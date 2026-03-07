@@ -1357,6 +1357,13 @@ async function onCb(ctx, cb) {
     if (!SVC_IDS.has(st.svcId) || !isValidDate(st.date) || !isValidTime(st.time)) {
       return send(ctx, cid, t(lg, 'book_err'), mainKb(lg));
     }
+
+    // Idempotency lock: prevent double-booking if user taps Confirm twice
+    const lockKey = `lock:${cid}:${st.date}:${st.time}`;
+    const lockTaken = await kvGet(ctx, lockKey);
+    if (lockTaken) return;
+    await kvPut(ctx, lockKey, 1, { expirationTtl: 30 });
+
     await clearState(ctx, cid);
 
     const s = SVC.find(x => x.id === st.svcId);

@@ -28,6 +28,7 @@ function buildCtx(env) {
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: env.WEBHOOK_SECRET,
     kv: env.MANICBOT,
+    adminChatId: env.ADMIN_CHAT_ID || null,
   };
 }
 
@@ -1377,8 +1378,22 @@ async function onCb(ctx, cb) {
       svc: svcName(lg, st.svcId), dt: fmtDT(lg, st.date, st.time),
       dur: String(s.dur), min: t(lg, 'min'), p: String(s.price), c: t(lg, 'cur'), addr: ADDRESS,
     }), mainKb(lg));
+
     const ics = makeICS(apt, lg);
-    if (ics) await sendIcs(ctx, cid, ics, `manicure_${st.date}_${st.time.replace(':', '')}.ics`, t(lg, 'ics_cap'));
+    const notifyAdmin = ctx.adminChatId
+      ? send(ctx, ctx.adminChatId, [
+          '🆕 <b>Новая запись!</b>',
+          `👤 ${escHtml(user?.name || '?')} | 📱 ${escHtml(user?.phone || '?')}`,
+          `💅 ${svcName('ru', st.svcId)}`,
+          `📅 ${fmtDT('ru', st.date, st.time)}`,
+          `💵 ${s.price} zł`,
+        ].join('\n'))
+      : Promise.resolve();
+
+    await Promise.all([
+      ics ? sendIcs(ctx, cid, ics, `manicure_${st.date}_${st.time.replace(':', '')}.ics`, t(lg, 'ics_cap')) : Promise.resolve(),
+      notifyAdmin,
+    ]);
     return;
   }
 

@@ -804,6 +804,11 @@ async function clearState(ctx, cid) { await kvDel(ctx, `st:${cid}`); }
 async function getUser(ctx, cid) { return kvGet(ctx, `u:${cid}`); }
 async function saveUser(ctx, cid, d) { await kvPut(ctx, `u:${cid}`, d); }
 
+function allKey(dateStr) {
+  // e.g. "2026-03-15" → "all:2026-03"
+  return `all:${dateStr.slice(0, 7)}`;
+}
+
 async function saveApt(ctx, apt) {
   const ul = (await kvGet(ctx, `ua:${apt.chatId}`)) || [];
 
@@ -815,15 +820,24 @@ async function saveApt(ctx, apt) {
   apt.id = id;
   apt.createdAt = Date.now();
   apt.rem = { h24: false, h12: false, h1: false };
-  await kvPut(ctx, `ap:${id}`, apt);
+
+  const monthKey = allKey(apt.date);
+  const [dl, al] = await Promise.all([
+    kvGet(ctx, `d:${apt.date}`),
+    kvGet(ctx, monthKey),
+  ]);
+
   ul.push(id);
-  await kvPut(ctx, `ua:${apt.chatId}`, ul);
-  const dl = (await kvGet(ctx, `d:${apt.date}`)) || [];
-  dl.push(id);
-  await kvPut(ctx, `d:${apt.date}`, dl);
-  const al = (await kvGet(ctx, 'all')) || [];
-  al.push(id);
-  await kvPut(ctx, 'all', al);
+  (dl || []).push(id);
+  (al || []).push(id);
+
+  await Promise.all([
+    kvPut(ctx, `ap:${id}`, apt),
+    kvPut(ctx, `ua:${apt.chatId}`, ul),
+    kvPut(ctx, `d:${apt.date}`, dl || [id]),
+    kvPut(ctx, monthKey, al || [id]),
+  ]);
+
   return apt;
 }
 
@@ -1423,31 +1437,39 @@ async function handleCron(ctx) {
     }
   }
 
-  // Phase 2: cleanup — remove expired/cancelled from global list + date indexes
-  const allIds = (await kvGet(ctx, 'all')) || [];
-  const kept = [];
-  for (const id of allIds) {
-    try {
-      const a = await kvGet(ctx, `ap:${id}`);
-      if (!a) continue;
-      if ((a.ts < now - 48 * 3600000) || a.cx) {
-        await kvDel(ctx, `ap:${id}`);
-        const dl = (await kvGet(ctx, `d:${a.date}`)) || [];
-        const newDl = dl.filter(x => x !== id);
-        if (newDl.length !== dl.length) {
-          if (newDl.length === 0) await kvDel(ctx, `d:${a.date}`);
-          else await kvPut(ctx, `d:${a.date}`, newDl);
-        }
-        continue;
-      }
-      kept.push(id);
-    } catch (e) {
-      console.error(`Cron cleanup error for apt ${id}:`, e.message);
-      kept.push(id);
-    }
+  // Phase 2: cleanup — scan current + previous month, remove expired/cancelled
+  const monthsToClean = [];
+  for (const off of [-1, 0]) {
+    const d = new Date(Date.UTC(w.year, w.month - 1 + off, 1));
+    monthsToClean.push(`all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`);
   }
-  if (kept.length !== allIds.length) {
-    await kvPut(ctx, 'all', kept);
+  for (const monthKey of monthsToClean) {
+    const allIds = (await kvGet(ctx, monthKey)) || [];
+    const kept = [];
+    for (const id of allIds) {
+      try {
+        const a = await kvGet(ctx, `ap:${id}`);
+        if (!a) continue;
+        if ((a.ts < now - 48 * 3600000) || a.cx) {
+          await kvDel(ctx, `ap:${id}`);
+          const dl = (await kvGet(ctx, `d:${a.date}`)) || [];
+          const newDl = dl.filter(x => x !== id);
+          if (newDl.length !== dl.length) {
+            if (newDl.length === 0) await kvDel(ctx, `d:${a.date}`);
+            else await kvPut(ctx, `d:${a.date}`, newDl);
+          }
+          continue;
+        }
+        kept.push(id);
+      } catch (e) {
+        console.error(`Cron cleanup error for apt ${id}:`, e.message);
+        kept.push(id);
+      }
+    }
+    if (kept.length !== allIds.length) {
+      if (kept.length === 0) await kvDel(ctx, monthKey);
+      else await kvPut(ctx, monthKey, kept);
+    }
   }
 }
 
@@ -1492,7 +1514,13 @@ export default {
       if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
       if (!ctx.kv) return new Response('KV not bound', { status: 500 });
 
-      const allIds = (await kvGet(ctx, 'all')) || [];
+      const adminW = warsawNow();
+      const adminMonthKeys = [-2, -1, 0].map(off => {
+        const d = new Date(Date.UTC(adminW.year, adminW.month - 1 + off, 1));
+        return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
+      });
+      const monthBuckets = await Promise.all(adminMonthKeys.map(k => kvGet(ctx, k)));
+      const allIds = [...new Set(monthBuckets.flatMap(b => b || []))];
       const userKeys = await kvListAll(ctx.kv, { prefix: 'u:' });
 
       const [aptRecords, userRecords] = await Promise.all([
@@ -1590,7 +1618,13 @@ tr:hover td{background:#fdf2f8}
       }
 
       if (file === 'appointments.csv') {
-        const allIds = (await kvGet(ctx, 'all')) || [];
+        const csvW = warsawNow();
+        const csvMonthKeys = [-2, -1, 0].map(off => {
+          const d = new Date(Date.UTC(csvW.year, csvW.month - 1 + off, 1));
+          return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
+        });
+        const csvBuckets = await Promise.all(csvMonthKeys.map(k => kvGet(ctx, k)));
+        const allIds = [...new Set(csvBuckets.flatMap(b => b || []))];
         const apts = await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`)));
         let csv = 'ID,Client,Chat ID,Service,Date,Time,Status,Created\n';
         for (const a of apts) {

@@ -31,13 +31,25 @@ function buildCtx(env) {
   };
 }
 
+function timingSafeEqual(a, b) {
+  const ta = new TextEncoder().encode(a);
+  const tb = new TextEncoder().encode(b);
+  if (ta.length !== tb.length) {
+    // Still run the comparison to avoid length-based timing leak
+    crypto.subtle.timingSafeEqual(ta, ta);
+    return false;
+  }
+  return crypto.subtle.timingSafeEqual(ta, tb);
+}
+
 function checkAdmin(request, adminKey) {
   const auth = request.headers.get('Authorization');
   if (!auth?.startsWith('Basic ')) return false;
   try {
     const decoded = atob(auth.slice(6));
     const idx = decoded.indexOf(':');
-    return idx >= 0 && decoded.slice(idx + 1) === adminKey;
+    if (idx < 0) return false;
+    return timingSafeEqual(decoded.slice(idx + 1), adminKey);
   } catch { return false; }
 }
 
@@ -612,7 +624,8 @@ function fill(str, vars) {
 function isValidDate(ds) {
   if (!DATE_RE.test(ds)) return false;
   const [y, m, d] = ds.split('-').map(Number);
-  if (y < 2024 || y > 2030 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const currentYear = warsawNow().year;
+  if (y < currentYear || y > currentYear + 2 || m < 1 || m > 12 || d < 1 || d > 31) return false;
   const dt = new Date(y, m - 1, d);
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
@@ -1366,17 +1379,21 @@ async function handleCron(ctx) {
   for (const date of reminderDates) {
     const ids = (await kvGet(ctx, `d:${date}`)) || [];
     for (const id of ids) {
-      const a = await kvGet(ctx, `ap:${id}`);
-      if (!a || a.cx) continue;
-      const diffH = (a.ts - now) / 3600000;
-      if (diffH < -1 || diffH > 25) continue;
-      const lg = (await getLang(ctx, a.chatId)) || 'ru';
-      const vars = { svc: svcName(lg, a.svcId), dt: fmtDT(lg, a.date, a.time), addr: ADDRESS };
-      let sent = false;
-      if (!a.rem.h24 && diffH <= 25 && diffH > 23) { a.rem.h24 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_24'), vars)); }
-      if (!a.rem.h12 && diffH <= 13 && diffH > 11) { a.rem.h12 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_12'), vars)); }
-      if (!a.rem.h1  && diffH <= 1.5 && diffH > 0.5) { a.rem.h1 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_1'), vars)); }
-      if (sent) await kvPut(ctx, `ap:${id}`, a);
+      try {
+        const a = await kvGet(ctx, `ap:${id}`);
+        if (!a || a.cx) continue;
+        const diffH = (a.ts - now) / 3600000;
+        if (diffH < -1 || diffH > 25) continue;
+        const lg = (await getLang(ctx, a.chatId)) || 'ru';
+        const vars = { svc: svcName(lg, a.svcId), dt: fmtDT(lg, a.date, a.time), addr: ADDRESS };
+        let sent = false;
+        if (!a.rem.h24 && diffH <= 25 && diffH > 23) { a.rem.h24 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_24'), vars)); }
+        if (!a.rem.h12 && diffH <= 13 && diffH > 11) { a.rem.h12 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_12'), vars)); }
+        if (!a.rem.h1  && diffH <= 1.5 && diffH > 0.5) { a.rem.h1 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_1'), vars)); }
+        if (sent) await kvPut(ctx, `ap:${id}`, a);
+      } catch (e) {
+        console.error(`Cron reminder error for apt ${id}:`, e.message);
+      }
     }
   }
 
@@ -1384,19 +1401,24 @@ async function handleCron(ctx) {
   const allIds = (await kvGet(ctx, 'all')) || [];
   const kept = [];
   for (const id of allIds) {
-    const a = await kvGet(ctx, `ap:${id}`);
-    if (!a) continue;
-    if ((a.ts < now - 48 * 3600000) || a.cx) {
-      await kvDel(ctx, `ap:${id}`);
-      const dl = (await kvGet(ctx, `d:${a.date}`)) || [];
-      const newDl = dl.filter(x => x !== id);
-      if (newDl.length !== dl.length) {
-        if (newDl.length === 0) await kvDel(ctx, `d:${a.date}`);
-        else await kvPut(ctx, `d:${a.date}`, newDl);
+    try {
+      const a = await kvGet(ctx, `ap:${id}`);
+      if (!a) continue;
+      if ((a.ts < now - 48 * 3600000) || a.cx) {
+        await kvDel(ctx, `ap:${id}`);
+        const dl = (await kvGet(ctx, `d:${a.date}`)) || [];
+        const newDl = dl.filter(x => x !== id);
+        if (newDl.length !== dl.length) {
+          if (newDl.length === 0) await kvDel(ctx, `d:${a.date}`);
+          else await kvPut(ctx, `d:${a.date}`, newDl);
+        }
+        continue;
       }
-      continue;
+      kept.push(id);
+    } catch (e) {
+      console.error(`Cron cleanup error for apt ${id}:`, e.message);
+      kept.push(id);
     }
-    kept.push(id);
   }
   if (kept.length !== allIds.length) {
     await kvPut(ctx, 'all', kept);
@@ -1419,7 +1441,7 @@ export default {
 
     // ── Admin: set webhook (key-protected, curl-friendly)
     if (url.pathname === '/setup') {
-      if (url.searchParams.get('key') !== ctx.ADMIN_KEY) {
+      if (!timingSafeEqual(url.searchParams.get('key') || '', ctx.ADMIN_KEY)) {
         return new Response('Forbidden', { status: 403 });
       }
       const wh = `${url.origin}/webhook`;
@@ -1433,7 +1455,7 @@ export default {
 
     // ── Admin: remove webhook (key-protected, curl-friendly)
     if (url.pathname === '/remove-webhook') {
-      if (url.searchParams.get('key') !== ctx.ADMIN_KEY) {
+      if (!timingSafeEqual(url.searchParams.get('key') || '', ctx.ADMIN_KEY)) {
         return new Response('Forbidden', { status: 403 });
       }
       return Response.json({ result: await api(ctx, 'deleteWebhook', {}) });

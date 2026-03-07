@@ -807,11 +807,8 @@ async function saveUser(ctx, cid, d) { await kvPut(ctx, `u:${cid}`, d); }
 async function saveApt(ctx, apt) {
   const ul = (await kvGet(ctx, `ua:${apt.chatId}`)) || [];
 
-  let active = 0;
-  for (const id of ul) {
-    const a = await kvGet(ctx, `ap:${id}`);
-    if (a && !a.cx && a.ts > Date.now()) active++;
-  }
+  const existing = await Promise.all(ul.map(id => kvGet(ctx, `ap:${id}`)));
+  const active = existing.filter(a => a && !a.cx && a.ts > Date.now()).length;
   if (active >= MAX_APTS) return null;
 
   const id = `a${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -832,12 +829,10 @@ async function saveApt(ctx, apt) {
 
 async function getApts(ctx, cid) {
   const ids = (await kvGet(ctx, `ua:${cid}`)) || [];
-  const r = [];
-  for (const id of ids) {
-    const a = await kvGet(ctx, `ap:${id}`);
-    if (a && !a.cx && a.ts > Date.now() - 3600000) r.push(a);
-  }
-  return r.sort((a, b) => a.ts - b.ts);
+  const all = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
+  return all
+    .filter(a => a && !a.cx && a.ts > Date.now() - 3600000)
+    .sort((a, b) => a.ts - b.ts);
 }
 
 async function cancelApt(ctx, id, ownerChatId) {
@@ -861,11 +856,8 @@ async function getSlots(ctx, date, svcId) {
   const svc = SVC.find(s => s.id === svcId);
   if (!svc) return [];
   const ids = (await kvGet(ctx, `d:${date}`)) || [];
-  const booked = [];
-  for (const id of ids) {
-    const a = await kvGet(ctx, `ap:${id}`);
-    if (a && !a.cx) booked.push(a);
-  }
+  const fetched = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
+  const booked = fetched.filter(a => a && !a.cx);
   const td = todayStr();
   const w = warsawNow();
   const ch = w.hour, cm = w.minute;
@@ -1493,38 +1485,39 @@ export default {
       if (!ctx.kv) return new Response('KV not bound', { status: 500 });
 
       const allIds = (await kvGet(ctx, 'all')) || [];
-      const clients = [];
-      const appointments = [];
-
-      for (const id of allIds) {
-        const a = await kvGet(ctx, `ap:${id}`);
-        if (!a) continue;
-        const svc = SVC.find(x => x.id === a.svcId);
-        appointments.push({
-          id: a.id,
-          client: a.userName,
-          chatId: a.chatId,
-          service: svc ? `${svc.e} ${a.svcId}` : a.svcId,
-          date: a.date,
-          time: a.time,
-          status: a.cx ? '❌ Отменено' : (a.ts < Date.now() ? '✅ Завершено' : '🕐 Предстоит'),
-          created: new Date(a.createdAt).toISOString().slice(0, 16).replace('T', ' '),
-        });
-      }
-
       const userKeys = await kvListAll(ctx.kv, { prefix: 'u:' });
-      for (const k of userKeys) {
-        const u = await kvGet(ctx, k.name);
-        if (!u) continue;
-        clients.push({
+
+      const [aptRecords, userRecords] = await Promise.all([
+        Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))),
+        Promise.all(userKeys.map(k => kvGet(ctx, k.name))),
+      ]);
+
+      const appointments = aptRecords
+        .filter(Boolean)
+        .map(a => {
+          const svc = SVC.find(x => x.id === a.svcId);
+          return {
+            id: a.id,
+            client: a.userName,
+            chatId: a.chatId,
+            service: svc ? `${svc.e} ${a.svcId}` : a.svcId,
+            date: a.date,
+            time: a.time,
+            status: a.cx ? '❌ Отменено' : (a.ts < Date.now() ? '✅ Завершено' : '🕐 Предстоит'),
+            created: new Date(a.createdAt).toISOString().slice(0, 16).replace('T', ' '),
+          };
+        });
+
+      const clients = userRecords
+        .filter(Boolean)
+        .map(u => ({
           chatId: u.chatId,
           name: u.name,
           phone: u.phone,
           username: u.tgUsername ? `@${u.tgUsername}` : '—',
           lang: u.tgLang || '—',
           registered: u.registeredAt ? new Date(u.registeredAt).toISOString().slice(0, 16).replace('T', ' ') : '—',
-        });
-      }
+        }));
 
       const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
@@ -1579,9 +1572,9 @@ tr:hover td{background:#fdf2f8}
 
       if (file === 'clients.csv') {
         const userKeys = await kvListAll(ctx.kv, { prefix: 'u:' });
+        const users = await Promise.all(userKeys.map(k => kvGet(ctx, k.name)));
         let csv = 'Chat ID,Name,Phone,Username,Language,Registered\n';
-        for (const k of userKeys) {
-          const u = await kvGet(ctx, k.name);
+        for (const u of users) {
           if (!u) continue;
           csv += `${u.chatId},"${(u.name||'').replace(/"/g,'""')}",${u.phone},${u.tgUsername||''},${u.tgLang||''},${u.registeredAt ? new Date(u.registeredAt).toISOString() : ''}\n`;
         }
@@ -1590,9 +1583,9 @@ tr:hover td{background:#fdf2f8}
 
       if (file === 'appointments.csv') {
         const allIds = (await kvGet(ctx, 'all')) || [];
+        const apts = await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`)));
         let csv = 'ID,Client,Chat ID,Service,Date,Time,Status,Created\n';
-        for (const id of allIds) {
-          const a = await kvGet(ctx, `ap:${id}`);
+        for (const a of apts) {
           if (!a) continue;
           const status = a.cx ? 'Cancelled' : (a.ts < Date.now() ? 'Completed' : 'Upcoming');
           csv += `${a.id},"${(a.userName||'').replace(/"/g,'""')}",${a.chatId},${a.svcId},${a.date},${a.time},${status},${new Date(a.createdAt).toISOString()}\n`;

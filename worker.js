@@ -841,12 +841,20 @@ async function cancelApt(ctx, id, ownerChatId) {
   if (!a || a.chatId !== ownerChatId) return null;
   a.cx = true;
   await kvPut(ctx, `ap:${id}`, a);
-  const dl = (await kvGet(ctx, `d:${a.date}`)) || [];
-  const nl = dl.filter(x => x !== id);
-  if (nl.length !== dl.length) {
-    if (nl.length === 0) await kvDel(ctx, `d:${a.date}`);
-    else await kvPut(ctx, `d:${a.date}`, nl);
-  }
+
+  const [dl, ul] = await Promise.all([
+    kvGet(ctx, `d:${a.date}`),
+    kvGet(ctx, `ua:${ownerChatId}`),
+  ]);
+
+  const newDl = (dl || []).filter(x => x !== id);
+  const newUl = (ul || []).filter(x => x !== id);
+
+  await Promise.all([
+    newDl.length === 0 ? kvDel(ctx, `d:${a.date}`) : kvPut(ctx, `d:${a.date}`, newDl),
+    kvPut(ctx, `ua:${ownerChatId}`, newUl),
+  ]);
+
   return a;
 }
 

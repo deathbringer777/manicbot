@@ -71,6 +71,32 @@ const VALID_LANGS = new Set(['ru', 'ua', 'en', 'pl']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
 
+// ─── Callback data prefixes ───────────────────────────────────
+const CB = {
+  NOOP:      '_',
+  MAIN:      'main',
+  BOOK:      'book',
+  MY:        'my',
+  PRICES:    'prices',
+  CONTACTS:  'cont',
+  REVIEWS:   'rev',
+  ABOUT:     'about',
+  CATALOG:   'cat',
+  CAL_BACK:  'bcal',
+  CONFIRM:   'ok',
+  CANCEL_BOOK: 'no',
+  LANG:      'lang',
+  LANG_SET:  'sl:',
+  REG_YES:   'rg:y',
+  REG_CHANGE:'rg:c',
+  SERVICE:   'sv:',
+  CAL_MONTH: 'cm:',
+  DATE:      'dt:',
+  TIME:      'tm:',
+  CANCEL_APT:'cx:',
+  CAT_PHOTO: 'cc:',
+};
+
 const TIMEZONE = 'Europe/Warsaw';
 const SALON = 'ManicBot 💅';
 const ADDRESS = 'ul. Marszałkowska 27, Warszawa';
@@ -898,32 +924,32 @@ function makeICS(apt, lang) {
 
 function mainKb(lg) {
   return { reply_markup: { inline_keyboard: [
-    [{ text: t(lg, 'm_book'), callback_data: 'book' }],
-    [{ text: t(lg, 'm_cat'), callback_data: 'cat' },
-     { text: t(lg, 'm_prices'), callback_data: 'prices' }],
-    [{ text: t(lg, 'm_my'), callback_data: 'my' }],
-    [{ text: t(lg, 'm_rev'), callback_data: 'rev' },
-     { text: t(lg, 'm_about'), callback_data: 'about' }],
-    [{ text: t(lg, 'm_cont'), callback_data: 'cont' },
-     { text: t(lg, 'm_lang'), callback_data: 'lang' }],
+    [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+    [{ text: t(lg, 'm_cat'), callback_data: CB.CATALOG },
+     { text: t(lg, 'm_prices'), callback_data: CB.PRICES }],
+    [{ text: t(lg, 'm_my'), callback_data: CB.MY }],
+    [{ text: t(lg, 'm_rev'), callback_data: CB.REVIEWS },
+     { text: t(lg, 'm_about'), callback_data: CB.ABOUT }],
+    [{ text: t(lg, 'm_cont'), callback_data: CB.CONTACTS },
+     { text: t(lg, 'm_lang'), callback_data: CB.LANG }],
   ] } };
 }
 
 function langKb() {
   return { reply_markup: { inline_keyboard: [
-    [{ text: '🇷🇺 Русский', callback_data: 'sl:ru' },
-     { text: '🇺🇦 Українська', callback_data: 'sl:ua' }],
-    [{ text: '🇬🇧 English', callback_data: 'sl:en' },
-     { text: '🇵🇱 Polski', callback_data: 'sl:pl' }],
+    [{ text: '🇷🇺 Русский', callback_data: CB.LANG_SET + 'ru' },
+     { text: '🇺🇦 Українська', callback_data: CB.LANG_SET + 'ua' }],
+    [{ text: '🇬🇧 English', callback_data: CB.LANG_SET + 'en' },
+     { text: '🇵🇱 Polski', callback_data: CB.LANG_SET + 'pl' }],
   ] } };
 }
 
 function svcKb(lg) {
   const rows = SVC.map(s => [{
     text: `${s.e} ${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
-    callback_data: `sv:${s.id}`,
+    callback_data: CB.SERVICE + s.id,
   }]);
-  rows.push([{ text: t(lg, 'back_m'), callback_data: 'main' }]);
+  rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
@@ -938,53 +964,53 @@ function calKb(lg, mo = 0) {
   const rows = [];
 
   const nav = [];
-  nav.push(mo > 0 ? { text: '◀️', callback_data: `cm:${mo - 1}` } : { text: ' ', callback_data: '_' });
-  nav.push({ text: `${t(lg, 'mon')[vm]} ${vy}`, callback_data: '_' });
-  nav.push(mo < 2 ? { text: '▶️', callback_data: `cm:${mo + 1}` } : { text: ' ', callback_data: '_' });
+  nav.push(mo > 0 ? { text: '◀️', callback_data: CB.CAL_MONTH + (mo - 1) } : { text: ' ', callback_data: CB.NOOP });
+  nav.push({ text: `${t(lg, 'mon')[vm]} ${vy}`, callback_data: CB.NOOP });
+  nav.push(mo < 2 ? { text: '▶️', callback_data: CB.CAL_MONTH + (mo + 1) } : { text: ' ', callback_data: CB.NOOP });
   rows.push(nav);
 
-  rows.push(t(lg, 'daysH').map(d => ({ text: d, callback_data: '_' })));
+  rows.push(t(lg, 'daysH').map(d => ({ text: d, callback_data: CB.NOOP })));
 
   const td = todayStr();
-  let wk = Array.from({ length: f }, () => ({ text: ' ', callback_data: '_' }));
+  let wk = Array.from({ length: f }, () => ({ text: ' ', callback_data: CB.NOOP }));
   for (let day = 1; day <= dim; day++) {
     const ds = `${vy}-${p2(vm + 1)}-${p2(day)}`;
-    if (ds < td) wk.push({ text: '·', callback_data: '_' });
-    else wk.push({ text: ds === td ? `[${day}]` : `${day}`, callback_data: `dt:${ds}` });
+    if (ds < td) wk.push({ text: '·', callback_data: CB.NOOP });
+    else wk.push({ text: ds === td ? `[${day}]` : `${day}`, callback_data: CB.DATE + ds });
     if (wk.length === 7) { rows.push(wk); wk = []; }
   }
-  if (wk.length) { while (wk.length < 7) wk.push({ text: ' ', callback_data: '_' }); rows.push(wk); }
+  if (wk.length) { while (wk.length < 7) wk.push({ text: ' ', callback_data: CB.NOOP }); rows.push(wk); }
 
-  rows.push([{ text: t(lg, 'other_svc'), callback_data: 'book' }]);
+  rows.push([{ text: t(lg, 'other_svc'), callback_data: CB.BOOK }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
 function timeKb(slots, lg) {
   const rows = [];
   for (let i = 0; i < slots.length; i += 3)
-    rows.push(slots.slice(i, i + 3).map(x => ({ text: `🕐 ${x}`, callback_data: `tm:${x}` })));
-  rows.push([{ text: t(lg, 'other_date'), callback_data: 'bcal' }]);
+    rows.push(slots.slice(i, i + 3).map(x => ({ text: `🕐 ${x}`, callback_data: CB.TIME + x })));
+  rows.push([{ text: t(lg, 'other_date'), callback_data: CB.CAL_BACK }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
 function catListKb(lg) {
   const rows = SVC.map(s => [{
     text: `${s.e} ${t(lg, 'svc_' + s.id)}`,
-    callback_data: `cc:${s.id}:0`,
+    callback_data: CB.CAT_PHOTO + s.id + ':0',
   }]);
-  rows.push([{ text: t(lg, 'back_m'), callback_data: 'main' }]);
+  rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
 function catPhotoKb(lg, svcId, idx, total) {
   const nav = [];
-  if (idx > 0) nav.push({ text: '◀️', callback_data: `cc:${svcId}:${idx - 1}` });
-  nav.push({ text: `${idx + 1} / ${total}`, callback_data: '_' });
-  if (idx < total - 1) nav.push({ text: '▶️', callback_data: `cc:${svcId}:${idx + 1}` });
+  if (idx > 0) nav.push({ text: '◀️', callback_data: CB.CAT_PHOTO + svcId + ':' + (idx - 1) });
+  nav.push({ text: `${idx + 1} / ${total}`, callback_data: CB.NOOP });
+  if (idx < total - 1) nav.push({ text: '▶️', callback_data: CB.CAT_PHOTO + svcId + ':' + (idx + 1) });
   return { reply_markup: { inline_keyboard: [
     nav,
-    [{ text: t(lg, 'cat_book'), callback_data: `sv:${svcId}` }],
-    [{ text: t(lg, 'cat_back'), callback_data: 'cat' }],
+    [{ text: t(lg, 'cat_book'), callback_data: CB.SERVICE + svcId }],
+    [{ text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
   ] } };
 }
 
@@ -1008,32 +1034,32 @@ async function showPrices(ctx, cid) {
   for (const s of SVC)
     txt += `${s.e} <b>${t(lg, 'svc_' + s.id)}</b>\n   💵 ${s.price} ${t(lg, 'cur')} · ⏱ ${s.dur} ${t(lg, 'min')}\n\n`;
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: [
-    [{ text: t(lg, 'm_book'), callback_data: 'book' }],
-    [{ text: t(lg, 'back_m'), callback_data: 'main' }],
+    [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+    [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
   ] } });
 }
 
 async function showContacts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   await send(ctx, cid, fill(t(lg, 'cont_t'), { addr: ADDRESS, ph: PHONE, h: hours() }), { reply_markup: { inline_keyboard: [
-    [{ text: t(lg, 'm_book'), callback_data: 'book' }],
-    [{ text: t(lg, 'back_m'), callback_data: 'main' }],
+    [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+    [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
   ] } });
 }
 
 async function showReviews(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   await send(ctx, cid, fill(t(lg, 'rev_t'), {}), { reply_markup: { inline_keyboard: [
-    [{ text: t(lg, 'm_book'), callback_data: 'book' }],
-    [{ text: t(lg, 'back_m'), callback_data: 'main' }],
+    [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+    [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
   ] } });
 }
 
 async function showAbout(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   await send(ctx, cid, fill(t(lg, 'about_t'), { s: SALON, addr: ADDRESS, h: hours() }), { reply_markup: { inline_keyboard: [
-    [{ text: t(lg, 'm_book'), callback_data: 'book' }],
-    [{ text: t(lg, 'back_m'), callback_data: 'main' }],
+    [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+    [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
   ] } });
 }
 
@@ -1047,7 +1073,7 @@ async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
   const photos = PHOTOS[svcId] || [];
   if (!photos.length) {
     return send(ctx, cid, `${svcName(lg, svcId)}\n\n${t(lg, 'cat_empty')}`, { reply_markup: { inline_keyboard: [
-      [{ text: t(lg, 'cat_back'), callback_data: 'cat' }],
+      [{ text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
     ] } });
   }
   const safeIdx = Math.max(0, Math.min(idx, photos.length - 1));
@@ -1072,8 +1098,8 @@ async function showMyApts(ctx, cid) {
   const apts = await getApts(ctx, cid);
   if (!apts.length) {
     return send(ctx, cid, `${t(lg, 'my_title')}\n\n${t(lg, 'my_empty')}`, { reply_markup: { inline_keyboard: [
-      [{ text: t(lg, 'm_book'), callback_data: 'book' }],
-      [{ text: t(lg, 'back_m'), callback_data: 'main' }],
+      [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+      [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
     ] } });
   }
   let txt = `${t(lg, 'my_title')}\n\n`;
@@ -1084,10 +1110,10 @@ async function showMyApts(ctx, cid) {
     txt += `${svcName(lg, a.svcId)}\n📅 ${fmtDT(lg, a.date, a.time)}\n💵 ${sv.price} ${t(lg, 'cur')}\n\n`;
     btns.push([{
       text: fill(t(lg, 'my_cancel'), { d: fmtDate(lg, a.date), t: a.time }),
-      callback_data: `cx:${a.id}`,
+      callback_data: CB.CANCEL_APT + a.id,
     }]);
   }
-  btns.push([{ text: t(lg, 'back_m'), callback_data: 'main' }]);
+  btns.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }
 
@@ -1103,8 +1129,8 @@ async function startBooking(ctx, cid, from) {
     });
     return send(ctx, cid, fill(t(lg, 'reg_confirm_name'), { n: escHtml(tgName) }), {
       reply_markup: { inline_keyboard: [
-        [{ text: t(lg, 'reg_yes'), callback_data: 'rg:y' }],
-        [{ text: t(lg, 'reg_change'), callback_data: 'rg:c' }],
+        [{ text: t(lg, 'reg_yes'), callback_data: CB.REG_YES }],
+        [{ text: t(lg, 'reg_change'), callback_data: CB.REG_CHANGE }],
       ] },
     });
   }
@@ -1195,10 +1221,10 @@ async function onCb(ctx, cb) {
   const name = escHtml(rawName.slice(0, 64)) || '👋';
   await answerCb(ctx, cb.id);
 
-  if (d === '_') return;
+  if (d === CB.NOOP) return;
 
-  if (d.startsWith('sl:')) {
-    const lang = d.slice(3);
+  if (d.startsWith(CB.LANG_SET)) {
+    const lang = d.slice(CB.LANG_SET.length);
     if (!VALID_LANGS.has(lang)) return;
     await setLang(ctx, cid, lang);
     await send(ctx, cid, t(lang, 'lang_set'));
@@ -1207,11 +1233,11 @@ async function onCb(ctx, cb) {
 
   const lg = (await getLang(ctx, cid)) || 'ru';
 
-  if (d === 'main') return showWelcome(ctx, cid, name);
-  if (d === 'lang') return showLangPick(ctx, cid);
-  if (d === 'book') return startBooking(ctx, cid, cb.from);
+  if (d === CB.MAIN)     return showWelcome(ctx, cid, name);
+  if (d === CB.LANG)     return showLangPick(ctx, cid);
+  if (d === CB.BOOK)     return startBooking(ctx, cid, cb.from);
 
-  if (d === 'rg:y') {
+  if (d === CB.REG_YES) {
     const st = await getState(ctx, cid);
     if (st.step !== 'rc') return;
     st.step = 'rp';
@@ -1222,30 +1248,30 @@ async function onCb(ctx, cb) {
     });
   }
 
-  if (d === 'rg:c') {
+  if (d === CB.REG_CHANGE) {
     const st = await getState(ctx, cid);
     if (st.step !== 'rc') return;
     st.step = 'rn';
     await setState(ctx, cid, st);
     return send(ctx, cid, t(lg, 'reg_enter_name'));
   }
-  if (d === 'my')   return showMyApts(ctx, cid);
-  if (d === 'prices') return showPrices(ctx, cid);
-  if (d === 'cont') return showContacts(ctx, cid);
-  if (d === 'rev')  return showReviews(ctx, cid);
-  if (d === 'about') return showAbout(ctx, cid);
-  if (d === 'cat')  return showCatalog(ctx, cid);
+  if (d === CB.MY)       return showMyApts(ctx, cid);
+  if (d === CB.PRICES)   return showPrices(ctx, cid);
+  if (d === CB.CONTACTS) return showContacts(ctx, cid);
+  if (d === CB.REVIEWS)  return showReviews(ctx, cid);
+  if (d === CB.ABOUT)    return showAbout(ctx, cid);
+  if (d === CB.CATALOG)  return showCatalog(ctx, cid);
 
-  if (d.startsWith('cc:')) {
-    const parts = d.slice(3).split(':');
+  if (d.startsWith(CB.CAT_PHOTO)) {
+    const parts = d.slice(CB.CAT_PHOTO.length).split(':');
     const svcId = parts[0];
     if (!SVC_IDS.has(svcId)) return;
     const idx = Math.max(0, parseInt(parts[1]) || 0);
     return showCatPhoto(ctx, cid, svcId, idx, mid);
   }
 
-  if (d.startsWith('sv:')) {
-    const sid = d.slice(3);
+  if (d.startsWith(CB.SERVICE)) {
+    const sid = d.slice(CB.SERVICE.length);
     if (!SVC_IDS.has(sid)) return;
     const s = SVC.find(x => x.id === sid);
     const user = await getUser(ctx, cid);
@@ -1259,13 +1285,13 @@ async function onCb(ctx, cb) {
     return;
   }
 
-  if (d.startsWith('cm:')) {
-    const off = Math.max(0, Math.min(2, parseInt(d.slice(3)) || 0));
+  if (d.startsWith(CB.CAL_MONTH)) {
+    const off = Math.max(0, Math.min(2, parseInt(d.slice(CB.CAL_MONTH.length)) || 0));
     return edit(ctx, cid, mid, t(lg, 'choose_date'), calKb(lg, off));
   }
 
-  if (d.startsWith('dt:')) {
-    const date = d.slice(3);
+  if (d.startsWith(CB.DATE)) {
+    const date = d.slice(CB.DATE.length);
     if (!isValidDate(date)) return;
     if (date < todayStr()) return;
     const st = await getState(ctx, cid);
@@ -1279,10 +1305,10 @@ async function onCb(ctx, cb) {
     return;
   }
 
-  if (d === 'bcal') return send(ctx, cid, t(lg, 'choose_date'), calKb(lg, 0));
+  if (d === CB.CAL_BACK) return send(ctx, cid, t(lg, 'choose_date'), calKb(lg, 0));
 
-  if (d.startsWith('tm:')) {
-    const time = d.slice(3);
+  if (d.startsWith(CB.TIME)) {
+    const time = d.slice(CB.TIME.length);
     if (!isValidTime(time)) return;
     const st = await getState(ctx, cid);
     if (!st.svcId || !st.date || !SVC_IDS.has(st.svcId) || !isValidDate(st.date)) {
@@ -1302,13 +1328,13 @@ async function onCb(ctx, cb) {
       `👤 ${escHtml(user?.name || '—')}`,
       `📱 ${escHtml(user?.phone || '—')}`,
     ].join('\n'), { reply_markup: { inline_keyboard: [
-      [{ text: t(lg, 'confirm_yes'), callback_data: 'ok' }],
-      [{ text: t(lg, 'confirm_no'), callback_data: 'no' }],
+      [{ text: t(lg, 'confirm_yes'), callback_data: CB.CONFIRM }],
+      [{ text: t(lg, 'confirm_no'), callback_data: CB.CANCEL_BOOK }],
     ] } });
     return;
   }
 
-  if (d === 'ok') {
+  if (d === CB.CONFIRM) {
     const st = await getState(ctx, cid);
     if (st.step !== 'conf' || !st.svcId || !st.date || !st.time) {
       return send(ctx, cid, t(lg, 'book_err'), mainKb(lg));
@@ -1342,20 +1368,20 @@ async function onCb(ctx, cb) {
     return;
   }
 
-  if (d === 'no') {
+  if (d === CB.CANCEL_BOOK) {
     await clearState(ctx, cid);
     return send(ctx, cid, t(lg, 'book_cancelled'), mainKb(lg));
   }
 
-  if (d.startsWith('cx:')) {
-    const aptId = d.slice(3);
+  if (d.startsWith(CB.CANCEL_APT)) {
+    const aptId = d.slice(CB.CANCEL_APT.length);
     const apt = await cancelApt(ctx, aptId, cid);
     if (apt) {
       await send(ctx, cid, fill(t(lg, 'cancel_ok'), {
         svc: svcName(lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time),
       }), { reply_markup: { inline_keyboard: [
-        [{ text: t(lg, 'rebook'), callback_data: 'book' }],
-        [{ text: t(lg, 'back_m'), callback_data: 'main' }],
+        [{ text: t(lg, 'rebook'), callback_data: CB.BOOK }],
+        [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
       ] } });
     } else {
       await send(ctx, cid, t(lg, 'cancel_err'), mainKb(lg));

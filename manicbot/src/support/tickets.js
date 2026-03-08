@@ -16,11 +16,12 @@ function ticketKey(id) { return TICKET_PREFIX + id; }
 function agentKey(chatId) { return TICKETS_AGENT_PREFIX + chatId; }
 
 export async function createTicket(globalKv, ctx, clientChatId, clientName, clientBotId, firstMessage) {
-  if (!globalKv || !ctx?.tenantId || !clientChatId) return null;
+  if (!globalKv || !clientChatId) return null;
+  const tenantId = ctx?.tenantId || ctx?.bot?.botId || 'legacy';
   const id = 'tk_' + randomId(8);
   const ticket = {
     id,
-    tenantId: ctx.tenantId,
+    tenantId,
     clientChatId,
     clientBotId: clientBotId || null,
     clientName: clientName || 'Client',

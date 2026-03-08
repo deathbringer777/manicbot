@@ -1,0 +1,15 @@
+name = "manicbot"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# CLOUDFLARE_ACCOUNT_ID should be set as a secret: wrangler secret put CLOUDFLARE_ACCOUNT_ID
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[[kv_namespaces]]
+binding = "MANICBOT"
+id = "62a7d16805e742918a82184e879537cc"
+
+[ai]
+binding = "AI"

@@ -1,0 +1,220 @@
+// ══════════════════════════════════════════════════════════════
+// ManicBot — Configuration & Constants
+// ══════════════════════════════════════════════════════════════
+
+export const MAX_APTS = 10;
+export const API_TIMEOUT_MS = 10000;
+export const VALID_LANGS = new Set(['ru', 'ua', 'en', 'pl']);
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const TIME_RE = /^\d{2}:\d{2}$/;
+
+export const CB = {
+  NOOP:      '_',
+  MAIN:      'main',
+  BOOK:      'book',
+  MY:        'my',
+  PRICES:    'prices',
+  CONTACTS:  'cont',
+  REVIEWS:   'rev',
+  ABOUT:     'about',
+  CATALOG:   'cat',
+  CAL_BACK:  'bcal',
+  CONFIRM:   'ok',
+  CANCEL_BOOK: 'no',
+  LANG:      'lang',
+  LANG_SET:  'sl:',
+  REG_YES:   'rg:y',
+  REG_CHANGE:'rg:c',
+  SERVICE:   'sv:',
+  CAL_MONTH: 'cm:',
+  DATE:      'dt:',
+  TIME:      'tm:',
+  CANCEL_APT:'cx:',
+  CANCEL_APT_YES:'cxy:',
+  CANCEL_APT_SKIP:'cxs:',
+  CANCEL_ALL:    'cxa',
+  CANCEL_ALL_YES: 'cxay',
+  CAT_PHOTO: 'cc:',
+  ABOUT_PHOTO: 'abph:',
+  ADM_MAIN:    'adm',
+  ADM_TODAY:   'adm:td',
+  ADM_TOMORROW:'adm:tm',
+  ADM_MASTERS: 'adm:ms',
+  ADM_ADD_M:   'adm:am',
+  ADM_DEL_M:   'adm:dm:',
+  ADM_VACATION:'adm:vac:',
+  ADM_SETTINGS:'adm:st',
+  ADM_CLIENTS: 'adm:cl',
+  ADM_CLIENTS_PAGE: 'adm:clp:',
+  MST_MAIN:    'mst',
+  MST_TODAY:   'mst:td',
+  MST_TOMORROW:'mst:tm',
+  APT_CONFIRM:     'ac:',
+  APT_REJECT:      'ar:',
+  APT_REJECT_SKIP: 'ars:',
+  APT_COUNTER:     'ao:',
+  APT_COUNTER_SKIP:'aos:',
+  APT_ACCEPT:      'aa:',
+  APT_DECLINE:     'adl:',
+  APT_REPLY:       'arl:',
+  ADM_BLOCK:       'abk:',
+  ADM_UNBLOCK:     'aub:',
+  ADM_CANCEL_APT:  'aca:',
+  ADM_CANCEL_SKIP: 'acs:',
+  ADM_CANCEL_ALL:  'admcxa',
+  ADM_CANCEL_ALL_YES: 'admcxay',
+  ADM_ABOUT: 'adm:about',
+  ADM_ABOUT_PHOTOS: 'adm:abph',
+  ADM_ABOUT_PHOTO_ADD: 'adm:abpha',
+  ADM_ABOUT_PHOTO_DEL: 'adm:abphd:',
+  ADM_ABOUT_DESC: 'adm:abdesc',
+  ADM_ABOUT_INSTAGRAM: 'adm:abig',
+  SVC_LIST:     'svl',
+  SVC_EDIT:     'sve:',
+  SVC_NAME:     'svn:',
+  SVC_PRICE:    'svp:',
+  SVC_DUR:      'svd:',
+  SVC_DESC:     'svds:',
+  SVC_EMOJI:    'svem:',
+  SVC_TOGGLE:   'svt:',
+  SVC_DEL:      'svdl:',
+  SVC_ADD:      'sva',
+  SVC_PHOTOS:   'svph:',
+  SVC_PHOTO_DEL:'svpd:',
+  SVC_PHOTO_ADD:'svpa:',
+  SVC_BACK:     'svbk:',
+  CONSULT_REQ:  'consult_req',
+  SUPPORT:      'support',
+  TICKET_TAKE:  'tk:',
+  TICKET_DECLINE:'td:',
+  TICKET_CLOSE: 'tkc:',
+  TICKET_FREE_CORRECTION: 'tfc:',
+};
+
+export const STEP = {
+  IDLE:                'idle',
+  REG_CONFIRM:         'rc',
+  REG_NAME:            'rn',
+  REG_PHONE:           'rp',
+  DATE:                'date',
+  TIME:                'time',
+  CONFIRM:             'conf',
+  CLIENT_CANCEL_COMMENT: 'client_cancel_comment',
+  ADD_MASTER:          'add_master',
+  REJECT_COMMENT:      'reject_comment',
+  COUNTER_TIME:        'counter_time',
+  COUNTER_COMMENT:     'counter_comment',
+  ADMIN_CANCEL_REASON: 'admin_cancel_reason',
+  CLIENT_REPLY:        'client_reply',
+  EDIT_SVC_NAME:       'edit_svc_name',
+  EDIT_SVC_PRICE:      'edit_svc_price',
+  EDIT_SVC_DUR:        'edit_svc_dur',
+  EDIT_SVC_DESC:       'edit_svc_desc',
+  EDIT_SVC_EMOJI:      'edit_svc_emoji',
+  ADD_SVC_ID:          'add_svc_id',
+  ADD_SVC_PHOTO:       'add_svc_photo',
+  ADD_ABOUT_PHOTO:     'add_about_photo',
+  EDIT_ABOUT_DESC:     'edit_about_desc',
+  EDIT_ABOUT_INSTAGRAM:'edit_about_instagram',
+  SUPPORT_MSG:         'support_msg',
+  SUPPORT_REPLY:       'support_reply',
+};
+
+export const TIMEZONE = 'Europe/Warsaw';
+export const SALON = 'ManicBot 💅';
+export const ADDRESS = 'ul. Marszałkowska 27, Warszawa';
+export const MAPS_URL = 'https://maps.app.goo.gl/qabutZZG1sEmnwcX7';
+export const INSTAGRAM_URL = 'https://instagram.com/';
+export const PHONE = '+48 22 123 45 67';
+export const WORK = { from: 9, to: 19 };
+export const HOURS_STR = `${WORK.from}:00 — ${WORK.to}:00`;
+export const STATE_TTL_SEC = 7200;
+export const LOCK_TTL_SEC = 30;
+export const CLEANUP_AFTER_MS = 48 * 3600000;
+export const RATE_LIMIT_MAX = 100;
+export const RATE_LIMIT_WINDOW_SEC = 60;
+export const CHAT_HISTORY_MAX = 8;
+export const CHAT_HISTORY_TTL = 3600;
+export const CLIENTS_PER_PAGE = 8;
+export const HUMAN_REQ_THRESHOLD = 1;
+
+export const DEFAULT_SVC = [
+  { id: 'classic',  e: '💅', dur: 60,  price: 80   },
+  { id: 'gel',      e: '💎', dur: 90,  price: 140  },
+  { id: 'pedi',     e: '🦶', dur: 90,  price: 120  },
+  { id: 'ext',      e: '✨', dur: 120, price: 250  },
+  { id: 'design',   e: '🎨', dur: 30,  price: 50   },
+  { id: 'combo',    e: '👑', dur: 150, price: 220  },
+];
+
+export const DEFAULT_PHOTOS = {
+  classic: [
+    'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?w=600',
+    'https://images.pexels.com/photos/3997354/pexels-photo-3997354.jpeg?w=600',
+    'https://images.pexels.com/photos/7321747/pexels-photo-7321747.jpeg?w=600',
+  ],
+  gel: [
+    'https://images.pexels.com/photos/3997388/pexels-photo-3997388.jpeg?w=600',
+    'https://images.pexels.com/photos/3997384/pexels-photo-3997384.jpeg?w=600',
+    'https://images.pexels.com/photos/3997393/pexels-photo-3997393.jpeg?w=600',
+  ],
+  pedi: [
+    'https://images.pexels.com/photos/5874862/pexels-photo-5874862.jpeg?w=600',
+    'https://images.pexels.com/photos/9789207/pexels-photo-9789207.jpeg?w=600',
+    'https://images.pexels.com/photos/4155017/pexels-photo-4155017.jpeg?w=600',
+  ],
+  ext: [
+    'https://images.pexels.com/photos/939836/pexels-photo-939836.jpeg?w=600',
+    'https://images.pexels.com/photos/3738375/pexels-photo-3738375.jpeg?w=600',
+    'https://images.pexels.com/photos/7320686/pexels-photo-7320686.jpeg?w=600',
+  ],
+  design: [
+    'https://images.pexels.com/photos/704815/pexels-photo-704815.jpeg?w=600',
+    'https://images.pexels.com/photos/3997383/pexels-photo-3997383.jpeg?w=600',
+    'https://images.pexels.com/photos/4963822/pexels-photo-4963822.jpeg?w=600',
+  ],
+  combo: [
+    'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?w=600',
+    'https://images.pexels.com/photos/5874862/pexels-photo-5874862.jpeg?w=600',
+  ],
+};
+
+export const DEFAULT_ABOUT_PHOTOS = [
+  'https://images.pexels.com/photos/7750099/pexels-photo-7750099.jpeg?w=600',
+  'https://images.pexels.com/photos/3997354/pexels-photo-3997354.jpeg?w=600',
+  'https://images.pexels.com/photos/7321747/pexels-photo-7321747.jpeg?w=600',
+];
+
+export const CORRECTION_SVC = {
+  id: 'correction', e: '🔧', dur: 30, price: 0, active: true, hidden: true, order: 999,
+  names: { ru: 'Исправление', ua: 'Виправлення', en: 'Correction', pl: 'Korekta' },
+  desc: { ru: null, ua: null, en: null, pl: null },
+  photos: [],
+};
+
+export const AI_MODEL = '@cf/openai/gpt-oss-120b';
+export const AI_MODEL_FALLBACK = '@cf/meta/llama-4-scout-17b-16e-instruct';
+export const AI_MODEL_FALLBACK2 = '@cf/meta/llama-3.1-8b-instruct';
+export const AI_MAX_TOKENS = 280;
+export const LANG_HINT = { ru: 'русском', ua: 'українській', en: 'English', pl: 'polsku' };
+
+export const BROKEN_ABOUT_PHOTO_ID = '33412989';
+export const FALLBACK_ABOUT_PHOTO = 'https://images.pexels.com/photos/3997354/pexels-photo-3997354.jpeg?w=600';
+
+export function buildCtx(env) {
+  if (!env.BOT_TOKEN) throw new Error('Missing secret: BOT_TOKEN');
+  if (!env.ADMIN_KEY) throw new Error('Missing secret: ADMIN_KEY');
+  if (!env.WEBHOOK_SECRET) throw new Error('Missing secret: WEBHOOK_SECRET');
+  const botId = env.BOT_TOKEN.split(':')[0];
+  return {
+    TG: `https://api.telegram.org/bot${env.BOT_TOKEN}`,
+    ADMIN_KEY: env.ADMIN_KEY,
+    WEBHOOK_SECRET: env.WEBHOOK_SECRET,
+    kv: env.MANICBOT,
+    adminChatId: env.ADMIN_CHAT_ID || null,
+    prefix: `b:${botId}:`,
+    AI: env.AI || null,
+    WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
+    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
+  };
+}

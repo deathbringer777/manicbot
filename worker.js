@@ -32,11 +32,13 @@ function buildCtx(env) {
   };
 }
 
+// Constant-time comparison: when lengths differ, compares ta with itself
+// (result discarded, always returns false) to spend equal CPU time
+// and avoid leaking length information via timing side-channel.
 function timingSafeEqual(a, b) {
   const ta = new TextEncoder().encode(a);
   const tb = new TextEncoder().encode(b);
   if (ta.length !== tb.length) {
-    // Still run the comparison to avoid length-based timing leak
     crypto.subtle.timingSafeEqual(ta, ta);
     return false;
   }
@@ -228,6 +230,7 @@ ru: {
   book_cancelled: '❌ Запись отменена.\n\nВыбери, что тебя интересует:',
   book_err: '❌ Ошибка. Начни запись сначала.',
   book_limit: '⚠️ Достигнут лимит записей ({n}). Отмени одну из текущих, чтобы создать новую.',
+  book_already: '⏳ Запись уже создаётся, подожди...',
   ics_cap: '📅 Добавь в Google / Apple календарь',
 
   my_title: '📋 <b>Мои записи</b>',
@@ -348,6 +351,7 @@ ua: {
   book_cancelled: '❌ Запис скасовано.\n\nОбери, що тебе цікавить:',
   book_err: '❌ Помилка. Почни запис спочатку.',
   book_limit: '⚠️ Досягнуто ліміт записів ({n}). Скасуй одну з поточних.',
+  book_already: '⏳ Запис вже створюється, зачекай...',
   ics_cap: '📅 Додай у Google / Apple календар',
 
   my_title: '📋 <b>Мої записи</b>',
@@ -465,6 +469,7 @@ en: {
   book_cancelled: '❌ Booking cancelled.\n\nChoose what interests you:',
   book_err: '❌ Error. Please start booking again.',
   book_limit: '⚠️ Appointment limit reached ({n}). Cancel an existing one first.',
+  book_already: '⏳ Booking is being created, please wait...',
   ics_cap: '📅 Add to Google / Apple Calendar',
 
   my_title: '📋 <b>My Appointments</b>',
@@ -582,6 +587,7 @@ pl: {
   book_cancelled: '❌ Rezerwacja anulowana.\n\nWybierz co Cię interesuje:',
   book_err: '❌ Błąd. Zacznij rezerwację od nowa.',
   book_limit: '⚠️ Osiągnięto limit wizyt ({n}). Anuluj jedną z obecnych.',
+  book_already: '⏳ Rezerwacja jest tworzona, proszę czekać...',
   ics_cap: '📅 Dodaj do Google / Apple Calendar',
 
   my_title: '📋 <b>Moje wizyty</b>',
@@ -817,7 +823,8 @@ async function saveApt(ctx, apt) {
   const active = existing.filter(a => a && !a.cx && a.ts > Date.now()).length;
   if (active >= MAX_APTS) return null;
 
-  const id = `a${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(36)).join('').slice(0, 8);
+  const id = `a${Date.now()}_${rnd}`;
   apt.id = id;
   apt.createdAt = Date.now();
   apt.rem = { h24: false, h12: false, h1: false };
@@ -828,15 +835,17 @@ async function saveApt(ctx, apt) {
     kvGet(ctx, monthKey),
   ]);
 
+  const dayList = dl || [];
+  const monthList = al || [];
   ul.push(id);
-  (dl || []).push(id);
-  (al || []).push(id);
+  dayList.push(id);
+  monthList.push(id);
 
   await Promise.all([
     kvPut(ctx, `ap:${id}`, apt),
     kvPut(ctx, `ua:${apt.chatId}`, ul),
-    kvPut(ctx, `d:${apt.date}`, dl || [id]),
-    kvPut(ctx, monthKey, al || [id]),
+    kvPut(ctx, `d:${apt.date}`, dayList),
+    kvPut(ctx, monthKey, monthList),
   ]);
 
   return apt;
@@ -845,6 +854,8 @@ async function saveApt(ctx, apt) {
 async function getApts(ctx, cid) {
   const ids = (await kvGet(ctx, `ua:${cid}`)) || [];
   const all = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
+  // Include appointments up to 1 hour in the past so users can still see
+  // their current appointment shortly after it starts
   return all
     .filter(a => a && !a.cx && a.ts > Date.now() - 3600000)
     .sort((a, b) => a.ts - b.ts);
@@ -857,17 +868,21 @@ async function cancelApt(ctx, id, ownerChatId) {
   a.cx = true;
   await kvPut(ctx, `ap:${id}`, a);
 
-  const [dl, ul] = await Promise.all([
+  const monthKey = allKey(a.date);
+  const [dl, ul, al] = await Promise.all([
     kvGet(ctx, `d:${a.date}`),
     kvGet(ctx, `ua:${ownerChatId}`),
+    kvGet(ctx, monthKey),
   ]);
 
   const newDl = (dl || []).filter(x => x !== id);
   const newUl = (ul || []).filter(x => x !== id);
+  const newAl = (al || []).filter(x => x !== id);
 
   await Promise.all([
     newDl.length === 0 ? kvDel(ctx, `d:${a.date}`) : kvPut(ctx, `d:${a.date}`, newDl),
     kvPut(ctx, `ua:${ownerChatId}`, newUl),
+    newAl.length === 0 ? kvDel(ctx, monthKey) : kvPut(ctx, monthKey, newAl),
   ]);
 
   return a;
@@ -881,6 +896,7 @@ async function getSlots(ctx, date, svcId) {
   const ids = (await kvGet(ctx, `d:${date}`)) || [];
   const fetched = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
   const booked = fetched.filter(a => a && !a.cx);
+  const svcMap = new Map(SVC.map(s => [s.id, s]));
   const td = todayStr();
   const w = warsawNow();
   const ch = w.hour, cm = w.minute;
@@ -892,7 +908,7 @@ async function getSlots(ctx, date, svcId) {
       if (date === td && (h < ch || (h === ch && m <= cm))) continue;
       let ok = true;
       for (const a of booked) {
-        const bs = SVC.find(s => s.id === a.svcId);
+        const bs = svcMap.get(a.svcId);
         if (!bs) continue;
         const [ah, am] = a.time.split(':').map(Number);
         const as = ah + am / 60, ae = as + bs.dur / 60;
@@ -1208,7 +1224,7 @@ async function onMsg(ctx, msg) {
 async function finishPhone(ctx, cid, phone, st) {
   const lg = (await getLang(ctx, cid)) || 'ru';
   const cl = phone.replace(/[^\d+]/g, '').slice(0, 20);
-  if (cl.length < 7) return send(ctx, cid, t(lg, 'reg_phone_err'));
+  if (cl.length < 9) return send(ctx, cid, t(lg, 'reg_phone_err'));
   const safeName = escHtml(st.name || '');
   await saveUser(ctx, cid, {
     chatId: cid,
@@ -1361,7 +1377,7 @@ async function onCb(ctx, cb) {
     // Idempotency lock: prevent double-booking if user taps Confirm twice
     const lockKey = `lock:${cid}:${st.date}:${st.time}`;
     const lockTaken = await kvGet(ctx, lockKey);
-    if (lockTaken) return;
+    if (lockTaken) return send(ctx, cid, t(lg, 'book_already'));
     await kvPut(ctx, lockKey, 1, { expirationTtl: 30 });
 
     await clearState(ctx, cid);
@@ -1448,11 +1464,18 @@ async function handleCron(ctx) {
         if (diffH < -1 || diffH > 25) continue;
         const lg = (await getLang(ctx, a.chatId)) || 'ru';
         const vars = { svc: svcName(lg, a.svcId), dt: fmtDT(lg, a.date, a.time), addr: ADDRESS };
-        let sent = false;
-        if (!a.rem.h24 && diffH <= 25 && diffH > 23) { a.rem.h24 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_24'), vars)); }
-        if (!a.rem.h12 && diffH <= 13 && diffH > 11) { a.rem.h12 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_12'), vars)); }
-        if (!a.rem.h1  && diffH <= 1.5 && diffH > 0.5) { a.rem.h1 = true; sent = true; await send(ctx, a.chatId, fill(t(lg, 'rem_1'), vars)); }
-        if (sent) await kvPut(ctx, `ap:${id}`, a);
+        // Determine which reminders to send (check flag BEFORE setting it)
+        const do24 = !a.rem.h24 && diffH <= 25 && diffH > 23;
+        const do12 = !a.rem.h12 && diffH <= 13 && diffH > 11;
+        const do1  = !a.rem.h1  && diffH <= 1.5 && diffH > 0.5;
+        // Persist flags BEFORE sending to prevent duplicate reminders on crash/retry
+        if (do24) a.rem.h24 = true;
+        if (do12) a.rem.h12 = true;
+        if (do1)  a.rem.h1  = true;
+        if (do24 || do12 || do1) await kvPut(ctx, `ap:${id}`, a);
+        if (do24) await send(ctx, a.chatId, fill(t(lg, 'rem_24'), vars));
+        if (do12) await send(ctx, a.chatId, fill(t(lg, 'rem_12'), vars));
+        if (do1)  await send(ctx, a.chatId, fill(t(lg, 'rem_1'), vars));
       } catch (e) {
         console.error(`Cron reminder error for apt ${id}:`, e.message);
       }
@@ -1634,7 +1657,7 @@ tr:hover td{background:#fdf2f8}
         let csv = 'Chat ID,Name,Phone,Username,Language,Registered\n';
         for (const u of users) {
           if (!u) continue;
-          csv += `${u.chatId},"${(u.name||'').replace(/"/g,'""')}",${u.phone},${u.tgUsername||''},${u.tgLang||''},${u.registeredAt ? new Date(u.registeredAt).toISOString() : ''}\n`;
+          csv += `${u.chatId},"${(u.name||'').replace(/[\r\n]/g,' ').replace(/"/g,'""')}",${u.phone},${u.tgUsername||''},${u.tgLang||''},${u.registeredAt ? new Date(u.registeredAt).toISOString() : ''}\n`;
         }
         return new Response(csv, { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="clients.csv"' } });
       }
@@ -1652,7 +1675,7 @@ tr:hover td{background:#fdf2f8}
         for (const a of apts) {
           if (!a) continue;
           const status = a.cx ? 'Cancelled' : (a.ts < Date.now() ? 'Completed' : 'Upcoming');
-          csv += `${a.id},"${(a.userName||'').replace(/"/g,'""')}",${a.chatId},${a.svcId},${a.date},${a.time},${status},${new Date(a.createdAt).toISOString()}\n`;
+          csv += `${a.id},"${(a.userName||'').replace(/[\r\n]/g,' ').replace(/"/g,'""')}",${a.chatId},${a.svcId},${a.date},${a.time},${status},${new Date(a.createdAt).toISOString()}\n`;
         }
         return new Response(csv, { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="appointments.csv"' } });
       }

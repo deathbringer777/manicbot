@@ -16,7 +16,11 @@ import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
+import { showBillingMenu } from '../ui/billing.js';
+import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
+import { getTenant } from '../tenant/storage.js';
 import { makeICS } from '../utils/ics.js';
+import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList } from '../ui/sysadmin.js';
 
 export async function onCb(ctx, cb) {
   if (!cb?.message?.chat?.id || !cb?.from || !cb?.data) return;
@@ -147,9 +151,105 @@ export async function onCb(ctx, cb) {
     return;
   }
 
+  // ─── Platform (system_admin) callbacks ────────────────────────────────────
+  if (d === CB.SYSADM_MAIN || d === CB.SYSADM_BACK) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'system_admin') return;
+    return showPlatformAdminPanel(ctx, cid, name);
+  }
+
+  if (d === CB.SYSADM_TENANTS) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'system_admin') return;
+    return showPlatformTenantsList(ctx, cid);
+  }
+
+  if (d === CB.SYSADM_NEW_TENANT) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'system_admin') return;
+    await setState(ctx, cid, { step: STEP.SYSADM_NEW_TENANT });
+    return send(ctx, cid, t(lg, 'sysadm_tenant_enter_name'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]] },
+    });
+  }
+
+  if (d === CB.SYSADM_BOT_NEW) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'system_admin') return;
+    await setState(ctx, cid, { step: STEP.SYSADM_NEW_BOT });
+    return send(ctx, cid, t(lg, 'sysadm_bot_enter_token'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]] },
+    });
+  }
+
+  if (d === CB.SYSADM_SUPPORT_LIST) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'system_admin') return;
+    return showPlatformSupportList(ctx, cid);
+  }
+
+  if (d.startsWith(CB.SYSADM_TENANT_INFO)) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'system_admin') return;
+    const tenantId = d.slice(CB.SYSADM_TENANT_INFO.length);
+    return showPlatformTenantInfo(ctx, cid, tenantId);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (d === CB.ADM_MAIN) {
     if (await isAdmin(ctx, cid)) return showAdminPanel(ctx, cid, name);
     if (await isMaster(ctx, cid)) return showMasterPanel(ctx, cid, name);
+    return;
+  }
+
+  if (d === CB.ADM_BILLING) {
+    if (!await isAdmin(ctx, cid)) return;
+    if (!ctx.tenantId || !ctx.globalKv) return send(ctx, cid, t(lg, 'billing_no_config'));
+    return showBillingMenu(ctx, cid, name);
+  }
+
+  if (d.startsWith(CB.BILLING_SUBSCRIBE)) {
+    if (!await isAdmin(ctx, cid)) return;
+    if (!ctx.tenantId || !ctx.globalKv) return send(ctx, cid, t(lg, 'billing_no_config'));
+    const plan = d.slice(CB.BILLING_SUBSCRIBE.length);
+    const baseUrl = ctx.baseUrl || '';
+    const tenant = await getTenant(ctx.globalKv, ctx.tenantId);
+    const result = await createCheckoutSession(ctx, {
+      tenantId: ctx.tenantId,
+      customerId: tenant?.stripeCustomerId || undefined,
+      customer_email: tenant?.billingEmail || undefined,
+      plan,
+      successUrl: baseUrl ? `${baseUrl}/stripe/success?session_id={CHECKOUT_SESSION_ID}` : undefined,
+      cancelUrl: baseUrl ? `${baseUrl}/` : undefined,
+    });
+    if (result.error) return send(ctx, cid, t(lg, 'billing_no_config') + '\n' + result.error);
+    if (result.url) {
+      await send(ctx, cid, t(lg, 'billing_checkout_sent') + '\n\n' + result.url);
+      return showBillingMenu(ctx, cid, name);
+    }
+    return send(ctx, cid, t(lg, 'billing_no_config'));
+  }
+
+  if (d === CB.BILLING_PORTAL) {
+    if (!await isAdmin(ctx, cid)) return;
+    if (!ctx.tenantId || !ctx.globalKv) return send(ctx, cid, t(lg, 'billing_no_config'));
+    const tenant = await getTenant(ctx.globalKv, ctx.tenantId);
+    if (!tenant?.stripeCustomerId) return send(ctx, cid, t(lg, 'billing_no_config'));
+    const baseUrl = ctx.baseUrl || '';
+    const result = await createPortalSession(ctx, {
+      customerId: tenant.stripeCustomerId,
+      returnUrl: baseUrl ? `${baseUrl}/` : undefined,
+    });
+    if (result.error) return send(ctx, cid, t(lg, 'billing_no_config') + '\n' + result.error);
+    if (result.url) {
+      await send(ctx, cid, t(lg, 'billing_portal_sent') + '\n\n' + result.url);
+      return showBillingMenu(ctx, cid, name);
+    }
+    return send(ctx, cid, t(lg, 'billing_no_config'));
+  }
+
+  if (d === CB.BILLING_BACK) {
+    if (await isAdmin(ctx, cid)) return showAdminPanel(ctx, cid, name);
     return;
   }
 

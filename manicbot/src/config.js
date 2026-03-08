@@ -89,6 +89,18 @@ export const CB = {
   TICKET_DECLINE:'td:',
   TICKET_CLOSE: 'tkc:',
   TICKET_FREE_CORRECTION: 'tfc:',
+  ADM_BILLING:  'adm:bill',
+  BILLING_SUBSCRIBE: 'bill:sub:',
+  BILLING_PORTAL:    'bill:portal',
+  BILLING_BACK:      'bill:back',
+  // Platform (system_admin) panel
+  SYSADM_MAIN:        'sysadm',
+  SYSADM_TENANTS:     'sysadm:ten',
+  SYSADM_NEW_TENANT:  'sysadm:nt',
+  SYSADM_BOT_NEW:     'sysadm:bn',
+  SYSADM_SUPPORT_LIST:'sysadm:sup',
+  SYSADM_TENANT_INFO: 'sysadm:ti:',
+  SYSADM_BACK:        'sysadm:back',
 };
 
 export const STEP = {
@@ -118,6 +130,10 @@ export const STEP = {
   EDIT_ABOUT_INSTAGRAM:'edit_about_instagram',
   SUPPORT_MSG:         'support_msg',
   SUPPORT_REPLY:       'support_reply',
+  // Platform admin flows
+  SYSADM_NEW_TENANT:    'sysadm_new_tenant',
+  SYSADM_NEW_BOT:       'sysadm_new_bot',
+  SYSADM_NEW_BOT_TENANT:'sysadm_new_bot_tenant',
 };
 
 export const TIMEZONE = 'Europe/Warsaw';

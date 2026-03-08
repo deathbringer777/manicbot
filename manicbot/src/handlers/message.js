@@ -11,6 +11,9 @@ import { cancelApt, getApts } from '../services/appointments.js';
 import { getTicket, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
 import { createTicket } from '../support/tickets.js';
 import { getSupportAgents } from '../roles/roles.js';
+import { addSupport, removeSupport, createTenant, registerBot, setSystemAdmin } from '../admin/provisioning.js';
+import { showPlatformAdminPanel } from '../ui/sysadmin.js';
+import { timingSafeEqual, randomId } from '../utils/security.js';
 import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
@@ -18,7 +21,7 @@ import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, sho
 import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
 import { runWorkersAI, parseAIActions, executeAIAction } from '../ai.js';
 import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage } from '../patterns.js';
-import { timingSafeEqual } from '../utils/security.js';
+// timingSafeEqual imported above from security.js
 
 async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   const showConsultBtn = isWantHumanMessage(txt);
@@ -34,7 +37,7 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   const history = await getChatHistory(ctx, cid);
   const aiReply = await runWorkersAI(ctx, txt, lg, realRole, history);
   const { text: aiText, actions } = parseAIActions(aiReply);
-  const pageActions = ['MY_APTS', 'PRICES', 'CATALOG', 'CONTACTS', 'MAIN', 'BOOK', 'CANCEL_ALL', 'ADM_PANEL', 'ADM_TODAY', 'ADM_TOMORROW', 'ADM_MASTERS', 'ADM_CONFIRM_ALL', 'ADM_CANCEL_ALL', 'MST_PANEL', 'MST_TODAY', 'MST_TOMORROW'];
+  const pageActions = ['MY_APTS', 'PRICES', 'CATALOG', 'CONTACTS', 'MAIN', 'BOOK', 'CANCEL_ALL', 'ADM_PANEL', 'ADM_TODAY', 'ADM_TOMORROW', 'ADM_MASTERS', 'ADM_CONFIRM_ALL', 'ADM_CANCEL_ALL', 'MST_PANEL', 'MST_TODAY', 'MST_TOMORROW', 'SYSADM_PANEL', 'TENANT_LIST', 'SUPPORT_LIST', 'CREATE_TENANT', 'BOT_NEW'];
   let didAction = false;
   for (const { tag, param } of actions) {
     if (pageActions.includes(tag) || (tag === 'BOOK' && param)) {
@@ -98,6 +101,42 @@ export async function onMsg(ctx, msg) {
     return;
   }
 
+  if (txt.startsWith('/support_register ')) {
+    const key = txt.slice(17).trim();
+    if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
+    const role = await getRole(ctx, cid);
+    if (role !== 'admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (ctx.globalKv) {
+      await addSupport(ctx.globalKv, cid);
+      return send(ctx, cid, t(lg, 'support_registered'));
+    }
+    return send(ctx, cid, t(lg, 'unknown'));
+  }
+
+  if (txt.startsWith('/add_support ')) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    const arg = txt.slice(12).trim();
+    if (!arg) return send(ctx, cid, t(lg, 'support_add_usage'));
+    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
+    const { masterId, masterName } = await resolveMasterInput(ctx, msg, arg);
+    if (!masterId) return send(ctx, cid, t(lg, 'support_user_not_found'));
+    await addSupport(ctx.globalKv, masterId);
+    return send(ctx, cid, fill(t(lg, 'support_added'), { n: escHtml(masterName), id: String(masterId) }));
+  }
+
+  if (txt === '/remove_support' || txt.startsWith('/remove_support ')) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    const arg = txt.startsWith('/remove_support ') ? txt.slice(15).trim() : '';
+    if (!arg) return send(ctx, cid, t(lg, 'support_remove_usage'));
+    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
+    const { masterId, masterName } = await resolveMasterInput(ctx, msg, arg);
+    if (!masterId) return send(ctx, cid, t(lg, 'support_user_not_found'));
+    await removeSupport(ctx.globalKv, masterId);
+    return send(ctx, cid, fill(t(lg, 'support_removed'), { n: escHtml(masterName) }));
+  }
+
   if (txt.startsWith('/admin ')) {
     const key = txt.slice(7).trim();
     if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
@@ -108,6 +147,15 @@ export async function onMsg(ctx, msg) {
     }
     await send(ctx, cid, t(lg, 'adm_registered'));
     return showAdminPanel(ctx, cid, name);
+  }
+
+  if (txt.startsWith('/sysadmin ')) {
+    const key = txt.slice(10).trim();
+    if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
+    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
+    await setSystemAdmin(ctx.globalKv, cid);
+    await send(ctx, cid, t(lg, 'sysadm_registered'));
+    return showPlatformAdminPanel(ctx, cid, name);
   }
 
   const realRole = await getRole(ctx, cid);
@@ -153,10 +201,11 @@ export async function onMsg(ctx, msg) {
   if (txt === '/client' && realRole !== 'client') {
     return showWelcome(ctx, cid, name);
   }
-  if (txt === '/master' && (realRole === 'admin' || realRole === 'master')) {
+  if (txt === '/master' && (realRole === 'admin' || realRole === 'master' || realRole === 'system_admin')) {
     return showMasterPanel(ctx, cid, name);
   }
   if (txt === '/panel' && realRole !== 'client') {
+    if (realRole === 'system_admin') return showPlatformAdminPanel(ctx, cid, name);
     if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
   }
@@ -172,6 +221,7 @@ export async function onMsg(ctx, msg) {
       }
     }
     if (!hasLang) return showLangPick(ctx, cid);
+    if (realRole === 'system_admin') return showPlatformAdminPanel(ctx, cid, name);
     if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     return showWelcome(ctx, cid, name);
@@ -228,6 +278,60 @@ export async function onMsg(ctx, msg) {
     await send(ctx, cid, fill(t(lg, 'adm_master_added'), { n: escHtml(masterName), id: String(masterId) }));
     return showMastersList(ctx, cid);
   }
+
+  // ─── Platform admin flows ──────────────────────────────────────────────────
+  if (st.step === STEP.SYSADM_NEW_TENANT && realRole === 'system_admin') {
+    const tenantName = txt?.trim();
+    if (!tenantName || tenantName.length < 2) return send(ctx, cid, t(lg, 'sysadm_tenant_name_invalid'));
+    const kv = ctx.globalKv || ctx.kv;
+    const result = await createTenant(kv, tenantName, ctx);
+    await clearState(ctx, cid);
+    if (result.ok) {
+      await send(ctx, cid,
+        `✅ ${t(lg, 'sysadm_tenant_created')}\n\n` +
+        `ID: <code>${result.tenantId}</code>\n` +
+        `${t(lg, 'sysadm_tenant_name_label')}: <b>${escHtml(result.name)}</b>\n\n` +
+        `<i>${t(lg, 'sysadm_register_bot_hint')}</i>`
+      );
+    } else {
+      await send(ctx, cid, `❌ ${result.error || t(lg, 'unknown')}`);
+    }
+    return showPlatformAdminPanel(ctx, cid, name);
+  }
+
+  if (st.step === STEP.SYSADM_NEW_BOT && realRole === 'system_admin') {
+    const token = txt?.trim();
+    if (!token || !token.includes(':') || token.split(':').length < 2) {
+      return send(ctx, cid, t(lg, 'sysadm_bot_token_invalid'));
+    }
+    await setState(ctx, cid, { step: STEP.SYSADM_NEW_BOT_TENANT, botToken: token });
+    return send(ctx, cid, t(lg, 'sysadm_bot_enter_tenant'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]] },
+    });
+  }
+
+  if (st.step === STEP.SYSADM_NEW_BOT_TENANT && realRole === 'system_admin') {
+    const tenantIdInput = txt?.trim();
+    if (!tenantIdInput) return send(ctx, cid, t(lg, 'sysadm_bot_enter_tenant'));
+    const kv = ctx.globalKv || ctx.kv;
+    const webhookSecret = randomId(20);
+    const result = await registerBot(kv, st.botToken, tenantIdInput, webhookSecret, ctx.BOT_ENCRYPTION_KEY || null);
+    await clearState(ctx, cid);
+    if (result.ok) {
+      const wh = ctx.baseUrl ? `${ctx.baseUrl}/webhook/${result.botId}` : `/webhook/${result.botId}`;
+      await send(ctx, cid,
+        `✅ ${t(lg, 'sysadm_bot_registered')}\n\n` +
+        `Bot ID: <code>${result.botId}</code>\n` +
+        `Tenant: <code>${result.tenantId}</code>\n` +
+        `Webhook URL:\n<code>${wh}</code>\n` +
+        `Webhook Secret:\n<code>${webhookSecret}</code>`
+      );
+    } else {
+      await send(ctx, cid, `❌ ${result.error || t(lg, 'unknown')}`);
+    }
+    return showPlatformAdminPanel(ctx, cid, name);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (st.step === STEP.REJECT_COMMENT) {
     if (!txt) return send(ctx, cid, t(lg, 'mst_reject_prompt'));
@@ -499,14 +603,15 @@ export async function onMsg(ctx, msg) {
     }
   }
 
-  if ((realRole === 'admin' || realRole === 'master') && isConfirmAllRequestsMessage(txt)) {
+  if ((realRole === 'admin' || realRole === 'master' || realRole === 'system_admin') && isConfirmAllRequestsMessage(txt)) {
     const count = await confirmAllPendingApts(ctx, cid);
     const confirmLg = await getLang(ctx, cid) || 'ru';
     const confirmMsg = count > 0 ? fill(t(confirmLg, 'confirm_all_done'), { n: String(count) }) : t(confirmLg, 'confirm_all_none');
-    return send(ctx, cid, confirmMsg, { reply_markup: { inline_keyboard: [[{ text: t(confirmLg, 'adm_back'), callback_data: realRole === 'admin' ? CB.ADM_MAIN : CB.MST_MAIN }]] } });
+    const backCb = realRole === 'system_admin' ? CB.SYSADM_MAIN : realRole === 'admin' ? CB.ADM_MAIN : CB.MST_MAIN;
+    return send(ctx, cid, confirmMsg, { reply_markup: { inline_keyboard: [[{ text: t(confirmLg, 'adm_back'), callback_data: backCb }]] } });
   }
 
-  if (realRole === 'admin' && isAdminCancelAllMessage(txt)) {
+  if ((realRole === 'admin' || realRole === 'system_admin') && isAdminCancelAllMessage(txt)) {
     return showAdminCancelAllConfirm(ctx, cid);
   }
 

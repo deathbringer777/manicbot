@@ -6,7 +6,10 @@ import { getLang } from './services/chat.js';
 import { showMyApts, showPrices, showContacts, showCatalog, showWelcome, showReviews } from './ui/screens.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm } from './ui/booking.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showAdminCancelAllConfirm } from './ui/admin.js';
+import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformSupportList } from './ui/sysadmin.js';
 import { confirmAllPendingApts } from './notifications.js';
+import { setState } from './services/state.js';
+import { STEP } from './config.js';
 
 export function buildAISystemPrompt(role, langHint, today = null) {
   const lang = langHint || 'русском';
@@ -92,6 +95,27 @@ export function buildAISystemPrompt(role, langHint, today = null) {
 [CANCEL_ALL] — отменить все МОИ записи
 `.replace(/\n+/g, '\n').trim();
 
+  const sysAdminActions = `
+СИСТЕМНЫЙ АДМИНИСТРАТОР ПЛАТФОРМЫ — теги:
+[SYSADM_PANEL] — панель платформы ManicBot
+[TENANT_LIST] — список всех тенантов (салонов)
+[SUPPORT_LIST] — список агентов поддержки
+[CREATE_TENANT] — создать нового тенанта (спросит название)
+[BOT_NEW] — зарегистрировать нового бота
+
+Доступны ВСЕ действия администратора:
+[ADM_PANEL] — панель текущего салона
+[ADM_TODAY] — записи на сегодня
+[ADM_TOMORROW] — записи на завтра
+[ADM_MASTERS] — мастера
+[ADM_CONFIRM_ALL] — подтвердить все ожидающие
+[ADM_CANCEL_ALL] — отменить все записи
+
+И все клиентские действия:
+[MY_APTS], [BOOK:svcId:date:time], [CANCEL_ALL], [PRICES], [CATALOG], [CONTACTS], [MAIN]
+`.replace(/\n+/g, '\n').trim();
+
+  if (role === 'system_admin') return `${base}\n\n${sysAdminActions}`;
   if (role === 'admin') return `${base}\n\n${adminActions}`;
   if (role === 'master') return `${base}\n\n${masterActions}`;
   return `${base}\n\n${clientActions}`;
@@ -147,6 +171,33 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       return true;
     }
     case 'CANCEL_ALL': await showCancelAllConfirm(ctx, cid); return true;
+  }
+  if (role === 'system_admin') {
+    switch (tag) {
+      case 'SYSADM_PANEL': await showPlatformAdminPanel(ctx, cid, name); return true;
+      case 'TENANT_LIST': await showPlatformTenantsList(ctx, cid); return true;
+      case 'SUPPORT_LIST': await showPlatformSupportList(ctx, cid); return true;
+      case 'CREATE_TENANT':
+        await setState(ctx, cid, { step: STEP.SYSADM_NEW_TENANT });
+        await send(ctx, cid, t(lg, 'sysadm_tenant_enter_name'));
+        return true;
+      case 'BOT_NEW':
+        await setState(ctx, cid, { step: STEP.SYSADM_NEW_BOT });
+        await send(ctx, cid, t(lg, 'sysadm_bot_enter_token'));
+        return true;
+      // All admin actions available to system_admin too
+      case 'ADM_PANEL': await showAdminPanel(ctx, cid, name); return true;
+      case 'ADM_TODAY': await showAdminApts(ctx, cid, dateStrForOffset(0)); return true;
+      case 'ADM_TOMORROW': await showAdminApts(ctx, cid, dateStrForOffset(1)); return true;
+      case 'ADM_MASTERS': await showMastersList(ctx, cid); return true;
+      case 'ADM_CANCEL_ALL': await showAdminCancelAllConfirm(ctx, cid); return true;
+      case 'ADM_CONFIRM_ALL': {
+        const count = await confirmAllPendingApts(ctx, cid);
+        const msg = count > 0 ? fill(t(lg, 'confirm_all_done'), { n: String(count) }) : t(lg, 'confirm_all_none');
+        await send(ctx, cid, msg, { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.SYSADM_MAIN }]] } });
+        return true;
+      }
+    }
   }
   if (role === 'admin') {
     switch (tag) {

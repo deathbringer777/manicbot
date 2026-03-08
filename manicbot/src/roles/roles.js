@@ -44,6 +44,20 @@ export async function setPlatformRole(kv, chatId, role) {
 }
 
 /**
+ * Remove platform role (so user is no longer system_admin or support).
+ */
+export async function removePlatformRole(kv, chatId) {
+  if (!kv || chatId == null) return false;
+  try {
+    await kv.delete(PLATFORM_ROLE_PREFIX + chatId);
+    return true;
+  } catch (e) {
+    console.error('removePlatformRole:', e.message);
+    return false;
+  }
+}
+
+/**
  * Get tenant role (uses ctx = tenant-scoped KV via ctx.prefix).
  */
 export async function getTenantRole(ctx, chatId) {

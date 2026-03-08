@@ -1,11 +1,17 @@
 import { kvGet, kvPut, kvDel, kvListAll } from '../utils/kv.js';
 import { isValidChatId } from '../utils/helpers.js';
 import { api } from '../telegram.js';
-import { resolveRole, ROLES } from '../roles/roles.js';
+import { resolveRole, getPlatformRole, ROLES } from '../roles/roles.js';
 
 export async function getAdminId(ctx) { return kvGet(ctx, 'cfg:admin'); }
 export async function setAdminId(ctx, cid) { return kvPut(ctx, 'cfg:admin', cid); }
-export async function isAdmin(ctx, cid) { return (await getAdminId(ctx)) === cid; }
+export async function isAdmin(ctx, cid) {
+  if (ctx.globalKv) {
+    const platformRole = await getPlatformRole(ctx.globalKv, cid);
+    if (platformRole === ROLES.SYSTEM_ADMIN) return true;
+  }
+  return (await getAdminId(ctx)) === cid;
+}
 
 export async function getMaster(ctx, cid) { return kvGet(ctx, `master:${cid}`); }
 
@@ -145,14 +151,15 @@ export async function resolveMasterInput(ctx, msg, txt) {
   return { masterId: null, masterName: '?', masterUsername: null, masterPhone: null };
 }
 
-/** Returns 'admin' | 'master' | 'support' | 'client' for backward compat with UI. */
+/** Returns 'system_admin' | 'admin' | 'master' | 'support' | 'client'. */
 export async function getRole(ctx, cid) {
   if (ctx.globalKv && ctx.prefix) {
     const role = await resolveRole(ctx.globalKv, ctx, cid);
-    if (role === ROLES.SYSTEM_ADMIN || role === ROLES.TENANT_OWNER) return 'admin';
+    if (role === ROLES.SYSTEM_ADMIN) return 'system_admin';
+    if (role === ROLES.TENANT_OWNER) return 'admin';
     if (role === ROLES.SUPPORT) return 'support';
     if (role === ROLES.MASTER) return 'master';
-    if (role === ROLES.CLIENT && (await isAdmin(ctx, cid))) return 'admin';
+    if (role === ROLES.CLIENT && (await getAdminId(ctx)) === cid) return 'admin';
     return 'client';
   }
   if (await isAdmin(ctx, cid)) return 'admin';

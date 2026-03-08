@@ -10,7 +10,7 @@ import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAbou
 import { cancelApt, getApts } from '../services/appointments.js';
 import { getTicket, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
 import { createTicket } from '../support/tickets.js';
-import { getSupportAgents } from '../roles/roles.js';
+import { getSupportAgents, setTenantRole, ROLES } from '../roles/roles.js';
 import { addSupport, removeSupport, createTenant, registerBot, setSystemAdmin } from '../admin/provisioning.js';
 import { showPlatformAdminPanel } from '../ui/sysadmin.js';
 import { timingSafeEqual, randomId } from '../utils/security.js';
@@ -198,6 +198,35 @@ export async function onMsg(ctx, msg) {
     }
   }
 
+  // ─── Role assignment commands ──────────────────────────────────────────────
+  if (txt.startsWith('/grant_master') || txt.startsWith('/grant_owner')) {
+    const isOwnerCmd = txt.startsWith('/grant_owner');
+    const targetRole = isOwnerCmd ? ROLES.TENANT_OWNER : ROLES.MASTER;
+    const cmd = isOwnerCmd ? '/grant_owner' : '/grant_master';
+    if (realRole !== 'admin' && realRole !== 'system_admin') {
+      return send(ctx, cid, t(lg, 'support_only_admin'));
+    }
+    if (isOwnerCmd && realRole !== 'system_admin') {
+      return send(ctx, cid, t(lg, 'support_only_admin'));
+    }
+    const args = txt.slice(cmd.length).trim().split(/\s+/).filter(Boolean);
+    const input = args[0];
+    const tenantIdArg = args[1] || null;
+    if (!input) return send(ctx, cid, fill(t(lg, 'sysadm_grant_usage'), { cmd }));
+    const { masterId, masterName } = await resolveMasterInput(ctx, msg, input);
+    if (!masterId) return send(ctx, cid, t(lg, 'support_user_not_found'));
+    // Determine target ctx (cross-tenant for system_admin)
+    let targetCtx = ctx;
+    if (tenantIdArg) {
+      const kv = ctx.globalKv || ctx.kv;
+      targetCtx = { ...ctx, kv, prefix: `t:${tenantIdArg}:` };
+    }
+    if (!targetCtx.prefix) return send(ctx, cid, fill(t(lg, 'sysadm_no_tenant_ctx'), { cmd }));
+    await setTenantRole(targetCtx, masterId, targetRole);
+    return send(ctx, cid, fill(t(lg, 'sysadm_role_granted'), { role: isOwnerCmd ? 'owner' : 'master', id: String(masterId), name: escHtml(masterName) }));
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   if (txt === '/client' && realRole !== 'client') {
     return showWelcome(ctx, cid, name);
   }
@@ -274,6 +303,8 @@ export async function onMsg(ctx, msg) {
       addedAt: Date.now(),
       active: true,
     });
+    // In multi-tenant mode also assign the MASTER role so routing works on /start
+    if (ctx.prefix) await setTenantRole(ctx, masterId, ROLES.MASTER);
     await clearState(ctx, cid);
     await send(ctx, cid, fill(t(lg, 'adm_master_added'), { n: escHtml(masterName), id: String(masterId) }));
     return showMastersList(ctx, cid);

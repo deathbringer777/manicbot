@@ -9,7 +9,7 @@ import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMas
 import { saveServices, loadAboutPhotos, saveAboutPhotos } from '../services/services.js';
 import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, resetHumanRequestCount, buildTicketInternalNote } from '../services/tickets.js';
-import { claimTicket } from '../support/tickets.js';
+import { claimTicket, closeTicket } from '../support/tickets.js';
 import { getRole } from '../services/users.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
@@ -93,12 +93,30 @@ export async function onCb(ctx, cb) {
     const suffix = d.slice(CB.TICKET_TAKE.length);
     if (suffix.startsWith('tk_') && ctx.globalKv) {
       const role = await getRole(ctx, cid);
-      if (role !== 'support' && role !== 'admin') return;
+      if (role !== 'support' && role !== 'admin' && role !== 'system_admin') return;
       const result = await claimTicket(ctx.globalKv, suffix, cid);
       if (result.ok) {
-        await send(ctx, cid, t(lg, 'ticket_master_hint') + '\n\n🆘 Тикет #' + result.ticket.id + '\nКлиент: ' + (result.ticket.clientName || '—') + '\n\nОтветьте клиенту в чате — сообщения будут пересылаться.');
+        const clientCid = result.ticket.clientChatId;
+        // Set up local ticket routing so message forwarding works
+        if (ctx.kv && clientCid) {
+          await setTicket(ctx, clientCid, { open: true, masterCid: cid, since: Date.now(), globalTicketId: result.ticket.id });
+          await setTicketMaster(ctx, cid, clientCid);
+          // Notify client they've been connected
+          const clg = await getLang(ctx, clientCid) || 'ru';
+          const masterName = escHtml((cb.from?.first_name || '').trim() || 'Агент');
+          try { await send(ctx, clientCid, fill(t(clg, 'ticket_taken_by'), { name: masterName })); } catch (_) {}
+        }
+        await send(ctx, cid,
+          t(lg, 'ticket_master_hint') +
+          '\n\n🆘 Тикет #' + result.ticket.id +
+          '\nКлиент: ' + escHtml(result.ticket.clientName || '—') +
+          (clientCid ? '\nID: <code>' + clientCid + '</code>' : ''),
+          { reply_markup: { inline_keyboard: [
+            [{ text: t(lg, 'ticket_close_btn'), callback_data: CB.TICKET_CLOSE + (clientCid || result.ticket.id) }],
+          ] } }
+        );
       } else {
-        await send(ctx, cid, result.error === 'Claim race lost' ? t(lg, 'ticket_taken_else') : (result.error || 'Error'));
+        await send(ctx, cid, result.error === 'Claim race lost' ? t(lg, 'ticket_taken_else') : '❌ ' + (result.error || 'Error'));
       }
       return;
     }
@@ -144,6 +162,10 @@ export async function onCb(ctx, cb) {
     if (!clientCid) return;
     const ticket = await getTicket(ctx, clientCid);
     if (!ticket || (ticket.masterCid !== cid && !(await isAdmin(ctx, cid)))) return;
+    // Also close the global platform ticket if linked
+    if (ticket.globalTicketId && ctx.globalKv) {
+      try { await closeTicket(ctx.globalKv, ticket.globalTicketId); } catch (_) {}
+    }
     await clearTicket(ctx, clientCid);
     const clg = await getLang(ctx, clientCid) || 'ru';
     await send(ctx, clientCid, t(clg, 'ticket_closed'));

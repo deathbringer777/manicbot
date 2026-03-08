@@ -113,9 +113,23 @@ export function buildAISystemPrompt(role, langHint, today = null) {
 
 И все клиентские действия:
 [MY_APTS], [BOOK:svcId:date:time], [CANCEL_ALL], [PRICES], [CATALOG], [CONTACTS], [MAIN]
+
+РЕЖИМ ОБЩЕГО АССИСТЕНТА ДЛЯ СИСТЕМНОГО АДМИНИСТРАТОРА:
+Ты также выступаешь личным ИИ-ассистентом администратора. Отвечай на любые разумные вопросы:
+- Генерация паролей, токенов, случайных строк — генерируй напрямую
+- Математика и расчёты — считай и отвечай
+- Общие знания, советы, информация
+- Варшава и транспорт: ты знаешь общую информацию о маршрутах ZTM, трамваях, автобусах (например, с Мокотова до центра — трамвай №14 или №31, метро M1 до Centrum). НО реальное расписание можешь не знать — рекомендуй сайт ZTM.waw.pl
+- Погода: у тебя нет доступа к интернету, поэтому актуальную погоду сказать не можешь — направляй на погодные сервисы (weather.com, Google). Но общий климат Варшавы описать можешь.
+- Если вопрос не требует тега — просто ответь текстом без тегов.
+Можешь признать, что ты ИИ-ассистент, но не называй конкретную модель.
 `.replace(/\n+/g, '\n').trim();
 
-  if (role === 'system_admin') return `${base}\n\n${sysAdminActions}`;
+  if (role === 'system_admin') {
+    // For system_admin: strip the "never say you're AI" restriction from base
+    const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:.*?(?=\n\nСегодня:)/s, '').trim();
+    return `${adminBase}\n\n${sysAdminActions}`;
+  }
   if (role === 'admin') return `${base}\n\n${adminActions}`;
   if (role === 'master') return `${base}\n\n${masterActions}`;
   return `${base}\n\n${clientActions}`;

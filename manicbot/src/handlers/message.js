@@ -9,7 +9,8 @@ import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt,
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts } from '../services/appointments.js';
 import { getTicket, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
-import { createTicket, getSupportAgents } from '../support/tickets.js';
+import { createTicket } from '../support/tickets.js';
+import { getSupportAgents } from '../roles/roles.js';
 import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews } from '../ui/screens.js';

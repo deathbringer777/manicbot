@@ -1,0 +1,5 @@
+secrets.generated.txt
+.env
+.env.*
+!.env.example
+node_modules/

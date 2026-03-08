@@ -1,35 +1,46 @@
 // ══════════════════════════════════════════════════════════════
 // ManicBot 💅 — Telegram-бот для записи на маникюр
-// Платформа: Cloudflare Workers + KV Storage
-// 4 языка: RU / UA / EN / PL
-//
-// НАСТРОЙКА:
-// 1. Создай KV namespace: Workers & Pages → KV → Create → имя MANICBOT
-// 2. Привяжи к воркеру: Settings → Variables → KV Bindings
-//    Variable name: MANICBOT → выбери namespace MANICBOT
-// 3. Добавь секреты (Settings → Variables → Secrets):
-//    BOT_TOKEN       = токен от @BotFather
-//    ADMIN_KEY       = произвольный ключ для /admin и /setup
-//    WEBHOOK_SECRET  = произвольная строка (openssl rand -hex 20)
-// 4. Вставь код → Deploy
-// 5. Admin: https://<worker>.workers.dev/admin (Basic Auth: admin / ADMIN_KEY)
-// 6. Setup: https://<worker>.workers.dev/setup?key=YOUR_ADMIN_KEY
-// 7. Для напоминаний: Triggers → Cron → */15 * * * *
+// Multi-tenant SaaS-ready (see ARCHITECTURE_REPORT.md)
+// Платформа: Cloudflare Workers + KV Storage | 4 языка: RU / UA / EN / PL
 // ══════════════════════════════════════════════════════════════
 
-// Secrets: wrangler secret put BOT_TOKEN / ADMIN_KEY / WEBHOOK_SECRET
+import { CB, VALID_LANGS, MAX_APTS, API_TIMEOUT_MS, DATE_RE, TIME_RE, DEFAULT_TENANT_ID } from './src/constants.js';
+import { getTenantConfig } from './src/tenant.js';
+import * as storage from './src/storage.js';
+import { dayKey, monthKey, monthFromDate, aptKey } from './src/keys.js';
 
-function buildCtx(env) {
-  if (!env.BOT_TOKEN) throw new Error('Missing secret: BOT_TOKEN');
+/** Get token for bot. Env: BOT_TOKEN (default), BOT_TOKEN_SALON1, BOT_TOKEN_MASTER1 (uppercase). */
+function getBotToken(env, botId) {
+  if (botId === 'default') {
+    return env.BOT_TOKEN
+      || env.BOT_TOKEN_SALON1 || env.BOT_TOKEN_SALON2
+      || env.BOT_TOKEN_MASTER1 || env.BOT_TOKEN_MASTER2
+      || null;
+  }
+  const key = `BOT_TOKEN_${botId.toUpperCase()}`;
+  return env[key] || env[`BOT_TOKEN_${botId}`] || null;
+}
+
+function buildCtx(env, overrides = {}) {
+  const token = overrides.token ?? getBotToken(env, 'default');
+  const tenantId = overrides.tenantId ?? DEFAULT_TENANT_ID;
+  if (!token) throw new Error('Missing bot token. Set at least one: BOT_TOKEN or BOT_TOKEN_SALON1 / BOT_TOKEN_MASTER1 etc.');
   if (!env.ADMIN_KEY) throw new Error('Missing secret: ADMIN_KEY');
   if (!env.WEBHOOK_SECRET) throw new Error('Missing secret: WEBHOOK_SECRET');
   return {
-    TG: `https://api.telegram.org/bot${env.BOT_TOKEN}`,
+    TG: `https://api.telegram.org/bot${token}`,
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: env.WEBHOOK_SECRET,
     kv: env.MANICBOT,
     adminChatId: env.ADMIN_CHAT_ID || null,
+    tenantId,
   };
+}
+
+async function buildCtxWithTenant(env, overrides = {}) {
+  const ctx = buildCtx(env, overrides);
+  ctx.tenantConfig = await getTenantConfig(ctx.kv, ctx.tenantId);
+  return ctx;
 }
 
 // Constant-time comparison: when lengths differ, compares ta with itself
@@ -67,84 +78,10 @@ async function kvListAll(kv, opts) {
   return keys;
 }
 
-// ─── Security ────────────────────────────────────────────────
-const MAX_APTS = 10;                // макс. активных записей на пользователя
-const API_TIMEOUT_MS = 10000;       // таймаут Telegram API (мс)
-const VALID_LANGS = new Set(['ru', 'ua', 'en', 'pl']);
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_RE = /^\d{2}:\d{2}$/;
-
-// ─── Callback data prefixes ───────────────────────────────────
-const CB = {
-  NOOP:      '_',
-  MAIN:      'main',
-  BOOK:      'book',
-  MY:        'my',
-  PRICES:    'prices',
-  CONTACTS:  'cont',
-  REVIEWS:   'rev',
-  ABOUT:     'about',
-  CATALOG:   'cat',
-  CAL_BACK:  'bcal',
-  CONFIRM:   'ok',
-  CANCEL_BOOK: 'no',
-  LANG:      'lang',
-  LANG_SET:  'sl:',
-  REG_YES:   'rg:y',
-  REG_CHANGE:'rg:c',
-  SERVICE:   'sv:',
-  CAL_MONTH: 'cm:',
-  DATE:      'dt:',
-  TIME:      'tm:',
-  CANCEL_APT:'cx:',
-  CAT_PHOTO: 'cc:',
-};
-
-const TIMEZONE = 'Europe/Warsaw';
-const SALON = 'ManicBot 💅';
-const ADDRESS = 'ul. Marszałkowska 27, Warszawa';
-const PHONE = '+48 22 123 45 67';
-const WORK = { from: 9, to: 19 };
-
-const SVC = [
-  { id: 'classic',  e: '💅', dur: 60,  price: 80   },
-  { id: 'gel',      e: '💎', dur: 90,  price: 140  },
-  { id: 'pedi',     e: '🦶', dur: 90,  price: 120  },
-  { id: 'ext',      e: '✨', dur: 120, price: 250  },
-  { id: 'design',   e: '🎨', dur: 30,  price: 50   },
-  { id: 'combo',    e: '👑', dur: 150, price: 220  },
-];
-const SVC_IDS = new Set(SVC.map(s => s.id));
-
-// ─── Фото каталога (замени URL на свои) ─────────────────────
-const PHOTOS = {
-  classic: [
-    'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?w=600',
-    'https://images.pexels.com/photos/3997391/pexels-photo-3997391.jpeg?w=600',
-    'https://images.pexels.com/photos/704815/pexels-photo-704815.jpeg?w=600',
-  ],
-  gel: [
-    'https://images.pexels.com/photos/3997388/pexels-photo-3997388.jpeg?w=600',
-    'https://images.pexels.com/photos/3997384/pexels-photo-3997384.jpeg?w=600',
-    'https://images.pexels.com/photos/3997393/pexels-photo-3997393.jpeg?w=600',
-  ],
-  pedi: [
-    'https://images.pexels.com/photos/1204464/pexels-photo-1204464.jpeg?w=600',
-    'https://images.pexels.com/photos/5765783/pexels-photo-5765783.jpeg?w=600',
-  ],
-  ext: [
-    'https://images.pexels.com/photos/939836/pexels-photo-939836.jpeg?w=600',
-    'https://images.pexels.com/photos/1115128/pexels-photo-1115128.jpeg?w=600',
-  ],
-  design: [
-    'https://images.pexels.com/photos/1484808/pexels-photo-1484808.jpeg?w=600',
-    'https://images.pexels.com/photos/3997383/pexels-photo-3997383.jpeg?w=600',
-  ],
-  combo: [
-    'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?w=600',
-    'https://images.pexels.com/photos/1204464/pexels-photo-1204464.jpeg?w=600',
-  ],
-};
+// ─── Tenant config: use ctx.tenantConfig (salonName, address, phone, workHours, services, photos, timezone) ───
+function svcIds(ctx) {
+  return new Set((ctx.tenantConfig?.services || []).map(s => s.id));
+}
 
 // ══════════════════════════════════════════════════════════════
 //  ПЕРЕВОДЫ — 4 языка
@@ -642,8 +579,8 @@ function escHtml(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function svcName(lang, id) {
-  const s = SVC.find(x => x.id === id);
+function svcName(lang, id, services) {
+  const s = (services || []).find(x => x.id === id);
   if (!s) return escHtml(id);
   return `${s.e} ${t(lang, 'svc_' + id)}`;
 }
@@ -669,10 +606,10 @@ function isValidTime(ts) {
   return h >= 0 && h <= 23 && (m === 0 || m === 30);
 }
 
-function warsawNow() {
+function warsawNow(timezone = 'Europe/Warsaw') {
   const p = {};
   for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMEZONE,
+    timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(new Date())) p[type] = value;
@@ -682,12 +619,12 @@ function warsawNow() {
   };
 }
 
-function warsawToUTC(year, month, day, hour, minute) {
+function warsawToUTC(year, month, day, hour, minute, timezone = 'Europe/Warsaw') {
   for (const offset of [1, 2]) {
     const utc = new Date(Date.UTC(year, month - 1, day, hour - offset, minute));
     const p = {};
     for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
-      timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+      timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: false,
     }).formatToParts(utc)) p[type] = value;
     if (parseInt(p.hour) === hour && parseInt(p.day) === day && parseInt(p.month) === month)
@@ -696,8 +633,8 @@ function warsawToUTC(year, month, day, hour, minute) {
   return new Date(Date.UTC(year, month - 1, day, hour - 1, minute));
 }
 
-function todayStr() {
-  const w = warsawNow();
+function todayStr(timezone = 'Europe/Warsaw') {
+  const w = warsawNow(timezone);
   return `${w.year}-${p2(w.month)}-${p2(w.day)}`;
 }
 
@@ -709,7 +646,10 @@ function fmtDate(lang, ds) {
 }
 function fmtDT(lang, ds, ts) { return `${fmtDate(lang, ds)} ${ts}`; }
 
-const hours = () => `${WORK.from}:00 — ${WORK.to}:00`;
+function hours(config) {
+  const w = config?.workHours || { from: 9, to: 19 };
+  return `${w.from}:00 — ${w.to}:00`;
+}
 
 // ─── Telegram API (with timeout) ─────────────────────────────
 
@@ -778,127 +718,16 @@ async function sendIcs(ctx, chatId, content, fname, caption) {
   }
 }
 
-// ─── KV (all wrapped in try-catch) ───────────────────────────
-
-async function kvGet(ctx, k) {
-  try { return await ctx.kv.get(k, 'json'); }
-  catch (e) { console.error('KV GET fail:', k, e.message); return null; }
-}
-
-async function kvPut(ctx, k, v, o) {
-  try { await ctx.kv.put(k, JSON.stringify(v), o); return true; }
-  catch (e) { console.error('KV PUT fail:', k, e.message); return false; }
-}
-
-async function kvDel(ctx, k) {
-  try { await ctx.kv.delete(k); }
-  catch (e) { console.error('KV DEL fail:', k, e.message); }
-}
-
-async function getLang(ctx, cid) {
-  try { return (await ctx.kv.get(`lang:${cid}`)) || null; }
-  catch { return null; }
-}
-async function setLang(ctx, cid, lang) {
-  if (!VALID_LANGS.has(lang)) return;
-  try { await ctx.kv.put(`lang:${cid}`, lang); } catch {}
-}
-
-async function getState(ctx, cid) { return (await kvGet(ctx, `st:${cid}`)) || { step: 'idle' }; }
-async function setState(ctx, cid, s) { await kvPut(ctx, `st:${cid}`, s, { expirationTtl: 7200 }); }
-async function clearState(ctx, cid) { await kvDel(ctx, `st:${cid}`); }
-
-async function getUser(ctx, cid) { return kvGet(ctx, `u:${cid}`); }
-async function saveUser(ctx, cid, d) { await kvPut(ctx, `u:${cid}`, d); }
-
-function allKey(dateStr) {
-  // e.g. "2026-03-15" → "all:2026-03"
-  return `all:${dateStr.slice(0, 7)}`;
-}
-
-async function saveApt(ctx, apt) {
-  const ul = (await kvGet(ctx, `ua:${apt.chatId}`)) || [];
-
-  const existing = await Promise.all(ul.map(id => kvGet(ctx, `ap:${id}`)));
-  const active = existing.filter(a => a && !a.cx && a.ts > Date.now()).length;
-  if (active >= MAX_APTS) return null;
-
-  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(36)).join('').slice(0, 8);
-  const id = `a${Date.now()}_${rnd}`;
-  apt.id = id;
-  apt.createdAt = Date.now();
-  apt.rem = { h24: false, h12: false, h1: false };
-
-  const monthKey = allKey(apt.date);
-  const [dl, al] = await Promise.all([
-    kvGet(ctx, `d:${apt.date}`),
-    kvGet(ctx, monthKey),
-  ]);
-
-  const dayList = dl || [];
-  const monthList = al || [];
-  ul.push(id);
-  dayList.push(id);
-  monthList.push(id);
-
-  await Promise.all([
-    kvPut(ctx, `ap:${id}`, apt),
-    kvPut(ctx, `ua:${apt.chatId}`, ul),
-    kvPut(ctx, `d:${apt.date}`, dayList),
-    kvPut(ctx, monthKey, monthList),
-  ]);
-
-  return apt;
-}
-
-async function getApts(ctx, cid) {
-  const ids = (await kvGet(ctx, `ua:${cid}`)) || [];
-  const all = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
-  // Include appointments up to 1 hour in the past so users can still see
-  // their current appointment shortly after it starts
-  return all
-    .filter(a => a && !a.cx && a.ts > Date.now() - 3600000)
-    .sort((a, b) => a.ts - b.ts);
-}
-
-async function cancelApt(ctx, id, ownerChatId) {
-  if (!/^a\d+_\w+$/.test(id)) return null;
-  const a = await kvGet(ctx, `ap:${id}`);
-  if (!a || a.chatId !== ownerChatId) return null;
-  a.cx = true;
-  await kvPut(ctx, `ap:${id}`, a);
-
-  const monthKey = allKey(a.date);
-  const [dl, ul, al] = await Promise.all([
-    kvGet(ctx, `d:${a.date}`),
-    kvGet(ctx, `ua:${ownerChatId}`),
-    kvGet(ctx, monthKey),
-  ]);
-
-  const newDl = (dl || []).filter(x => x !== id);
-  const newUl = (ul || []).filter(x => x !== id);
-  const newAl = (al || []).filter(x => x !== id);
-
-  await Promise.all([
-    newDl.length === 0 ? kvDel(ctx, `d:${a.date}`) : kvPut(ctx, `d:${a.date}`, newDl),
-    kvPut(ctx, `ua:${ownerChatId}`, newUl),
-    newAl.length === 0 ? kvDel(ctx, monthKey) : kvPut(ctx, monthKey, newAl),
-  ]);
-
-  return a;
-}
-
-// ─── Available Slots ─────────────────────────────────────────
+// ─── KV: use storage.* (tenant-scoped). getLang/setLang/getState/setState/getUser/saveUser/saveApt/cancelApt/getApts from storage ───
 
 async function getSlots(ctx, date, svcId) {
-  const svc = SVC.find(s => s.id === svcId);
+  const config = ctx.tenantConfig || {};
+  const { services: SVC, workHours: WORK, timezone: TZ } = config;
+  if (!SVC?.length) return [];
+  const { svc, booked, svcMap } = await storage.getSlots(ctx, date, svcId, config);
   if (!svc) return [];
-  const ids = (await kvGet(ctx, `d:${date}`)) || [];
-  const fetched = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
-  const booked = fetched.filter(a => a && !a.cx);
-  const svcMap = new Map(SVC.map(s => [s.id, s]));
-  const td = todayStr();
-  const w = warsawNow();
+  const td = todayStr(TZ);
+  const w = warsawNow(TZ);
   const ch = w.hour, cm = w.minute;
   const slots = [];
   for (let h = WORK.from; h < WORK.to; h++) {
@@ -920,22 +749,37 @@ async function getSlots(ctx, date, svcId) {
   return slots;
 }
 
+// ─── Tenant-scoped storage wrappers ───────────────────────────
+const getLang = storage.getLang;
+const setLang = storage.setLang;
+const getState = storage.getState;
+const setState = storage.setState;
+const clearState = storage.clearState;
+const getUser = storage.getUser;
+const saveUser = storage.saveUser;
+const saveApt = storage.saveApt;
+const getApts = storage.getApts;
+const cancelApt = storage.cancelApt;
+
 // ─── ICS ─────────────────────────────────────────────────────
 
 function escIcs(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
-function makeICS(apt, lang) {
-  const svc = SVC.find(s => s.id === apt.svcId);
+function makeICS(apt, lang, config) {
+  const svcList = config?.services || [];
+  const svc = svcList.find(s => s.id === apt.svcId);
   if (!svc) return '';
-  const name = svcName(lang, apt.svcId);
+  const name = svcName(lang, apt.svcId, svcList);
   const [y, mo, d] = apt.date.split('-').map(Number);
   const [h, mi] = apt.time.split(':').map(Number);
-  const start = warsawToUTC(y, mo, d, h, mi);
+  const tz = config?.timezone || 'Europe/Warsaw';
+  const start = warsawToUTC(y, mo, d, h, mi, tz);
   const end = new Date(start.getTime() + svc.dur * 60000);
   const f = dt => dt.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const safeName = name.replace(/[^\w\sа-яА-ЯёЁіІїЇєЄґҐa-zA-Zżźćńółęąś']/gui, '');
+  const addr = config?.address || '';
   return [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ManicBot//Bot', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -943,7 +787,7 @@ function makeICS(apt, lang) {
     `DTSTART:${f(start)}`, `DTEND:${f(end)}`,
     `SUMMARY:${escIcs(safeName)}`,
     `DESCRIPTION:${escIcs(safeName)}\\n${escIcs(apt.userName)}`,
-    `LOCATION:${escIcs(ADDRESS)}`, 'STATUS:CONFIRMED',
+    `LOCATION:${escIcs(addr)}`, 'STATUS:CONFIRMED',
     'BEGIN:VALARM', 'TRIGGER:-PT24H', 'ACTION:DISPLAY', 'DESCRIPTION:24h', 'END:VALARM',
     'BEGIN:VALARM', 'TRIGGER:-PT12H', 'ACTION:DISPLAY', 'DESCRIPTION:12h', 'END:VALARM',
     'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:1h', 'END:VALARM',
@@ -975,7 +819,8 @@ function langKb() {
   ] } };
 }
 
-function svcKb(lg) {
+function svcKb(lg, config) {
+  const SVC = config?.services || [];
   const rows = SVC.map(s => [{
     text: `${s.e} ${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
     callback_data: CB.SERVICE + s.id,
@@ -984,9 +829,9 @@ function svcKb(lg) {
   return { reply_markup: { inline_keyboard: rows } };
 }
 
-function calKb(lg, mo = 0) {
+function calKb(lg, mo = 0, timezone = 'Europe/Warsaw') {
   mo = Math.max(0, Math.min(2, mo));
-  const w = warsawNow();
+  const w = warsawNow(timezone);
   const vd = new Date(Date.UTC(w.year, w.month - 1 + mo, 1));
   const vy = vd.getUTCFullYear(), vm = vd.getUTCMonth();
   const dim = new Date(Date.UTC(vy, vm + 1, 0)).getUTCDate();
@@ -1002,7 +847,7 @@ function calKb(lg, mo = 0) {
 
   rows.push(t(lg, 'daysH').map(d => ({ text: d, callback_data: CB.NOOP })));
 
-  const td = todayStr();
+  const td = todayStr(timezone);
   let wk = Array.from({ length: f }, () => ({ text: ' ', callback_data: CB.NOOP }));
   for (let day = 1; day <= dim; day++) {
     const ds = `${vy}-${p2(vm + 1)}-${p2(day)}`;
@@ -1024,7 +869,8 @@ function timeKb(slots, lg) {
   return { reply_markup: { inline_keyboard: rows } };
 }
 
-function catListKb(lg) {
+function catListKb(lg, config) {
+  const SVC = config?.services || [];
   const rows = SVC.map(s => [{
     text: `${s.e} ${t(lg, 'svc_' + s.id)}`,
     callback_data: CB.CAT_PHOTO + s.id + ':0',
@@ -1056,11 +902,13 @@ async function showLangPick(ctx, chatId) {
 async function showWelcome(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
-  await send(ctx, cid, fill(t(lg, 'welcome'), { s: SALON, n: escHtml(name) }), mainKb(lg));
+  const salon = ctx.tenantConfig?.salonName || 'ManicBot 💅';
+  await send(ctx, cid, fill(t(lg, 'welcome'), { s: salon, n: escHtml(name) }), mainKb(lg));
 }
 
 async function showPrices(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
+  const SVC = ctx.tenantConfig?.services || [];
   let txt = t(lg, 'prices_t');
   for (const s of SVC)
     txt += `${s.e} <b>${t(lg, 'svc_' + s.id)}</b>\n   💵 ${s.price} ${t(lg, 'cur')} · ⏱ ${s.dur} ${t(lg, 'min')}\n\n`;
@@ -1072,7 +920,8 @@ async function showPrices(ctx, cid) {
 
 async function showContacts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  await send(ctx, cid, fill(t(lg, 'cont_t'), { addr: ADDRESS, ph: PHONE, h: hours() }), { reply_markup: { inline_keyboard: [
+  const cfg = ctx.tenantConfig || {};
+  await send(ctx, cid, fill(t(lg, 'cont_t'), { addr: cfg.address || '', ph: cfg.phone || '', h: hours(cfg) }), { reply_markup: { inline_keyboard: [
     [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
     [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
   ] } });
@@ -1088,7 +937,8 @@ async function showReviews(ctx, cid) {
 
 async function showAbout(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  await send(ctx, cid, fill(t(lg, 'about_t'), { s: SALON, addr: ADDRESS, h: hours() }), { reply_markup: { inline_keyboard: [
+  const cfg = ctx.tenantConfig || {};
+  await send(ctx, cid, fill(t(lg, 'about_t'), { s: cfg.salonName || '', addr: cfg.address || '', h: hours(cfg) }), { reply_markup: { inline_keyboard: [
     [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
     [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
   ] } });
@@ -1096,14 +946,16 @@ async function showAbout(ctx, cid) {
 
 async function showCatalog(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  await send(ctx, cid, t(lg, 'cat_title'), catListKb(lg));
+  await send(ctx, cid, t(lg, 'cat_title'), catListKb(lg, ctx.tenantConfig));
 }
 
 async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const photos = PHOTOS[svcId] || [];
+  const cfg = ctx.tenantConfig || {};
+  const photos = (cfg.photos && cfg.photos[svcId]) || [];
+  const SVC = cfg.services || [];
   if (!photos.length) {
-    return send(ctx, cid, `${svcName(lg, svcId)}\n\n${t(lg, 'cat_empty')}`, { reply_markup: { inline_keyboard: [
+    return send(ctx, cid, `${svcName(lg, svcId, SVC)}\n\n${t(lg, 'cat_empty')}`, { reply_markup: { inline_keyboard: [
       [{ text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
     ] } });
   }
@@ -1127,6 +979,7 @@ async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
 async function showMyApts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const apts = await getApts(ctx, cid);
+  const SVC = ctx.tenantConfig?.services || [];
   if (!apts.length) {
     return send(ctx, cid, `${t(lg, 'my_title')}\n\n${t(lg, 'my_empty')}`, { reply_markup: { inline_keyboard: [
       [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
@@ -1138,7 +991,7 @@ async function showMyApts(ctx, cid) {
   for (const a of apts) {
     const sv = SVC.find(x => x.id === a.svcId);
     if (!sv) continue;
-    txt += `${svcName(lg, a.svcId)}\n📅 ${fmtDT(lg, a.date, a.time)}\n💵 ${sv.price} ${t(lg, 'cur')}\n\n`;
+    txt += `${svcName(lg, a.svcId, SVC)}\n📅 ${fmtDT(lg, a.date, a.time)}\n💵 ${sv.price} ${t(lg, 'cur')}\n\n`;
     btns.push([{
       text: fill(t(lg, 'my_cancel'), { d: fmtDate(lg, a.date), t: a.time }),
       callback_data: CB.CANCEL_APT + a.id,
@@ -1165,7 +1018,7 @@ async function startBooking(ctx, cid, from) {
       ] },
     });
   }
-  await send(ctx, cid, t(lg, 'choose_svc'), svcKb(lg));
+  await send(ctx, cid, t(lg, 'choose_svc'), svcKb(lg, ctx.tenantConfig));
 }
 
 // ─── Message handler (with validation) ───────────────────────
@@ -1296,14 +1149,15 @@ async function onCb(ctx, cb) {
   if (d.startsWith(CB.CAT_PHOTO)) {
     const parts = d.slice(CB.CAT_PHOTO.length).split(':');
     const svcId = parts[0];
-    if (!SVC_IDS.has(svcId)) return;
+    if (!svcIds(ctx).has(svcId)) return;
     const idx = Math.max(0, parseInt(parts[1]) || 0);
     return showCatPhoto(ctx, cid, svcId, idx, mid);
   }
 
   if (d.startsWith(CB.SERVICE)) {
     const sid = d.slice(CB.SERVICE.length);
-    if (!SVC_IDS.has(sid)) return;
+    const SVC = ctx.tenantConfig?.services || [];
+    if (!svcIds(ctx).has(sid)) return;
     const s = SVC.find(x => x.id === sid);
     const user = await getUser(ctx, cid);
     if (!user) {
@@ -1311,39 +1165,41 @@ async function onCb(ctx, cb) {
     }
     await setState(ctx, cid, { step: 'date', svcId: sid });
     await send(ctx, cid, fill(t(lg, 'chosen'), {
-      svc: svcName(lg, sid), p: String(s.price), c: t(lg, 'cur'), d: String(s.dur), min: t(lg, 'min'),
-    }) + '\n\n' + t(lg, 'choose_date'), calKb(lg, 0));
+      svc: svcName(lg, sid, SVC), p: String(s.price), c: t(lg, 'cur'), d: String(s.dur), min: t(lg, 'min'),
+    }) + '\n\n' + t(lg, 'choose_date'), calKb(lg, 0, ctx.tenantConfig?.timezone));
     return;
   }
 
   if (d.startsWith(CB.CAL_MONTH)) {
     const off = Math.max(0, Math.min(2, parseInt(d.slice(CB.CAL_MONTH.length)) || 0));
-    return edit(ctx, cid, mid, t(lg, 'choose_date'), calKb(lg, off));
+    return edit(ctx, cid, mid, t(lg, 'choose_date'), calKb(lg, off, ctx.tenantConfig?.timezone));
   }
 
   if (d.startsWith(CB.DATE)) {
     const date = d.slice(CB.DATE.length);
     if (!isValidDate(date)) return;
-    if (date < todayStr()) return;
+    const tz = ctx.tenantConfig?.timezone || 'Europe/Warsaw';
+    if (date < todayStr(tz)) return;
     const st = await getState(ctx, cid);
-    if (!st.svcId || !SVC_IDS.has(st.svcId)) return send(ctx, cid, t(lg, 'book_err'), svcKb(lg));
+    if (!st.svcId || !svcIds(ctx).has(st.svcId)) return send(ctx, cid, t(lg, 'book_err'), svcKb(lg, ctx.tenantConfig));
     const slots = await getSlots(ctx, date, st.svcId);
-    if (!slots.length) return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, date) }), calKb(lg, 0));
+    if (!slots.length) return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, date) }), calKb(lg, 0, tz));
     st.step = 'time';
     st.date = date;
     await setState(ctx, cid, st);
-    await send(ctx, cid, `📅 <b>${fmtDate(lg, date)}</b>\n${svcName(lg, st.svcId)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
+    await send(ctx, cid, `📅 <b>${fmtDate(lg, date)}</b>\n${svcName(lg, st.svcId, ctx.tenantConfig?.services)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
     return;
   }
 
-  if (d === CB.CAL_BACK) return send(ctx, cid, t(lg, 'choose_date'), calKb(lg, 0));
+  if (d === CB.CAL_BACK) return send(ctx, cid, t(lg, 'choose_date'), calKb(lg, 0, ctx.tenantConfig?.timezone));
 
   if (d.startsWith(CB.TIME)) {
     const time = d.slice(CB.TIME.length);
     if (!isValidTime(time)) return;
     const st = await getState(ctx, cid);
-    if (!st.svcId || !st.date || !SVC_IDS.has(st.svcId) || !isValidDate(st.date)) {
-      return send(ctx, cid, t(lg, 'book_err'), svcKb(lg));
+    const SVC = ctx.tenantConfig?.services || [];
+    if (!st.svcId || !st.date || !svcIds(ctx).has(st.svcId) || !isValidDate(st.date)) {
+      return send(ctx, cid, t(lg, 'book_err'), svcKb(lg, ctx.tenantConfig));
     }
     st.step = 'conf';
     st.time = time;
@@ -1370,23 +1226,25 @@ async function onCb(ctx, cb) {
     if (st.step !== 'conf' || !st.svcId || !st.date || !st.time) {
       return send(ctx, cid, t(lg, 'book_err'), mainKb(lg));
     }
-    if (!SVC_IDS.has(st.svcId) || !isValidDate(st.date) || !isValidTime(st.time)) {
+    const SVC = ctx.tenantConfig?.services || [];
+    if (!svcIds(ctx).has(st.svcId) || !isValidDate(st.date) || !isValidTime(st.time)) {
       return send(ctx, cid, t(lg, 'book_err'), mainKb(lg));
     }
 
     // Idempotency lock: prevent double-booking if user taps Confirm twice
-    const lockKey = `lock:${cid}:${st.date}:${st.time}`;
-    const lockTaken = await kvGet(ctx, lockKey);
+    const lockKey = storage.getLockKey(ctx, cid, st.date, st.time);
+    const lockTaken = await storage.kvGet(ctx, lockKey);
     if (lockTaken) return send(ctx, cid, t(lg, 'book_already'));
-    await kvPut(ctx, lockKey, 1, { expirationTtl: 30 });
+    await storage.kvPut(ctx, lockKey, 1, { expirationTtl: 30 });
 
     await clearState(ctx, cid);
 
     const s = SVC.find(x => x.id === st.svcId);
     const user = await getUser(ctx, cid);
+    const tz = ctx.tenantConfig?.timezone || 'Europe/Warsaw';
     const [y, mo, dd] = st.date.split('-').map(Number);
     const [h, mi] = st.time.split(':').map(Number);
-    const ts = warsawToUTC(y, mo, dd, h, mi).getTime();
+    const ts = warsawToUTC(y, mo, dd, h, mi, tz).getTime();
 
     const apt = await saveApt(ctx, {
       chatId: cid, svcId: st.svcId, date: st.date, time: st.time, ts,
@@ -1397,17 +1255,18 @@ async function onCb(ctx, cb) {
       return send(ctx, cid, fill(t(lg, 'book_limit'), { n: String(MAX_APTS) }), mainKb(lg));
     }
 
+    const addr = ctx.tenantConfig?.address || '';
     await send(ctx, cid, fill(t(lg, 'booked'), {
-      svc: svcName(lg, st.svcId), dt: fmtDT(lg, st.date, st.time),
-      dur: String(s.dur), min: t(lg, 'min'), p: String(s.price), c: t(lg, 'cur'), addr: ADDRESS,
+      svc: svcName(lg, st.svcId, SVC), dt: fmtDT(lg, st.date, st.time),
+      dur: String(s.dur), min: t(lg, 'min'), p: String(s.price), c: t(lg, 'cur'), addr,
     }), mainKb(lg));
 
-    const ics = makeICS(apt, lg);
+    const ics = makeICS(apt, lg, ctx.tenantConfig);
     const notifyAdmin = ctx.adminChatId
       ? send(ctx, ctx.adminChatId, [
           '🆕 <b>Новая запись!</b>',
           `👤 ${escHtml(user?.name || '?')} | 📱 ${escHtml(user?.phone || '?')}`,
-          `💅 ${svcName('ru', st.svcId)}`,
+          `💅 ${svcName('ru', st.svcId, SVC)}`,
           `📅 ${fmtDT('ru', st.date, st.time)}`,
           `💵 ${s.price} zł`,
         ].join('\n'))
@@ -1428,9 +1287,10 @@ async function onCb(ctx, cb) {
   if (d.startsWith(CB.CANCEL_APT)) {
     const aptId = d.slice(CB.CANCEL_APT.length);
     const apt = await cancelApt(ctx, aptId, cid);
+    const SVC = ctx.tenantConfig?.services || [];
     if (apt) {
       await send(ctx, cid, fill(t(lg, 'cancel_ok'), {
-        svc: svcName(lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time),
+        svc: svcName(lg, apt.svcId, SVC), dt: fmtDT(lg, apt.date, apt.time),
       }), { reply_markup: { inline_keyboard: [
         [{ text: t(lg, 'rebook'), callback_data: CB.BOOK }],
         [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
@@ -1442,37 +1302,39 @@ async function onCb(ctx, cb) {
   }
 }
 
-// ─── Cron: Reminders + Cleanup ───────────────────────────────
+// ─── Cron: Reminders + Cleanup (tenant-scoped) ────────────────
 
 async function handleCron(ctx) {
   const now = Date.now();
-  const w = warsawNow();
+  const tid = ctx.tenantId || DEFAULT_TENANT_ID;
+  const tz = ctx.tenantConfig?.timezone || 'Europe/Warsaw';
+  const w = warsawNow(tz);
+  const addr = ctx.tenantConfig?.address || '';
+  const SVC = ctx.tenantConfig?.services || [];
 
-  // Phase 1: reminders — only scan today + tomorrow (not all appointments)
+  // Phase 1: reminders — only scan today + tomorrow
   const reminderDates = [];
   for (const off of [0, 1]) {
     const d = new Date(Date.UTC(w.year, w.month - 1, w.day + off));
     reminderDates.push(`${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`);
   }
   for (const date of reminderDates) {
-    const ids = (await kvGet(ctx, `d:${date}`)) || [];
+    const ids = (await storage.kvGet(ctx, dayKey(tid, date))) || [];
     for (const id of ids) {
       try {
-        const a = await kvGet(ctx, `ap:${id}`);
+        const a = await storage.kvGet(ctx, aptKey(tid, id));
         if (!a || a.cx) continue;
         const diffH = (a.ts - now) / 3600000;
         if (diffH < -1 || diffH > 25) continue;
         const lg = (await getLang(ctx, a.chatId)) || 'ru';
-        const vars = { svc: svcName(lg, a.svcId), dt: fmtDT(lg, a.date, a.time), addr: ADDRESS };
-        // Determine which reminders to send (check flag BEFORE setting it)
+        const vars = { svc: svcName(lg, a.svcId, SVC), dt: fmtDT(lg, a.date, a.time), addr };
         const do24 = !a.rem.h24 && diffH <= 25 && diffH > 23;
         const do12 = !a.rem.h12 && diffH <= 13 && diffH > 11;
         const do1  = !a.rem.h1  && diffH <= 1.5 && diffH > 0.5;
-        // Persist flags BEFORE sending to prevent duplicate reminders on crash/retry
         if (do24) a.rem.h24 = true;
         if (do12) a.rem.h12 = true;
         if (do1)  a.rem.h1  = true;
-        if (do24 || do12 || do1) await kvPut(ctx, `ap:${id}`, a);
+        if (do24 || do12 || do1) await storage.kvPut(ctx, aptKey(tid, id), a);
         if (do24) await send(ctx, a.chatId, fill(t(lg, 'rem_24'), vars));
         if (do12) await send(ctx, a.chatId, fill(t(lg, 'rem_12'), vars));
         if (do1)  await send(ctx, a.chatId, fill(t(lg, 'rem_1'), vars));
@@ -1482,26 +1344,27 @@ async function handleCron(ctx) {
     }
   }
 
-  // Phase 2: cleanup — scan current + previous month, remove expired/cancelled
+  // Phase 2: cleanup — current + previous month
   const monthsToClean = [];
   for (const off of [-1, 0]) {
     const d = new Date(Date.UTC(w.year, w.month - 1 + off, 1));
-    monthsToClean.push(`all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`);
+    monthsToClean.push(monthFromDate(`${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-01`));
   }
-  for (const monthKey of monthsToClean) {
-    const allIds = (await kvGet(ctx, monthKey)) || [];
+  for (const yyyyMm of monthsToClean) {
+    const mk = monthKey(tid, yyyyMm);
+    const allIds = (await storage.kvGet(ctx, mk)) || [];
     const kept = [];
     for (const id of allIds) {
       try {
-        const a = await kvGet(ctx, `ap:${id}`);
+        const a = await storage.kvGet(ctx, aptKey(tid, id));
         if (!a) continue;
         if ((a.ts < now - 48 * 3600000) || a.cx) {
-          await kvDel(ctx, `ap:${id}`);
-          const dl = (await kvGet(ctx, `d:${a.date}`)) || [];
+          await storage.kvDel(ctx, aptKey(tid, id));
+          const dl = (await storage.kvGet(ctx, dayKey(tid, a.date))) || [];
           const newDl = dl.filter(x => x !== id);
           if (newDl.length !== dl.length) {
-            if (newDl.length === 0) await kvDel(ctx, `d:${a.date}`);
-            else await kvPut(ctx, `d:${a.date}`, newDl);
+            if (newDl.length === 0) await storage.kvDel(ctx, dayKey(tid, a.date));
+            else await storage.kvPut(ctx, dayKey(tid, a.date), newDl);
           }
           continue;
         }
@@ -1512,8 +1375,8 @@ async function handleCron(ctx) {
       }
     }
     if (kept.length !== allIds.length) {
-      if (kept.length === 0) await kvDel(ctx, monthKey);
-      else await kvPut(ctx, monthKey, kept);
+      if (kept.length === 0) await storage.kvDel(ctx, mk);
+      else await storage.kvPut(ctx, mk, kept);
     }
   }
 }
@@ -1522,57 +1385,111 @@ async function handleCron(ctx) {
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+
+    // Webhook: /webhook or /webhook/:botId — build ctx per bot
+    if (request.method === 'POST' && pathParts[0] === 'webhook') {
+      const botId = pathParts[1] || 'default';
+      const token = getBotToken(env, botId);
+      if (!token) {
+        return new Response('Bot not configured', { status: 503 });
+      }
+      let ctx;
+      try {
+        ctx = await buildCtxWithTenant(env, { token, tenantId: botId });
+      } catch (e) {
+        return new Response(e.message, { status: 500 });
+      }
+      const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+      if (secret !== ctx.WEBHOOK_SECRET) {
+        return new Response('Unauthorized', { status: 403 });
+      }
+      if (!ctx.kv) {
+        console.error('KV MANICBOT not bound');
+        return new Response('OK');
+      }
+      try {
+        const upd = await request.json();
+        if (upd.message && upd.message.chat?.id && upd.message.from?.id) {
+          await onMsg(ctx, upd.message);
+        }
+        if (upd.callback_query && upd.callback_query.message?.chat?.id && upd.callback_query.from?.id && upd.callback_query.data) {
+          await onCb(ctx, upd.callback_query);
+        }
+      } catch (e) {
+        console.error('Webhook error:', e.message, e.stack);
+      }
+      return new Response('OK');
+    }
+
+    // All other routes: default ctx (admin, setup, landing, cron uses default tenant)
     let ctx;
-    try { ctx = buildCtx(env); } catch (e) {
+    try {
+      ctx = await buildCtxWithTenant(env);
+    } catch (e) {
       return new Response(e.message, { status: 500 });
     }
-    const url = new URL(request.url);
     const ADMIN_401 = new Response('Unauthorized', {
       status: 401,
       headers: { 'WWW-Authenticate': 'Basic realm="ManicBot Admin"' },
     });
 
-    // ── Admin: set webhook (key-protected, curl-friendly)
-    if (url.pathname === '/setup') {
+    // ── Admin: set webhook (key-protected). /setup or /setup/:botId (e.g. /setup/salon1)
+    if (url.pathname === '/setup' || (pathParts[0] === 'setup' && pathParts.length >= 1)) {
       if (!timingSafeEqual(url.searchParams.get('key') || '', ctx.ADMIN_KEY)) {
         return new Response('Forbidden', { status: 403 });
       }
-      const wh = `${url.origin}/webhook`;
-      const r = await api(ctx, 'setWebhook', {
+      const botId = pathParts[1] || 'default';
+      const token = getBotToken(env, botId);
+      if (!token) {
+        return Response.json({ error: `No token for bot: ${botId}. Set BOT_TOKEN_${botId.toUpperCase()} secret.` }, { status: 400 });
+      }
+      const wh = `${url.origin}/webhook/${botId}`;
+      const setupCtx = buildCtx(env, { token, tenantId: botId });
+      const r = await api(setupCtx, 'setWebhook', {
         url: wh,
         secret_token: ctx.WEBHOOK_SECRET,
         allowed_updates: ['message', 'callback_query'],
       });
-      return Response.json({ webhook: wh, result: r });
+      return Response.json({ botId, webhook: wh, result: r });
     }
 
-    // ── Admin: remove webhook (key-protected, curl-friendly)
-    if (url.pathname === '/remove-webhook') {
+    // ── Admin: remove webhook. /remove-webhook or /remove-webhook/:botId
+    if (url.pathname === '/remove-webhook' || (pathParts[0] === 'remove-webhook' && pathParts.length >= 1)) {
       if (!timingSafeEqual(url.searchParams.get('key') || '', ctx.ADMIN_KEY)) {
         return new Response('Forbidden', { status: 403 });
       }
-      return Response.json({ result: await api(ctx, 'deleteWebhook', {}) });
+      const botId = pathParts[1] || 'default';
+      const token = getBotToken(env, botId);
+      if (!token) {
+        return Response.json({ error: `No token for bot: ${botId}` }, { status: 400 });
+      }
+      const removeCtx = buildCtx(env, { token });
+      return Response.json({ botId, result: await api(removeCtx, 'deleteWebhook', {}) });
     }
 
-    // ── Admin panel (Basic Auth)
+    // ── Admin panel (Basic Auth) — tenant-scoped (default tenant)
     if (url.pathname === '/admin') {
       if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
       if (!ctx.kv) return new Response('KV not bound', { status: 500 });
 
-      const adminW = warsawNow();
+      const tid = ctx.tenantId || DEFAULT_TENANT_ID;
+      const adminW = warsawNow(ctx.tenantConfig?.timezone);
       const adminMonthKeys = [-2, -1, 0].map(off => {
         const d = new Date(Date.UTC(adminW.year, adminW.month - 1 + off, 1));
-        return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
+        return monthKey(tid, `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`);
       });
-      const monthBuckets = await Promise.all(adminMonthKeys.map(k => kvGet(ctx, k)));
+      const monthBuckets = await Promise.all(adminMonthKeys.map(k => storage.kvGet(ctx, k)));
       const allIds = [...new Set(monthBuckets.flatMap(b => b || []))];
-      const userKeys = await kvListAll(ctx.kv, { prefix: 'u:' });
+      const userKeys = await kvListAll(ctx.kv, { prefix: `tenant:${tid}:user:` });
 
       const [aptRecords, userRecords] = await Promise.all([
-        Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))),
-        Promise.all(userKeys.map(k => kvGet(ctx, k.name))),
+        Promise.all(allIds.map(id => storage.kvGet(ctx, aptKey(tid, id)))),
+        Promise.all(userKeys.map(k => storage.kvGet(ctx, k.name))),
       ]);
 
+      const SVC = ctx.tenantConfig?.services || [];
       const appointments = aptRecords
         .filter(Boolean)
         .map(a => {
@@ -1646,14 +1563,15 @@ tr:hover td{background:#fdf2f8}
       return new Response(html, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
     }
 
-    // ── CSV export (Basic Auth)
+    // ── CSV export (Basic Auth) — tenant-scoped
     if (url.pathname.startsWith('/admin/export/') && ctx.kv) {
       if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
       const file = url.pathname.split('/').pop();
+      const tid = ctx.tenantId || DEFAULT_TENANT_ID;
 
       if (file === 'clients.csv') {
-        const userKeys = await kvListAll(ctx.kv, { prefix: 'u:' });
-        const users = await Promise.all(userKeys.map(k => kvGet(ctx, k.name)));
+        const userKeys = await kvListAll(ctx.kv, { prefix: `tenant:${tid}:user:` });
+        const users = await Promise.all(userKeys.map(k => storage.kvGet(ctx, k.name)));
         let csv = 'Chat ID,Name,Phone,Username,Language,Registered\n';
         for (const u of users) {
           if (!u) continue;
@@ -1663,14 +1581,14 @@ tr:hover td{background:#fdf2f8}
       }
 
       if (file === 'appointments.csv') {
-        const csvW = warsawNow();
+        const csvW = warsawNow(ctx.tenantConfig?.timezone);
         const csvMonthKeys = [-2, -1, 0].map(off => {
           const d = new Date(Date.UTC(csvW.year, csvW.month - 1 + off, 1));
-          return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
+          return monthKey(tid, `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`);
         });
-        const csvBuckets = await Promise.all(csvMonthKeys.map(k => kvGet(ctx, k)));
+        const csvBuckets = await Promise.all(csvMonthKeys.map(k => storage.kvGet(ctx, k)));
         const allIds = [...new Set(csvBuckets.flatMap(b => b || []))];
-        const apts = await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`)));
+        const apts = await Promise.all(allIds.map(id => storage.kvGet(ctx, aptKey(tid, id))));
         let csv = 'ID,Client,Chat ID,Service,Date,Time,Status,Created\n';
         for (const a of apts) {
           if (!a) continue;
@@ -1695,49 +1613,15 @@ code{background:#fce7f3;padding:2px 6px;border-radius:4px}
 <h1>💅 ManicBot</h1>
 <p>Telegram-бот для записи на маникюр</p>
 <div class="s"><h3>Status</h3><p>✅ Worker is running</p></div>
-<div class="s"><h3>Setup</h3><p>Use <code>/setup?key=YOUR_KEY</code> to configure webhook</p></div>
+<div class="s"><h3>Setup</h3><p><code>/setup?key=KEY</code> — default bot<br><code>/setup/salon1?key=KEY</code> — salon1<br><code>/setup/salon2?key=KEY</code> — salon2</p></div>
 </body></html>`, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
-    }
-
-    // ── Webhook endpoint (verified by secret header)
-    if (request.method === 'POST' && url.pathname === '/webhook') {
-      const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
-      if (secret !== ctx.WEBHOOK_SECRET) {
-        return new Response('Unauthorized', { status: 403 });
-      }
-
-      if (!ctx.kv) {
-        console.error('KV MANICBOT not bound');
-        return new Response('OK');
-      }
-
-      try {
-        const upd = await request.json();
-
-        if (upd.message) {
-          if (!upd.message.chat?.id || !upd.message.from?.id) {
-            return new Response('OK');
-          }
-          await onMsg(ctx, upd.message);
-        }
-
-        if (upd.callback_query) {
-          if (!upd.callback_query.message?.chat?.id || !upd.callback_query.from?.id || !upd.callback_query.data) {
-            return new Response('OK');
-          }
-          await onCb(ctx, upd.callback_query);
-        }
-      } catch (e) {
-        console.error('Webhook error:', e.message, e.stack);
-      }
-      return new Response('OK');
     }
 
     return new Response('Not Found', { status: 404 });
   },
 
   async scheduled(event, env, _scheduledCtx) {
-    const ctx = buildCtx(env);
+    const ctx = await buildCtxWithTenant(env);
     _scheduledCtx.waitUntil(handleCron(ctx));
   },
 };

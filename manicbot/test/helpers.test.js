@@ -6,6 +6,7 @@ describe('escHtml', () => {
     expect(escHtml('<b>test</b>')).toBe('&lt;b&gt;test&lt;/b&gt;');
     expect(escHtml('a & b')).toBe('a &amp; b');
     expect(escHtml('"quoted"')).toBe('&quot;quoted&quot;');
+    expect(escHtml("'apos'")).toBe('&#39;apos&#39;');
   });
 
   it('handles non-string input', () => {

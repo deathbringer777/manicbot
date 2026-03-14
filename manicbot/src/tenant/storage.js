@@ -11,6 +11,44 @@ import { SALON, ADDRESS, PHONE, MAPS_URL, INSTAGRAM_URL, WORK, DEFAULT_SVC, DEFA
 const TENANT_PREFIX = 'tenant:';
 const BOT_PREFIX = 'bot:';
 const BOTMAP_PREFIX = 'botmap:';
+const TENANTS_INDEX_KEY = 'tenants_index';
+const BOTS_INDEX_PREFIX = 'botsindex:';
+
+// ── Index helpers (strong-consistency replacements for kv.list()) ─────────────
+
+async function getTenantIndex(kv) {
+  try {
+    const raw = await kv.get(TENANTS_INDEX_KEY, 'json');
+    return Array.isArray(raw) ? raw : null;
+  } catch { return null; }
+}
+
+async function addTenantToIndex(kv, tenantId) {
+  try {
+    const index = (await getTenantIndex(kv)) || [];
+    if (!index.includes(tenantId)) {
+      index.push(tenantId);
+      await kv.put(TENANTS_INDEX_KEY, JSON.stringify(index));
+    }
+  } catch (e) { console.error('addTenantToIndex:', e.message); }
+}
+
+async function getBotIndex(kv, tenantId) {
+  try {
+    const raw = await kv.get(BOTS_INDEX_PREFIX + tenantId, 'json');
+    return Array.isArray(raw) ? raw : null;
+  } catch { return null; }
+}
+
+async function addBotToIndex(kv, tenantId, botId) {
+  try {
+    const index = (await getBotIndex(kv, tenantId)) || [];
+    if (!index.includes(botId)) {
+      index.push(botId);
+      await kv.put(BOTS_INDEX_PREFIX + tenantId, JSON.stringify(index));
+    }
+  } catch (e) { console.error('addBotToIndex:', e.message); }
+}
 
 function tenantKey(tenantId) {
   return TENANT_PREFIX + tenantId;
@@ -38,6 +76,7 @@ export async function putTenant(kv, tenantId, data) {
   if (!kv || !tenantId) return false;
   try {
     await kv.put(tenantKey(tenantId), JSON.stringify(data));
+    await addTenantToIndex(kv, tenantId);
     return true;
   } catch (e) {
     console.error('putTenant:', e.message);
@@ -74,7 +113,14 @@ export async function putBot(kv, botId, data, encryptionKey = null) {
       delete payload.botToken;
     }
     await kv.put(botKey(botId), JSON.stringify(payload));
-    await kv.put(botmapKey(botId), payload.tenantId || data.tenantId);
+    const tenantIdToMap = payload.tenantId || data.tenantId;
+    try {
+      await kv.put(botmapKey(botId), tenantIdToMap);
+    } catch (e) {
+      console.error('putBot: botmap write failed, retrying:', e.message);
+      await kv.put(botmapKey(botId), tenantIdToMap);
+    }
+    if (tenantIdToMap) await addBotToIndex(kv, tenantIdToMap, botId);
     return true;
   } catch (e) {
     console.error('putBot:', e.message);
@@ -140,6 +186,12 @@ export function defaultBotPayload(botId, tenantId, botToken, webhookSecret, botU
 }
 
 export async function listTenantIds(kv) {
+  // Use index key for strong consistency (kv.list has eventual consistency)
+  const index = await getTenantIndex(kv);
+  if (index !== null) return index;
+
+  // First call after deploy: index doesn't exist yet — fall back to kv.list()
+  // and persist the index so future calls skip this slow path.
   const keys = [];
   let cursor;
   do {
@@ -150,12 +202,19 @@ export async function listTenantIds(kv) {
     }
     cursor = res.list_complete ? undefined : res.cursor;
   } while (cursor);
+  try { await kv.put(TENANTS_INDEX_KEY, JSON.stringify(keys)); } catch (_) {}
   return keys;
 }
 
 /** Return botIds that are bound to this tenantId. */
 export async function getBotIdsByTenantId(kv, tenantId) {
   if (!kv || !tenantId) return [];
+
+  // Use per-tenant bot index for strong consistency
+  const index = await getBotIndex(kv, tenantId);
+  if (index !== null) return index;
+
+  // First call: fall back to kv.list() and persist the index
   const out = [];
   let cursor;
   do {
@@ -167,5 +226,6 @@ export async function getBotIdsByTenantId(kv, tenantId) {
     }
     cursor = res.list_complete ? undefined : res.cursor;
   } while (cursor);
+  try { await kv.put(BOTS_INDEX_PREFIX + tenantId, JSON.stringify(out)); } catch (_) {}
   return out;
 }

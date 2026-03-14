@@ -77,7 +77,7 @@ export function resolveDateHint(hint) {
   const h = hint.trim().toLowerCase();
   if (/^(tomorrow|завтра|jutro|jutra)$/i.test(h)) return dateStrForOffset(1);
   if (/^(after.?tomorrow|послезавтра|післязавтра|pojutrze)$/i.test(h)) return dateStrForOffset(2);
-  if (/^today|сегодня|сьогодні|dziś$/i.test(h)) return dateStrForOffset(0);
+  if (/^(today|сегодня|сьогодні|dziś)$/i.test(h)) return dateStrForOffset(0);
   for (const [dowStr, patterns] of Object.entries(DAY_OF_WEEK_MAP)) {
     if (patterns.some(re => re.test(h))) {
       const targetDow = parseInt(dowStr, 10);

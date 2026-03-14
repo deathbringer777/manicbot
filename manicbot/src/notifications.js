@@ -93,7 +93,7 @@ export async function notifyStaffAptCancelled(ctx, apt, comment = null) {
       const lg = await getLang(ctx, rcid) || 'ru';
       const usernamePart = username ? ` | 🔗 @${escHtml(username)}` : '';
       const lines = [
-        '❌ <b>Запись отменена клиентом</b>',
+        t(lg, 'staff_apt_cancelled_client'),
         '',
         `👤 ${escHtml(apt.userName)} | 📱 ${escHtml(apt.userPhone)}${usernamePart}`,
         '',
@@ -113,16 +113,18 @@ export async function notifyStaffConsultantRequest(ctx, clientCid, replyMarkup =
   const masters = await listMasters(ctx);
   const adminId = await getAdminId(ctx);
   const recipients = new Set();
-  for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
-  if (adminId) recipients.add(adminId);
-  if (ctx.adminChatId) recipients.add(ctx.adminChatId);
+  for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(Number(m.chatId));
+  if (adminId) recipients.add(Number(adminId));
+  if (ctx.adminChatId) recipients.add(Number(ctx.adminChatId));
   const user = await getUser(ctx, clientCid);
   const name = user?.name ? escHtml(user.name) : '—';
   const phone = user?.phone ? escHtml(user.phone) : '—';
   const username = user?.tgUsername ? `@${escHtml(user.tgUsername)}` : '—';
+  const salonName = escHtml(ctx.tenant?.salon?.name || ctx.SALON_NAME || '');
+  const salonPrefix = salonName ? `🏠 <b>${salonName}</b>\n` : '';
   for (const rcid of recipients) {
     const rlg = await getLang(ctx, rcid) || 'ru';
-    let msg = fill(t(rlg, 'consultant_notify'), { name, phone, username });
+    let msg = salonPrefix + fill(t(rlg, 'consultant_notify'), { name, phone, username });
     if (internalNote && internalNote.trim()) {
       msg += '\n\n' + fill(t(rlg, 'ticket_internal_note'), { note: escHtml(internalNote.trim()) });
     }

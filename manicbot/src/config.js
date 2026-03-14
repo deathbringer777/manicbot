@@ -101,6 +101,17 @@ export const CB = {
   SYSADM_SUPPORT_LIST:'sysadm:sup',
   SYSADM_TENANT_INFO: 'sysadm:ti:',
   SYSADM_BACK:        'sysadm:back',
+  SYSADM_LINKS:       'sysadm:links',
+  SYSADM_SUPPORT_ADD: 'sysadm:supadd',
+  SYSADM_SUPPORT_REMOVE: 'sysadm:suprm:',
+  SYSADM_GRANT_ROLE: 'sysadm:grant',
+  SYSADM_GRANT_MASTER: 'sysadm:gm',
+  SYSADM_GRANT_OWNER: 'sysadm:go',
+  // Salon settings editing
+  ADM_SETTINGS_NAME: 'adm:stn',
+  ADM_SETTINGS_PHONE: 'adm:stp',
+  ADM_SETTINGS_ADDR: 'adm:sta',
+  ADM_SETTINGS_HOURS: 'adm:sth',
 };
 
 export const STEP = {
@@ -133,7 +144,14 @@ export const STEP = {
   // Platform admin flows
   SYSADM_NEW_TENANT:    'sysadm_new_tenant',
   SYSADM_NEW_BOT:       'sysadm_new_bot',
+  SYSADM_GRANT_INPUT:   'sysadm_grant_input',
   SYSADM_NEW_BOT_TENANT:'sysadm_new_bot_tenant',
+  SYSADM_ADD_SUPPORT:   'sysadm_add_support',
+  // Salon settings editing steps
+  EDIT_SALON_NAME:      'edit_salon_name',
+  EDIT_SALON_PHONE:     'edit_salon_phone',
+  EDIT_SALON_ADDR:      'edit_salon_addr',
+  EDIT_SALON_HOURS_FROM:'edit_salon_hours_from',
 };
 
 export const TIMEZONE = 'Europe/Warsaw';
@@ -227,6 +245,7 @@ export function buildCtx(env) {
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: env.WEBHOOK_SECRET,
     kv: env.MANICBOT,
+    globalKv: env.MANICBOT,
     adminChatId: env.ADMIN_CHAT_ID || null,
     prefix: `b:${botId}:`,
     AI: env.AI || null,

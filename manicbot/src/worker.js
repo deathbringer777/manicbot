@@ -1,4 +1,4 @@
-import { buildCtx, CB } from './config.js';
+import { buildCtx } from './config.js';
 import { timingSafeEqual, checkAdmin } from './utils/security.js';
 import { kvGet, kvListAll } from './utils/kv.js';
 import { escHtml, p2 } from './utils/helpers.js';
@@ -13,8 +13,8 @@ import { handleCron } from './handlers/cron.js';
 import { resolveTenantFromBotId, buildTenantCtx, buildLegacyCtx, isMigrationDone } from './tenant/resolver.js';
 import { runMigration } from './tenant/migration.js';
 import { handleStripeWebhook } from './billing/webhooks.js';
-import { listTenantIds, getBotIdsByTenantId } from './tenant/storage.js';
-import { resolveTenantFromBotId, buildTenantCtx } from './tenant/resolver.js';
+import { listTenantIds, getBotIdsByTenantId, getTenant } from './tenant/storage.js';
+import { runSeed } from './admin/seed.js';
 
 async function getCtx(env, url, request) {
   const kv = env.MANICBOT;
@@ -47,6 +47,17 @@ export default {
       return new Response(result.skipped ? 'OK (duplicate)' : 'OK', { status: result.status });
     }
 
+    if (request.method === 'GET' && url.pathname === '/stripe/success') {
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Payment successful</title>
+<style>body{font-family:system-ui;max-width:480px;margin:60px auto;padding:20px;background:#f0fdf4;color:#166534;text-align:center}
+h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.1)}</style></head><body>
+<h1>✅ Payment successful</h1>
+<div class="s"><p>Your subscription is active. You can close this tab and return to the bot.</p></div>
+</body></html>`;
+      return new Response(html, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+    }
+
     if (url.pathname === '/admin/migrate') {
       const key = url.searchParams.get('key') || '';
       if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
@@ -54,6 +65,17 @@ export default {
       }
       if (!env.MANICBOT) return new Response('KV not bound', { status: 500 });
       const result = await runMigration(env.MANICBOT, env);
+      return Response.json(result);
+    }
+
+    if (url.pathname === '/admin/seed') {
+      const key = url.searchParams.get('key') || '';
+      if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      if (!env.MANICBOT) return new Response('KV not bound', { status: 500 });
+      const masterParam = (url.searchParams.get('master') || 'dezbringer').replace(/^@/, '');
+      const result = await runSeed(env.MANICBOT, env, masterParam);
       return Response.json(result);
     }
 
@@ -78,11 +100,15 @@ code{background:#fce7f3;padding:2px 6px;border-radius:4px}
     try {
       ctx = await getCtx(env, url, request);
       if (!ctx && url.pathname !== '/' && !url.pathname.startsWith('/admin/migrate')) {
-        ctx = buildCtx(env);
+        if (env.BOT_TOKEN && env.WEBHOOK_SECRET) ctx = buildLegacyCtx(env);
+        else ctx = buildCtx(env);
       }
     } catch (e) {
       if (url.pathname !== '/' && !url.pathname.startsWith('/admin/migrate')) {
-        try { ctx = buildCtx(env); } catch (_) {}
+        try {
+          if (env.BOT_TOKEN && env.WEBHOOK_SECRET) ctx = buildLegacyCtx(env);
+          else ctx = buildCtx(env);
+        } catch (_) {}
       }
       if (!ctx) return new Response(e?.message || 'Server Error', { status: 500 });
     }
@@ -113,7 +139,30 @@ code{background:#fce7f3;padding:2px 6px;border-radius:4px}
           ],
         }),
       ]);
-      return Response.json({ webhook: wh, result: r, commands: cmds });
+      const adminChatId = ctx.adminChatId || ctx.ADMIN_CHAT_ID;
+      let godCmds = null;
+      if (adminChatId) {
+        godCmds = await api(ctx, 'setMyCommands', {
+          commands: [
+            { command: 'start', description: '💅 Main menu' },
+            { command: 'book', description: '📝 Book' },
+            { command: 'my', description: '📋 My appointments' },
+            { command: 'lang', description: '🌐 Language' },
+            { command: 'sysadmin', description: '🌐 Platform admin (key)' },
+            { command: 'admin', description: '🔧 Set admin (key)' },
+            { command: 'grant_master', description: '👨‍🎨 Grant master role @user [tenantId]' },
+            { command: 'grant_owner', description: '👑 Grant owner role @user [tenantId]' },
+            { command: 'add_support', description: '🆘 Add support agent @user' },
+            { command: 'remove_support', description: '❌ Remove support agent @user' },
+            { command: 'support_register', description: '🆘 Register as support agent (key)' },
+            { command: 'panel', description: '🔧 Admin/master panel' },
+            { command: 'client', description: '👤 Switch to client view' },
+            { command: 'master', description: '👨‍🎨 Master panel' },
+          ],
+          scope: { type: 'chat', chat_id: parseInt(String(adminChatId)) },
+        }).catch(() => null);
+      }
+      return Response.json({ webhook: wh, result: r, commands: cmds, godCommands: godCmds });
     }
 
     if (url.pathname === '/remove-webhook') {
@@ -121,6 +170,39 @@ code{background:#fce7f3;padding:2px 6px;border-radius:4px}
         return new Response('Forbidden', { status: 403 });
       }
       return Response.json({ result: await api(ctx, 'deleteWebhook', {}) });
+    }
+
+    if (url.pathname === '/admin/billing') {
+      if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
+      if (!ctx.kv) return new Response('KV not bound', { status: 500 });
+      const tenantIds = await listTenantIds(ctx.kv);
+      const tenants = await Promise.all(tenantIds.map(id => getTenant(ctx.kv, id)));
+      const fmt = (ts) => ts ? new Date(ts).toISOString().slice(0, 10) : '—';
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>ManicBot — Platform Billing</title>
+<style>*{box-sizing:border-box}body{font-family:system-ui;margin:0;padding:20px;background:#fdf2f8;color:#1a1a2e}
+h1{color:#831843}h2{color:#9d174d;margin-top:24px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1);margin:12px 0}
+th{background:#ec4899;color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:.85em}
+td{padding:8px 12px;border-bottom:1px solid #fce7f3;font-size:.9em}
+tr:hover td{background:#fdf2f8}
+.back{display:inline-block;padding:8px 16px;background:#ec4899;color:#fff;border-radius:8px;text-decoration:none;font-size:.85em;margin:4px}
+</style></head><body>
+<h1>💳 Platform Billing</h1>
+<p><a class="back" href="/admin">← Admin</a></p>
+<h2>Tenants</h2>
+<table><tr><th>Tenant</th><th>Plan</th><th>Status</th><th>Period end</th><th>Stripe customer</th></tr>`;
+      for (const t of tenants) {
+        if (!t) continue;
+        const name = escHtml(t.name || t.id || '—');
+        const plan = escHtml(t.plan || '—');
+        const status = escHtml(t.billingStatus || '—');
+        const periodEnd = fmt(t.currentPeriodEnd);
+        const cust = t.stripeCustomerId ? (t.stripeCustomerId.slice(0, 12) + '…') : '—';
+        html += `<tr><td>${name}</td><td>${plan}</td><td>${status}</td><td>${periodEnd}</td><td>${escHtml(cust)}</td></tr>`;
+      }
+      html += '</table></body></html>';
+      return new Response(html, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
     }
 
     if (url.pathname === '/admin') {
@@ -190,6 +272,7 @@ tr:hover td{background:#fdf2f8}
 <div class="stat"><b>${clients.length}</b>Клиентов</div>
 <div class="stat"><b>${appointments.length}</b>Всего записей</div>
 <div class="stat"><b>${appointments.filter(a => a.status === '✅ Подтверждено').length}</b>Предстоит</div>
+<a class="export" href="/admin/billing">💳 Billing (all tenants)</a>
 </div>
 
 <h2>👥 Клиенты</h2>
@@ -246,6 +329,7 @@ tr:hover td{background:#fdf2f8}
         }
         return new Response(csv, { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="appointments.csv"' } });
       }
+      return new Response('Not Found', { status: 404 });
     }
 
     const calMatch = request.method === 'GET' && url.pathname.match(/^\/calendar\/(.+)$/);
@@ -331,7 +415,10 @@ tr:hover td{background:#fdf2f8}
           return;
         }
       }
-      const ctx = buildCtx(env);
+      const ctx =
+        env.BOT_TOKEN && env.WEBHOOK_SECRET
+          ? buildLegacyCtx(env)
+          : buildCtx(env);
       _scheduledCtx.waitUntil(handleCron(ctx));
     } catch (e) {
       console.error('Cron init error:', e.message);

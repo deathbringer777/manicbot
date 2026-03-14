@@ -83,6 +83,16 @@ export async function claimTicket(globalKv, ticketId, agentChatId) {
   ticket.claimedAt = Date.now();
   ticket.updatedAt = Date.now();
   await globalKv.put(ticketKey(ticketId), JSON.stringify(ticket));
+  // Final lock check: another worker may have written between our check and this write
+  const finalLock = await globalKv.get(lockKey, 'text');
+  if (finalLock !== String(agentChatId)) {
+    // Race lost after claim write — roll back to open
+    ticket.status = 'open';
+    ticket.claimedBy = null;
+    ticket.claimedAt = null;
+    await globalKv.put(ticketKey(ticketId), JSON.stringify(ticket));
+    return { ok: false, error: 'Claim race lost' };
+  }
   const openList = (await getOpenTicketIds(globalKv)).filter(id => id !== ticketId);
   await globalKv.put(TICKETS_OPEN, JSON.stringify(openList));
   const agentList = await getJson(globalKv, agentKey(agentChatId)) || [];

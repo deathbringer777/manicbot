@@ -90,12 +90,14 @@ export const CONTEXT_PHRASES = {
   prices: [/^(прайс|ціни|prices?|cennik)/i, /\bпрайс\b/i, /\bціни\b/i],
   catalog: [/^(каталог|портфоліо|portfolio)/i, /\bкаталог\b/i],
   contacts: [/^(контакт|contacts?|kontakt|инстаграм|instagram)/i, /\bконтакт/i, /\bинстаграм\b/i],
+  main: [/^(главн|меню|main|back|головн|menu|główn)/i, /◀️\s*главн/i, /главное\s*меню/i],
 };
 
 export function getContextAction(txt) {
   if (!txt || typeof txt !== 'string') return null;
   const s = txt.trim();
-  if (s.length < 3) return null;
+  if (s.length < 2) return null;
+  if (CONTEXT_PHRASES.main.some(re => re.test(s))) return 'main';
   if (CONTEXT_PHRASES.prices.some(re => re.test(s))) return 'prices';
   if (CONTEXT_PHRASES.catalog.some(re => re.test(s))) return 'catalog';
   if (CONTEXT_PHRASES.contacts.some(re => re.test(s))) return 'contacts';
@@ -153,7 +155,7 @@ export function parseQuickBookingPhrase(txt) {
     const m = s.match(/(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?/);
     if (m) dateHint = resolveDateHint(m[0]);
   }
-  const timeM = s.match(/\b(?:на|в|о)\s*(\d{1,2})(?::(\d{2}))?\s*(?:часа|час|ч)?/i) || s.match(/\b(\d{1,2})\s*(?:часа|час|ч|:)/i) || s.match(/\b(\d{1,2}):(\d{2})\b/i);
+  const timeM = s.match(/(?:^|\s)(?:на|в|о)\s+(\d{1,2})(?::(\d{2}))?\s*(?:часа?|ч(?:\s|$))?/i) || s.match(/\b(\d{1,2})\s*(?:часа|час|ч|:)/i) || s.match(/\b(\d{1,2}):(\d{2})\b/i);
   let timeHint = null;
   if (timeM) {
     const h = parseInt(timeM[1], 10);

@@ -1,9 +1,9 @@
 import { send, sendPhoto, edit } from '../telegram.js';
 import { escHtml, fill, t, p2, svcName } from '../utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from '../utils/date.js';
-import { CB } from '../config.js';
+import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
-import { clearState, setState } from '../services/state.js';
+import { clearState, setState, getState } from '../services/state.js';
 import { listMasters, getAdminId, isBlocked } from '../services/users.js';
 import { loadDayAppointments, getAdminAllApts, getApts } from '../services/appointments.js';
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
@@ -123,6 +123,34 @@ export async function showAdminPanel(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
   await send(ctx, cid, fill(t(lg, 'adm_welcome'), { n: escHtml(name) }), adminKb(lg));
+}
+
+export async function showAdminSettings(ctx, cid) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  await clearState(ctx, cid);
+  const salon = ctx.tenant?.salon || {};
+  const name = escHtml(salon.name || ctx.SALON_NAME || '—');
+  const phone = escHtml(salon.phone || ctx.PHONE || '—');
+  const addr = escHtml(salon.address || ctx.ADDRESS || '—');
+  const wh = salon.workHours || ctx.WORK || {};
+  const hours = (wh.from != null && wh.to != null) ? `${wh.from}:00 — ${wh.to}:00` : '—';
+  const tenantId = ctx.tenantId ? `\n🆔 ID: <code>${ctx.tenantId}</code>` : '';
+  const txt = `${t(lg, 'adm_settings_title')}\n\n` +
+    `🏠 <b>${name}</b>\n` +
+    `📞 ${phone}\n` +
+    `📍 ${addr}\n` +
+    `🕐 ${hours}` +
+    tenantId;
+  const kb = { reply_markup: { inline_keyboard: [
+    [{ text: t(lg, 'adm_settings_name_btn'), callback_data: CB.ADM_SETTINGS_NAME },
+     { text: t(lg, 'adm_settings_phone_btn'), callback_data: CB.ADM_SETTINGS_PHONE }],
+    [{ text: t(lg, 'adm_settings_addr_btn'), callback_data: CB.ADM_SETTINGS_ADDR },
+     { text: t(lg, 'adm_settings_hours_btn'), callback_data: CB.ADM_SETTINGS_HOURS }],
+    [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST }],
+    [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
+    [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }],
+  ] } };
+  await send(ctx, cid, txt, kb);
 }
 
 export async function showMasterPanel(ctx, cid, name) {

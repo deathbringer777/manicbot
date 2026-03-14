@@ -19,6 +19,7 @@ export async function showWelcome(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
   const role = await getRole(ctx, cid);
+  await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
   await send(ctx, cid, fill(t(lg, 'welcome'), { s: SALON, n: escHtml(name) }), mainKb(lg, role));
 }
 

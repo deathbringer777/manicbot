@@ -165,3 +165,6 @@ dist
 .env*
 !.env.example
 .wrangler/
+
+# Локальная копия ключа админки (никогда не коммитить)
+ADMIN_CREDENTIALS.md

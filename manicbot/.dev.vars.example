@@ -1,0 +1,3 @@
+# Скопируй в .dev.vars и подставь свои значения (или сгенерированный ADMIN_KEY).
+# .dev.vars в .gitignore и не коммитится.
+ADMIN_KEY=your_admin_key_here

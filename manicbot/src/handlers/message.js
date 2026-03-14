@@ -2,29 +2,31 @@ import { CB, STEP, SALON } from '../config.js';
 import { escHtml, fill, t, svcName, isValidChatId, detectLang } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
-import { send } from '../telegram.js';
+import { send, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';
-import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, setAdminId, getMaster, saveMaster, listMasters, resolveMasterInput, blockUser, unblockUser } from '../services/users.js';
+import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, setAdminId, getMaster, saveMaster, listMasters, resolveMasterInput, blockUser, unblockUser, upsertUserFromTelegram, isPlatformAdmin } from '../services/users.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts } from '../services/appointments.js';
-import { getTicket, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
+import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
 import { createTicket } from '../support/tickets.js';
 import { getSupportAgents, setTenantRole, ROLES } from '../roles/roles.js';
 import { addSupport, removeSupport, createTenant, registerBot, setSystemAdmin } from '../admin/provisioning.js';
-import { showPlatformAdminPanel } from '../ui/sysadmin.js';
+import { getTenant, putTenant } from '../tenant/storage.js';
+import { showPlatformAdminPanel, showPlatformSupportList } from '../ui/sysadmin.js';
 import { timingSafeEqual, randomId } from '../utils/security.js';
 import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
-import { showWelcome, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
-import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showClientsList, showAdminCancelAllConfirm } from '../ui/admin.js';
+import { showWelcome, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
+import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showClientsList, showAdminCancelAllConfirm, showAdminSettings } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
 import { runWorkersAI, parseAIActions, executeAIAction } from '../ai.js';
 import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage } from '../patterns.js';
 // timingSafeEqual imported above from security.js
 
 async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
-  const showConsultBtn = isWantHumanMessage(txt);
+  const isStaff = realRole === 'system_admin' || realRole === 'admin' || realRole === 'master' || realRole === 'support';
+  const showConsultBtn = !isStaff && isWantHumanMessage(txt);
   if (ctx.kv && showConsultBtn) await incHumanRequestCount(ctx, cid);
   let extraConsult = showConsultBtn
     ? { reply_markup: { inline_keyboard: [[{ text: t(lg, 'consultant_btn'), callback_data: CB.CONSULT_REQ }]] } }
@@ -44,7 +46,7 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
       const ran = await executeAIAction(ctx, cid, realRole, tag, param, from);
       if (ran) { didAction = true; break; }
     }
-    if (tag === 'CONSULT') {
+    if (tag === 'CONSULT' && !isStaff) {
       extraConsult = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'consultant_btn'), callback_data: CB.CONSULT_REQ }]] } };
       if (ctx.kv) await incHumanRequestCount(ctx, cid);
     }
@@ -53,6 +55,11 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   if (didAction) return;
   const finalHint = extraConsult.reply_markup ? '\n\n' + t(lg, 'consultant_btn_hint') : '';
   const toSend = (aiText ? escHtml(aiText) : t(lg, 'unknown')) + finalHint;
+  // Стафф всегда получает кнопку «Назад» (не кнопку консультанта)
+  if (isStaff) {
+    const backCb = realRole === 'system_admin' || realRole === 'support' ? CB.SYSADM_MAIN : realRole === 'admin' ? CB.ADM_MAIN : CB.MST_MAIN;
+    extraConsult = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: backCb }]] } };
+  }
   await send(ctx, cid, toSend, extraConsult);
 }
 
@@ -82,30 +89,40 @@ export async function onMsg(ctx, msg) {
 
   const txt = (msg.text || '').trim().slice(0, 200);
 
-  if (st.step === STEP.SUPPORT_MSG && txt && ctx.globalKv) {
-    const ticket = await createTicket(ctx.globalKv, ctx, cid, name, ctx.bot?.botId || null, txt);
-    await clearState(ctx, cid);
-    if (ticket) {
-      const agents = await getSupportAgents(ctx.globalKv);
-      const notice = `🆘 Новый тикет #${ticket.id}\nТенант: ${ctx.tenant?.name || ctx.tenantId || '—'}\nОт: ${name}\n\n${escHtml(txt).slice(0, 300)}`;
-      const claimKb = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'support_claim_btn'), callback_data: 'tk:' + ticket.id }]] } };
-      for (const agentId of agents) {
-        try { await send(ctx, agentId, notice, claimKb); } catch (_) {}
-      }
-      const adminId = await getAdminId(ctx);
-      if (adminId && !agents.includes(adminId)) try { await send(ctx, adminId, notice, claimKb); } catch (_) {}
-      await send(ctx, cid, t(lg, 'support_ticket_created'), mainKb(lg, 'client'));
+  if (st.step === STEP.SUPPORT_MSG && txt) {
+    const isCommand = txt.startsWith('/');
+    const menuLabels = [t(lg, 'm_book'), t(lg, 'm_cat'), t(lg, 'm_prices'), t(lg, 'm_my'), t(lg, 'back_m'), t(lg, 'm_rev'), t(lg, 'm_about'), t(lg, 'm_cont'), t(lg, 'm_lang'), t(lg, 'm_support'), t(lg, 'mst_panel'), t(lg, 'adm_management')];
+    const isMenuButton = menuLabels.includes(txt);
+    if (isCommand || isMenuButton) {
+      await clearState(ctx, cid);
     } else {
-      await send(ctx, cid, t(lg, 'unknown'), mainKb(lg));
+      await clearState(ctx, cid);
+      // Route support message to THIS salon's staff (masters + admin)
+      if (ctx.kv) {
+        await setTicket(ctx, cid, { open: true, masterCid: null, since: Date.now(), msg: txt.slice(0, 500) });
+        const masters = await listMasters(ctx);
+        const adminId = await getAdminId(ctx);
+        const recipients = new Set();
+        for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+        if (adminId) recipients.add(adminId);
+        const notice = `🆘 <b>Запрос поддержки</b>\n👤 ${escHtml(name)}\n\n${escHtml(txt).slice(0, 300)}`;
+        const claimKb = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'support_claim_btn'), callback_data: CB.TICKET_TAKE + cid }]] } };
+        for (const rcid of recipients) {
+          try { await send(ctx, rcid, notice, claimKb); } catch (_) {}
+        }
+        await send(ctx, cid, t(lg, 'support_local_created'), mainKb(lg, 'client'));
+      } else {
+        await send(ctx, cid, t(lg, 'unknown'), mainKb(lg));
+      }
+      return;
     }
-    return;
   }
 
   if (txt.startsWith('/support_register ')) {
     const key = txt.slice(17).trim();
     if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
     const role = await getRole(ctx, cid);
-    if (role !== 'admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     if (ctx.globalKv) {
       await addSupport(ctx.globalKv, cid);
       return send(ctx, cid, t(lg, 'support_registered'));
@@ -115,7 +132,7 @@ export async function onMsg(ctx, msg) {
 
   if (txt.startsWith('/add_support ')) {
     const role = await getRole(ctx, cid);
-    if (role !== 'admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     const arg = txt.slice(12).trim();
     if (!arg) return send(ctx, cid, t(lg, 'support_add_usage'));
     if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
@@ -127,7 +144,7 @@ export async function onMsg(ctx, msg) {
 
   if (txt === '/remove_support' || txt.startsWith('/remove_support ')) {
     const role = await getRole(ctx, cid);
-    if (role !== 'admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     const arg = txt.startsWith('/remove_support ') ? txt.slice(15).trim() : '';
     if (!arg) return send(ctx, cid, t(lg, 'support_remove_usage'));
     if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
@@ -199,14 +216,14 @@ export async function onMsg(ctx, msg) {
   }
 
   // ─── Role assignment commands ──────────────────────────────────────────────
-  if (txt.startsWith('/grant_master') || txt.startsWith('/grant_owner')) {
-    const isOwnerCmd = txt.startsWith('/grant_owner');
-    const targetRole = isOwnerCmd ? ROLES.TENANT_OWNER : ROLES.MASTER;
-    const cmd = isOwnerCmd ? '/grant_owner' : '/grant_master';
+  if (txt.startsWith('/grant_master') || txt.startsWith('/grant_salon')) {
+    const isSalonCmd = txt.startsWith('/grant_salon');
+    const targetRole = isSalonCmd ? ROLES.TENANT_OWNER : ROLES.MASTER;
+    const cmd = isSalonCmd ? '/grant_salon' : '/grant_master';
     if (realRole !== 'admin' && realRole !== 'system_admin') {
       return send(ctx, cid, t(lg, 'support_only_admin'));
     }
-    if (isOwnerCmd && realRole !== 'system_admin') {
+    if (isSalonCmd && realRole !== 'system_admin') {
       return send(ctx, cid, t(lg, 'support_only_admin'));
     }
     const args = txt.slice(cmd.length).trim().split(/\s+/).filter(Boolean);
@@ -214,7 +231,10 @@ export async function onMsg(ctx, msg) {
     const tenantIdArg = args[1] || null;
     if (!input) return send(ctx, cid, fill(t(lg, 'sysadm_grant_usage'), { cmd }));
     const { masterId, masterName } = await resolveMasterInput(ctx, msg, input);
-    if (!masterId) return send(ctx, cid, t(lg, 'support_user_not_found'));
+    if (!masterId) {
+      const looksLikeUsername = /^@?[a-zA-Z0-9_]{5,32}$/.test(String(input || '').trim());
+      return send(ctx, cid, looksLikeUsername ? t(lg, 'adm_master_username_hint') : t(lg, 'support_user_not_found'));
+    }
     // Determine target ctx (cross-tenant for system_admin)
     let targetCtx = ctx;
     if (tenantIdArg) {
@@ -223,7 +243,9 @@ export async function onMsg(ctx, msg) {
     }
     if (!targetCtx.prefix) return send(ctx, cid, fill(t(lg, 'sysadm_no_tenant_ctx'), { cmd }));
     await setTenantRole(targetCtx, masterId, targetRole);
-    return send(ctx, cid, fill(t(lg, 'sysadm_role_granted'), { role: isOwnerCmd ? 'owner' : 'master', id: String(masterId), name: escHtml(masterName) }));
+    const notifLg = await getLang(ctx, masterId) || 'ru';
+    try { await send(ctx, masterId, t(notifLg, isSalonCmd ? 'role_granted_owner' : 'role_granted_master')); } catch (_) {}
+    return send(ctx, cid, fill(t(lg, 'sysadm_role_granted'), { role: isSalonCmd ? 'salon' : 'master', id: String(masterId), name: escHtml(masterName) }));
   }
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -234,12 +256,14 @@ export async function onMsg(ctx, msg) {
     return showMasterPanel(ctx, cid, name);
   }
   if (txt === '/panel' && realRole !== 'client') {
-    if (realRole === 'system_admin') return showPlatformAdminPanel(ctx, cid, name);
+    if (await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
+    if (realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
     if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
   }
 
   if (txt === '/start') {
+    await upsertUserFromTelegram(ctx, cid, msg.from);
     await clearChatHistory(ctx, cid);
     let hasLang = await getLang(ctx, cid);
     if (!hasLang) {
@@ -250,7 +274,27 @@ export async function onMsg(ctx, msg) {
       }
     }
     if (!hasLang) return showLangPick(ctx, cid);
-    if (realRole === 'system_admin') return showPlatformAdminPanel(ctx, cid, name);
+    if (await isPlatformAdmin(ctx, cid)) {
+      // Auto-register god-mode commands for this chat so they show in the / menu
+      api(ctx, 'setMyCommands', {
+        commands: [
+          { command: 'start', description: '💅 Главное меню' },
+          { command: 'book', description: '📝 Записаться' },
+          { command: 'my', description: '📋 Мои записи' },
+          { command: 'lang', description: '🌐 Язык' },
+          { command: 'panel', description: '🔧 Панель управления' },
+          { command: 'admin', description: '🔑 Назначить себя администратором салона (ключ)' },
+          { command: 'grant_master', description: '👨‍🎨 Выдать роль мастера @user' },
+          { command: 'grant_salon', description: '👑 Назначить Салон @user' },
+          { command: 'add_support', description: '🆘 Добавить агента поддержки @user' },
+          { command: 'client', description: '👤 Режим клиента' },
+          { command: 'master', description: '👨‍🎨 Панель мастера' },
+        ],
+        scope: { type: 'chat', chat_id: cid },
+      }).catch(() => null);
+      return showPlatformAdminPanel(ctx, cid, name);
+    }
+    if (realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
     if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     return showWelcome(ctx, cid, name);
@@ -263,12 +307,54 @@ export async function onMsg(ctx, msg) {
   if (txt === '/lang')     return showLangPick(ctx, cid);
   if (txt === '/help')     return send(ctx, cid, fill(t(lg, 'help'), {}), { reply_markup: { remove_keyboard: true } });
 
+  // ─── Нажатия кнопок постоянной клавиатуры (меню внизу экрана) ─────────────
+  if (txt) {
+    if (txt === t(lg, 'm_book')) return startBooking(ctx, cid, msg.from);
+    if (txt === t(lg, 'm_cat')) return showCatalog(ctx, cid);
+    if (txt === t(lg, 'm_prices')) return showPrices(ctx, cid);
+    if (txt === t(lg, 'm_my')) return showMyApts(ctx, cid);
+    if (txt === t(lg, 'back_m')) return showWelcome(ctx, cid, name);
+    if (txt === t(lg, 'm_rev')) return showReviews(ctx, cid);
+    if (txt === t(lg, 'm_about')) return showAbout(ctx, cid);
+    if (txt === t(lg, 'm_cont')) return showContacts(ctx, cid);
+    if (txt === t(lg, 'm_lang')) return showLangPick(ctx, cid);
+    if (txt === t(lg, 'm_support')) {
+      await setState(ctx, cid, { step: STEP.SUPPORT_MSG });
+      return send(ctx, cid, t(lg, 'support_enter_msg'), { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]] } });
+    }
+    if (txt === t(lg, 'mst_panel') && (realRole === 'master' || realRole === 'admin')) return showMasterPanel(ctx, cid, name);
+    if (txt === t(lg, 'adm_management') && realRole !== 'client') {
+      if (await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
+      if (realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
+      if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
+      if (realRole === 'master') return showMasterPanel(ctx, cid, name);
+    }
+  }
+
   if (txt) {
     if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
     const ctxAction = getContextAction(txt);
+    if (ctxAction === 'main') return showWelcome(ctx, cid, name);
     if (ctxAction === 'prices') return showPrices(ctx, cid);
     if (ctxAction === 'catalog') return showCatalog(ctx, cid);
     if (ctxAction === 'contacts') return showContacts(ctx, cid);
+  }
+
+  // ─── Booking flow: handle typed time when time picker is shown ─────────
+  if (st.step === 'time' && txt) {
+    const timeM = txt.match(/(\d{1,2})(?::(\d{2}))?/);
+    if (timeM) {
+      const parsed = timeM[2] ? `${timeM[1]}:${timeM[2]}` : timeM[1];
+      const timeHint = resolveTimeHint(parsed);
+      if (timeHint) return startBookingWithService(ctx, cid, msg.from, st.svcId, st.date, timeHint);
+    }
+  }
+
+  // ─── Booking flow: handle typed date when calendar is shown ────────────
+  if (st.step === 'date' && txt) {
+    const cleaned = txt.replace(/^(?:на|в|о)\s+/i, '').trim();
+    const dateHint = resolveDateHint(cleaned);
+    if (dateHint) return startBookingWithService(ctx, cid, msg.from, st.svcId, dateHint, null);
   }
 
   if (st.step === STEP.CLIENT_CANCEL_COMMENT) {
@@ -292,7 +378,10 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.ADD_MASTER) {
     const { masterId, masterName, masterUsername, masterPhone } = await resolveMasterInput(ctx, msg, txt);
-    if (!masterId) return send(ctx, cid, t(lg, 'adm_master_invalid'));
+    if (!masterId) {
+      const looksLikeUsername = /^@?[a-zA-Z0-9_]{5,32}$/.test(String(txt || '').trim());
+      return send(ctx, cid, looksLikeUsername ? t(lg, 'adm_master_username_hint') : t(lg, 'adm_master_invalid'));
+    }
     const existing = await getMaster(ctx, masterId);
     if (existing) return send(ctx, cid, t(lg, 'adm_master_exists'));
     await saveMaster(ctx, masterId, {
@@ -310,8 +399,8 @@ export async function onMsg(ctx, msg) {
     return showMastersList(ctx, cid);
   }
 
-  // ─── Platform admin flows ──────────────────────────────────────────────────
-  if (st.step === STEP.SYSADM_NEW_TENANT && realRole === 'system_admin') {
+  // ─── Platform admin flows (создатель или system_admin) ────────────────────
+  if (st.step === STEP.SYSADM_NEW_TENANT && (await isPlatformAdmin(ctx, cid))) {
     const tenantName = txt?.trim();
     if (!tenantName || tenantName.length < 2) return send(ctx, cid, t(lg, 'sysadm_tenant_name_invalid'));
     const kv = ctx.globalKv || ctx.kv;
@@ -330,7 +419,7 @@ export async function onMsg(ctx, msg) {
     return showPlatformAdminPanel(ctx, cid, name);
   }
 
-  if (st.step === STEP.SYSADM_NEW_BOT && realRole === 'system_admin') {
+  if (st.step === STEP.SYSADM_NEW_BOT && (await isPlatformAdmin(ctx, cid))) {
     const token = txt?.trim();
     if (!token || !token.includes(':') || token.split(':').length < 2) {
       return send(ctx, cid, t(lg, 'sysadm_bot_token_invalid'));
@@ -341,7 +430,7 @@ export async function onMsg(ctx, msg) {
     });
   }
 
-  if (st.step === STEP.SYSADM_NEW_BOT_TENANT && realRole === 'system_admin') {
+  if (st.step === STEP.SYSADM_NEW_BOT_TENANT && (await isPlatformAdmin(ctx, cid))) {
     const tenantIdInput = txt?.trim();
     if (!tenantIdInput) return send(ctx, cid, t(lg, 'sysadm_bot_enter_tenant'));
     const kv = ctx.globalKv || ctx.kv;
@@ -360,6 +449,53 @@ export async function onMsg(ctx, msg) {
     } else {
       await send(ctx, cid, `❌ ${result.error || t(lg, 'unknown')}`);
     }
+    return showPlatformAdminPanel(ctx, cid, name);
+  }
+
+  if (st.step === STEP.SYSADM_ADD_SUPPORT && (await isPlatformAdmin(ctx, cid))) {
+    const arg = txt?.trim();
+    if (!arg) return send(ctx, cid, t(lg, 'sysadm_support_enter_user'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_SUPPORT_LIST }]] },
+    });
+    const { masterId, masterName } = await resolveMasterInput(ctx, msg, arg);
+    if (!masterId) {
+      return send(ctx, cid, t(lg, 'sysadm_support_user_invalid'), {
+        reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_SUPPORT_LIST }]] },
+      });
+    }
+    await clearState(ctx, cid);
+    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
+    await addSupport(ctx.globalKv, masterId);
+    await send(ctx, cid, t(lg, 'sysadm_support_added'));
+    return showPlatformSupportList(ctx, cid);
+  }
+
+  if (st.step === STEP.SYSADM_GRANT_INPUT && (await isPlatformAdmin(ctx, cid))) {
+    const arg = txt?.trim();
+    if (!arg) return send(ctx, cid, fill(t(lg, 'sysadm_grant_enter_user'), { role: st.grantRole || 'master' }), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_GRANT_ROLE }]] },
+    });
+    const { masterId, masterName } = await resolveMasterInput(ctx, msg, arg);
+    if (!masterId) {
+      return send(ctx, cid, t(lg, 'sysadm_support_user_invalid'), {
+        reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_GRANT_ROLE }]] },
+      });
+    }
+    const isOwner = st.grantRole === 'salon';
+    const targetRole = isOwner ? ROLES.TENANT_OWNER : ROLES.MASTER;
+    let targetCtx = ctx;
+    if (!targetCtx.prefix) {
+      const kv = ctx.globalKv || ctx.kv;
+      const tenantId = ctx.tenantId;
+      if (tenantId) targetCtx = { ...ctx, kv, prefix: `t:${tenantId}:` };
+    }
+    if (targetCtx.prefix) {
+      await setTenantRole(targetCtx, masterId, targetRole);
+      const notifLg = await getLang(ctx, masterId) || 'ru';
+      try { await send(ctx, masterId, t(notifLg, isOwner ? 'role_granted_owner' : 'role_granted_master')); } catch (_) {}
+    }
+    await clearState(ctx, cid);
+    await send(ctx, cid, fill(t(lg, 'sysadm_role_granted'), { role: isOwner ? 'owner' : 'master', id: String(masterId), name: escHtml(masterName) }));
     return showPlatformAdminPanel(ctx, cid, name);
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -457,6 +593,50 @@ export async function onMsg(ctx, msg) {
     }
     return send(ctx, cid, t(lg, 'apt_reply_sent'));
   }
+
+  // ─── Salon settings editing ───────────────────────────────────────────────
+  if ((st.step === STEP.EDIT_SALON_NAME || st.step === STEP.EDIT_SALON_PHONE ||
+       st.step === STEP.EDIT_SALON_ADDR || st.step === STEP.EDIT_SALON_HOURS_FROM) &&
+      (await isAdmin(ctx, cid))) {
+    if (!txt) return send(ctx, cid, t(lg, 'unknown'));
+    const kv = ctx.globalKv || ctx.kv;
+    const tenantId = ctx.tenantId;
+    if (!kv || !tenantId) {
+      await clearState(ctx, cid);
+      return send(ctx, cid, t(lg, 'adm_settings_no_tenant'));
+    }
+    const tenant = await getTenant(kv, tenantId);
+    if (!tenant) {
+      await clearState(ctx, cid);
+      return send(ctx, cid, t(lg, 'unknown'));
+    }
+    if (!tenant.salon) tenant.salon = {};
+    if (st.step === STEP.EDIT_SALON_NAME) {
+      const val = txt.replace(/<[^>]*>/g, '').trim().slice(0, 100);
+      if (!val || val.length < 2) return send(ctx, cid, t(lg, 'svc_invalid'));
+      tenant.salon.name = val;
+      tenant.name = val;
+    } else if (st.step === STEP.EDIT_SALON_PHONE) {
+      tenant.salon.phone = txt.trim().slice(0, 30);
+    } else if (st.step === STEP.EDIT_SALON_ADDR) {
+      tenant.salon.address = txt.trim().slice(0, 200);
+    } else if (st.step === STEP.EDIT_SALON_HOURS_FROM) {
+      const m = txt.match(/^(\d{1,2})\s*[-–]\s*(\d{1,2})$/);
+      if (!m) return send(ctx, cid, t(lg, 'adm_settings_enter_hours'));
+      const from = parseInt(m[1]);
+      const to = parseInt(m[2]);
+      if (isNaN(from) || isNaN(to) || from < 0 || to > 24 || from >= to) return send(ctx, cid, t(lg, 'adm_settings_enter_hours'));
+      tenant.salon.workHours = { from, to };
+    }
+    tenant.updatedAt = Date.now();
+    await putTenant(kv, tenantId, tenant);
+    // Reflect changes in ctx for immediate display
+    if (ctx.tenant) { ctx.tenant.salon = tenant.salon; ctx.tenant.name = tenant.name; }
+    await clearState(ctx, cid);
+    await send(ctx, cid, t(lg, 'adm_settings_saved'));
+    return showAdminSettings(ctx, cid);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (st.step === STEP.EDIT_SVC_NAME) {
     if (!txt || !await canManageApt(ctx, cid)) return;
@@ -611,6 +791,7 @@ export async function onMsg(ctx, msg) {
     if (txt) {
       if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
       const ctxAction = getContextAction(txt);
+      if (ctxAction === 'main') return showWelcome(ctx, cid, name);
       if (ctxAction === 'prices') return showPrices(ctx, cid);
       if (ctxAction === 'catalog') return showCatalog(ctx, cid);
       if (ctxAction === 'contacts') return showContacts(ctx, cid);
@@ -626,6 +807,8 @@ export async function onMsg(ctx, msg) {
   if (st.step === STEP.REG_PHONE) return finishPhone(ctx, cid, txt, st);
 
   if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
+
+  if (txt && getContextAction(txt) === 'main') return showWelcome(ctx, cid, name);
 
   if (txt) {
     const quick = parseQuickBookingPhrase(txt);
@@ -647,7 +830,8 @@ export async function onMsg(ctx, msg) {
   }
 
   if (txt && /\b(отмени|отменить|скасуй|скасувати|cancel|anuluj)\b/i.test(txt) && /\b(все|всі|всё|all|wszystk)/i.test(txt)) {
-    return showCancelAllConfirm(ctx, cid);
+    if (realRole === 'client') return showCancelAllConfirm(ctx, cid);
+    return showAdminCancelAllConfirm(ctx, cid);
   }
 
   return handleAIChat(ctx, cid, txt, lg, realRole, msg.from);

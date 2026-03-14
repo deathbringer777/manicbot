@@ -4,7 +4,7 @@
  */
 
 import { putTenant, putBot, getTenant, getBot, getBotToken, defaultTenantPayload, defaultBotPayload } from '../tenant/storage.js';
-import { setPlatformRole, setTenantRole, addSupportAgent, removeSupportAgent, getSupportAgents, ROLES } from '../roles/roles.js';
+import { setPlatformRole, setTenantRole, addSupportAgent, removeSupportAgent, getSupportAgents, removePlatformRole, ROLES } from '../roles/roles.js';
 import { randomId } from '../utils/security.js';
 
 export async function createTenant(globalKv, name, env) {
@@ -22,7 +22,6 @@ export async function createTenant(globalKv, name, env) {
 export async function registerBot(globalKv, botToken, tenantId, webhookSecret, encryptionKey = null) {
   if (!globalKv || !botToken?.includes(':')) return { ok: false, error: 'Invalid token' };
   const botId = botToken.split(':')[0];
-  const tenant = tenantId ? await getTenant(globalKv, tenantId) : null;
   const payload = defaultBotPayload(botId, tenantId || null, botToken, webhookSecret || '');
   await putBot(globalKv, botId, payload, encryptionKey);
   return { ok: true, botId, tenantId: payload.tenantId };
@@ -62,7 +61,10 @@ export async function addSupport(globalKv, chatId) {
 }
 
 export async function removeSupport(globalKv, chatId) {
+  if (chatId == null) return false;
   await removeSupportAgent(globalKv, chatId);
+  await removePlatformRole(globalKv, chatId);
+  return true;
 }
 
 export { getSupportAgents };

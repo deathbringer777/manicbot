@@ -1,4 +1,4 @@
-import { kvGet, kvPut } from '../utils/kv.js';
+import { kvGet, kvPut, kvDel } from '../utils/kv.js';
 import { getChatHistory } from './chat.js';
 
 export async function getHumanRequestCount(ctx, cid) {
@@ -14,7 +14,7 @@ export async function incHumanRequestCount(ctx, cid) {
 }
 
 export async function resetHumanRequestCount(ctx, cid) {
-  try { await ctx.kv.delete(ctx.prefix + `hr:${cid}`); } catch (_) {}
+  await kvDel(ctx, `hr:${cid}`);
 }
 
 export async function getTicket(ctx, clientCid) {
@@ -38,9 +38,9 @@ export async function setTicketMaster(ctx, masterCid, clientCid) {
 export async function clearTicket(ctx, clientCid) {
   const ticket = await getTicket(ctx, clientCid);
   if (ticket?.masterCid) {
-    try { await ctx.kv.delete(ctx.prefix + `ticket_master:${ticket.masterCid}`); } catch (_) {}
+    await kvDel(ctx, `ticket_master:${ticket.masterCid}`);
   }
-  try { await ctx.kv.delete(ctx.prefix + `ticket:${clientCid}`); } catch (_) {}
+  await kvDel(ctx, `ticket:${clientCid}`);
 }
 
 export function isTicketCloseWord(txt) {

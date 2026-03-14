@@ -120,7 +120,9 @@ export function adminKb(lg) {
      { text: t(lg, 'adm_tomorrow'), callback_data: CB.ADM_TOMORROW }],
     [{ text: t(lg, 'adm_masters'), callback_data: CB.ADM_MASTERS }],
     [{ text: t(lg, 'adm_clients'), callback_data: CB.ADM_CLIENTS }],
-    [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST }],
+    [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST },
+     { text: t(lg, 'adm_settings'), callback_data: CB.ADM_SETTINGS }],
+    [{ text: t(lg, 'billing_menu'), callback_data: CB.ADM_BILLING }],
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
     [{ text: t(lg, 'adm_to_client'), callback_data: CB.MAIN }],
   ] } };

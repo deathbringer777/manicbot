@@ -61,8 +61,13 @@ export async function removePlatformRole(kv, chatId) {
  * Get tenant role (uses ctx = tenant-scoped KV via ctx.prefix).
  */
 export async function getTenantRole(ctx, chatId) {
-  const v = await ctx.kv.get(ctx.prefix + 'role:' + chatId, 'json');
-  return v?.role || null;
+  if (!ctx?.kv) return null;
+  try {
+    const v = await ctx.kv.get(ctx.prefix + 'role:' + chatId, 'json');
+    return v?.role || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

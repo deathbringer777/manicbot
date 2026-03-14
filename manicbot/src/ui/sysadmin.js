@@ -4,7 +4,7 @@
  */
 
 import { send } from '../telegram.js';
-import { t, escHtml } from '../utils/helpers.js';
+import { t, escHtml, fill } from '../utils/helpers.js';
 import { getLang } from '../services/chat.js';
 import { listTenantIds, getTenant, getBotIdsByTenantId } from '../tenant/storage.js';
 import { getSupportAgents } from '../roles/roles.js';
@@ -15,9 +15,12 @@ function sysadmKb(lg) {
     reply_markup: {
       inline_keyboard: [
         [{ text: t(lg, 'sysadm_tenants_btn'), callback_data: CB.SYSADM_TENANTS },
-         { text: t(lg, 'sysadm_bot_new_btn'), callback_data: CB.SYSADM_BOT_NEW }],
+         { text: t(lg, 'sysadm_new_tenant_btn'), callback_data: CB.SYSADM_NEW_TENANT }],
+        [{ text: t(lg, 'sysadm_bot_new_btn'), callback_data: CB.SYSADM_BOT_NEW }],
+        [{ text: t(lg, 'sysadm_grant_role_btn'), callback_data: CB.SYSADM_GRANT_ROLE }],
         [{ text: t(lg, 'sysadm_support_btn'), callback_data: CB.SYSADM_SUPPORT_LIST }],
         [{ text: t(lg, 'sysadm_tenant_panel_btn'), callback_data: CB.ADM_MAIN }],
+        [{ text: t(lg, 'sysadm_links_btn'), callback_data: CB.SYSADM_LINKS }],
       ],
     },
   };
@@ -111,9 +114,42 @@ export async function showPlatformSupportList(ctx, cid) {
   try { agents = await getSupportAgents(kv); } catch {}
   const text = agents.length
     ? `👥 <b>${t(lg, 'sysadm_support_agents')}</b> (${agents.length})\n\n` +
-      agents.map(id => `• <code>${id}</code>`).join('\n') +
-      `\n\n<i>${t(lg, 'sysadm_support_hint')}</i>`
-    : `👥 <b>${t(lg, 'sysadm_support_agents')}</b>\n\n${t(lg, 'sysadm_no_agents')}\n\n<i>${t(lg, 'sysadm_support_hint')}</i>`;
+      agents.map(id => `• <code>${id}</code>`).join('\n')
+    : `👥 <b>${t(lg, 'sysadm_support_agents')}</b>\n\n${t(lg, 'sysadm_no_agents')}`;
+  const rows = [];
+  rows.push([{ text: t(lg, 'sysadm_support_add_btn'), callback_data: CB.SYSADM_SUPPORT_ADD }]);
+  for (const agentId of agents) {
+    rows.push([{ text: `${t(lg, 'sysadm_support_remove_btn')} ${agentId}`, callback_data: CB.SYSADM_SUPPORT_REMOVE + agentId }]);
+  }
+  rows.push([{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]);
+  await send(ctx, cid, text, {
+    reply_markup: { inline_keyboard: rows },
+  });
+}
+
+export async function showGrantRoleMenu(ctx, cid) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  await send(ctx, cid, t(lg, 'sysadm_grant_role_msg'), {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: t(lg, 'sysadm_grant_master_btn'), callback_data: CB.SYSADM_GRANT_MASTER }],
+        [{ text: t(lg, 'sysadm_grant_owner_btn'), callback_data: CB.SYSADM_GRANT_OWNER }],
+        [{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }],
+      ],
+    },
+  });
+}
+
+/** Показать ссылки на веб-админку и биллинг (для создателя/админа платформы). */
+export async function showPlatformLinks(ctx, cid) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  const base = ctx.baseUrl || '';
+  const adminUrl = base ? `${base}/admin` : '/admin';
+  const billingUrl = base ? `${base}/admin/billing` : '/admin/billing';
+  const text = fill(t(lg, 'sysadm_links_msg'), {
+    admin: adminUrl,
+    billing: billingUrl,
+  });
   await send(ctx, cid, text, {
     reply_markup: {
       inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]],

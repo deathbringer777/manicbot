@@ -125,8 +125,8 @@ export function buildAISystemPrompt(role, langHint, today = null) {
 Можешь признать, что ты ИИ-ассистент, но не называй конкретную модель.
 `.replace(/\n+/g, '\n').trim();
 
-  if (role === 'system_admin') {
-    // For system_admin: strip the "never say you're AI" restriction from base
+  if (role === 'system_admin' || role === 'support') {
+    // For system_admin/support: strip the "never say you're AI" restriction from base
     const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:.*?(?=\n\nСегодня:)/s, '').trim();
     return `${adminBase}\n\n${sysAdminActions}`;
   }
@@ -211,6 +211,13 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
         await send(ctx, cid, msg, { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.SYSADM_MAIN }]] } });
         return true;
       }
+    }
+  }
+  if (role === 'support') {
+    switch (tag) {
+      case 'SYSADM_PANEL': await showPlatformAdminPanel(ctx, cid, name); return true;
+      case 'TENANT_LIST': await showPlatformTenantsList(ctx, cid); return true;
+      case 'SUPPORT_LIST': await showPlatformSupportList(ctx, cid); return true;
     }
   }
   if (role === 'admin') {

@@ -2,7 +2,7 @@ export function timingSafeEqual(a, b) {
   const ta = new TextEncoder().encode(a);
   const tb = new TextEncoder().encode(b);
   if (ta.length !== tb.length) {
-    crypto.subtle.timingSafeEqual(ta, ta);
+    crypto.subtle.timingSafeEqual(tb, tb);
     return false;
   }
   return crypto.subtle.timingSafeEqual(ta, tb);

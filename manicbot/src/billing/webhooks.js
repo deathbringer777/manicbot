@@ -3,7 +3,11 @@
  * Events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed.
  */
 
+import { updateTenantBilling } from './storage.js';
+import { mapStripeStatusToBilling } from './stripe.js';
+
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
+const STRIPE_CUSTOMER_PREFIX = 'stripe_customer:';
 const EVT_TTL = 86400 * 7; // 7 days idempotency
 
 /** Stripe signature format: "t=timestamp,v1=hexsig". Verify HMAC-SHA256(secret, "timestamp.payload") === v1. */
@@ -31,6 +35,28 @@ export async function verifyStripeSignature(payload, signature, secret) {
   return expectedHex === v1.toLowerCase();
 }
 
+async function resolveTenantIdByCustomer(kv, customerId) {
+  if (!customerId) return null;
+  const tenantId = await kv.get(STRIPE_CUSTOMER_PREFIX + customerId, 'text');
+  return tenantId || null;
+}
+
+function subscriptionToBillingUpdates(sub) {
+  const status = mapStripeStatusToBilling(sub.status);
+  const periodEnd = sub.current_period_end ? sub.current_period_end * 1000 : null;
+  const priceId = sub.items?.data?.[0]?.price?.id || null;
+  return {
+    billingStatus: status,
+    subscriptionStatus: sub.status,
+    stripeSubscriptionId: sub.id,
+    stripePriceId: priceId,
+    currentPeriodEnd: periodEnd,
+    nextPaymentDate: periodEnd,
+    cancelAtPeriodEnd: sub.cancel_at_period_end === true,
+    updatedAt: Date.now(),
+  };
+}
+
 export async function handleStripeWebhook(kv, payload, signature, webhookSecret) {
   if (!kv || !payload || !webhookSecret) return { ok: false, status: 400 };
   const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
@@ -50,21 +76,76 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
     await kv.put(STRIPE_EVT_PREFIX + eventId, '1', { expirationTtl: EVT_TTL });
   }
   const type = body.type || '';
+
   if (type === 'checkout.session.completed') {
     const session = body.data?.object;
     const tenantId = session?.metadata?.tenantId;
+    const customerId = session?.customer;
     if (tenantId) {
       const tenant = await kv.get('tenant:' + tenantId, 'json');
       if (tenant) {
-        const updated = { ...tenant, stripeCustomerId: session.customer || tenant.stripeCustomerId, updatedAt: Date.now() };
+        const updates = {
+          stripeCustomerId: customerId || tenant.stripeCustomerId,
+          updatedAt: Date.now(),
+        };
+        if (session.subscription) {
+          updates.stripeSubscriptionId = session.subscription;
+          updates.billingStatus = 'active';
+          updates.subscriptionStatus = 'active';
+        }
+        if (session.customer_email) updates.billingEmail = session.customer_email;
+        const updated = { ...tenant, ...updates };
         await kv.put('tenant:' + tenantId, JSON.stringify(updated));
+        if (customerId) {
+          await kv.put(STRIPE_CUSTOMER_PREFIX + customerId, tenantId);
+        }
+        if (session.subscription) {
+          await kv.put('tenant_sub_by_sub:' + session.subscription, tenantId);
+        }
       }
     }
   }
+
   if (type === 'customer.subscription.updated' || type === 'customer.subscription.deleted') {
     const sub = body.data?.object;
-    const customerId = sub?.customer;
-    // In production: find tenant by stripeCustomerId and update subscription fields
+    const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+    let tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(kv, customerId);
+    if (!tenantId) {
+      const subs = await kv.get('tenant_sub_by_sub:' + sub.id, 'text');
+      if (subs) tenantId = subs;
+    }
+    if (tenantId) {
+      const updates = subscriptionToBillingUpdates(sub);
+      if (type === 'customer.subscription.deleted') {
+        updates.billingStatus = 'inactive';
+        updates.subscriptionStatus = 'canceled';
+        updates.stripeSubscriptionId = null;
+        updates.stripePriceId = null;
+        updates.currentPeriodEnd = null;
+        updates.nextPaymentDate = null;
+        updates.cancelAtPeriodEnd = false;
+      }
+      await updateTenantBilling(kv, tenantId, updates);
+      await kv.put('tenant_sub_by_sub:' + sub.id, tenantId);
+    }
   }
+
+  if (type === 'invoice.payment_failed') {
+    const invoice = body.data?.object;
+    const subscriptionId = invoice.subscription;
+    const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+    if (subscriptionId) {
+      let tenantId = await kv.get('tenant_sub_by_sub:' + subscriptionId, 'text');
+      if (!tenantId) tenantId = await resolveTenantIdByCustomer(kv, customerId);
+      if (tenantId) {
+        await updateTenantBilling(kv, tenantId, {
+          billingStatus: 'past_due',
+          subscriptionStatus: 'past_due',
+          updatedAt: Date.now(),
+        });
+      }
+    }
+  }
+
   return { ok: true, status: 200 };
 }

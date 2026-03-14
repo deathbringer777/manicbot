@@ -1,10 +1,11 @@
-export async function kvListAll(ctx, opts) {
+export async function kvListAll(ctx, opts = {}) {
   const pLen = ctx.prefix.length;
-  const prefixedOpts = opts.prefix ? { ...opts, prefix: ctx.prefix + opts.prefix } : opts;
+  const prefix = opts.prefix != null ? ctx.prefix + opts.prefix : ctx.prefix;
+  const listOpts = { ...opts, prefix };
   const keys = [];
   let cursor;
   do {
-    const res = await ctx.kv.list({ ...prefixedOpts, cursor });
+    const res = await ctx.kv.list({ ...listOpts, cursor });
     for (const k of res.keys) keys.push({ ...k, name: k.name.slice(pLen) });
     cursor = res.list_complete ? undefined : res.cursor;
   } while (cursor);

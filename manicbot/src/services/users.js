@@ -5,12 +5,35 @@ import { resolveRole, getPlatformRole, ROLES } from '../roles/roles.js';
 
 export async function getAdminId(ctx) { return kvGet(ctx, 'cfg:admin'); }
 export async function setAdminId(ctx, cid) { return kvPut(ctx, 'cfg:admin', cid); }
+
+/** Единственный создатель платформы (бог): ADMIN_CHAT_ID в конфиге. Всегда админ везде. */
+export function isCreator(ctx, cid) {
+  if (!ctx?.adminChatId || cid == null) return false;
+  return String(ctx.adminChatId) === String(cid);
+}
+
 export async function isAdmin(ctx, cid) {
+  if (isCreator(ctx, cid)) return true;
   if (ctx.globalKv) {
-    const platformRole = await getPlatformRole(ctx.globalKv, cid);
-    if (platformRole === ROLES.SYSTEM_ADMIN) return true;
+    if (ctx.prefix) {
+      const role = await resolveRole(ctx.globalKv, ctx, cid);
+      if (role === ROLES.SYSTEM_ADMIN || role === ROLES.TENANT_OWNER) return true;
+      if (role === ROLES.SUPPORT || role === ROLES.MASTER) return false;
+    } else {
+      const platformRole = await getPlatformRole(ctx.globalKv, cid);
+      if (platformRole === ROLES.SYSTEM_ADMIN) return true;
+      if (platformRole === ROLES.SUPPORT) return false;
+    }
   }
   return (await getAdminId(ctx)) === cid;
+}
+
+/** Доступ к панели платформы (салоны, боты, агенты): system_admin в KV или создатель (ADMIN_CHAT_ID). */
+export async function isPlatformAdmin(ctx, cid) {
+  if (isCreator(ctx, cid)) return true;
+  if (!ctx.globalKv) return false;
+  const platformRole = await getPlatformRole(ctx.globalKv, cid);
+  return platformRole === ROLES.SYSTEM_ADMIN;
 }
 
 export async function getMaster(ctx, cid) { return kvGet(ctx, `master:${cid}`); }
@@ -114,6 +137,14 @@ export async function resolveMasterInput(ctx, msg, txt) {
 
   const username = normalizeUsername(txt);
   if (username) {
+    if (msg.from && normalizeUsername(msg.from.username) === username) {
+      return {
+        masterId: msg.from.id,
+        masterName: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || (msg.from.username ? '@' + msg.from.username : '?'),
+        masterUsername: msg.from.username || username,
+        masterPhone: null,
+      };
+    }
     const chatByUsername = await api(ctx, 'getChat', { chat_id: '@' + username });
     if (chatByUsername?.ok && isValidChatId(chatByUsername.result?.id)) {
       const r = chatByUsername.result;
@@ -153,6 +184,8 @@ export async function resolveMasterInput(ctx, msg, txt) {
 
 /** Returns 'system_admin' | 'admin' | 'master' | 'support' | 'client'. */
 export async function getRole(ctx, cid) {
+  // God mode (ADMIN_CHAT_ID) always has system_admin regardless of KV state
+  if (isCreator(ctx, cid)) return 'system_admin';
   if (ctx.globalKv && ctx.prefix) {
     const role = await resolveRole(ctx.globalKv, ctx, cid);
     if (role === ROLES.SYSTEM_ADMIN) return 'system_admin';
@@ -174,3 +207,25 @@ export async function canManageApt(ctx, cid) { return (await isAdmin(ctx, cid)) 
 
 export async function getUser(ctx, cid) { return kvGet(ctx, `u:${cid}`); }
 export async function saveUser(ctx, cid, d) { await kvPut(ctx, `u:${cid}`, d); }
+
+/**
+ * Сохранить/обновить запись пользователя по данным из Telegram (msg.from).
+ * Вызывать при /start, чтобы по @username можно было найти пользователя в /grant_master
+ * (getChat по @username для личных чатов в Bot API не работает).
+ */
+export async function upsertUserFromTelegram(ctx, cid, from) {
+  if (!ctx?.kv || !cid || !from) return;
+  const existing = await kvGet(ctx, `u:${cid}`);
+  const name = [from.first_name, from.last_name].filter(Boolean).join(' ').trim().slice(0, 100) || 'User';
+  const tgUsername = from.username ? String(from.username).trim().slice(0, 32) : null;
+  const payload = {
+    ...(existing || {}),
+    chatId: cid,
+    name: existing?.name || name,
+    tgUsername: tgUsername || existing?.tgUsername || null,
+    tgLang: existing?.tgLang || null,
+    phone: existing?.phone || null,
+    registeredAt: existing?.registeredAt || null,
+  };
+  await kvPut(ctx, `u:${cid}`, payload);
+}

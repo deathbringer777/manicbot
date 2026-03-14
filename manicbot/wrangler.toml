@@ -2,6 +2,13 @@ name = "manicbot"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
+# Optional: set via wrangler secret put STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+# and vars or secrets: STRIPE_PRICE_START_MONTHLY, STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_STUDIO_MONTHLY, APP_BASE_URL
+[vars]
+APP_BASE_URL = ""
+# Создатель платформы (полный доступ к панели): твой Telegram chat_id
+ADMIN_CHAT_ID = "321706035"
+
 # CLOUDFLARE_ACCOUNT_ID should be set as a secret: wrangler secret put CLOUDFLARE_ACCOUNT_ID
 
 [triggers]

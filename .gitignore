@@ -3,3 +3,5 @@ secrets.generated.txt
 .env.*
 !.env.example
 node_modules/
+.DS_Store
+.cursor/

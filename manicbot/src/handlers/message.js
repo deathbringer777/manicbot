@@ -400,6 +400,43 @@ export async function onMsg(ctx, msg) {
   }
 
   // ─── Platform admin flows (создатель или system_admin) ────────────────────
+
+  async function doRegisterBot(token, tenantId) {
+    const kv = ctx.globalKv || ctx.kv;
+    const webhookSecret = randomId(20);
+    const result = await registerBot(kv, token, tenantId, webhookSecret, ctx.BOT_ENCRYPTION_KEY || null);
+    await clearState(ctx, cid);
+    if (!result.ok) {
+      await send(ctx, cid, `❌ ${result.error || t(lg, 'unknown')}`);
+      return showPlatformAdminPanel(ctx, cid, name);
+    }
+    const wh = ctx.baseUrl ? `${ctx.baseUrl}/webhook/${result.botId}` : null;
+    let webhookSet = false;
+    if (wh) {
+      try {
+        const r = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: wh, secret_token: webhookSecret }),
+        });
+        const data = await r.json();
+        webhookSet = data.ok === true;
+      } catch (e) {
+        console.error('setWebhook error:', e.message);
+      }
+    }
+    const webhookLine = webhookSet
+      ? `\n\n${t(lg, 'sysadm_webhook_ok')}`
+      : `\n\n${t(lg, 'sysadm_webhook_fail')}\nURL: <code>${wh || '/webhook/' + result.botId}</code>\nSecret: <code>${webhookSecret}</code>`;
+    await send(ctx, cid,
+      `✅ ${t(lg, 'sysadm_bot_registered')}\n\n` +
+      `Bot ID: <code>${result.botId}</code>\n` +
+      `Tenant: <code>${result.tenantId}</code>` +
+      webhookLine
+    );
+    return showPlatformAdminPanel(ctx, cid, name);
+  }
+
   if (st.step === STEP.SYSADM_NEW_TENANT && (await isPlatformAdmin(ctx, cid))) {
     const tenantName = txt?.trim();
     if (!tenantName || tenantName.length < 2) return send(ctx, cid, t(lg, 'sysadm_tenant_name_invalid'));
@@ -424,6 +461,9 @@ export async function onMsg(ctx, msg) {
     if (!token || !token.includes(':') || token.split(':').length < 2) {
       return send(ctx, cid, t(lg, 'sysadm_bot_token_invalid'));
     }
+    if (st.preTenantId) {
+      return doRegisterBot(token, st.preTenantId);
+    }
     await setState(ctx, cid, { step: STEP.SYSADM_NEW_BOT_TENANT, botToken: token });
     return send(ctx, cid, t(lg, 'sysadm_bot_enter_tenant'), {
       reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]] },
@@ -433,23 +473,7 @@ export async function onMsg(ctx, msg) {
   if (st.step === STEP.SYSADM_NEW_BOT_TENANT && (await isPlatformAdmin(ctx, cid))) {
     const tenantIdInput = txt?.trim();
     if (!tenantIdInput) return send(ctx, cid, t(lg, 'sysadm_bot_enter_tenant'));
-    const kv = ctx.globalKv || ctx.kv;
-    const webhookSecret = randomId(20);
-    const result = await registerBot(kv, st.botToken, tenantIdInput, webhookSecret, ctx.BOT_ENCRYPTION_KEY || null);
-    await clearState(ctx, cid);
-    if (result.ok) {
-      const wh = ctx.baseUrl ? `${ctx.baseUrl}/webhook/${result.botId}` : `/webhook/${result.botId}`;
-      await send(ctx, cid,
-        `✅ ${t(lg, 'sysadm_bot_registered')}\n\n` +
-        `Bot ID: <code>${result.botId}</code>\n` +
-        `Tenant: <code>${result.tenantId}</code>\n` +
-        `Webhook URL:\n<code>${wh}</code>\n` +
-        `Webhook Secret:\n<code>${webhookSecret}</code>`
-      );
-    } else {
-      await send(ctx, cid, `❌ ${result.error || t(lg, 'unknown')}`);
-    }
-    return showPlatformAdminPanel(ctx, cid, name);
+    return doRegisterBot(st.botToken, tenantIdInput);
   }
 
   if (st.step === STEP.SYSADM_ADD_SUPPORT && (await isPlatformAdmin(ctx, cid))) {

@@ -107,6 +107,7 @@ export const CB = {
   SYSADM_GRANT_ROLE: 'sysadm:grant',
   SYSADM_GRANT_MASTER: 'sysadm:gm',
   SYSADM_GRANT_OWNER: 'sysadm:go',
+  SYSADM_BOT_NEW_FOR: 'sysadm:bnf:',
   // Salon settings editing
   ADM_SETTINGS_NAME: 'adm:stn',
   ADM_SETTINGS_PHONE: 'adm:stp',

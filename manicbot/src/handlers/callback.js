@@ -206,6 +206,15 @@ export async function onCb(ctx, cb) {
     });
   }
 
+  if (d.startsWith(CB.SYSADM_BOT_NEW_FOR)) {
+    if (!(await isPlatformAdmin(ctx, cid))) return noAccessMsg();
+    const preTenantId = d.slice(CB.SYSADM_BOT_NEW_FOR.length);
+    await setState(ctx, cid, { step: STEP.SYSADM_NEW_BOT, preTenantId });
+    return send(ctx, cid, t(lg, 'sysadm_bot_enter_token'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_TENANT_INFO + preTenantId }]] },
+    });
+  }
+
   if (d === CB.SYSADM_SUPPORT_LIST) {
     if (!canPlatform) return noAccessMsg();
     await clearState(ctx, cid);

@@ -3,8 +3,8 @@ main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
 routes = [
-  { pattern = "manicbot.com/*", zone_name = "manicbot.com" },
-  { pattern = "*.manicbot.com/*", zone_name = "manicbot.com" },
+  { pattern = "manicbot.com", custom_domain = true },
+  { pattern = "www.manicbot.com", custom_domain = true },
 ]
 
 # Optional: set via wrangler secret put STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET

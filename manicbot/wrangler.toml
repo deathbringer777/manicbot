@@ -2,10 +2,15 @@ name = "manicbot"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
+routes = [
+  { pattern = "manicbot.com/*", zone_name = "manicbot.com" },
+  { pattern = "*.manicbot.com/*", zone_name = "manicbot.com" },
+]
+
 # Optional: set via wrangler secret put STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-# and vars or secrets: STRIPE_PRICE_START_MONTHLY, STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_STUDIO_MONTHLY, APP_BASE_URL
+# and vars or secrets: STRIPE_PRICE_START_MONTHLY, STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_STUDIO_MONTHLY
 [vars]
-APP_BASE_URL = ""
+APP_BASE_URL = "https://manicbot.com"
 # Создатель платформы (полный доступ к панели): твой Telegram chat_id
 ADMIN_CHAT_ID = "321706035"
 

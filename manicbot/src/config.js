@@ -126,6 +126,12 @@ export const CB = {
   MST_CALENDAR:       'mst:cal',
   MST_CALENDAR_SET:   'mst:calset',
   MST_CALENDAR_CLEAR: 'mst:calclr',
+  // Master selection during booking
+  MASTER_ANY:  'ma',       // client picks "any available master"
+  MASTER_SEL:  'ms:',      // client picks specific master: ms:{chatId}
+  // Admin assigns master to unassigned appointment
+  ADM_ASSIGN_M: 'adm:asm:', // show master list for apt: adm:asm:{aptId}
+  ADM_SET_M:    'adm:stm:', // set master for apt: adm:stm:{aptId}:{masterId}
 };
 
 export const STEP = {
@@ -153,6 +159,7 @@ export const STEP = {
   ADD_ABOUT_PHOTO:     'add_about_photo',
   EDIT_ABOUT_DESC:     'edit_about_desc',
   EDIT_ABOUT_INSTAGRAM:'edit_about_instagram',
+  MASTER_PICK:         'master_pick',   // booking step: choose master
   SUPPORT_MSG:         'support_msg',
   SUPPORT_REPLY:       'support_reply',
   TECH_SUPPORT_MSG:    'tech_support_msg',

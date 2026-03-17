@@ -168,6 +168,8 @@ export async function showAdminApts(ctx, cid, dateStr) {
       [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }],
     ] } });
   }
+  const masters = await listMasters(ctx);
+  const masterMap = new Map(masters.map(m => [m.chatId, m]));
   let txt = `📅 <b>${fmtDate(lg, dateStr)}</b>\n\n`;
   const btns = [];
   for (const a of apts) {
@@ -175,10 +177,16 @@ export async function showAdminApts(ctx, cid, dateStr) {
     if (!sv) continue;
     const st = a.status === 'pending' ? '⏳' : a.status === 'confirmed' ? '✅' : a.status === 'counter_offer' ? '💬' : '🕐';
     const username = a.userTg ? ` · 🔗 @${escHtml(String(a.userTg).replace(/^@+/, ''))}` : '';
+    const masterName = a.masterId ? escHtml(masterMap.get(a.masterId)?.name || String(a.masterId)) : t(lg, 'adm_apt_unassigned');
     txt += `${st} <b>${a.time}</b> — ${sv.e} ${t(lg, 'svc_' + a.svcId)}\n`;
-    txt += `👤 ${escHtml(a.userName)} · 📱 ${escHtml(a.userPhone)}${username}\n\n`;
+    txt += `👤 ${escHtml(a.userName)} · 📱 ${escHtml(a.userPhone)}${username}\n`;
+    txt += `👩‍🎨 ${masterName}\n\n`;
     if (a.status !== 'cancelled' && a.status !== 'rejected') {
-      btns.push([{ text: `❌ ${a.time} ${escHtml(a.userName)}`, callback_data: CB.ADM_CANCEL_APT + a.id }]);
+      const row = [{ text: `❌ ${a.time} ${escHtml(a.userName)}`, callback_data: CB.ADM_CANCEL_APT + a.id }];
+      if (!a.masterId && masters.length) {
+        row.push({ text: t(lg, 'adm_assign_btn'), callback_data: CB.ADM_ASSIGN_M + a.id });
+      }
+      btns.push(row);
     }
   }
   btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
@@ -195,7 +203,8 @@ export async function showMasterAllApts(ctx, cid) {
   const buckets = await Promise.all(monthKeys.map(k => kvGet(ctx, k)));
   const allIds = [...new Set(buckets.flatMap(b => b || []))];
   const apts = (await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))))
-    .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000)
+    .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
+      && (a.masterId === cid || a.confirmedBy === cid))
     .sort((a, b) => a.ts - b.ts);
 
   if (!apts.length) {

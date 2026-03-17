@@ -13,10 +13,16 @@ import { canUse } from './billing/features.js';
 import { createCalendarEvent, buildCalendarEvent } from './services/calendar.js';
 
 export async function notifyAptStaff(ctx, apt, user) {
-  const masters = await listMasters(ctx);
   const adminId = await getAdminId(ctx);
   const recipients = new Set();
-  for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+  if (apt.masterId) {
+    // Assigned to a specific master — notify only that master + admin
+    recipients.add(apt.masterId);
+  } else {
+    // Unassigned — notify all active masters
+    const masters = await listMasters(ctx);
+    for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+  }
   if (adminId) recipients.add(adminId);
   const promises = [];
   for (const rcid of recipients) {

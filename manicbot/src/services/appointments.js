@@ -3,6 +3,7 @@ import { kvGet, kvPut, kvDel } from '../utils/kv.js';
 import { p2 } from '../utils/helpers.js';
 import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
 import { deleteCalendarEvent } from './calendar.js';
+import { getMaster } from './users.js';
 
 export function allKey(dateStr) {
   return `all:${dateStr.slice(0, 7)}`;
@@ -16,9 +17,14 @@ export function getAptMasterId(apt) { return apt?.masterId || null; }
 export function isSharedApt(apt) { return !apt?.masterId; }
 
 export async function loadDayAppointments(ctx, date, masterId = null) {
-  const ids = (await kvGet(ctx, dayIndexKey(date, masterId))) || [];
+  const ids = (await kvGet(ctx, `d:${date}`)) || [];
   const fetched = await Promise.all(ids.map(id => kvGet(ctx, `ap:${id}`)));
-  return fetched.filter(a => a && !a.cx);
+  const active = fetched.filter(a => a && !a.cx);
+  // When checking a specific master's schedule, only their booked appointments block slots
+  if (masterId != null) {
+    return active.filter(a => a.masterId === masterId || a.confirmedBy === masterId);
+  }
+  return active;
 }
 
 export async function addToIndexes(ctx, apt) {
@@ -121,16 +127,34 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
 export async function getSlots(ctx, date, svcId, masterId = null) {
   const svc = ctx.svc.find(s => s.id === svcId);
   if (!svc) return [];
+
+  // Determine work hours: use master's schedule when a specific master is selected
+  let workFrom = WORK.from, workTo = WORK.to;
+  if (masterId != null) {
+    const master = await getMaster(ctx, masterId);
+    if (!master) return []; // master not found
+    if (master.onVacation) return []; // master on vacation
+    // Master's custom work hours override global
+    if (master.workHours?.from != null) workFrom = master.workHours.from;
+    if (master.workHours?.to != null) workTo = master.workHours.to;
+    // Master's work days: check if this date's weekday is a working day
+    if (Array.isArray(master.workDays) && master.workDays.length > 0) {
+      const [y, mo, d] = date.split('-').map(Number);
+      const dow = new Date(Date.UTC(y, mo - 1, d)).getUTCDay(); // 0=Sun..6=Sat
+      if (!master.workDays.includes(dow)) return []; // master doesn't work this day
+    }
+  }
+
   const booked = await loadDayAppointments(ctx, date, masterId);
   const svcMap = new Map(ctx.svc.map(s => [s.id, s]));
   const td = todayStr();
   const w = warsawNow();
   const ch = w.hour, cm = w.minute;
   const slots = [];
-  for (let h = WORK.from; h < WORK.to; h++) {
+  for (let h = workFrom; h < workTo; h++) {
     for (const m of [0, 30]) {
       const ss = h + m / 60, se = ss + svc.dur / 60;
-      if (se > WORK.to) continue;
+      if (se > workTo) continue;
       if (date === td && (h < ch || (h === ch && m <= cm))) continue;
       let ok = true;
       for (const a of booked) {

@@ -16,7 +16,7 @@ import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, noti
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
-import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
+import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick } from '../ui/booking.js';
 import { showBillingMenu } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
 import { getTenant } from '../tenant/storage.js';
@@ -462,6 +462,55 @@ export async function onCb(ctx, cb) {
     return showMastersList(ctx, cid);
   }
 
+  // Admin: show master list to assign to an appointment
+  if (d.startsWith(CB.ADM_ASSIGN_M)) {
+    if (!await isAdmin(ctx, cid)) return;
+    const aptId = d.slice(CB.ADM_ASSIGN_M.length);
+    const apt = await kvGet(ctx, `ap:${aptId}`);
+    if (!apt || apt.cx) return;
+    const masters = (await listMasters(ctx)).filter(m => !m.onVacation);
+    if (!masters.length) return send(ctx, cid, t(lg, 'adm_no_masters'));
+    const btns = masters.map(m => [{ text: `👤 ${escHtml(m.name)}`, callback_data: CB.ADM_SET_M + aptId + ':' + m.chatId }]);
+    btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+    return send(ctx, cid, t(lg, 'adm_assign_master_prompt'), { reply_markup: { inline_keyboard: btns } });
+  }
+
+  // Admin: set specific master for appointment
+  if (d.startsWith(CB.ADM_SET_M)) {
+    if (!await isAdmin(ctx, cid)) return;
+    const parts = d.slice(CB.ADM_SET_M.length).split(':');
+    const aptId = parts[0];
+    const masterId = parseInt(parts[1]);
+    if (!aptId || !masterId) return;
+    const apt = await kvGet(ctx, `ap:${aptId}`);
+    if (!apt || apt.cx) return;
+    const master = await getMaster(ctx, masterId);
+    if (!master) return;
+    apt.masterId = masterId;
+    await kvPut(ctx, `ap:${aptId}`, apt);
+    // Notify the assigned master
+    const mlg = await getLang(ctx, masterId) || 'ru';
+    const s = ctx.svc.find(x => x.id === apt.svcId);
+    const priceLine = '💵 ' + String(s?.price || '?') + ' ' + t(mlg, 'cur');
+    await send(ctx, masterId, [
+      '👩‍🎨 <b>' + t(mlg, 'mst_new_apt_header') + '</b>',
+      '',
+      '👤 ' + escHtml(apt.userName),
+      '📱 ' + escHtml(apt.userPhone),
+      apt.userTg ? '🔗 @' + escHtml(apt.userTg) : '',
+      '',
+      '💅 ' + svcName(ctx, mlg, apt.svcId),
+      '',
+      '📅 ' + fmtDT(mlg, apt.date, apt.time),
+      priceLine,
+    ].filter(Boolean).join('\n'), { reply_markup: { inline_keyboard: [
+      [{ text: t(mlg, 'mst_confirm_btn'), callback_data: CB.APT_CONFIRM + aptId }],
+      [{ text: t(mlg, 'mst_reject_btn'), callback_data: CB.APT_REJECT + aptId }],
+      [{ text: t(mlg, 'mst_counter_btn'), callback_data: CB.APT_COUNTER + aptId }],
+    ]}}).catch(() => null);
+    return send(ctx, cid, fill(t(lg, 'adm_master_assigned_ok'), { name: escHtml(master.name) }));
+  }
+
   if (d === CB.ADM_CLIENTS) {
     if (!await isAdmin(ctx, cid)) return;
     return showClientsList(ctx, cid, 0);
@@ -587,6 +636,8 @@ export async function onCb(ctx, cb) {
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'confirmed';
     apt.confirmedBy = cid;
+    // If no master was pre-assigned, the confirming master claims the appointment
+    if (!apt.masterId) apt.masterId = cid;
     await kvPut(ctx, `ap:${aptId}`, apt);
     await sendAptConfirmedToClient(ctx, apt);
     // Google Calendar: create event if master has calendar connected
@@ -912,16 +963,38 @@ export async function onCb(ctx, cb) {
     if (date < todayStr()) return;
     const st = await getState(ctx, cid);
     if (!st.svcId || !ctx.svcIds.has(st.svcId)) return send(ctx, cid, t(lg, 'book_err'), svcKb(ctx, lg));
-    const slots = await getSlots(ctx, date, st.svcId);
-    if (!slots.length) return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, date) }), calKb(lg, 0));
-    st.step = STEP.TIME;
     st.date = date;
-    await setState(ctx, cid, st);
-    await send(ctx, cid, `📅 <b>${fmtDate(lg, date)}</b>\n${svcName(ctx, lg, st.svcId)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
-    return;
+    // Route through master selection if salon has masters
+    return showMasterPick(ctx, cid, st.svcId, date, st);
   }
 
   if (d === CB.CAL_BACK) return send(ctx, cid, t(lg, 'choose_date'), calKb(lg, 0));
+
+  // Master selection: "any available master"
+  if (d === CB.MASTER_ANY) {
+    const st = await getState(ctx, cid);
+    if (!st.svcId || !st.date || !ctx.svcIds.has(st.svcId)) return send(ctx, cid, t(lg, 'book_err'), svcKb(ctx, lg));
+    const slots = await getSlots(ctx, st.date, st.svcId, null);
+    if (!slots.length) return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, st.date) }), calKb(lg, 0));
+    await setState(ctx, cid, { ...st, step: STEP.TIME, masterId: null });
+    await send(ctx, cid, `📅 <b>${fmtDate(lg, st.date)}</b>\n${svcName(ctx, lg, st.svcId)}\n${t(lg, 'book_any_master_label')}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
+    return;
+  }
+
+  // Master selection: specific master chosen
+  if (d.startsWith(CB.MASTER_SEL)) {
+    const masterId = parseInt(d.slice(CB.MASTER_SEL.length));
+    if (!masterId) return;
+    const st = await getState(ctx, cid);
+    if (!st.svcId || !st.date || !ctx.svcIds.has(st.svcId)) return send(ctx, cid, t(lg, 'book_err'), svcKb(ctx, lg));
+    const master = await getMaster(ctx, masterId);
+    if (!master || master.onVacation) return send(ctx, cid, t(lg, 'book_err'), svcKb(ctx, lg));
+    const slots = await getSlots(ctx, st.date, st.svcId, masterId);
+    if (!slots.length) return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, st.date) }), calKb(lg, 0));
+    await setState(ctx, cid, { ...st, step: STEP.TIME, masterId });
+    await send(ctx, cid, `📅 <b>${fmtDate(lg, st.date)}</b>\n${svcName(ctx, lg, st.svcId)}\n${fill(t(lg, 'book_master_assigned'), { name: escHtml(master.name) })}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
+    return;
+  }
 
   if (d.startsWith(CB.TIME)) {
     const time = d.slice(CB.TIME.length);
@@ -985,6 +1058,7 @@ export async function onCb(ctx, cb) {
       chatId: cid, svcId: st.svcId, date: st.date, time: st.time, ts,
       userName: user?.name || '?', userPhone: user?.phone || '?',
       userTg: user?.tgUsername ? String(user.tgUsername).replace(/^@+/, '') : null,
+      masterId: st.masterId || null,
     });
 
     if (!apt) {

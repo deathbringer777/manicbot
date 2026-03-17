@@ -1,10 +1,10 @@
 import { send } from '../telegram.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc } from '../utils/helpers.js';
 import { fmtDT, fmtDate, resolveDateHint, resolveTimeHint, findClosestSlot } from '../utils/date.js';
-import { CB } from '../config.js';
+import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
 import { setState } from '../services/state.js';
-import { getUser } from '../services/users.js';
+import { getUser, listMasters } from '../services/users.js';
 import { getApts, getSlots } from '../services/appointments.js';
 import { svcKb, calKb, timeKb } from './keyboards.js';
 import { showMyApts } from './screens.js';
@@ -68,6 +68,31 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
     ? fill(t(lg, 'chosen_correction'), { svc: svcName(ctx, lg, svcId) }) + '\n\n' + t(lg, 'choose_date')
     : fill(t(lg, 'chosen'), { svc: svcName(ctx, lg, svcId), p: String(s.price), c: t(lg, 'cur'), d: String(s.dur), min: t(lg, 'min') }) + '\n\n' + t(lg, 'choose_date');
   await send(ctx, cid, chosenText, calKb(lg, 0));
+}
+
+/**
+ * Show master selection step during booking.
+ * Called after date is chosen. Lists active masters + "any" option.
+ * If no masters, skips directly to time selection.
+ */
+export async function showMasterPick(ctx, cid, svcId, date, st) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  const masters = (await listMasters(ctx)).filter(m => !m.onVacation && m.active !== false);
+  if (!masters.length) {
+    // No masters — skip master pick, go straight to time
+    const slots = await getSlots(ctx, date, svcId, null);
+    if (!slots.length) return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, date) }), calKb(lg, 0));
+    await setState(ctx, cid, { ...st, step: STEP.TIME, masterId: null });
+    return send(ctx, cid, `📅 <b>${fmtDate(lg, date)}</b>\n${svcName(ctx, lg, svcId)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
+  }
+  await setState(ctx, cid, { ...st, step: STEP.MASTER_PICK });
+  const btns = [];
+  btns.push([{ text: t(lg, 'book_any_master'), callback_data: CB.MASTER_ANY }]);
+  for (const m of masters) {
+    btns.push([{ text: fill(t(lg, 'book_master_label'), { name: escHtml(m.name) }), callback_data: CB.MASTER_SEL + m.chatId }]);
+  }
+  btns.push([{ text: t(lg, 'back'), callback_data: CB.CAL_BACK }]);
+  await send(ctx, cid, t(lg, 'book_choose_master'), { reply_markup: { inline_keyboard: btns } });
 }
 
 export async function showCancelAllConfirm(ctx, cid) {

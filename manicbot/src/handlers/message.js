@@ -65,10 +65,10 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   await appendChatTurn(ctx, cid, txt, aiText || (didAction ? '' : null));
   if (didAction) return;
   const finalHint = extraConsult.reply_markup ? '\n\n' + t(lg, 'consultant_btn_hint') : '';
-  // Стафф всегда получает кнопку «Назад» (не кнопку консультанта)
+  // Стафф получает кнопку «В меню» (нейтральная, не «Панель админа» — только в админ-разделах)
   if (isStaff) {
     const backCb = (realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support') ? CB.SYSADM_MAIN : (realRole === 'admin' || realRole === 'tenant_owner') ? CB.ADM_MAIN : CB.MST_MAIN;
-    extraConsult = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: backCb }]] } };
+    extraConsult = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: backCb }]] } };
     // Для стаффа при пустом AI-ответе даём нейтральное сообщение, не «Не понимаю»
     const toSendStaff = aiText ? escHtml(aiText) : '🤖 AI временно недоступен. Используй кнопки панели.';
     await send(ctx, cid, toSendStaff, extraConsult);
@@ -198,7 +198,10 @@ export async function onMsg(ctx, msg) {
 
   if (txt.startsWith('/add_technical_support ')) {
     const tsRole = await getRole(ctx, cid);
-    if (tsRole !== 'system_admin') return send(ctx, cid, t(lg, 'sysadm_no_access'));
+    if (tsRole !== 'system_admin') {
+      if (ctx.tenantId) return showWelcome(ctx, cid, name);
+      return send(ctx, cid, t(lg, 'sysadm_no_access'));
+    }
     const arg = txt.slice(24).trim();
     if (!arg) return send(ctx, cid, '⚠️ Использование: /add_technical_support @username или ID');
     if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
@@ -356,7 +359,6 @@ export async function onMsg(ctx, msg) {
   }
   if (txt === '/panel' && realRole !== 'client') {
     if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
-    if (!ctx.tenantId && (realRole === 'support' || realRole === 'technical_support')) return showPlatformAdminPanel(ctx, cid, name);
     if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
   }
@@ -373,7 +375,8 @@ export async function onMsg(ctx, msg) {
       }
     }
     if (!hasLang) return showLangPick(ctx, cid);
-    // Platform admin panel only in main bot (no tenantId). Tenant bots always use role-based flow.
+    // Platform admin panel only in main bot (no tenantId), and only for platform creator (ADMIN_CHAT_ID) or system_admin in KV.
+    // Support/technical_support do NOT see platform panel on /start — only isPlatformAdmin.
     if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) {
       // Auto-register god-mode commands for this chat so they show in the / menu
       api(ctx, 'setMyCommands', {
@@ -393,9 +396,6 @@ export async function onMsg(ctx, msg) {
         ],
         scope: { type: 'chat', chat_id: cid },
       }).catch(() => null);
-      return showPlatformAdminPanel(ctx, cid, name);
-    }
-    if (!ctx.tenantId && (realRole === 'support' || realRole === 'technical_support')) {
       return showPlatformAdminPanel(ctx, cid, name);
     }
     // In tenant bots: reset per-chat commands to basic set (clears any stale platform commands)
@@ -444,7 +444,6 @@ export async function onMsg(ctx, msg) {
     if (txt === t(lg, 'mst_panel') && (realRole === 'master' || realRole === 'admin')) return showMasterPanel(ctx, cid, name);
     if (txt === t(lg, 'adm_management') && realRole !== 'client') {
       if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
-      if (!ctx.tenantId && realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
       if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
       if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     }
@@ -493,7 +492,7 @@ export async function onMsg(ctx, msg) {
         await send(ctx, cid, fill(t(lg, 'cancel_ok'), {
           svc: svcName(ctx, lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time),
         }), { reply_markup: { inline_keyboard: [
-          [{ text: t(lg, 'adm_back'), callback_data: backCb }],
+          [{ text: t(lg, 'back_m'), callback_data: backCb }],
         ] } });
       } else {
         await send(ctx, cid, fill(t(lg, 'cancel_ok'), {
@@ -1043,7 +1042,7 @@ export async function onMsg(ctx, msg) {
     const confirmLg = await getLang(ctx, cid) || 'ru';
     const confirmMsg = count > 0 ? fill(t(confirmLg, 'confirm_all_done'), { n: String(count) }) : t(confirmLg, 'confirm_all_none');
     const backCb = realRole === 'system_admin' ? CB.SYSADM_MAIN : realRole === 'admin' ? CB.ADM_MAIN : CB.MST_MAIN;
-    return send(ctx, cid, confirmMsg, { reply_markup: { inline_keyboard: [[{ text: t(confirmLg, 'adm_back'), callback_data: backCb }]] } });
+    return send(ctx, cid, confirmMsg, { reply_markup: { inline_keyboard: [[{ text: t(confirmLg, 'back_m'), callback_data: backCb }]] } });
   }
 
   if ((realRole === 'admin' || realRole === 'system_admin') && isAdminCancelAllMessage(txt)) {

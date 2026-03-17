@@ -74,12 +74,11 @@ describe('resolveRole — platform vs tenant priority', () => {
 
 /**
  * Panel routing logic tests (pure function extracted from /start handler).
- * Mirrors the fixed routing: system_admin in tenant bot → admin panel.
+ * Platform panel only for isPlatformAdmin (creator or system_admin in KV); support no longer sees it.
  */
 function resolveStartPanel(ctx, realRole) {
-  // Platform admin panel: main bot only
+  // Platform admin panel: main bot only, and only for system_admin (support/tech_support no longer get it)
   if (!ctx.tenantId && realRole === 'system_admin') return 'platform_admin';
-  if (!ctx.tenantId && (realRole === 'support' || realRole === 'technical_support')) return 'platform_admin';
   // Tenant admin panel: admin, tenant_owner, or system_admin in tenant bot
   if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return 'admin';
   if (realRole === 'master') return 'master';
@@ -114,7 +113,7 @@ describe('resolveStartPanel — routing logic', () => {
     expect(resolveStartPanel(mainCtx, 'system_admin')).toBe('platform_admin');
   });
 
-  it('support in main bot → platform admin panel', () => {
-    expect(resolveStartPanel(mainCtx, 'support')).toBe('platform_admin');
+  it('support in main bot → welcome (platform panel only for isPlatformAdmin)', () => {
+    expect(resolveStartPanel(mainCtx, 'support')).toBe('welcome');
   });
 });

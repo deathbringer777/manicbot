@@ -207,11 +207,11 @@ export async function onCb(ctx, cb) {
     return;
   }
 
-  // ─── Панель платформы: только в главном боте (без tenantId) ─────────────────
-  // Platform panel is ONLY accessible in the main bot (ctx.tenantId === null).
-  // Tenant bots must never show the platform panel, even if the user is system_admin.
-  const canPlatform = !ctx.tenantId && ((await isPlatformAdmin(ctx, cid)) || (await getRole(ctx, cid)) === 'support');
-  const noAccessMsg = () => send(ctx, cid, t(lg, 'sysadm_no_access'));
+  // ─── Панель платформы: только в главном боте (без tenantId) и только для создателя платформы ─────────────────
+  // Platform panel is ONLY for isPlatformAdmin (ADMIN_CHAT_ID or system_admin in KV). Support no longer sees it.
+  // В тенантных ботах никогда не показываем сообщения про «нет доступа» — только главное меню.
+  const canPlatform = !ctx.tenantId && (await isPlatformAdmin(ctx, cid));
+  const noAccessMsg = () => (ctx.tenantId ? showWelcome(ctx, cid, name) : send(ctx, cid, t(lg, 'sysadm_no_access')));
 
   if (d === CB.SYSADM_MAIN || d === CB.SYSADM_BACK) {
     if (!canPlatform) return noAccessMsg();

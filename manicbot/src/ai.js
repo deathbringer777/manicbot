@@ -208,7 +208,7 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       case 'ADM_CONFIRM_ALL': {
         const count = await confirmAllPendingApts(ctx, cid);
         const msg = count > 0 ? fill(t(lg, 'confirm_all_done'), { n: String(count) }) : t(lg, 'confirm_all_none');
-        await send(ctx, cid, msg, { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.SYSADM_MAIN }]] } });
+        await send(ctx, cid, msg, { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: CB.SYSADM_MAIN }]] } });
         return true;
       }
     }
@@ -230,7 +230,7 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       case 'ADM_CONFIRM_ALL': {
         const count = await confirmAllPendingApts(ctx, cid);
         const msg = count > 0 ? fill(t(lg, 'confirm_all_done'), { n: String(count) }) : t(lg, 'confirm_all_none');
-        await send(ctx, cid, msg, { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]] } });
+        await send(ctx, cid, msg, { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: CB.ADM_MAIN }]] } });
         return true;
       }
     }

@@ -14,3 +14,8 @@ make_logo.py
 
 # Landing app (separate Cloudflare Pages deploy)
 manicbot-landing/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example

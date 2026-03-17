@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "44444444",
+  "compatibility_date": "2025-09-27",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "manicbot-landing"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}

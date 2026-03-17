@@ -374,7 +374,8 @@ export async function onMsg(ctx, msg) {
       }
     }
     if (!hasLang) return showLangPick(ctx, cid);
-    if (await isPlatformAdmin(ctx, cid)) {
+    // Platform admin panel only in main bot (no tenantId). Tenant bots always use role-based flow.
+    if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) {
       // Auto-register god-mode commands for this chat so they show in the / menu
       api(ctx, 'setMyCommands', {
         commands: [
@@ -395,8 +396,21 @@ export async function onMsg(ctx, msg) {
       }).catch(() => null);
       return showPlatformAdminPanel(ctx, cid, name);
     }
-    if (realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
-    if (realRole === 'technical_support') return showPlatformAdminPanel(ctx, cid, name);
+    if (!ctx.tenantId && (realRole === 'support' || realRole === 'technical_support')) {
+      return showPlatformAdminPanel(ctx, cid, name);
+    }
+    // In tenant bots: reset per-chat commands to basic set (clears any stale platform commands)
+    if (ctx.tenantId) {
+      api(ctx, 'setMyCommands', {
+        commands: [
+          { command: 'start', description: '💅 Главное меню / Main menu' },
+          { command: 'book', description: '📝 Записаться / Book now' },
+          { command: 'my', description: '📋 Мои записи / My appointments' },
+          { command: 'lang', description: '🌐 Язык / Language' },
+        ],
+        scope: { type: 'chat', chat_id: cid },
+      }).catch(() => null);
+    }
     if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     return showWelcome(ctx, cid, name);

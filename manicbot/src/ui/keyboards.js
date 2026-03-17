@@ -4,8 +4,9 @@ import { todayStr, warsawNow } from '../utils/date.js';
 import { canUse } from '../billing/features.js';
 
 export function mainKb(lg, role = 'client', ctx = null) {
-  // Support button shown only if ctx is absent (legacy) OR support feature enabled
-  const showSupport = !ctx || canUse(ctx, 'support_tickets');
+  // Support button: always shown for clients; salon staff (master/admin) gated by plan
+  const isSalonStaffKb = role === 'master' || role === 'admin' || role === 'tenant_owner';
+  const showSupport = !ctx || !isSalonStaffKb || canUse(ctx, 'support_tickets');
   const lastRow = [
     { text: t(lg, 'm_cont'), callback_data: CB.CONTACTS },
     { text: t(lg, 'm_lang'), callback_data: CB.LANG },

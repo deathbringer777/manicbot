@@ -70,7 +70,10 @@ export async function onCb(ctx, cb) {
   if (d === CB.BOOK)     return startBooking(ctx, cid, cb.from);
 
   if (d === CB.SUPPORT) {
-    if (!canUse(ctx, 'support_tickets') && !(await isPlatformAdmin(ctx, cid))) {
+    // Support plan check only for salon staff — clients & platform roles always have support
+    const supportRole = await getRole(ctx, cid);
+    const isSalonStaffSupport = supportRole === 'admin' || supportRole === 'master' || supportRole === 'tenant_owner';
+    if (isSalonStaffSupport && !canUse(ctx, 'support_tickets') && !(await isPlatformAdmin(ctx, cid))) {
       return send(ctx, cid, t(lg, 'feature_support_unavailable'));
     }
     await setState(ctx, cid, { step: STEP.SUPPORT_MSG });

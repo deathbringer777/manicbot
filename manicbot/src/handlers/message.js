@@ -27,9 +27,11 @@ import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQui
 // timingSafeEqual imported above from security.js
 
 async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
-  // Gate: AI unavailable on Start plan or grace period (clients only — staff always has AI)
-  const isStaff = realRole === 'system_admin' || realRole === 'admin' || realRole === 'master' || realRole === 'support' || realRole === 'technical_support' || realRole === 'tenant_owner';
-  if (!isStaff && !canUse(ctx, 'ai')) {
+  // Gate: AI plan check only for salon staff (master/admin) — clients & platform roles always have AI
+  const isPlatformRole = realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support';
+  const isSalonStaff = realRole === 'admin' || realRole === 'master' || realRole === 'tenant_owner';
+  const isStaff = isPlatformRole || isSalonStaff;
+  if (isSalonStaff && !canUse(ctx, 'ai')) {
     return send(ctx, cid, t(lg, 'feature_ai_unavailable'));
   }
   const showConsultBtn = !isStaff && isWantHumanMessage(txt);

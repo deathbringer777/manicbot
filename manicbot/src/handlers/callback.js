@@ -152,6 +152,9 @@ export async function onCb(ctx, cb) {
     }
     const clientCid = parseInt(suffix, 10);
     if (!clientCid) return;
+    if (cid === clientCid) {
+      return send(ctx, cid, t(lg, 'ticket_cannot_take_own'));
+    }
     const agentRole = await getRole(ctx, cid);
     const tenantAgents = ctx.kv ? await getTenantSupportAgents(ctx).catch(() => []) : [];
     const isSupportAgent = tenantAgents.includes(cid) || tenantAgents.includes(String(cid));

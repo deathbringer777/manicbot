@@ -132,6 +132,9 @@ export const CB = {
   // Admin assigns master to unassigned appointment
   ADM_ASSIGN_M: 'adm:asm:', // show master list for apt: adm:asm:{aptId}
   ADM_SET_M:    'adm:stm:', // set master for apt: adm:stm:{aptId}:{masterId}
+  // Admin all-appointments view with master filter
+  ADM_ALL_APTS:   'adm:aa',   // all appointments (no filter)
+  ADM_ALL_APTS_M: 'adm:aam:', // filtered by master: adm:aam:{masterId}
 };
 
 export const STEP = {

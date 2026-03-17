@@ -235,6 +235,58 @@ export async function showMasterAllApts(ctx, cid) {
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }
 
+export async function showAdminAllApts(ctx, cid, filterMasterId = null) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  const masters = await listMasters(ctx);
+  const masterMap = new Map(masters.map(m => [m.chatId, m]));
+
+  let apts = (await getAdminAllApts(ctx)).filter(a => a.status !== 'cancelled' && a.status !== 'rejected');
+  if (filterMasterId != null) {
+    apts = apts.filter(a => a.masterId === filterMasterId || a.confirmedBy === filterMasterId);
+  }
+  apts.sort((a, b) => a.ts - b.ts);
+
+  // Filter buttons row
+  const filterRow = [];
+  const allLabel = filterMasterId == null ? `✅ ${t(lg, 'adm_filter_all')}` : t(lg, 'adm_filter_all');
+  filterRow.push({ text: allLabel, callback_data: CB.ADM_ALL_APTS });
+  for (const m of masters) {
+    const active = filterMasterId === m.chatId;
+    const label = active ? `✅ ${m.name}` : fill(t(lg, 'adm_filter_master'), { name: m.name });
+    filterRow.push({ text: label, callback_data: CB.ADM_ALL_APTS_M + m.chatId });
+  }
+
+  if (!apts.length) {
+    return send(ctx, cid, `${t(lg, 'adm_all_apts_title')}\n\n${t(lg, 'adm_no_apts')}`, {
+      reply_markup: { inline_keyboard: [filterRow, [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]] },
+    });
+  }
+
+  let txt = `${t(lg, 'adm_all_apts_title')}\n\n`;
+  const btns = [filterRow];
+  let currentDate = null;
+  for (const a of apts) {
+    if (a.date !== currentDate) {
+      currentDate = a.date;
+      txt += `📅 <b>${fmtDate(lg, a.date)}</b>\n`;
+    }
+    const sv = ctx.svc.find(x => x.id === a.svcId);
+    if (!sv) continue;
+    const st = a.status === 'pending' ? '⏳' : a.status === 'confirmed' ? '✅' : a.status === 'counter_offer' ? '💬' : '🕐';
+    const masterName = a.masterId ? escHtml(masterMap.get(a.masterId)?.name || String(a.masterId)) : t(lg, 'adm_apt_unassigned');
+    txt += `${st} <b>${a.time}</b> — ${sv.e} ${svcName(ctx, lg, a.svcId)}\n`;
+    txt += `👤 ${escHtml(a.userName)} · 👩‍🎨 ${masterName}\n`;
+    const row = [{ text: `❌ ${a.time} ${escHtml(a.userName)}`, callback_data: CB.ADM_CANCEL_APT + a.id }];
+    if (!a.masterId && masters.length) {
+      row.push({ text: t(lg, 'adm_assign_btn'), callback_data: CB.ADM_ASSIGN_M + a.id });
+    }
+    btns.push(row);
+    txt += '\n';
+  }
+  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
+}
+
 export async function showMastersList(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const masters = await listMasters(ctx);

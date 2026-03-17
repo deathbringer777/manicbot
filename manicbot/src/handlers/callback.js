@@ -15,7 +15,7 @@ import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
-import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
+import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick } from '../ui/booking.js';
 import { showBillingMenu } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
@@ -509,6 +509,17 @@ export async function onCb(ctx, cb) {
       [{ text: t(mlg, 'mst_counter_btn'), callback_data: CB.APT_COUNTER + aptId }],
     ]}}).catch(() => null);
     return send(ctx, cid, fill(t(lg, 'adm_master_assigned_ok'), { name: escHtml(master.name) }));
+  }
+
+  if (d === CB.ADM_ALL_APTS) {
+    if (!await isAdmin(ctx, cid)) return;
+    return showAdminAllApts(ctx, cid, null);
+  }
+
+  if (d.startsWith(CB.ADM_ALL_APTS_M)) {
+    if (!await isAdmin(ctx, cid)) return;
+    const masterId = parseInt(d.slice(CB.ADM_ALL_APTS_M.length));
+    return showAdminAllApts(ctx, cid, masterId || null);
   }
 
   if (d === CB.ADM_CLIENTS) {

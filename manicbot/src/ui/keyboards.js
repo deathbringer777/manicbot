@@ -126,6 +126,7 @@ export function adminKb(lg) {
   return { reply_markup: { inline_keyboard: [
     [{ text: t(lg, 'adm_today'), callback_data: CB.ADM_TODAY },
      { text: t(lg, 'adm_tomorrow'), callback_data: CB.ADM_TOMORROW }],
+    [{ text: t(lg, 'adm_all_apts'), callback_data: CB.ADM_ALL_APTS }],
     [{ text: t(lg, 'adm_masters'), callback_data: CB.ADM_MASTERS }],
     [{ text: t(lg, 'adm_clients'), callback_data: CB.ADM_CLIENTS }],
     [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST },

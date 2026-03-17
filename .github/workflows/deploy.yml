@@ -1,14 +1,18 @@
-name: Deploy to Cloudflare Workers
+name: CI / Deploy
 
 on:
   push:
     branches:
       - main
+      - dev
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-    name: Deploy
+    name: Test
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +29,25 @@ jobs:
 
       - name: Run tests
         run: npm test
+        working-directory: manicbot
+
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: manicbot/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
         working-directory: manicbot
 
       - name: Deploy to Cloudflare Workers

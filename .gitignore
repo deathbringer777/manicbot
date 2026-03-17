@@ -5,3 +5,12 @@ secrets.generated.txt
 node_modules/
 .DS_Store
 .cursor/
+.idea/
+
+# Generated assets
+*.png
+*.jpg
+make_logo.py
+
+# Landing app (separate Cloudflare Pages deploy)
+manicbot-landing/

@@ -11,6 +11,9 @@ import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/se
 import { kvGet, kvListAll } from '../utils/kv.js';
 import { adminKb, masterKb } from './keyboards.js';
 
+/** В тенантном боте — «Главное меню», в главном — «Панель админа». */
+function backToAdmLabel(ctx, lg) { return ctx.tenantId ? t(lg, 'back_m') : t(lg, 'adm_back'); }
+
 export async function showServicesList(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   let txt = t(lg, 'svc_list_title');
@@ -22,7 +25,7 @@ export async function showServicesList(ctx, cid) {
     btns.push([{ text: `✏️ ${s.e} ${name}`, callback_data: CB.SVC_EDIT + s.id }]);
   }
   btns.push([{ text: t(lg, 'svc_add'), callback_data: CB.SVC_ADD }]);
-  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }
 
@@ -49,7 +52,7 @@ export async function showServiceEdit(ctx, cid, svcId) {
     [{ text: t(lg, 'svc_edit_photos') + ` (${photoCount})`, callback_data: CB.SVC_PHOTOS + svcId }],
     [{ text: toggleText, callback_data: CB.SVC_TOGGLE + svcId },
      { text: t(lg, 'svc_delete'), callback_data: CB.SVC_DEL + svcId }],
-    [{ text: t(lg, 'adm_back'), callback_data: CB.SVC_LIST }],
+    [{ text: backToAdmLabel(ctx, lg), callback_data: CB.SVC_LIST }],
   ] } });
 }
 
@@ -66,7 +69,7 @@ export async function showServicePhotos(ctx, cid, svcId) {
     btns.push([{ text: label, callback_data: CB.SVC_PHOTO_DEL + svcId + ':' + i }]);
   }
   btns.push([{ text: t(lg, 'svc_photo_add'), callback_data: CB.SVC_PHOTO_ADD + svcId }]);
-  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.SVC_EDIT + svcId }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.SVC_EDIT + svcId }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
   for (let i = 0; i < Math.min(photos.length, 5); i++) {
     await sendPhoto(ctx, cid, photos[i], `#${i + 1}`, {});
@@ -80,7 +83,7 @@ export async function showAboutSettings(ctx, cid) {
       [{ text: t(lg, 'adm_about_photos'), callback_data: CB.ADM_ABOUT_PHOTOS }],
       [{ text: t(lg, 'adm_about_desc'), callback_data: CB.ADM_ABOUT_DESC }],
       [{ text: t(lg, 'adm_about_instagram'), callback_data: CB.ADM_ABOUT_INSTAGRAM }],
-      [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }],
+      [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }],
     ] },
   });
 }
@@ -94,7 +97,7 @@ export async function showAboutPhotos(ctx, cid) {
     btns.push([{ text: `${t(lg, 'svc_photo_del')} #${i + 1}`, callback_data: CB.ADM_ABOUT_PHOTO_DEL + i }]);
   }
   btns.push([{ text: t(lg, 'svc_photo_add'), callback_data: CB.ADM_ABOUT_PHOTO_ADD }]);
-  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_ABOUT }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_ABOUT }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
   for (let i = 0; i < Math.min(photos.length, 5); i++) {
     await sendPhoto(ctx, cid, photos[i], `#${i + 1}`, {});
@@ -107,7 +110,7 @@ export async function showAboutDescEdit(ctx, cid) {
   const preview = current ? current.slice(0, 200) + (current.length > 200 ? '...' : '') : t(lg, 'about_desc_default').slice(0, 100) + '...';
   await setState(ctx, cid, { step: 'edit_about_desc' });
   return send(ctx, cid, `${t(lg, 'adm_enter_about_desc')}\n\n<i>${t(lg, 'adm_current')}:</i>\n${escHtml(preview)}`, {
-    reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.ADM_ABOUT }]] },
+    reply_markup: { inline_keyboard: [[{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_ABOUT }]] },
   });
 }
 
@@ -116,7 +119,7 @@ export async function showAboutInstagramEdit(ctx, cid) {
   const current = await loadInstagramUrl(ctx);
   await setState(ctx, cid, { step: 'edit_about_instagram' });
   return send(ctx, cid, `${t(lg, 'adm_enter_instagram')}\n\n<i>${t(lg, 'adm_current')}:</i> ${escHtml(current)}`, {
-    reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.ADM_ABOUT }]] },
+    reply_markup: { inline_keyboard: [[{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_ABOUT }]] },
   });
 }
 
@@ -149,7 +152,7 @@ export async function showAdminSettings(ctx, cid) {
      { text: t(lg, 'adm_settings_hours_btn'), callback_data: CB.ADM_SETTINGS_HOURS }],
     [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST }],
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
-    [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }],
+    [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }],
   ] } };
   await send(ctx, cid, txt, kb);
 }
@@ -165,7 +168,7 @@ export async function showAdminApts(ctx, cid, dateStr) {
   const apts = (await loadDayAppointments(ctx, dateStr)).sort((a, b) => a.ts - b.ts);
   if (!apts.length) {
     return send(ctx, cid, `📅 <b>${fmtDate(lg, dateStr)}</b>\n\n${t(lg, 'adm_no_apts')}`, { reply_markup: { inline_keyboard: [
-      [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }],
+      [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }],
     ] } });
   }
   const masters = await listMasters(ctx);
@@ -189,7 +192,7 @@ export async function showAdminApts(ctx, cid, dateStr) {
       btns.push(row);
     }
   }
-  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }
 
@@ -258,7 +261,7 @@ export async function showAdminAllApts(ctx, cid, filterMasterId = null) {
 
   if (!apts.length) {
     return send(ctx, cid, `${t(lg, 'adm_all_apts_title')}\n\n${t(lg, 'adm_no_apts')}`, {
-      reply_markup: { inline_keyboard: [filterRow, [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]] },
+      reply_markup: { inline_keyboard: [filterRow, [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]] },
     });
   }
 
@@ -283,7 +286,7 @@ export async function showAdminAllApts(ctx, cid, filterMasterId = null) {
     btns.push(row);
     txt += '\n';
   }
-  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }
 
@@ -293,7 +296,7 @@ export async function showMastersList(ctx, cid) {
   if (!masters.length) {
     return send(ctx, cid, t(lg, 'adm_no_masters'), { reply_markup: { inline_keyboard: [
       [{ text: t(lg, 'adm_add_master'), callback_data: CB.ADM_ADD_M }],
-      [{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }],
+      [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }],
     ] } });
   }
   let txt = `👩‍🎨 <b>${t(lg, 'adm_masters')}</b>\n\n`;
@@ -311,7 +314,7 @@ export async function showMastersList(ctx, cid) {
     ]);
   }
   btns.push([{ text: t(lg, 'adm_add_master'), callback_data: CB.ADM_ADD_M }]);
-  btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }
 
@@ -349,7 +352,7 @@ export async function showClientsList(ctx, cid, page = 0, msgId = null) {
     if (p < totalPages - 1) nav.push({ text: t(lg, 'adm_next'), callback_data: CB.ADM_CLIENTS_PAGE + (p + 1) });
     if (nav.length) cBtns.push(nav);
   }
-  cBtns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  cBtns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   const opts = { reply_markup: { inline_keyboard: cBtns } };
   if (msgId) await edit(ctx, cid, msgId, txt, opts);
   else await send(ctx, cid, txt, opts);
@@ -359,7 +362,7 @@ export async function showAdminCancelAllConfirm(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const apts = await getAdminAllApts(ctx);
   if (!apts.length) {
-    return send(ctx, cid, t(lg, 'adm_no_apts'), { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]] } });
+    return send(ctx, cid, t(lg, 'adm_no_apts'), { reply_markup: { inline_keyboard: [[{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]] } });
   }
   return send(ctx, cid, fill(t(lg, 'adm_cancel_all_confirm'), { n: String(apts.length) }), {
     reply_markup: { inline_keyboard: [
@@ -383,6 +386,6 @@ export async function showTenantSupportList(ctx, cid) {
   for (const agentId of agents) {
     rows.push([{ text: `${t(lg, 'adm_support_remove_btn')} ${agentId}`, callback_data: CB.ADM_SUPPORT_REMOVE + agentId }]);
   }
-  rows.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  rows.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   await send(ctx, cid, text, { reply_markup: { inline_keyboard: rows } });
 }

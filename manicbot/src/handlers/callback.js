@@ -473,7 +473,7 @@ export async function onCb(ctx, cb) {
     const masters = (await listMasters(ctx)).filter(m => !m.onVacation);
     if (!masters.length) return send(ctx, cid, t(lg, 'adm_no_masters'));
     const btns = masters.map(m => [{ text: `👤 ${escHtml(m.name)}`, callback_data: CB.ADM_SET_M + aptId + ':' + m.chatId }]);
-    btns.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+    btns.push([{ text: (ctx.tenantId ? t(lg, 'back_m') : t(lg, 'adm_back')), callback_data: CB.ADM_MAIN }]);
     return send(ctx, cid, t(lg, 'adm_assign_master_prompt'), { reply_markup: { inline_keyboard: btns } });
   }
 
@@ -639,7 +639,7 @@ export async function onCb(ctx, cb) {
         ]}});
       }
     }
-    return send(ctx, cid, fill(t(lg, 'adm_cancel_all_done'), { n: String(count) }), { reply_markup: { inline_keyboard: [[{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]] } });
+    return send(ctx, cid, fill(t(lg, 'adm_cancel_all_done'), { n: String(count) }), { reply_markup: { inline_keyboard: [[{ text: (ctx.tenantId ? t(lg, 'back_m') : t(lg, 'adm_back')), callback_data: CB.ADM_MAIN }]] } });
   }
 
   if (d.startsWith(CB.APT_CONFIRM)) {

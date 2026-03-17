@@ -516,6 +516,11 @@ export async function onMsg(ctx, msg) {
       const looksLikeUsername = /^@?[a-zA-Z0-9_]{5,32}$/.test(String(txt || '').trim());
       return send(ctx, cid, looksLikeUsername ? t(lg, 'adm_master_username_hint') : t(lg, 'adm_master_invalid'));
     }
+    // Назначить мастером можно только того, кто уже заходил в этого бота (тот же тенант).
+    if (ctx.tenantId) {
+      const userInTenant = await getUser(ctx, masterId);
+      if (!userInTenant) return send(ctx, cid, t(lg, 'adm_master_must_use_bot_first'));
+    }
     const existing = await getMaster(ctx, masterId);
     if (existing) return send(ctx, cid, t(lg, 'adm_master_exists'));
     // Gate: masters limit per plan

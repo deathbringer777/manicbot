@@ -61,6 +61,8 @@ ru: {
     '', 'Или используй кнопки! 😊'
   ],
   unknown: '🤔 Не понимаю. Нажми /start чтобы открыть меню!',
+  ai_short_use_panel: '👆 Слишком короткое сообщение. Используй кнопки меню.',
+  ai_unavailable_use_panel: '🤖 AI временно недоступен. Используй кнопки панели.',
 
   reg_confirm_name: '📝 Для записи нужна регистрация.\n\nТвоё имя в Telegram: <b>{n}</b>\n\nВсё верно?',
   reg_yes: '✅ Да, верно',
@@ -492,6 +494,8 @@ ua: {
     '', 'Або використовуй кнопки! 😊'
   ],
   unknown: '🤔 Не зрозумів. Натисни /start щоб відкрити меню!',
+  ai_short_use_panel: '👆 Занадто коротке повідомлення. Використовуй кнопки меню.',
+  ai_unavailable_use_panel: '🤖 AI тимчасово недоступний. Використовуй кнопки панелі.',
 
   reg_confirm_name: '📝 Для запису потрібна реєстрація.\n\nТвоє ім\'я в Telegram: <b>{n}</b>\n\nВсе вірно?',
   reg_yes: '✅ Так, вірно',
@@ -921,6 +925,8 @@ en: {
     '', 'Or just use the buttons! 😊'
   ],
   unknown: '🤔 I didn\'t understand. Press /start to open the menu!',
+  ai_short_use_panel: '👆 Message too short. Use the menu buttons.',
+  ai_unavailable_use_panel: '🤖 AI is temporarily unavailable. Use the panel buttons.',
 
   reg_confirm_name: '📝 Registration required to book.\n\nYour Telegram name: <b>{n}</b>\n\nIs this correct?',
   reg_yes: '✅ Yes, correct',
@@ -1350,6 +1356,8 @@ pl: {
     '', 'Lub po prostu użyj przycisków! 😊'
   ],
   unknown: '🤔 Nie rozumiem. Naciśnij /start żeby otworzyć menu!',
+  ai_short_use_panel: '👆 Wiadomość zbyt krótka. Użyj przycisków menu.',
+  ai_unavailable_use_panel: '🤖 AI tymczasowo niedostępne. Użyj przycisków panelu.',
 
   reg_confirm_name: '📝 Wymagana rejestracja.\n\nTwoje imię w Telegram: <b>{n}</b>\n\nCzy to poprawne?',
   reg_yes: '✅ Tak, poprawne',

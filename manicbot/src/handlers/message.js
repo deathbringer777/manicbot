@@ -44,8 +44,9 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
     await send(ctx, cid, t(lg, 'consultant_constructive') + consultHint, extraConsult);
     return;
   }
-  const history = await getChatHistory(ctx, cid);
-  const aiReply = await runWorkersAI(ctx, txt, lg, realRole, history);
+  const txtTooShort = txt.length < 2;
+  const history = txtTooShort ? [] : await getChatHistory(ctx, cid);
+  const aiReply = txtTooShort ? null : await runWorkersAI(ctx, txt, lg, realRole, history);
   const { text: aiText, actions } = parseAIActions(aiReply);
   // ADM_CONFIRM_ALL and ADM_CANCEL_ALL are intentionally excluded: these are destructive
   // bulk operations that must only be triggered via explicit button clicks, never from
@@ -69,8 +70,8 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   if (isStaff) {
     const backCb = (realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support') ? CB.SYSADM_MAIN : (realRole === 'admin' || realRole === 'tenant_owner') ? CB.ADM_MAIN : CB.MST_MAIN;
     extraConsult = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: backCb }]] } };
-    // Для стаффа при пустом AI-ответе даём нейтральное сообщение, не «Не понимаю»
-    const toSendStaff = aiText ? escHtml(aiText) : '🤖 AI временно недоступен. Используй кнопки панели.';
+    // Короткое сообщение (< 2 символа) не уходило в AI — не показываем «AI недоступен»; при реальном сбое AI — отдельная фраза
+    const toSendStaff = aiText ? escHtml(aiText) : (txtTooShort ? t(lg, 'ai_short_use_panel') : t(lg, 'ai_unavailable_use_panel'));
     await send(ctx, cid, toSendStaff, extraConsult);
     return;
   }

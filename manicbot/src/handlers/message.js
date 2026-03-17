@@ -355,10 +355,9 @@ export async function onMsg(ctx, msg) {
     return showMasterPanel(ctx, cid, name);
   }
   if (txt === '/panel' && realRole !== 'client') {
-    if (await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
-    if (realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
-    if (realRole === 'technical_support') return showPlatformAdminPanel(ctx, cid, name);
-    if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
+    if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
+    if (!ctx.tenantId && (realRole === 'support' || realRole === 'technical_support')) return showPlatformAdminPanel(ctx, cid, name);
+    if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
   }
 
@@ -411,7 +410,7 @@ export async function onMsg(ctx, msg) {
         scope: { type: 'chat', chat_id: cid },
       }).catch(() => null);
     }
-    if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
+    if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     return showWelcome(ctx, cid, name);
   }
@@ -444,9 +443,9 @@ export async function onMsg(ctx, msg) {
     }
     if (txt === t(lg, 'mst_panel') && (realRole === 'master' || realRole === 'admin')) return showMasterPanel(ctx, cid, name);
     if (txt === t(lg, 'adm_management') && realRole !== 'client') {
-      if (await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
-      if (realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
-      if (realRole === 'admin') return showAdminPanel(ctx, cid, name);
+      if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
+      if (!ctx.tenantId && realRole === 'support') return showPlatformAdminPanel(ctx, cid, name);
+      if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
       if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     }
   }

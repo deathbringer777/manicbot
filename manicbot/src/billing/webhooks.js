@@ -83,28 +83,22 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
     const tenantId = session?.metadata?.tenantId;
     const customerId = session?.customer;
     if (tenantId) {
-      const tenant = await kv.get('tenant:' + tenantId, 'json');
-      if (tenant) {
-        const updates = {
-          stripeCustomerId: customerId || tenant.stripeCustomerId,
-          updatedAt: Date.now(),
-        };
-        if (session.subscription) {
-          updates.stripeSubscriptionId = session.subscription;
-          updates.billingStatus = 'active';
-          updates.subscriptionStatus = 'active';
-          updates.trialEndsAt = null;
-          updates.graceEndsAt = null;
-        }
-        if (session.customer_email) updates.billingEmail = session.customer_email;
-        const updated = { ...tenant, ...updates };
-        await kv.put('tenant:' + tenantId, JSON.stringify(updated));
-        if (customerId) {
-          await kv.put(STRIPE_CUSTOMER_PREFIX + customerId, tenantId);
-        }
-        if (session.subscription) {
-          await kv.put('tenant_sub_by_sub:' + session.subscription, tenantId);
-        }
+      const updates = {};
+      if (customerId) updates.stripeCustomerId = customerId;
+      if (session.subscription) {
+        updates.stripeSubscriptionId = session.subscription;
+        updates.billingStatus = 'active';
+        updates.subscriptionStatus = 'active';
+        updates.trialEndsAt = null;
+        updates.graceEndsAt = null;
+      }
+      if (session.customer_email) updates.billingEmail = session.customer_email;
+      await updateTenantBilling(kv, tenantId, updates);
+      if (customerId) {
+        await kv.put(STRIPE_CUSTOMER_PREFIX + customerId, tenantId);
+      }
+      if (session.subscription) {
+        await kv.put('tenant_sub_by_sub:' + session.subscription, tenantId);
       }
     }
   }

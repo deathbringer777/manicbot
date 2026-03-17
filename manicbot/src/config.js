@@ -271,5 +271,6 @@ export function buildCtx(env) {
     AI: env.AI || null,
     WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
+    GOOGLE_SERVICE_ACCOUNT_KEY: env.GOOGLE_SERVICE_ACCOUNT_KEY || null,
   };
 }

@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"deploy": "wrangler deploy",
+		"deploy": "echo 'Deploy via GitHub: git push origin main'",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
 		"test": "vitest run",

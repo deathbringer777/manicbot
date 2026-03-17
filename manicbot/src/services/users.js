@@ -38,21 +38,53 @@ export async function isPlatformAdmin(ctx, cid) {
 
 export async function getMaster(ctx, cid) { return kvGet(ctx, `master:${cid}`); }
 
+// Index key for master chat IDs — kv.get is immediately consistent after kv.put
+// (unlike kv.list which is eventually consistent on Cloudflare)
+const MASTER_INDEX_KEY = 'master:__index';
+
+async function getMasterIndex(ctx) {
+  const idx = await kvGet(ctx, MASTER_INDEX_KEY);
+  return Array.isArray(idx) ? idx : [];
+}
+
 export async function saveMaster(ctx, cid, data) {
   data.services = data.services || null;
   data.workHours = data.workHours || null;
   data.workDays = data.workDays || null;
   data.onVacation = data.onVacation === true;
-  return kvPut(ctx, `master:${cid}`, data);
+  await kvPut(ctx, `master:${cid}`, data);
+  // Keep index in sync so listMasters doesn't depend on kv.list() consistency
+  const idx = await getMasterIndex(ctx);
+  if (!idx.includes(cid)) {
+    idx.push(cid);
+    await kvPut(ctx, MASTER_INDEX_KEY, idx);
+  }
 }
 
-export async function deleteMaster(ctx, cid) { await kvDel(ctx, `master:${cid}`); }
+export async function deleteMaster(ctx, cid) {
+  await kvDel(ctx, `master:${cid}`);
+  const idx = (await getMasterIndex(ctx)).filter(id => id !== cid);
+  await kvPut(ctx, MASTER_INDEX_KEY, idx);
+}
+
 export async function isMaster(ctx, cid) { return !!(await getMaster(ctx, cid)); }
 
 export async function listMasters(ctx) {
+  // Primary: index-based lookup — kv.get is immediately consistent after kv.put
+  const idx = await kvGet(ctx, MASTER_INDEX_KEY);
+  if (Array.isArray(idx)) {
+    const masters = [];
+    for (const cid of idx) {
+      const m = await kvGet(ctx, `master:${cid}`);
+      if (m) masters.push(m);
+    }
+    return masters;
+  }
+  // Fallback: kv.list scan for legacy data (eventually consistent)
   const keys = await kvListAll(ctx, { prefix: 'master:' });
   const masters = [];
   for (const k of keys) {
+    if (k.name === MASTER_INDEX_KEY) continue; // skip index key itself
     const m = await kvGet(ctx, k.name);
     if (m) masters.push(m);
   }

@@ -14,9 +14,11 @@ export async function getTenantBilling(kv, tenantId) {
   if (!tenant) return null;
   return {
     tenantId,
-    plan: tenant.plan || 'free',
+    plan: tenant.plan || 'start',
     billingStatus: tenant.billingStatus || 'inactive',
     subscriptionStatus: tenant.subscriptionStatus || null,
+    trialEndsAt: tenant.trialEndsAt || null,
+    graceEndsAt: tenant.graceEndsAt || null,
     currentPeriodEnd: tenant.currentPeriodEnd || null,
     nextPaymentDate: tenant.nextPaymentDate || null,
     stripeCustomerId: tenant.stripeCustomerId || null,

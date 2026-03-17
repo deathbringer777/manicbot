@@ -11,6 +11,7 @@ export const PLANS = {
 export const BILLING_STATUS = {
   ACTIVE: 'active',
   TRIALING: 'trialing',
+  GRACE_PERIOD: 'grace_period',
   PAST_DUE: 'past_due',
   UNPAID: 'unpaid',
   CANCELED: 'canceled',
@@ -18,6 +19,15 @@ export const BILLING_STATUS = {
   INCOMPLETE: 'incomplete',
   INACTIVE: 'inactive',
 };
+
+export const PLAN_LIMITS = {
+  start:  { masters: 1,        ai: false, support: false, calendar: false, whiteLabel: false },
+  pro:    { masters: 5,        ai: true,  support: true,  calendar: true,  whiteLabel: false },
+  studio: { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true  },
+};
+
+export const TRIAL_DURATION_MS = 7 * 24 * 3600 * 1000;  // 7 дней
+export const GRACE_DURATION_MS  = 7 * 24 * 3600 * 1000;  // 7 дней
 
 /**
  * @param {object} env - Worker env (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_*_MONTHLY, APP_BASE_URL)

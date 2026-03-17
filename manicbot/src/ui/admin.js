@@ -1,4 +1,5 @@
 import { send, sendPhoto, edit } from '../telegram.js';
+import { getTenantSupportAgents } from '../roles/roles.js';
 import { escHtml, fill, t, p2, svcName } from '../utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from '../utils/date.js';
 import { CB, STEP } from '../config.js';
@@ -305,4 +306,22 @@ export async function showAdminCancelAllConfirm(ctx, cid) {
       [{ text: t(lg, 'cancel_no'), callback_data: CB.ADM_MAIN }],
     ] },
   });
+}
+
+export async function showTenantSupportList(ctx, cid) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  if (!ctx.kv) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
+  let agents = [];
+  try { agents = await getTenantSupportAgents(ctx); } catch {}
+  const text = agents.length
+    ? `👥 <b>${t(lg, 'adm_support_agents')}</b> (${agents.length}/50)\n\n` +
+      agents.map(id => `• <code>${id}</code>`).join('\n')
+    : `👥 <b>${t(lg, 'adm_support_agents')}</b>\n\n${t(lg, 'adm_support_no_agents')}`;
+  const rows = [];
+  rows.push([{ text: t(lg, 'adm_support_add_btn'), callback_data: CB.ADM_SUPPORT_ADD }]);
+  for (const agentId of agents) {
+    rows.push([{ text: `${t(lg, 'adm_support_remove_btn')} ${agentId}`, callback_data: CB.ADM_SUPPORT_REMOVE + agentId }]);
+  }
+  rows.push([{ text: t(lg, 'adm_back'), callback_data: CB.ADM_MAIN }]);
+  await send(ctx, cid, text, { reply_markup: { inline_keyboard: rows } });
 }

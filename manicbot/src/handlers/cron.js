@@ -6,12 +6,29 @@ import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
 import { initServices } from '../services/services.js';
 import { dayIndexKey, getAptMasterId } from '../services/appointments.js';
+import { updateTenantBilling } from '../billing/storage.js';
 
 export async function handleCron(ctx) {
   try {
     await initServices(ctx);
     const now = Date.now();
     const w = warsawNow();
+
+    // Phase 0: billing status transitions (trial expiry, grace period expiry)
+    if (ctx.tenant && ctx.tenantId && ctx.globalKv) {
+      try {
+        const tenant = ctx.tenant;
+        if (tenant.billingStatus === 'trialing' && tenant.trialEndsAt && now > tenant.trialEndsAt) {
+          await updateTenantBilling(ctx.globalKv, ctx.tenantId, { billingStatus: 'inactive', subscriptionStatus: null });
+          ctx.tenant = { ...ctx.tenant, billingStatus: 'inactive', subscriptionStatus: null };
+        } else if (tenant.billingStatus === 'grace_period' && tenant.graceEndsAt && now > tenant.graceEndsAt) {
+          await updateTenantBilling(ctx.globalKv, ctx.tenantId, { billingStatus: 'inactive', subscriptionStatus: null });
+          ctx.tenant = { ...ctx.tenant, billingStatus: 'inactive', subscriptionStatus: null };
+        }
+      } catch (e) {
+        console.error('Cron billing expiry error:', e.message);
+      }
+    }
 
     // Phase 1: reminders — only scan today + tomorrow
     const reminderDates = [];

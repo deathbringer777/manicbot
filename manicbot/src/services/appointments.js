@@ -2,6 +2,7 @@ import { WORK, MAX_APTS, CLEANUP_AFTER_MS } from '../config.js';
 import { kvGet, kvPut, kvDel } from '../utils/kv.js';
 import { p2 } from '../utils/helpers.js';
 import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
+import { deleteCalendarEvent } from './calendar.js';
 
 export function allKey(dateStr) {
   return `all:${dateStr.slice(0, 7)}`;
@@ -100,6 +101,13 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
   a.cx = true;
   a.status = 'cancelled';
   await kvPut(ctx, `ap:${id}`, a);
+
+  // Google Calendar: delete event if linked
+  if (a.googleEventId && a.googleCalendarId) {
+    deleteCalendarEvent(ctx, a.googleCalendarId, a.googleEventId).catch(e =>
+      console.error('cancelApt calendar delete error:', e.message),
+    );
+  }
 
   const ul = (await kvGet(ctx, `ua:${a.chatId}`)) || [];
   const newUl = ul.filter(x => x !== id);

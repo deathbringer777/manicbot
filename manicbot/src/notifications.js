@@ -2,13 +2,15 @@ import { send, sendIcs } from './telegram.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc } from './utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from './utils/date.js';
 import { ADDRESS, MAPS_URL, CB } from './config.js';
-import { listMasters, getAdminId, getUser } from './services/users.js';
+import { listMasters, getAdminId, getUser, getMaster } from './services/users.js';
 import { getLang } from './services/chat.js';
 import { kvPut, kvGet } from './utils/kv.js';
 import { makeICS } from './utils/ics.js';
 import { p2 } from './utils/helpers.js';
 import { getAllPendingApts } from './services/appointments.js';
 import { canManageApt } from './services/users.js';
+import { canUse } from './billing/features.js';
+import { createCalendarEvent, buildCalendarEvent } from './services/calendar.js';
 
 export async function notifyAptStaff(ctx, apt, user) {
   const masters = await listMasters(ctx);
@@ -73,6 +75,27 @@ export async function confirmAllPendingApts(ctx, cid) {
     apt.confirmedBy = cid;
     await kvPut(ctx, `ap:${apt.id}`, apt);
     await sendAptConfirmedToClient(ctx, apt);
+
+    // Google Calendar: create event if master has calendar connected
+    if (canUse(ctx, 'calendar') && ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      try {
+        const masterId = apt.masterId || cid;
+        const master = await getMaster(ctx, masterId);
+        if (master?.googleCalendarId && master?.calendarEnabled) {
+          const svcObj = ctx.svc?.find(s => s.id === apt.svcId);
+          const event = buildCalendarEvent(apt, svcObj, ctx.tenant?.salon, ctx.tenant?.salon?.timezone || 'Europe/Warsaw');
+          const created = await createCalendarEvent(ctx, master.googleCalendarId, event);
+          if (created?.id) {
+            apt.googleEventId = created.id;
+            apt.googleCalendarId = master.googleCalendarId;
+            await kvPut(ctx, `ap:${apt.id}`, apt);
+          }
+        }
+      } catch (e) {
+        console.error('[calendar] confirmAllPendingApts event creation failed:', e.message);
+      }
+    }
+
     count++;
   }
   return count;

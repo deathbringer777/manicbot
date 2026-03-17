@@ -1,8 +1,17 @@
 import { CB } from '../config.js';
 import { t, p2 } from '../utils/helpers.js';
 import { todayStr, warsawNow } from '../utils/date.js';
+import { canUse } from '../billing/features.js';
 
-export function mainKb(lg, role = 'client') {
+export function mainKb(lg, role = 'client', ctx = null) {
+  // Support button shown only if ctx is absent (legacy) OR support feature enabled
+  const showSupport = !ctx || canUse(ctx, 'support_tickets');
+  const lastRow = [
+    { text: t(lg, 'm_cont'), callback_data: CB.CONTACTS },
+    { text: t(lg, 'm_lang'), callback_data: CB.LANG },
+  ];
+  if (showSupport) lastRow.push({ text: t(lg, 'm_support'), callback_data: CB.SUPPORT });
+
   const rows = [
     [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
     [{ text: t(lg, 'm_cat'), callback_data: CB.CATALOG },
@@ -10,9 +19,7 @@ export function mainKb(lg, role = 'client') {
     [{ text: t(lg, 'm_my'), callback_data: CB.MY }],
     [{ text: t(lg, 'm_rev'), callback_data: CB.REVIEWS },
      { text: t(lg, 'm_about'), callback_data: CB.ABOUT }],
-    [{ text: t(lg, 'm_cont'), callback_data: CB.CONTACTS },
-     { text: t(lg, 'm_lang'), callback_data: CB.LANG },
-     { text: t(lg, 'm_support'), callback_data: CB.SUPPORT }],
+    lastRow,
   ];
   if (role === 'master' || role === 'admin') {
     rows.push([{ text: t(lg, 'mst_panel'), callback_data: CB.MST_MAIN }]);
@@ -124,15 +131,23 @@ export function adminKb(lg) {
      { text: t(lg, 'adm_settings'), callback_data: CB.ADM_SETTINGS }],
     [{ text: t(lg, 'billing_menu'), callback_data: CB.ADM_BILLING }],
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
+    [{ text: t(lg, 'adm_support_btn'), callback_data: CB.ADM_SUPPORT_LIST },
+     { text: t(lg, 'm_tech_support'), callback_data: CB.TECH_SUPPORT_REQ }],
     [{ text: t(lg, 'adm_to_client'), callback_data: CB.MAIN }],
   ] } };
 }
 
-export function masterKb(lg) {
-  return { reply_markup: { inline_keyboard: [
+export function masterKb(lg, ctx = null) {
+  const showCalendar = !ctx || canUse(ctx, 'calendar');
+  const rows = [
     [{ text: t(lg, 'mst_today'), callback_data: CB.MST_TODAY },
      { text: t(lg, 'mst_tomorrow'), callback_data: CB.MST_TOMORROW }],
     [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST }],
-    [{ text: t(lg, 'mst_to_client'), callback_data: CB.MAIN }],
-  ] } };
+  ];
+  if (showCalendar) {
+    rows.push([{ text: t(lg, 'mst_calendar'), callback_data: CB.MST_CALENDAR }]);
+  }
+  rows.push([{ text: t(lg, 'm_tech_support'), callback_data: CB.TECH_SUPPORT_REQ }]);
+  rows.push([{ text: t(lg, 'mst_to_client'), callback_data: CB.MAIN }]);
+  return { reply_markup: { inline_keyboard: rows } };
 }

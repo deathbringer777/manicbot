@@ -5,6 +5,7 @@
 
 import { updateTenantBilling } from './storage.js';
 import { mapStripeStatusToBilling } from './stripe.js';
+import { GRACE_DURATION_MS } from './config.js';
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const STRIPE_CUSTOMER_PREFIX = 'stripe_customer:';
@@ -92,6 +93,8 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
           updates.stripeSubscriptionId = session.subscription;
           updates.billingStatus = 'active';
           updates.subscriptionStatus = 'active';
+          updates.trialEndsAt = null;
+          updates.graceEndsAt = null;
         }
         if (session.customer_email) updates.billingEmail = session.customer_email;
         const updated = { ...tenant, ...updates };
@@ -139,8 +142,9 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
       if (!tenantId) tenantId = await resolveTenantIdByCustomer(kv, customerId);
       if (tenantId) {
         await updateTenantBilling(kv, tenantId, {
-          billingStatus: 'past_due',
+          billingStatus: 'grace_period',
           subscriptionStatus: 'past_due',
+          graceEndsAt: Date.now() + GRACE_DURATION_MS,
           updatedAt: Date.now(),
         });
       }

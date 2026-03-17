@@ -85,6 +85,7 @@ export const CB = {
   SVC_BACK:     'svbk:',
   CONSULT_REQ:  'consult_req',
   SUPPORT:      'support',
+  TECH_SUPPORT_REQ: 'tech_req',
   TICKET_TAKE:  'tk:',
   TICKET_DECLINE:'td:',
   TICKET_CLOSE: 'tkc:',
@@ -108,11 +109,23 @@ export const CB = {
   SYSADM_GRANT_MASTER: 'sysadm:gm',
   SYSADM_GRANT_OWNER: 'sysadm:go',
   SYSADM_BOT_NEW_FOR: 'sysadm:bnf:',
+  // Technical support (platform-level)
+  SYSADM_TECH_SUPPORT_LIST:   'sysadm:tsl',
+  SYSADM_TECH_SUPPORT_ADD:    'sysadm:tsadd',
+  SYSADM_TECH_SUPPORT_REMOVE: 'sysadm:tsrm:',
+  // Tenant support agents (managed by tenant admin)
+  ADM_SUPPORT_LIST:   'adm:sul',
+  ADM_SUPPORT_ADD:    'adm:suadd',
+  ADM_SUPPORT_REMOVE: 'adm:surm:',
   // Salon settings editing
   ADM_SETTINGS_NAME: 'adm:stn',
   ADM_SETTINGS_PHONE: 'adm:stp',
   ADM_SETTINGS_ADDR: 'adm:sta',
   ADM_SETTINGS_HOURS: 'adm:sth',
+  // Google Calendar (master)
+  MST_CALENDAR:       'mst:cal',
+  MST_CALENDAR_SET:   'mst:calset',
+  MST_CALENDAR_CLEAR: 'mst:calclr',
 };
 
 export const STEP = {
@@ -142,17 +155,23 @@ export const STEP = {
   EDIT_ABOUT_INSTAGRAM:'edit_about_instagram',
   SUPPORT_MSG:         'support_msg',
   SUPPORT_REPLY:       'support_reply',
+  TECH_SUPPORT_MSG:    'tech_support_msg',
   // Platform admin flows
-  SYSADM_NEW_TENANT:    'sysadm_new_tenant',
-  SYSADM_NEW_BOT:       'sysadm_new_bot',
-  SYSADM_GRANT_INPUT:   'sysadm_grant_input',
-  SYSADM_NEW_BOT_TENANT:'sysadm_new_bot_tenant',
-  SYSADM_ADD_SUPPORT:   'sysadm_add_support',
+  SYSADM_NEW_TENANT:       'sysadm_new_tenant',
+  SYSADM_NEW_BOT:          'sysadm_new_bot',
+  SYSADM_GRANT_INPUT:      'sysadm_grant_input',
+  SYSADM_NEW_BOT_TENANT:   'sysadm_new_bot_tenant',
+  SYSADM_ADD_SUPPORT:      'sysadm_add_support',
+  SYSADM_ADD_TECH_SUPPORT: 'sysadm_add_tech_support',
+  // Tenant support flows
+  ADM_ADD_TENANT_SUPPORT:  'adm_add_tenant_support',
   // Salon settings editing steps
   EDIT_SALON_NAME:      'edit_salon_name',
   EDIT_SALON_PHONE:     'edit_salon_phone',
   EDIT_SALON_ADDR:      'edit_salon_addr',
   EDIT_SALON_HOURS_FROM:'edit_salon_hours_from',
+  // Google Calendar
+  SET_CALENDAR_ID:      'set_calendar_id',
 };
 
 export const TIMEZONE = 'Europe/Warsaw';

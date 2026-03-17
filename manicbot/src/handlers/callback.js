@@ -1,4 +1,6 @@
 import { CB, STEP, VALID_LANGS, LOCK_TTL_SEC, MAX_APTS } from '../config.js';
+import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
+import { showInactiveMessage } from '../ui/billing.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2 } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, warsawToUTC, warsawNow, dateStrForOffset, todayStr } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
@@ -13,14 +15,16 @@ import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
-import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings } from '../ui/admin.js';
+import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
 import { showBillingMenu } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
 import { getTenant } from '../tenant/storage.js';
 import { makeICS } from '../utils/ics.js';
-import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList, showPlatformLinks, showGrantRoleMenu } from '../ui/sysadmin.js';
-import { addSupport, removeSupport } from '../admin/provisioning.js';
+import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList, showPlatformLinks, showGrantRoleMenu, showPlatformTechSupportList } from '../ui/sysadmin.js';
+import { addSupport, removeSupport, addTechnicalSupport, removeTechnicalSupport } from '../admin/provisioning.js';
+import { getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent, removeTenantSupportAgent } from '../roles/roles.js';
+import { createCalendarEvent, deleteCalendarEvent, buildCalendarEvent } from '../services/calendar.js';
 
 export async function onCb(ctx, cb) {
   if (!cb?.message?.chat?.id || !cb?.from || !cb?.data) return;
@@ -54,13 +58,32 @@ export async function onCb(ctx, cb) {
 
   if (await isBlocked(ctx, cid)) return send(ctx, cid, t(lg, 'client_blocked'));
 
+  // Inactive/canceled billing: block all except billing-related callbacks for non-platform-admins
+  if (isInactive(ctx) && !(await isPlatformAdmin(ctx, cid))) {
+    const isBillingCb = d === CB.ADM_BILLING || d === CB.BILLING_PORTAL || d === CB.BILLING_BACK
+      || d.startsWith(CB.BILLING_SUBSCRIBE) || d === CB.MAIN || d === CB.LANG;
+    if (!isBillingCb) return showInactiveMessage(ctx, cid);
+  }
+
   if (d === CB.MAIN)     return showWelcome(ctx, cid, name);
   if (d === CB.LANG)     return showLangPick(ctx, cid);
   if (d === CB.BOOK)     return startBooking(ctx, cid, cb.from);
 
   if (d === CB.SUPPORT) {
+    if (!canUse(ctx, 'support_tickets') && !(await isPlatformAdmin(ctx, cid))) {
+      return send(ctx, cid, t(lg, 'feature_support_unavailable'));
+    }
     await setState(ctx, cid, { step: STEP.SUPPORT_MSG });
     return send(ctx, cid, t(lg, 'support_enter_msg'), { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]] } });
+  }
+
+  if (d === CB.TECH_SUPPORT_REQ) {
+    const role = await getRole(ctx, cid);
+    if (role !== 'master' && role !== 'admin' && role !== 'tenant_owner' && role !== 'system_admin') return;
+    await setState(ctx, cid, { step: STEP.TECH_SUPPORT_MSG });
+    return send(ctx, cid, t(lg, 'tech_support_enter_msg'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.ADM_MAIN }]] },
+    });
   }
 
   if (d === CB.CONSULT_REQ) {
@@ -83,7 +106,8 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.TICKET_DECLINE)) {
     const clientCid = parseInt(d.slice(CB.TICKET_DECLINE.length), 10);
     if (!clientCid) return;
-    if (!(await isAdmin(ctx, cid)) && !(await isMaster(ctx, cid)) && (await getRole(ctx, cid)) !== 'support') return;
+    const declRole = await getRole(ctx, cid);
+    if (!(await isAdmin(ctx, cid)) && !(await isMaster(ctx, cid)) && declRole !== 'support' && declRole !== 'technical_support') return;
     const ticket = await getTicket(ctx, clientCid);
     if (!ticket?.open) return;
     await clearTicket(ctx, clientCid);
@@ -125,7 +149,10 @@ export async function onCb(ctx, cb) {
     }
     const clientCid = parseInt(suffix, 10);
     if (!clientCid) return;
-    if (!(await isAdmin(ctx, cid)) && !(await isMaster(ctx, cid))) return;
+    const agentRole = await getRole(ctx, cid);
+    const tenantAgents = ctx.kv ? await getTenantSupportAgents(ctx).catch(() => []) : [];
+    const isSupportAgent = tenantAgents.includes(cid) || tenantAgents.includes(String(cid));
+    if (!(await isAdmin(ctx, cid)) && !(await isMaster(ctx, cid)) && !isSupportAgent && agentRole !== 'technical_support' && agentRole !== 'system_admin') return;
     const ticket = await getTicket(ctx, clientCid);
     if (!ticket?.open) return;
     await setTicket(ctx, clientCid, { ...ticket, masterCid: cid });
@@ -164,7 +191,8 @@ export async function onCb(ctx, cb) {
     const clientCid = parseInt(d.slice(CB.TICKET_CLOSE.length), 10);
     if (!clientCid) return;
     const ticket = await getTicket(ctx, clientCid);
-    if (!ticket || (ticket.masterCid !== cid && !(await isAdmin(ctx, cid)))) return;
+    const closeRole = await getRole(ctx, cid);
+    if (!ticket || (ticket.masterCid !== cid && !(await isAdmin(ctx, cid)) && closeRole !== 'technical_support' && closeRole !== 'system_admin')) return;
     // Also close the global platform ticket if linked
     if (ticket.globalTicketId && ctx.globalKv) {
       try { await closeTicket(ctx.globalKv, ticket.globalTicketId); } catch (_) {}
@@ -247,6 +275,52 @@ export async function onCb(ctx, cb) {
     await removeSupport(ctx.globalKv, agentChatId);
     await send(ctx, cid, t(lg, 'sysadm_support_removed'));
     return showPlatformSupportList(ctx, cid);
+  }
+
+  if (d === CB.SYSADM_TECH_SUPPORT_LIST) {
+    if (!(await isPlatformAdmin(ctx, cid))) return noAccessMsg();
+    await clearState(ctx, cid);
+    return showPlatformTechSupportList(ctx, cid);
+  }
+
+  if (d === CB.SYSADM_TECH_SUPPORT_ADD) {
+    if (!(await isPlatformAdmin(ctx, cid))) return noAccessMsg();
+    await setState(ctx, cid, { step: STEP.SYSADM_ADD_TECH_SUPPORT });
+    return send(ctx, cid, t(lg, 'sysadm_tech_support_enter_user'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_TECH_SUPPORT_LIST }]] },
+    });
+  }
+
+  if (d.startsWith(CB.SYSADM_TECH_SUPPORT_REMOVE)) {
+    if (!(await isPlatformAdmin(ctx, cid))) return noAccessMsg();
+    const agentChatId = d.slice(CB.SYSADM_TECH_SUPPORT_REMOVE.length).trim();
+    if (!agentChatId || !ctx.globalKv) return showPlatformTechSupportList(ctx, cid);
+    await removeTechnicalSupport(ctx.globalKv, agentChatId);
+    await send(ctx, cid, t(lg, 'sysadm_tech_support_removed'));
+    return showPlatformTechSupportList(ctx, cid);
+  }
+
+  if (d === CB.ADM_SUPPORT_LIST) {
+    if (!await isAdmin(ctx, cid)) return;
+    await clearState(ctx, cid);
+    return showTenantSupportList(ctx, cid);
+  }
+
+  if (d === CB.ADM_SUPPORT_ADD) {
+    if (!await isAdmin(ctx, cid)) return;
+    await setState(ctx, cid, { step: STEP.ADM_ADD_TENANT_SUPPORT });
+    return send(ctx, cid, t(lg, 'adm_support_enter_user'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.ADM_SUPPORT_LIST }]] },
+    });
+  }
+
+  if (d.startsWith(CB.ADM_SUPPORT_REMOVE)) {
+    if (!await isAdmin(ctx, cid)) return;
+    const agentChatId = parseInt(d.slice(CB.ADM_SUPPORT_REMOVE.length).trim(), 10);
+    if (!agentChatId || !ctx.kv) return showTenantSupportList(ctx, cid);
+    await removeTenantSupportAgent(ctx, agentChatId);
+    await send(ctx, cid, t(lg, 'adm_support_removed'));
+    return showTenantSupportList(ctx, cid);
   }
 
   if (d === CB.SYSADM_GRANT_ROLE) {
@@ -357,6 +431,11 @@ export async function onCb(ctx, cb) {
 
   if (d === CB.ADM_ADD_M) {
     if (!await isAdmin(ctx, cid)) return;
+    const currentMasters = await listMasters(ctx);
+    const mastersLimit = getMastersLimit(ctx);
+    if (currentMasters.length >= mastersLimit) {
+      return send(ctx, cid, fill(t(lg, 'feature_masters_limit'), { limit: String(mastersLimit) }));
+    }
     await setState(ctx, cid, { step: STEP.ADD_MASTER });
     return send(ctx, cid, t(lg, 'adm_enter_master_id'));
   }
@@ -507,6 +586,25 @@ export async function onCb(ctx, cb) {
     apt.confirmedBy = cid;
     await kvPut(ctx, `ap:${aptId}`, apt);
     await sendAptConfirmedToClient(ctx, apt);
+    // Google Calendar: create event if master has calendar connected
+    if (canUse(ctx, 'calendar') && ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      try {
+        const masterId = apt.masterId || cid;
+        const master = await getMaster(ctx, masterId);
+        if (master?.googleCalendarId && master?.calendarEnabled) {
+          const svcObj = ctx.svc?.find(s => s.id === apt.svcId);
+          const event = buildCalendarEvent(apt, svcObj, ctx.tenant?.salon, ctx.tenant?.salon?.timezone || 'Europe/Warsaw');
+          const created = await createCalendarEvent(ctx, master.googleCalendarId, event);
+          if (created?.id) {
+            apt.googleEventId = created.id;
+            apt.googleCalendarId = master.googleCalendarId;
+            await kvPut(ctx, `ap:${aptId}`, apt);
+          }
+        }
+      } catch (e) {
+        console.error('Calendar event creation failed:', e.message);
+      }
+    }
     return send(ctx, cid, fill(t(lg, 'mst_apt_confirmed'), { client: escHtml(apt.userName), dt: fmtDT(lg, apt.date, apt.time) }));
   }
 
@@ -703,6 +801,42 @@ export async function onCb(ctx, cb) {
   }
 
   if (d === CB.MST_MAIN) return showMasterPanel(ctx, cid, name);
+
+  // ─── Google Calendar (master) ────────────────────────────────────────────
+  if (d === CB.MST_CALENDAR) {
+    if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
+    if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
+    const master = await getMaster(ctx, cid) || {};
+    const isOn = master.googleCalendarId && master.calendarEnabled;
+    const statusText = isOn
+      ? `${t(lg, 'mst_calendar_status_on')}: <code>${escHtml(master.googleCalendarId)}</code>`
+      : t(lg, 'mst_calendar_status_off');
+    const rows = [
+      [{ text: t(lg, 'mst_calendar_setup_btn'), callback_data: CB.MST_CALENDAR_SET }],
+    ];
+    if (isOn) rows.push([{ text: t(lg, 'mst_calendar_clear_btn'), callback_data: CB.MST_CALENDAR_CLEAR }]);
+    rows.push([{ text: t(lg, 'back'), callback_data: CB.MST_MAIN }]);
+    return send(ctx, cid, `📅 <b>${t(lg, 'mst_calendar')}</b>\n\n${statusText}`, { reply_markup: { inline_keyboard: rows } });
+  }
+
+  if (d === CB.MST_CALENDAR_SET) {
+    if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
+    if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
+    await setState(ctx, cid, { step: STEP.SET_CALENDAR_ID });
+    return send(ctx, cid, t(lg, 'mst_calendar_enter_id'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.MST_CALENDAR }]] },
+    });
+  }
+
+  if (d === CB.MST_CALENDAR_CLEAR) {
+    if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
+    const master = await getMaster(ctx, cid) || {};
+    await saveMaster(ctx, cid, { ...master, googleCalendarId: null, calendarEnabled: false });
+    return send(ctx, cid, t(lg, 'mst_calendar_cleared'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.MST_CALENDAR }]] },
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (d === CB.MST_TODAY || d === CB.MST_TOMORROW) {
     if (!await isMaster(ctx, cid)) return;

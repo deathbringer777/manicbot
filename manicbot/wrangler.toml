@@ -11,6 +11,8 @@ routes = [
 # and vars or secrets: STRIPE_PRICE_START_MONTHLY, STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_STUDIO_MONTHLY
 [vars]
 APP_BASE_URL = "https://manicbot.com"
+# Landing (Cloudflare Pages)
+LANDING_URL = "https://manicbot-landing.pages.dev"
 # Создатель платформы (полный доступ к панели): твой Telegram chat_id
 ADMIN_CHAT_ID = "321706035"
 

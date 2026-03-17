@@ -33,9 +33,20 @@ async function getCtx(env, url, request) {
   return buildLegacyCtx(env);
 }
 
+function isLandingPath(pathname) {
+  return pathname === '/' || pathname.startsWith('/assets/') || pathname === '/favicon.svg' || pathname === '/favicon.ico';
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (request.method === 'GET' && env.LANDING_URL && isLandingPath(url.pathname)) {
+      const landingOrigin = env.LANDING_URL.replace(/\/$/, '');
+      const landingUrl = url.pathname === '/' ? `${landingOrigin}/` : `${landingOrigin}${url.pathname}`;
+      const res = await fetch(landingUrl, { headers: request.headers });
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers });
+    }
 
     if (request.method === 'POST' && url.pathname === '/stripe/webhook') {
       const secret = env.STRIPE_WEBHOOK_SECRET;
@@ -79,7 +90,7 @@ h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16p
       return Response.json(result);
     }
 
-    if (request.method === 'GET' && url.pathname === '/') {
+    if (request.method === 'GET' && url.pathname === '/' && !env.LANDING_URL) {
       return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>ManicBot</title>
 <style>

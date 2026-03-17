@@ -15,6 +15,8 @@ import { runMigration } from './tenant/migration.js';
 import { handleStripeWebhook } from './billing/webhooks.js';
 import { listTenantIds, getBotIdsByTenantId, getTenant } from './tenant/storage.js';
 import { runSeed } from './admin/seed.js';
+import { registerBot, createTenant } from './admin/provisioning.js';
+import { putTenant, putBot } from './tenant/storage.js';
 
 async function getCtx(env, url, request) {
   const kv = env.MANICBOT;
@@ -37,9 +39,74 @@ function isLandingPath(pathname) {
   return pathname === '/' || pathname.startsWith('/assets/') || pathname === '/favicon.svg' || pathname === '/favicon.ico';
 }
 
+// One-time self-provisioning for 4 demo bots (runs once, then noops)
+const DEMO_BOTS = [
+  { tenantId: 't_salon1', botToken: '8613882748:AAFp0fbOb1lAAY0V8nnhPwiPfiTcLwd6HiM', botUsername: 'manic_salon1bot', webhookSecret: 'wh_salon1_xK9mP3qR7vL2nT5' },
+  { tenantId: 't_salon2', botToken: '8742175386:AAGhfxCI-vCSut4JayVW4VOCs_5zxiqqc88', botUsername: 'manic_salon2bot', webhookSecret: 'wh_salon2_yJ4bN8wF6cH1gZ3' },
+  { tenantId: 't_master1', botToken: '8621333011:AAF1e8OKxJ9dhAY1njg9PdZfhH6Yvk_v7B4', botUsername: 'manic_master1bot', webhookSecret: 'wh_master1_aD7eQ2uK9xM5pV8' },
+  { tenantId: 't_master2', botToken: '8669878808:AAGuobOSQ8LuZqSHqMjjSzW2G_mo8acLt_I', botUsername: 'manic_master2bot', webhookSecret: 'wh_master2_bF3hS6tW1rN4jC9' },
+];
+
+async function ensureDemoBotsProvisioned(env) {
+  const kv = env.MANICBOT;
+  if (!kv) return;
+  // Check each bot — only provision missing ones
+  let allOk = true;
+  for (const b of DEMO_BOTS) {
+    const bid = b.botToken.split(':')[0];
+    const m = await kv.get('botmap:' + bid, 'text');
+    if (!m) { allOk = false; break; }
+  }
+  if (allOk) return;
+
+  console.log('Self-provisioning demo bots (some missing)...');
+  const TRIAL_MS = 7 * 24 * 3600 * 1000;
+  const now = Date.now();
+
+  const TENANTS = {
+    t_salon1: { name: 'Crystal Nails', salon: { name: 'Crystal Nails', address: 'ul. Nowy Świat 15, Warszawa', phone: '+48 22 100 10 01', timezone: 'Europe/Warsaw', workHours: { from: 9, to: 20 }, currency: 'PLN' } },
+    t_salon2: { name: 'Velvet Touch', salon: { name: 'Velvet Touch', address: 'ul. Mokotowska 42, Warszawa', phone: '+48 22 200 20 02', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 21 }, currency: 'PLN' } },
+    t_master1: { name: 'Мастер Алина', salon: { name: 'Мастер Алина', address: 'ul. Złota 59, Warszawa', phone: '+48 22 300 30 03', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 19 }, currency: 'PLN' } },
+    t_master2: { name: 'Мастер Виктория', salon: { name: 'Мастер Виктория', address: 'ul. Puławska 12, Warszawa', phone: '+48 22 400 40 04', timezone: 'Europe/Warsaw', workHours: { from: 11, to: 20 }, currency: 'PLN' } },
+  };
+
+  for (const b of DEMO_BOTS) {
+    const botId = b.botToken.split(':')[0];
+    const t = TENANTS[b.tenantId];
+    // Create tenant
+    await putTenant(kv, b.tenantId, {
+      id: b.tenantId, name: t.name, active: true, createdAt: now, updatedAt: now,
+      salon: t.salon, plan: 'pro', billingStatus: 'trialing',
+      trialEndsAt: now + TRIAL_MS, graceEndsAt: null,
+      stripeCustomerId: null, stripeSubscriptionId: null,
+      currentPeriodEnd: null, billingEmail: null, cancelAtPeriodEnd: false,
+    });
+    // Register bot
+    await putBot(kv, botId, {
+      botId, tenantId: b.tenantId, botToken: b.botToken,
+      botUsername: b.botUsername, webhookSecret: b.webhookSecret,
+      active: true, createdAt: now, updatedAt: now,
+    });
+    // Set admin
+    if (env.ADMIN_CHAT_ID) await kv.put(`t:${b.tenantId}:cfg:admin`, env.ADMIN_CHAT_ID);
+    // Set webhook
+    const whUrl = `https://manicbot.com/webhook/${botId}`;
+    await fetch(`https://api.telegram.org/bot${b.botToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: whUrl, secret_token: b.webhookSecret, allowed_updates: ['message', 'callback_query'] }),
+    }).catch(() => {});
+    console.log(`Provisioned: @${b.botUsername} → ${b.tenantId}`);
+  }
+  console.log('Demo bots provisioned!');
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // One-time self-provisioning (runs inside worker for KV consistency)
+    await ensureDemoBotsProvisioned(env);
 
     if (request.method === 'GET' && env.LANDING_URL && isLandingPath(url.pathname)) {
       const landingOrigin = env.LANDING_URL.replace(/\/$/, '');
@@ -88,6 +155,87 @@ h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16p
       const masterParam = (url.searchParams.get('master') || 'dezbringer').replace(/^@/, '');
       const result = await runSeed(env.MANICBOT, env, masterParam);
       return Response.json(result);
+    }
+
+    // Provision bots: POST /admin/provision?key=ADMIN_KEY  body: { bots: [...] }
+    // Each bot: { botToken, tenantName, webhookSecret, services, aboutDesc, aboutPhotos, salon }
+    if (request.method === 'POST' && url.pathname === '/admin/provision') {
+      const key = url.searchParams.get('key') || '';
+      if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      const kv = env.MANICBOT;
+      if (!kv) return Response.json({ error: 'KV not bound' }, { status: 500 });
+      try {
+        const { bots } = await request.json();
+        const results = [];
+        for (const b of bots) {
+          const botId = b.botToken.split(':')[0];
+          // Create tenant if tenantId specified and doesn't exist
+          let tenantId = b.tenantId;
+          if (tenantId) {
+            const existing = await getTenant(kv, tenantId);
+            if (!existing) {
+              const tRes = await createTenant(kv, b.tenantName || tenantId, env);
+              if (tRes.ok) {
+                // Override generated ID with our specified ID
+                const tPayload = await getTenant(kv, tRes.tenantId);
+                if (tPayload && tRes.tenantId !== tenantId) {
+                  // re-create with correct ID
+                  tPayload.id = tenantId;
+                  if (b.salon) tPayload.salon = b.salon;
+                  await kv.put(`tenant:${tenantId}`, JSON.stringify(tPayload));
+                  // Update index
+                  const idx = JSON.parse(await kv.get('tenants_index', 'text') || '[]');
+                  const filtered = idx.filter(x => x !== tRes.tenantId);
+                  if (!filtered.includes(tenantId)) filtered.push(tenantId);
+                  await kv.put('tenants_index', JSON.stringify(filtered));
+                  // Clean up auto-generated
+                  await kv.delete(`tenant:${tRes.tenantId}`);
+                } else if (tPayload) {
+                  if (b.salon) { tPayload.salon = b.salon; await kv.put(`tenant:${tenantId}`, JSON.stringify(tPayload)); }
+                }
+              }
+            }
+          }
+          // Register bot
+          const res = await registerBot(kv, b.botToken, tenantId, b.webhookSecret, env.BOT_ENCRYPTION_KEY || null);
+          if (!res.ok && res.error === 'tenant_has_bot') {
+            results.push({ botId, skip: 'tenant_has_bot' });
+            continue;
+          }
+          if (!res.ok) { results.push({ botId, error: res.error }); continue; }
+          // Seed services
+          const prefix = `t:${tenantId}:`;
+          if (b.services) await kv.put(`${prefix}cfg:svc_list`, JSON.stringify(b.services));
+          if (b.aboutDesc) await kv.put(`${prefix}cfg:about_desc`, b.aboutDesc);
+          if (b.aboutPhotos) await kv.put(`${prefix}cfg:about_photos`, JSON.stringify(b.aboutPhotos));
+          if (env.ADMIN_CHAT_ID) await kv.put(`${prefix}cfg:admin`, env.ADMIN_CHAT_ID);
+          // Set up webhook
+          const whUrl = `${url.origin}/webhook/${botId}`;
+          const tg = `https://api.telegram.org/bot${b.botToken}`;
+          const whRes = await fetch(`${tg}/setWebhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: whUrl, secret_token: b.webhookSecret, allowed_updates: ['message', 'callback_query'] }),
+          }).then(r => r.json());
+          // Set commands
+          await fetch(`${tg}/setMyCommands`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commands: [
+              { command: 'start', description: '💅 Главное меню / Main menu' },
+              { command: 'book', description: '📝 Записаться / Book now' },
+              { command: 'my', description: '📋 Мои записи / My appointments' },
+              { command: 'lang', description: '🌐 Язык / Language' },
+            ] }),
+          }).catch(() => {});
+          results.push({ botId, tenantId, webhook: whRes.ok, webhookUrl: whUrl });
+        }
+        return Response.json({ ok: true, results });
+      } catch (e) {
+        return Response.json({ error: e.message, stack: e.stack }, { status: 400 });
+      }
     }
 
     if (request.method === 'GET' && url.pathname === '/' && !env.LANDING_URL) {

@@ -48,7 +48,9 @@ export function buildTenantCtx(env, resolved) {
     prefix,
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: bot.webhookSecret,
-    adminChatId: env.ADMIN_CHAT_ID || null,
+    // God mode (ADMIN_CHAT_ID) only in main bot — tenant bots must not expose sysadmin panel
+    adminChatId: null,
+    ADMIN_CHAT_ID: null,
     AI: env.AI || null,
     WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,

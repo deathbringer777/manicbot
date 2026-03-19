@@ -53,9 +53,9 @@ export async function notifyAptStaff(ctx, apt, user) {
         [{ text: t(lg, 'mst_reject_btn'), callback_data: CB.APT_REJECT + apt.id }],
         [{ text: t(lg, 'mst_counter_btn'), callback_data: CB.APT_COUNTER + apt.id }],
       ]}});
-    })());
+    })().catch(e => console.error('notifyAptStaff send failed for', rcid, e.message)));
   }
-  await Promise.all(promises);
+  await Promise.allSettled(promises);
 }
 
 export async function sendAptConfirmedToClient(ctx, apt) {
@@ -133,9 +133,9 @@ export async function notifyStaffAptCancelled(ctx, apt, comment = null) {
         lines.push('', `💬 ${escHtml(String(comment).trim())}`);
       }
       await send(ctx, rcid, lines.join('\n'));
-    })());
+    })().catch(e => console.error('notifyStaffAptCancelled send failed for', rcid, e.message)));
   }
-  await Promise.all(promises);
+  await Promise.allSettled(promises);
 }
 
 export async function notifyStaffConsultantRequest(ctx, clientCid, replyMarkup = null, internalNote = null) {
@@ -157,6 +157,6 @@ export async function notifyStaffConsultantRequest(ctx, clientCid, replyMarkup =
     if (internalNote && internalNote.trim()) {
       msg += '\n\n' + fill(t(rlg, 'ticket_internal_note'), { note: escHtml(internalNote.trim()) });
     }
-    await send(ctx, rcid, msg, replyMarkup || {});
+    try { await send(ctx, rcid, msg, replyMarkup || {}); } catch (e) { console.error('notifyStaffConsultantRequest send failed for', rcid, e.message); }
   }
 }

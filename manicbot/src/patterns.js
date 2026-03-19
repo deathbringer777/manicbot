@@ -130,6 +130,7 @@ export function isAdminCancelAllMessage(txt) {
 export function parseQuickBookingPhrase(txt) {
   if (!txt || typeof txt !== 'string' || txt.length < 8) return null;
   const s = txt.trim();
+  if (/(^|\s)(не\s+)(запиши|забронируй|записать|book|umów)/i.test(s)) return null;
   if (!/(^|\s)(запиши|забронируй|записать|book|umów)(\s|$)/i.test(s)) return null;
   const svcMap = [
     { re: /(^|\s)(гель|гель-лак|gel)(\s|$)/i, id: 'gel' },

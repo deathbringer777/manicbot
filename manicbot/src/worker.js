@@ -39,18 +39,33 @@ function isLandingPath(pathname) {
   return pathname === '/' || pathname.startsWith('/assets/') || pathname === '/favicon.svg' || pathname === '/favicon.ico';
 }
 
-// One-time self-provisioning for 4 demo bots (runs once, then noops)
-const DEMO_BOTS = [
-  { tenantId: 't_salon1', botToken: '8613882748:AAFp0fbOb1lAAY0V8nnhPwiPfiTcLwd6HiM', botUsername: 'manic_salon1bot', webhookSecret: 'wh_salon1_xK9mP3qR7vL2nT5' },
-  { tenantId: 't_salon2', botToken: '8742175386:AAGhfxCI-vCSut4JayVW4VOCs_5zxiqqc88', botUsername: 'manic_salon2bot', webhookSecret: 'wh_salon2_yJ4bN8wF6cH1gZ3' },
-  { tenantId: 't_master1', botToken: '8621333011:AAF1e8OKxJ9dhAY1njg9PdZfhH6Yvk_v7B4', botUsername: 'manic_master1bot', webhookSecret: 'wh_master1_aD7eQ2uK9xM5pV8' },
-  { tenantId: 't_master2', botToken: '8669878808:AAGuobOSQ8LuZqSHqMjjSzW2G_mo8acLt_I', botUsername: 'manic_master2bot', webhookSecret: 'wh_master2_bF3hS6tW1rN4jC9' },
-];
+// Demo bots — tokens read from env secrets (set via `wrangler secret put`)
+function getDemoBots(env) {
+  const bots = [];
+  const defs = [
+    { tenantId: 't_salon1', tokenKey: 'BOT_TOKEN_SALON1', username: 'manic_salon1bot', whKey: 'WH_SECRET_SALON1' },
+    { tenantId: 't_salon2', tokenKey: 'BOT_TOKEN_SALON2', username: 'manic_salon2bot', whKey: 'WH_SECRET_SALON2' },
+    { tenantId: 't_master1', tokenKey: 'BOT_TOKEN_MASTER1', username: 'manic_master1bot', whKey: 'WH_SECRET_MASTER1' },
+    { tenantId: 't_master2', tokenKey: 'BOT_TOKEN_MASTER2', username: 'manic_master2bot', whKey: 'WH_SECRET_MASTER2' },
+  ];
+  for (const d of defs) {
+    const token = env[d.tokenKey];
+    if (!token) continue;
+    bots.push({
+      tenantId: d.tenantId,
+      botToken: token,
+      botUsername: d.username,
+      webhookSecret: env[d.whKey] || `wh_${d.tenantId}_auto`,
+    });
+  }
+  return bots;
+}
 
 async function ensureDemoBotsProvisioned(env) {
   const kv = env.MANICBOT;
   if (!kv) return;
-  // Check each bot — only provision missing ones
+  const DEMO_BOTS = getDemoBots(env);
+  if (!DEMO_BOTS.length) return;
   let allOk = true;
   for (const b of DEMO_BOTS) {
     const bid = b.botToken.split(':')[0];

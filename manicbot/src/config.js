@@ -135,6 +135,7 @@ export const CB = {
   // Admin all-appointments view with master filter
   ADM_ALL_APTS:   'adm:aa',   // all appointments (no filter)
   ADM_ALL_APTS_M: 'adm:aam:', // filtered by master: adm:aam:{masterId}
+  ADM_RENAME_M:   'adm:rnm:', // rename master: adm:rnm:{chatId}
 };
 
 export const STEP = {
@@ -182,6 +183,7 @@ export const STEP = {
   EDIT_SALON_HOURS_FROM:'edit_salon_hours_from',
   // Google Calendar
   SET_CALENDAR_ID:      'set_calendar_id',
+  RENAME_MASTER:        'rename_master',
 };
 
 export const TIMEZONE = 'Europe/Warsaw';

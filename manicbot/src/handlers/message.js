@@ -34,6 +34,9 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   if (isSalonStaff && !canUse(ctx, 'ai')) {
     return send(ctx, cid, t(lg, 'feature_ai_unavailable'));
   }
+  if (!ctx._cachedMasters && ctx.kv) {
+    try { ctx._cachedMasters = await listMasters(ctx); } catch (_) { ctx._cachedMasters = []; }
+  }
   const showConsultBtn = !isStaff && isWantHumanMessage(txt);
   if (ctx.kv && showConsultBtn) await incHumanRequestCount(ctx, cid);
   let extraConsult = showConsultBtn
@@ -542,6 +545,20 @@ export async function onMsg(ctx, msg) {
     if (ctx.prefix) await setTenantRole(ctx, masterId, ROLES.MASTER);
     await clearState(ctx, cid);
     await send(ctx, cid, fill(t(lg, 'adm_master_added'), { n: escHtml(masterName), id: String(masterId) }));
+    return showMastersList(ctx, cid);
+  }
+
+  if (st.step === STEP.RENAME_MASTER && (await isAdmin(ctx, cid))) {
+    const newName = txt ? txt.replace(/<[^>]*>/g, '').trim().slice(0, 50) : '';
+    if (newName.length < 2) return send(ctx, cid, t(lg, 'adm_rename_master_err'));
+    const masterId = st.renameMasterId;
+    const master = await getMaster(ctx, masterId);
+    if (!master) { await clearState(ctx, cid); return showMastersList(ctx, cid); }
+    master.name = newName;
+    master.displayName = newName;
+    await saveMaster(ctx, masterId, master);
+    await clearState(ctx, cid);
+    await send(ctx, cid, fill(t(lg, 'adm_rename_master_done'), { name: escHtml(newName) }));
     return showMastersList(ctx, cid);
   }
 

@@ -309,8 +309,11 @@ export async function showMastersList(ctx, cid) {
     txt += '\n';
     const vacBtn = m.onVacation ? t(lg, 'adm_vacation_off_btn') : t(lg, 'adm_vacation_btn');
     btns.push([
-      { text: `${t(lg, 'adm_del_master')}: ${m.name}`, callback_data: CB.ADM_DEL_M + m.chatId },
+      { text: `${t(lg, 'adm_rename_master')}: ${m.name}`, callback_data: CB.ADM_RENAME_M + m.chatId },
       { text: vacBtn, callback_data: CB.ADM_VACATION + m.chatId },
+    ]);
+    btns.push([
+      { text: `${t(lg, 'adm_del_master')}: ${m.name}`, callback_data: CB.ADM_DEL_M + m.chatId },
     ]);
   }
   btns.push([{ text: t(lg, 'adm_add_master'), callback_data: CB.ADM_ADD_M }]);

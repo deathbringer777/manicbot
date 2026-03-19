@@ -451,6 +451,18 @@ export async function onCb(ctx, cb) {
     return send(ctx, cid, t(lg, 'adm_enter_master_id'));
   }
 
+  if (d.startsWith(CB.ADM_RENAME_M)) {
+    if (!await isAdmin(ctx, cid)) return;
+    const mId = parseInt(d.slice(CB.ADM_RENAME_M.length));
+    if (!mId) return showMastersList(ctx, cid);
+    const m = await getMaster(ctx, mId);
+    if (!m) return showMastersList(ctx, cid);
+    await setState(ctx, cid, { step: STEP.RENAME_MASTER, renameMasterId: mId });
+    return send(ctx, cid, t(lg, 'adm_rename_master_prompt'), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.ADM_MASTERS }]] },
+    });
+  }
+
   if (d.startsWith(CB.ADM_DEL_M)) {
     if (!await isAdmin(ctx, cid)) return;
     const mId = parseInt(d.slice(CB.ADM_DEL_M.length));

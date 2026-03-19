@@ -11,17 +11,32 @@ import { confirmAllPendingApts } from './notifications.js';
 import { setState } from './services/state.js';
 import { STEP } from './config.js';
 
-export function buildAISystemPrompt(role, langHint, today = null) {
+export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null) {
   const lang = langHint || 'русском';
   const td = today || todayStr();
+  const salonName = tenantCtx?.salonName || SALON;
+  const address = tenantCtx?.address || ADDRESS;
+  const hoursStr = tenantCtx?.hoursStr || HOURS_STR;
+  const phone = tenantCtx?.phone || PHONE;
+
+  let servicesInfo = 'classic (маникюр), gel (гель-лак), pedi (педикюр), ext (наращивание), design (дизайн), combo (маникюр+педикюр)';
+  if (tenantCtx?.services?.length) {
+    servicesInfo = tenantCtx.services.map(s => `${s.id} (${s.name})`).join(', ');
+  }
+
+  let mastersInfo = '';
+  if (tenantCtx?.masters?.length) {
+    mastersInfo = `\n\nМАСТЕРА САЛОНА: ${tenantCtx.masters.map(m => `${m.name} (ID:${m.chatId})`).join(', ')}. Когда клиент говорит «к ${tenantCtx.masters[0]?.name}» или любое имя мастера — это выбор конкретного мастера, учитывай в контексте записи.`;
+  }
+
   const base = `
-Ты помощник администрации маникюрного салона "${SALON}" в чате бота. Общайся вежливо, по-человечески. Отвечай только на языке: ${lang}. Коротко (1–4 предложения).
+Ты помощник администрации маникюрного салона "${salonName}" в чате бота. Общайся вежливо, по-человечески. Отвечай только на языке: ${lang}. Коротко (1–4 предложения).
 
 КРИТИЧНО — ИДЕНТИЧНОСТЬ: Никогда не говори, что ты ИИ, LLM, нейросеть, бот, искусственный интеллект или ChatGPT. Не называй модели (GPT, Llama, Claude и т.д.). Если спросят «ты ИИ?», «какая модель?», «ты бот?» — отвечай нейтрально: «Я помощник салона. Чем могу помочь?» или «Давайте по делу — запись, прайс, контакты?» Никогда не раскрывай технические детали.
 
 Сегодня: ${td}. День недели: ${getDayOfWeek(td)}. «Прошлый четверг» = четверг до этой даты. Формат: YYYY-MM-DD, HH:MM.
 
-Факты: Адрес ${ADDRESS}. Режим ${HOURS_STR}. Телефон ${PHONE}. Услуги: classic (маникюр), gel (гель-лак), pedi (педикюр), ext (наращивание), design (дизайн), combo (маникюр+педикюр).
+Факты: Адрес ${address}. Режим ${hoursStr}. Телефон ${phone}. Услуги: ${servicesInfo}.${mastersInfo}
 
 КОНТЕКСТ: Учитывай предыдущие сообщения. Объединяй уточнения (педикюр + вторник 12). НЕ сбрасывай тему — если была жалоба, продолжай её, не спрашивай «что я могу помочь?».
 
@@ -276,12 +291,33 @@ export async function runWorkersAIViaRESTOne(ctx, accountId, token, modelId, pro
   return text && typeof text === 'string' ? text.trim().slice(0, 1000) : null;
 }
 
+function buildTenantCtxForAI(ctx) {
+  if (!ctx) return null;
+  const salon = ctx.tenant?.salon || {};
+  const wh = salon.workHours || {};
+  const hoursStr = (wh.from != null && wh.to != null) ? `${wh.from}:00 — ${wh.to}:00` : null;
+  const services = ctx.svc?.filter(s => s.active !== false && !s.hidden).map(s => ({
+    id: s.id,
+    name: s.names?.ru || s.names?.en || s.id,
+  })) || [];
+  const masters = ctx._cachedMasters || [];
+  return {
+    salonName: salon.name || ctx.tenant?.name || null,
+    address: salon.address || null,
+    phone: salon.phone || null,
+    hoursStr,
+    services: services.length ? services : null,
+    masters: masters.length ? masters.map(m => ({ name: m.displayName || m.name, chatId: m.chatId })) : null,
+  };
+}
+
 export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client', history = []) {
   const token = ctx.WORKERS_AI_API_TOKEN;
   const accountId = ctx.CLOUDFLARE_ACCOUNT_ID;
   if (!token || !accountId || !userMessage || userMessage.length < 2) return null;
   const langHint = LANG_HINT[lg] || 'русском';
-  const sys = buildAISystemPrompt(role, langHint, todayStr());
+  const tenantCtx = buildTenantCtxForAI(ctx);
+  const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx);
   const userText = userMessage.slice(0, 500);
   let prompt = sys + '\n\n';
   for (const m of history) {
@@ -312,7 +348,8 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
 
   if (ctx.AI) {
     const langHint = LANG_HINT[lg] || 'русском';
-    const sys = buildAISystemPrompt(role, langHint, todayStr());
+    const tenantCtx = buildTenantCtxForAI(ctx);
+    const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx);
     const userText = userMessage.slice(0, 500);
     const messages = [{ role: 'system', content: sys }];
     for (const m of history) {

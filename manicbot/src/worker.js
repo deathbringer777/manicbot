@@ -13,10 +13,9 @@ import { handleCron } from './handlers/cron.js';
 import { resolveTenantFromBotId, buildTenantCtx, buildLegacyCtx, isMigrationDone } from './tenant/resolver.js';
 import { runMigration } from './tenant/migration.js';
 import { handleStripeWebhook } from './billing/webhooks.js';
-import { listTenantIds, getBotIdsByTenantId, getTenant } from './tenant/storage.js';
+import { listTenantIds, getBotIdsByTenantId, getTenant, putTenant, putBot } from './tenant/storage.js';
 import { runSeed } from './admin/seed.js';
 import { registerBot, createTenant } from './admin/provisioning.js';
-import { putTenant, putBot } from './tenant/storage.js';
 
 async function getCtx(env, url, request) {
   const kv = env.MANICBOT;

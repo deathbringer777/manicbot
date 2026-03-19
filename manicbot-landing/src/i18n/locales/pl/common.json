@@ -1,0 +1,160 @@
+{
+  "nav": {
+    "about": "O bocie",
+    "features": "Funkcje",
+    "howItWorks": "Jak działa",
+    "ai": "Asystent AI",
+    "pricing": "Cennik",
+    "contacts": "Kontakt"
+  },
+  "hero": {
+    "tagline": "Bot Telegram do rezerwacji manicure",
+    "title": "Rezerwacje w Telegramie bez niekończącej się korespondencji",
+    "subtitle": "ManicBot pomaga klientom wybrać usługę, znaleźć dogodny termin i potwierdzić wizytę w znanym czacie.",
+    "cta": "Wypróbuj bota"
+  },
+  "stats": {
+    "s1": { "value": "4", "label": "języki interfejsu" },
+    "s2": { "value": "∞", "label": "klientów bez limitu" },
+    "s3": { "value": "0", "label": "dodatkowych aplikacji" }
+  },
+  "about": {
+    "title": "Co robi ManicBot",
+    "p1": "💬 Bot przejmuje typowe pytania o rezerwacje i pomaga klientom szybciej przejść od pierwszej wiadomości do potwierdzonej wizyty.",
+    "p2": "⏱️ Zmniejsza powtarzalną pracę w czacie — Ty lub administrator spędzacie mniej czasu na tych samych odpowiedziach.",
+    "p3": "🏪 Sprawdza się u manikiurzystek pracujących solo i w małych salonach, które chcą mieć przejrzystą rezerwację w Telegramie."
+  },
+  "features": {
+    "title": "Dlaczego to pomaga",
+    "items": {
+      "booking": {
+        "title": "Mniej powtarzających się wiadomości",
+        "description": "Klient wybiera usługę i dogodny termin od razu w czacie."
+      },
+      "reminders": {
+        "title": "Przypomnienia o wizycie",
+        "description": "Przypomnienia pomagają klientom nie zapomnieć o wizycie."
+      },
+      "answers": {
+        "title": "Odpowiedzi na częste pytania",
+        "description": "ManicBot pomaga szybko odpowiadać na typowe pytania o rezerwację, terminy i wizyty."
+      },
+      "flexible": {
+        "title": "Dla solo i dla salonu",
+        "description": "Elastyczny format dla osób pracujących solo i małych zespołów beauty."
+      },
+      "multilang": {
+        "title": "4 języki interfejsu",
+        "description": "Rosyjski, ukraiński, angielski i polski — bot mówi językiem klienta."
+      },
+      "team": {
+        "title": "Zespół mistrzów",
+        "description": "Wielu mistrzów, harmonogramy i role — dla salonu lub studia."
+      }
+    }
+  },
+  "howItWorks": {
+    "title": "Jak to działa",
+    "subtitle": "Trzy proste kroki od pierwszej wiadomości do potwierdzonej rezerwacji",
+    "steps": {
+      "s1": {
+        "num": "1",
+        "title": "Klient pisze do bota",
+        "desc": "Otwiera ManicBot w Telegramie, klika Start i wybiera usługę z listy."
+      },
+      "s2": {
+        "num": "2",
+        "title": "Wybiera termin",
+        "desc": "Bot proponuje dostępne sloty — klient wybiera jednym kliknięciem, bez długiej korespondencji."
+      },
+      "s3": {
+        "num": "3",
+        "title": "Rezerwacja potwierdzona",
+        "desc": "Klient dostaje potwierdzenie, mistrz — powiadomienie. Można dodać do kalendarza."
+      }
+    }
+  },
+  "carousel": {
+    "booking": "Prosta rezerwacja w Telegramie",
+    "reminders": "Przypomnienia o wizycie",
+    "answers": "Pomoc w typowych pytaniach",
+    "aiTone": "Bardziej naturalna rozmowa",
+    "soloAndSalon": "Dla solo i dla salonu"
+  },
+  "ai": {
+    "title": "AI, które wspiera rozmowę",
+    "subtitle": "ManicBot to nie tylko przyciski. Sprawia, że dialog jest płynniejszy i bardziej naturalny.",
+    "points": {
+      "understands": "🧠 Rozumie naturalne wiadomości klienta i prowadzi go do rezerwacji.",
+      "guides": "🗺️ Pomaga wybrać dogodny termin bez zamętu w czacie.",
+      "savesTime": "⚡ Oszczędza czas i ułatwia codzienną komunikację."
+    }
+  },
+  "pricing": {
+    "title": "Cennik",
+    "subtitle": "Proste i przejrzyste plany dla każdej skali",
+    "period": "/mies",
+    "cta": "Zaczynamy",
+    "plans": {
+      "start": {
+        "name": "Start",
+        "badge": "",
+        "desc": "Dla manikiurzystki solo",
+        "price": "45 zł",
+        "f1": "1 mistrz",
+        "f2": "Rezerwacja i harmonogram",
+        "f3": "Przypomnienia dla klientów",
+        "f4": "4 języki interfejsu"
+      },
+      "pro": {
+        "name": "Pro",
+        "badge": "Popularny",
+        "desc": "Dla salonu z zespołem",
+        "price": "60 zł",
+        "f1": "Do 5 mistrzów",
+        "f2": "Asystent AI",
+        "f3": "Agenci wsparcia",
+        "f4": "Priorytetowe wsparcie"
+      },
+      "studio": {
+        "name": "Studio",
+        "badge": "",
+        "desc": "Dla dużego studia",
+        "price": "90 zł",
+        "f1": "Nieograniczeni mistrzowie",
+        "f2": "White label",
+        "f3": "Personalizacja",
+        "f4": "Dedykowane wsparcie"
+      }
+    }
+  },
+  "contacts": {
+    "title": "Skontaktuj się",
+    "subtitle": "Otwórz bota w Telegramie lub napisz do nas.",
+    "telegram": "Otwórz w Telegramie",
+    "email": "Napisz e-mail"
+  },
+  "cta": {
+    "title": "Zobacz, jak rezerwacja może działać w Telegramie",
+    "subtitle": "Otwórz ManicBot i wypróbuj rozmowę samodzielnie.",
+    "button": "Otwórz bota"
+  },
+  "chat": {
+    "ariaLabel": "Przykład rozmowy rezerwacyjnej z botem",
+    "hello": "Cześć! Mogę zapisać Cię na manicure. Jaką usługę wybierasz?",
+    "userService": "Klasyczny manicure",
+    "botDay": "Okej, klasyczny manicure. Na który dzień zapisujemy?",
+    "userDay": "Jutro",
+    "slots": "Jutro mam 12:00, 14:30 i 16:00. Która godzina pasuje?",
+    "userTime": "14:30",
+    "success": "Gotowe! Zapisane na jutro 14:30. Jeśli coś się zmieni — napisz tutaj."
+  },
+  "footer": {
+    "copy": "© 2025 ManicBot",
+    "tagline": "Bot Telegram do rezerwacji w branży beauty",
+    "links": {
+      "telegram": "Telegram",
+      "email": "Email"
+    }
+  }
+}

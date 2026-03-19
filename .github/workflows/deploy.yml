@@ -10,9 +10,10 @@ on:
       - main
 
 jobs:
+  # ─── Bot: test ──────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
-    name: Test
+    name: Bot — Test
     steps:
       - uses: actions/checkout@v4
 
@@ -31,9 +32,10 @@ jobs:
         run: npm test
         working-directory: manicbot
 
-  deploy:
+  # ─── Bot: deploy to Cloudflare Workers ──────────────────────
+  deploy-bot:
     runs-on: ubuntu-latest
-    name: Deploy
+    name: Bot — Deploy Workers
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
@@ -57,3 +59,34 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: manicbot
           command: deploy --config wrangler.toml
+
+  # ─── Landing: build + deploy to Cloudflare Pages ────────────
+  deploy-landing:
+    runs-on: ubuntu-latest
+    name: Landing — Deploy Pages
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: manicbot-landing/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+        working-directory: manicbot-landing
+
+      - name: Build landing
+        run: npm run build
+        working-directory: manicbot-landing
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: manicbot-landing
+          command: pages deploy dist --project-name=manicbot-landing --commit-dirty=true

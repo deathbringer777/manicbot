@@ -1,6 +1,5 @@
 import { CB, STEP, VALID_LANGS, LOCK_TTL_SEC, MAX_APTS } from '../config.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
-import { showInactiveMessage } from '../ui/billing.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2 } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, warsawToUTC, warsawNow, dateStrForOffset, todayStr } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
@@ -17,7 +16,7 @@ import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick } from '../ui/booking.js';
-import { showBillingMenu } from '../ui/billing.js';
+import { showBillingMenu, showInactiveMessage } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
 import { getTenant } from '../tenant/storage.js';
 import { makeICS } from '../utils/ics.js';

@@ -1,4 +1,4 @@
-import { AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2, AI_MAX_TOKENS, LANG_HINT, SALON, ADDRESS, HOURS_STR, PHONE, CB } from './config.js';
+import { AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2, AI_MAX_TOKENS, LANG_HINT, SALON, ADDRESS, HOURS_STR, PHONE, CB, STEP } from './config.js';
 import { todayStr, getDayOfWeek, dateStrForOffset, resolveDateHint } from './utils/date.js';
 import { escHtml, fill, t } from './utils/helpers.js';
 import { send } from './telegram.js';
@@ -9,7 +9,6 @@ import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, show
 import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformSupportList } from './ui/sysadmin.js';
 import { confirmAllPendingApts } from './notifications.js';
 import { setState } from './services/state.js';
-import { STEP } from './config.js';
 
 export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null) {
   const lang = langHint || 'русском';

@@ -1,14 +1,12 @@
 import { send, sendIcs } from './telegram.js';
-import { escHtml, fill, t, svcName, isCorrectionSvc } from './utils/helpers.js';
+import { escHtml, fill, t, svcName, isCorrectionSvc, p2 } from './utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from './utils/date.js';
 import { ADDRESS, MAPS_URL, CB } from './config.js';
-import { listMasters, getAdminId, getUser, getMaster } from './services/users.js';
+import { listMasters, getAdminId, getUser, getMaster, canManageApt } from './services/users.js';
 import { getLang } from './services/chat.js';
 import { kvPut, kvGet } from './utils/kv.js';
 import { makeICS } from './utils/ics.js';
-import { p2 } from './utils/helpers.js';
 import { getAllPendingApts } from './services/appointments.js';
-import { canManageApt } from './services/users.js';
 import { canUse } from './billing/features.js';
 import { createCalendarEvent, buildCalendarEvent } from './services/calendar.js';
 

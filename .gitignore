@@ -7,15 +7,11 @@ node_modules/
 .cursor/
 .idea/
 
-# Generated assets
-*.png
-*.jpg
+# Root-level generated/temp files
 make_logo.py
+manicbot_logo.png
 
-# Landing app (separate Cloudflare Pages deploy)
-manicbot-landing/
-
-# wrangler files
+# wrangler local state
 .wrangler
 .dev.vars*
 !.dev.vars.example

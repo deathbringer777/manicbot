@@ -126,12 +126,12 @@ export async function onMsg(ctx, msg) {
         const claimKb = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'support_claim_btn'), callback_data: CB.TICKET_TAKE + cid }]] } };
         const recipients = new Set();
         if (tenantAgents.length > 0) {
-          for (const agId of tenantAgents) if (Number(agId) !== cid && String(agId) !== String(cid)) recipients.add(agId);
+          for (const agId of tenantAgents) recipients.add(agId);
         } else {
           const masters = await listMasters(ctx);
           const adminId = await getAdminId(ctx);
-          for (const m of masters) if (m.chatId && !m.onVacation && m.chatId !== cid) recipients.add(m.chatId);
-          if (adminId && adminId !== cid) recipients.add(adminId);
+          for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+          if (adminId) recipients.add(adminId);
         }
         for (const rcid of recipients) {
           try { await send(ctx, rcid, notice, claimKb); } catch (_) {}

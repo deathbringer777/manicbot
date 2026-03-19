@@ -205,8 +205,11 @@ export async function onCb(ctx, cb) {
     }
     await clearTicket(ctx, clientCid);
     const clg = await getLang(ctx, clientCid) || 'ru';
-    await send(ctx, clientCid, t(clg, 'ticket_closed'));
-    await send(ctx, cid, t(lg, 'ticket_closed_master'));
+    await send(ctx, clientCid, t(clg, 'ticket_closed'), { reply_markup: { remove_keyboard: true } });
+    const clientUser = await getUser(ctx, clientCid);
+    const clientName = (clientUser?.name && escHtml(clientUser.name.slice(0, 64))) || '👋';
+    await showWelcome(ctx, clientCid, clientName);
+    if (cid !== clientCid) await send(ctx, cid, t(lg, 'ticket_closed_master'));
     return;
   }
 

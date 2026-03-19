@@ -8,6 +8,7 @@ import { getRole } from '../services/users.js';
 import { getApts } from '../services/appointments.js';
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
 import { mainKb, langKb, catListKb, catPhotoKb, aboutPhotoKb } from './keyboards.js';
+import { showAdminPanel, showMasterPanel } from './admin.js';
 
 export async function showLangPick(ctx, chatId) {
   await send(ctx, chatId,
@@ -21,6 +22,19 @@ export async function showWelcome(ctx, cid, name) {
   const role = await getRole(ctx, cid);
   await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
   await send(ctx, cid, fill(t(lg, 'welcome'), { s: SALON, n: escHtml(name) }), mainKb(lg, role));
+}
+
+/**
+ * Routes to the appropriate home screen based on the user's role.
+ * - admin / tenant_owner → Admin panel
+ * - master → Master panel
+ * - client (and others) → Client welcome
+ */
+export async function showHomeByRole(ctx, cid, name) {
+  const role = await getRole(ctx, cid);
+  if (role === 'admin' || role === 'tenant_owner') return showAdminPanel(ctx, cid, name);
+  if (role === 'master') return showMasterPanel(ctx, cid, name);
+  return showWelcome(ctx, cid, name);
 }
 
 export async function showPrices(ctx, cid) {

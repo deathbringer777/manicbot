@@ -14,7 +14,7 @@ import { getTicket, setTicket, setTicketMaster, clearTicket, resetHumanRequestCo
 import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
-import { showWelcome, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
+import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick } from '../ui/booking.js';
 import { showBillingMenu } from '../ui/billing.js';
@@ -51,7 +51,7 @@ export async function onCb(ctx, cb) {
     if (!VALID_LANGS.has(lang)) return;
     await setLang(ctx, cid, lang);
     await send(ctx, cid, t(lang, 'lang_set'));
-    return showWelcome(ctx, cid, name);
+    return showHomeByRole(ctx, cid, name);
   }
 
   const lg = (await getLang(ctx, cid)) || 'ru';
@@ -65,7 +65,7 @@ export async function onCb(ctx, cb) {
     if (!isBillingCb) return showInactiveMessage(ctx, cid);
   }
 
-  if (d === CB.MAIN)     return showWelcome(ctx, cid, name);
+  if (d === CB.MAIN)     return showHomeByRole(ctx, cid, name);
   if (d === CB.LANG)     return showLangPick(ctx, cid);
   if (d === CB.BOOK)     return startBooking(ctx, cid, cb.from);
 

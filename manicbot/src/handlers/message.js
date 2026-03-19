@@ -19,7 +19,7 @@ import { showPlatformAdminPanel, showPlatformSupportList, showPlatformTechSuppor
 import { timingSafeEqual, randomId } from '../utils/security.js';
 import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
-import { showWelcome, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
+import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showClientsList, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
 import { runWorkersAI, parseAIActions, executeAIAction } from '../ai.js';
@@ -432,7 +432,7 @@ export async function onMsg(ctx, msg) {
     if (txt === t(lg, 'm_cat')) return showCatalog(ctx, cid);
     if (txt === t(lg, 'm_prices')) return showPrices(ctx, cid);
     if (txt === t(lg, 'm_my')) return showMyApts(ctx, cid);
-    if (txt === t(lg, 'back_m')) return showWelcome(ctx, cid, name);
+    if (txt === t(lg, 'back_m')) return showHomeByRole(ctx, cid, name);
     if (txt === t(lg, 'm_rev')) return showReviews(ctx, cid);
     if (txt === t(lg, 'm_about')) return showAbout(ctx, cid);
     if (txt === t(lg, 'm_cont')) return showContacts(ctx, cid);
@@ -456,7 +456,7 @@ export async function onMsg(ctx, msg) {
   if (txt) {
     if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
     const ctxAction = getContextAction(txt);
-    if (ctxAction === 'main') return showWelcome(ctx, cid, name);
+    if (ctxAction === 'main') return showHomeByRole(ctx, cid, name);
     if (ctxAction === 'prices') return showPrices(ctx, cid);
     if (ctxAction === 'catalog') return showCatalog(ctx, cid);
     if (ctxAction === 'contacts') return showContacts(ctx, cid);
@@ -1034,7 +1034,7 @@ export async function onMsg(ctx, msg) {
     if (txt) {
       if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
       const ctxAction = getContextAction(txt);
-      if (ctxAction === 'main') return showWelcome(ctx, cid, name);
+      if (ctxAction === 'main') return showHomeByRole(ctx, cid, name);
       if (ctxAction === 'prices') return showPrices(ctx, cid);
       if (ctxAction === 'catalog') return showCatalog(ctx, cid);
       if (ctxAction === 'contacts') return showContacts(ctx, cid);
@@ -1051,7 +1051,7 @@ export async function onMsg(ctx, msg) {
 
   if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
 
-  if (txt && getContextAction(txt) === 'main') return showWelcome(ctx, cid, name);
+  if (txt && getContextAction(txt) === 'main') return showHomeByRole(ctx, cid, name);
 
   if (txt) {
     const quick = parseQuickBookingPhrase(txt);

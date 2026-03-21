@@ -1,12 +1,24 @@
 import { kvGet, kvPut, kvDel, kvListAll } from '../utils/kv.js';
+import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { isValidChatId } from '../utils/helpers.js';
 import { api } from '../telegram.js';
 import { resolveRole, getPlatformRole, ROLES } from '../roles/roles.js';
 
-export async function getAdminId(ctx) { return kvGet(ctx, 'cfg:admin'); }
-export async function setAdminId(ctx, cid) { return kvPut(ctx, 'cfg:admin', cid); }
+export async function getAdminId(ctx) {
+  if (!ctx?.db || !ctx?.tenantId) return kvGet(ctx, 'cfg:admin');
+  const row = await dbGet(ctx, "SELECT value FROM tenant_config WHERE tenant_id = ? AND key = 'admin'", ctx.tenantId);
+  return row?.value ? JSON.parse(row.value) : null;
+}
 
-/** Единственный создатель платформы (бог): ADMIN_CHAT_ID в конфиге. Всегда админ везде. */
+export async function setAdminId(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) return kvPut(ctx, 'cfg:admin', cid);
+  await dbRun(ctx,
+    "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)",
+    ctx.tenantId, JSON.stringify(cid),
+  );
+  return true;
+}
+
 export function isCreator(ctx, cid) {
   if (!ctx?.adminChatId || cid == null) return false;
   return String(ctx.adminChatId) === String(cid);
@@ -14,13 +26,13 @@ export function isCreator(ctx, cid) {
 
 export async function isAdmin(ctx, cid) {
   if (isCreator(ctx, cid)) return true;
-  if (ctx.globalKv) {
-    if (ctx.prefix) {
-      const role = await resolveRole(ctx.globalKv, ctx, cid);
+  if (ctx.db) {
+    if (ctx.tenantId) {
+      const role = await resolveRole(ctx, cid);
       if (role === ROLES.SYSTEM_ADMIN || role === ROLES.TENANT_OWNER) return true;
       if (role === ROLES.SUPPORT || role === ROLES.MASTER) return false;
     } else {
-      const platformRole = await getPlatformRole(ctx.globalKv, cid);
+      const platformRole = await getPlatformRole(ctx, cid);
       if (platformRole === ROLES.SYSTEM_ADMIN) return true;
       if (platformRole === ROLES.SUPPORT) return false;
     }
@@ -28,18 +40,15 @@ export async function isAdmin(ctx, cid) {
   return (await getAdminId(ctx)) === cid;
 }
 
-/** Доступ к панели платформы (салоны, боты, агенты): system_admin в KV или создатель (ADMIN_CHAT_ID). */
 export async function isPlatformAdmin(ctx, cid) {
   if (isCreator(ctx, cid)) return true;
-  if (!ctx.globalKv) return false;
-  const platformRole = await getPlatformRole(ctx.globalKv, cid);
+  if (!ctx.db) return false;
+  const platformRole = await getPlatformRole(ctx, cid);
   return platformRole === ROLES.SYSTEM_ADMIN;
 }
 
-export async function getMaster(ctx, cid) { return kvGet(ctx, `master:${cid}`); }
+// ── Masters ─────────────────────────────────────────────────────────────────
 
-// Index key for master chat IDs — kv.get is immediately consistent after kv.put
-// (unlike kv.list which is eventually consistent on Cloudflare)
 const MASTER_INDEX_KEY = 'master:__index';
 
 async function getMasterIndex(ctx) {
@@ -47,49 +56,100 @@ async function getMasterIndex(ctx) {
   return Array.isArray(idx) ? idx : [];
 }
 
+function masterRowToDoc(row) {
+  if (!row) return null;
+  return {
+    chatId: row.chat_id,
+    name: row.name,
+    tgUsername: row.tg_username,
+    services: row.services ? JSON.parse(row.services) : null,
+    workHours: row.work_hours ? JSON.parse(row.work_hours) : null,
+    workDays: row.work_days ? JSON.parse(row.work_days) : null,
+    onVacation: row.on_vacation === 1,
+    active: row.active === 1,
+    addedAt: row.added_at,
+    googleCalendarId: row.google_calendar_id,
+    calendarEnabled: row.calendar_enabled === 1,
+  };
+}
+
+export async function getMaster(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) return kvGet(ctx, `master:${cid}`);
+  const row = await dbGet(ctx, 'SELECT * FROM masters WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
+  return masterRowToDoc(row);
+}
+
 export async function saveMaster(ctx, cid, data) {
-  data.services = data.services || null;
-  data.workHours = data.workHours || null;
-  data.workDays = data.workDays || null;
-  data.onVacation = data.onVacation === true;
-  await kvPut(ctx, `master:${cid}`, data);
-  // Keep index in sync so listMasters doesn't depend on kv.list() consistency
-  const idx = await getMasterIndex(ctx);
-  if (!idx.includes(cid)) {
-    idx.push(cid);
-    await kvPut(ctx, MASTER_INDEX_KEY, idx);
+  if (!ctx?.db || !ctx?.tenantId) {
+    const payload = {
+      ...data,
+      services: data.services || null,
+      workHours: data.workHours || null,
+      workDays: data.workDays || null,
+      onVacation: data.onVacation === true,
+    };
+    await kvPut(ctx, `master:${cid}`, payload);
+    const idx = await getMasterIndex(ctx);
+    if (!idx.includes(cid)) {
+      idx.push(cid);
+      await kvPut(ctx, MASTER_INDEX_KEY, idx);
+    }
+    return;
   }
+  await dbRun(ctx,
+    `INSERT OR REPLACE INTO masters (tenant_id, chat_id, name, tg_username, services, work_hours, work_days, on_vacation, active, added_at, google_calendar_id, calendar_enabled)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ctx.tenantId, cid,
+    data.name || null,
+    data.tgUsername || null,
+    data.services ? JSON.stringify(data.services) : null,
+    data.workHours ? JSON.stringify(data.workHours) : null,
+    data.workDays ? JSON.stringify(data.workDays) : null,
+    data.onVacation === true ? 1 : 0,
+    data.active === false ? 0 : 1,
+    data.addedAt || Date.now(),
+    data.googleCalendarId || null,
+    data.calendarEnabled ? 1 : 0,
+  );
 }
 
 export async function deleteMaster(ctx, cid) {
-  await kvDel(ctx, `master:${cid}`);
-  const idx = (await getMasterIndex(ctx)).filter(id => id !== cid);
-  await kvPut(ctx, MASTER_INDEX_KEY, idx);
+  if (!ctx?.db || !ctx?.tenantId) {
+    await kvDel(ctx, `master:${cid}`);
+    const idx = (await getMasterIndex(ctx)).filter(id => id !== cid);
+    await kvPut(ctx, MASTER_INDEX_KEY, idx);
+    return;
+  }
+  await dbRun(ctx, 'DELETE FROM masters WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
 }
 
 export async function isMaster(ctx, cid) { return !!(await getMaster(ctx, cid)); }
 
 export async function listMasters(ctx) {
-  // Primary: index-based lookup — kv.get is immediately consistent after kv.put
-  const idx = await kvGet(ctx, MASTER_INDEX_KEY);
-  if (Array.isArray(idx)) {
+  if (!ctx?.db || !ctx?.tenantId) {
+    const idx = await kvGet(ctx, MASTER_INDEX_KEY);
+    if (Array.isArray(idx)) {
+      const masters = [];
+      for (const cid of idx) {
+        const master = await kvGet(ctx, `master:${cid}`);
+        if (master) masters.push(master);
+      }
+      return masters;
+    }
+    const keys = await kvListAll(ctx, { prefix: 'master:' });
     const masters = [];
-    for (const cid of idx) {
-      const m = await kvGet(ctx, `master:${cid}`);
-      if (m) masters.push(m);
+    for (const key of keys) {
+      if (key.name === MASTER_INDEX_KEY) continue;
+      const master = await kvGet(ctx, key.name);
+      if (master) masters.push(master);
     }
     return masters;
   }
-  // Fallback: kv.list scan for legacy data (eventually consistent)
-  const keys = await kvListAll(ctx, { prefix: 'master:' });
-  const masters = [];
-  for (const k of keys) {
-    if (k.name === MASTER_INDEX_KEY) continue; // skip index key itself
-    const m = await kvGet(ctx, k.name);
-    if (m) masters.push(m);
-  }
-  return masters;
+  const rows = await dbAll(ctx, 'SELECT * FROM masters WHERE tenant_id = ?', ctx.tenantId);
+  return rows.map(masterRowToDoc).filter(Boolean);
 }
+
+// ── User lookup ─────────────────────────────────────────────────────────────
 
 export function normalizeUsername(raw) {
   const uname = String(raw || '').trim().replace(/^@+/, '');
@@ -107,11 +167,18 @@ export function normalizePhone(raw) {
 export async function findUserByUsername(ctx, username) {
   const uname = normalizeUsername(username);
   if (!uname) return null;
+  if (ctx?.db && ctx?.tenantId) {
+    const row = await dbGet(ctx,
+      'SELECT * FROM users WHERE tenant_id = ? AND LOWER(tg_username) = ?',
+      ctx.tenantId, uname,
+    );
+    return row ? { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at } : null;
+  }
   const keys = await kvListAll(ctx, { prefix: 'u:' });
-  for (const k of keys) {
-    const u = await kvGet(ctx, k.name);
-    if (!u?.tgUsername) continue;
-    if (normalizeUsername(u.tgUsername) === uname) return u;
+  for (const key of keys) {
+    const user = await kvGet(ctx, key.name);
+    if (!user?.tgUsername) continue;
+    if (normalizeUsername(user.tgUsername) === uname) return user;
   }
   return null;
 }
@@ -119,12 +186,24 @@ export async function findUserByUsername(ctx, username) {
 export async function findUserByPhone(ctx, phoneRaw) {
   const phone = normalizePhone(phoneRaw);
   if (!phone) return null;
+  if (ctx?.db && ctx?.tenantId) {
+    const rows = await dbAll(ctx,
+      'SELECT * FROM users WHERE tenant_id = ? AND phone IS NOT NULL',
+      ctx.tenantId,
+    );
+    for (const row of rows) {
+      const userPhone = normalizePhone(row.phone);
+      if (userPhone && userPhone.digits === phone.digits) {
+        return { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at };
+      }
+    }
+  }
   const keys = await kvListAll(ctx, { prefix: 'u:' });
-  for (const k of keys) {
-    const u = await kvGet(ctx, k.name);
-    if (!u?.phone) continue;
-    const userPhone = normalizePhone(u.phone);
-    if (userPhone && userPhone.digits === phone.digits) return u;
+  for (const key of keys) {
+    const user = await kvGet(ctx, key.name);
+    if (!user?.phone) continue;
+    const userPhone = normalizePhone(user.phone);
+    if (userPhone && userPhone.digits === phone.digits) return user;
   }
   return null;
 }
@@ -182,7 +261,7 @@ export async function resolveMasterInput(ctx, msg, txt) {
       const r = chatByUsername.result;
       return {
         masterId: r.id,
-        masterName: [r.first_name, r.last_name].filter(Boolean).join(' ') || (r.username ? '@' + r.username : '?'),
+        masterName: [r.first_name, r.last_name].filter(Boolean).join(' ') || (r.username ? '@' + username : '?'),
         masterUsername: r.username || username,
         masterPhone: null,
       };
@@ -214,12 +293,10 @@ export async function resolveMasterInput(ctx, msg, txt) {
   return { masterId: null, masterName: '?', masterUsername: null, masterPhone: null };
 }
 
-/** Returns 'system_admin' | 'admin' | 'master' | 'support' | 'client'. */
 export async function getRole(ctx, cid) {
-  // God mode (ADMIN_CHAT_ID) always has system_admin regardless of KV state
   if (isCreator(ctx, cid)) return 'system_admin';
-  if (ctx.globalKv && ctx.prefix) {
-    const role = await resolveRole(ctx.globalKv, ctx, cid);
+  if (ctx.db && ctx.tenantId) {
+    const role = await resolveRole(ctx, cid);
     if (role === ROLES.SYSTEM_ADMIN) return 'system_admin';
     if (role === ROLES.TENANT_OWNER) return 'admin';
     if (role === ROLES.SUPPORT) return 'support';
@@ -232,26 +309,60 @@ export async function getRole(ctx, cid) {
   return 'client';
 }
 
-export async function isBlocked(ctx, cid) { return !!(await kvGet(ctx, `blocked:${cid}`)); }
-export async function blockUser(ctx, cid) { await kvPut(ctx, `blocked:${cid}`, true); }
-export async function unblockUser(ctx, cid) { await kvDel(ctx, `blocked:${cid}`); }
+// ── Blocked users (D1) ──────────────────────────────────────────────────────
+
+export async function isBlocked(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) return !!(await kvGet(ctx, `blocked:${cid}`));
+  const row = await dbGet(ctx, 'SELECT 1 FROM blocked_users WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
+  return !!row;
+}
+
+export async function blockUser(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) {
+    await kvPut(ctx, `blocked:${cid}`, true);
+    return;
+  }
+  await dbRun(ctx, 'INSERT OR IGNORE INTO blocked_users (tenant_id, chat_id) VALUES (?, ?)', ctx.tenantId, cid);
+}
+
+export async function unblockUser(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) {
+    await kvDel(ctx, `blocked:${cid}`);
+    return;
+  }
+  await dbRun(ctx, 'DELETE FROM blocked_users WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
+}
+
 export async function canManageApt(ctx, cid) { return (await isAdmin(ctx, cid)) || (await isMaster(ctx, cid)); }
 
-export async function getUser(ctx, cid) { return kvGet(ctx, `u:${cid}`); }
-export async function saveUser(ctx, cid, d) { await kvPut(ctx, `u:${cid}`, d); }
+// ── User CRUD (D1) ─────────────────────────────────────────────────────────
 
-/**
- * Сохранить/обновить запись пользователя по данным из Telegram (msg.from).
- * Вызывать при /start, чтобы по @username можно было найти пользователя в /grant_master
- * (getChat по @username для личных чатов в Bot API не работает).
- */
+export async function getUser(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) return kvGet(ctx, `u:${cid}`);
+  const row = await dbGet(ctx, 'SELECT * FROM users WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
+  if (!row) return null;
+  return { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at };
+}
+
+export async function saveUser(ctx, cid, d) {
+  if (!ctx?.db || !ctx?.tenantId) {
+    await kvPut(ctx, `u:${cid}`, d);
+    return;
+  }
+  await dbRun(ctx,
+    `INSERT OR REPLACE INTO users (tenant_id, chat_id, name, tg_username, tg_lang, phone, registered_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ctx.tenantId, cid, d.name || null, d.tgUsername || null, d.tgLang || null, d.phone || null, d.registeredAt || null,
+  );
+}
+
 export async function upsertUserFromTelegram(ctx, cid, from) {
-  if (!ctx?.kv || !cid || !from) return;
-  const existing = await kvGet(ctx, `u:${cid}`);
+  if (!cid || !from) return;
   const name = [from.first_name, from.last_name].filter(Boolean).join(' ').trim().slice(0, 100) || 'User';
   const tgUsername = from.username ? String(from.username).trim().slice(0, 32) : null;
+
+  const existing = await getUser(ctx, cid);
   const payload = {
-    ...(existing || {}),
     chatId: cid,
     name: existing?.name || name,
     tgUsername: tgUsername || existing?.tgUsername || null,
@@ -259,5 +370,5 @@ export async function upsertUserFromTelegram(ctx, cid, from) {
     phone: existing?.phone || null,
     registeredAt: existing?.registeredAt || null,
   };
-  await kvPut(ctx, `u:${cid}`, payload);
+  await saveUser(ctx, cid, payload);
 }

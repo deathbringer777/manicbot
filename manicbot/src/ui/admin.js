@@ -9,10 +9,49 @@ import { listMasters, getAdminId, isBlocked } from '../services/users.js';
 import { loadDayAppointments, getAdminAllApts, getApts } from '../services/appointments.js';
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
 import { kvGet, kvListAll } from '../utils/kv.js';
+import { dbAll } from '../utils/db.js';
 import { adminKb, masterKb } from './keyboards.js';
 
 /** В тенантном боте — «Главное меню», в главном — «Панель админа». */
 function backToAdmLabel(ctx, lg) { return ctx.tenantId ? t(lg, 'back_m') : t(lg, 'adm_back'); }
+
+/**
+ * Иконка статуса записи (appointment).
+ * Единая точка — раньше одна и та же ternary-цепочка дублировалась в трёх функциях.
+ * @param {string} status - pending | confirmed | counter_offer | любой другой
+ * @returns {string} emoji
+ */
+function aptStatusIcon(status) {
+  if (status === 'pending')       return '⏳';
+  if (status === 'confirmed')     return '✅';
+  if (status === 'counter_offer') return '💬';
+  return '🕐';
+}
+
+/**
+ * Рендерит список фотографий с кнопками удаления и превью первых 5.
+ * Раньше этот блок дублировался в showServicePhotos и showAboutPhotos.
+ * @param {object} ctx
+ * @param {string|number} cid
+ * @param {string}   titleText  - уже готовый текст заголовка
+ * @param {string[]} photos     - массив file_id / URL
+ * @param {Function} delCb      - (i: number) => callback_data string
+ * @param {string}   addCb      - callback_data для кнопки «добавить фото»
+ * @param {string}   backCb     - callback_data для кнопки «назад»
+ * @param {string}   lg         - язык
+ */
+async function renderPhotoList(ctx, cid, titleText, photos, delCb, addCb, backCb, lg) {
+  const btns = [];
+  for (let i = 0; i < photos.length; i++) {
+    btns.push([{ text: `${t(lg, 'svc_photo_del')} #${i + 1}`, callback_data: delCb(i) }]);
+  }
+  btns.push([{ text: t(lg, 'svc_photo_add'), callback_data: addCb }]);
+  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: backCb }]);
+  await send(ctx, cid, titleText, { reply_markup: { inline_keyboard: btns } });
+  for (let i = 0; i < Math.min(photos.length, 5); i++) {
+    await sendPhoto(ctx, cid, photos[i], `#${i + 1}`, {});
+  }
+}
 
 export async function showServicesList(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
@@ -63,17 +102,13 @@ export async function showServicePhotos(ctx, cid, svcId) {
   const name = s.names?.[lg] || s.names?.ru || s.id;
   const photos = s.photos || [];
   const txt = fill(t(lg, 'svc_photo_title'), { name: escHtml(name), count: String(photos.length) });
-  const btns = [];
-  for (let i = 0; i < photos.length; i++) {
-    const label = `${t(lg, 'svc_photo_del')} #${i + 1}`;
-    btns.push([{ text: label, callback_data: CB.SVC_PHOTO_DEL + svcId + ':' + i }]);
-  }
-  btns.push([{ text: t(lg, 'svc_photo_add'), callback_data: CB.SVC_PHOTO_ADD + svcId }]);
-  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.SVC_EDIT + svcId }]);
-  await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
-  for (let i = 0; i < Math.min(photos.length, 5); i++) {
-    await sendPhoto(ctx, cid, photos[i], `#${i + 1}`, {});
-  }
+  await renderPhotoList(
+    ctx, cid, txt, photos,
+    i => CB.SVC_PHOTO_DEL + svcId + ':' + i,
+    CB.SVC_PHOTO_ADD + svcId,
+    CB.SVC_EDIT + svcId,
+    lg,
+  );
 }
 
 export async function showAboutSettings(ctx, cid) {
@@ -92,16 +127,13 @@ export async function showAboutPhotos(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const photos = await loadAboutPhotos(ctx);
   const txt = fill(t(lg, 'svc_photo_title'), { name: t(lg, 'm_about'), count: String(photos.length) });
-  const btns = [];
-  for (let i = 0; i < photos.length; i++) {
-    btns.push([{ text: `${t(lg, 'svc_photo_del')} #${i + 1}`, callback_data: CB.ADM_ABOUT_PHOTO_DEL + i }]);
-  }
-  btns.push([{ text: t(lg, 'svc_photo_add'), callback_data: CB.ADM_ABOUT_PHOTO_ADD }]);
-  btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_ABOUT }]);
-  await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
-  for (let i = 0; i < Math.min(photos.length, 5); i++) {
-    await sendPhoto(ctx, cid, photos[i], `#${i + 1}`, {});
-  }
+  await renderPhotoList(
+    ctx, cid, txt, photos,
+    i => CB.ADM_ABOUT_PHOTO_DEL + i,
+    CB.ADM_ABOUT_PHOTO_ADD,
+    CB.ADM_ABOUT,
+    lg,
+  );
 }
 
 export async function showAboutDescEdit(ctx, cid) {
@@ -178,7 +210,7 @@ export async function showAdminApts(ctx, cid, dateStr) {
   for (const a of apts) {
     const sv = ctx.svc.find(x => x.id === a.svcId);
     if (!sv) continue;
-    const st = a.status === 'pending' ? '⏳' : a.status === 'confirmed' ? '✅' : a.status === 'counter_offer' ? '💬' : '🕐';
+    const st = aptStatusIcon(a.status);
     const username = a.userTg ? ` · 🔗 @${escHtml(String(a.userTg).replace(/^@+/, ''))}` : '';
     const masterName = a.masterId ? escHtml(masterMap.get(a.masterId)?.name || String(a.masterId)) : t(lg, 'adm_apt_unassigned');
     txt += `${st} <b>${a.time}</b> — ${sv.e} ${t(lg, 'svc_' + a.svcId)}\n`;
@@ -198,17 +230,27 @@ export async function showAdminApts(ctx, cid, dateStr) {
 
 export async function showMasterAllApts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const w = warsawNow();
-  const monthKeys = [-1, 0, 1, 2].map(off => {
-    const d = new Date(Date.UTC(w.year, w.month - 1 + off, 1));
-    return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
-  });
-  const buckets = await Promise.all(monthKeys.map(k => kvGet(ctx, k)));
-  const allIds = [...new Set(buckets.flatMap(b => b || []))];
-  const apts = (await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))))
-    .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
-      && (a.masterId === cid || a.confirmedBy === cid))
-    .sort((a, b) => a.ts - b.ts);
+  let apts;
+  if (ctx?.db && ctx?.tenantId) {
+    const { getAdminAllApts: getAllApts } = await import('../services/appointments.js');
+    const allApts = await getAllApts(ctx);
+    apts = allApts
+      .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
+        && (a.masterId === cid || a.confirmedBy === cid))
+      .sort((a, b) => a.ts - b.ts);
+  } else {
+    const w = warsawNow();
+    const monthKeys = [-1, 0, 1, 2].map(off => {
+      const d = new Date(Date.UTC(w.year, w.month - 1 + off, 1));
+      return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
+    });
+    const buckets = await Promise.all(monthKeys.map(k => kvGet(ctx, k)));
+    const allIds = [...new Set(buckets.flatMap(b => b || []))];
+    apts = (await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))))
+      .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
+        && (a.masterId === cid || a.confirmedBy === cid))
+      .sort((a, b) => a.ts - b.ts);
+  }
 
   if (!apts.length) {
     return send(ctx, cid, t(lg, 'adm_no_apts'), { reply_markup: { inline_keyboard: [
@@ -226,7 +268,7 @@ export async function showMasterAllApts(ctx, cid) {
     }
     const sv = ctx.svc.find(x => x.id === a.svcId);
     if (!sv) continue;
-    const st = a.status === 'pending' ? '⏳' : a.status === 'confirmed' ? '✅' : a.status === 'counter_offer' ? '💬' : '🕐';
+    const st = aptStatusIcon(a.status);
     const username = a.userTg ? ` · 🔗 @${escHtml(String(a.userTg).replace(/^@+/, ''))}` : '';
     txt += `${st} <b>${a.time}</b> — ${sv.e} ${t(lg, 'svc_' + a.svcId)}\n`;
     txt += `👤 ${escHtml(a.userName)} · 📱 ${escHtml(a.userPhone)}${username}\n\n`;
@@ -275,7 +317,7 @@ export async function showAdminAllApts(ctx, cid, filterMasterId = null) {
     }
     const sv = ctx.svc.find(x => x.id === a.svcId);
     if (!sv) continue;
-    const st = a.status === 'pending' ? '⏳' : a.status === 'confirmed' ? '✅' : a.status === 'counter_offer' ? '💬' : '🕐';
+    const st = aptStatusIcon(a.status);
     const masterName = a.masterId ? escHtml(masterMap.get(a.masterId)?.name || String(a.masterId)) : t(lg, 'adm_apt_unassigned');
     txt += `${st} <b>${a.time}</b> — ${sv.e} ${svcName(ctx, lg, a.svcId)}\n`;
     txt += `👤 ${escHtml(a.userName)} · 👩‍🎨 ${masterName}\n`;
@@ -325,11 +367,17 @@ const CLIENTS_PER_PAGE = 8;
 
 export async function showClientsList(ctx, cid, page = 0, msgId = null) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const userKeys = await kvListAll(ctx, { prefix: 'u:' });
-  const clients = [];
-  for (const k of userKeys) {
-    const u = await kvGet(ctx, k.name);
-    if (u) clients.push(u);
+  let clients;
+  if (ctx?.db && ctx?.tenantId) {
+    const rows = await dbAll(ctx, 'SELECT * FROM users WHERE tenant_id = ?', ctx.tenantId);
+    clients = rows.map(r => ({ chatId: r.chat_id, name: r.name, tgUsername: r.tg_username, tgLang: r.tg_lang, phone: r.phone, registeredAt: r.registered_at }));
+  } else {
+    const userKeys = await kvListAll(ctx, { prefix: 'u:' });
+    clients = [];
+    for (const k of userKeys) {
+      const u = await kvGet(ctx, k.name);
+      if (u) clients.push(u);
+    }
   }
   clients.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const total = clients.length;

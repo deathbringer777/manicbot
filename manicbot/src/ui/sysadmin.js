@@ -29,13 +29,10 @@ function sysadmKb(lg) {
 
 export async function showPlatformAdminPanel(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const kv = ctx.globalKv || ctx.kv;
   let tenantCount = 0;
   let agentCount = 0;
-  if (kv) {
-    try { tenantCount = (await listTenantIds(kv)).length; } catch {}
-    try { agentCount = (await getSupportAgents(kv)).length; } catch {}
-  }
+  try { tenantCount = (await listTenantIds(ctx)).length; } catch {}
+  try { agentCount = (await getSupportAgents(ctx)).length; } catch {}
   const text =
     `🌐 <b>${t(lg, 'sysadm_title')}</b>\n\n` +
     `👤 ${escHtml(name)}\n` +
@@ -46,10 +43,9 @@ export async function showPlatformAdminPanel(ctx, cid, name) {
 
 export async function showPlatformTenantsList(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const kv = ctx.globalKv || ctx.kv;
-  if (!kv) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
+  if (!ctx.db) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
   let tenantIds = [];
-  try { tenantIds = await listTenantIds(kv); } catch {}
+  try { tenantIds = await listTenantIds(ctx); } catch {}
   if (!tenantIds.length) {
     return send(ctx, cid, t(lg, 'sysadm_no_tenants'), {
       reply_markup: {
@@ -60,7 +56,7 @@ export async function showPlatformTenantsList(ctx, cid) {
       },
     });
   }
-  const tenants = await Promise.all(tenantIds.map(id => getTenant(kv, id).catch(() => null)));
+  const tenants = await Promise.all(tenantIds.map(id => getTenant(ctx, id).catch(() => null)));
   let text = `🏢 <b>${t(lg, 'sysadm_tenants_list')}</b>\n\n`;
   const rows = [];
   for (const ten of tenants) {
@@ -77,12 +73,11 @@ export async function showPlatformTenantsList(ctx, cid) {
 
 export async function showPlatformTenantInfo(ctx, cid, tenantId) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const kv = ctx.globalKv || ctx.kv;
-  if (!kv || !tenantId) return;
+  if (!ctx.db || !tenantId) return;
   let tenant = null;
   let botIds = [];
-  try { tenant = await getTenant(kv, tenantId); } catch {}
-  try { botIds = await getBotIdsByTenantId(kv, tenantId); } catch {}
+  try { tenant = await getTenant(ctx, tenantId); } catch {}
+  try { botIds = await getBotIdsByTenantId(ctx, tenantId); } catch {}
   if (!tenant) {
     return send(ctx, cid, t(lg, 'sysadm_tenant_not_found'), {
       reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.SYSADM_TENANTS }]] },
@@ -116,24 +111,38 @@ export async function showPlatformTenantInfo(ctx, cid, tenantId) {
   });
 }
 
-export async function showPlatformSupportList(ctx, cid) {
-  const lg = await getLang(ctx, cid) || 'ru';
-  const kv = ctx.globalKv || ctx.kv;
-  if (!kv) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
-  let agents = [];
-  try { agents = await getSupportAgents(kv); } catch {}
+/**
+ * Общий рендер списка агентов для платформы.
+ * Раньше showPlatformSupportList и showPlatformTechSupportList были ~идентичны.
+ * @param {{ icon, titleKey, noAgentsKey, addBtn, addCb, removeBtn, removeCb }} cfg
+ */
+async function renderPlatformAgentList(ctx, cid, lg, agents, cfg) {
   const text = agents.length
-    ? `👥 <b>${t(lg, 'sysadm_support_agents')}</b> (${agents.length})\n\n` +
+    ? `${cfg.icon} <b>${t(lg, cfg.titleKey)}</b> (${agents.length})\n\n` +
       agents.map(id => `• <code>${id}</code>`).join('\n')
-    : `👥 <b>${t(lg, 'sysadm_support_agents')}</b>\n\n${t(lg, 'sysadm_no_agents')}`;
+    : `${cfg.icon} <b>${t(lg, cfg.titleKey)}</b>\n\n${t(lg, cfg.noAgentsKey)}`;
   const rows = [];
-  rows.push([{ text: t(lg, 'sysadm_support_add_btn'), callback_data: CB.SYSADM_SUPPORT_ADD }]);
+  rows.push([{ text: t(lg, cfg.addBtn), callback_data: cfg.addCb }]);
   for (const agentId of agents) {
-    rows.push([{ text: `${t(lg, 'sysadm_support_remove_btn')} ${agentId}`, callback_data: CB.SYSADM_SUPPORT_REMOVE + agentId }]);
+    rows.push([{ text: `${t(lg, cfg.removeBtn)} ${agentId}`, callback_data: cfg.removeCb + agentId }]);
   }
   rows.push([{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]);
-  await send(ctx, cid, text, {
-    reply_markup: { inline_keyboard: rows },
+  await send(ctx, cid, text, { reply_markup: { inline_keyboard: rows } });
+}
+
+export async function showPlatformSupportList(ctx, cid) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  if (!ctx.db) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
+  let agents = [];
+  try { agents = await getSupportAgents(ctx); } catch {}
+  await renderPlatformAgentList(ctx, cid, lg, agents, {
+    icon: '👥',
+    titleKey: 'sysadm_support_agents',
+    noAgentsKey: 'sysadm_no_agents',
+    addBtn: 'sysadm_support_add_btn',
+    addCb: CB.SYSADM_SUPPORT_ADD,
+    removeBtn: 'sysadm_support_remove_btn',
+    removeCb: CB.SYSADM_SUPPORT_REMOVE,
   });
 }
 
@@ -152,24 +161,20 @@ export async function showGrantRoleMenu(ctx, cid) {
 
 export async function showPlatformTechSupportList(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const kv = ctx.globalKv || ctx.kv;
-  if (!kv) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
+  if (!ctx.db) return send(ctx, cid, t(lg, 'sysadm_kv_error'));
   let agents = [];
-  try { agents = await getTechnicalSupportAgents(kv); } catch {}
-  const text = agents.length
-    ? `🔧 <b>${t(lg, 'sysadm_tech_support_agents')}</b> (${agents.length})\n\n` +
-      agents.map(id => `• <code>${id}</code>`).join('\n')
-    : `🔧 <b>${t(lg, 'sysadm_tech_support_agents')}</b>\n\n${t(lg, 'sysadm_tech_support_no_agents')}`;
-  const rows = [];
-  rows.push([{ text: t(lg, 'sysadm_tech_support_add_btn'), callback_data: CB.SYSADM_TECH_SUPPORT_ADD }]);
-  for (const agentId of agents) {
-    rows.push([{ text: `${t(lg, 'sysadm_tech_support_remove_btn')} ${agentId}`, callback_data: CB.SYSADM_TECH_SUPPORT_REMOVE + agentId }]);
-  }
-  rows.push([{ text: t(lg, 'back'), callback_data: CB.SYSADM_MAIN }]);
-  await send(ctx, cid, text, { reply_markup: { inline_keyboard: rows } });
+  try { agents = await getTechnicalSupportAgents(ctx); } catch {}
+  await renderPlatformAgentList(ctx, cid, lg, agents, {
+    icon: '🔧',
+    titleKey: 'sysadm_tech_support_agents',
+    noAgentsKey: 'sysadm_tech_support_no_agents',
+    addBtn: 'sysadm_tech_support_add_btn',
+    addCb: CB.SYSADM_TECH_SUPPORT_ADD,
+    removeBtn: 'sysadm_tech_support_remove_btn',
+    removeCb: CB.SYSADM_TECH_SUPPORT_REMOVE,
+  });
 }
 
-/** Показать ссылки на веб-админку и биллинг (для создателя/админа платформы). */
 export async function showPlatformLinks(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const base = ctx.baseUrl || '';

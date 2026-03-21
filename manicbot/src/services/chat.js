@@ -22,6 +22,11 @@ export async function clearChatHistory(ctx, cid) {
   await kvDel(ctx, `chat:${cid}`);
 }
 
+// ⚠️  Намеренно используется прямой ctx.kv вместо kvGet/kvPut.
+// Причина: язык хранится как plain string ("ru", "uk", "pl"), а kvGet/kvPut
+// работают с JSON-форматом (сохраняют/читают через JSON.stringify/parse).
+// Смена на kvPut сломала бы существующие записи (plain "ru" ≠ JSON '"ru"').
+// При полной миграции хранилища — можно заменить, но нужна data-migration.
 export async function getLang(ctx, cid) {
   try { return (await ctx.kv.get(`${ctx.prefix}lang:${cid}`)) || null; }
   catch { return null; }

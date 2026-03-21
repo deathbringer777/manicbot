@@ -1,17 +1,17 @@
 /**
  * Stripe webhook handler: verify signature, idempotency, update tenant billing state.
- * Events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed.
+ * Idempotency (stripe:evt:{eventId}) stays in KV (TTL 7 days).
+ * stripe_customer:{customerId} → D1 stripe_customers table.
  */
 
 import { updateTenantBilling } from './storage.js';
 import { mapStripeStatusToBilling } from './stripe.js';
 import { GRACE_DURATION_MS } from './config.js';
+import { dbGet, dbRun } from '../utils/db.js';
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
-const STRIPE_CUSTOMER_PREFIX = 'stripe_customer:';
-const EVT_TTL = 86400 * 7; // 7 days idempotency
+const EVT_TTL = 86400 * 7;
 
-/** Stripe signature format: "t=timestamp,v1=hexsig". Verify HMAC-SHA256(secret, "timestamp.payload") === v1. */
 export async function verifyStripeSignature(payload, signature, secret) {
   if (!secret || !signature) return false;
   const parts = {};
@@ -36,10 +36,10 @@ export async function verifyStripeSignature(payload, signature, secret) {
   return expectedHex === v1.toLowerCase();
 }
 
-async function resolveTenantIdByCustomer(kv, customerId) {
-  if (!customerId) return null;
-  const tenantId = await kv.get(STRIPE_CUSTOMER_PREFIX + customerId, 'text');
-  return tenantId || null;
+async function resolveTenantIdByCustomer(ctx, customerId) {
+  if (!customerId || !ctx?.db) return null;
+  const row = await dbGet(ctx, 'SELECT tenant_id FROM stripe_customers WHERE customer_id = ?', customerId);
+  return row?.tenant_id || null;
 }
 
 function subscriptionToBillingUpdates(sub) {
@@ -58,8 +58,9 @@ function subscriptionToBillingUpdates(sub) {
   };
 }
 
-export async function handleStripeWebhook(kv, payload, signature, webhookSecret) {
-  if (!kv || !payload || !webhookSecret) return { ok: false, status: 400 };
+export async function handleStripeWebhook(ctx, payload, signature, webhookSecret) {
+  if (!ctx?.db || !payload || !webhookSecret) return { ok: false, status: 400 };
+  const kv = ctx.kv || ctx.globalKv;
   const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
   if (!(await verifyStripeSignature(raw, signature, webhookSecret))) {
     return { ok: false, status: 401 };
@@ -71,7 +72,11 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
     return { ok: false, status: 400 };
   }
   const eventId = body.id;
-  if (eventId) {
+  if (eventId && kv) {
+    // ⚠️  Намеренно используется прямой kv (без tenant-prefix и без kvGet/kvPut).
+    // Stripe-события глобальны: один webhook от Stripe может относиться к любому
+    // тенанту, поэтому дедупликация хранится в глобальном пространстве KV без префикса.
+    // Использование kvGet/kvPut добавило бы tenant-prefix и сломало бы dedup.
     const seen = await kv.get(STRIPE_EVT_PREFIX + eventId, 'text');
     if (seen) return { ok: true, status: 200, skipped: true };
     await kv.put(STRIPE_EVT_PREFIX + eventId, '1', { expirationTtl: EVT_TTL });
@@ -93,12 +98,12 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
         updates.graceEndsAt = null;
       }
       if (session.customer_email) updates.billingEmail = session.customer_email;
-      await updateTenantBilling(kv, tenantId, updates);
+      await updateTenantBilling(ctx, tenantId, updates);
       if (customerId) {
-        await kv.put(STRIPE_CUSTOMER_PREFIX + customerId, tenantId);
-      }
-      if (session.subscription) {
-        await kv.put('tenant_sub_by_sub:' + session.subscription, tenantId);
+        await dbRun(ctx,
+          'INSERT OR REPLACE INTO stripe_customers (customer_id, tenant_id) VALUES (?, ?)',
+          customerId, tenantId,
+        );
       }
     }
   }
@@ -106,11 +111,7 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
   if (type === 'customer.subscription.updated' || type === 'customer.subscription.deleted') {
     const sub = body.data?.object;
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
-    let tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(kv, customerId);
-    if (!tenantId) {
-      const subs = await kv.get('tenant_sub_by_sub:' + sub.id, 'text');
-      if (subs) tenantId = subs;
-    }
+    let tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(ctx, customerId);
     if (tenantId) {
       const updates = subscriptionToBillingUpdates(sub);
       if (type === 'customer.subscription.deleted') {
@@ -122,8 +123,7 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
         updates.nextPaymentDate = null;
         updates.cancelAtPeriodEnd = false;
       }
-      await updateTenantBilling(kv, tenantId, updates);
-      await kv.put('tenant_sub_by_sub:' + sub.id, tenantId);
+      await updateTenantBilling(ctx, tenantId, updates);
     }
   }
 
@@ -132,10 +132,9 @@ export async function handleStripeWebhook(kv, payload, signature, webhookSecret)
     const subscriptionId = invoice.subscription;
     const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
     if (subscriptionId) {
-      let tenantId = await kv.get('tenant_sub_by_sub:' + subscriptionId, 'text');
-      if (!tenantId) tenantId = await resolveTenantIdByCustomer(kv, customerId);
+      let tenantId = await resolveTenantIdByCustomer(ctx, customerId);
       if (tenantId) {
-        await updateTenantBilling(kv, tenantId, {
+        await updateTenantBilling(ctx, tenantId, {
           billingStatus: 'grace_period',
           subscriptionStatus: 'past_due',
           graceEndsAt: Date.now() + GRACE_DURATION_MS,

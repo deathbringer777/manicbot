@@ -7,14 +7,30 @@ routes = [
   { pattern = "www.manicbot.com", custom_domain = true },
 ]
 
-# Optional: set via wrangler secret put STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-# and vars or secrets: STRIPE_PRICE_START_MONTHLY, STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_STUDIO_MONTHLY
+# ─── Публичные переменные окружения ─────────────────────────────────────────
 [vars]
 APP_BASE_URL = "https://manicbot.com"
 # Landing (Cloudflare Pages)
 LANDING_URL = "https://manicbot-landing.pages.dev"
-# Создатель платформы (полный доступ к панели): твой Telegram chat_id
+
+# ⚠️  ВНИМАНИЕ: ADMIN_CHAT_ID — это Telegram chat_id создателя платформы.
+# Даёт ПОЛНЫЙ доступ к системной панели. В идеале выносить в секрет:
+#   wrangler secret put ADMIN_CHAT_ID
+# Пока оставлен в vars для совместимости, но значение не является секретом API.
 ADMIN_CHAT_ID = "321706035"
+
+# ─── Секреты (задаются через wrangler secret put, НЕ хранятся в этом файле) ─
+# Следующие переменные ОБЯЗАТЕЛЬНО должны быть установлены как секреты:
+#
+#   wrangler secret put STRIPE_SECRET_KEY          # sk_live_...
+#   wrangler secret put STRIPE_WEBHOOK_SECRET      # whsec_...
+#   wrangler secret put STRIPE_PRICE_START_MONTHLY # price_...
+#   wrangler secret put STRIPE_PRICE_PRO_MONTHLY   # price_...
+#   wrangler secret put STRIPE_PRICE_STUDIO_MONTHLY# price_...
+#   wrangler secret put CLOUDFLARE_ACCOUNT_ID
+#
+# Без STRIPE_SECRET_KEY и STRIPE_WEBHOOK_SECRET Stripe webhooks вернут 400/401.
+# Без STRIPE_PRICE_* кнопки оплаты не будут отображаться (canCheckout = false).
 
 # CLOUDFLARE_ACCOUNT_ID should be set as a secret: wrangler secret put CLOUDFLARE_ACCOUNT_ID
 
@@ -24,6 +40,11 @@ crons = ["*/15 * * * *"]
 [[kv_namespaces]]
 binding = "MANICBOT"
 id = "62a7d16805e742918a82184e879537cc"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "manicbot-db"
+database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 
 [ai]
 binding = "AI"

@@ -61,7 +61,7 @@ async function showGoogleCalendarPanel(
 
   const lines = [`📅 <b>${t(lg, 'mst_calendar')}</b>`];
   if (notice) lines.push('', notice);
-  lines.push('', scope === 'tenant' ? 'Scope: salon' : 'Scope: master');
+  lines.push('', scope === 'tenant' ? t(lg, 'gcal_scope_salon') : t(lg, 'gcal_scope_master'));
 
   if (integration) {
     lines.push(`${t(lg, 'mst_calendar_status_on')}: <code>${escHtml(integration.calendarSummary || integration.calendarId)}</code>`);
@@ -69,20 +69,20 @@ async function showGoogleCalendarPanel(
       lines.push(`👤 Google: <code>${escHtml(integration.providerAccountEmail)}</code>`);
     }
     if (integration.watchExpiration && integration.watchExpiration > Date.now()) {
-      lines.push(`🛰 Watch: ${escHtml(fmtAuditTs(integration.watchExpiration) || 'active')}`);
+      lines.push(fill(t(lg, 'gcal_watch_active'), { date: escHtml(fmtAuditTs(integration.watchExpiration) || '') }));
     }
     if (integration.lastSyncAt) {
       const suffix = integration.lastSyncStatus && integration.lastSyncStatus !== 'ok'
         ? ` (${escHtml(integration.lastSyncStatus)})`
         : '';
-      lines.push(`🔄 Sync: ${escHtml(fmtAuditTs(integration.lastSyncAt) || '')}${suffix}`);
+      lines.push(fill(t(lg, 'gcal_sync_time'), { time: escHtml(fmtAuditTs(integration.lastSyncAt) || '') }) + suffix);
     }
     if (integration.lastSyncError) {
       lines.push(`⚠️ ${escHtml(integration.lastSyncError)}`);
     }
   } else if (legacyConnected) {
     lines.push(`${t(lg, 'mst_calendar_status_on')}: <code>${escHtml(master.googleCalendarId)}</code>`);
-    lines.push('↩️ Legacy service-account mode');
+    lines.push(t(lg, 'gcal_legacy_mode'));
   } else {
     lines.push(t(lg, 'mst_calendar_status_off'));
   }
@@ -97,13 +97,13 @@ async function showGoogleCalendarPanel(
 
   const rows = [];
   if (connectUrl) {
-    rows.push([{ text: '🔗 Google OAuth', url: connectUrl }]);
+    rows.push([{ text: t(lg, 'gcal_oauth_btn'), url: connectUrl }]);
   }
   if (integration) {
-    rows.push([{ text: '🔄 Sync now', callback_data: scope === 'tenant' ? CB.ADM_CALENDAR_RESYNC : CB.MST_CALENDAR_RESYNC }]);
+    rows.push([{ text: t(lg, 'gcal_sync_now_btn'), callback_data: scope === 'tenant' ? CB.ADM_CALENDAR_RESYNC : CB.MST_CALENDAR_RESYNC }]);
   }
   if (scope === 'master' && ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    rows.push([{ text: '↩️ Manual Calendar ID', callback_data: CB.MST_CALENDAR_SET }]);
+    rows.push([{ text: t(lg, 'gcal_manual_id_btn'), callback_data: CB.MST_CALENDAR_SET }]);
   }
   if (integration || legacyConnected) {
     rows.push([{ text: t(lg, 'mst_calendar_clear_btn'), callback_data: scope === 'tenant' ? CB.ADM_CALENDAR_CLEAR : CB.MST_CALENDAR_CLEAR }]);

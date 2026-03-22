@@ -185,28 +185,51 @@ export async function deleteCalendarEvent(ctx, calendarId, eventId) {
 /**
  * Build a Google Calendar event object from an appointment.
  * @param {object} apt - appointment
- * @param {object} svc - service object {e, id, dur}
- * @param {object} salon - salon info {name, address}
+ * @param {object} svc - service object {e, id, dur, price, names}
+ * @param {object} salon - salon info {name, address, phone}
  * @param {string} timezone - IANA timezone string
+ * @param {object} [extra] - { masterName, svcDisplayName, currency }
  * @returns {object} Google Calendar event
  */
-export function buildCalendarEvent(apt, svc, salon, timezone = 'Europe/Warsaw') {
+export function buildCalendarEvent(apt, svc, salon, timezone = 'Europe/Warsaw', extra = {}) {
   const [h, m] = apt.time.split(':').map(Number);
   const durMin = svc?.dur || 60;
   const endMinutes = h * 60 + m + durMin;
   const endH = String(Math.floor(endMinutes / 60)).padStart(2, '0');
   const endM = String(endMinutes % 60).padStart(2, '0');
 
-  const svcLabel = svc ? `${svc.e || ''} ${svc.id}`.trim() : apt.svcId;
+  const svcDisplayName = extra.svcDisplayName
+    || (svc?.names?.ru ? `${svc.e || ''} ${svc.names.ru}`.trim() : null)
+    || (svc ? `${svc.e || ''} ${svc.id}`.trim() : apt.svcId);
+
+  const currency = extra.currency || salon?.currency || 'PLN';
+  const masterName = extra.masterName || null;
+
+  // Summary: "💅 Маникюр классический — Анна" or "💅 Маникюр — Анна (Мастер: Коля)"
+  let summary = `${svcDisplayName} — ${apt.userName}`;
+  if (masterName) summary += ` (${masterName})`;
+
+  // Rich description
+  const desc = [];
+  desc.push(`👤 Клиент: ${apt.userName}`);
+  if (apt.userPhone) desc.push(`📱 Телефон: ${apt.userPhone}`);
+  if (apt.userTg) desc.push(`💬 Telegram: https://t.me/${apt.userTg.replace(/^@/, '')}`);
+  desc.push('');
+  desc.push(`💅 Услуга: ${svcDisplayName}`);
+  desc.push(`⏱ Длительность: ${durMin} мин`);
+  if (svc?.price != null && svc.price > 0) desc.push(`💰 Цена: ${svc.price} ${currency}`);
+  if (masterName) desc.push(`🧑‍🎨 Мастер: ${masterName}`);
+  desc.push('');
+  if (salon?.name) desc.push(`🏠 ${salon.name}`);
+  if (salon?.address) desc.push(`📍 ${salon.address}`);
+  if (salon?.phone) desc.push(`📞 ${salon.phone}`);
+  desc.push('');
+  desc.push(`🆔 ID: ${apt.id || '—'}`);
+  desc.push(`📋 Статус: ${apt.status || 'confirmed'}`);
+
   return {
-    summary: `${svcLabel} — ${apt.userName}`,
-    description: [
-      `Клиент: ${apt.userName}`,
-      apt.userPhone ? `Телефон: ${apt.userPhone}` : null,
-      apt.userTg   ? `Telegram: @${apt.userTg}` : null,
-      `Услуга: ${svcLabel}`,
-      apt.id ? `ID записи: ${apt.id}` : null,
-    ].filter(Boolean).join('\n'),
+    summary,
+    description: desc.join('\n'),
     start: { dateTime: `${apt.date}T${apt.time}:00`, timeZone: timezone },
     end:   { dateTime: `${apt.date}T${endH}:${endM}:00`, timeZone: timezone },
     location: salon?.address || '',
@@ -214,5 +237,6 @@ export function buildCalendarEvent(apt, svc, salon, timezone = 'Europe/Warsaw') 
       title: salon?.name || 'ManicBot',
       url: 'https://manicbot.com',
     },
+    colorId: '6', // tangerine — stands out in Google Calendar
   };
 }

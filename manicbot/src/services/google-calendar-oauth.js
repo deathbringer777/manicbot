@@ -129,6 +129,10 @@ async function ensureGoogleCalendarSchema(ctx) {
   try {
     await dbRun(ctx, 'ALTER TABLE appointments ADD COLUMN google_integration_id TEXT');
   } catch {}
+  // Add description/location columns to busy_blocks for richer metadata
+  try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN description TEXT'); } catch {}
+  try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN location TEXT'); } catch {}
+  try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN creator TEXT'); } catch {}
   ctx._gcalSchemaReady = true;
 }
 
@@ -379,6 +383,9 @@ function mapEventToBusyBlock(integration, event) {
     calendarId: integration.calendarId,
     externalEventId: event.id,
     summary: event.summary || null,
+    description: event.description || null,
+    location: event.location || null,
+    creator: event.creator?.email || event.organizer?.email || null,
     startTs,
     endTs,
     updatedAt: nowTs(),
@@ -390,14 +397,17 @@ async function persistBusyBlocks(ctx, integration, blocks) {
   for (const block of blocks) {
     await dbRun(ctx,
       `INSERT OR REPLACE INTO google_busy_blocks
-        (id, integration_id, tenant_id, calendar_id, external_event_id, summary, start_ts, end_ts, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, integration_id, tenant_id, calendar_id, external_event_id, summary, description, location, creator, start_ts, end_ts, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       block.id,
       block.integrationId,
       block.tenantId,
       block.calendarId,
       block.externalEventId,
       block.summary,
+      block.description,
+      block.location,
+      block.creator,
       block.startTs,
       block.endTs,
       block.updatedAt,
@@ -833,10 +843,43 @@ export async function loadExternalBusyBlocks(ctx, date, masterId = null) {
         startTs: row.start_ts,
         endTs: row.end_ts,
         summary: row.summary,
+        description: row.description || null,
+        location: row.location || null,
+        creator: row.creator || null,
+        source: 'google_calendar',
       });
     }
   }
   return result;
+}
+
+/**
+ * Load Google Calendar events for admin panel display.
+ * Returns busy blocks for the given date range, formatted for UI.
+ */
+export async function loadGoogleCalendarEvents(ctx, dateFrom, dateTo) {
+  await ensureGoogleCalendarSchema(ctx);
+  if (!ctx?.db || !ctx?.tenantId) return [];
+  const { warsawToUTC } = await import('../utils/date.js');
+  const [yf, mf, df] = dateFrom.split('-').map(Number);
+  const [yt, mt, dt2] = dateTo.split('-').map(Number);
+  const startTs = warsawToUTC(yf, mf, df, 0, 0).getTime();
+  const endTs = warsawToUTC(yt, mt, dt2 + 1, 0, 0).getTime();
+  const rows = await dbAll(ctx,
+    'SELECT * FROM google_busy_blocks WHERE tenant_id = ? AND start_ts < ? AND end_ts > ? ORDER BY start_ts',
+    ctx.tenantId, endTs, startTs,
+  );
+  return rows.map(row => ({
+    externalEventId: row.external_event_id,
+    summary: row.summary || '(без названия)',
+    description: row.description || null,
+    location: row.location || null,
+    creator: row.creator || null,
+    startTs: row.start_ts,
+    endTs: row.end_ts,
+    calendarId: row.calendar_id,
+    source: 'google_calendar',
+  }));
 }
 
 async function resolveCalendarTarget(ctx, apt) {
@@ -863,7 +906,17 @@ export async function syncAppointmentCalendar(ctx, apt) {
   const target = await resolveCalendarTarget(ctx, apt);
   if (!target) return { ok: false, skipped: 'not_connected' };
   const service = ctx.svc?.find(s => s.id === apt.svcId);
-  const event = buildCalendarEvent(apt, service, ctx.tenant?.salon, ctx.tenant?.salon?.timezone || 'Europe/Warsaw');
+  const masterId = apt?.masterId || apt?.confirmedBy || null;
+  let masterName = null;
+  if (masterId != null) {
+    const master = await getMaster(ctx, masterId);
+    masterName = master?.name || null;
+  }
+  const salon = ctx.tenant?.salon;
+  const event = buildCalendarEvent(apt, service, salon, salon?.timezone || 'Europe/Warsaw', {
+    masterName,
+    currency: salon?.currency || 'PLN',
+  });
 
   if (target.type === 'oauth') {
     if (apt.googleEventId && apt.googleIntegrationId === target.integration.id) {

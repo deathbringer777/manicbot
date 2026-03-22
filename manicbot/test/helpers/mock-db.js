@@ -17,7 +17,14 @@ export function createMockD1() {
   }
 
   function matchesWhere(row, conditions) {
-    for (const [key, op, value] of conditions) {
+    for (const cond of conditions) {
+      if (cond[0] === '__OR__') {
+        const leftMatch = matchesWhere(row, cond[1]);
+        const rightMatch = matchesWhere(row, cond[2]);
+        if (!leftMatch && !rightMatch) return false;
+        continue;
+      }
+      const [key, op, value] = cond;
       const rv = row[key];
       if (op === '=') { if (rv !== value) return false; }
       else if (op === '!=') { if (rv === value) return false; }
@@ -134,6 +141,21 @@ export function createMockD1() {
           conditions.push([cmpNum[1], cmpNum[2], parseInt(cmpNum[3], 10)]);
           continue;
         }
+        // OR support: (col1 = ? OR col2 = ?)
+        const orMatch = trimmed.match(/^(.+?)\s+OR\s+(.+)$/i);
+        if (orMatch) {
+          const leftConds = this._buildWhereConditions(orMatch[1].replace(/^\(|\)$/g, ''), params.slice(pIdx));
+          let leftParams = 0;
+          for (const c of leftConds) if (c[1] !== 'IS NULL' && c[1] !== 'IS NOT NULL' && c[1] !== 'IN') leftParams++;
+            else if (c[1] === 'IN') leftParams += c[2].length;
+          const rightConds = this._buildWhereConditions(orMatch[2].replace(/^\(|\)$/g, ''), params.slice(pIdx + leftParams));
+          let rightParams = 0;
+          for (const c of rightConds) if (c[1] !== 'IS NULL' && c[1] !== 'IS NOT NULL' && c[1] !== 'IN') rightParams++;
+            else if (c[1] === 'IN') rightParams += c[2].length;
+          conditions.push(['__OR__', leftConds, rightConds]);
+          pIdx += leftParams + rightParams;
+          continue;
+        }
       }
       return conditions;
     }
@@ -144,8 +166,9 @@ export function createMockD1() {
       const rows = getTable(parsed.table);
       const conditions = this._buildWhereConditions(parsed.whereClause, this._params);
       const filtered = rows.filter(r => matchesWhere(r, conditions));
-      if (parsed.cols.trim() === 'COUNT(*)') {
-        return { 'COUNT(*)': filtered.length };
+      if (/^COUNT\(\*\)/i.test(parsed.cols.trim())) {
+        const alias = parsed.cols.match(/\s+AS\s+(\w+)$/i)?.[1];
+        return alias ? { [alias]: filtered.length } : { 'COUNT(*)': filtered.length };
       }
       return filtered[0] || null;
     }
@@ -169,8 +192,9 @@ export function createMockD1() {
         }
       }
       if (parsed.limit != null) filtered = filtered.slice(0, parsed.limit);
-      if (parsed.cols.trim() === 'COUNT(*)') {
-        return { results: [{ 'COUNT(*)': filtered.length }] };
+      if (/^COUNT\(\*\)/i.test(parsed.cols.trim())) {
+        const alias = parsed.cols.match(/\s+AS\s+(\w+)$/i)?.[1];
+        return { results: [alias ? { [alias]: filtered.length } : { 'COUNT(*)': filtered.length }] };
       }
       return { results: filtered };
     }

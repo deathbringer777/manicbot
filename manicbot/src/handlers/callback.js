@@ -8,7 +8,7 @@ import { getState, setState, clearState, checkRateLimit } from '../services/stat
 import { getLang, setLang } from '../services/chat.js';
 import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMaster, saveMaster, deleteMaster, blockUser, unblockUser, listMasters, isPlatformAdmin, getRole } from '../services/users.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos } from '../services/services.js';
-import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt } from '../services/appointments.js';
+import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, resetHumanRequestCount, buildTicketInternalNote } from '../services/tickets.js';
 import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
@@ -23,7 +23,94 @@ import { makeICS } from '../utils/ics.js';
 import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList, showPlatformLinks, showGrantRoleMenu, showPlatformTechSupportList } from '../ui/sysadmin.js';
 import { addSupport, removeSupport, addTechnicalSupport, removeTechnicalSupport } from '../admin/provisioning.js';
 import { getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent, removeTenantSupportAgent } from '../roles/roles.js';
-import { createCalendarEvent, deleteCalendarEvent, buildCalendarEvent } from '../services/calendar.js';
+import {
+  createGoogleConnectUrl,
+  getGoogleIntegration,
+  revokeGoogleIntegration,
+  syncAppointmentCalendar,
+  syncGoogleIntegrationNow,
+} from '../services/google-calendar-oauth.js';
+
+function fmtAuditTs(ts) {
+  if (!ts) return null;
+  return new Date(ts).toISOString().slice(0, 16).replace('T', ' ');
+}
+
+async function showGoogleCalendarPanel(
+  ctx,
+  cid,
+  lg,
+  { scope = 'master', masterChatId = cid, backCb = CB.MST_MAIN, notice = null } = {},
+) {
+  if (scope === 'tenant' && (!ctx?.db || !ctx?.tenantId)) {
+    return send(ctx, cid, t(lg, 'adm_settings_no_tenant'));
+  }
+
+  const integration = await getGoogleIntegration(ctx, {
+    scope,
+    masterChatId: scope === 'master' ? masterChatId : null,
+  });
+  const master = scope === 'master' ? (await getMaster(ctx, masterChatId) || {}) : null;
+  const legacyConnected = !!(scope === 'master' && master?.googleCalendarId && master?.calendarEnabled);
+  const connectUrl = await createGoogleConnectUrl(ctx, {
+    scope,
+    actorChatId: cid,
+    masterChatId: scope === 'master' ? masterChatId : null,
+  });
+
+  const lines = [`📅 <b>${t(lg, 'mst_calendar')}</b>`];
+  if (notice) lines.push('', notice);
+  lines.push('', scope === 'tenant' ? 'Scope: salon' : 'Scope: master');
+
+  if (integration) {
+    lines.push(`${t(lg, 'mst_calendar_status_on')}: <code>${escHtml(integration.calendarSummary || integration.calendarId)}</code>`);
+    if (integration.providerAccountEmail) {
+      lines.push(`👤 Google: <code>${escHtml(integration.providerAccountEmail)}</code>`);
+    }
+    if (integration.watchExpiration && integration.watchExpiration > Date.now()) {
+      lines.push(`🛰 Watch: ${escHtml(fmtAuditTs(integration.watchExpiration) || 'active')}`);
+    }
+    if (integration.lastSyncAt) {
+      const suffix = integration.lastSyncStatus && integration.lastSyncStatus !== 'ok'
+        ? ` (${escHtml(integration.lastSyncStatus)})`
+        : '';
+      lines.push(`🔄 Sync: ${escHtml(fmtAuditTs(integration.lastSyncAt) || '')}${suffix}`);
+    }
+    if (integration.lastSyncError) {
+      lines.push(`⚠️ ${escHtml(integration.lastSyncError)}`);
+    }
+  } else if (legacyConnected) {
+    lines.push(`${t(lg, 'mst_calendar_status_on')}: <code>${escHtml(master.googleCalendarId)}</code>`);
+    lines.push('↩️ Legacy service-account mode');
+  } else {
+    lines.push(t(lg, 'mst_calendar_status_off'));
+  }
+
+  if (!connectUrl) {
+    if (!ctx?.db || !ctx?.tenantId) {
+      lines.push('ℹ️ OAuth mode works in D1 multi-tenant mode.');
+    } else {
+      lines.push('ℹ️ Configure GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET to enable OAuth.');
+    }
+  }
+
+  const rows = [];
+  if (connectUrl) {
+    rows.push([{ text: '🔗 Google OAuth', url: connectUrl }]);
+  }
+  if (integration) {
+    rows.push([{ text: '🔄 Sync now', callback_data: scope === 'tenant' ? CB.ADM_CALENDAR_RESYNC : CB.MST_CALENDAR_RESYNC }]);
+  }
+  if (scope === 'master' && ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    rows.push([{ text: '↩️ Manual Calendar ID', callback_data: CB.MST_CALENDAR_SET }]);
+  }
+  if (integration || legacyConnected) {
+    rows.push([{ text: t(lg, 'mst_calendar_clear_btn'), callback_data: scope === 'tenant' ? CB.ADM_CALENDAR_CLEAR : CB.MST_CALENDAR_CLEAR }]);
+  }
+  rows.push([{ text: t(lg, 'back'), callback_data: backCb }]);
+
+  return send(ctx, cid, lines.join('\n'), { reply_markup: { inline_keyboard: rows } });
+}
 
 export async function onCb(ctx, cb) {
   if (!cb?.message?.chat?.id || !cb?.from || !cb?.data) return;
@@ -120,10 +207,10 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.TICKET_TAKE)) {
     const suffix = d.slice(CB.TICKET_TAKE.length);
-    if (suffix.startsWith('tk_') && ctx.globalKv) {
+    if (suffix.startsWith('tk_') && ctx.db) {
       const role = await getRole(ctx, cid);
       if (role !== 'support' && role !== 'admin' && role !== 'system_admin') return;
-      const result = await claimTicket(ctx.globalKv, suffix, cid);
+      const result = await claimTicket(ctx, suffix, cid);
       if (result.ok) {
         const clientCid = result.ticket.clientChatId;
         // Set up local ticket routing so message forwarding works
@@ -199,8 +286,8 @@ export async function onCb(ctx, cb) {
     const closeRole = await getRole(ctx, cid);
     if (!ticket || (ticket.masterCid !== cid && !(await isAdmin(ctx, cid)) && closeRole !== 'technical_support' && closeRole !== 'system_admin')) return;
     // Also close the global platform ticket if linked
-    if (ticket.globalTicketId && ctx.globalKv) {
-      try { await closeTicket(ctx.globalKv, ticket.globalTicketId); } catch (_) {}
+    if (ticket.globalTicketId && ctx.db) {
+      try { await closeTicket(ctx, ticket.globalTicketId); } catch (_) {}
     }
     await clearTicket(ctx, clientCid);
     const clg = await getLang(ctx, clientCid) || 'ru';
@@ -281,8 +368,8 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.SYSADM_SUPPORT_REMOVE)) {
     if (!(await isPlatformAdmin(ctx, cid))) return noAccessMsg();
     const agentChatId = d.slice(CB.SYSADM_SUPPORT_REMOVE.length).trim();
-    if (!agentChatId || !ctx.globalKv) return showPlatformSupportList(ctx, cid);
-    await removeSupport(ctx.globalKv, agentChatId);
+    if (!agentChatId || !ctx.db) return showPlatformSupportList(ctx, cid);
+    await removeSupport(ctx, agentChatId);
     await send(ctx, cid, t(lg, 'sysadm_support_removed'));
     return showPlatformSupportList(ctx, cid);
   }
@@ -304,8 +391,8 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.SYSADM_TECH_SUPPORT_REMOVE)) {
     if (!(await isPlatformAdmin(ctx, cid))) return noAccessMsg();
     const agentChatId = d.slice(CB.SYSADM_TECH_SUPPORT_REMOVE.length).trim();
-    if (!agentChatId || !ctx.globalKv) return showPlatformTechSupportList(ctx, cid);
-    await removeTechnicalSupport(ctx.globalKv, agentChatId);
+    if (!agentChatId || !ctx.db) return showPlatformTechSupportList(ctx, cid);
+    await removeTechnicalSupport(ctx, agentChatId);
     await send(ctx, cid, t(lg, 'sysadm_tech_support_removed'));
     return showPlatformTechSupportList(ctx, cid);
   }
@@ -353,6 +440,40 @@ export async function onCb(ctx, cb) {
     return showAdminSettings(ctx, cid);
   }
 
+  if (d === CB.ADM_CALENDAR) {
+    if (!await isAdmin(ctx, cid)) return;
+    if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
+    return showGoogleCalendarPanel(ctx, cid, lg, { scope: 'tenant', backCb: CB.ADM_SETTINGS });
+  }
+
+  if (d === CB.ADM_CALENDAR_RESYNC) {
+    if (!await isAdmin(ctx, cid)) return;
+    if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
+    try {
+      const result = await syncGoogleIntegrationNow(ctx, { scope: 'tenant' });
+      const notice = result.ok
+        ? `✅ Sync complete: ${result.result?.blocks ?? 0} busy events cached.`
+        : '❌ Google Calendar is not connected yet.';
+      return showGoogleCalendarPanel(ctx, cid, lg, { scope: 'tenant', backCb: CB.ADM_SETTINGS, notice });
+    } catch (e) {
+      return showGoogleCalendarPanel(ctx, cid, lg, {
+        scope: 'tenant',
+        backCb: CB.ADM_SETTINGS,
+        notice: `❌ Sync failed: ${escHtml(e.message)}`,
+      });
+    }
+  }
+
+  if (d === CB.ADM_CALENDAR_CLEAR) {
+    if (!await isAdmin(ctx, cid)) return;
+    const removed = await revokeGoogleIntegration(ctx, { scope: 'tenant' });
+    return showGoogleCalendarPanel(ctx, cid, lg, {
+      scope: 'tenant',
+      backCb: CB.ADM_SETTINGS,
+      notice: removed ? t(lg, 'mst_calendar_cleared') : 'ℹ️ Google Calendar was not connected.',
+    });
+  }
+
   if (d === CB.ADM_SETTINGS_NAME || d === CB.ADM_SETTINGS_PHONE || d === CB.ADM_SETTINGS_ADDR || d === CB.ADM_SETTINGS_HOURS) {
     if (!await isAdmin(ctx, cid)) return;
     const stepMap = {
@@ -376,16 +497,16 @@ export async function onCb(ctx, cb) {
 
   if (d === CB.ADM_BILLING) {
     if (!await isAdmin(ctx, cid)) return;
-    if (!ctx.tenantId || !ctx.globalKv) return send(ctx, cid, t(lg, 'billing_no_config'));
+    if (!ctx.tenantId || !ctx.db) return send(ctx, cid, t(lg, 'billing_no_config'));
     return showBillingMenu(ctx, cid, name);
   }
 
   if (d.startsWith(CB.BILLING_SUBSCRIBE)) {
     if (!await isAdmin(ctx, cid)) return;
-    if (!ctx.tenantId || !ctx.globalKv) return send(ctx, cid, t(lg, 'billing_no_config'));
+    if (!ctx.tenantId || !ctx.db) return send(ctx, cid, t(lg, 'billing_no_config'));
     const plan = d.slice(CB.BILLING_SUBSCRIBE.length);
     const baseUrl = ctx.baseUrl || '';
-    const tenant = await getTenant(ctx.globalKv, ctx.tenantId);
+    const tenant = await getTenant(ctx, ctx.tenantId);
     const result = await createCheckoutSession(ctx, {
       tenantId: ctx.tenantId,
       customerId: tenant?.stripeCustomerId || undefined,
@@ -404,8 +525,8 @@ export async function onCb(ctx, cb) {
 
   if (d === CB.BILLING_PORTAL) {
     if (!await isAdmin(ctx, cid)) return;
-    if (!ctx.tenantId || !ctx.globalKv) return send(ctx, cid, t(lg, 'billing_no_config'));
-    const tenant = await getTenant(ctx.globalKv, ctx.tenantId);
+    if (!ctx.tenantId || !ctx.db) return send(ctx, cid, t(lg, 'billing_no_config'));
+    const tenant = await getTenant(ctx, ctx.tenantId);
     if (!tenant?.stripeCustomerId) return send(ctx, cid, t(lg, 'billing_no_config'));
     const baseUrl = ctx.baseUrl || '';
     const result = await createPortalSession(ctx, {
@@ -485,7 +606,7 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.ADM_ASSIGN_M)) {
     if (!await isAdmin(ctx, cid)) return;
     const aptId = d.slice(CB.ADM_ASSIGN_M.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.cx) return;
     const masters = (await listMasters(ctx)).filter(m => !m.onVacation);
     if (!masters.length) return send(ctx, cid, t(lg, 'adm_no_masters'));
@@ -501,12 +622,12 @@ export async function onCb(ctx, cb) {
     const aptId = parts[0];
     const masterId = parseInt(parts[1]);
     if (!aptId || !masterId) return;
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.cx) return;
     const master = await getMaster(ctx, masterId);
     if (!master) return;
     apt.masterId = masterId;
-    await kvPut(ctx, `ap:${aptId}`, apt);
+    await updateApt(ctx, aptId, { masterId });
     // Notify the assigned master
     const mlg = await getLang(ctx, masterId) || 'ru';
     const s = ctx.svc.find(x => x.id === apt.svcId);
@@ -619,7 +740,7 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.ADM_CANCEL_SKIP)) {
     if (!await canManageApt(ctx, cid)) return;
     const aptId = d.slice(CB.ADM_CANCEL_SKIP.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.cx) { await clearState(ctx, cid); return; }
     const cancelled = await cancelApt(ctx, apt.id, cid, true);
     await clearState(ctx, cid);
@@ -662,31 +783,18 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.APT_CONFIRM)) {
     if (!await canManageApt(ctx, cid)) return;
     const aptId = d.slice(CB.APT_CONFIRM.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'confirmed';
     apt.confirmedBy = cid;
-    // If no master was pre-assigned, the confirming master claims the appointment
     if (!apt.masterId) apt.masterId = cid;
-    await kvPut(ctx, `ap:${aptId}`, apt);
+    await updateApt(ctx, aptId, { status: 'confirmed', confirmedBy: cid, masterId: apt.masterId });
     await sendAptConfirmedToClient(ctx, apt);
-    // Google Calendar: create event if master has calendar connected
-    if (canUse(ctx, 'calendar') && ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    if (canUse(ctx, 'calendar')) {
       try {
-        const masterId = apt.masterId || cid;
-        const master = await getMaster(ctx, masterId);
-        if (master?.googleCalendarId && master?.calendarEnabled) {
-          const svcObj = ctx.svc?.find(s => s.id === apt.svcId);
-          const event = buildCalendarEvent(apt, svcObj, ctx.tenant?.salon, ctx.tenant?.salon?.timezone || 'Europe/Warsaw');
-          const created = await createCalendarEvent(ctx, master.googleCalendarId, event);
-          if (created?.id) {
-            apt.googleEventId = created.id;
-            apt.googleCalendarId = master.googleCalendarId;
-            await kvPut(ctx, `ap:${aptId}`, apt);
-          }
-        }
+        await syncAppointmentCalendar(ctx, apt);
       } catch (e) {
-        console.error('Calendar event creation failed:', e.message);
+        console.error('Calendar event sync failed:', e.message);
       }
     }
     return send(ctx, cid, fill(t(lg, 'mst_apt_confirmed'), { client: escHtml(apt.userName), dt: fmtDT(lg, apt.date, apt.time) }));
@@ -695,7 +803,7 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.APT_REJECT) && !d.startsWith(CB.APT_REJECT_SKIP)) {
     if (!await canManageApt(ctx, cid)) return;
     const aptId = d.slice(CB.APT_REJECT.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     await setState(ctx, cid, { step: STEP.REJECT_COMMENT, aptId });
     return send(ctx, cid, t(lg, 'mst_reject_prompt'), { reply_markup: { inline_keyboard: [
@@ -706,10 +814,10 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.APT_REJECT_SKIP)) {
     if (!await canManageApt(ctx, cid)) return;
     const aptId = d.slice(CB.APT_REJECT_SKIP.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'rejected';
-    await kvPut(ctx, `ap:${aptId}`, apt);
+    await updateApt(ctx, aptId, { status: 'rejected' });
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
     let clientMsg = fill(t(clg, 'apt_rejected'), { svc: svcName(ctx, clg, apt.svcId), dt: fmtDT(clg, apt.date, apt.time) });
@@ -724,7 +832,7 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.APT_COUNTER) && !d.startsWith(CB.APT_COUNTER_SKIP)) {
     if (!await canManageApt(ctx, cid)) return;
     const aptId = d.slice(CB.APT_COUNTER.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     await setState(ctx, cid, { step: STEP.COUNTER_TIME, aptId });
     return send(ctx, cid, t(lg, 'mst_counter_time'));
@@ -735,13 +843,13 @@ export async function onCb(ctx, cb) {
     const aptId = d.slice(CB.APT_COUNTER_SKIP.length);
     const st = await getState(ctx, cid);
     if (st.step !== STEP.COUNTER_COMMENT || st.aptId !== aptId) return;
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'counter_offer';
     apt.counterTime = st.newTime;
     apt.counterComment = null;
     apt.confirmedBy = cid;
-    await kvPut(ctx, `ap:${aptId}`, apt);
+    await updateApt(ctx, aptId, { status: 'counter_offer', counterTime: st.newTime, counterComment: null, confirmedBy: cid });
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
     await send(ctx, apt.chatId, fill(t(clg, 'apt_counter'), { svc: svcName(ctx, clg, apt.svcId), d: fmtDate(clg, apt.date), newtime: st.newTime }), { reply_markup: { inline_keyboard: [
@@ -754,7 +862,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.APT_ACCEPT)) {
     const aptId = d.slice(CB.APT_ACCEPT.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.status !== 'counter_offer' || apt.chatId !== cid) return;
     const newTime = apt.counterTime;
     apt.time = newTime;
@@ -762,8 +870,15 @@ export async function onCb(ctx, cb) {
     const [h, mi] = newTime.split(':').map(Number);
     apt.ts = warsawToUTC(y, mo, dd, h, mi).getTime();
     apt.status = 'confirmed';
-    await kvPut(ctx, `ap:${aptId}`, apt);
+    await updateApt(ctx, aptId, { status: 'confirmed', time: newTime, ts: apt.ts });
     await sendAptConfirmedToClient(ctx, apt);
+    if (canUse(ctx, 'calendar')) {
+      try {
+        await syncAppointmentCalendar(ctx, apt);
+      } catch (e) {
+        console.error('Calendar event sync after counter-offer failed:', e.message);
+      }
+    }
     if (apt.confirmedBy) {
       const mlg = await getLang(ctx, apt.confirmedBy) || 'ru';
       await send(ctx, apt.confirmedBy, fill(t(mlg, 'mst_client_accepted'), { client: escHtml(apt.userName), newtime: newTime }));
@@ -773,7 +888,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.APT_DECLINE)) {
     const aptId = d.slice(CB.APT_DECLINE.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.chatId !== cid) return;
     await setState(ctx, cid, { step: STEP.CLIENT_REPLY, aptId });
     await send(ctx, cid, t(lg, 'apt_enter_reply'));
@@ -786,7 +901,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.APT_REPLY)) {
     const aptId = d.slice(CB.APT_REPLY.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.chatId !== cid) return;
     await setState(ctx, cid, { step: STEP.CLIENT_REPLY, aptId });
     return send(ctx, cid, t(lg, 'apt_enter_reply'));
@@ -890,22 +1005,44 @@ export async function onCb(ctx, cb) {
   if (d === CB.MST_CALENDAR) {
     if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
     if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
-    const master = await getMaster(ctx, cid) || {};
-    const isOn = master.googleCalendarId && master.calendarEnabled;
-    const statusText = isOn
-      ? `${t(lg, 'mst_calendar_status_on')}: <code>${escHtml(master.googleCalendarId)}</code>`
-      : t(lg, 'mst_calendar_status_off');
-    const rows = [
-      [{ text: t(lg, 'mst_calendar_setup_btn'), callback_data: CB.MST_CALENDAR_SET }],
-    ];
-    if (isOn) rows.push([{ text: t(lg, 'mst_calendar_clear_btn'), callback_data: CB.MST_CALENDAR_CLEAR }]);
-    rows.push([{ text: t(lg, 'back'), callback_data: CB.MST_MAIN }]);
-    return send(ctx, cid, `📅 <b>${t(lg, 'mst_calendar')}</b>\n\n${statusText}`, { reply_markup: { inline_keyboard: rows } });
+    return showGoogleCalendarPanel(ctx, cid, lg, { scope: 'master', masterChatId: cid, backCb: CB.MST_MAIN });
+  }
+
+  if (d === CB.MST_CALENDAR_RESYNC) {
+    if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
+    if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
+    try {
+      const result = await syncGoogleIntegrationNow(ctx, { scope: 'master', masterChatId: cid });
+      const notice = result.ok
+        ? `✅ Sync complete: ${result.result?.blocks ?? 0} busy events cached.`
+        : '❌ Google Calendar is not connected yet.';
+      return showGoogleCalendarPanel(ctx, cid, lg, {
+        scope: 'master',
+        masterChatId: cid,
+        backCb: CB.MST_MAIN,
+        notice,
+      });
+    } catch (e) {
+      return showGoogleCalendarPanel(ctx, cid, lg, {
+        scope: 'master',
+        masterChatId: cid,
+        backCb: CB.MST_MAIN,
+        notice: `❌ Sync failed: ${escHtml(e.message)}`,
+      });
+    }
   }
 
   if (d === CB.MST_CALENDAR_SET) {
     if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
     if (!canUse(ctx, 'calendar')) return send(ctx, cid, t(lg, 'feature_calendar_unavailable'));
+    if (!ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      return showGoogleCalendarPanel(ctx, cid, lg, {
+        scope: 'master',
+        masterChatId: cid,
+        backCb: CB.MST_MAIN,
+        notice: 'ℹ️ Manual Calendar ID mode requires GOOGLE_SERVICE_ACCOUNT_KEY.',
+      });
+    }
     await setState(ctx, cid, { step: STEP.SET_CALENDAR_ID });
     return send(ctx, cid, t(lg, 'mst_calendar_enter_id'), {
       reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.MST_CALENDAR }]] },
@@ -914,10 +1051,14 @@ export async function onCb(ctx, cb) {
 
   if (d === CB.MST_CALENDAR_CLEAR) {
     if (!await isMaster(ctx, cid) && !await isAdmin(ctx, cid)) return;
+    await revokeGoogleIntegration(ctx, { scope: 'master', masterChatId: cid }).catch(() => false);
     const master = await getMaster(ctx, cid) || {};
     await saveMaster(ctx, cid, { ...master, googleCalendarId: null, calendarEnabled: false });
-    return send(ctx, cid, t(lg, 'mst_calendar_cleared'), {
-      reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.MST_CALENDAR }]] },
+    return showGoogleCalendarPanel(ctx, cid, lg, {
+      scope: 'master',
+      masterChatId: cid,
+      backCb: CB.MST_MAIN,
+      notice: t(lg, 'mst_calendar_cleared'),
     });
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -1112,7 +1253,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.CANCEL_APT_YES)) {
     const aptId = d.slice(CB.CANCEL_APT_YES.length);
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.chatId !== cid || apt.cx) {
       return send(ctx, cid, t(lg, 'cancel_err'), mainKb(lg));
     }
@@ -1161,7 +1302,7 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.CANCEL_APT)) {
     const aptId = d.slice(CB.CANCEL_APT.length);
     if (!/^a\d+_\w+$/.test(aptId)) return;
-    const apt = await kvGet(ctx, `ap:${aptId}`);
+    const apt = await getAptById(ctx, aptId);
     if (!apt || apt.chatId !== cid || apt.cx) {
       return send(ctx, cid, t(lg, 'cancel_err'), mainKb(lg));
     }

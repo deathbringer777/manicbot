@@ -36,9 +36,9 @@ function fmtDate(ts) {
 function planButtonRows(lg, stripeCfg) {
   const rows = [];
   const plans = [PLANS.START, PLANS.PRO, PLANS.STUDIO].filter(p => stripeCfg.priceIds?.[p]);
-  const labels = { start: 'Start — 45 zł', pro: 'Pro — 60 zł ⭐', studio: 'Studio — 90 zł' };
+  const defaultLabels = { start: 'Start', pro: 'Pro ⭐', studio: 'Studio' };
   for (const plan of plans) {
-    rows.push([{ text: `💳 ${labels[plan] || planLabel(lg, plan)}`, callback_data: CB.BILLING_SUBSCRIBE + plan }]);
+    rows.push([{ text: `💳 ${defaultLabels[plan] || planLabel(lg, plan)}`, callback_data: CB.BILLING_SUBSCRIBE + plan }]);
   }
   return rows;
 }
@@ -48,7 +48,7 @@ function planButtonRows(lg, stripeCfg) {
  */
 export async function showBillingMenu(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const billing = await getTenantBilling(ctx.globalKv, ctx.tenantId);
+  const billing = await getTenantBilling(ctx, ctx.tenantId);
   const stripeCfg = getStripeConfig(ctx);
 
   let text = `💳 <b>${t(lg, 'billing_menu')}</b>\n\n`;

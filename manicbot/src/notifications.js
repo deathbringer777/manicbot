@@ -2,13 +2,13 @@ import { send, sendIcs } from './telegram.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, p2 } from './utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from './utils/date.js';
 import { ADDRESS, MAPS_URL, CB } from './config.js';
-import { listMasters, getAdminId, getUser, getMaster, canManageApt } from './services/users.js';
+import { listMasters, getAdminId, getUser, canManageApt } from './services/users.js';
 import { getLang } from './services/chat.js';
 import { kvPut, kvGet } from './utils/kv.js';
 import { makeICS } from './utils/ics.js';
-import { getAllPendingApts } from './services/appointments.js';
+import { getAllPendingApts, updateApt } from './services/appointments.js';
 import { canUse } from './billing/features.js';
-import { createCalendarEvent, buildCalendarEvent } from './services/calendar.js';
+import { syncAppointmentCalendar } from './services/google-calendar-oauth.js';
 
 export async function notifyAptStaff(ctx, apt, user) {
   const adminId = await getAdminId(ctx);
@@ -60,7 +60,9 @@ export async function sendAptConfirmedToClient(ctx, apt) {
   const lg = await getLang(ctx, apt.chatId) || 'ru';
   const s = ctx.svc.find(x => x.id === apt.svcId);
   const tpl = isCorrectionSvc(apt.svcId) ? 'booked_correction' : 'booked';
-  const vars = { svc: svcName(ctx, lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time), addr: ADDRESS, maps: MAPS_URL };
+  const tenantAddr = ctx.tenant?.salon?.address || ADDRESS;
+  const tenantMaps = ctx.tenant?.salon?.mapsUrl || MAPS_URL;
+  const vars = { svc: svcName(ctx, lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time), addr: tenantAddr, maps: tenantMaps };
   if (!isCorrectionSvc(apt.svcId)) {
     vars.dur = String(s?.dur || '?'); vars.min = t(lg, 'min');
     vars.p = String(s?.price || '?'); vars.c = t(lg, 'cur');
@@ -77,26 +79,14 @@ export async function confirmAllPendingApts(ctx, cid) {
   for (const apt of pending) {
     apt.status = 'confirmed';
     apt.confirmedBy = cid;
-    await kvPut(ctx, `ap:${apt.id}`, apt);
+    await updateApt(ctx, apt.id, { status: 'confirmed', confirmedBy: cid });
     await sendAptConfirmedToClient(ctx, apt);
 
-    // Google Calendar: create event if master has calendar connected
-    if (canUse(ctx, 'calendar') && ctx.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    if (canUse(ctx, 'calendar')) {
       try {
-        const masterId = apt.masterId || cid;
-        const master = await getMaster(ctx, masterId);
-        if (master?.googleCalendarId && master?.calendarEnabled) {
-          const svcObj = ctx.svc?.find(s => s.id === apt.svcId);
-          const event = buildCalendarEvent(apt, svcObj, ctx.tenant?.salon, ctx.tenant?.salon?.timezone || 'Europe/Warsaw');
-          const created = await createCalendarEvent(ctx, master.googleCalendarId, event);
-          if (created?.id) {
-            apt.googleEventId = created.id;
-            apt.googleCalendarId = master.googleCalendarId;
-            await kvPut(ctx, `ap:${apt.id}`, apt);
-          }
-        }
+        await syncAppointmentCalendar(ctx, apt);
       } catch (e) {
-        console.error('[calendar] confirmAllPendingApts event creation failed:', e.message);
+        console.error('[calendar] confirmAllPendingApts sync failed:', e.message);
       }
     }
 

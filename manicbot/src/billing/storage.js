@@ -1,16 +1,11 @@
 /**
- * Tenant billing storage. Billing state lives on tenant document (tenant:{tenantId}).
+ * Tenant billing storage — reads/writes billing fields on tenants table in D1.
  */
 
 import { getTenant, putTenant } from '../tenant/storage.js';
 
-/**
- * Get billing snapshot from tenant document.
- * @param {KVNamespace} kv - global KV
- * @param {string} tenantId
- */
-export async function getTenantBilling(kv, tenantId) {
-  const tenant = await getTenant(kv, tenantId);
+export async function getTenantBilling(ctx, tenantId) {
+  const tenant = await getTenant(ctx, tenantId);
   if (!tenant) return null;
   return {
     tenantId,
@@ -30,19 +25,13 @@ export async function getTenantBilling(kv, tenantId) {
   };
 }
 
-/**
- * Update tenant billing fields (merge into tenant doc).
- * @param {KVNamespace} kv
- * @param {string} tenantId
- * @param {object} updates - partial billing fields
- */
-export async function updateTenantBilling(kv, tenantId, updates) {
-  const tenant = await getTenant(kv, tenantId);
+export async function updateTenantBilling(ctx, tenantId, updates) {
+  const tenant = await getTenant(ctx, tenantId);
   if (!tenant) return false;
   const updated = {
     ...tenant,
     ...updates,
     updatedAt: Date.now(),
   };
-  return putTenant(kv, tenantId, updated);
+  return putTenant(ctx, tenantId, updated);
 }

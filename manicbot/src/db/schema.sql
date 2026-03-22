@@ -1,0 +1,198 @@
+-- ManicBot D1 Schema
+-- Tenant-scoped tables
+
+CREATE TABLE IF NOT EXISTS appointments (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  svc_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  time TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  master_id INTEGER,
+  user_name TEXT,
+  user_phone TEXT,
+  user_tg TEXT,
+  confirmed_by INTEGER,
+  counter_time TEXT,
+  counter_comment TEXT,
+  reject_comment TEXT,
+  cancel_reason TEXT,
+  cancelled INTEGER NOT NULL DEFAULT 0,
+  rem_h24 INTEGER NOT NULL DEFAULT 0,
+  rem_h2 INTEGER NOT NULL DEFAULT 0,
+  google_event_id TEXT,
+  google_calendar_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);
+CREATE INDEX IF NOT EXISTS idx_apt_tenant_chat ON appointments(tenant_id, chat_id);
+CREATE INDEX IF NOT EXISTS idx_apt_tenant_status ON appointments(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_apt_tenant_ts ON appointments(tenant_id, ts);
+
+CREATE TABLE IF NOT EXISTS users (
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  name TEXT,
+  tg_username TEXT,
+  tg_lang TEXT,
+  phone TEXT,
+  registered_at INTEGER,
+  PRIMARY KEY (tenant_id, chat_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_username ON users(tenant_id, tg_username);
+CREATE INDEX IF NOT EXISTS idx_user_phone ON users(tenant_id, phone);
+
+CREATE TABLE IF NOT EXISTS masters (
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  name TEXT,
+  tg_username TEXT,
+  services TEXT,
+  work_hours TEXT,
+  work_days TEXT,
+  on_vacation INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  added_at INTEGER,
+  google_calendar_id TEXT,
+  calendar_enabled INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS tenant_roles (
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS services (
+  tenant_id TEXT NOT NULL,
+  svc_id TEXT NOT NULL,
+  emoji TEXT,
+  duration INTEGER NOT NULL,
+  price REAL NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  names TEXT,
+  description TEXT,
+  photos TEXT,
+  PRIMARY KEY (tenant_id, svc_id)
+);
+
+CREATE TABLE IF NOT EXISTS tenant_config (
+  tenant_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT,
+  PRIMARY KEY (tenant_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS blocked_users (
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS local_tickets (
+  tenant_id TEXT NOT NULL,
+  client_cid INTEGER NOT NULL,
+  master_cid INTEGER,
+  open INTEGER NOT NULL DEFAULT 1,
+  data TEXT,
+  PRIMARY KEY (tenant_id, client_cid)
+);
+
+CREATE TABLE IF NOT EXISTS human_requests (
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, chat_id)
+);
+
+-- Global tables (no tenant prefix)
+
+CREATE TABLE IF NOT EXISTS tenants (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  salon TEXT,
+  photos TEXT,
+  about_photos TEXT,
+  maps_url TEXT,
+  instagram_url TEXT,
+  plan TEXT DEFAULT 'start',
+  billing_status TEXT DEFAULT 'trialing',
+  subscription_status TEXT,
+  trial_ends_at INTEGER,
+  grace_ends_at INTEGER,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  stripe_price_id TEXT,
+  current_period_end INTEGER,
+  next_payment_date INTEGER,
+  billing_email TEXT,
+  cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bots (
+  bot_id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  bot_username TEXT,
+  webhook_secret TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bot_tenant ON bots(tenant_id);
+
+CREATE TABLE IF NOT EXISTS platform_roles (
+  chat_id INTEGER PRIMARY KEY,
+  role TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS support_agents (
+  chat_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  PRIMARY KEY (chat_id, type)
+);
+
+CREATE TABLE IF NOT EXISTS tenant_support_agents (
+  tenant_id TEXT NOT NULL,
+  chat_id INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS platform_tickets (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  client_chat_id INTEGER NOT NULL,
+  client_bot_id TEXT,
+  client_name TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  claimed_by INTEGER,
+  claimed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pticket_status ON platform_tickets(status);
+CREATE INDEX IF NOT EXISTS idx_pticket_agent ON platform_tickets(claimed_by);
+
+CREATE TABLE IF NOT EXISTS platform_ticket_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ticket_id TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  text TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ptmsg_ticket ON platform_ticket_messages(ticket_id);
+
+CREATE TABLE IF NOT EXISTS stripe_customers (
+  customer_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL
+);

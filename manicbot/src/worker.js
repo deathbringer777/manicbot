@@ -1,8 +1,8 @@
 import { buildCtx } from './config.js';
 import { timingSafeEqual, checkAdmin } from './utils/security.js';
-import { kvGet, kvListAll } from './utils/kv.js';
-import { escHtml, p2 } from './utils/helpers.js';
-import { warsawNow } from './utils/date.js';
+import { dbAll } from './utils/db.js';
+import { escHtml } from './utils/helpers.js';
+import { getAdminAllApts, getAptById } from './services/appointments.js';
 import { api } from './telegram.js';
 import { initServices } from './services/services.js';
 import { getLang } from './services/chat.js';
@@ -13,22 +13,32 @@ import { handleCron } from './handlers/cron.js';
 import { resolveTenantFromBotId, buildTenantCtx, buildLegacyCtx, isMigrationDone } from './tenant/resolver.js';
 import { runMigration } from './tenant/migration.js';
 import { handleStripeWebhook } from './billing/webhooks.js';
-import { listTenantIds, getBotIdsByTenantId, getTenant, putTenant, putBot } from './tenant/storage.js';
+import { listTenantIds, getBotIdsByTenantId, getTenant, putTenant, putBot, getTenantIdByBotId } from './tenant/storage.js';
 import { runSeed } from './admin/seed.js';
 import { registerBot, createTenant } from './admin/provisioning.js';
+import {
+  handleGoogleConnectRequest,
+  handleGoogleCallback,
+  handleGoogleSelect,
+  handleGoogleWebhook,
+} from './services/google-calendar-oauth.js';
+
+function envCtx(env) {
+  return { db: env.DB || null, kv: env.MANICBOT, globalKv: env.MANICBOT };
+}
 
 async function getCtx(env, url, request) {
-  const kv = env.MANICBOT;
+  const ec = envCtx(env);
   const webhookBotMatch = url.pathname.match(/^\/webhook\/([^/]+)$/);
   if (request.method === 'POST' && webhookBotMatch) {
-    const resolved = await resolveTenantFromBotId(kv, webhookBotMatch[1], env.BOT_ENCRYPTION_KEY || null);
+    const resolved = await resolveTenantFromBotId(ec, webhookBotMatch[1], env.BOT_ENCRYPTION_KEY || null);
     if (!resolved) return null;
     return buildTenantCtx(env, resolved);
   }
   if (!env.BOT_TOKEN) return null;
   const botId = env.BOT_TOKEN.split(':')[0];
-  if (kv && (await isMigrationDone(kv, botId))) {
-    const resolved = await resolveTenantFromBotId(kv, botId, env.BOT_ENCRYPTION_KEY || null);
+  if (ec.db && (await isMigrationDone(ec, botId))) {
+    const resolved = await resolveTenantFromBotId(ec, botId, env.BOT_ENCRYPTION_KEY || null);
     if (resolved) return buildTenantCtx(env, resolved);
   }
   return buildLegacyCtx(env);
@@ -60,20 +70,24 @@ function getDemoBots(env) {
   return bots;
 }
 
+let _demoProvisioned = false;
+
 async function ensureDemoBotsProvisioned(env) {
-  const kv = env.MANICBOT;
-  if (!kv) return;
+  if (_demoProvisioned) return;
+  const ec = envCtx(env);
+  if (!ec.db) return;
   const DEMO_BOTS = getDemoBots(env);
-  if (!DEMO_BOTS.length) return;
+  if (!DEMO_BOTS.length) { _demoProvisioned = true; return; }
   let allOk = true;
   for (const b of DEMO_BOTS) {
     const bid = b.botToken.split(':')[0];
-    const m = await kv.get('botmap:' + bid, 'text');
-    if (!m) { allOk = false; break; }
+    const tid = await getTenantIdByBotId(ec, bid);
+    if (!tid) { allOk = false; break; }
   }
-  if (allOk) return;
+  if (allOk) { _demoProvisioned = true; return; }
 
   console.log('Self-provisioning demo bots (some missing)...');
+  const { dbRun } = await import('./utils/db.js');
   const TRIAL_MS = 7 * 24 * 3600 * 1000;
   const now = Date.now();
 
@@ -87,23 +101,21 @@ async function ensureDemoBotsProvisioned(env) {
   for (const b of DEMO_BOTS) {
     const botId = b.botToken.split(':')[0];
     const t = TENANTS[b.tenantId];
-    // Create tenant
-    await putTenant(kv, b.tenantId, {
+    await putTenant(ec, b.tenantId, {
       id: b.tenantId, name: t.name, active: true, createdAt: now, updatedAt: now,
       salon: t.salon, plan: 'pro', billingStatus: 'trialing',
       trialEndsAt: now + TRIAL_MS, graceEndsAt: null,
       stripeCustomerId: null, stripeSubscriptionId: null,
       currentPeriodEnd: null, billingEmail: null, cancelAtPeriodEnd: false,
     });
-    // Register bot
-    await putBot(kv, botId, {
+    await putBot(ec, botId, {
       botId, tenantId: b.tenantId, botToken: b.botToken,
       botUsername: b.botUsername, webhookSecret: b.webhookSecret,
       active: true, createdAt: now, updatedAt: now,
     });
-    // Set admin
-    if (env.ADMIN_CHAT_ID) await kv.put(`t:${b.tenantId}:cfg:admin`, env.ADMIN_CHAT_ID);
-    // Set webhook
+    if (env.ADMIN_CHAT_ID) {
+      await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)", b.tenantId, env.ADMIN_CHAT_ID);
+    }
     const whUrl = `https://manicbot.com/webhook/${botId}`;
     await fetch(`https://api.telegram.org/bot${b.botToken}/setWebhook`, {
       method: 'POST',
@@ -112,6 +124,7 @@ async function ensureDemoBotsProvisioned(env) {
     }).catch(() => {});
     console.log(`Provisioned: @${b.botUsername} → ${b.tenantId}`);
   }
+  _demoProvisioned = true;
   console.log('Demo bots provisioned!');
 }
 
@@ -135,7 +148,7 @@ export default {
       const signature = request.headers.get('Stripe-Signature') || '';
       let body;
       try { body = await request.text(); } catch { return new Response('Bad body', { status: 400 }); }
-      const result = await handleStripeWebhook(env.MANICBOT, body, signature, secret);
+      const result = await handleStripeWebhook(envCtx(env), body, signature, secret);
       return new Response(result.skipped ? 'OK (duplicate)' : 'OK', { status: result.status });
     }
 
@@ -160,14 +173,25 @@ h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16p
       return Response.json(result);
     }
 
+    if (url.pathname === '/admin/migrate-d1') {
+      const key = url.searchParams.get('key') || '';
+      if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      if (!env.DB || !env.MANICBOT) return new Response('DB or KV not bound', { status: 500 });
+      const { migrateKvToD1 } = await import('../scripts/migrate-kv-to-d1.js');
+      const result = await migrateKvToD1(envCtx(env));
+      return Response.json(result);
+    }
+
     if (url.pathname === '/admin/seed') {
       const key = url.searchParams.get('key') || '';
       if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
         return new Response('Forbidden', { status: 403 });
       }
-      if (!env.MANICBOT) return new Response('KV not bound', { status: 500 });
+      if (!env.DB) return new Response('DB not bound', { status: 500 });
       const masterParam = (url.searchParams.get('master') || 'dezbringer').replace(/^@/, '');
-      const result = await runSeed(env.MANICBOT, env, masterParam);
+      const result = await runSeed(envCtx(env), env, masterParam);
       return Response.json(result);
     }
 
@@ -178,54 +202,43 @@ h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16p
       if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
         return new Response('Forbidden', { status: 403 });
       }
-      const kv = env.MANICBOT;
-      if (!kv) return Response.json({ error: 'KV not bound' }, { status: 500 });
+      const ec = envCtx(env);
+      if (!ec.db) return Response.json({ error: 'DB not bound' }, { status: 500 });
+      const { dbRun } = await import('./utils/db.js');
       try {
         const { bots } = await request.json();
         const results = [];
         for (const b of bots) {
           const botId = b.botToken.split(':')[0];
-          // Create tenant if tenantId specified and doesn't exist
           let tenantId = b.tenantId;
           if (tenantId) {
-            const existing = await getTenant(kv, tenantId);
+            const existing = await getTenant(ec, tenantId);
             if (!existing) {
-              const tRes = await createTenant(kv, b.tenantName || tenantId, env);
+              const tRes = await createTenant(ec, b.tenantName || tenantId, env);
               if (tRes.ok) {
-                // Override generated ID with our specified ID
-                const tPayload = await getTenant(kv, tRes.tenantId);
+                const tPayload = await getTenant(ec, tRes.tenantId);
                 if (tPayload && tRes.tenantId !== tenantId) {
-                  // re-create with correct ID
                   tPayload.id = tenantId;
                   if (b.salon) tPayload.salon = b.salon;
-                  await kv.put(`tenant:${tenantId}`, JSON.stringify(tPayload));
-                  // Update index
-                  const idx = JSON.parse(await kv.get('tenants_index', 'text') || '[]');
-                  const filtered = idx.filter(x => x !== tRes.tenantId);
-                  if (!filtered.includes(tenantId)) filtered.push(tenantId);
-                  await kv.put('tenants_index', JSON.stringify(filtered));
-                  // Clean up auto-generated
-                  await kv.delete(`tenant:${tRes.tenantId}`);
-                } else if (tPayload) {
-                  if (b.salon) { tPayload.salon = b.salon; await kv.put(`tenant:${tenantId}`, JSON.stringify(tPayload)); }
+                  await putTenant(ec, tenantId, tPayload);
+                  await dbRun(ec, 'DELETE FROM tenants WHERE id = ?', tRes.tenantId);
+                } else if (tPayload && b.salon) {
+                  tPayload.salon = b.salon;
+                  await putTenant(ec, tenantId, tPayload);
                 }
               }
             }
           }
-          // Register bot
-          const res = await registerBot(kv, b.botToken, tenantId, b.webhookSecret, env.BOT_ENCRYPTION_KEY || null);
+          const res = await registerBot(ec, b.botToken, tenantId, b.webhookSecret, env.BOT_ENCRYPTION_KEY || null);
           if (!res.ok && res.error === 'tenant_has_bot') {
             results.push({ botId, skip: 'tenant_has_bot' });
             continue;
           }
           if (!res.ok) { results.push({ botId, error: res.error }); continue; }
-          // Seed services
-          const prefix = `t:${tenantId}:`;
-          if (b.services) await kv.put(`${prefix}cfg:svc_list`, JSON.stringify(b.services));
-          if (b.aboutDesc) await kv.put(`${prefix}cfg:about_desc`, b.aboutDesc);
-          if (b.aboutPhotos) await kv.put(`${prefix}cfg:about_photos`, JSON.stringify(b.aboutPhotos));
-          if (env.ADMIN_CHAT_ID) await kv.put(`${prefix}cfg:admin`, env.ADMIN_CHAT_ID);
-          // Set up webhook
+          if (b.services) await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'svc_list', ?)", tenantId, JSON.stringify(b.services));
+          if (b.aboutDesc) await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_desc', ?)", tenantId, JSON.stringify(b.aboutDesc));
+          if (b.aboutPhotos) await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_photos', ?)", tenantId, JSON.stringify(b.aboutPhotos));
+          if (env.ADMIN_CHAT_ID) await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)", tenantId, env.ADMIN_CHAT_ID);
           const whUrl = `${url.origin}/webhook/${botId}`;
           const tg = `https://api.telegram.org/bot${b.botToken}`;
           const whRes = await fetch(`${tg}/setWebhook`, {
@@ -233,7 +246,6 @@ h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16p
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: whUrl, secret_token: b.webhookSecret, allowed_updates: ['message', 'callback_query'] }),
           }).then(r => r.json());
-          // Set commands
           await fetch(`${tg}/setMyCommands`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -269,15 +281,32 @@ code{background:#fce7f3;padding:2px 6px;border-radius:4px}
 </body></html>`, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
     }
 
+    if (request.method === 'GET' && url.pathname === '/google/connect') {
+      return handleGoogleConnectRequest({ ...envCtx(env), ...env, baseUrl: url.origin }, url);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/google/callback') {
+      return handleGoogleCallback({ ...envCtx(env), ...env, baseUrl: url.origin }, url);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/google/select') {
+      return handleGoogleSelect({ ...envCtx(env), ...env, baseUrl: url.origin }, url);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/google/webhook') {
+      return handleGoogleWebhook({ ...envCtx(env), ...env, baseUrl: url.origin }, request);
+    }
+
+    const isAdminPath = url.pathname.startsWith('/admin/');
     let ctx;
     try {
       ctx = await getCtx(env, url, request);
-      if (!ctx && url.pathname !== '/' && !url.pathname.startsWith('/admin/migrate')) {
+      if (!ctx && url.pathname !== '/' && !isAdminPath) {
         if (env.BOT_TOKEN && env.WEBHOOK_SECRET) ctx = buildLegacyCtx(env);
         else ctx = buildCtx(env);
       }
     } catch (e) {
-      if (url.pathname !== '/' && !url.pathname.startsWith('/admin/migrate')) {
+      if (url.pathname !== '/' && !isAdminPath) {
         try {
           if (env.BOT_TOKEN && env.WEBHOOK_SECRET) ctx = buildLegacyCtx(env);
           else ctx = buildCtx(env);
@@ -347,9 +376,9 @@ code{background:#fce7f3;padding:2px 6px;border-radius:4px}
 
     if (url.pathname === '/admin/billing') {
       if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
-      if (!ctx.kv) return new Response('KV not bound', { status: 500 });
-      const tenantIds = await listTenantIds(ctx.kv);
-      const tenants = await Promise.all(tenantIds.map(id => getTenant(ctx.kv, id)));
+      if (!ctx.db) return new Response('DB not bound', { status: 500 });
+      const tenantIds = await listTenantIds(ctx);
+      const tenants = await Promise.all(tenantIds.map(id => getTenant(ctx, id)));
       const fmt = (ts) => ts ? new Date(ts).toISOString().slice(0, 10) : '—';
       let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>ManicBot — Platform Billing</title>
@@ -380,22 +409,12 @@ tr:hover td{background:#fdf2f8}
 
     if (url.pathname === '/admin') {
       if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
-      if (!ctx.kv) return new Response('KV not bound', { status: 500 });
+      if (!ctx.db) return new Response('DB not bound', { status: 500 });
       await initServices(ctx);
 
-      const adminW = warsawNow();
-      const adminMonthKeys = [-2, -1, 0].map(off => {
-        const d = new Date(Date.UTC(adminW.year, adminW.month - 1 + off, 1));
-        return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
-      });
-      const monthBuckets = await Promise.all(adminMonthKeys.map(k => kvGet(ctx, k)));
-      const allIds = [...new Set(monthBuckets.flatMap(b => b || []))];
-      const userKeys = await kvListAll(ctx, { prefix: 'u:' });
-
-      const [aptRecords, userRecords] = await Promise.all([
-        Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))),
-        Promise.all(userKeys.map(k => kvGet(ctx, k.name))),
-      ]);
+      const aptRecords = await getAdminAllApts(ctx);
+      const userRows = ctx.tenantId ? await dbAll(ctx, 'SELECT * FROM users WHERE tenant_id = ?', ctx.tenantId) : [];
+      const userRecords = userRows.map(r => ({ chatId: r.chat_id, name: r.name, phone: r.phone, tgUsername: r.tg_username, tgLang: r.tg_lang, registeredAt: r.registered_at }));
 
       const appointments = aptRecords
         .filter(Boolean)
@@ -469,14 +488,14 @@ tr:hover td{background:#fdf2f8}
       return new Response(html, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
     }
 
-    if (url.pathname.startsWith('/admin/export/') && ctx.kv) {
+    if (url.pathname.startsWith('/admin/export/')) {
       if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
       await initServices(ctx);
       const file = url.pathname.split('/').pop();
 
       if (file === 'clients.csv') {
-        const userKeys = await kvListAll(ctx, { prefix: 'u:' });
-        const users = await Promise.all(userKeys.map(k => kvGet(ctx, k.name)));
+        const rows = ctx.tenantId ? await dbAll(ctx, 'SELECT * FROM users WHERE tenant_id = ?', ctx.tenantId) : [];
+        const users = rows.map(r => ({ chatId: r.chat_id, name: r.name, phone: r.phone, tgUsername: r.tg_username, tgLang: r.tg_lang, registeredAt: r.registered_at }));
         let csv = 'Chat ID,Name,Phone,Username,Language,Registered\n';
         for (const u of users) {
           if (!u) continue;
@@ -486,14 +505,7 @@ tr:hover td{background:#fdf2f8}
       }
 
       if (file === 'appointments.csv') {
-        const csvW = warsawNow();
-        const csvMonthKeys = [-2, -1, 0].map(off => {
-          const d = new Date(Date.UTC(csvW.year, csvW.month - 1 + off, 1));
-          return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
-        });
-        const csvBuckets = await Promise.all(csvMonthKeys.map(k => kvGet(ctx, k)));
-        const allIds = [...new Set(csvBuckets.flatMap(b => b || []))];
-        const apts = await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`)));
+        const apts = await getAdminAllApts(ctx);
         let csv = 'ID,Client,Chat ID,Service,Date,Time,Status,Created\n';
         for (const a of apts) {
           if (!a) continue;
@@ -512,9 +524,9 @@ tr:hover td{background:#fdf2f8}
       if (!/^a\d+_\w+$/.test(aptId)) {
         return new Response('Invalid appointment ID', { status: 400 });
       }
-      if (!ctx.kv) return new Response('Service unavailable', { status: 503 });
+      if (!ctx.db) return new Response('Service unavailable', { status: 503 });
       await initServices(ctx);
-      const apt = await ctx.kv.get(ctx.prefix + 'ap:' + aptId, 'json');
+      const apt = await getAptById(ctx, aptId);
       if (!apt || apt.cx) {
         return new Response('Appointment not found', { status: 404 });
       }
@@ -573,14 +585,14 @@ tr:hover td{background:#fdf2f8}
 
   async scheduled(event, env, _scheduledCtx) {
     try {
-      const kv = env.MANICBOT;
-      if (kv) {
-        const tenantIds = await listTenantIds(kv);
+      const ec = envCtx(env);
+      if (ec.db) {
+        const tenantIds = await listTenantIds(ec);
         if (tenantIds.length > 0) {
           for (const tenantId of tenantIds) {
-            const botIds = await getBotIdsByTenantId(kv, tenantId);
+            const botIds = await getBotIdsByTenantId(ec, tenantId);
             if (botIds.length === 0) continue;
-            const resolved = await resolveTenantFromBotId(kv, botIds[0], env.BOT_ENCRYPTION_KEY || null);
+            const resolved = await resolveTenantFromBotId(ec, botIds[0], env.BOT_ENCRYPTION_KEY || null);
             if (!resolved) continue;
             const ctx = buildTenantCtx(env, resolved);
             _scheduledCtx.waitUntil(handleCron(ctx));

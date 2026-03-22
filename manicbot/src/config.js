@@ -122,10 +122,14 @@ export const CB = {
   ADM_SETTINGS_PHONE: 'adm:stp',
   ADM_SETTINGS_ADDR: 'adm:sta',
   ADM_SETTINGS_HOURS: 'adm:sth',
+  ADM_CALENDAR:      'adm:gcal',
+  ADM_CALENDAR_CLEAR:'adm:gcalclr',
+  ADM_CALENDAR_RESYNC:'adm:gcalsync',
   // Google Calendar (master)
   MST_CALENDAR:       'mst:cal',
   MST_CALENDAR_SET:   'mst:calset',
   MST_CALENDAR_CLEAR: 'mst:calclr',
+  MST_CALENDAR_RESYNC:'mst:calsync',
   // Master selection during booking
   MASTER_ANY:  'ma',       // client picks "any available master"
   MASTER_SEL:  'ms:',      // client picks specific master: ms:{chatId}
@@ -278,11 +282,18 @@ export function buildCtx(env) {
     WEBHOOK_SECRET: env.WEBHOOK_SECRET,
     kv: env.MANICBOT,
     globalKv: env.MANICBOT,
+    db: env.DB || null,
     adminChatId: env.ADMIN_CHAT_ID || null,
     prefix: `b:${botId}:`,
     AI: env.AI || null,
     WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
     GOOGLE_SERVICE_ACCOUNT_KEY: env.GOOGLE_SERVICE_ACCOUNT_KEY || null,
+    GOOGLE_OAUTH_CLIENT_ID: env.GOOGLE_OAUTH_CLIENT_ID || null,
+    GOOGLE_OAUTH_CLIENT_SECRET: env.GOOGLE_OAUTH_CLIENT_SECRET || null,
+    GOOGLE_OAUTH_REDIRECT_URI: env.GOOGLE_OAUTH_REDIRECT_URI || null,
+    GOOGLE_TOKEN_ENCRYPTION_KEY: env.GOOGLE_TOKEN_ENCRYPTION_KEY || null,
+    APP_BASE_URL: env.APP_BASE_URL || null,
+    baseUrl: env.APP_BASE_URL || null,
   };
 }

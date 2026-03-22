@@ -8,19 +8,18 @@ import { getTenant, getTenantIdByBotId, getBot, getBotToken } from './storage.js
 const DEFAULT_TENANT_ID = 'default';
 
 /**
- * Resolve tenant from bot ID (from KV registry).
- * @param {KVNamespace} kv
+ * Resolve tenant from bot ID (from D1 registry).
+ * @param {{ db: D1Database, kv: KVNamespace }} ctx
  * @param {string} botId
- * @param {string} [encryptionKey] - BOT_ENCRYPTION_KEY for decrypting token
- * @returns {Promise<{ tenantId: string, tenant: object, bot: object, TG: string } | null>}
+ * @param {string} [encryptionKey]
  */
-export async function resolveTenantFromBotId(kv, botId, encryptionKey = null) {
-  if (!kv || !botId) return null;
-  const tenantId = await getTenantIdByBotId(kv, botId);
+export async function resolveTenantFromBotId(ctx, botId, encryptionKey = null) {
+  if (!ctx?.db || !botId) return null;
+  const tenantId = await getTenantIdByBotId(ctx, botId);
   if (!tenantId) return null;
-  const [tenant, bot] = await Promise.all([getTenant(kv, tenantId), getBot(kv, botId)]);
+  const [tenant, bot] = await Promise.all([getTenant(ctx, tenantId), getBot(ctx, botId)]);
   if (!tenant || !bot || !bot.active) return null;
-  const token = await getBotToken(kv, botId, encryptionKey);
+  const token = await getBotToken(ctx, botId, encryptionKey);
   if (!token) return null;
   return {
     tenantId,
@@ -32,7 +31,6 @@ export async function resolveTenantFromBotId(kv, botId, encryptionKey = null) {
 
 /**
  * Build tenant-scoped context for request processing.
- * ctx.prefix = "t:{tenantId}:" so all kvGet/kvPut use tenant scope.
  */
 export function buildTenantCtx(env, resolved) {
   const { tenantId, tenant, bot, TG } = resolved;
@@ -41,6 +39,7 @@ export function buildTenantCtx(env, resolved) {
     ...env,
     kv: env.MANICBOT,
     globalKv: env.MANICBOT,
+    db: env.DB || null,
     tenantId,
     tenant,
     bot,
@@ -48,8 +47,6 @@ export function buildTenantCtx(env, resolved) {
     prefix,
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: bot.webhookSecret,
-    // adminChatId preserved so isCreator() works in tenant bots (enables role resolution).
-    // The platform admin panel is blocked via !ctx.tenantId guards in message.js handlers.
     adminChatId: env.ADMIN_CHAT_ID || null,
     ADMIN_CHAT_ID: env.ADMIN_CHAT_ID || null,
     AI: env.AI || null,
@@ -60,7 +57,7 @@ export function buildTenantCtx(env, resolved) {
 }
 
 /**
- * Build context for legacy single-bot mode (no migration yet): use env BOT_TOKEN and default tenant.
+ * Build context for legacy single-bot mode.
  */
 export function buildLegacyCtx(env) {
   const botId = env.BOT_TOKEN.split(':')[0];
@@ -69,6 +66,7 @@ export function buildLegacyCtx(env) {
     ...env,
     kv: env.MANICBOT,
     globalKv: env.MANICBOT,
+    db: env.DB || null,
     tenantId: null,
     tenant: null,
     bot: { botId, botToken: env.BOT_TOKEN, webhookSecret: env.WEBHOOK_SECRET },
@@ -85,10 +83,10 @@ export function buildLegacyCtx(env) {
 }
 
 /**
- * Check if multi-tenant migration has been run (default tenant + bot exist).
+ * Check if multi-tenant migration has been run (bot exists in D1).
  */
-export async function isMigrationDone(kv, botId) {
-  if (!kv) return false;
-  const tenantId = await getTenantIdByBotId(kv, botId);
+export async function isMigrationDone(ctx, botId) {
+  if (!ctx?.db) return false;
+  const tenantId = await getTenantIdByBotId(ctx, botId);
   return !!tenantId;
 }

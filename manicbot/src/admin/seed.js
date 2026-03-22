@@ -1,16 +1,15 @@
 /**
  * One-time seed: 2 test salons with different services/prices/photos, 2 masters.
  * GET /admin/seed?key=ADMIN_KEY&master=dezbringer
- * - Ensures 2 tenants exist (creates if needed).
- * - Seeds each with different cfg:svc_list, cfg:about_photos, cfg:about_desc.
- * - Resolves master username to chatId and adds as master (and owner) to both tenants.
  */
 
 import { listTenantIds, getTenant, putTenant, getBotIdsByTenantId, getBotToken } from '../tenant/storage.js';
 import { createTenant } from './provisioning.js';
 import { setTenantRole, ROLES } from '../roles/roles.js';
 import { saveMaster } from '../services/users.js';
+import { saveServices } from '../services/services.js';
 import { CORRECTION_SVC } from '../config.js';
+import { dbRun } from '../utils/db.js';
 
 const L = {
   ru: { svc_classic: 'Классический маникюр', svc_gel: 'Гель-лак', svc_pedi: 'Педикюр', svc_ext: 'Наращивание', svc_design: 'Дизайн', svc_combo: 'Маникюр + Педикюр' },
@@ -21,28 +20,19 @@ const L = {
 
 function buildSvc(spec, photosBySvc) {
   return spec.map((s, i) => ({
-    id: s.id,
-    e: s.e,
-    dur: s.dur,
-    price: s.price,
-    active: true,
-    order: i,
+    id: s.id, e: s.e, dur: s.dur, price: s.price, active: true, order: i,
     names: { ru: L.ru['svc_' + s.id], ua: L.ua['svc_' + s.id], en: L.en['svc_' + s.id], pl: L.pl['svc_' + s.id] },
     desc: { ru: null, ua: null, en: null, pl: null },
     photos: photosBySvc[s.id] || [],
   }));
 }
 
-// Салон 1: Nails Studio — стандартные цены, дефолтные фото
 const SALON1 = {
   name: 'Nails Studio',
   svc: [
-    { id: 'classic', e: '💅', dur: 60, price: 80 },
-    { id: 'gel', e: '💎', dur: 90, price: 140 },
-    { id: 'pedi', e: '🦶', dur: 90, price: 120 },
-    { id: 'ext', e: '✨', dur: 120, price: 250 },
-    { id: 'design', e: '🎨', dur: 30, price: 50 },
-    { id: 'combo', e: '👑', dur: 150, price: 220 },
+    { id: 'classic', e: '💅', dur: 60, price: 80 }, { id: 'gel', e: '💎', dur: 90, price: 140 },
+    { id: 'pedi', e: '🦶', dur: 90, price: 120 }, { id: 'ext', e: '✨', dur: 120, price: 250 },
+    { id: 'design', e: '🎨', dur: 30, price: 50 }, { id: 'combo', e: '👑', dur: 150, price: 220 },
   ],
   photos: {
     classic: ['https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?w=600', 'https://images.pexels.com/photos/3997354/pexels-photo-3997354.jpeg?w=600'],
@@ -56,16 +46,12 @@ const SALON1 = {
   aboutDesc: 'Салон Nails Studio — уютное место в центре. Классический маникюр, гель-лак, педикюр, наращивание и дизайн. Работаем по записи.',
 };
 
-// Салон 2: Luxe Manicure — премиум цены, другие фото
 const SALON2 = {
   name: 'Luxe Manicure',
   svc: [
-    { id: 'classic', e: '💅', dur: 60, price: 100 },
-    { id: 'gel', e: '💎', dur: 90, price: 180 },
-    { id: 'pedi', e: '🦶', dur: 90, price: 150 },
-    { id: 'ext', e: '✨', dur: 120, price: 300 },
-    { id: 'design', e: '🎨', dur: 30, price: 70 },
-    { id: 'combo', e: '👑', dur: 150, price: 280 },
+    { id: 'classic', e: '💅', dur: 60, price: 100 }, { id: 'gel', e: '💎', dur: 90, price: 180 },
+    { id: 'pedi', e: '🦶', dur: 90, price: 150 }, { id: 'ext', e: '✨', dur: 120, price: 300 },
+    { id: 'design', e: '🎨', dur: 30, price: 70 }, { id: 'combo', e: '👑', dur: 150, price: 280 },
   ],
   photos: {
     classic: ['https://images.pexels.com/photos/7321747/pexels-photo-7321747.jpeg?w=600', 'https://images.pexels.com/photos/3997383/pexels-photo-3997383.jpeg?w=600'],
@@ -88,20 +74,16 @@ async function resolveUsernameToChatId(botToken, username) {
   return data.result.id;
 }
 
-function tenantPrefix(tenantId) {
-  return `t:${tenantId}:`;
-}
-
-export async function runSeed(kv, env, masterUsername = 'dezbringer') {
-  if (!kv) return { ok: false, error: 'KV not bound' };
+export async function runSeed(ctx, env, masterUsername = 'dezbringer') {
+  if (!ctx?.db) return { ok: false, error: 'DB not bound' };
   const encKey = env.BOT_ENCRYPTION_KEY || null;
   const log = [];
 
-  let tenantIds = await listTenantIds(kv);
+  let tenantIds = await listTenantIds(ctx);
   if (tenantIds.length < 2) {
     const names = [SALON1.name, SALON2.name];
     for (let i = tenantIds.length; i < 2; i++) {
-      const out = await createTenant(kv, names[i], env);
+      const out = await createTenant(ctx, names[i], env);
       if (out.ok) {
         tenantIds.push(out.tenantId);
         log.push(`Created tenant: ${out.tenantId} (${out.name})`);
@@ -114,33 +96,35 @@ export async function runSeed(kv, env, masterUsername = 'dezbringer') {
 
   const t1 = tenantIds[0];
   const t2 = tenantIds[1];
-  const prefix1 = tenantPrefix(t1);
-  const prefix2 = tenantPrefix(t2);
 
-  const tenant1 = await getTenant(kv, t1);
-  const tenant2 = await getTenant(kv, t2);
-  if (tenant1) { tenant1.name = SALON1.name; tenant1.updatedAt = Date.now(); await putTenant(kv, t1, tenant1); }
-  if (tenant2) { tenant2.name = SALON2.name; tenant2.updatedAt = Date.now(); await putTenant(kv, t2, tenant2); }
+  const tenant1 = await getTenant(ctx, t1);
+  const tenant2 = await getTenant(ctx, t2);
+  if (tenant1) { tenant1.name = SALON1.name; tenant1.updatedAt = Date.now(); await putTenant(ctx, t1, tenant1); }
+  if (tenant2) { tenant2.name = SALON2.name; tenant2.updatedAt = Date.now(); await putTenant(ctx, t2, tenant2); }
   log.push(`Tenant names set: ${SALON1.name}, ${SALON2.name}`);
 
   const svcList1 = [...buildSvc(SALON1.svc, SALON1.photos), CORRECTION_SVC];
   const svcList2 = [...buildSvc(SALON2.svc, SALON2.photos), CORRECTION_SVC];
 
-  await kv.put(prefix1 + 'cfg:svc_list', JSON.stringify(svcList1));
-  await kv.put(prefix2 + 'cfg:svc_list', JSON.stringify(svcList2));
-  log.push(`Seeded cfg:svc_list for ${t1} and ${t2}`);
+  const tenantCtx = (tenantId) => ({ ...ctx, tenantId, prefix: `t:${tenantId}:` });
+  const ctx1 = tenantCtx(t1);
+  const ctx2 = tenantCtx(t2);
 
-  await kv.put(prefix1 + 'cfg:about_photos', JSON.stringify(SALON1.aboutPhotos));
-  await kv.put(prefix2 + 'cfg:about_photos', JSON.stringify(SALON2.aboutPhotos));
-  await kv.put(prefix1 + 'cfg:about_desc', SALON1.aboutDesc);
-  await kv.put(prefix2 + 'cfg:about_desc', SALON2.aboutDesc);
+  await saveServices(ctx1, svcList1);
+  await saveServices(ctx2, svcList2);
+  log.push(`Seeded services for ${t1} and ${t2}`);
+
+  await dbRun(ctx, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_photos', ?)", t1, JSON.stringify(SALON1.aboutPhotos));
+  await dbRun(ctx, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_photos', ?)", t2, JSON.stringify(SALON2.aboutPhotos));
+  await dbRun(ctx, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_desc', ?)", t1, JSON.stringify(SALON1.aboutDesc));
+  await dbRun(ctx, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_desc', ?)", t2, JSON.stringify(SALON2.aboutDesc));
   log.push('Seeded about_photos and about_desc');
 
   let masterChatId = null;
   for (const tid of tenantIds) {
-    const botIds = await getBotIdsByTenantId(kv, tid);
+    const botIds = await getBotIdsByTenantId(ctx, tid);
     if (botIds.length) {
-      const token = await getBotToken(kv, botIds[0], encKey);
+      const token = await getBotToken(ctx, botIds[0], encKey);
       if (token) {
         masterChatId = await resolveUsernameToChatId(token, masterUsername);
         if (masterChatId) break;
@@ -149,39 +133,19 @@ export async function runSeed(kv, env, masterUsername = 'dezbringer') {
   }
   if (!masterChatId) {
     return {
-      ok: true,
-      log,
-      tenants: [t1, t2],
-      masterAssigned: false,
+      ok: true, log, tenants: [t1, t2], masterAssigned: false,
       hint: `Could not resolve @${masterUsername} to chatId. Add master in bot: /grant_master @${masterUsername}`,
     };
   }
 
-  const tenantCtx = (tenantId) => ({ kv, prefix: tenantPrefix(tenantId) });
   for (const tid of [t1, t2]) {
-    const ctx = tenantCtx(tid);
-    await setTenantRole(ctx, masterChatId, ROLES.MASTER);
-    await saveMaster(ctx, masterChatId, {
-      name: masterUsername,
-      tgUsername: masterUsername,
-      onVacation: false,
-    });
-    await setTenantRole(ctx, masterChatId, ROLES.TENANT_OWNER);
-    await kv.put(ctx.prefix + 'cfg:admin', masterChatId);
+    const tCtx = tenantCtx(tid);
+    await setTenantRole(tCtx, masterChatId, ROLES.MASTER);
+    await saveMaster(tCtx, masterChatId, { name: masterUsername, tgUsername: masterUsername, onVacation: false });
+    await setTenantRole(tCtx, masterChatId, ROLES.TENANT_OWNER);
+    await dbRun(ctx, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)", tid, JSON.stringify(masterChatId));
   }
   log.push(`@${masterUsername} (${masterChatId}) set as master and owner for ${t1} and ${t2}`);
 
-  return {
-    ok: true,
-    log,
-    tenants: [t1, t2],
-    masterAssigned: true,
-    masterChatId,
-    masterUsername: '@' + masterUsername,
-    commands: [
-      `In bot for salon 1: /grant_master @${masterUsername} (if needed)`,
-      `In bot for salon 2: /grant_master @${masterUsername} (if needed)`,
-      `Or from system admin bot: /grant_owner ${masterChatId} ${t1} and /grant_owner ${masterChatId} ${t2}`,
-    ],
-  };
+  return { ok: true, log, tenants: [t1, t2], masterAssigned: true, masterChatId, masterUsername: '@' + masterUsername };
 }

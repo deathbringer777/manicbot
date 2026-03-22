@@ -1,25 +1,32 @@
 /**
- * Platform support tickets: create, claim, list, message routing.
- * Global keys: ticket:{ticketId}, tickets:open, tickets:agent:{chatId}.
- * Tenant index: t:{tenantId}:tickets:client:{chatId} (array of ticketIds).
+ * Platform support tickets — D1 backed.
+ * Tables: platform_tickets, platform_ticket_messages.
+ * KV stays for: tktlock:{ticketId} (TTL 10s distributed lock).
  */
 
 import { randomId } from '../utils/security.js';
+import { dbGet, dbAll, dbRun, dbBatch } from '../utils/db.js';
 
-const TICKET_PREFIX = 'ticket:';
-const TICKETS_OPEN = 'tickets:open';
-const TICKETS_AGENT_PREFIX = 'tickets:agent:';
 const TKT_LOCK_PREFIX = 'tktlock:';
 const LOCK_TTL = 10;
 
-function ticketKey(id) { return TICKET_PREFIX + id; }
-function agentKey(chatId) { return TICKETS_AGENT_PREFIX + chatId; }
-
-export async function createTicket(globalKv, ctx, clientChatId, clientName, clientBotId, firstMessage) {
-  if (!globalKv || !clientChatId) return null;
+export async function createTicket(ctx, clientChatId, clientName, clientBotId, firstMessage) {
+  if (!ctx?.db || !clientChatId) return null;
   const tenantId = ctx?.tenantId || ctx?.bot?.botId || 'legacy';
   const id = 'tk_' + randomId(8);
-  const ticket = {
+  const now = Date.now();
+
+  await dbRun(ctx,
+    `INSERT INTO platform_tickets (id, tenant_id, client_chat_id, client_bot_id, client_name, status, claimed_by, claimed_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'open', NULL, NULL, ?, ?)`,
+    id, tenantId, clientChatId, clientBotId || null, clientName || 'Client', now, now,
+  );
+  await dbRun(ctx,
+    'INSERT INTO platform_ticket_messages (ticket_id, sender, text, created_at) VALUES (?, ?, ?, ?)',
+    id, 'client', firstMessage, now,
+  );
+
+  return {
     id,
     tenantId,
     clientChatId,
@@ -28,107 +35,118 @@ export async function createTicket(globalKv, ctx, clientChatId, clientName, clie
     status: 'open',
     claimedBy: null,
     claimedAt: null,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    messages: [{ from: 'client', text: firstMessage, at: Date.now() }],
+    createdAt: now,
+    updatedAt: now,
+    messages: [{ from: 'client', text: firstMessage, at: now }],
   };
-  await globalKv.put(ticketKey(id), JSON.stringify(ticket));
-  const openList = await getOpenTicketIds(globalKv);
-  if (!openList.includes(id)) {
-    openList.push(id);
-    await globalKv.put(TICKETS_OPEN, JSON.stringify(openList));
-  }
-  if (ctx.kv && ctx.prefix) {
-    const clientList = await getJson(ctx.kv, ctx.prefix + 'tickets:client:' + clientChatId);
-    const newList = [...(Array.isArray(clientList) ? clientList : []), id];
-    try {
-      await ctx.kv.put(ctx.prefix + 'tickets:client:' + clientChatId, JSON.stringify(newList));
-    } catch (e) { console.error('tickets client index:', e.message); }
-  }
-  return ticket;
 }
 
-async function getJson(kv, key) {
-  try {
-    const raw = await kv.get(key, 'json');
-    return raw;
-  } catch { return null; }
+function ticketRowToDoc(row, messages = []) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    clientChatId: row.client_chat_id,
+    clientBotId: row.client_bot_id,
+    clientName: row.client_name,
+    status: row.status,
+    claimedBy: row.claimed_by,
+    claimedAt: row.claimed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    messages: messages.map(m => ({ from: m.sender, text: m.text, at: m.created_at })),
+  };
 }
 
-export async function getOpenTicketIds(globalKv) {
-  const raw = await getJson(globalKv, TICKETS_OPEN);
-  return Array.isArray(raw) ? raw : [];
+export async function getOpenTicketIds(ctx) {
+  if (!ctx?.db) return [];
+  const rows = await dbAll(ctx, "SELECT id FROM platform_tickets WHERE status = 'open'");
+  return rows.map(r => r.id);
 }
 
-export async function getTicketById(globalKv, ticketId) {
-  return await getJson(globalKv, ticketKey(ticketId));
+export async function getTicketById(ctx, ticketId) {
+  if (!ctx?.db) return null;
+  const row = await dbGet(ctx, 'SELECT * FROM platform_tickets WHERE id = ?', ticketId);
+  if (!row) return null;
+  const msgs = await dbAll(ctx,
+    'SELECT * FROM platform_ticket_messages WHERE ticket_id = ? ORDER BY created_at',
+    ticketId,
+  );
+  return ticketRowToDoc(row, msgs);
 }
 
-export async function claimTicket(globalKv, ticketId, agentChatId) {
-  if (!globalKv || !ticketId || !agentChatId) return { ok: false, error: 'Missing params' };
+export async function claimTicket(ctx, ticketId, agentChatId) {
+  if (!ctx?.db || !ticketId || !agentChatId) return { ok: false, error: 'Missing params' };
+  const kv = ctx.kv || ctx.globalKv;
   const lockKey = TKT_LOCK_PREFIX + ticketId;
-  try {
-    await globalKv.put(lockKey, String(agentChatId), { expirationTtl: LOCK_TTL });
-  } catch (e) { return { ok: false, error: 'Lock failed' }; }
-  const ticket = await getTicketById(globalKv, ticketId);
+  if (kv) {
+    try {
+      await kv.put(lockKey, String(agentChatId), { expirationTtl: LOCK_TTL });
+    } catch (e) { return { ok: false, error: 'Lock failed' }; }
+  }
+  const ticket = await getTicketById(ctx, ticketId);
   if (!ticket || ticket.status !== 'open') {
     return { ok: false, error: 'Ticket not open' };
   }
-  const lockOwner = await globalKv.get(lockKey, 'text');
-  if (lockOwner !== String(agentChatId)) {
-    return { ok: false, error: 'Claim race lost' };
+  if (kv) {
+    const lockOwner = await kv.get(lockKey, 'text');
+    if (lockOwner !== String(agentChatId)) {
+      return { ok: false, error: 'Claim race lost' };
+    }
+  }
+  const now = Date.now();
+  await dbRun(ctx,
+    "UPDATE platform_tickets SET status = 'claimed', claimed_by = ?, claimed_at = ?, updated_at = ? WHERE id = ?",
+    agentChatId, now, now, ticketId,
+  );
+  if (kv) {
+    const finalLock = await kv.get(lockKey, 'text');
+    if (finalLock !== String(agentChatId)) {
+      await dbRun(ctx,
+        "UPDATE platform_tickets SET status = 'open', claimed_by = NULL, claimed_at = NULL, updated_at = ? WHERE id = ?",
+        Date.now(), ticketId,
+      );
+      return { ok: false, error: 'Claim race lost' };
+    }
   }
   ticket.status = 'claimed';
   ticket.claimedBy = agentChatId;
-  ticket.claimedAt = Date.now();
-  ticket.updatedAt = Date.now();
-  await globalKv.put(ticketKey(ticketId), JSON.stringify(ticket));
-  // Final lock check: another worker may have written between our check and this write
-  const finalLock = await globalKv.get(lockKey, 'text');
-  if (finalLock !== String(agentChatId)) {
-    // Race lost after claim write — roll back to open
-    ticket.status = 'open';
-    ticket.claimedBy = null;
-    ticket.claimedAt = null;
-    await globalKv.put(ticketKey(ticketId), JSON.stringify(ticket));
-    return { ok: false, error: 'Claim race lost' };
-  }
-  const openList = (await getOpenTicketIds(globalKv)).filter(id => id !== ticketId);
-  await globalKv.put(TICKETS_OPEN, JSON.stringify(openList));
-  const agentList = await getJson(globalKv, agentKey(agentChatId)) || [];
-  if (!agentList.includes(ticketId)) {
-    agentList.push(ticketId);
-    await globalKv.put(agentKey(agentChatId), JSON.stringify(agentList));
-  }
+  ticket.claimedAt = now;
+  ticket.updatedAt = now;
   return { ok: true, ticket };
 }
 
-export async function getAgentTicketIds(globalKv, agentChatId) {
-  const raw = await getJson(globalKv, agentKey(agentChatId));
-  return Array.isArray(raw) ? raw : [];
+export async function getAgentTicketIds(ctx, agentChatId) {
+  if (!ctx?.db) return [];
+  const rows = await dbAll(ctx,
+    "SELECT id FROM platform_tickets WHERE claimed_by = ? AND status = 'claimed'",
+    agentChatId,
+  );
+  return rows.map(r => r.id);
 }
 
-export async function appendMessage(globalKv, ticketId, from, text) {
-  const ticket = await getTicketById(globalKv, ticketId);
+export async function appendMessage(ctx, ticketId, from, text) {
+  if (!ctx?.db) return false;
+  const ticket = await dbGet(ctx, 'SELECT id FROM platform_tickets WHERE id = ?', ticketId);
   if (!ticket) return false;
-  ticket.messages = ticket.messages || [];
-  ticket.messages.push({ from, text, at: Date.now() });
-  ticket.updatedAt = Date.now();
-  await globalKv.put(ticketKey(ticketId), JSON.stringify(ticket));
+  await dbRun(ctx,
+    'INSERT INTO platform_ticket_messages (ticket_id, sender, text, created_at) VALUES (?, ?, ?, ?)',
+    ticketId, from, text, Date.now(),
+  );
+  await dbRun(ctx,
+    'UPDATE platform_tickets SET updated_at = ? WHERE id = ?',
+    Date.now(), ticketId,
+  );
   return true;
 }
 
-export async function closeTicket(globalKv, ticketId) {
-  const ticket = await getTicketById(globalKv, ticketId);
+export async function closeTicket(ctx, ticketId) {
+  if (!ctx?.db) return false;
+  const ticket = await dbGet(ctx, 'SELECT id FROM platform_tickets WHERE id = ?', ticketId);
   if (!ticket) return false;
-  ticket.status = 'closed';
-  ticket.updatedAt = Date.now();
-  await globalKv.put(ticketKey(ticketId), JSON.stringify(ticket));
-  const openList = (await getOpenTicketIds(globalKv)).filter(id => id !== ticketId);
-  await globalKv.put(TICKETS_OPEN, JSON.stringify(openList));
-  if (ticket.claimedBy) {
-    const agentList = (await getJson(globalKv, agentKey(ticket.claimedBy)) || []).filter(id => id !== ticketId);
-    await globalKv.put(agentKey(ticket.claimedBy), JSON.stringify(agentList));
-  }
+  await dbRun(ctx,
+    "UPDATE platform_tickets SET status = 'closed', updated_at = ? WHERE id = ?",
+    Date.now(), ticketId,
+  );
   return true;
 }

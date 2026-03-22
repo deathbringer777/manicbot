@@ -1,10 +1,11 @@
 /**
  * Тесты ролей: создатель (ADMIN_CHAT_ID), isAdmin, isPlatformAdmin.
- * Роли в системе: админ (бог/создатель), саппорты, мастер, салон (tenant_owner), клиент.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isCreator, isAdmin, isPlatformAdmin } from '../src/services/users.js';
+import { setPlatformRole } from '../src/roles/roles.js';
+import { createMockD1 } from './helpers/mock-db.js';
 
 describe('isCreator', () => {
   it('returns true when cid equals adminChatId (string)', () => {
@@ -29,38 +30,34 @@ describe('isCreator', () => {
 
 describe('isAdmin (with creator)', () => {
   it('creator is always admin regardless of KV', async () => {
-    const ctx = { adminChatId: '111', kv: {}, prefix: 't:default:' };
+    const ctx = { adminChatId: '111', kv: {}, db: createMockD1(), prefix: 't:default:', tenantId: 'default' };
     expect(await isAdmin(ctx, 111)).toBe(true);
     expect(await isAdmin(ctx, '111')).toBe(true);
   });
-
 });
 
 describe('isPlatformAdmin', () => {
-  it('creator is platform admin without KV role', async () => {
-    const ctx = { adminChatId: '777', globalKv: null };
+  it('creator is platform admin without DB', async () => {
+    const ctx = { adminChatId: '777', db: null };
     expect(await isPlatformAdmin(ctx, 777)).toBe(true);
   });
 
-  it('non-creator without globalKv is not platform admin', async () => {
-    const ctx = { adminChatId: '777', globalKv: null };
+  it('non-creator without db is not platform admin', async () => {
+    const ctx = { adminChatId: '777', db: null };
     expect(await isPlatformAdmin(ctx, 888)).toBe(false);
   });
 
-  it('non-creator with system_admin in globalKv is platform admin', async () => {
-    const mockKv = {
-      get: vi.fn().mockResolvedValue({ role: 'system_admin', createdAt: Date.now() }),
-    };
-    const ctx = { adminChatId: null, globalKv: mockKv };
+  it('non-creator with system_admin in D1 is platform admin', async () => {
+    const db = createMockD1();
+    const ctx = { adminChatId: null, db };
+    await setPlatformRole(ctx, 888, 'system_admin');
     expect(await isPlatformAdmin(ctx, 888)).toBe(true);
-    expect(mockKv.get).toHaveBeenCalledWith('role:888', 'json');
   });
 
-  it('support role in globalKv is not platform admin', async () => {
-    const mockKv = {
-      get: vi.fn().mockResolvedValue({ role: 'support', createdAt: Date.now() }),
-    };
-    const ctx = { adminChatId: null, globalKv: mockKv };
+  it('support role in D1 is not platform admin', async () => {
+    const db = createMockD1();
+    const ctx = { adminChatId: null, db };
+    await setPlatformRole(ctx, 888, 'support');
     expect(await isPlatformAdmin(ctx, 888)).toBe(false);
   });
 });

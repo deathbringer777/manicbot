@@ -1,46 +1,75 @@
-import { kvGet, kvPut, kvDel } from '../utils/kv.js';
+import { dbGet, dbRun } from '../utils/db.js';
 import { getChatHistory } from './chat.js';
 
 export async function getHumanRequestCount(ctx, cid) {
-  const v = await kvGet(ctx, `hr:${cid}`);
-  return typeof v === 'number' && v >= 0 ? v : 0;
+  if (!ctx?.db || !ctx?.tenantId) return 0;
+  const row = await dbGet(ctx,
+    'SELECT count FROM human_requests WHERE tenant_id = ? AND chat_id = ?',
+    ctx.tenantId, cid,
+  );
+  return row?.count || 0;
 }
 
 export async function incHumanRequestCount(ctx, cid) {
   const n = await getHumanRequestCount(ctx, cid);
   const next = n + 1;
-  await kvPut(ctx, `hr:${cid}`, next);
+  if (!ctx?.db || !ctx?.tenantId) return next;
+  await dbRun(ctx,
+    'INSERT OR REPLACE INTO human_requests (tenant_id, chat_id, count) VALUES (?, ?, ?)',
+    ctx.tenantId, cid, next,
+  );
   return next;
 }
 
 export async function resetHumanRequestCount(ctx, cid) {
-  await kvDel(ctx, `hr:${cid}`);
+  if (!ctx?.db || !ctx?.tenantId) return;
+  await dbRun(ctx, 'DELETE FROM human_requests WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
 }
 
 export async function getTicket(ctx, clientCid) {
-  const v = await kvGet(ctx, `ticket:${clientCid}`);
-  return v && v.open ? v : null;
+  if (!ctx?.db || !ctx?.tenantId) return null;
+  const row = await dbGet(ctx,
+    'SELECT * FROM local_tickets WHERE tenant_id = ? AND client_cid = ? AND open = 1',
+    ctx.tenantId, clientCid,
+  );
+  if (!row) return null;
+  return { open: true, masterCid: row.master_cid, ...(row.data ? JSON.parse(row.data) : {}) };
 }
 
 export async function setTicket(ctx, clientCid, data) {
-  await kvPut(ctx, `ticket:${clientCid}`, data);
+  if (!ctx?.db || !ctx?.tenantId) return;
+  const serialized = { ...data };
+  delete serialized.open;
+  delete serialized.masterCid;
+  await dbRun(ctx,
+    'INSERT OR REPLACE INTO local_tickets (tenant_id, client_cid, master_cid, open, data) VALUES (?, ?, ?, 1, ?)',
+    ctx.tenantId, clientCid, data.masterCid || null, JSON.stringify(serialized),
+  );
 }
 
 export async function getTicketMaster(ctx, masterCid) {
-  const v = await kvGet(ctx, `ticket_master:${masterCid}`);
-  return typeof v === 'number' ? v : null;
+  if (!ctx?.db || !ctx?.tenantId) return null;
+  const row = await dbGet(ctx,
+    'SELECT client_cid FROM local_tickets WHERE tenant_id = ? AND master_cid = ? AND open = 1',
+    ctx.tenantId, masterCid,
+  );
+  return row?.client_cid || null;
 }
 
 export async function setTicketMaster(ctx, masterCid, clientCid) {
-  await kvPut(ctx, `ticket_master:${masterCid}`, clientCid);
+  if (!ctx?.db || !ctx?.tenantId) return;
+  await dbRun(ctx,
+    'UPDATE local_tickets SET master_cid = ? WHERE tenant_id = ? AND client_cid = ? AND open = 1',
+    masterCid, ctx.tenantId, clientCid,
+  );
 }
 
 export async function clearTicket(ctx, clientCid) {
-  const ticket = await getTicket(ctx, clientCid);
-  if (ticket?.masterCid) {
-    await kvDel(ctx, `ticket_master:${ticket.masterCid}`);
-  }
-  await kvDel(ctx, `ticket:${clientCid}`);
+  if (!ctx?.db || !ctx?.tenantId) return;
+  await dbRun(ctx,
+    'UPDATE local_tickets SET open = 0 WHERE tenant_id = ? AND client_cid = ?',
+    ctx.tenantId, clientCid,
+  );
 }
 
 export function isTicketCloseWord(txt) {

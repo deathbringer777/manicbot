@@ -1,14 +1,13 @@
 import { send, sendPhoto, edit } from '../telegram.js';
 import { getTenantSupportAgents } from '../roles/roles.js';
 import { escHtml, fill, t, p2, svcName } from '../utils/helpers.js';
-import { fmtDT, fmtDate, warsawNow } from '../utils/date.js';
+import { fmtDT, fmtDate } from '../utils/date.js';
 import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
 import { clearState, setState, getState } from '../services/state.js';
 import { listMasters, getAdminId, isBlocked } from '../services/users.js';
 import { loadDayAppointments, getAdminAllApts, getApts } from '../services/appointments.js';
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
-import { kvGet, kvListAll } from '../utils/kv.js';
 import { dbAll } from '../utils/db.js';
 import { adminKb, masterKb } from './keyboards.js';
 
@@ -182,6 +181,7 @@ export async function showAdminSettings(ctx, cid) {
      { text: t(lg, 'adm_settings_phone_btn'), callback_data: CB.ADM_SETTINGS_PHONE }],
     [{ text: t(lg, 'adm_settings_addr_btn'), callback_data: CB.ADM_SETTINGS_ADDR },
      { text: t(lg, 'adm_settings_hours_btn'), callback_data: CB.ADM_SETTINGS_HOURS }],
+    [{ text: t(lg, 'mst_calendar'), callback_data: CB.ADM_CALENDAR }],
     [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST }],
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
     [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }],
@@ -192,7 +192,7 @@ export async function showAdminSettings(ctx, cid) {
 export async function showMasterPanel(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
-  await send(ctx, cid, fill(t(lg, 'mst_welcome'), { n: escHtml(name) }), masterKb(lg));
+  await send(ctx, cid, fill(t(lg, 'mst_welcome'), { n: escHtml(name) }), masterKb(lg, ctx));
 }
 
 export async function showAdminApts(ctx, cid, dateStr) {
@@ -230,27 +230,12 @@ export async function showAdminApts(ctx, cid, dateStr) {
 
 export async function showMasterAllApts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
-  let apts;
-  if (ctx?.db && ctx?.tenantId) {
-    const { getAdminAllApts: getAllApts } = await import('../services/appointments.js');
-    const allApts = await getAllApts(ctx);
-    apts = allApts
-      .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
-        && (a.masterId === cid || a.confirmedBy === cid))
-      .sort((a, b) => a.ts - b.ts);
-  } else {
-    const w = warsawNow();
-    const monthKeys = [-1, 0, 1, 2].map(off => {
-      const d = new Date(Date.UTC(w.year, w.month - 1 + off, 1));
-      return `all:${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
-    });
-    const buckets = await Promise.all(monthKeys.map(k => kvGet(ctx, k)));
-    const allIds = [...new Set(buckets.flatMap(b => b || []))];
-    apts = (await Promise.all(allIds.map(id => kvGet(ctx, `ap:${id}`))))
-      .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
-        && (a.masterId === cid || a.confirmedBy === cid))
-      .sort((a, b) => a.ts - b.ts);
-  }
+  const { getAdminAllApts: getAllApts } = await import('../services/appointments.js');
+  const allApts = await getAllApts(ctx);
+  const apts = allApts
+    .filter(a => a && !a.cx && a.status !== 'rejected' && a.ts > Date.now() - 6 * 3600000
+      && (a.masterId === cid || a.confirmedBy === cid))
+    .sort((a, b) => a.ts - b.ts);
 
   if (!apts.length) {
     return send(ctx, cid, t(lg, 'adm_no_apts'), { reply_markup: { inline_keyboard: [
@@ -367,18 +352,8 @@ const CLIENTS_PER_PAGE = 8;
 
 export async function showClientsList(ctx, cid, page = 0, msgId = null) {
   const lg = await getLang(ctx, cid) || 'ru';
-  let clients;
-  if (ctx?.db && ctx?.tenantId) {
-    const rows = await dbAll(ctx, 'SELECT * FROM users WHERE tenant_id = ?', ctx.tenantId);
-    clients = rows.map(r => ({ chatId: r.chat_id, name: r.name, tgUsername: r.tg_username, tgLang: r.tg_lang, phone: r.phone, registeredAt: r.registered_at }));
-  } else {
-    const userKeys = await kvListAll(ctx, { prefix: 'u:' });
-    clients = [];
-    for (const k of userKeys) {
-      const u = await kvGet(ctx, k.name);
-      if (u) clients.push(u);
-    }
-  }
+  const rows = ctx?.db && ctx?.tenantId ? await dbAll(ctx, 'SELECT * FROM users WHERE tenant_id = ?', ctx.tenantId) : [];
+  const clients = rows.map(r => ({ chatId: r.chat_id, name: r.name, tgUsername: r.tg_username, tgLang: r.tg_lang, phone: r.phone, registeredAt: r.registered_at }));
   clients.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const total = clients.length;
   const totalPages = Math.max(1, Math.ceil(total / CLIENTS_PER_PAGE));

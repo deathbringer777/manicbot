@@ -138,6 +138,30 @@ export async function createCalendarEvent(ctx, calendarId, event) {
 }
 
 /**
+ * Update an existing Google Calendar event.
+ * @param {object} ctx - tenant context
+ * @param {string} calendarId - master's calendar ID
+ * @param {string} eventId - Google Calendar event ID
+ * @param {object} event - partial or full Google Calendar event object
+ * @returns {object} updated event
+ */
+export async function updateCalendarEvent(ctx, calendarId, eventId, event) {
+  const token = await getAccessToken(ctx);
+  const res = await fetch(
+    `${GCAL_API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(event),
+    },
+  );
+  return res.json();
+}
+
+/**
  * Delete a Google Calendar event.
  * @param {object} ctx - tenant context
  * @param {string} calendarId - master's calendar ID

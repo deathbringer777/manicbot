@@ -1,10 +1,10 @@
-import { WORK, MAX_APTS, CLEANUP_AFTER_MS } from '../config.js';
+import { WORK, MAX_APTS, CLEANUP_AFTER_MS, TIMEZONE } from '../config.js';
 import { kvGet, kvPut, kvDel } from '../utils/kv.js';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { p2 } from '../utils/helpers.js';
 import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
-import { deleteCalendarEvent } from './calendar.js';
 import { getMaster } from './users.js';
+import { deleteAppointmentCalendar, loadExternalBusyBlocks } from './google-calendar-oauth.js';
 
 export function allKey(dateStr) {
   return `all:${dateStr.slice(0, 7)}`;
@@ -42,6 +42,7 @@ function aptRowToDoc(row) {
     rem: { h24: row.rem_h24 === 1, h2: row.rem_h2 === 1 },
     googleEventId: row.google_event_id,
     googleCalendarId: row.google_calendar_id,
+    googleIntegrationId: row.google_integration_id,
     createdAt: row.created_at,
   };
 }
@@ -59,10 +60,36 @@ function normalizeAptDoc(apt) {
     cancelReason: apt.cancelReason || apt.cancel_reason || null,
     googleEventId: apt.googleEventId || apt.google_event_id || null,
     googleCalendarId: apt.googleCalendarId || apt.google_calendar_id || null,
+    googleIntegrationId: apt.googleIntegrationId || apt.google_integration_id || null,
     cancelled: apt.cancelled === true || apt.cancelled === 1 || apt.cx === true || apt.cx === 1,
     cx: apt.cancelled === true || apt.cancelled === 1 || apt.cx === true || apt.cx === 1,
     rem: apt.rem || { h24: false, h2: false },
   };
+}
+
+function localDateTimeParts(ts) {
+  const parts = {};
+  for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(ts))) parts[type] = value;
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: parseInt(parts.hour, 10) * 60 + parseInt(parts.minute, 10),
+  };
+}
+
+function externalBlockOverlapsSlot(date, startMin, endMin, block) {
+  const blockStart = localDateTimeParts(block.startTs);
+  const blockEnd = localDateTimeParts(block.endTs);
+  const blockStartMin = blockStart.date < date ? 0 : blockStart.minutes;
+  const blockEndMin = blockEnd.date > date ? 24 * 60 : blockEnd.minutes;
+  return startMin < blockEndMin && endMin > blockStartMin;
 }
 
 async function addToIndexes(ctx, apt) {
@@ -229,8 +256,8 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
     a.status = 'cancelled';
     await kvPut(ctx, `ap:${id}`, a);
 
-    if (a.googleEventId && a.googleCalendarId) {
-      deleteCalendarEvent(ctx, a.googleCalendarId, a.googleEventId).catch(e =>
+    if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
+      deleteAppointmentCalendar(ctx, a).catch(e =>
         console.error('cancelApt calendar delete error:', e.message),
       );
     }
@@ -254,8 +281,8 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
     id, ctx.tenantId,
   );
 
-  if (a.googleEventId && a.googleCalendarId) {
-    deleteCalendarEvent(ctx, a.googleCalendarId, a.googleEventId).catch(e =>
+  if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
+    deleteAppointmentCalendar(ctx, a).catch(e =>
       console.error('cancelApt calendar delete error:', e.message),
     );
   }
@@ -284,6 +311,9 @@ export async function getSlots(ctx, date, svcId, masterId = null) {
   }
 
   const booked = await loadDayAppointments(ctx, date, masterId);
+  const externalBusy = ctx?.db && ctx?.tenantId
+    ? await loadExternalBusyBlocks(ctx, date, masterId)
+    : [];
   const svcMap = new Map(ctx.svc.map(s => [s.id, s]));
   const td = todayStr();
   const w = warsawNow();
@@ -292,6 +322,8 @@ export async function getSlots(ctx, date, svcId, masterId = null) {
   for (let h = workFrom; h < workTo; h++) {
     for (const m of [0, 30]) {
       const ss = h + m / 60, se = ss + svc.dur / 60;
+      const slotStartMin = h * 60 + m;
+      const slotEndMin = slotStartMin + svc.dur;
       if (se > workTo) continue;
       if (date === td && (h < ch || (h === ch && m <= cm))) continue;
       let ok = true;
@@ -301,6 +333,14 @@ export async function getSlots(ctx, date, svcId, masterId = null) {
         const [ah, am] = a.time.split(':').map(Number);
         const as = ah + am / 60, ae = as + bs.dur / 60;
         if (ss < ae && se > as) { ok = false; break; }
+      }
+      if (ok) {
+        for (const block of externalBusy) {
+          if (externalBlockOverlapsSlot(date, slotStartMin, slotEndMin, block)) {
+            ok = false;
+            break;
+          }
+        }
       }
       if (ok) slots.push(`${p2(h)}:${p2(m)}`);
     }
@@ -338,11 +378,13 @@ export async function updateApt(ctx, aptId, updates) {
   const setClauses = [];
   const params = [];
   const fieldMap = {
+    date: 'date', time: 'time', ts: 'ts',
     status: 'status', masterId: 'master_id', confirmedBy: 'confirmed_by',
     counterTime: 'counter_time', counterComment: 'counter_comment',
     rejectComment: 'reject_comment', cancelReason: 'cancel_reason',
     cancelled: 'cancelled', cx: 'cancelled',
     googleEventId: 'google_event_id', googleCalendarId: 'google_calendar_id',
+    googleIntegrationId: 'google_integration_id',
   };
   const remFields = { 'rem.h24': 'rem_h24', 'rem.h2': 'rem_h2' };
   for (const [jsKey, dbCol] of Object.entries(fieldMap)) {

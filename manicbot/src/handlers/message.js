@@ -9,7 +9,7 @@ import { getState, setState, clearState, checkRateLimit } from '../services/stat
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';
 import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, setAdminId, getMaster, saveMaster, listMasters, resolveMasterInput, blockUser, unblockUser, upsertUserFromTelegram, isPlatformAdmin } from '../services/users.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
-import { cancelApt, getApts } from '../services/appointments.js';
+import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
 import { createTicket } from '../support/tickets.js';
 import { getSupportAgents, setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
@@ -159,7 +159,7 @@ export async function onMsg(ctx, msg) {
       if (senderRole !== 'master' && senderRole !== 'admin' && senderRole !== 'tenant_owner' && senderRole !== 'system_admin') {
         return send(ctx, cid, t(lg, 'tech_support_only_staff'));
       }
-      const agents = ctx.globalKv ? await getTechnicalSupportAgents(ctx.globalKv) : [];
+      const agents = ctx.db ? await getTechnicalSupportAgents(ctx) : [];
       if (agents.length > 0) {
         const salonName = ctx.tenant?.name || ctx.SALON_NAME || 'Salon';
         await setTicket(ctx, cid, { open: true, masterCid: null, since: Date.now(), msg: txt.slice(0, 500) });
@@ -180,8 +180,8 @@ export async function onMsg(ctx, msg) {
     if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
     const role = await getRole(ctx, cid);
     if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
-    if (ctx.globalKv) {
-      await addSupport(ctx.globalKv, cid);
+    if (ctx.db) {
+      await addSupport(ctx, cid);
       return send(ctx, cid, t(lg, 'support_registered'));
     }
     return send(ctx, cid, t(lg, 'unknown'));
@@ -208,27 +208,26 @@ export async function onMsg(ctx, msg) {
     }
     const arg = txt.slice(24).trim();
     if (!arg) return send(ctx, cid, '⚠️ Использование: /add_technical_support @username или ID');
-    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
+    if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
     const { masterId, masterName } = await resolveMasterInput(ctx, msg, arg);
     if (!masterId) return send(ctx, cid, t(lg, 'support_user_not_found'));
-    await addTechnicalSupport(ctx.globalKv, masterId);
+    await addTechnicalSupport(ctx, masterId);
     return send(ctx, cid, t(lg, 'sysadm_tech_support_added'));
   }
 
   if (txt === '/resetwebhooks') {
     if (!(await isPlatformAdmin(ctx, cid))) return;
-    const kv = ctx.globalKv || ctx.kv;
-    if (!kv || !ctx.baseUrl) return send(ctx, cid, '❌ KV или baseUrl недоступны');
+    if (!ctx.db || !ctx.baseUrl) return send(ctx, cid, '❌ DB или baseUrl недоступны');
     await send(ctx, cid, '🔄 Обновляю вебхуки для всех ботов...');
     let ok = 0, fail = 0;
     let report = '';
     try {
-      const tenantIds = await listTenantIds(kv);
+      const tenantIds = await listTenantIds(ctx);
       for (const tenantId of tenantIds) {
-        const botIds = await getBotIdsByTenantId(kv, tenantId);
+        const botIds = await getBotIdsByTenantId(ctx, tenantId);
         for (const botId of botIds) {
-          const bot = await getBot(kv, botId);
-          const token = await getBotToken(kv, botId, ctx.BOT_ENCRYPTION_KEY || null);
+          const bot = await getBot(ctx, botId);
+          const token = await getBotToken(ctx, botId, ctx.BOT_ENCRYPTION_KEY || null);
           if (!token) { fail++; report += `❌ ${botId}: нет токена\n`; continue; }
           const webhookSecret = bot?.webhookSecret || '';
           const wh = `${ctx.baseUrl}/webhook/${botId}`;
@@ -253,10 +252,10 @@ export async function onMsg(ctx, msg) {
     if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     const arg = txt.startsWith('/remove_support ') ? txt.slice(15).trim() : '';
     if (!arg) return send(ctx, cid, t(lg, 'support_remove_usage'));
-    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
+    if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
     const { masterId, masterName } = await resolveMasterInput(ctx, msg, arg);
     if (!masterId) return send(ctx, cid, t(lg, 'support_user_not_found'));
-    await removeSupport(ctx.globalKv, masterId);
+    await removeSupport(ctx, masterId);
     return send(ctx, cid, fill(t(lg, 'support_removed'), { n: escHtml(masterName) }));
   }
 
@@ -275,8 +274,8 @@ export async function onMsg(ctx, msg) {
   if (txt.startsWith('/sysadmin ')) {
     const key = txt.slice(10).trim();
     if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
-    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
-    await setSystemAdmin(ctx.globalKv, cid);
+    if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
+    await setSystemAdmin(ctx, cid);
     await send(ctx, cid, t(lg, 'sysadm_registered'));
     return showPlatformAdminPanel(ctx, cid, name);
   }
@@ -344,8 +343,7 @@ export async function onMsg(ctx, msg) {
     // Determine target ctx (cross-tenant for system_admin)
     let targetCtx = ctx;
     if (tenantIdArg) {
-      const kv = ctx.globalKv || ctx.kv;
-      targetCtx = { ...ctx, kv, prefix: `t:${tenantIdArg}:` };
+      targetCtx = { ...ctx, tenantId: tenantIdArg, prefix: `t:${tenantIdArg}:` };
     }
     if (!targetCtx.prefix) return send(ctx, cid, fill(t(lg, 'sysadm_no_tenant_ctx'), { cmd }));
     await setTenantRole(targetCtx, masterId, targetRole);
@@ -565,9 +563,8 @@ export async function onMsg(ctx, msg) {
   // ─── Platform admin flows (создатель или system_admin) ────────────────────
 
   async function doRegisterBot(token, tenantId) {
-    const kv = ctx.globalKv || ctx.kv;
     const webhookSecret = randomId(20);
-    const result = await registerBot(kv, token, tenantId, webhookSecret, ctx.BOT_ENCRYPTION_KEY || null);
+    const result = await registerBot(ctx, token, tenantId, webhookSecret, ctx.BOT_ENCRYPTION_KEY || null);
     await clearState(ctx, cid);
     if (!result.ok) {
       const errMsg = result.error === 'tenant_has_bot'
@@ -606,8 +603,7 @@ export async function onMsg(ctx, msg) {
   if (st.step === STEP.SYSADM_NEW_TENANT && (await isPlatformAdmin(ctx, cid))) {
     const tenantName = txt?.trim();
     if (!tenantName || tenantName.length < 2) return send(ctx, cid, t(lg, 'sysadm_tenant_name_invalid'));
-    const kv = ctx.globalKv || ctx.kv;
-    const result = await createTenant(kv, tenantName, ctx);
+    const result = await createTenant(ctx, tenantName, ctx);
     await clearState(ctx, cid);
     if (result.ok) {
       await send(ctx, cid,
@@ -654,8 +650,8 @@ export async function onMsg(ctx, msg) {
       });
     }
     await clearState(ctx, cid);
-    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
-    await addSupport(ctx.globalKv, masterId);
+    if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
+    await addSupport(ctx, masterId);
     await send(ctx, cid, t(lg, 'sysadm_support_added'));
     return showPlatformSupportList(ctx, cid);
   }
@@ -672,8 +668,8 @@ export async function onMsg(ctx, msg) {
       });
     }
     await clearState(ctx, cid);
-    if (!ctx.globalKv) return send(ctx, cid, t(lg, 'unknown'));
-    await addTechnicalSupport(ctx.globalKv, masterId);
+    if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
+    await addTechnicalSupport(ctx, masterId);
     await send(ctx, cid, t(lg, 'sysadm_tech_support_added'));
     return showPlatformTechSupportList(ctx, cid);
   }
@@ -728,9 +724,8 @@ export async function onMsg(ctx, msg) {
     const targetRole = isOwner ? ROLES.TENANT_OWNER : ROLES.MASTER;
     let targetCtx = ctx;
     if (!targetCtx.prefix) {
-      const kv = ctx.globalKv || ctx.kv;
       const tenantId = ctx.tenantId;
-      if (tenantId) targetCtx = { ...ctx, kv, prefix: `t:${tenantId}:` };
+      if (tenantId) targetCtx = { ...ctx, tenantId, prefix: `t:${tenantId}:` };
     }
     if (targetCtx.prefix) {
       await setTenantRole(targetCtx, masterId, targetRole);
@@ -745,11 +740,11 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.REJECT_COMMENT) {
     if (!txt) return send(ctx, cid, t(lg, 'mst_reject_prompt'));
-    const apt = await kvGet(ctx, `ap:${st.aptId}`);
+    const apt = await getAptById(ctx, st.aptId);
     if (!apt || apt.status !== 'pending') return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'rejected';
     apt.rejectComment = txt.slice(0, 500);
-    await kvPut(ctx, `ap:${st.aptId}`, apt);
+    await updateApt(ctx, st.aptId, { status: 'rejected', rejectComment: txt.slice(0, 500) });
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
     let clientMsg = fill(t(clg, 'apt_rejected'), { svc: svcName(ctx, clg, apt.svcId), dt: fmtDT(clg, apt.date, apt.time) });
@@ -774,13 +769,13 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.COUNTER_COMMENT) {
     const comment = txt ? txt.slice(0, 500) : '';
-    const apt = await kvGet(ctx, `ap:${st.aptId}`);
+    const apt = await getAptById(ctx, st.aptId);
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'counter_offer';
     apt.counterTime = st.newTime;
     apt.counterComment = comment || null;
     apt.confirmedBy = cid;
-    await kvPut(ctx, `ap:${st.aptId}`, apt);
+    await updateApt(ctx, st.aptId, { status: 'counter_offer', counterTime: st.newTime, counterComment: comment || null, confirmedBy: cid });
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
     let clientMsg = fill(t(clg, 'apt_counter'), { svc: svcName(ctx, clg, apt.svcId), d: fmtDate(clg, apt.date), newtime: st.newTime });
@@ -795,9 +790,9 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.ADMIN_CANCEL_REASON) {
     const reason = txt ? txt.slice(0, 500) : '';
-    const apt = await kvGet(ctx, `ap:${st.aptId}`);
+    const apt = await getAptById(ctx, st.aptId);
     if (!apt || apt.cx) { await clearState(ctx, cid); return; }
-    apt.cancelReason = reason || null;
+    if (reason) await updateApt(ctx, apt.id, { cancelReason: reason });
     const cancelled = await cancelApt(ctx, apt.id, cid, true);
     await clearState(ctx, cid);
     if (cancelled) {
@@ -817,7 +812,7 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.CLIENT_REPLY) {
     if (!txt) return send(ctx, cid, t(lg, 'apt_enter_reply'));
-    const apt = await kvGet(ctx, `ap:${st.aptId}`);
+    const apt = await getAptById(ctx, st.aptId);
     if (!apt) { await clearState(ctx, cid); return; }
     await clearState(ctx, cid);
     const recipients = new Set();
@@ -842,13 +837,12 @@ export async function onMsg(ctx, msg) {
        st.step === STEP.EDIT_SALON_ADDR || st.step === STEP.EDIT_SALON_HOURS_FROM) &&
       (await isAdmin(ctx, cid))) {
     if (!txt) return send(ctx, cid, t(lg, 'unknown'));
-    const kv = ctx.globalKv || ctx.kv;
     const tenantId = ctx.tenantId;
-    if (!kv || !tenantId) {
+    if (!ctx.db || !tenantId) {
       await clearState(ctx, cid);
       return send(ctx, cid, t(lg, 'adm_settings_no_tenant'));
     }
-    const tenant = await getTenant(kv, tenantId);
+    const tenant = await getTenant(ctx, tenantId);
     if (!tenant) {
       await clearState(ctx, cid);
       return send(ctx, cid, t(lg, 'unknown'));
@@ -872,7 +866,7 @@ export async function onMsg(ctx, msg) {
       tenant.salon.workHours = { from, to };
     }
     tenant.updatedAt = Date.now();
-    await putTenant(kv, tenantId, tenant);
+    await putTenant(ctx, tenantId, tenant);
     // Reflect changes in ctx for immediate display
     if (ctx.tenant) { ctx.tenant.salon = tenant.salon; ctx.tenant.name = tenant.name; }
     await clearState(ctx, cid);

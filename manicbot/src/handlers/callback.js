@@ -29,6 +29,7 @@ import {
   revokeGoogleIntegration,
   syncAppointmentCalendar,
   syncGoogleIntegrationNow,
+  deleteAppointmentCalendar,
 } from '../services/google-calendar-oauth.js';
 
 function fmtAuditTs(ts) {
@@ -818,6 +819,9 @@ export async function onCb(ctx, cb) {
     if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'rejected';
     await updateApt(ctx, aptId, { status: 'rejected' });
+    if (apt.googleEventId) {
+      deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
+    }
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
     let clientMsg = fill(t(clg, 'apt_rejected'), { svc: svcName(ctx, clg, apt.svcId), dt: fmtDT(clg, apt.date, apt.time) });

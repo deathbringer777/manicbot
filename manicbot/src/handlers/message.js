@@ -18,6 +18,7 @@ import { getTenant, putTenant, listTenantIds, getBotIdsByTenantId, getBot, getBo
 import { showPlatformAdminPanel, showPlatformSupportList, showPlatformTechSupportList } from '../ui/sysadmin.js';
 import { timingSafeEqual, randomId } from '../utils/security.js';
 import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications.js';
+import { deleteAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showClientsList, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
@@ -745,6 +746,9 @@ export async function onMsg(ctx, msg) {
     apt.status = 'rejected';
     apt.rejectComment = txt.slice(0, 500);
     await updateApt(ctx, st.aptId, { status: 'rejected', rejectComment: txt.slice(0, 500) });
+    if (apt.googleEventId) {
+      deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
+    }
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
     let clientMsg = fill(t(clg, 'apt_rejected'), { svc: svcName(ctx, clg, apt.svcId), dt: fmtDT(clg, apt.date, apt.time) });

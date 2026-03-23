@@ -227,6 +227,15 @@ export const pl: Translations = {
     button: "Zacznij za darmo — bez karty",
   },
 
+  seo: {
+    title: "ManicBot — rezerwacje w Telegramie dla salonów i stylistek | AI, 4 języki, UE",
+    description:
+      "ManicBot: rezerwacja manicure w Telegramie — asystent 24/7, synchronizacja z Google Calendar, języki EN/RU/UA/PL. Dla salonów i niezależnych stylistek w Polsce i Europie.",
+    keywords:
+      "bot Telegram, rezerwacja salonu, manicure, Polska, Europa, asystent AI, Google Calendar, automatyzacja beauty",
+    ogSiteName: "ManicBot",
+  },
+
   theme: {
     toggleGroup: "Motyw strony",
     dark: "Ciemny",

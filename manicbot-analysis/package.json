@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:brand-icons": "python3 scripts/build-round-brand-icons.py",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

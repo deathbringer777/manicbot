@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useCallback, type ReactNode, createElement } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  type ReactNode,
+  createElement,
+} from "react";
 import { en, type Translations } from "./en";
 import { ru } from "./ru";
 import { ua } from "./ua";
@@ -35,13 +43,43 @@ function getSavedLocale(): Locale {
   return "ru";
 }
 
+function readLocaleFromUrl(): Locale | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const q = new URLSearchParams(window.location.search).get("lang");
+    if (q && q in locales) return q as Locale;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(getSavedLocale);
+  const [locale, setLocaleState] = useState<Locale>(() => readLocaleFromUrl() ?? getSavedLocale());
+
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("lang") !== locale) {
+        u.searchParams.set("lang", locale);
+        window.history.replaceState({}, "", u.toString());
+      }
+    } catch {
+      // ignore
+    }
+  }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     try {
       localStorage.setItem(STORAGE_KEY, l);
+    } catch {
+      // ignore
+    }
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set("lang", l);
+      window.history.replaceState({}, "", u.toString());
     } catch {
       // ignore
     }

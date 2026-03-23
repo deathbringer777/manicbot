@@ -1,0 +1,8 @@
+{
+  "name": "manicbot-blog",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node generate.mjs"
+  }
+}

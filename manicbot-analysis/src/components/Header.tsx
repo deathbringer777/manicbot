@@ -12,7 +12,13 @@ export function Header() {
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[rgba(5,8,18,0.82)]">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
-        <div className="min-w-0 shrink-0 pr-1">
+        <div className="flex min-w-0 shrink-0 items-center gap-2.5 pr-1">
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 via-violet-500 to-cyan-500 text-[1.65rem] leading-none shadow-lg shadow-violet-500/30 ring-[2.5px] ring-white/50 dark:shadow-violet-900/40 dark:ring-white/15"
+            aria-hidden
+          >
+            💅
+          </span>
           <span className="block truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white sm:text-base">
             ManicBot
             <span

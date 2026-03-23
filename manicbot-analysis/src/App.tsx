@@ -9,6 +9,7 @@ import { TestimonialsSection } from "@/components/TestimonialsSection";
 import { FaqSection } from "@/components/FaqSection";
 import { CtaSection } from "@/components/CtaSection";
 import { Footer } from "@/components/Footer";
+import { SeoHead } from "@/components/SeoHead";
 
 function Landing() {
   return (
@@ -66,6 +67,7 @@ function Landing() {
       />
 
       <div className="relative z-10">
+        <SeoHead />
         <Header />
         <HeroSection />
         <FeaturesSection />

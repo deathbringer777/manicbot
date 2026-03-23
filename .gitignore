@@ -11,6 +11,9 @@ node_modules/
 make_logo.py
 manicbot_logo.png
 
+# Generated static blog output (built in CI)
+manicbot-blog/dist/
+
 # wrangler local state
 .wrangler
 .dev.vars*

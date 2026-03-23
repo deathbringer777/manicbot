@@ -32,6 +32,16 @@ git push origin landing/pre-manicbot-analysis
 
 Откат кода: `git checkout landing/pre-manicbot-analysis` (и при необходимости вернуть старый `deploy.yml` из этого коммита).
 
+## Блог на поддомене (SEO)
+
+Папка **`manicbot-blog`**: статические статьи на **4 языках** (RU/EN/UA/PL), отдельный деплой в Cloudflare Pages.
+
+1. В Cloudflare создайте проект Pages **`manicbot-blog`** (первый деплой произойдёт из GitHub Actions job **Blog — Deploy Pages** после push в `main`).
+2. В **Custom domains** привяжите **`blog.manicbot.com`** (DNS CNAME на `*.pages.dev` как подскажет Cloudflare).
+3. На основном лендинге **нет** ссылок на блог — страницы предназначены для поисковиков и прямых входов; `robots.txt` основного сайта указывает sitemap блога.
+
+Содержимое и метаданные генерируются командой `node generate.mjs` (см. `manicbot-blog/generate.mjs`).
+
 ## Секреты CI
 
 Как и для бота: **`CLOUDFLARE_API_TOKEN`**, **`CLOUDFLARE_ACCOUNT_ID`**.

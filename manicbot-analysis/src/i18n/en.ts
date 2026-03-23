@@ -225,6 +225,15 @@ export const en = {
     button: "Start free — no card",
   },
 
+  seo: {
+    title: "ManicBot — Telegram booking for nail salons & masters | AI, 4 languages, EU",
+    description:
+      "ManicBot: manicure booking inside Telegram — 24/7 assistant, Google Calendar sync, EN/RU/UA/PL. Built for salons and independent masters in Poland and across Europe.",
+    keywords:
+      "Telegram booking bot, nail salon, manicure, Poland, Europe, AI assistant, Google Calendar, beauty salon automation",
+    ogSiteName: "ManicBot",
+  },
+
   theme: {
     toggleGroup: "Site theme",
     dark: "Dark",

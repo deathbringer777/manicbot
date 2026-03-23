@@ -227,6 +227,15 @@ export const ua: Translations = {
     button: "Почати безкоштовно — без картки",
   },
 
+  seo: {
+    title: "ManicBot — запис у Telegram для салонів і майстрів | ШІ, 4 мови, ЄС",
+    description:
+      "ManicBot: запис на манікюр у Telegram — помічник цілодобово, синхронізація з Google Calendar, мови EN/RU/UA/PL. Для салонів і приватних майстрів у Польщі та Європі.",
+    keywords:
+      "бот запису Telegram, салон краси, манікюр, Польща, Європа, ШІ, Google Calendar, автоматизація салону",
+    ogSiteName: "ManicBot",
+  },
+
   theme: {
     toggleGroup: "Тема оформлення",
     dark: "Темна",

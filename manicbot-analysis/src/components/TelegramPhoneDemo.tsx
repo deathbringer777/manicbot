@@ -149,10 +149,16 @@ export function TelegramPhoneDemo() {
             >
               ‹
             </button>
-            <div
-              className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-white/10"
-              style={{ background: "linear-gradient(135deg,#f9a8d4,#fbcfe8)" }}
-            />
+            <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full ring-[1.5px] ring-white/20">
+              <img
+                src="/favicon-48.png"
+                alt=""
+                width={36}
+                height={36}
+                className="h-full w-full object-cover"
+                decoding="async"
+              />
+            </div>
             <div className="flex-1 min-w-0">
               <div className="text-[14px] font-semibold truncate" style={{ color: tg.text }}>
                 Manicbot

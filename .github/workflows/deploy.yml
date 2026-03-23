@@ -114,28 +114,3 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: ${{ steps.landing.outputs.dir }}
           command: pages deploy dist --project-name=manicbot-landing --commit-dirty=true
-
-  # ─── Blog (blog.manicbot.com): static SEO pages, no link from main landing ───
-  deploy-blog:
-    runs-on: ubuntu-latest
-    name: Blog — Deploy Pages (blog subdomain)
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Generate static blog
-        run: node generate.mjs
-        working-directory: manicbot-blog
-
-      - name: Deploy blog to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: manicbot-blog
-          command: pages deploy dist --project-name=manicbot-blog --commit-dirty=true

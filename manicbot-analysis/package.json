@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:blog": "BLOG_INTEGRATED=1 node ../manicbot-blog/generate.mjs",
+    "prebuild": "npm run generate:blog",
     "build:brand-icons": "python3 scripts/build-round-brand-icons.py",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node generate.mjs"
+    "build": "node generate.mjs",
+    "build:landing": "BLOG_INTEGRATED=1 node generate.mjs"
   }
 }

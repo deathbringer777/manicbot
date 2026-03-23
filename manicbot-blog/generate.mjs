@@ -1,10 +1,17 @@
-import { mkdir, writeFile, copyFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT = join(__dirname, "dist");
-const SITE = "https://blog.manicbot.com";
+const INTEGRATED =
+  process.env.BLOG_INTEGRATED === "1" || process.env.BLOG_INTEGRATED === "true";
+const OUT = process.env.BLOG_OUT
+  ? process.env.BLOG_OUT
+  : INTEGRATED
+    ? join(__dirname, "..", "manicbot-analysis", "public", "blog")
+    : join(__dirname, "dist");
+/** Public URL prefix (path on manicbot.com — no separate subdomain/DNS). */
+const SITE = "https://manicbot.com/blog";
 const MAIN = "https://manicbot.com";
 const OG_IMG = "https://manicbot.com/og-image.png";
 
@@ -341,16 +348,6 @@ ${urls.map((loc) => `  <url><loc>${loc}</loc></url>`).join("\n")}
     `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`,
     "utf8"
   );
-
-  const headers = `/*
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
-  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;
-`;
-  await writeFile(join(OUT, "_headers"), headers, "utf8");
 }
 
 main().catch((e) => {

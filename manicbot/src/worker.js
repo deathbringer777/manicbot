@@ -48,6 +48,8 @@ async function getCtx(env, url, request) {
 function isLandingPath(pathname) {
   if (pathname === '/' || pathname.startsWith('/assets/')) return true;
   if (pathname === '/favicon.svg' || pathname === '/favicon.ico') return true;
+  // Static SEO blog (generated into public/blog/)
+  if (pathname === '/blog' || pathname === '/blog/' || pathname.startsWith('/blog/')) return true;
   // Root-level static files from Vite public/ (og-image, favicon-48, apple-touch, robots, sitemap, …)
   if (/^\/[^/]+\.(?:png|svg|ico|txt|xml|webmanifest)$/i.test(pathname)) return true;
   return false;
@@ -141,6 +143,9 @@ export default {
     await ensureDemoBotsProvisioned(env);
 
     if (request.method === 'GET' && env.LANDING_URL && isLandingPath(url.pathname)) {
+      if (url.pathname === '/blog') {
+        return Response.redirect(new URL('/blog/', url).toString(), 308);
+      }
       const landingOrigin = env.LANDING_URL.replace(/\/$/, '');
       const landingUrl = url.pathname === '/' ? `${landingOrigin}/` : `${landingOrigin}${url.pathname}`;
       const res = await fetch(landingUrl, { headers: request.headers });

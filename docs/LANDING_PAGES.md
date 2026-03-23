@@ -32,15 +32,15 @@ git push origin landing/pre-manicbot-analysis
 
 Откат кода: `git checkout landing/pre-manicbot-analysis` (и при необходимости вернуть старый `deploy.yml` из этого коммита).
 
-## Блог на поддомене (SEO)
+## Блог (SEO) — путь `/blog/` на manicbot.com
 
-Папка **`manicbot-blog`**: статические статьи на **4 языках** (RU/EN/UA/PL), отдельный деплой в Cloudflare Pages.
+Статические статьи на **4 языках** (RU/EN/UA/PL) **не требуют отдельного поддомена и DNS**: они генерируются в **`manicbot-analysis/public/blog/`** перед сборкой лендинга (`npm run prebuild` → `manicbot-blog/generate.mjs` с `BLOG_INTEGRATED=1`) и попадают в тот же деплой Pages **`manicbot-landing`**.
 
-1. В Cloudflare создайте проект Pages **`manicbot-blog`** (первый деплой произойдёт из GitHub Actions job **Blog — Deploy Pages** после push в `main`).
-2. В **Custom domains** привяжите **`blog.manicbot.com`** (DNS CNAME на `*.pages.dev` как подскажет Cloudflare).
-3. На основном лендинге **нет** ссылок на блог — страницы предназначены для поисковиков и прямых входов; `robots.txt` основного сайта указывает sitemap блога.
+Публичные URL: **`https://manicbot.com/blog/...`**. Worker (`manicbot/src/worker.js`) проксирует запросы `/blog` и `/blog/*` на `LANDING_URL`, редирект **`/blog` → `/blog/`** (308).
 
-Содержимое и метаданные генерируются командой `node generate.mjs` (см. `manicbot-blog/generate.mjs`).
+Отдельный проект **`manicbot-blog`** в Cloudflare и запись **`blog.manicbot.com`** **не обязательны** (старый поддомен можно не настраивать или позже сделать редирект на `/blog/` в Cloudflare Rules).
+
+Локально только блог: из корня репо `node manicbot-blog/generate.mjs` → вывод в `manicbot-blog/dist/` (базовый URL всё равно `https://manicbot.com/blog` в HTML).
 
 ## Секреты CI
 

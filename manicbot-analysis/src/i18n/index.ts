@@ -8,7 +8,8 @@ export type Locale = "en" | "ru" | "ua" | "pl";
 
 export const locales: Record<Locale, Translations> = { en, ru, ua, pl };
 
-export const localeOrder: Locale[] = ["en", "ru", "ua", "pl"];
+/** RU first — совпадает с языком по умолчанию */
+export const localeOrder: Locale[] = ["ru", "en", "ua", "pl"];
 
 interface LanguageContextValue {
   locale: Locale;
@@ -17,8 +18,8 @@ interface LanguageContextValue {
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
-  locale: "en",
-  t: en,
+  locale: "ru",
+  t: ru,
   setLocale: () => undefined,
 });
 
@@ -31,7 +32,7 @@ function getSavedLocale(): Locale {
   } catch {
     // SSR or blocked storage
   }
-  return "en";
+  return "ru";
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {

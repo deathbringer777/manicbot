@@ -227,6 +227,12 @@ export const pl: Translations = {
     button: "Zacznij za darmo — bez karty",
   },
 
+  theme: {
+    toggleGroup: "Motyw strony",
+    dark: "Ciemny",
+    light: "Jasny",
+  },
+
   footer: {
     tagline: "ManicBot — rezerwacje w Telegramie.",
     links: ["Prywatność", "Regulamin", "Wsparcie"],

@@ -1,6 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru" class="dark">
   <head>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("manicbot-theme");
+          if (t === "light") {
+            document.documentElement.classList.remove("dark");
+            document.documentElement.style.colorScheme = "light";
+          } else {
+            document.documentElement.classList.add("dark");
+            document.documentElement.style.colorScheme = "dark";
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

@@ -1,3 +1,4 @@
+import { ThemeProvider } from "@/theme/ThemeProvider";
 import { LanguageProvider } from "@/i18n";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
@@ -12,12 +13,35 @@ import { Footer } from "@/components/Footer";
 function Landing() {
   return (
     <div
-      className="min-h-screen text-white antialiased relative overflow-x-hidden"
-      style={{ background: "#050812", fontFamily: "Space Grotesk, sans-serif" }}
+      className="relative min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 antialiased dark:bg-[#050812] dark:text-white"
+      style={{ fontFamily: "Space Grotesk, sans-serif" }}
     >
-      {/* Background orbs */}
       <div
-        className="fixed pointer-events-none"
+        className="pointer-events-none fixed dark:hidden"
+        style={{
+          top: "-12%",
+          right: "-10%",
+          width: "65vw",
+          height: "65vw",
+          background: "radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 62%)",
+          filter: "blur(72px)",
+          zIndex: 0,
+        }}
+      />
+      <div
+        className="pointer-events-none fixed dark:hidden"
+        style={{
+          bottom: "5%",
+          left: "-15%",
+          width: "55vw",
+          height: "55vw",
+          background: "radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 62%)",
+          filter: "blur(72px)",
+          zIndex: 0,
+        }}
+      />
+      <div
+        className="pointer-events-none fixed hidden dark:block"
         style={{
           top: "-15%",
           right: "-15%",
@@ -29,7 +53,7 @@ function Landing() {
         }}
       />
       <div
-        className="fixed pointer-events-none"
+        className="pointer-events-none fixed hidden dark:block"
         style={{
           bottom: "10%",
           left: "-20%",
@@ -58,8 +82,10 @@ function Landing() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <Landing />
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <Landing />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }

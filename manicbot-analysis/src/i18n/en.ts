@@ -225,6 +225,12 @@ export const en = {
     button: "Start free — no card",
   },
 
+  theme: {
+    toggleGroup: "Site theme",
+    dark: "Dark",
+    light: "Light",
+  },
+
   footer: {
     tagline: "ManicBot — booking in Telegram.",
     links: ["Privacy", "Terms", "Support"],

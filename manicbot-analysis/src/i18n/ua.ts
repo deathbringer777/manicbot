@@ -227,6 +227,12 @@ export const ua: Translations = {
     button: "Почати безкоштовно — без картки",
   },
 
+  theme: {
+    toggleGroup: "Тема оформлення",
+    dark: "Темна",
+    light: "Світла",
+  },
+
   footer: {
     tagline: "ManicBot — запис у Telegram.",
     links: ["Конфіденційність", "Умови", "Підтримка"],

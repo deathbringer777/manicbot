@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLanguage } from "@/i18n";
+import { useTheme } from "@/theme/ThemeProvider";
 
 /** Animated iPhone frame with Telegram-style chat (demo loop). */
 export function TelegramPhoneDemo() {
   const { t } = useLanguage();
+  const { theme } = useTheme();
   const p = t.phoneDemo;
   const rootRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
@@ -65,23 +67,40 @@ export function TelegramPhoneDemo() {
       {/* Outer phone body */}
       <div
         className="relative rounded-[2.75rem] p-[10px] shadow-2xl"
-        style={{
-          background: "linear-gradient(145deg,#1a1a22,#0a0a10)",
-          boxShadow:
-            "0 50px 100px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.08)",
-        }}
+        style={
+          theme === "light"
+            ? {
+                background: "linear-gradient(145deg,#e8e8ed,#c8cad4)",
+                boxShadow:
+                  "0 40px 80px -24px rgba(15,23,42,0.25), 0 0 0 1px rgba(255,255,255,0.9), inset 0 2px 0 rgba(255,255,255,0.75)",
+              }
+            : {
+                background: "linear-gradient(145deg,#1a1a22,#0a0a10)",
+                boxShadow:
+                  "0 50px 100px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.08)",
+              }
+        }
       >
         {/* Side buttons (decorative) */}
         <div
-          className="absolute -left-[2px] top-[18%] w-[3px] h-8 rounded-l-sm bg-zinc-700/80"
+          className={[
+            "absolute -left-[2px] top-[18%] h-8 w-[3px] rounded-l-sm",
+            theme === "light" ? "bg-slate-400/90" : "bg-zinc-700/80",
+          ].join(" ")}
           aria-hidden
         />
         <div
-          className="absolute -left-[2px] top-[28%] w-[3px] h-14 rounded-l-sm bg-zinc-700/80"
+          className={[
+            "absolute -left-[2px] top-[28%] h-14 w-[3px] rounded-l-sm",
+            theme === "light" ? "bg-slate-400/90" : "bg-zinc-700/80",
+          ].join(" ")}
           aria-hidden
         />
         <div
-          className="absolute -right-[2px] top-[22%] w-[3px] h-16 rounded-r-sm bg-zinc-700/80"
+          className={[
+            "absolute -right-[2px] top-[22%] h-16 w-[3px] rounded-r-sm",
+            theme === "light" ? "bg-slate-400/90" : "bg-zinc-700/80",
+          ].join(" ")}
           aria-hidden
         />
 
@@ -291,7 +310,7 @@ export function TelegramPhoneDemo() {
 
       {/* Reflection / glow under phone */}
       <div
-        className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-[70%] h-10 rounded-[100%] blur-2xl opacity-40 pointer-events-none"
+        className="pointer-events-none absolute -bottom-8 left-1/2 h-10 w-[70%] -translate-x-1/2 rounded-[100%] opacity-25 blur-2xl"
         style={{ background: "linear-gradient(90deg,#7c3aed,#06b6d4)" }}
         aria-hidden
       />

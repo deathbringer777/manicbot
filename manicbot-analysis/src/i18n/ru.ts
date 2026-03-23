@@ -227,6 +227,12 @@ export const ru: Translations = {
     button: "Начать бесплатно — без карты",
   },
 
+  theme: {
+    toggleGroup: "Тема оформления",
+    dark: "Тёмная",
+    light: "Светлая",
+  },
+
   footer: {
     tagline: "ManicBot — запись в Telegram.",
     links: ["Конфиденциальность", "Условия", "Поддержка"],

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* class "dark" на <html> — варианты dark:* */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   /* ── Font families ── */
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -11,25 +14,25 @@
   --color-brand-cyan: #06b6d4;
   --color-brand-blue: #3b82f6;
 
-  /* ── shadcn/ui compatibility (dark theme) ── */
-  --color-background: #050812;
-  --color-foreground: #f8fafc;
-  --color-card: rgba(255, 255, 255, 0.04);
-  --color-card-foreground: #f8fafc;
-  --color-popover: #0f172a;
-  --color-popover-foreground: #f8fafc;
+  /* ── shadcn/ui — светлая тема ── */
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
   --color-primary: #7c3aed;
   --color-primary-foreground: #ffffff;
-  --color-secondary: rgba(255, 255, 255, 0.06);
-  --color-secondary-foreground: #f8fafc;
-  --color-muted: rgba(255, 255, 255, 0.05);
-  --color-muted-foreground: #94a3b8;
-  --color-accent: rgba(124, 58, 237, 0.15);
-  --color-accent-foreground: #f8fafc;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: rgba(124, 58, 237, 0.08);
+  --color-accent-foreground: #4c1d95;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-input: rgba(255, 255, 255, 0.06);
+  --color-border: rgba(15, 23, 42, 0.08);
+  --color-input: rgba(15, 23, 42, 0.06);
   --color-ring: #7c3aed;
 
   /* ── Border radius ── */
@@ -117,6 +120,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  html.dark body {
+    background-color: #050812;
+    color: #f8fafc;
+  }
+
   code, pre, .font-mono {
     font-family: var(--font-mono);
   }
@@ -125,23 +133,23 @@
 @layer utilities {
   /* Glass morphism */
   .glass {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.72);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(15, 23, 42, 0.08);
   }
 
   .glass-card {
-    background: linear-gradient(145deg, rgba(124, 58, 237, 0.06), rgba(6, 182, 212, 0.03));
+    background: linear-gradient(145deg, rgba(124, 58, 237, 0.06), rgba(6, 182, 212, 0.04));
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow: 0 8px 32px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
   .glass-card:hover {
-    border-color: rgba(124, 58, 237, 0.3);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(124, 58, 237, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border-color: rgba(124, 58, 237, 0.22);
+    box-shadow: 0 12px 40px rgba(124, 58, 237, 0.1), 0 0 0 1px rgba(124, 58, 237, 0.08), inset 0 1px 0 rgba(255, 255, 255, 1);
   }
 
   /* Gradient text */

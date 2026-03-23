@@ -26,44 +26,29 @@ export function FeaturesSection() {
   const { t } = useLanguage();
 
   return (
-    <section id="features" className="py-20 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Section header */}
-        <div className="text-center mb-14">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+    <section id="features" className="px-4 py-20">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-14 text-center">
+          <h2 className="mb-4 text-3xl font-bold text-slate-900 sm:text-4xl dark:text-white">
             {t.features.title}
           </h2>
-          <p className="text-white/45 max-w-md mx-auto text-sm leading-relaxed">
+          <p className="mx-auto max-w-md text-sm leading-relaxed text-slate-600 dark:text-white/45">
             {t.features.sub}
           </p>
         </div>
 
-        {/* Feature grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {t.features.items.map((f, i) => (
             <div
               key={f.title}
-              className="group rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 cursor-default"
-              style={{
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "rgba(124,58,237,0.3)";
-                (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.06)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.07)";
-                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";
-              }}
+              className="group cursor-default rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-violet-200 hover:shadow-md hover:shadow-violet-500/5 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-violet-500/30 dark:hover:bg-violet-500/[0.06] dark:hover:shadow-violet-500/10"
             >
-              {/* Icon */}
               <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
-                style={{ background: gradients[i % gradients.length] + "20" }}
+                className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl"
+                style={{ background: gradients[i % gradients.length] + "18" }}
               >
                 <svg
-                  className="w-5 h-5"
+                  className="h-5 w-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   strokeWidth={1.5}
@@ -79,8 +64,8 @@ export function FeaturesSection() {
                 </svg>
               </div>
 
-              <h3 className="text-sm font-semibold text-white mb-2">{f.title}</h3>
-              <p className="text-xs text-white/40 leading-relaxed">{f.desc}</p>
+              <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-white">{f.title}</h3>
+              <p className="text-xs leading-relaxed text-slate-600 dark:text-white/40">{f.desc}</p>
             </div>
           ))}
         </div>

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLanguage } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 
+import brandMark from "@/assets/manicbot-emoji-mark-ui.png";
+
 /** Animated iPhone frame with Telegram-style chat (demo loop). */
 export function TelegramPhoneDemo() {
   const { t } = useLanguage();
@@ -151,7 +153,7 @@ export function TelegramPhoneDemo() {
             </button>
             <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full ring-[1.5px] ring-white/20">
               <img
-                src="/favicon-48.png"
+                src={brandMark}
                 alt=""
                 width={36}
                 height={36}

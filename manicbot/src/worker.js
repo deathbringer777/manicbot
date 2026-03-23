@@ -44,8 +44,13 @@ async function getCtx(env, url, request) {
   return buildLegacyCtx(env);
 }
 
+/** GET paths proxied to LANDING_URL (Pages). Keep in sync with manicbot-analysis/public. */
 function isLandingPath(pathname) {
-  return pathname === '/' || pathname.startsWith('/assets/') || pathname === '/favicon.svg' || pathname === '/favicon.ico';
+  if (pathname === '/' || pathname.startsWith('/assets/')) return true;
+  if (pathname === '/favicon.svg' || pathname === '/favicon.ico') return true;
+  // Root-level static files from Vite public/ (og-image, favicon-48, apple-touch, robots, sitemap, …)
+  if (/^\/[^/]+\.(?:png|svg|ico|txt|xml|webmanifest)$/i.test(pathname)) return true;
+  return false;
 }
 
 // Demo bots — tokens read from env secrets (set via `wrangler secret put`)

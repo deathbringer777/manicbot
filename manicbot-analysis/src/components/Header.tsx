@@ -1,6 +1,7 @@
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useLanguage } from "@/i18n";
+import brandMark from "@/assets/manicbot-emoji-mark-ui.png";
 
 export function Header() {
   const { t } = useLanguage();
@@ -14,10 +15,17 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 shrink-0 items-center gap-2.5 pr-1">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 via-violet-500 to-cyan-500 text-[1.65rem] leading-none shadow-lg shadow-violet-500/30 ring-[2.5px] ring-white/50 dark:shadow-violet-900/40 dark:ring-white/15"
+            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full shadow-lg shadow-violet-500/30 ring-[2.5px] ring-white/50 dark:shadow-violet-900/40 dark:ring-white/15"
             aria-hidden
           >
-            💅
+            <img
+              src={brandMark}
+              alt=""
+              width={40}
+              height={40}
+              className="h-full w-full object-cover"
+              decoding="async"
+            />
           </span>
           <span className="block truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white sm:text-base">
             ManicBot

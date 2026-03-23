@@ -11,6 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SRC = ROOT / "src" / "assets" / "manicbot-emoji-mark.png"
 
 
+def flatten_opaque(im: Image.Image, rgb: tuple[int, int, int] = (8, 13, 24)) -> Image.Image:
+    """Composite onto opaque background so transparent 'rings' never show as checkerboard."""
+    im = im.convert("RGBA")
+    bg = Image.new("RGBA", im.size, (*rgb, 255))
+    return Image.alpha_composite(bg, im)
+
+
 def cover_square(im: Image.Image, side: int) -> Image.Image:
     """Scale to cover `side`×`side`, center-crop."""
     w, h = im.size
@@ -34,7 +41,7 @@ def main() -> None:
     ui_dir = ROOT / "src" / "assets"
     ui_dir.mkdir(parents=True, exist_ok=True)
 
-    img = Image.open(src).convert("RGBA")
+    img = flatten_opaque(Image.open(src))
     base = cover_square(img, 1024)
 
     def write(size: int, path: Path) -> None:

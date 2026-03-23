@@ -22,6 +22,7 @@ import {
   handleGoogleSelect,
   handleGoogleWebhook,
 } from './services/google-calendar-oauth.js';
+import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from './utils/landing-pages-proxy.js';
 
 function envCtx(env) {
   return { db: env.DB || null, kv: env.MANICBOT, globalKv: env.MANICBOT };
@@ -42,36 +43,6 @@ async function getCtx(env, url, request) {
     if (resolved) return buildTenantCtx(env, resolved);
   }
   return buildLegacyCtx(env);
-}
-
-/** Default Pages host if dashboard cleared LANDING_URL (vars in wrangler.toml are often overridden). */
-const DEFAULT_LANDING_ORIGIN = 'https://manicbot-landing.pages.dev';
-
-function resolveLandingOrigin(env) {
-  const raw = env.LANDING_URL && String(env.LANDING_URL).trim();
-  if (raw) {
-    const o = raw.replace(/\/$/, '');
-    try {
-      const host = new URL(o).hostname;
-      // Mis-set LANDING_URL to the Worker hostname causes fetch loops / "Not Found".
-      if (host === 'manicbot.com' || host === 'www.manicbot.com') return DEFAULT_LANDING_ORIGIN;
-    } catch (_) {
-      /* ignore */
-    }
-    return o;
-  }
-  return DEFAULT_LANDING_ORIGIN;
-}
-
-/** GET paths proxied to LANDING_URL (Pages). Keep in sync with manicbot-analysis/public. */
-function isLandingPath(pathname) {
-  if (pathname === '/' || pathname.startsWith('/assets/')) return true;
-  if (pathname === '/favicon.svg' || pathname === '/favicon.ico') return true;
-  // Static SEO blog (generated into public/blog/)
-  if (pathname === '/blog' || pathname === '/blog/' || pathname.startsWith('/blog/')) return true;
-  // Root-level static files from Vite public/ (og-image, favicon-48, apple-touch, robots, sitemap, …)
-  if (/^\/[^/]+\.(?:png|svg|ico|txt|xml|webmanifest)$/i.test(pathname)) return true;
-  return false;
 }
 
 // Demo bots — tokens read from env secrets (set via `wrangler secret put`)
@@ -166,7 +137,7 @@ export default {
         return Response.redirect(new URL('/blog/', url).toString(), 308);
       }
       const landingOrigin = resolveLandingOrigin(env);
-      const landingUrl = url.pathname === '/' ? `${landingOrigin}/` : `${landingOrigin}${url.pathname}`;
+      const landingUrl = buildLandingFetchUrl(url.pathname, landingOrigin);
       const res = await fetch(landingUrl, { headers: request.headers });
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers });
     }

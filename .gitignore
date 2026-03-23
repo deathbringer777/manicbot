@@ -13,9 +13,6 @@ manicbot_logo.png
 
 # Generated static blog output (standalone `node generate.mjs` in manicbot-blog)
 manicbot-blog/dist/
-# Blog HTML baked into landing public/ during `npm run build` (manicbot-analysis)
-manicbot-analysis/public/blog/
-
 # wrangler local state
 .wrangler
 .dev.vars*

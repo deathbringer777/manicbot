@@ -34,7 +34,7 @@ git push origin landing/pre-manicbot-analysis
 
 ## Блог (SEO) — путь `/blog/` на manicbot.com
 
-Статические статьи на **4 языках** (RU/EN/UA/PL) **не требуют отдельного поддомена и DNS**: они генерируются в **`manicbot-analysis/public/blog/`** перед сборкой лендинга (`npm run prebuild` → `manicbot-blog/generate.mjs` с `BLOG_INTEGRATED=1`) и попадают в тот же деплой Pages **`manicbot-landing`**.
+Статические статьи на **4 языках** (RU/EN/UA/PL) **не требуют отдельного поддомена и DNS**: HTML лежит в **`manicbot-analysis/public/blog/`** (в git, чтобы прод всегда получал `/blog/*` даже если lifecycle npm на CI сбойнул). Перед сборкой `prebuild` всё равно перегенерирует папку из `manicbot-blog/generate.mjs`. Итог попадает в один деплой Pages **`manicbot-landing`**.
 
 Публичные URL: **`https://manicbot.com/blog/...`**. Worker (`manicbot/src/worker.js`) проксирует запросы `/blog` и `/blog/*` на `LANDING_URL`, редирект **`/blog` → `/blog/`** (308).
 

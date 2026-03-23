@@ -15,7 +15,7 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 shrink-0 items-center gap-2.5 pr-1">
           <span
-            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full shadow-lg shadow-violet-500/30 ring-[2.5px] ring-white/50 dark:shadow-violet-900/40 dark:ring-white/15"
+            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full shadow-md shadow-violet-500/25 ring-1 ring-white/45 dark:shadow-violet-900/35 dark:ring-white/12"
             aria-hidden
           >
             <img

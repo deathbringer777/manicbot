@@ -151,7 +151,7 @@ export function TelegramPhoneDemo() {
             >
               ‹
             </button>
-            <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full ring-[1.5px] ring-white/20">
+            <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full ring-1 ring-white/25">
               <img
                 src={brandMark}
                 alt=""

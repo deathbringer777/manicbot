@@ -19,7 +19,7 @@ export const pl: Translations = {
     sub: "Gość nie musi instalować nic nowego — pisze jak na czacie, a Ty dostajesz jasne potwierdzenie, godzinę i cenę w jednej wiadomości.",
     ctaPrimary: "Jak to działa",
     ctaSecondary: "Zobacz cennik",
-    trustLine: "Dla małych salonów i mistrzów pracujących na siebie",
+    trustLine: "Dla salonów i prywatnych mistrzów",
     demoCaption: "Tak to wygląda w Telegramie",
   },
 
@@ -34,7 +34,7 @@ export const pl: Translations = {
     time: "22:41",
     botLabel: "bot",
     welcomeLead: "💅 Witaj w Preview Salon!",
-    welcomeHi: "Cześć, KIRILL! 👋",
+    welcomeHi: "Cześć, Anno! 👋",
     welcomeBody: "Pomogę Ci zapisać się na manicure szybko i wygodnie.",
     featuresIntro: "🌸 Co potrafię:",
     features: [
@@ -54,7 +54,7 @@ export const pl: Translations = {
     confirmWhen: "📅 24 mar (wt) 15:00",
     confirmDuration: "⏱️ 60 min",
     confirmPrice: "💵 80 zł",
-    confirmClient: "👤 KIRILL",
+    confirmClient: "👤 Anna",
     btnOk: "✅ Potwierdź",
     btnNo: "❌ Anuluj",
     inputPlaceholder: "Wiadomość…",
@@ -75,9 +75,9 @@ export const pl: Translations = {
         desc: "Odpowiada na typowe pytania i delikatnie prowadzi do dogodnej godziny — Ty decydujesz.",
       },
       {
-        icon: "credit-card",
-        title: "Płatności opcjonalnie",
-        desc: "Stripe, gdy chcesz zaliczkę lub przedpłatę. Wszystko przejrzyście dla Ciebie i gościa.",
+        icon: "layout-panel",
+        title: "Panel pod właściciela",
+        desc: "Usługi, ceny i grafik w jednym miejscu — mniej chaosu w czatach i arkuszach.",
       },
       {
         icon: "globe",
@@ -162,13 +162,13 @@ export const pl: Translations = {
         highlighted: true,
       },
       {
-        name: "Studio",
+        name: "Biznes",
         price: "90 zł",
         period: "/mies",
-        desc: "Dla dużego studia",
+        desc: "Dla sieci salonów lub dużego zespołu",
         features: [
           "Nieograniczeni mistrzowie",
-          "White label",
+          "Wygląd bota pod Twój salon",
           "Personalizacja",
           "Dedykowane wsparcie",
         ],
@@ -189,12 +189,12 @@ export const pl: Translations = {
       {
         text: "AI obsługuje wszystkie pytania 'a ile to kosztuje'. W końcu mogę skupić się na pracy.",
         author: "Maria S.",
-        role: "Mistrzyni urody, Kijów",
+        role: "Mistrzyni urody, Wrocław",
       },
       {
         text: "Skonfigurowałam w jeden wieczór. Następnego ranka miałam 8 nowych rezerwacji od klientów, którzy nigdy wcześniej do nas nie dzwonili.",
         author: "Daria L.",
-        role: "Menedżer salonu, Londyn",
+        role: "Menedżer salonu, Poznań",
       },
     ],
   },

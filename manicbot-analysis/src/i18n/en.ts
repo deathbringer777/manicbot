@@ -17,7 +17,7 @@ export const en = {
     sub: "No new apps to learn. Guests write as they already chat — you get a clear confirmation, time, and price in one place.",
     ctaPrimary: "See how it works",
     ctaSecondary: "View pricing",
-    trustLine: "Built for small salons and solo masters",
+    trustLine: "For salons and independent masters running their own business",
     demoCaption: "How it looks in Telegram",
   },
 
@@ -32,7 +32,7 @@ export const en = {
     time: "22:41",
     botLabel: "bot",
     welcomeLead: "💅 Welcome to Preview Salon!",
-    welcomeHi: "Hi, KIRILL 👋",
+    welcomeHi: "Hi, Anna 👋",
     welcomeBody: "I'll help you book a manicure in a calm, simple way.",
     featuresIntro: "🌸 What I can do:",
     features: [
@@ -52,7 +52,7 @@ export const en = {
     confirmWhen: "📅 Tue, Mar 24 · 15:00",
     confirmDuration: "⏱️ 60 min",
     confirmPrice: "💵 80 zł",
-    confirmClient: "👤 KIRILL",
+    confirmClient: "👤 Anna",
     btnOk: "✅ Confirm",
     btnNo: "❌ Cancel",
     inputPlaceholder: "Message…",
@@ -73,9 +73,9 @@ export const en = {
         desc: "Answers common questions and nudges guests toward a time that fits — you stay in control.",
       },
       {
-        icon: "credit-card",
-        title: "Payments (optional)",
-        desc: "Stripe when you want deposits or prepay. Clear receipts for you and the client.",
+        icon: "layout-panel",
+        title: "Owner-friendly control",
+        desc: "Services, prices, and slots in one place — less juggling chats and spreadsheets.",
       },
       {
         icon: "globe",
@@ -160,13 +160,13 @@ export const en = {
         highlighted: true,
       },
       {
-        name: "Studio",
+        name: "Business",
         price: "90 zł",
         period: "/mo",
-        desc: "For a large studio",
+        desc: "For multi-location or fast-growing teams",
         features: [
           "Unlimited masters",
-          "White label",
+          "Bot styling to match your brand",
           "Custom setup",
           "Dedicated support",
         ],
@@ -187,12 +187,12 @@ export const en = {
       {
         text: "The AI handles all the 'how much does it cost' questions. I can finally focus on work.",
         author: "Maria S.",
-        role: "Beauty master, Kyiv",
+        role: "Beauty master, Wrocław",
       },
       {
         text: "Set up in one evening. Next morning we had 8 new bookings from clients who never called us before.",
         author: "Daria L.",
-        role: "Salon manager, London",
+        role: "Salon manager, Poznań",
       },
     ],
   },

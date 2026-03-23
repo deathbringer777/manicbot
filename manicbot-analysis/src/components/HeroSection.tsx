@@ -65,16 +65,18 @@ export function HeroSection() {
               </button>
             </div>
 
-            <p className="mb-8 text-xs text-slate-400 lg:mb-0 dark:text-white/30">{t.hero.trustLine}</p>
+            <p className="mb-6 max-w-md text-center text-xs leading-relaxed text-slate-500 dark:text-white/40 lg:mb-6 lg:max-w-none lg:text-left">
+              {t.hero.trustLine}
+            </p>
 
-            <div className="flex flex-wrap justify-center gap-2 lg:justify-start">
+            <div className="mx-auto grid w-full max-w-[20rem] grid-cols-2 gap-2 sm:max-w-none sm:grid-cols-4 lg:mx-0">
               {t.stats.map((s, i) => (
                 <div
                   key={i}
-                  className="rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left shadow-sm dark:border-white/[0.07] dark:bg-white/[0.03]"
+                  className="flex min-h-[4.5rem] flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-left shadow-sm dark:border-white/[0.07] dark:bg-white/[0.03]"
                 >
                   <span
-                    className="font-mono text-lg font-bold"
+                    className="font-mono text-lg font-bold leading-tight"
                     style={{
                       background: "linear-gradient(135deg,#a78bfa,#5eead4)",
                       WebkitBackgroundClip: "text",
@@ -84,7 +86,9 @@ export function HeroSection() {
                   >
                     {s.value}
                   </span>
-                  <span className="mt-0.5 block text-[10px] text-slate-500 dark:text-white/35">{s.label}</span>
+                  <span className="mt-1 block text-[10px] font-medium leading-snug text-slate-500 dark:text-white/40">
+                    {s.label}
+                  </span>
                 </div>
               ))}
             </div>

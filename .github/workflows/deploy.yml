@@ -8,6 +8,16 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      landing_source:
+        description: "Лендинг на Cloudflare Pages (тот же проект manicbot-landing / manicbot.com)"
+        required: true
+        default: manicbot-analysis
+        type: choice
+        options:
+          - manicbot-analysis
+          - manicbot-landing
 
 jobs:
   # ─── Bot: test ──────────────────────────────────────────────
@@ -61,32 +71,46 @@ jobs:
           command: deploy --config wrangler.toml
 
   # ─── Landing: build + deploy to Cloudflare Pages ────────────
+  # Push main → новый сайт (manicbot-analysis). Ручной запуск → можно выбрать manicbot-landing (откат).
   deploy-landing:
     runs-on: ubuntu-latest
     name: Landing — Deploy Pages
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
+
+      - name: Выбор пакета лендинга
+        id: landing
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.landing_source }}" = "manicbot-landing" ]; then
+            echo "dir=manicbot-landing" >> "$GITHUB_OUTPUT"
+            echo "📦 Деплой **legacy**: manicbot-landing (прежняя вёрстка сайта)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "dir=manicbot-analysis" >> "$GITHUB_OUTPUT"
+            echo "📦 Деплой **текущий**: manicbot-analysis" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: manicbot-landing/package-lock.json
+          cache-dependency-path: ${{ steps.landing.outputs.dir }}/package-lock.json
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-        working-directory: manicbot-landing
+        working-directory: ${{ steps.landing.outputs.dir }}
 
       - name: Build landing
         run: npm run build
-        working-directory: manicbot-landing
+        working-directory: ${{ steps.landing.outputs.dir }}
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: manicbot-landing
+          workingDirectory: ${{ steps.landing.outputs.dir }}
           command: pages deploy dist --project-name=manicbot-landing --commit-dirty=true

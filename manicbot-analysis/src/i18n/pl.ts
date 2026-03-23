@@ -162,7 +162,7 @@ export const pl: Translations = {
         highlighted: true,
       },
       {
-        name: "Biznes",
+        name: "MAX",
         price: "90 zł",
         period: "/mies",
         desc: "Dla sieci salonów lub dużego zespołu",
@@ -212,7 +212,7 @@ export const pl: Translations = {
       },
       {
         q: "Czy mogę dostosować osobowość bota?",
-        a: "Tak. W planie Biznes możesz ustawić nazwę, styl komunikacji, a nawet zdjęcie profilowe dla AI.",
+        a: "Tak. W planie MAX możesz ustawić nazwę, styl komunikacji, a nawet zdjęcie profilowe dla AI.",
       },
       {
         q: "Czy przetwarzanie płatności jest bezpieczne?",

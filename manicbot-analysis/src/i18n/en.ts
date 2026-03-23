@@ -160,7 +160,7 @@ export const en = {
         highlighted: true,
       },
       {
-        name: "Business",
+        name: "MAX",
         price: "90 zł",
         period: "/mo",
         desc: "For multi-location or fast-growing teams",
@@ -210,7 +210,7 @@ export const en = {
       },
       {
         q: "Can I customize the bot's personality?",
-        a: "Yes. On Business plan you can set a custom name, language style and even a profile photo for the AI.",
+        a: "Yes. On the MAX plan you can set a custom name, language style and even a profile photo for the AI.",
       },
       {
         q: "Is payment processing secure?",

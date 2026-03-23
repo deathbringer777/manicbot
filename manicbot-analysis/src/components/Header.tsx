@@ -11,15 +11,16 @@ export function Header() {
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[rgba(5,8,18,0.82)]">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:gap-4 sm:px-6">
-        <div className="flex flex-shrink-0 items-center gap-2.5">
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-base font-bold text-white shadow-md shadow-violet-500/25"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
-          >
-            M
-          </div>
-          <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">ManicBot</span>
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
+        <div className="min-w-0 shrink-0 pr-1">
+          <span className="block truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white sm:text-base">
+            ManicBot
+            <span
+              className="bg-gradient-to-r from-violet-600 to-cyan-500 bg-clip-text font-bold text-transparent dark:from-violet-400 dark:to-cyan-400"
+            >
+              .com
+            </span>
+          </span>
         </div>
 
         <nav className="hidden items-center gap-6 md:flex">
@@ -39,7 +40,7 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <ThemeToggle />
           <LanguageSwitcher />
           <button

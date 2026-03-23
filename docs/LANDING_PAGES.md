@@ -42,6 +42,12 @@ git push origin landing/pre-manicbot-analysis
 
 Локально только блог: из корня репо `node manicbot-blog/generate.mjs` → вывод в `manicbot-blog/dist/` (базовый URL всё равно `https://manicbot.com/blog` в HTML).
 
+## «Not Found» на manicbot.com или /blog/
+
+1. **Worker** проксирует `/` и `/blog/*` на **`LANDING_URL`** (по умолчанию `https://manicbot-landing.pages.dev`). В **Cloudflare → Workers → manicbot → Settings → Variables** не задавайте `LANDING_URL` пустым и **не указывайте `https://manicbot.com`** (петля запроса). Если переменная пустая или указывает на сам домен, в коде используется fallback на `manicbot-landing.pages.dev`.
+2. Убедитесь, что последний деплой **Landing — Deploy Pages** прошёл и в логе есть шаг **Verify dist** (в `dist/` есть `blog/…`).
+3. В **Pages → manicbot-landing → Custom domains** домен `manicbot.com` должен быть привязан к этому проекту (как в документации Cloudflare для Worker + Pages).
+
 ## Секреты CI
 
 Как и для бота: **`CLOUDFLARE_API_TOKEN`**, **`CLOUDFLARE_ACCOUNT_ID`**.

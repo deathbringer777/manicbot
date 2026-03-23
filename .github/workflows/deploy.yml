@@ -107,6 +107,13 @@ jobs:
         run: npm run build
         working-directory: ${{ steps.landing.outputs.dir }}
 
+      - name: Verify dist (SPA + /blog static)
+        run: |
+          test -f dist/index.html
+          test -f dist/blog/index.html
+          test -f dist/blog/ru/manicbot-telegram-booking.html
+          echo "OK: blog HTML present in Pages artifact"
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

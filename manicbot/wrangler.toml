@@ -10,8 +10,11 @@ routes = [
 # ─── Публичные переменные окружения ─────────────────────────────────────────
 [vars]
 APP_BASE_URL = "https://manicbot.com"
-# Landing (Cloudflare Pages)
+# Landing (Cloudflare Pages) — must be the *.pages.dev (or preview) URL, NOT manicbot.com
+# If the Worker dashboard has an empty LANDING_URL, code falls back to manicbot-landing.pages.dev
 LANDING_URL = "https://manicbot-landing.pages.dev"
+# Admin mini-app (God Mode panel) — Cloudflare Pages
+ADMIN_APP_URL = "https://admin-app-3nc.pages.dev"
 
 # ⚠️  ВНИМАНИЕ: ADMIN_CHAT_ID — это Telegram chat_id создателя платформы.
 # Даёт ПОЛНЫЙ доступ к системной панели. В идеале выносить в секрет:

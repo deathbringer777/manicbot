@@ -44,6 +44,25 @@ async function getCtx(env, url, request) {
   return buildLegacyCtx(env);
 }
 
+/** Default Pages host if dashboard cleared LANDING_URL (vars in wrangler.toml are often overridden). */
+const DEFAULT_LANDING_ORIGIN = 'https://manicbot-landing.pages.dev';
+
+function resolveLandingOrigin(env) {
+  const raw = env.LANDING_URL && String(env.LANDING_URL).trim();
+  if (raw) {
+    const o = raw.replace(/\/$/, '');
+    try {
+      const host = new URL(o).hostname;
+      // Mis-set LANDING_URL to the Worker hostname causes fetch loops / "Not Found".
+      if (host === 'manicbot.com' || host === 'www.manicbot.com') return DEFAULT_LANDING_ORIGIN;
+    } catch (_) {
+      /* ignore */
+    }
+    return o;
+  }
+  return DEFAULT_LANDING_ORIGIN;
+}
+
 /** GET paths proxied to LANDING_URL (Pages). Keep in sync with manicbot-analysis/public. */
 function isLandingPath(pathname) {
   if (pathname === '/' || pathname.startsWith('/assets/')) return true;
@@ -142,11 +161,11 @@ export default {
     // One-time self-provisioning (runs inside worker for KV consistency)
     await ensureDemoBotsProvisioned(env);
 
-    if (request.method === 'GET' && env.LANDING_URL && isLandingPath(url.pathname)) {
+    if (request.method === 'GET' && isLandingPath(url.pathname)) {
       if (url.pathname === '/blog') {
         return Response.redirect(new URL('/blog/', url).toString(), 308);
       }
-      const landingOrigin = env.LANDING_URL.replace(/\/$/, '');
+      const landingOrigin = resolveLandingOrigin(env);
       const landingUrl = url.pathname === '/' ? `${landingOrigin}/` : `${landingOrigin}${url.pathname}`;
       const res = await fetch(landingUrl, { headers: request.headers });
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers });
@@ -272,23 +291,6 @@ h1{font-size:1.5em}.s{background:#fff;padding:24px;border-radius:12px;margin:16p
       } catch (e) {
         return Response.json({ error: e.message, stack: e.stack }, { status: 400 });
       }
-    }
-
-    if (request.method === 'GET' && url.pathname === '/' && !env.LANDING_URL) {
-      return new Response(`<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>ManicBot</title>
-<style>
-body{font-family:system-ui;max-width:600px;margin:60px auto;padding:0 20px;background:#fdf2f8;color:#831843}
-h1{font-size:2.5em}
-.s{background:#fff;padding:20px;border-radius:12px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.1)}
-.s h3{margin-top:0}
-code{background:#fce7f3;padding:2px 6px;border-radius:4px}
-</style></head><body>
-<h1>💅 ManicBot</h1>
-<p>Telegram-бот для записи на маникюр</p>
-<div class="s"><h3>Status</h3><p>✅ Worker is running</p></div>
-<div class="s"><h3>Setup</h3><p>Use <code>/setup?key=YOUR_KEY</code> to configure webhook</p></div>
-</body></html>`, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
     }
 
     if (request.method === 'GET' && url.pathname === '/google/connect') {

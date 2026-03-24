@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseQuickBookingPhrase, isWantHumanMessage, isMyAppointmentsMessage, getContextAction, isConfirmAllRequestsMessage, isAdminCancelAllMessage, hasHeavyProfanity } from '../src/patterns.js';
+import { parseQuickBookingPhrase, isWantHumanMessage, isMyAppointmentsMessage, getContextAction, isConfirmAllRequestsMessage, isAdminCancelAllMessage, hasHeavyProfanity, parseServiceMention, isBookingConfirmDeclineText } from '../src/patterns.js';
+
+const SVC_CTX = { svcIds: new Set(['classic', 'gel', 'pedi', 'ext', 'design', 'combo']) };
 
 describe('parseQuickBookingPhrase — negation handling', () => {
   it('rejects "не запиши" (negation)', () => {
@@ -53,6 +55,29 @@ describe('parseQuickBookingPhrase — negation handling', () => {
   it('handles "book" in English', () => {
     const result = parseQuickBookingPhrase('book manicure tomorrow at 14');
     expect(result).not.toBeNull();
+  });
+});
+
+describe('parseServiceMention — correction without «запиши»', () => {
+  it('detects pedicure (RU)', () => {
+    expect(parseServiceMention('на педикюр бля', SVC_CTX)).toBe('pedi');
+  });
+  it('detects gel', () => {
+    expect(parseServiceMention('гель-лак', SVC_CTX)).toBe('gel');
+  });
+  it('returns null without service', () => {
+    expect(parseServiceMention('просто текст', SVC_CTX)).toBeNull();
+  });
+});
+
+describe('isBookingConfirmDeclineText', () => {
+  it('matches short declines', () => {
+    expect(isBookingConfirmDeclineText('нет')).toBe(true);
+    expect(isBookingConfirmDeclineText('no')).toBe(true);
+    expect(isBookingConfirmDeclineText('ні')).toBe(true);
+  });
+  it('rejects long sentences', () => {
+    expect(isBookingConfirmDeclineText('нет я имел в виду другое время завтра')).toBe(false);
   });
 });
 

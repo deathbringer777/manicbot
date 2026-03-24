@@ -6,13 +6,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { isBillingExpired, checkBillingExpiry } from '../src/billing/lifecycle.js';
 import { createMockD1 } from './helpers/mock-db.js';
+import { nowSec } from '../src/utils/time.js';
 
 // ─── isBillingExpired — чистая функция ───────────────────────────────────────
 
 describe('isBillingExpired', () => {
-  const PAST  = Date.now() - 86400000; // вчера
-  const NOW   = Date.now();
-  const FUTURE = Date.now() + 86400000; // завтра
+  const PAST  = nowSec() - 86400; // вчера (sec)
+  const NOW   = nowSec();
+  const FUTURE = nowSec() + 86400; // завтра (sec)
 
   it('возвращает null для null tenant', () => {
     expect(isBillingExpired(null, NOW)).toBeNull();
@@ -62,8 +63,8 @@ describe('isBillingExpired', () => {
 // ─── checkBillingExpiry — с side-effects ─────────────────────────────────────
 
 describe('checkBillingExpiry', () => {
-  const PAST   = Date.now() - 86400000;
-  const FUTURE = Date.now() + 86400000;
+  const PAST   = nowSec() - 86400;
+  const FUTURE = nowSec() + 86400;
 
   function makeTenantCtx(tenant) {
     const db = createMockD1();
@@ -120,7 +121,7 @@ describe('checkBillingExpiry', () => {
   });
 
   it('принимает явный параметр now', async () => {
-    const fixedNow = Date.now();
+    const fixedNow = nowSec();
     const ctx = makeTenantCtx({ billingStatus: 'trialing', trialEndsAt: fixedNow - 1 });
     const result = await checkBillingExpiry(ctx, fixedNow);
     expect(result).toBe('trial_expired');

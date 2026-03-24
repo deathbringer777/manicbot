@@ -1,14 +1,15 @@
 import { send, sendPhoto, editPhoto, api } from '../telegram.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc } from '../utils/helpers.js';
 import { fmtDT, fmtDate } from '../utils/date.js';
-import { CB, SALON, ADDRESS, PHONE, HOURS_STR } from '../config.js';
+import { CB, SALON, ADDRESS, PHONE, HOURS_STR, MAPS_URL } from '../config.js';
 import { getLang } from '../services/chat.js';
 import { clearState } from '../services/state.js';
-import { getRole } from '../services/users.js';
+import { getRole, isPlatformAdmin } from '../services/users.js';
 import { getApts } from '../services/appointments.js';
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
 import { mainKb, langKb, catListKb, catPhotoKb, aboutPhotoKb } from './keyboards.js';
 import { showAdminPanel, showMasterPanel } from './admin.js';
+import { showPlatformAdminPanel } from './sysadmin.js';
 
 export async function showLangPick(ctx, chatId) {
   await send(ctx, chatId,
@@ -20,18 +21,27 @@ export async function showWelcome(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
   const role = await getRole(ctx, cid);
+  const salonName = ctx.tenant?.salon?.name || SALON;
   await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
-  await send(ctx, cid, fill(t(lg, 'welcome'), { s: SALON, n: escHtml(name) }), mainKb(lg, role));
+  await send(ctx, cid, fill(t(lg, 'welcome'), { s: salonName, n: escHtml(name) }), mainKb(lg, role));
 }
 
 /**
  * Routes to the appropriate home screen based on the user's role.
- * - admin / tenant_owner → Admin panel
- * - master → Master panel
- * - client (and others) → Client welcome
+ * - system_admin in main bot  → Platform admin panel
+ * - system_admin in tenant bot → Admin panel (acts as admin)
+ * - admin / tenant_owner       → Admin panel
+ * - master                     → Master panel
+ * - client (and others)        → Client welcome
  */
 export async function showHomeByRole(ctx, cid, name) {
+  // Platform creator / system_admin in main bot → platform panel (highest priority)
+  if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) {
+    return showPlatformAdminPanel(ctx, cid, name);
+  }
   const role = await getRole(ctx, cid);
+  // system_admin in tenant bot acts as admin
+  if (role === 'system_admin') return showAdminPanel(ctx, cid, name);
   if (role === 'admin' || role === 'tenant_owner') return showAdminPanel(ctx, cid, name);
   if (role === 'master') return showMasterPanel(ctx, cid, name);
   return showWelcome(ctx, cid, name);
@@ -55,7 +65,11 @@ export async function showContacts(ctx, cid) {
   if (instagramUrl) rows.push([{ text: t(lg, 'm_instagram'), url: instagramUrl }]);
   rows.push([{ text: t(lg, 'm_book'), callback_data: CB.BOOK }]);
   rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
-  await send(ctx, cid, fill(t(lg, 'cont_t'), { addr: ADDRESS, ph: PHONE, h: HOURS_STR }), { reply_markup: { inline_keyboard: rows } });
+  const tenantSalon = ctx.tenant?.salon || {};
+  const addr = tenantSalon.address || ADDRESS;
+  const ph = tenantSalon.phone || PHONE;
+  const h = tenantSalon.hoursStr || HOURS_STR;
+  await send(ctx, cid, fill(t(lg, 'cont_t'), { addr, ph, h }), { reply_markup: { inline_keyboard: rows } });
 }
 
 export async function showReviews(ctx, cid) {
@@ -71,15 +85,21 @@ export async function showAbout(ctx, cid, idx = 0, msgId = null) {
   const customDesc = await loadAboutDesc(ctx);
   const desc = customDesc || t(lg, 'about_desc_default');
   const instagramUrl = await loadInstagramUrl(ctx);
-  const aboutTxt = fill(t(lg, 'about_t'), { s: SALON, addr: ADDRESS, h: HOURS_STR, desc: escHtml(desc) });
+  const tenantSalon = ctx.tenant?.salon || {};
+  const aboutTxt = fill(t(lg, 'about_t'), {
+    s: tenantSalon.name || SALON,
+    addr: tenantSalon.address || ADDRESS,
+    h: tenantSalon.hoursStr || HOURS_STR,
+    desc: escHtml(desc),
+  });
   const photos = await loadAboutPhotos(ctx);
 
   if (!photos.length) {
-    return send(ctx, cid, aboutTxt, { reply_markup: { inline_keyboard: [
-      [{ text: t(lg, 'm_instagram'), url: instagramUrl }],
-      [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
-      [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
-    ] } });
+    const rows = [];
+    if (instagramUrl) rows.push([{ text: t(lg, 'm_instagram'), url: instagramUrl }]);
+    rows.push([{ text: t(lg, 'm_book'), callback_data: CB.BOOK }]);
+    rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
+    return send(ctx, cid, aboutTxt, { reply_markup: { inline_keyboard: rows } });
   }
 
   const safeIdx = Math.max(0, Math.min(idx, photos.length - 1));

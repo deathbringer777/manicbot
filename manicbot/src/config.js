@@ -21,6 +21,8 @@ export const CB = {
   CAL_BACK:  'bcal',
   CONFIRM:   'ok',
   CANCEL_BOOK: 'no',
+  /** While adjusting booking after declining confirmation — show service catalog */
+  BOOK_PICK_SVC: 'bpsvc',
   LANG:      'lang',
   LANG_SET:  'sl:',
   REG_YES:   'rg:y',
@@ -82,7 +84,6 @@ export const CB = {
   SVC_PHOTOS:   'svph:',
   SVC_PHOTO_DEL:'svpd:',
   SVC_PHOTO_ADD:'svpa:',
-  SVC_BACK:     'svbk:',
   CONSULT_REQ:  'consult_req',
   SUPPORT:      'support',
   TECH_SUPPORT_REQ: 'tech_req',
@@ -143,13 +144,14 @@ export const CB = {
 };
 
 export const STEP = {
-  IDLE:                'idle',
   REG_CONFIRM:         'rc',
   REG_NAME:            'rn',
   REG_PHONE:           'rp',
   DATE:                'date',
   TIME:                'time',
   CONFIRM:             'conf',
+  /** Declined confirmation screen; date/time/master kept for correction */
+  BOOK_ADJUST:         'badj',
   CLIENT_CANCEL_COMMENT: 'client_cancel_comment',
   ADD_MASTER:          'add_master',
   REJECT_COMMENT:      'reject_comment',
@@ -169,7 +171,6 @@ export const STEP = {
   EDIT_ABOUT_INSTAGRAM:'edit_about_instagram',
   MASTER_PICK:         'master_pick',   // booking step: choose master
   SUPPORT_MSG:         'support_msg',
-  SUPPORT_REPLY:       'support_reply',
   TECH_SUPPORT_MSG:    'tech_support_msg',
   // Platform admin flows
   SYSADM_NEW_TENANT:       'sysadm_new_tenant',
@@ -205,7 +206,6 @@ export const RATE_LIMIT_MAX = 100;
 export const RATE_LIMIT_WINDOW_SEC = 60;
 export const CHAT_HISTORY_MAX = 8;
 export const CHAT_HISTORY_TTL = 3600;
-export const CLIENTS_PER_PAGE = 8;
 export const HUMAN_REQ_THRESHOLD = 1;
 
 export const DEFAULT_SVC = [
@@ -295,5 +295,6 @@ export function buildCtx(env) {
     GOOGLE_TOKEN_ENCRYPTION_KEY: env.GOOGLE_TOKEN_ENCRYPTION_KEY || null,
     APP_BASE_URL: env.APP_BASE_URL || null,
     baseUrl: env.APP_BASE_URL || null,
+    ADMIN_APP_URL: env.ADMIN_APP_URL || null,
   };
 }

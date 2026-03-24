@@ -1,5 +1,6 @@
 import { kvGet, kvPut, kvDel, kvListAll } from '../utils/kv.js';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
+import { nowSec } from '../utils/time.js';
 import { isValidChatId } from '../utils/helpers.js';
 import { api } from '../telegram.js';
 import { resolveRole, getPlatformRole, ROLES } from '../roles/roles.js';
@@ -107,7 +108,7 @@ export async function saveMaster(ctx, cid, data) {
     data.workDays ? JSON.stringify(data.workDays) : null,
     data.onVacation === true ? 1 : 0,
     data.active === false ? 0 : 1,
-    data.addedAt || Date.now(),
+    data.addedAt || nowSec(),
     data.googleCalendarId || null,
     data.calendarEnabled ? 1 : 0,
   );

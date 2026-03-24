@@ -10,6 +10,7 @@ import { loadDayAppointments, getAdminAllApts, getApts } from '../services/appoi
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
 import { dbAll } from '../utils/db.js';
 import { adminKb, masterKb } from './keyboards.js';
+import { canUse } from '../billing/features.js';
 
 /** В тенантном боте — «Главное меню», в главном — «Панель админа». */
 function backToAdmLabel(ctx, lg) { return ctx.tenantId ? t(lg, 'back_m') : t(lg, 'adm_back'); }
@@ -139,7 +140,7 @@ export async function showAboutDescEdit(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const current = await loadAboutDesc(ctx);
   const preview = current ? current.slice(0, 200) + (current.length > 200 ? '...' : '') : t(lg, 'about_desc_default').slice(0, 100) + '...';
-  await setState(ctx, cid, { step: 'edit_about_desc' });
+  await setState(ctx, cid, { step: STEP.EDIT_ABOUT_DESC });
   return send(ctx, cid, `${t(lg, 'adm_enter_about_desc')}\n\n<i>${t(lg, 'adm_current')}:</i>\n${escHtml(preview)}`, {
     reply_markup: { inline_keyboard: [[{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_ABOUT }]] },
   });
@@ -148,7 +149,7 @@ export async function showAboutDescEdit(ctx, cid) {
 export async function showAboutInstagramEdit(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const current = await loadInstagramUrl(ctx);
-  await setState(ctx, cid, { step: 'edit_about_instagram' });
+  await setState(ctx, cid, { step: STEP.EDIT_ABOUT_INSTAGRAM });
   return send(ctx, cid, `${t(lg, 'adm_enter_instagram')}\n\n<i>${t(lg, 'adm_current')}:</i> ${escHtml(current)}`, {
     reply_markup: { inline_keyboard: [[{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_ABOUT }]] },
   });
@@ -157,7 +158,7 @@ export async function showAboutInstagramEdit(ctx, cid) {
 export async function showAdminPanel(ctx, cid, name) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
-  await send(ctx, cid, fill(t(lg, 'adm_welcome'), { n: escHtml(name) }), adminKb(lg));
+  await send(ctx, cid, fill(t(lg, 'adm_welcome'), { n: escHtml(name) }), adminKb(lg, ctx));
 }
 
 export async function showAdminSettings(ctx, cid) {
@@ -181,7 +182,7 @@ export async function showAdminSettings(ctx, cid) {
      { text: t(lg, 'adm_settings_phone_btn'), callback_data: CB.ADM_SETTINGS_PHONE }],
     [{ text: t(lg, 'adm_settings_addr_btn'), callback_data: CB.ADM_SETTINGS_ADDR },
      { text: t(lg, 'adm_settings_hours_btn'), callback_data: CB.ADM_SETTINGS_HOURS }],
-    [{ text: t(lg, 'mst_calendar'), callback_data: CB.ADM_CALENDAR }],
+    ...(canUse(ctx, 'calendar') ? [[{ text: t(lg, 'mst_calendar'), callback_data: CB.ADM_CALENDAR }]] : []),
     [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST }],
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
     [{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }],
@@ -366,10 +367,12 @@ export async function showClientsList(ctx, cid, page = 0, msgId = null) {
   for (const c of slice) {
     const blocked = await isBlocked(ctx, c.chatId);
     txt += `👤 <b>${escHtml(c.name)}</b>${blocked ? ' 🚫' : ''}\n📱 ${escHtml(c.phone)} · ${c.tgUsername ? '@' + escHtml(c.tgUsername) : ''}\n\n`;
-    cBtns.push([
-      { text: `${t(lg, 'adm_block_btn')} ${c.name}`, callback_data: CB.ADM_BLOCK + c.chatId },
-      { text: `${t(lg, 'adm_unblock_btn')} ${c.name}`, callback_data: CB.ADM_UNBLOCK + c.chatId },
-    ]);
+    // Show only the action that makes sense for this client's current status
+    if (blocked) {
+      cBtns.push([{ text: `${t(lg, 'adm_unblock_btn')} ${c.name}`, callback_data: CB.ADM_UNBLOCK + c.chatId }]);
+    } else {
+      cBtns.push([{ text: `${t(lg, 'adm_block_btn')} ${c.name}`, callback_data: CB.ADM_BLOCK + c.chatId }]);
+    }
   }
   if (!clients.length) txt += t(lg, 'adm_no_apts');
   if (totalPages > 1) {

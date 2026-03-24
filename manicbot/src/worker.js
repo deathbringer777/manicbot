@@ -1,3 +1,4 @@
+import { nowSec, msToSec } from './utils/time.js';
 import { buildCtx } from './config.js';
 import { timingSafeEqual, checkAdmin } from './utils/security.js';
 import { dbAll } from './utils/db.js';
@@ -85,8 +86,8 @@ async function ensureDemoBotsProvisioned(env) {
 
   console.log('Self-provisioning demo bots (some missing)...');
   const { dbRun } = await import('./utils/db.js');
-  const TRIAL_MS = 7 * 24 * 3600 * 1000;
-  const now = Date.now();
+  const TRIAL_SEC = msToSec(7 * 24 * 3600 * 1000);
+  const now = nowSec();
 
   const TENANTS = {
     t_salon1: { name: 'Crystal Nails', salon: { name: 'Crystal Nails', address: 'ul. Nowy Świat 15, Warszawa', phone: '+48 22 100 10 01', timezone: 'Europe/Warsaw', workHours: { from: 9, to: 20 }, currency: 'PLN' } },
@@ -101,7 +102,7 @@ async function ensureDemoBotsProvisioned(env) {
     await putTenant(ec, b.tenantId, {
       id: b.tenantId, name: t.name, active: true, createdAt: now, updatedAt: now,
       salon: t.salon, plan: 'pro', billingStatus: 'trialing',
-      trialEndsAt: now + TRIAL_MS, graceEndsAt: null,
+      trialEndsAt: now + TRIAL_SEC, graceEndsAt: null,
       stripeCustomerId: null, stripeSubscriptionId: null,
       currentPeriodEnd: null, billingEmail: null, cancelAtPeriodEnd: false,
     });

@@ -3,6 +3,7 @@
  */
 
 import { getTenant, putTenant } from '../tenant/storage.js';
+import { nowSec } from '../utils/time.js';
 
 export async function getTenantBilling(ctx, tenantId) {
   const tenant = await getTenant(ctx, tenantId);
@@ -31,7 +32,7 @@ export async function updateTenantBilling(ctx, tenantId, updates) {
   const updated = {
     ...tenant,
     ...updates,
-    updatedAt: Date.now(),
+    updatedAt: nowSec(),
   };
   return putTenant(ctx, tenantId, updated);
 }

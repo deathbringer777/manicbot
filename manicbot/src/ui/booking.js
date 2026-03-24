@@ -29,7 +29,7 @@ export async function startBooking(ctx, cid, from) {
   await send(ctx, cid, t(lg, 'choose_svc'), svcKb(ctx, lg));
 }
 
-export async function startBookingWithService(ctx, cid, from, svcId, dateHint = null, timeHint = null) {
+export async function startBookingWithService(ctx, cid, from, svcId, dateHint = null, timeHint = null, masterId = null) {
   const lg = await getLang(ctx, cid) || 'ru';
   if (!ctx.svcIds?.has(svcId)) return startBooking(ctx, cid, from);
   const user = await getUser(ctx, cid);
@@ -41,7 +41,7 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
   const timeStr = timeHint ? resolveTimeHint(timeHint) : null;
 
   if (dateStr) {
-    const slots = await getSlots(ctx, dateStr, svcId);
+    const slots = await getSlots(ctx, dateStr, svcId, masterId ?? null);
     if (!slots.length) {
       await setState(ctx, cid, { step: 'date', svcId });
       return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, dateStr) }) + '\n\n' + t(lg, 'choose_date'), calKb(lg, 0));
@@ -49,7 +49,7 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
     if (timeStr) {
       const slot = slots.includes(timeStr) ? timeStr : findClosestSlot(slots, timeStr);
       if (slot) {
-        await setState(ctx, cid, { step: 'conf', svcId, date: dateStr, time: slot });
+        await setState(ctx, cid, { step: 'conf', svcId, date: dateStr, time: slot, masterId: masterId ?? null });
         const confLines = isCorrectionSvc(svcId)
           ? [fill(t(lg, 'confirm_correction'), { svc: svcName(ctx, lg, svcId), dt: fmtDT(lg, dateStr, slot), name: escHtml(user?.name || '—'), phone: escHtml(user?.phone || '—') })]
           : [t(lg, 'confirm_title'), '', svcName(ctx, lg, svcId), `📅 ${fmtDT(lg, dateStr, slot)}`, `⏱ ${s.dur} ${t(lg, 'min')}`, `💵 ${s.price} ${t(lg, 'cur')}`, '', `👤 ${escHtml(user?.name || '—')}`, `📱 ${escHtml(user?.phone || '—')}`];
@@ -59,7 +59,7 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
         ] } });
       }
     }
-    await setState(ctx, cid, { step: 'time', svcId, date: dateStr });
+    await setState(ctx, cid, { step: 'time', svcId, date: dateStr, masterId: masterId ?? null });
     return send(ctx, cid, `📅 <b>${fmtDate(lg, dateStr)}</b>\n${svcName(ctx, lg, svcId)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
   }
 
@@ -68,6 +68,26 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
     ? fill(t(lg, 'chosen_correction'), { svc: svcName(ctx, lg, svcId) }) + '\n\n' + t(lg, 'choose_date')
     : fill(t(lg, 'chosen'), { svc: svcName(ctx, lg, svcId), p: String(s.price), c: t(lg, 'cur'), d: String(s.dur), min: t(lg, 'min') }) + '\n\n' + t(lg, 'choose_date');
   await send(ctx, cid, chosenText, calKb(lg, 0));
+}
+
+/** After user declines confirmation — keep slot, allow service change via text or catalog. */
+export async function enterBookingAdjustState(ctx, cid, prev) {
+  const lg = await getLang(ctx, cid) || 'ru';
+  if (!prev?.date || !prev?.time || !prev?.svcId) return;
+  await setState(ctx, cid, {
+    step: STEP.BOOK_ADJUST,
+    svcId: prev.svcId,
+    date: prev.date,
+    time: prev.time,
+    masterId: prev.masterId ?? null,
+  });
+  return send(ctx, cid, fill(t(lg, 'book_confirm_declined'), { dt: fmtDT(lg, prev.date, prev.time) }), {
+    reply_markup: { inline_keyboard: [
+      [{ text: t(lg, 'book_repick_service'), callback_data: CB.BOOK_PICK_SVC }],
+      [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+      [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
+    ] },
+  });
 }
 
 /**

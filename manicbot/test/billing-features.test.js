@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { canUse, getMastersLimit, isInactive, isGracePeriod, isTrialing, graceRemainingDays, trialRemainingDays } from '../src/billing/features.js';
+import { nowSec } from '../src/utils/time.js';
 
 function makeCtx(tenant) {
   return { tenant };
@@ -120,14 +121,14 @@ describe('graceRemainingDays', () => {
   });
 
   it('returns positive days when grace is active', () => {
-    const future = Date.now() + 3 * 86400000;
+    const future = nowSec() + 3 * 86400;
     const days = graceRemainingDays(makeCtx({ billingStatus: 'grace_period', graceEndsAt: future }));
     expect(days).toBeGreaterThan(0);
     expect(days).toBeLessThanOrEqual(4);
   });
 
   it('returns 0 when grace has expired', () => {
-    const past = Date.now() - 86400000;
+    const past = nowSec() - 86400;
     expect(graceRemainingDays(makeCtx({ billingStatus: 'grace_period', graceEndsAt: past }))).toBe(0);
   });
 });
@@ -142,14 +143,14 @@ describe('trialRemainingDays', () => {
   });
 
   it('returns positive days when trial is active', () => {
-    const future = Date.now() + 5 * 86400000;
+    const future = nowSec() + 5 * 86400;
     const days = trialRemainingDays(makeCtx({ billingStatus: 'trialing', trialEndsAt: future }));
     expect(days).toBeGreaterThan(0);
     expect(days).toBeLessThanOrEqual(6);
   });
 
   it('returns 0 when trial has expired', () => {
-    const past = Date.now() - 86400000;
+    const past = nowSec() - 86400;
     expect(trialRemainingDays(makeCtx({ billingStatus: 'trialing', trialEndsAt: past }))).toBe(0);
   });
 });

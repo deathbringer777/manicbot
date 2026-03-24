@@ -3,11 +3,11 @@
  */
 
 import { send } from '../telegram.js';
+import { nowSec } from '../utils/time.js';
 import { t, escHtml, fill } from '../utils/helpers.js';
 import { getLang } from '../services/chat.js';
 import { getTenantBilling } from '../billing/storage.js';
 import { getStripeConfig, PLANS } from '../billing/config.js';
-import { graceRemainingDays, trialRemainingDays } from '../billing/features.js';
 import { CB } from '../config.js';
 
 function planLabel(lg, plan) {
@@ -58,15 +58,15 @@ export async function showBillingMenu(ctx, cid) {
 
     // Trial info
     if (billing.billingStatus === 'trialing' && billing.trialEndsAt) {
-      const days = Math.max(0, Math.ceil((billing.trialEndsAt - Date.now()) / 86400000));
-      text += `${t(lg, 'billing_trial_ends')}: ${fmtDate(billing.trialEndsAt)}\n`;
+      const days = Math.max(0, Math.ceil((billing.trialEndsAt - nowSec()) / 86400));
+      text += `${t(lg, 'billing_trial_ends')}: ${fmtDate(billing.trialEndsAt * 1000)}\n`;
       text += `\n${fill(t(lg, 'billing_trial_info'), { days: String(days) })}\n`;
     }
 
     // Grace period warning
     if (billing.billingStatus === 'grace_period' && billing.graceEndsAt) {
-      const days = Math.max(0, Math.ceil((billing.graceEndsAt - Date.now()) / 86400000));
-      text += `${t(lg, 'billing_grace_ends')}: ${fmtDate(billing.graceEndsAt)}\n`;
+      const days = Math.max(0, Math.ceil((billing.graceEndsAt - nowSec()) / 86400));
+      text += `${t(lg, 'billing_grace_ends')}: ${fmtDate(billing.graceEndsAt * 1000)}\n`;
       text += `\n${fill(t(lg, 'billing_grace_warning'), { days: String(days) })}\n`;
     }
 
@@ -79,7 +79,9 @@ export async function showBillingMenu(ctx, cid) {
 
   const rows = [];
   const canCheckout = stripeCfg.ok && stripeCfg.baseUrl;
-  if (canCheckout) {
+  const isActiveSub = billing?.billingStatus === 'active' || billing?.billingStatus === 'trialing';
+  if (canCheckout && !isActiveSub) {
+    // Only show plan selection buttons when not already subscribed
     rows.push(...planButtonRows(lg, stripeCfg));
   }
   if (billing?.stripeCustomerId && canCheckout) {

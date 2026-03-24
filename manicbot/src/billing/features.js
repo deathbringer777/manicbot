@@ -4,6 +4,7 @@
  */
 
 import { PLAN_LIMITS } from './config.js';
+import { nowSec } from '../utils/time.js';
 
 // Features and which plan field they require (null = available on all plans)
 const FEATURE_PLAN_FIELD = {
@@ -78,7 +79,7 @@ export function isTrialing(ctx) {
  */
 export function graceRemainingDays(ctx) {
   if (!isGracePeriod(ctx) || !ctx.tenant.graceEndsAt) return 0;
-  return Math.max(0, Math.ceil((ctx.tenant.graceEndsAt - Date.now()) / 86400000));
+  return Math.max(0, Math.ceil((ctx.tenant.graceEndsAt - nowSec()) / 86400));
 }
 
 /**
@@ -86,5 +87,5 @@ export function graceRemainingDays(ctx) {
  */
 export function trialRemainingDays(ctx) {
   if (!isTrialing(ctx) || !ctx.tenant.trialEndsAt) return 0;
-  return Math.max(0, Math.ceil((ctx.tenant.trialEndsAt - Date.now()) / 86400000));
+  return Math.max(0, Math.ceil((ctx.tenant.trialEndsAt - nowSec()) / 86400));
 }

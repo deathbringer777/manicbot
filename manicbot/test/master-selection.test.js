@@ -49,7 +49,11 @@ function insertMaster(db, master) {
   ).run();
 }
 
-const TUESDAY = '2026-03-24';
+// Compute a future Tuesday (avoids today's "skip past slots" filter in getSlots)
+const _d = new Date();
+_d.setUTCDate(_d.getUTCDate() + 30);
+while (_d.getUTCDay() !== 2) _d.setUTCDate(_d.getUTCDate() + 1);
+const TUESDAY = _d.toISOString().slice(0, 10);
 
 describe('loadDayAppointments — masterId filtering', () => {
   let db, ctx;

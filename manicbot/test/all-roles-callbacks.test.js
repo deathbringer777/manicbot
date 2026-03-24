@@ -6,7 +6,7 @@ describe('CB — all callback constants defined', () => {
     'NOOP', 'MAIN', 'BOOK', 'MY', 'PRICES', 'CONTACTS', 'REVIEWS', 'ABOUT', 'CATALOG',
     'LANG', 'LANG_SET', 'REG_YES', 'REG_CHANGE',
     'SERVICE', 'CAL_MONTH', 'DATE', 'TIME', 'CAL_BACK',
-    'CONFIRM', 'CANCEL_BOOK', 'CANCEL_APT', 'CANCEL_APT_YES', 'CANCEL_APT_SKIP',
+    'CONFIRM', 'CANCEL_BOOK', 'BOOK_PICK_SVC', 'CANCEL_APT', 'CANCEL_APT_YES', 'CANCEL_APT_SKIP',
     'CANCEL_ALL', 'CANCEL_ALL_YES',
     'ADM_MAIN', 'ADM_TODAY', 'ADM_TOMORROW', 'ADM_MASTERS', 'ADM_ADD_M', 'ADM_DEL_M',
     'ADM_RENAME_M', 'ADM_VACATION', 'ADM_SETTINGS', 'ADM_CLIENTS', 'ADM_BILLING',
@@ -54,8 +54,8 @@ describe('CB — no duplicate values', () => {
 
 describe('STEP — all steps defined', () => {
   const requiredSteps = [
-    'IDLE', 'REG_CONFIRM', 'REG_NAME', 'REG_PHONE',
-    'DATE', 'TIME', 'CONFIRM',
+    'REG_CONFIRM', 'REG_NAME', 'REG_PHONE',
+    'DATE', 'TIME', 'CONFIRM', 'BOOK_ADJUST',
     'CLIENT_CANCEL_COMMENT', 'ADD_MASTER', 'RENAME_MASTER',
     'REJECT_COMMENT', 'COUNTER_TIME', 'COUNTER_COMMENT',
     'ADMIN_CANCEL_REASON', 'CLIENT_REPLY',

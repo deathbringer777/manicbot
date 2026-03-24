@@ -22,6 +22,10 @@ export async function notifyAptStaff(ctx, apt, user) {
     for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
   }
   if (adminId) recipients.add(adminId);
+  if (recipients.size === 0) {
+    console.warn('[notifyAptStaff] No recipients for apt', apt.id, '— tenant:', ctx.tenantId,
+      '. Ensure masters table and tenant_config.admin are populated in D1 after KV migration.');
+  }
   const promises = [];
   for (const rcid of recipients) {
     promises.push((async () => {
@@ -79,7 +83,8 @@ export async function confirmAllPendingApts(ctx, cid) {
   for (const apt of pending) {
     apt.status = 'confirmed';
     apt.confirmedBy = cid;
-    await updateApt(ctx, apt.id, { status: 'confirmed', confirmedBy: cid });
+    if (!apt.masterId) apt.masterId = cid;
+    await updateApt(ctx, apt.id, { status: 'confirmed', confirmedBy: cid, masterId: apt.masterId });
     await sendAptConfirmedToClient(ctx, apt);
 
     if (canUse(ctx, 'calendar')) {

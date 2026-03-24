@@ -45,11 +45,11 @@ describe('CB constants', () => {
 
 describe('STEP constants', () => {
   it('has required step constants', () => {
-    expect(STEP.IDLE).toBe('idle');
     expect(STEP.REG_CONFIRM).toBe('rc');
     expect(STEP.REG_NAME).toBe('rn');
     expect(STEP.REG_PHONE).toBe('rp');
     expect(STEP.CONFIRM).toBe('conf');
+    expect(STEP.BOOK_ADJUST).toBe('badj');
     expect(STEP.DATE).toBe('date');
     expect(STEP.TIME).toBe('time');
   });

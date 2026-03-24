@@ -3,14 +3,22 @@ import { todayStr, getDayOfWeek, dateStrForOffset, resolveDateHint } from './uti
 import { escHtml, fill, t } from './utils/helpers.js';
 import { send } from './telegram.js';
 import { getLang } from './services/chat.js';
-import { showMyApts, showPrices, showContacts, showCatalog, showWelcome, showReviews } from './ui/screens.js';
+import { showMyApts, showPrices, showContacts, showCatalog, showWelcome, showReviews, showAbout } from './ui/screens.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm } from './ui/booking.js';
-import { showAdminPanel, showMasterPanel, showAdminApts, showMasterAllApts, showMastersList, showAdminCancelAllConfirm } from './ui/admin.js';
+import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showAdminCancelAllConfirm } from './ui/admin.js';
 import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformSupportList } from './ui/sysadmin.js';
+import { showBillingMenu } from './ui/billing.js';
 import { confirmAllPendingApts } from './notifications.js';
 import { setState } from './services/state.js';
 
-export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null) {
+function bookingAdjustPromptExtra(bookingAdjust) {
+  if (!bookingAdjust?.date || !bookingAdjust?.time) return '';
+  const d = bookingAdjust.date;
+  const tm = bookingAdjust.time;
+  return `\n\nРЕЖИМ КОРРЕКТИРОВКИ ЗАПИСИ: клиент отклонил карточку подтверждения; слот сохранён: ${d} ${tm}. Если называет другую услугу — СРАЗУ [BOOK:svcId:${d}:${tm}] с верным svcId из списка услуг. НЕ запрашивай дату и время заново, пока пользователь сам их не меняет.`;
+}
+
+export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null, bookingAdjust = null) {
   const lang = langHint || 'русском';
   const td = today || todayStr();
   const salonName = tenantCtx?.salonName || SALON;
@@ -56,8 +64,10 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 КЛИЕНТ — теги:
 [MY_APTS] — показать записи. «мои записи», «покажи записи», «когда записан» → сразу [MY_APTS]. ЗАПРЕЩЕНО спрашивать номер телефона — в личном чате бот знает пользователя. Нет поиска по телефону.
 [PRICES] — прайс
-[CATALOG] — каталог
+[CATALOG] — каталог работ с фото
 [CONTACTS] — контакты (RU: инстаграм, инста; UA: інстаграм, інста; EN/PL: instagram, insta; what is your instagram, jaki macie instagram)
+[REVIEWS] — отзывы клиентов. «отзывы», «что говорят клиенты», «reviews», «opinie» → [REVIEWS]
+[ABOUT] — о нас / о салоне. «расскажи о себе», «кто вы», «about», «o nas» → [ABOUT]
 [MAIN] — главное меню
 [BOOK] — начать запись
 [BOOK:svcId] — запись на услугу (svcId: classic, gel, pedi, ext, design, combo, correction)
@@ -78,7 +88,11 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 [ADM_PANEL] — панель администратора
 [ADM_TODAY] — записи всех клиентов на сегодня
 [ADM_TOMORROW] — записи всех клиентов на завтра
+[ADM_ALL_APTS] — все записи (с фильтром по мастеру). «все записи», «все брони» → [ADM_ALL_APTS]
 [ADM_MASTERS] — список мастеров
+[ADM_CLIENTS] — список клиентов. «клиенты», «список клиентов» → [ADM_CLIENTS]
+[ADM_SVC_LIST] — управление услугами. «услуги», «прайс управление», «редактировать услуги» → [ADM_SVC_LIST]
+[BILLING] — подписка и оплата. «биллинг», «тариф», «оплата», «billing» → [BILLING]
 [ADM_CONFIRM_ALL] — подтвердить все ожидающие заявки
 [ADM_CANCEL_ALL] — отменить ВСЕ записи ВСЕХ клиентов. «отмени все брони всех клиентов» → [ADM_CANCEL_ALL]
 
@@ -86,6 +100,8 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 [MY_APTS] — показать МОИ записи. «мои записи», «покажи записи», «когда записан» → СРАЗУ [MY_APTS]. ЗАПРЕЩЕНО спрашивать телефон.
 [PRICES] — прайс
 [CATALOG] — каталог
+[REVIEWS] — отзывы клиентов
+[ABOUT] — о нас / о салоне
 [CONTACTS] — контакты (instagram, инста)
 [MAIN] — главное меню (клиентское)
 [BOOK] / [BOOK:svcId:date:time] — записаться на услугу
@@ -96,13 +112,16 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 МАСТЕР — теги:
 [MST_PANEL] — панель мастера
 [MST_TODAY] — мои записи на сегодня
-[MST_TOMORROW] — все записи
+[MST_TOMORROW] — все записи (расписание)
+[MST_CALENDAR] — настройки Google Календаря. «google calendar», «мой календарь», «синхронизация» → [MST_CALENDAR]
 [ADM_CONFIRM_ALL] — подтвердить все ожидающие заявки
 
 Общие действия (клиентский режим):
 [MY_APTS] — показать МОИ записи. «мои записи», «покажи записи», «когда записан» → СРАЗУ [MY_APTS]. ЗАПРЕЩЕНО спрашивать телефон.
 [PRICES] — прайс
 [CATALOG] — каталог
+[REVIEWS] — отзывы клиентов
+[ABOUT] — о нас / о салоне
 [CONTACTS] — контакты (instagram, інста)
 [MAIN] — главное меню (клиентское)
 [BOOK] / [BOOK:svcId:date:time] — записаться на услугу
@@ -126,7 +145,10 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 [ADM_CANCEL_ALL] — отменить все записи
 
 И все клиентские действия:
-[MY_APTS], [BOOK:svcId:date:time], [CANCEL_ALL], [PRICES], [CATALOG], [CONTACTS], [MAIN]
+[MY_APTS], [BOOK:svcId:date:time], [CANCEL_ALL], [PRICES], [CATALOG], [REVIEWS], [ABOUT], [CONTACTS], [MAIN]
+
+И все действия администратора:
+[ADM_ALL_APTS], [ADM_CLIENTS], [ADM_SVC_LIST], [BILLING]
 
 РЕЖИМ ОБЩЕГО АССИСТЕНТА ДЛЯ СИСТЕМНОГО АДМИНИСТРАТОРА:
 Ты также выступаешь личным ИИ-ассистентом администратора. Отвечай на любые разумные вопросы:
@@ -139,14 +161,15 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 Можешь признать, что ты ИИ-ассистент, но не называй конкретную модель.
 `.replace(/\n+/g, '\n').trim();
 
+  const adj = bookingAdjustPromptExtra(bookingAdjust);
   if (role === 'system_admin' || role === 'support') {
-    // For system_admin/support: strip the "never say you're AI" restriction from base
-    const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:.*?(?=\n\nСегодня:)/s, '').trim();
-    return `${adminBase}\n\n${sysAdminActions}`;
+    // Strip the "never say you're AI" restriction — use \n (single, after newline collapse)
+    const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:[^\n]*\n?/g, '').trim();
+    return `${adminBase}\n\n${sysAdminActions}${adj}`;
   }
-  if (role === 'admin') return `${base}\n\n${adminActions}`;
-  if (role === 'master') return `${base}\n\n${masterActions}`;
-  return `${base}\n\n${clientActions}`;
+  if (role === 'admin') return `${base}\n\n${adminActions}${adj}`;
+  if (role === 'master') return `${base}\n\n${masterActions}${adj}`;
+  return `${base}\n\n${clientActions}${adj}`;
 }
 
 export function parseAIResponse(out) {
@@ -199,6 +222,29 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       return true;
     }
     case 'CANCEL_ALL': await showCancelAllConfirm(ctx, cid); return true;
+    case 'REVIEWS': await showReviews(ctx, cid); return true;
+    case 'ABOUT': await showAbout(ctx, cid); return true;
+  }
+  if (role === 'admin' || role === 'master' || role === 'tenant_owner' || role === 'system_admin' || role === 'support') {
+    switch (tag) {
+      case 'BILLING': await showBillingMenu(ctx, cid); return true;
+    }
+  }
+  if (role === 'admin' || role === 'tenant_owner' || role === 'system_admin') {
+    switch (tag) {
+      case 'ADM_CLIENTS': await showClientsList(ctx, cid); return true;
+      case 'ADM_ALL_APTS': await showAdminAllApts(ctx, cid); return true;
+      case 'ADM_SVC_LIST': await showServicesList(ctx, cid); return true;
+    }
+  }
+  if (role === 'master') {
+    switch (tag) {
+      case 'MST_CALENDAR':
+        await send(ctx, cid, t(lg, 'mst_calendar'), {
+          reply_markup: { inline_keyboard: [[{ text: t(lg, 'mst_calendar_setup_btn'), callback_data: CB.MST_CALENDAR }]] },
+        });
+        return true;
+    }
   }
   if (role === 'system_admin') {
     switch (tag) {
@@ -217,7 +263,10 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       case 'ADM_PANEL': await showAdminPanel(ctx, cid, name); return true;
       case 'ADM_TODAY': await showAdminApts(ctx, cid, dateStrForOffset(0)); return true;
       case 'ADM_TOMORROW': await showAdminApts(ctx, cid, dateStrForOffset(1)); return true;
+      case 'ADM_ALL_APTS': await showAdminAllApts(ctx, cid); return true;
       case 'ADM_MASTERS': await showMastersList(ctx, cid); return true;
+      case 'ADM_CLIENTS': await showClientsList(ctx, cid); return true;
+      case 'ADM_SVC_LIST': await showServicesList(ctx, cid); return true;
       case 'ADM_CANCEL_ALL': await showAdminCancelAllConfirm(ctx, cid); return true;
       case 'ADM_CONFIRM_ALL': {
         const count = await confirmAllPendingApts(ctx, cid);
@@ -239,7 +288,10 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       case 'ADM_PANEL': await showAdminPanel(ctx, cid, name); return true;
       case 'ADM_TODAY': await showAdminApts(ctx, cid, dateStrForOffset(0)); return true;
       case 'ADM_TOMORROW': await showAdminApts(ctx, cid, dateStrForOffset(1)); return true;
+      case 'ADM_ALL_APTS': await showAdminAllApts(ctx, cid); return true;
       case 'ADM_MASTERS': await showMastersList(ctx, cid); return true;
+      case 'ADM_CLIENTS': await showClientsList(ctx, cid); return true;
+      case 'ADM_SVC_LIST': await showServicesList(ctx, cid); return true;
       case 'ADM_CANCEL_ALL': await showAdminCancelAllConfirm(ctx, cid); return true;
       case 'ADM_CONFIRM_ALL': {
         const count = await confirmAllPendingApts(ctx, cid);
@@ -310,13 +362,13 @@ function buildTenantCtxForAI(ctx) {
   };
 }
 
-export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client', history = []) {
+export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client', history = [], bookingAdjust = null) {
   const token = ctx.WORKERS_AI_API_TOKEN;
   const accountId = ctx.CLOUDFLARE_ACCOUNT_ID;
   if (!token || !accountId || !userMessage || userMessage.length < 2) return null;
   const langHint = LANG_HINT[lg] || 'русском';
   const tenantCtx = buildTenantCtxForAI(ctx);
-  const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx);
+  const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx, bookingAdjust);
   const userText = userMessage.slice(0, 500);
   let prompt = sys + '\n\n';
   for (const m of history) {
@@ -337,18 +389,18 @@ export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client',
   return null;
 }
 
-export async function runWorkersAI(ctx, userMessage, lg, role = 'client', history = []) {
+export async function runWorkersAI(ctx, userMessage, lg, role = 'client', history = [], bookingAdjust = null) {
   if (!userMessage || userMessage.length < 2) return null;
 
   if (ctx.WORKERS_AI_API_TOKEN && ctx.CLOUDFLARE_ACCOUNT_ID) {
-    const rest = await runWorkersAIViaREST(ctx, userMessage, lg, role, history);
+    const rest = await runWorkersAIViaREST(ctx, userMessage, lg, role, history, bookingAdjust);
     if (rest) return rest;
   }
 
   if (ctx.AI) {
     const langHint = LANG_HINT[lg] || 'русском';
     const tenantCtx = buildTenantCtxForAI(ctx);
-    const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx);
+    const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx, bookingAdjust);
     const userText = userMessage.slice(0, 500);
     const messages = [{ role: 'system', content: sys }];
     for (const m of history) {

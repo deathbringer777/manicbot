@@ -1,6 +1,7 @@
 import { WORK, MAX_APTS, CLEANUP_AFTER_MS, TIMEZONE } from '../config.js';
 import { kvGet, kvPut, kvDel } from '../utils/kv.js';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
+import { nowSec } from '../utils/time.js';
 import { p2 } from '../utils/helpers.js';
 import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
 import { getMaster } from './users.js';
@@ -10,12 +11,12 @@ export function allKey(dateStr) {
   return `all:${dateStr.slice(0, 7)}`;
 }
 
-export function dayIndexKey(date, masterId = null) {
+function dayIndexKey(date, masterId = null) {
   return `d:${date}`;
 }
 
 export function getAptMasterId(apt) { return apt?.masterId || apt?.master_id || null; }
-export function isSharedApt(apt) { return !getAptMasterId(apt); }
+function isSharedApt(apt) { return !getAptMasterId(apt); }
 
 function aptRowToDoc(row) {
   if (!row) return null;
@@ -159,7 +160,7 @@ export async function saveApt(ctx, apt) {
     apt.id = id;
     apt.masterId = apt.masterId || null;
     apt.status = 'pending';
-    apt.createdAt = Date.now();
+    apt.createdAt = nowSec();
     apt.rem = { h24: false, h2: false };
     apt.confirmedBy = null;
     apt.counterTime = null;
@@ -187,7 +188,7 @@ export async function saveApt(ctx, apt) {
   apt.id = id;
   apt.masterId = apt.masterId || null;
   apt.status = 'pending';
-  apt.createdAt = Date.now();
+  apt.createdAt = nowSec();
   apt.rem = { h24: false, h2: false };
   apt.confirmedBy = null;
   apt.counterTime = null;
@@ -196,12 +197,12 @@ export async function saveApt(ctx, apt) {
   apt.cancelReason = null;
 
   await dbRun(ctx,
-    `INSERT INTO appointments (id, tenant_id, chat_id, svc_id, date, time, ts, status, master_id, user_name, user_phone, user_tg, confirmed_by, counter_time, counter_comment, reject_comment, cancel_reason, cancelled, rem_h24, rem_h2, google_event_id, google_calendar_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?)`,
+    `INSERT INTO appointments (id, tenant_id, chat_id, svc_id, date, time, ts, status, master_id, user_name, user_phone, user_tg, confirmed_by, counter_time, counter_comment, reject_comment, cancel_reason, cancelled, rem_h24, rem_h2, google_event_id, google_calendar_id, google_integration_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
     id, ctx.tenantId, apt.chatId, apt.svcId, apt.date, apt.time, apt.ts,
     'pending', apt.masterId, apt.userName || null, apt.userPhone || null, apt.userTg || null,
     null, null, null, null, null,
-    null, null, apt.createdAt,
+    null, null, null, apt.createdAt,
   );
   return apt;
 }
@@ -257,7 +258,7 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
     await kvPut(ctx, `ap:${id}`, a);
 
     if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
-      deleteAppointmentCalendar(ctx, a).catch(e =>
+      await deleteAppointmentCalendar(ctx, a).catch(e =>
         console.error('cancelApt calendar delete error:', e.message),
       );
     }
@@ -282,7 +283,7 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
   );
 
   if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
-    deleteAppointmentCalendar(ctx, a).catch(e =>
+    await deleteAppointmentCalendar(ctx, a).catch(e =>
       console.error('cancelApt calendar delete error:', e.message),
     );
   }

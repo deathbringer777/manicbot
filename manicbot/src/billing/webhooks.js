@@ -8,6 +8,7 @@ import { updateTenantBilling } from './storage.js';
 import { mapStripeStatusToBilling } from './stripe.js';
 import { GRACE_DURATION_MS } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
+import { nowSec, msToSec } from '../utils/time.js';
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
@@ -54,7 +55,7 @@ function subscriptionToBillingUpdates(sub) {
     currentPeriodEnd: periodEnd,
     nextPaymentDate: periodEnd,
     cancelAtPeriodEnd: sub.cancel_at_period_end === true,
-    updatedAt: Date.now(),
+    updatedAt: nowSec(),
   };
 }
 
@@ -137,8 +138,8 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         await updateTenantBilling(ctx, tenantId, {
           billingStatus: 'grace_period',
           subscriptionStatus: 'past_due',
-          graceEndsAt: Date.now() + GRACE_DURATION_MS,
-          updatedAt: Date.now(),
+          graceEndsAt: nowSec() + msToSec(GRACE_DURATION_MS),
+          updatedAt: nowSec(),
         });
       }
     }

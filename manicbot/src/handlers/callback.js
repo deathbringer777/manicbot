@@ -14,12 +14,11 @@ import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
-import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
-import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick } from '../ui/booking.js';
+import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
+import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick, enterBookingAdjustState } from '../ui/booking.js';
 import { showBillingMenu, showInactiveMessage } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
 import { getTenant } from '../tenant/storage.js';
-import { makeICS } from '../utils/ics.js';
 import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList, showPlatformLinks, showGrantRoleMenu, showPlatformTechSupportList } from '../ui/sysadmin.js';
 import { addSupport, removeSupport, addTechnicalSupport, removeTechnicalSupport } from '../admin/provisioning.js';
 import { getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent, removeTenantSupportAgent } from '../roles/roles.js';
@@ -96,8 +95,18 @@ async function showGoogleCalendarPanel(
   }
 
   const rows = [];
+  const hasOAuthIntegration = !!integration;
+  const hasError = !!(integration?.lastSyncError || (integration?.lastSyncStatus && integration.lastSyncStatus !== 'ok'));
+
   if (connectUrl) {
-    rows.push([{ text: t(lg, 'gcal_oauth_btn'), url: connectUrl }]);
+    if (!hasOAuthIntegration) {
+      // Not connected yet — show Connect button (also shown for legacy mode to encourage upgrade)
+      rows.push([{ text: t(lg, 'gcal_oauth_btn'), url: connectUrl }]);
+    } else if (hasError) {
+      // Connected but sync failed — offer re-authentication
+      rows.push([{ text: t(lg, 'gcal_reauth_btn'), url: connectUrl }]);
+    }
+    // Connected successfully — OAuth button is hidden (no need to re-auth)
   }
   if (integration) {
     rows.push([{ text: t(lg, 'gcal_sync_now_btn'), callback_data: scope === 'tenant' ? CB.ADM_CALENDAR_RESYNC : CB.MST_CALENDAR_RESYNC }]);
@@ -156,6 +165,12 @@ export async function onCb(ctx, cb) {
   if (d === CB.LANG)     return showLangPick(ctx, cid);
   if (d === CB.BOOK)     return startBooking(ctx, cid, cb.from);
 
+  if (d === CB.BOOK_PICK_SVC) {
+    const st = await getState(ctx, cid);
+    if (st.step !== STEP.BOOK_ADJUST) return;
+    return send(ctx, cid, t(lg, 'book_choose_svc_adjust'), svcKb(ctx, lg));
+  }
+
   if (d === CB.SUPPORT) {
     // Support plan check only for salon staff — clients & platform roles always have support
     const supportRole = await getRole(ctx, cid);
@@ -210,7 +225,7 @@ export async function onCb(ctx, cb) {
     const suffix = d.slice(CB.TICKET_TAKE.length);
     if (suffix.startsWith('tk_') && ctx.db) {
       const role = await getRole(ctx, cid);
-      if (role !== 'support' && role !== 'admin' && role !== 'system_admin') return;
+      if (role !== 'support' && role !== 'technical_support' && role !== 'admin' && role !== 'tenant_owner' && role !== 'system_admin') return;
       const result = await claimTicket(ctx, suffix, cid);
       if (result.ok) {
         const clientCid = result.ticket.clientChatId;
@@ -493,13 +508,15 @@ export async function onCb(ctx, cb) {
   if (d === CB.ADM_MAIN) {
     if (await isAdmin(ctx, cid)) return showAdminPanel(ctx, cid, name);
     if (await isMaster(ctx, cid)) return showMasterPanel(ctx, cid, name);
+    // system_admin without explicit tenant role still gets the admin panel
+    if (await isPlatformAdmin(ctx, cid)) return showAdminPanel(ctx, cid, name);
     return;
   }
 
   if (d === CB.ADM_BILLING) {
     if (!await isAdmin(ctx, cid)) return;
     if (!ctx.tenantId || !ctx.db) return send(ctx, cid, t(lg, 'billing_no_config'));
-    return showBillingMenu(ctx, cid, name);
+    return showBillingMenu(ctx, cid);
   }
 
   if (d.startsWith(CB.BILLING_SUBSCRIBE)) {
@@ -519,7 +536,7 @@ export async function onCb(ctx, cb) {
     if (result.error) return send(ctx, cid, t(lg, 'billing_no_config') + '\n' + result.error);
     if (result.url) {
       await send(ctx, cid, t(lg, 'billing_checkout_sent') + '\n\n' + result.url);
-      return showBillingMenu(ctx, cid, name);
+      return showBillingMenu(ctx, cid);
     }
     return send(ctx, cid, t(lg, 'billing_no_config'));
   }
@@ -537,7 +554,7 @@ export async function onCb(ctx, cb) {
     if (result.error) return send(ctx, cid, t(lg, 'billing_no_config') + '\n' + result.error);
     if (result.url) {
       await send(ctx, cid, t(lg, 'billing_portal_sent') + '\n\n' + result.url);
-      return showBillingMenu(ctx, cid, name);
+      return showBillingMenu(ctx, cid);
     }
     return send(ctx, cid, t(lg, 'billing_no_config'));
   }
@@ -629,6 +646,10 @@ export async function onCb(ctx, cb) {
     if (!master) return;
     apt.masterId = masterId;
     await updateApt(ctx, aptId, { masterId });
+    // Re-sync calendar if the appointment is already confirmed (master changed → move event)
+    if (apt.status === 'confirmed' && canUse(ctx, 'calendar')) {
+      syncAppointmentCalendar(ctx, apt).catch(e => console.error('[gcal] ADM_SET_M re-sync failed:', e.message));
+    }
     // Notify the assigned master
     const mlg = await getLang(ctx, masterId) || 'ru';
     const s = ctx.svc.find(x => x.id === apt.svcId);
@@ -820,7 +841,7 @@ export async function onCb(ctx, cb) {
     apt.status = 'rejected';
     await updateApt(ctx, aptId, { status: 'rejected' });
     if (apt.googleEventId) {
-      deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
+      await deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
     }
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
@@ -874,7 +895,8 @@ export async function onCb(ctx, cb) {
     const [h, mi] = newTime.split(':').map(Number);
     apt.ts = warsawToUTC(y, mo, dd, h, mi).getTime();
     apt.status = 'confirmed';
-    await updateApt(ctx, aptId, { status: 'confirmed', time: newTime, ts: apt.ts });
+    if (!apt.masterId && apt.confirmedBy) apt.masterId = apt.confirmedBy;
+    await updateApt(ctx, aptId, { status: 'confirmed', time: newTime, ts: apt.ts, masterId: apt.masterId });
     await sendAptConfirmedToClient(ctx, apt);
     if (canUse(ctx, 'calendar')) {
       try {
@@ -1119,6 +1141,10 @@ export async function onCb(ctx, cb) {
     if (!user) {
       return startBooking(ctx, cid, cb.from);
     }
+    const st0 = await getState(ctx, cid);
+    if (st0.step === STEP.BOOK_ADJUST && st0.date && st0.time) {
+      return startBookingWithService(ctx, cid, cb.from, sid, st0.date, st0.time, st0.masterId ?? null);
+    }
     await setState(ctx, cid, { step: STEP.DATE, svcId: sid });
     const chosenText = isCorrectionSvc(sid)
       ? fill(t(lg, 'chosen_correction'), { svc: svcName(ctx, lg, sid) }) + '\n\n' + t(lg, 'choose_date')
@@ -1251,6 +1277,10 @@ export async function onCb(ctx, cb) {
   }
 
   if (d === CB.CANCEL_BOOK) {
+    const st = await getState(ctx, cid);
+    if (st.step === STEP.CONFIRM && st.svcId && st.date && st.time) {
+      return enterBookingAdjustState(ctx, cid, st);
+    }
     await clearState(ctx, cid);
     return send(ctx, cid, t(lg, 'book_cancelled'), mainKb(lg));
   }

@@ -7,6 +7,7 @@ import { putTenant, putBot, getTenant, getBot, getBotToken, getBotIdsByTenantId,
 import { TRIAL_DURATION_MS } from '../billing/config.js';
 import { setPlatformRole, setTenantRole, addSupportAgent, removeSupportAgent, getSupportAgents, addTechnicalSupportAgent, removeTechnicalSupportAgent, removePlatformRole, ROLES } from '../roles/roles.js';
 import { randomId } from '../utils/security.js';
+import { nowSec, msToSec } from '../utils/time.js';
 
 export async function createTenant(ctx, name, env) {
   if (!ctx?.db || !name?.trim()) return { ok: false, error: 'Missing db or name' };
@@ -14,11 +15,11 @@ export async function createTenant(ctx, name, env) {
   const payload = defaultTenantPayload(null, env || {});
   payload.id = tenantId;
   payload.name = name.trim();
-  payload.createdAt = Date.now();
-  payload.updatedAt = Date.now();
+  payload.createdAt = nowSec();
+  payload.updatedAt = nowSec();
   payload.billingStatus = 'trialing';
   payload.plan = 'pro';
-  payload.trialEndsAt = Date.now() + TRIAL_DURATION_MS;
+  payload.trialEndsAt = nowSec() + msToSec(TRIAL_DURATION_MS);
   payload.graceEndsAt = null;
   await putTenant(ctx, tenantId, payload);
   return { ok: true, tenantId, name: payload.name };
@@ -48,7 +49,7 @@ export async function bindBotToTenant(ctx, botId, tenantId, encryptionKey = null
   }
   const token = await getBotToken(ctx, botId, encryptionKey);
   if (!token) return { ok: false, error: 'Bot token not available' };
-  const payload = { ...bot, tenantId, botToken: token, updatedAt: Date.now() };
+  const payload = { ...bot, tenantId, botToken: token, updatedAt: nowSec() };
   await putBot(ctx, botId, payload, encryptionKey);
   return { ok: true };
 }

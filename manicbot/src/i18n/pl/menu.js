@@ -1,0 +1,18 @@
+export default {
+  m_book: '📝 Umów się',
+  m_my: '📋 Moje wizyty',
+  m_prices: '💰 Cennik',
+  m_cat: '📸 Portfolio',
+  m_rev: '⭐ Opinie',
+  m_about: 'ℹ️ O nas',
+  m_instagram: '📷 Instagram',
+  m_cont: '📞 Kontakt',
+  m_lang: '🌐 Język',
+  m_support: '🆘 Wsparcie',
+  m_tech_support: '🔧 Wsparcie tech.',
+  mst_panel: '👩‍🎨 Panel mistrza',
+  adm_management: '🔧 Zarządzanie',
+  back: '◀️ Wstecz',
+  back_m: '◀️ Menu główne',
+  min: 'min',
+};

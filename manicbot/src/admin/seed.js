@@ -10,6 +10,7 @@ import { saveMaster } from '../services/users.js';
 import { saveServices } from '../services/services.js';
 import { CORRECTION_SVC } from '../config.js';
 import { dbRun } from '../utils/db.js';
+import { nowSec } from '../utils/time.js';
 
 const L = {
   ru: { svc_classic: 'Классический маникюр', svc_gel: 'Гель-лак', svc_pedi: 'Педикюр', svc_ext: 'Наращивание', svc_design: 'Дизайн', svc_combo: 'Маникюр + Педикюр' },
@@ -99,8 +100,8 @@ export async function runSeed(ctx, env, masterUsername = 'dezbringer') {
 
   const tenant1 = await getTenant(ctx, t1);
   const tenant2 = await getTenant(ctx, t2);
-  if (tenant1) { tenant1.name = SALON1.name; tenant1.updatedAt = Date.now(); await putTenant(ctx, t1, tenant1); }
-  if (tenant2) { tenant2.name = SALON2.name; tenant2.updatedAt = Date.now(); await putTenant(ctx, t2, tenant2); }
+  if (tenant1) { tenant1.name = SALON1.name; tenant1.updatedAt = nowSec(); await putTenant(ctx, t1, tenant1); }
+  if (tenant2) { tenant2.name = SALON2.name; tenant2.updatedAt = nowSec(); await putTenant(ctx, t2, tenant2); }
   log.push(`Tenant names set: ${SALON1.name}, ${SALON2.name}`);
 
   const svcList1 = [...buildSvc(SALON1.svc, SALON1.photos), CORRECTION_SVC];

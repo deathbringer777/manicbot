@@ -7,6 +7,7 @@
 
 import { encryptToken, decryptToken } from '../utils/security.js';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
+import { nowSec } from '../utils/time.js';
 import { SALON, ADDRESS, PHONE, MAPS_URL, INSTAGRAM_URL, WORK, DEFAULT_SVC, DEFAULT_PHOTOS, DEFAULT_ABOUT_PHOTOS } from '../config.js';
 
 const BOT_TOKEN_PREFIX = 'bottoken:';
@@ -61,8 +62,8 @@ function docToTenantParams(data) {
     next_payment_date: data.nextPaymentDate || null,
     billing_email: data.billingEmail || null,
     cancel_at_period_end: data.cancelAtPeriodEnd ? 1 : 0,
-    created_at: data.createdAt || Date.now(),
-    updated_at: data.updatedAt || Date.now(),
+    created_at: data.createdAt || nowSec(),
+    updated_at: data.updatedAt || nowSec(),
   };
 }
 
@@ -133,8 +134,8 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
       data.botUsername || null,
       data.webhookSecret || '',
       data.active === false ? 0 : 1,
-      data.createdAt || Date.now(),
-      data.updatedAt || Date.now(),
+      data.createdAt || nowSec(),
+      data.updatedAt || nowSec(),
     );
     return true;
   } catch (e) {
@@ -167,8 +168,8 @@ export function defaultTenantPayload(botId, env) {
     id: 'default',
     name: salonName,
     active: true,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: nowSec(),
+    updatedAt: nowSec(),
     salon: {
       name: salonName,
       address,
@@ -203,8 +204,8 @@ export function defaultBotPayload(botId, tenantId, botToken, webhookSecret, botU
     botUsername: botUsername || `bot_${botId}`,
     webhookSecret,
     active: true,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: nowSec(),
+    updatedAt: nowSec(),
   };
 }
 

@@ -4,6 +4,7 @@
  */
 
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
+import { nowSec } from '../utils/time.js';
 
 export const ROLES = {
   SYSTEM_ADMIN: 'system_admin',
@@ -27,7 +28,7 @@ export async function setPlatformRole(ctx, chatId, role) {
   try {
     await dbRun(ctx,
       'INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)',
-      chatId, role, Date.now(),
+      chatId, role, nowSec(),
     );
     return true;
   } catch (e) {
@@ -59,7 +60,7 @@ export async function setTenantRole(ctx, chatId, role) {
   try {
     await dbRun(ctx,
       'INSERT OR REPLACE INTO tenant_roles (tenant_id, chat_id, role, created_at) VALUES (?, ?, ?, ?)',
-      ctx.tenantId, chatId, role, Date.now(),
+      ctx.tenantId, chatId, role, nowSec(),
     );
     return true;
   } catch (e) {
@@ -120,7 +121,7 @@ export async function removeSupportAgent(ctx, chatId) {
 
 export async function getTechnicalSupportAgents(ctx) {
   if (!ctx?.db) return [];
-  const rows = await dbAll(ctx, "SELECT chat_id FROM support_agents WHERE type = 'technical'");
+  const rows = await dbAll(ctx, "SELECT chat_id FROM support_agents WHERE type = 'technical_support'");
   return rows.map(r => r.chat_id);
 }
 
@@ -128,7 +129,7 @@ export async function addTechnicalSupportAgent(ctx, chatId) {
   if (!ctx?.db || chatId == null) return false;
   try {
     await dbRun(ctx,
-      "INSERT OR IGNORE INTO support_agents (chat_id, type) VALUES (?, 'technical')",
+      "INSERT OR IGNORE INTO support_agents (chat_id, type) VALUES (?, 'technical_support')",
       chatId,
     );
     return true;
@@ -145,7 +146,7 @@ export async function removeTechnicalSupportAgent(ctx, chatId) {
     // Логика: технический поддержант = надмножество обычного, поэтому при его удалении
     // убирается и обычный support-тип. Это предотвращает ситуацию "был tech, стал support"
     // после remove. Если нужно изменить — оставьте только тип 'technical'.
-    await dbRun(ctx, "DELETE FROM support_agents WHERE chat_id = ? AND type = 'technical'", chatId);
+    await dbRun(ctx, "DELETE FROM support_agents WHERE chat_id = ? AND type = 'technical_support'", chatId);
     await dbRun(ctx, "DELETE FROM support_agents WHERE chat_id = ? AND type = 'support'", chatId);
     return true;
   } catch (e) {

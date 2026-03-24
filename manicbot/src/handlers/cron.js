@@ -6,7 +6,8 @@ import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
 import { initServices } from '../services/services.js';
 import { checkBillingExpiry } from '../billing/lifecycle.js';
-import { renewExpiringGoogleWatches } from '../services/google-calendar-oauth.js';
+import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
+import { canUse } from '../billing/features.js';
 
 export async function handleCron(ctx) {
   try {
@@ -60,7 +61,43 @@ export async function handleCron(ctx) {
       }
     }
 
-    // Phase 2: cleanup
+    // Phase 2: retry calendar sync for confirmed appointments missing a google_event_id
+    if (canUse(ctx, 'calendar')) {
+      try {
+        const futureTs = now - 60 * 60 * 1000; // allow 1h window for recently-past apts
+        const unsynced = await dbAll(ctx,
+          "SELECT * FROM appointments WHERE tenant_id = ? AND status = 'confirmed' AND cancelled = 0 AND google_event_id IS NULL AND ts > ?",
+          ctx.tenantId, futureTs,
+        );
+        for (const row of unsynced) {
+          try {
+            const apt = {
+              id: row.id, tenantId: row.tenant_id, chatId: row.chat_id,
+              svcId: row.svc_id, date: row.date, time: row.time, ts: row.ts,
+              status: row.status, masterId: row.master_id || row.confirmed_by || null,
+              confirmedBy: row.confirmed_by || null, userName: row.user_name,
+              userPhone: row.user_phone, userTg: row.user_tg,
+              googleEventId: row.google_event_id, googleCalendarId: row.google_calendar_id,
+              googleIntegrationId: row.google_integration_id,
+            };
+            const result = await syncAppointmentCalendar(ctx, apt);
+            if (result?.ok) {
+              console.log(`[gcal] cron re-synced apt ${apt.id} (${apt.date} ${apt.time})`);
+            } else if (result?.skipped) {
+              // calendar not connected — skip silently
+            } else {
+              console.warn(`[gcal] cron sync failed for apt ${apt.id}:`, result?.error);
+            }
+          } catch (e) {
+            console.error(`[gcal] cron sync error for apt ${row.id}:`, e.message);
+          }
+        }
+      } catch (e) {
+        console.error('[gcal] cron unsynced-apts phase failed:', e.message);
+      }
+    }
+
+    // Phase 3: cleanup
     await dbRun(ctx,
       'DELETE FROM appointments WHERE tenant_id = ? AND (cancelled = 1 OR ts < ?)',
       ctx.tenantId, now - CLEANUP_AFTER_MS,

@@ -1,7 +1,7 @@
-import ru from './ru.js';
-import ua from './ua.js';
-import en from './en.js';
-import pl from './pl.js';
+import ru from './ru/index.js';
+import ua from './ua/index.js';
+import en from './en/index.js';
+import pl from './pl/index.js';
 
 export const L = { ru, ua, en, pl };
 

@@ -6,6 +6,7 @@
 
 import { randomId } from '../utils/security.js';
 import { dbGet, dbAll, dbRun, dbBatch } from '../utils/db.js';
+import { nowSec } from '../utils/time.js';
 
 const TKT_LOCK_PREFIX = 'tktlock:';
 const LOCK_TTL = 10;
@@ -14,7 +15,7 @@ export async function createTicket(ctx, clientChatId, clientName, clientBotId, f
   if (!ctx?.db || !clientChatId) return null;
   const tenantId = ctx?.tenantId || ctx?.bot?.botId || 'legacy';
   const id = 'tk_' + randomId(8);
-  const now = Date.now();
+  const now = nowSec();
 
   await dbRun(ctx,
     `INSERT INTO platform_tickets (id, tenant_id, client_chat_id, client_bot_id, client_name, status, claimed_by, claimed_at, created_at, updated_at)
@@ -94,7 +95,7 @@ export async function claimTicket(ctx, ticketId, agentChatId) {
       return { ok: false, error: 'Claim race lost' };
     }
   }
-  const now = Date.now();
+  const now = nowSec();
   await dbRun(ctx,
     "UPDATE platform_tickets SET status = 'claimed', claimed_by = ?, claimed_at = ?, updated_at = ? WHERE id = ?",
     agentChatId, now, now, ticketId,
@@ -104,7 +105,7 @@ export async function claimTicket(ctx, ticketId, agentChatId) {
     if (finalLock !== String(agentChatId)) {
       await dbRun(ctx,
         "UPDATE platform_tickets SET status = 'open', claimed_by = NULL, claimed_at = NULL, updated_at = ? WHERE id = ?",
-        Date.now(), ticketId,
+        nowSec(), ticketId,
       );
       return { ok: false, error: 'Claim race lost' };
     }
@@ -131,11 +132,11 @@ export async function appendMessage(ctx, ticketId, from, text) {
   if (!ticket) return false;
   await dbRun(ctx,
     'INSERT INTO platform_ticket_messages (ticket_id, sender, text, created_at) VALUES (?, ?, ?, ?)',
-    ticketId, from, text, Date.now(),
+    ticketId, from, text, nowSec(),
   );
   await dbRun(ctx,
     'UPDATE platform_tickets SET updated_at = ? WHERE id = ?',
-    Date.now(), ticketId,
+    nowSec(), ticketId,
   );
   return true;
 }
@@ -146,7 +147,7 @@ export async function closeTicket(ctx, ticketId) {
   if (!ticket) return false;
   await dbRun(ctx,
     "UPDATE platform_tickets SET status = 'closed', updated_at = ? WHERE id = ?",
-    Date.now(), ticketId,
+    nowSec(), ticketId,
   );
   return true;
 }

@@ -1,5 +1,6 @@
-import { CB, STEP, SALON } from '../config.js';
-import { isInactive, isGracePeriod, canUse, getMastersLimit, graceRemainingDays } from '../billing/features.js';
+import { CB, STEP } from '../config.js';
+import { nowSec } from '../utils/time.js';
+import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
 import { escHtml, fill, t, svcName, isValidChatId, detectLang } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
@@ -12,7 +13,7 @@ import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAbou
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
 import { createTicket } from '../support/tickets.js';
-import { getSupportAgents, setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
+import { setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
 import { addSupport, removeSupport, createTenant, registerBot, setSystemAdmin, addTechnicalSupport } from '../admin/provisioning.js';
 import { getTenant, putTenant, listTenantIds, getBotIdsByTenantId, getBot, getBotToken } from '../tenant/storage.js';
 import { showPlatformAdminPanel, showPlatformSupportList, showPlatformTechSupportList } from '../ui/sysadmin.js';
@@ -21,13 +22,115 @@ import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications
 import { deleteAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
-import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showClientsList, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
-import { startBooking, startBookingWithService, showCancelAllConfirm } from '../ui/booking.js';
+import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
+import { startBooking, startBookingWithService, showCancelAllConfirm, enterBookingAdjustState } from '../ui/booking.js';
 import { runWorkersAI, parseAIActions, executeAIAction } from '../ai.js';
-import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage } from '../patterns.js';
+import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage, isBookingConfirmDeclineText, parseServiceMention } from '../patterns.js';
 // timingSafeEqual imported above from security.js
 
-async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
+async function showHelp(ctx, cid, lg, realRole) {
+  let text;
+  if (realRole === 'system_admin') {
+    text = [
+      '🌐 <b>God Mode — Полный список команд платформы</b>',
+      '',
+      '<b>🔧 Системное управление:</b>',
+      '/start — Панель платформы ManicBot',
+      '/panel — Открыть панель управления (адаптируется к роли)',
+      `/sysadmin &lt;ключ&gt; — Зарегистрироваться как системный администратор`,
+      '  <i>Пример: /sysadmin YOUR_SECRET_KEY</i>',
+      '/resetwebhooks — ⚠️ Сбросить вебхуки ВСЕХ ботов платформы',
+      '',
+      '<b>👑 Управление ролями:</b>',
+      '/grant_master @username [salonId] — Назначить мастера',
+      '  <i>Пример: /grant_master @ivan t_salon1</i>',
+      '/grant_salon @username [salonId] — Назначить владельца салона',
+      '  <i>Пример: /grant_salon @owner t_salon2</i>',
+      '/admin &lt;ключ&gt; — Стать администратором тенанта (в боте салона)',
+      '  <i>Пример: /admin YOUR_SECRET_KEY</i>',
+      '',
+      '<b>🆘 Агенты поддержки:</b>',
+      '/add_support @username — Добавить агента поддержки клиентов',
+      '  <i>Пример: /add_support @maria_support</i>',
+      '/remove_support @username — Удалить агента поддержки',
+      '  <i>Пример: /remove_support 321706035</i>',
+      '/add_technical_support @username — Добавить агента техподдержки',
+      '  <i>Пример: /add_technical_support @tech_guy</i>',
+      '/support_register &lt;ключ&gt; — Самозапись как агент поддержки',
+      '  <i>Пример: /support_register YOUR_SECRET_KEY</i>',
+      '',
+      '<b>🧭 Навигация:</b>',
+      '/master — Открыть панель мастера',
+      '/client — Переключиться в режим клиента (без прав)',
+      '/book, /my, /prices, /catalog, /contacts, /lang — стандартные команды',
+      '',
+      '<b>🤖 AI распознаёт (пиши в чат):</b>',
+      '• «Список салонов» / «Создать салон»',
+      '• «Агенты поддержки» / «Техподдержка»',
+      '• «Биллинг» / «Ссылки на панели»',
+    ].join('\n');
+  } else if (realRole === 'admin' || realRole === 'tenant_owner') {
+    text = [
+      '📋 <b>Помощь — Администратор</b>',
+      '',
+      '<b>Навигация:</b>',
+      '/start — Открыть панель администратора',
+      '/panel — Панель управления (адаптируется к роли)',
+      '/master — Панель мастера',
+      '/client — Режим просмотра клиента',
+      '',
+      '<b>Управление командой:</b>',
+      '/add_support @username — Добавить агента поддержки',
+      '  <i>Пример: /add_support @maria</i>',
+      '/remove_support @username — Удалить агента поддержки',
+      '  <i>Пример: /remove_support @maria</i>',
+      '/grant_master @username — Назначить мастера',
+      '  <i>Пример: /grant_master @ivan_master</i>',
+      '/support_register &lt;ключ&gt; — Регистрация агента (с ключом)',
+      '',
+      '<b>Клиентские команды:</b>',
+      '/book — Записать клиента / себя',
+      '/my — Мои записи',
+      '/prices — Прайс-лист',
+      '/catalog — Каталог работ',
+      '/contacts — Контакты',
+      '/lang — Язык интерфейса',
+      '',
+      '<b>🤖 AI понимает:</b>',
+      '• «Все записи» / «Записи на сегодня» / «На завтра»',
+      '• «Список клиентов» / «Список мастеров»',
+      '• «Список услуг» / «Биллинг» / «Открой панель»',
+    ].join('\n');
+  } else if (realRole === 'master') {
+    text = [
+      '📋 <b>Помощь — Мастер</b>',
+      '',
+      '<b>Основные команды:</b>',
+      '/start — Главное меню / панель мастера',
+      '/my — Расписание и записи',
+      '/book — Записать клиента',
+      '/prices — Прайс-лист',
+      '/catalog — Каталог работ',
+      '/contacts — Контакты салона',
+      '/lang — Язык интерфейса',
+      '',
+      '<b>Панель мастера:</b>',
+      '/master — Открыть панель мастера',
+      '/panel — Панель (адаптируется к роли)',
+      '/client — Режим просмотра клиента',
+      '',
+      '<b>🤖 AI понимает:</b>',
+      '• «Мои записи на завтра» / «Расписание»',
+      '• «Открой мой календарь» / «Отзывы»',
+      '• «Что сегодня?» / «Ближайшие записи»',
+    ].join('\n');
+  } else {
+    text = fill(t(lg, 'help'), {});
+  }
+  return send(ctx, cid, text, { reply_markup: { remove_keyboard: true } });
+}
+
+async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
   // Gate: AI plan check only for salon staff (master/admin) — clients & platform roles always have AI
   const isPlatformRole = realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support';
   const isSalonStaff = realRole === 'admin' || realRole === 'master' || realRole === 'tenant_owner';
@@ -50,12 +153,24 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from) {
   }
   const txtTooShort = txt.length < 2;
   const history = txtTooShort ? [] : await getChatHistory(ctx, cid);
-  const aiReply = txtTooShort ? null : await runWorkersAI(ctx, txt, lg, realRole, history);
+  const bookingAdjust = opts.bookingAdjust || null;
+  const aiReply = txtTooShort ? null : await runWorkersAI(ctx, txt, lg, realRole, history, bookingAdjust);
   const { text: aiText, actions } = parseAIActions(aiReply);
   // ADM_CONFIRM_ALL and ADM_CANCEL_ALL are intentionally excluded: these are destructive
   // bulk operations that must only be triggered via explicit button clicks, never from
   // free-text AI interpretation (prevents accidental confirmations / "intelligent DTP").
-  const pageActions = ['MY_APTS', 'PRICES', 'CATALOG', 'CONTACTS', 'MAIN', 'BOOK', 'CANCEL_ALL', 'ADM_PANEL', 'ADM_TODAY', 'ADM_TOMORROW', 'ADM_MASTERS', 'MST_PANEL', 'MST_TODAY', 'MST_TOMORROW', 'SYSADM_PANEL', 'TENANT_LIST', 'SUPPORT_LIST', 'CREATE_TENANT', 'BOT_NEW'];
+  // ADM_CONFIRM_ALL and ADM_CANCEL_ALL intentionally excluded: destructive bulk operations
+  // must only be triggered via explicit button clicks, never from free-text AI interpretation.
+  const pageActions = [
+    // Client actions
+    'MY_APTS', 'PRICES', 'CATALOG', 'CONTACTS', 'REVIEWS', 'ABOUT', 'MAIN', 'BOOK', 'CANCEL_ALL',
+    // Admin actions
+    'ADM_PANEL', 'ADM_TODAY', 'ADM_TOMORROW', 'ADM_ALL_APTS', 'ADM_MASTERS', 'ADM_CLIENTS', 'ADM_SVC_LIST', 'BILLING',
+    // Master actions
+    'MST_PANEL', 'MST_TODAY', 'MST_TOMORROW', 'MST_CALENDAR',
+    // Platform admin actions
+    'SYSADM_PANEL', 'TENANT_LIST', 'SUPPORT_LIST', 'CREATE_TENANT', 'BOT_NEW',
+  ];
   let didAction = false;
   for (const { tag, param } of actions) {
     if (pageActions.includes(tag) || (tag === 'BOOK' && param)) {
@@ -114,9 +229,10 @@ export async function onMsg(ctx, msg) {
 
   const txt = (msg.text || '').trim().slice(0, 200);
 
+  const menuLabels = [t(lg, 'm_book'), t(lg, 'm_cat'), t(lg, 'm_prices'), t(lg, 'm_my'), t(lg, 'back_m'), t(lg, 'm_rev'), t(lg, 'm_about'), t(lg, 'm_cont'), t(lg, 'm_lang'), t(lg, 'm_support'), t(lg, 'mst_panel'), t(lg, 'adm_management')];
+
   if (st.step === STEP.SUPPORT_MSG && txt) {
     const isCommand = txt.startsWith('/');
-    const menuLabels = [t(lg, 'm_book'), t(lg, 'm_cat'), t(lg, 'm_prices'), t(lg, 'm_my'), t(lg, 'back_m'), t(lg, 'm_rev'), t(lg, 'm_about'), t(lg, 'm_cont'), t(lg, 'm_lang'), t(lg, 'm_support'), t(lg, 'mst_panel'), t(lg, 'adm_management')];
     const isMenuButton = menuLabels.includes(txt);
     if (isCommand || isMenuButton) {
       await clearState(ctx, cid);
@@ -150,7 +266,6 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.TECH_SUPPORT_MSG && txt) {
     const isCommand = txt.startsWith('/');
-    const menuLabels = [t(lg, 'm_book'), t(lg, 'm_cat'), t(lg, 'm_prices'), t(lg, 'm_my'), t(lg, 'back_m'), t(lg, 'm_rev'), t(lg, 'm_about'), t(lg, 'm_cont'), t(lg, 'm_lang'), t(lg, 'm_support'), t(lg, 'mst_panel'), t(lg, 'adm_management')];
     const isMenuButton = menuLabels.includes(txt);
     if (isCommand || isMenuButton) {
       await clearState(ctx, cid);
@@ -275,6 +390,10 @@ export async function onMsg(ctx, msg) {
   if (txt.startsWith('/sysadmin ')) {
     const key = txt.slice(10).trim();
     if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
+    // Only the platform creator (adminChatId) can become system_admin — prevents key leak abuse
+    if (ctx.adminChatId && cid !== parseInt(String(ctx.adminChatId))) {
+      return send(ctx, cid, t(lg, 'sysadm_no_access'));
+    }
     if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
     await setSystemAdmin(ctx, cid);
     await send(ctx, cid, t(lg, 'sysadm_registered'));
@@ -381,6 +500,13 @@ export async function onMsg(ctx, msg) {
     // Platform admin panel only in main bot (no tenantId), and only for platform creator (ADMIN_CHAT_ID) or system_admin in KV.
     // Support/technical_support do NOT see platform panel on /start — only isPlatformAdmin.
     if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) {
+      // Set the Web App menu button (God Mode) so it appears both inside chat and as OPEN in chat list
+      if (ctx.ADMIN_APP_URL) {
+        api(ctx, 'setChatMenuButton', {
+          chat_id: cid,
+          menu_button: { type: 'web_app', text: '⚡ God Mode', web_app: { url: ctx.ADMIN_APP_URL } },
+        }).catch(() => null);
+      }
       // Auto-register god-mode commands for this chat so they show in the / menu
       api(ctx, 'setMyCommands', {
         commands: [
@@ -423,7 +549,7 @@ export async function onMsg(ctx, msg) {
   if (txt === '/catalog')  return showCatalog(ctx, cid);
   if (txt === '/contacts' || txt === '/instagram') return showContacts(ctx, cid);
   if (txt === '/lang')     return showLangPick(ctx, cid);
-  if (txt === '/help')     return send(ctx, cid, fill(t(lg, 'help'), {}), { reply_markup: { remove_keyboard: true } });
+  if (txt === '/help')     return showHelp(ctx, cid, lg, realRole);
 
   // ─── Нажатия кнопок постоянной клавиатуры (меню внизу экрана) ─────────────
   if (txt) {
@@ -461,21 +587,39 @@ export async function onMsg(ctx, msg) {
     if (ctxAction === 'contacts') return showContacts(ctx, cid);
   }
 
+  if (st.step === STEP.CONFIRM && txt) {
+    if (isBookingConfirmDeclineText(txt)) {
+      return enterBookingAdjustState(ctx, cid, st);
+    }
+  }
+
+  if (st.step === STEP.BOOK_ADJUST && txt) {
+    const quickAdj = parseQuickBookingPhrase(txt);
+    if (quickAdj) {
+      return startBookingWithService(ctx, cid, msg.from, quickAdj.svcId, quickAdj.dateHint, quickAdj.timeHint, st.masterId ?? null);
+    }
+    const mention = parseServiceMention(txt, ctx);
+    if (mention) {
+      return startBookingWithService(ctx, cid, msg.from, mention, st.date, st.time, st.masterId ?? null);
+    }
+    return handleAIChat(ctx, cid, txt, lg, realRole, msg.from, { bookingAdjust: { date: st.date, time: st.time } });
+  }
+
   // ─── Booking flow: handle typed time when time picker is shown ─────────
-  if (st.step === 'time' && txt) {
+  if (st.step === STEP.TIME && txt) {
     const timeM = txt.match(/(\d{1,2})(?::(\d{2}))?/);
     if (timeM) {
       const parsed = timeM[2] ? `${timeM[1]}:${timeM[2]}` : timeM[1];
       const timeHint = resolveTimeHint(parsed);
-      if (timeHint) return startBookingWithService(ctx, cid, msg.from, st.svcId, st.date, timeHint);
+      if (timeHint) return startBookingWithService(ctx, cid, msg.from, st.svcId, st.date, timeHint, st.masterId ?? null);
     }
   }
 
   // ─── Booking flow: handle typed date when calendar is shown ────────────
-  if (st.step === 'date' && txt) {
+  if (st.step === STEP.DATE && txt) {
     const cleaned = txt.replace(/^(?:на|в|о)\s+/i, '').trim();
     const dateHint = resolveDateHint(cleaned);
-    if (dateHint) return startBookingWithService(ctx, cid, msg.from, st.svcId, dateHint, null);
+    if (dateHint) return startBookingWithService(ctx, cid, msg.from, st.svcId, dateHint, null, st.masterId ?? null);
   }
 
   if (st.step === STEP.CLIENT_CANCEL_COMMENT) {
@@ -485,7 +629,7 @@ export async function onMsg(ctx, msg) {
     if (apt) {
       // For staff users who cancelled their own appointment — route back to their panel
       // to avoid confusing "free text → AI → admin actions" DTP scenario
-      const cancellerRole = realRole || (await getRole(ctx, cid));
+      const cancellerRole = realRole;
       const isStaffCanceller = cancellerRole === 'system_admin' || cancellerRole === 'admin' ||
         cancellerRole === 'master' || cancellerRole === 'tenant_owner';
       if (isStaffCanceller) {
@@ -537,7 +681,7 @@ export async function onMsg(ctx, msg) {
       name: masterName,
       tgUsername: masterUsername || null,
       phone: masterPhone || null,
-      addedAt: Date.now(),
+      addedAt: nowSec(),
       active: true,
     });
     // In multi-tenant mode also assign the MASTER role so routing works on /start
@@ -742,12 +886,12 @@ export async function onMsg(ctx, msg) {
   if (st.step === STEP.REJECT_COMMENT) {
     if (!txt) return send(ctx, cid, t(lg, 'mst_reject_prompt'));
     const apt = await getAptById(ctx, st.aptId);
-    if (!apt || apt.status !== 'pending') return send(ctx, cid, t(lg, 'mst_already_done'));
+    if (!apt || (apt.status !== 'pending' && apt.status !== 'counter_offer')) return send(ctx, cid, t(lg, 'mst_already_done'));
     apt.status = 'rejected';
     apt.rejectComment = txt.slice(0, 500);
     await updateApt(ctx, st.aptId, { status: 'rejected', rejectComment: txt.slice(0, 500) });
     if (apt.googleEventId) {
-      deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
+      await deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
     }
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
@@ -869,7 +1013,7 @@ export async function onMsg(ctx, msg) {
       if (isNaN(from) || isNaN(to) || from < 0 || to > 24 || from >= to) return send(ctx, cid, t(lg, 'adm_settings_enter_hours'));
       tenant.salon.workHours = { from, to };
     }
-    tenant.updatedAt = Date.now();
+    tenant.updatedAt = nowSec();
     await putTenant(ctx, tenantId, tenant);
     // Reflect changes in ctx for immediate display
     if (ctx.tenant) { ctx.tenant.salon = tenant.salon; ctx.tenant.name = tenant.name; }
@@ -1089,7 +1233,7 @@ export async function finishPhone(ctx, cid, phone, st) {
     phone: cl,
     tgUsername: st.tgUser || null,
     tgLang: st.tgLang || null,
-    registeredAt: Date.now(),
+    registeredAt: nowSec(),
   });
   await clearState(ctx, cid);
   await send(ctx, cid, fill(t(lg, 'reg_done'), { n: safeName, p: escHtml(cl) }), { reply_markup: { remove_keyboard: true } });

@@ -1,0 +1,18 @@
+export default {
+  m_book: '📝 Записатися',
+  m_my: '📋 Мої записи',
+  m_prices: '💰 Прайс-лист',
+  m_cat: '📸 Каталог робіт',
+  m_rev: '⭐ Відгуки',
+  m_about: 'ℹ️ Про нас',
+  m_instagram: '📷 Instagram',
+  m_cont: '📞 Контакти',
+  m_lang: '🌐 Мова',
+  m_support: '🆘 Підтримка',
+  m_tech_support: '🔧 Тех. підтримка',
+  mst_panel: '👩‍🎨 Панель майстра',
+  adm_management: '🔧 Керування',
+  back: '◀️ Назад',
+  back_m: '◀️ Головне меню',
+  min: 'хв',
+};

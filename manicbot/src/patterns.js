@@ -168,6 +168,36 @@ export function parseQuickBookingPhrase(txt) {
   return null;
 }
 
+/** Short reply declining the booking confirmation card (before AI). */
+export function isBookingConfirmDeclineText(txt) {
+  if (!txt || typeof txt !== 'string') return false;
+  const s = txt.trim().toLowerCase();
+  if (s.length > 56) return false;
+  return /^(нет|неа|не|no|nope|nie|ні|cancel|отмена|отменить|скасуй|скасувати|anuluj)\.?$/i.test(s);
+}
+
+/**
+ * Detects service name in a short correction message ("на педикюр", "гель-лак") without "запиши…".
+ * Returns svc id or null.
+ */
+export function parseServiceMention(txt, ctx) {
+  if (!txt || typeof txt !== 'string' || !ctx?.svcIds?.size) return null;
+  const s = txt.trim();
+  if (s.length < 2 || s.length > 120) return null;
+  const svcMap = [
+    { re: /(^|\s)(гель|гель-лак|gel)(\s|$)/i, id: 'gel' },
+    { re: /(^|\s)(педикюр|педик|pedicure|pedicur|pedi)(\s|$)/i, id: 'pedi' },
+    { re: /(^|\s)(наращивание|нарощ|extensions?|ext)(\s|$)/i, id: 'ext' },
+    { re: /(^|\s)(дизайн|design)(\s|$)/i, id: 'design' },
+    { re: /(^|\s)(комбо|combo)(\s|$)/i, id: 'combo' },
+    { re: /(^|\s)(маникюр|маник|manicure|manicur|обычный|classic)(\s|$)/i, id: 'classic' },
+  ];
+  for (const { re, id } of svcMap) {
+    if (re.test(s) && ctx.svcIds.has(id)) return id;
+  }
+  return null;
+}
+
 export function isConfirmAllRequestsMessage(txt) {
   if (!txt || typeof txt !== 'string') return false;
   const s = txt.trim();

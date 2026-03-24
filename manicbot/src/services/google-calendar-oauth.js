@@ -857,7 +857,7 @@ export async function loadExternalBusyBlocks(ctx, date, masterId = null) {
  * Load Google Calendar events for admin panel display.
  * Returns busy blocks for the given date range, formatted for UI.
  */
-export async function loadGoogleCalendarEvents(ctx, dateFrom, dateTo) {
+async function loadGoogleCalendarEvents(ctx, dateFrom, dateTo) {
   await ensureGoogleCalendarSchema(ctx);
   if (!ctx?.db || !ctx?.tenantId) return [];
   const { warsawToUTC } = await import('../utils/date.js');

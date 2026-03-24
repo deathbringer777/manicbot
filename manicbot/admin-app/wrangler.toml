@@ -1,0 +1,9 @@
+name = "admin-app"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "manicbot-db"
+database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"

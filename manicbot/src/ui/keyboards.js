@@ -22,6 +22,10 @@ export function mainKb(lg, role = 'client', ctx = null) {
      { text: t(lg, 'm_about'), callback_data: CB.ABOUT }],
     lastRow,
   ];
+  if (role === 'system_admin') {
+    rows.push([{ text: t(lg, 'adm_management'), callback_data: CB.ADM_MAIN }]);
+    rows.push([{ text: t(lg, 'sysadm_title'), callback_data: CB.SYSADM_MAIN }]);
+  }
   if (role === 'master' || role === 'admin') {
     rows.push([{ text: t(lg, 'mst_panel'), callback_data: CB.MST_MAIN }]);
   }
@@ -122,8 +126,9 @@ export function aboutPhotoKb(lg, idx, total, instagramUrl) {
   return { reply_markup: { inline_keyboard: rows } };
 }
 
-export function adminKb(lg) {
-  return { reply_markup: { inline_keyboard: [
+export function adminKb(lg, ctx = null) {
+  const showBilling = !ctx || !!(ctx.tenantId && ctx.db);
+  const rows = [
     [{ text: t(lg, 'adm_today'), callback_data: CB.ADM_TODAY },
      { text: t(lg, 'adm_tomorrow'), callback_data: CB.ADM_TOMORROW }],
     [{ text: t(lg, 'adm_all_apts'), callback_data: CB.ADM_ALL_APTS }],
@@ -131,12 +136,16 @@ export function adminKb(lg) {
     [{ text: t(lg, 'adm_clients'), callback_data: CB.ADM_CLIENTS }],
     [{ text: t(lg, 'svc_manage'), callback_data: CB.SVC_LIST },
      { text: t(lg, 'adm_settings'), callback_data: CB.ADM_SETTINGS }],
-    [{ text: t(lg, 'billing_menu'), callback_data: CB.ADM_BILLING }],
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
     [{ text: t(lg, 'adm_support_btn'), callback_data: CB.ADM_SUPPORT_LIST },
      { text: t(lg, 'm_tech_support'), callback_data: CB.TECH_SUPPORT_REQ }],
     [{ text: t(lg, 'adm_to_client'), callback_data: CB.MAIN }],
-  ] } };
+  ];
+  if (showBilling) {
+    // Insert billing button before the last row (to_client)
+    rows.splice(rows.length - 1, 0, [{ text: t(lg, 'billing_menu'), callback_data: CB.ADM_BILLING }]);
+  }
+  return { reply_markup: { inline_keyboard: rows } };
 }
 
 export function masterKb(lg, ctx = null) {

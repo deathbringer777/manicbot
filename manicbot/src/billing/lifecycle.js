@@ -12,16 +12,17 @@
  */
 
 import { updateTenantBilling } from './storage.js';
+import { nowSec } from '../utils/time.js';
 
 /**
  * Чистая функция: проверяет, истёк ли срок триала или grace-периода.
  * Не делает никаких side-effects — удобна для тестирования.
  *
  * @param {{ billingStatus: string, trialEndsAt?: number|null, graceEndsAt?: number|null }} tenant
- * @param {number} [now] - timestamp (по умолчанию Date.now())
+ * @param {number} [now] - Unix seconds (по умолчанию nowSec())
  * @returns {'trial_expired' | 'grace_expired' | null}
  */
-export function isBillingExpired(tenant, now = Date.now()) {
+export function isBillingExpired(tenant, now = nowSec()) {
   if (!tenant) return null;
   if (tenant.billingStatus === 'trialing' && tenant.trialEndsAt && now > tenant.trialEndsAt) {
     return 'trial_expired';
@@ -37,10 +38,10 @@ export function isBillingExpired(tenant, now = Date.now()) {
  * Обновляет D1 через updateTenantBilling и мутирует ctx.tenant в памяти.
  *
  * @param {object} ctx  - context с ctx.tenant, ctx.tenantId, ctx.db
- * @param {number} [now] - timestamp (по умолчанию Date.now())
+ * @param {number} [now] - Unix seconds (по умолчанию nowSec())
  * @returns {Promise<'trial_expired' | 'grace_expired' | null>} тип перехода или null
  */
-export async function checkBillingExpiry(ctx, now = Date.now()) {
+export async function checkBillingExpiry(ctx, now = nowSec()) {
   if (!ctx?.tenant || !ctx?.tenantId || !ctx?.db) return null;
 
   const expiry = isBillingExpired(ctx.tenant, now);

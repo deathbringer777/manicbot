@@ -1,0 +1,18 @@
+export default {
+  m_book: '📝 Book Now',
+  m_my: '📋 My Appointments',
+  m_prices: '💰 Price List',
+  m_cat: '📸 Portfolio',
+  m_rev: '⭐ Reviews',
+  m_about: 'ℹ️ About Us',
+  m_instagram: '📷 Instagram',
+  m_cont: '📞 Contacts',
+  m_lang: '🌐 Language',
+  m_support: '🆘 Support',
+  m_tech_support: '🔧 Tech Support',
+  mst_panel: '👩‍🎨 Specialist Panel',
+  adm_management: '🔧 Management',
+  back: '◀️ Back',
+  back_m: '◀️ Main Menu',
+  min: 'min',
+};

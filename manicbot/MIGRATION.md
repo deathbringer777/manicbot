@@ -1,5 +1,27 @@
 # Что за миграция
 
+## Предварительное условие: D1
+
+Перед запуском любой миграции убедись, что D1 инициализирована:
+
+1. `npx wrangler d1 create manicbot-db` (или уже существует — проверь в `wrangler.toml`)
+2. `npx wrangler d1 execute manicbot-db --remote --file src/db/schema.sql`
+
+**Если D1 уже содержит данные с timestamp в миллисекундах** (старые записи до исправления):
+```bash
+npx wrangler d1 execute manicbot-db --remote --command "
+UPDATE tenants SET created_at = created_at/1000 WHERE created_at > 9999999999;
+UPDATE tenants SET updated_at = updated_at/1000 WHERE updated_at > 9999999999;
+UPDATE tenants SET trial_ends_at = trial_ends_at/1000 WHERE trial_ends_at IS NOT NULL AND trial_ends_at > 9999999999;
+UPDATE appointments SET created_at = created_at/1000 WHERE created_at > 9999999999;
+UPDATE masters SET added_at = added_at/1000 WHERE added_at IS NOT NULL AND added_at > 9999999999;
+"
+```
+
+---
+
+
+
 **Миграция** — это одноразовый шаг, который переводит бота из режима «один бот = один кусок KV» в режим **мультитенанта**: один и тот же воркер может обслуживать много ботов/салонов, данные изолированы по тенантам.
 
 ## Что именно делается

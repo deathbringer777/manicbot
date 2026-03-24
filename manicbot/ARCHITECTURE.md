@@ -4,7 +4,7 @@
 
 **ManicBot** — мультитенантный Telegram-бот для записи в маникюрные салоны. Один Cloudflare Worker обслуживает несколько ботов (по одному на салон/тенант). Реализовано: запись на услуги, роли (клиент / мастер / админ салона / системный админ), ИИ-чат, тикеты поддержки, биллинг Stripe, календарь (ICS).
 
-- **Стек:** Cloudflare Workers, KV, Workers AI (REST), Stripe API, Telegram Bot API.
+- **Стек:** Cloudflare Workers, KV, D1 (Cloudflare SQLite), Workers AI (REST), Stripe API, Telegram Bot API.
 - **Языки интерфейса:** RU, UA, EN, PL.
 - **Точка входа:** `src/worker.js` (fetch + scheduled).
 
@@ -40,19 +40,54 @@ scheduled (cron */15 * * * *) → handleCron (напоминания и т.д.)
 
 ## 3. Роли и авторизация
 
-| Роль            | Где хранится                    | Кто назначает              |
-|-----------------|---------------------------------|-----------------------------|
-| system_admin    | KV `role:{chatId}` (глобально)  | /sysadmin ADMIN_KEY         |
-| support         | KV `support:agents` + role      | system_admin: /add_support   |
-| tenant_owner    | KV `t:{tenantId}:role:{chatId}` | system_admin: /grant_owner   |
-| master          | KV `t:{tenantId}:master:{cid}` + role | tenant_owner в панели / grant_master |
-| client          | по умолчанию                    | —                           |
+| Роль              | D1-таблица / механизм                              | Кто назначает                             |
+|-------------------|----------------------------------------------------|-------------------------------------------|
+| system_admin      | D1 `platform_roles` (role='system_admin')          | Env ADMIN_CHAT_ID или /sysadmin           |
+| technical_support | D1 `support_agents` (type='technical_support')     | system_admin                              |
+| support           | D1 `support_agents` (type='support')               | system_admin                              |
+| tenant_owner      | D1 `tenant_roles` (role='tenant_owner')            | system_admin: /grant_owner                |
+| master            | D1 `tenant_roles` (role='master') + `masters`      | tenant_owner в панели                     |
+| client            | По умолчанию (нет записи)                          | —                                         |
 
-Приоритет при определении роли: platform (system_admin, support) → tenant (tenant_owner, master) → client.
+Приоритет: platform (system_admin > technical_support > support) → tenant (tenant_owner > master) → client.
 
 ---
 
-## 4. Модель данных (Cloudflare KV)
+## 4. Хранилище: KV + D1
+
+### 4а. D1 (Cloudflare SQLite) — бизнес-данные (основное хранилище)
+
+Схема: `src/db/schema.sql`. Все timestamp-поля хранятся в **Unix секундах** (`nowSec()` из `utils/time.js`).
+Исключение: `ts` в `appointments` — Unix **миллисекунды** (datetime слот записи).
+
+#### Глобальные таблицы (все тенанты)
+
+| Таблица | Ключевые поля |
+|---------|---------------|
+| `tenants` | id, name, plan, billing_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, created_at, updated_at |
+| `bots` | bot_id, tenant_id, bot_username, webhook_secret, active, created_at, updated_at |
+| `platform_roles` | chat_id, role ('system_admin'\|'support'\|'technical_support'), created_at |
+| `support_agents` | chat_id, type ('support'\|'technical_support') |
+| `platform_tickets` | id, tenant_id, client_chat_id, client_bot_id, status, claimed_by, claimed_at, created_at |
+| `platform_ticket_messages` | id (INTEGER autoincrement), ticket_id, sender, text, created_at |
+| `stripe_customers` | customer_id, tenant_id |
+
+#### Тенант-скопированные таблицы (изолированы по tenant_id)
+
+| Таблица | Ключевые поля |
+|---------|---------------|
+| `appointments` | id, tenant_id, chat_id, svc_id, date, time, ts (ms), status, master_id, confirmed_by, cancelled, rem_h24, rem_h2, google_event_id, google_integration_id, created_at |
+| `users` | tenant_id, chat_id, name, tg_username, tg_lang, phone, registered_at |
+| `masters` | tenant_id, chat_id, name, tg_username, services (JSON), work_hours (JSON), work_days (JSON), on_vacation, active, added_at, google_calendar_id, calendar_enabled |
+| `services` | tenant_id, svc_id, emoji, duration, price, active, sort_order, names (JSON) |
+| `tenant_roles` | tenant_id, chat_id, role ('tenant_owner'\|'master'), created_at |
+| `tenant_config` | tenant_id, key, value (JSON) |
+| `tenant_support_agents` | tenant_id, chat_id |
+| `blocked_users` | tenant_id, chat_id |
+| `local_tickets` | tenant_id, client_cid, master_cid, open, data (JSON) |
+| `human_requests` | tenant_id, chat_id, count |
+
+### 4б. KV (MANICBOT) — эфемерные данные
 
 Один namespace **MANICBOT**. Ключи:
 
@@ -145,6 +180,9 @@ flowchart TB
     Stripe["billing/stripe.js\nCheckout, Portal, Subscription"]
     BillingStorage["billing/storage.js\nupdateTenantBilling"]
     Webhooks["billing/webhooks.js\nverifyStripeSignature\nhandleStripeWebhook"]
+    BillingLifecycle["billing/lifecycle.js\nisBillingExpired\ncheckBillingExpiry"]
+    BillingFeatures["billing/features.js\ncanUse, getMastersLimit\nisTrialing, isGracePeriod"]
+    BillingConfig["billing/config.js\nPLANS, BILLING_STATUS\nPLAN_LIMITS"]
   end
 
   subgraph Admin["Админ и сид"]
@@ -155,11 +193,17 @@ flowchart TB
   subgraph Infra["Инфра и утилиты"]
     Config["config.js\nCB, STEP, DEFAULT_SVC\nLANG_HINT, AI_MODEL"]
     Kv["utils/kv.js\nkvGet, kvPut, kvListAll"]
+    Db["utils/db.js\ndbGet, dbAll, dbRun"]
+    Time["utils/time.js\nnowSec, msToSec"]
     Telegram["telegram.js\nsend, api"]
     Helpers["utils/helpers.js\nt, fill, escHtml"]
     Date["utils/date.js\ntodayStr, fmtDate"]
     Security["utils/security.js\ntimingSafeEqual, checkAdmin"]
-    I18n["i18n.js\nL.ru, L.ua, L.en, L.pl"]
+    I18n["i18n/index.js\nt(), L.{lang}"]
+  end
+
+  subgraph AdminApp["Admin App (отдельный сервис)"]
+    AdminAppUI["admin-app/\nNext.js + Drizzle ORM\nCloudflare Pages"]
   end
 
   W --> getCtx
@@ -215,8 +259,11 @@ flowchart TB
   Webhooks --> Stripe
 
   StorageT --> Kv
+  StorageT --> Db
+  Appointments --> Db
   Kv --> Config
   Telegram --> Config
+  AdminAppUI --> Db
 ```
 
 ---
@@ -230,9 +277,18 @@ manicbot/
 │   ├── config.js              # Константы, CB, STEP, DEFAULT_SVC, buildCtx
 │   ├── telegram.js            # send(), api() → Telegram Bot API
 │   ├── ai.js                  # Промпт, теги, runWorkersAI, executeAIAction
-│   ├── i18n.js                # Строки ru/ua/en/pl
 │   ├── patterns.js            # Паттерны фраз (отмена, прайс, консультант)
 │   ├── notifications.js       # Уведомления мастеру/админу, confirmAllPending
+│   │
+│   ├── i18n/
+│   │   ├── index.js           # t(), L.{lang} — агрегатор
+│   │   ├── ru/                # Строки на русском
+│   │   ├── ua/                # Строки на украинском
+│   │   ├── en/                # Строки на английском
+│   │   └── pl/                # Строки на польском
+│   │
+│   ├── db/
+│   │   └── schema.sql         # D1 схема: все таблицы
 │   │
 │   ├── tenant/
 │   │   ├── storage.js         # tenant:*, bot:*, botmap:*, listTenantIds
@@ -247,7 +303,9 @@ manicbot/
 │   │   └── seed.js            # runSeed: 2 салона, услуги, мастер
 │   │
 │   ├── billing/
-│   │   ├── config.js          # Stripe keys, price IDs
+│   │   ├── config.js          # PLANS, BILLING_STATUS, PLAN_LIMITS
+│   │   ├── features.js        # canUse, getMastersLimit, isTrialing, isGracePeriod
+│   │   ├── lifecycle.js       # isBillingExpired, checkBillingExpiry (cron)
 │   │   ├── stripe.js          # Checkout, Portal, getSubscription
 │   │   ├── storage.js         # updateTenantBilling, stripe_customer:*
 │   │   └── webhooks.js        # verifyStripeSignature, handleStripeWebhook
@@ -260,8 +318,9 @@ manicbot/
 │   │   ├── state.js           # getState, setState, clearState, checkRateLimit
 │   │   ├── chat.js            # getLang, setLang, getChatHistory
 │   │   ├── services.js        # loadServices, saveServices, about, initServices
-│   │   ├── appointments.js    # getApts, cancelApt, слоты
-│   │   └── tickets.js         # Консультант в салоне (тикет мастер–клиент)
+│   │   ├── appointments.js    # getApts, getSlots, cancelApt, loadDayAppointments
+│   │   ├── tickets.js         # Консультант в салоне (тикет мастер–клиент)
+│   │   └── google-calendar-oauth.js  # Google Calendar OAuth flow
 │   │
 │   ├── handlers/
 │   │   ├── message.js         # onMsg: команды, шаги, ИИ, grant_master, add_support
@@ -278,26 +337,35 @@ manicbot/
 │   │
 │   └── utils/
 │       ├── kv.js              # kvGet, kvPut, kvDel, kvListAll (с ctx.prefix)
+│       ├── db.js              # dbGet, dbAll, dbRun (D1 helpers)
+│       ├── time.js            # nowSec(), msToSec()
 │       ├── helpers.js         # t(), fill(), escHtml(), svcName()
 │       ├── date.js            # todayStr, fmtDate, fmtDT, resolveDateHint
 │       ├── security.js        # timingSafeEqual, checkAdmin, randomId, encrypt/decrypt
 │       └── ics.js             # makeICS для календаря
 │
-├── wrangler.toml              # name=manicbot, main=src/worker.js, KV MANICBOT, AI
+├── wrangler.toml              # name=manicbot, main=src/worker.js, KV MANICBOT, D1 DB, AI
 ├── package.json               # deploy, dev, test, migrate
 ├── vitest.config.js
-├── test/                      # config, kv, tenant-resolver, billing-webhooks, ...
+├── test/                      # config, kv, tenant-resolver, billing-webhooks, master-selection, ...
 ├── scripts/
 │   ├── run-migrate.js
 │   └── setup-stripe-secrets.sh
-├── archive/
-│   └── worker.legacy.js
 ├── BOT_GUIDE.md
 ├── CLOUDFLARE_SETUP.md
 ├── SEED_TEST_DATA.md
 ├── MIGRATION.md
 ├── STRIPE_SETUP.md
+├── BILLING.md
 └── ARCHITECTURE.md            # этот файл
+
+admin-app/                     # Отдельный пакет (Cloudflare Pages)
+├── src/
+│   ├── app/                   # Next.js App Router
+│   ├── server/                # tRPC routers + Drizzle ORM
+│   └── db/                    # Drizzle schema → D1 (manicbot-db)
+├── package.json
+└── wrangler.toml
 ```
 
 ---
@@ -321,6 +389,7 @@ manicbot/
 | Переменная | Описание |
 |------------|----------|
 | MANICBOT   | KV namespace (binding) |
+| DB         | D1 database binding (manicbot-db) |
 | BOT_TOKEN  | Токен бота (legacy / fallback для getCtx) |
 | WEBHOOK_SECRET | Секрет вебхука (legacy) |
 | ADMIN_KEY  | Ключ для /sysadmin, /admin, ?key= в /setup, /admin/migrate, /admin/seed |
@@ -335,10 +404,11 @@ manicbot/
 
 ## 9. Итог
 
-- Один воркер, один KV, много ботов: контекст определяется по **botId** из URL вебхука и регистрации **bot → tenant** в KV.
-- Все данные тенанта изолированы префиксом **t:{tenantId}:**; платформа (роли, тикеты, Stripe) — глобальные ключи.
-- Роли: **system_admin** (глобально), **support** (глобально), **tenant_owner** и **master** (в рамках тенанта), иначе **client**.
+- Один воркер, KV + D1, много ботов: контекст определяется по **botId** из URL вебхука и регистрации **bot → tenant** в D1.
+- **Бизнес-данные** (тенанты, мастера, записи, роли, биллинг) — в **D1** (SQLite); **эфемерные данные** (state, lang, chat history, rate limit) — в **KV**.
+- Роли: **system_admin** / **technical_support** / **support** (D1 `platform_roles`, `support_agents`), **tenant_owner** / **master** (D1 `tenant_roles`), иначе **client**.
 - Запись, админка, ИИ, тикеты, биллинг собраны в **handlers** + **ui** + **services**; сид и миграция — в **admin** и **tenant**.
+- **Admin-app** (Next.js + Drizzle ORM, Cloudflare Pages) предоставляет веб-интерфейс платформы, подключается напрямую к D1 `manicbot-db`.
 
 Карта выше и дерево файлов отражают актуальную структуру проекта.
 
@@ -392,13 +462,15 @@ manicbot/
      └──────────────┴──────────────┴─────────────┴──────────────┴──────────────┴──────────────┘
                                               │
                                               ▼
-                                    ┌──────────────────┐
-                                    │  KV (MANICBOT)   │
-                                    │  один namespace  │
-                                    └──────────────────┘
+                    ┌──────────────────────┐    ┌──────────────────────┐
+                    │  KV (MANICBOT)       │    │  D1 (manicbot-db)    │
+                    │  state, lang,        │    │  tenants, masters,   │
+                    │  chat history,       │    │  appointments,       │
+                    │  rate limits         │    │  roles, billing      │
+                    └──────────────────────┘    └──────────────────────┘
 ```
 
 **Сводка:**
 - Один воркер обрабатывает HTTP, Telegram и cron.
-- Контекст строится по **botId** из URL → в KV ищется tenantId → все операции идут с префиксом **t:{tenantId}:**.
-- Роли задаются в **roles.js** (глобально + по тенанту); обработка сообщений и кнопок — в **message.js** и **callback.js**; экраны — в **ui/**; биллинг и тикеты — отдельные модули, пишущие в KV.
+- Контекст строится по **botId** из URL → D1 `bots` → tenantId → все операции идут с **ctx.db** (D1) и **ctx.prefix** (KV).
+- Роли задаются в **roles.js** (D1 `platform_roles`, `tenant_roles`); обработка сообщений и кнопок — в **message.js** и **callback.js**; экраны — в **ui/**; биллинг и тикеты — отдельные модули, читающие/пишущие в D1.

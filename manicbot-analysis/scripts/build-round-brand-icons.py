@@ -2,6 +2,7 @@
 """Crop canonical brand mark to a square, then emit public/ icon sizes."""
 from __future__ import annotations
 
+import base64
 import sys
 from pathlib import Path
 
@@ -55,7 +56,19 @@ def main() -> None:
     # Small asset for Vite bundle (header + phone mockup) — avoid shipping multi‑MB source in JS
     write(256, ui_dir / "manicbot-emoji-mark-ui.png")
 
-    print("Wrote public/* icons + src/assets/manicbot-emoji-mark-ui.png")
+    png48 = (public / "favicon-48.png").read_bytes()
+    b64 = base64.standard_b64encode(png48).decode("ascii")
+    (public / "favicon.svg").write_text(
+        (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="ManicBot">\n'
+            f'  <image href="data:image/png;base64,{b64}" width="48" height="48" '
+            'preserveAspectRatio="xMidYMid meet"/>\n'
+            "</svg>\n"
+        ),
+        encoding="utf-8",
+    )
+
+    print("Wrote public/* icons + favicon.svg + src/assets/manicbot-emoji-mark-ui.png")
 
 
 if __name__ == "__main__":

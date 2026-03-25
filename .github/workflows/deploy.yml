@@ -154,4 +154,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: manicbot/admin-app
-          command: pages deploy .vercel/output/static --project-name=admin-app-3nc --commit-dirty=true
+          command: pages deploy .vercel/output/static --project-name=admin-app --commit-dirty=true

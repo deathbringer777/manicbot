@@ -22,12 +22,13 @@ export function RoleSwitcher() {
   const [pendingRole, setPendingRole] = useState<AppRole>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>("");
 
+  // All hooks must be called before any conditional return (Rules of Hooks)
+  const tenants = api.tenants.getAll.useQuery(undefined, {
+    enabled: role === "system_admin" && open && (pendingRole === "tenant_owner" || pendingRole === "master"),
+  });
+
   // Only render for system_admin
   if (role !== "system_admin") return null;
-
-  const tenants = api.tenants.getAll.useQuery(undefined, {
-    enabled: open && (pendingRole === "tenant_owner" || pendingRole === "master"),
-  });
 
   const activePreview = previewRole && previewRole !== "system_admin";
   const currentDisplay = activePreview ? previewRole : "system_admin";

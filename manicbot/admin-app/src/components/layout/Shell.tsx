@@ -161,6 +161,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
             );
           })}
           <div className="ml-auto flex items-center gap-1 px-2 shrink-0">
+            {role === "system_admin" && <RoleSwitcher />}
             <SettingsSheet />
           </div>
         </div>

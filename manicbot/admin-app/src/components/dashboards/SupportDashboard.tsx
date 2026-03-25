@@ -4,23 +4,14 @@ import { useState } from "react";
 import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
-
-const supportNavItems: NavItem[] = [
-  { href: "#tickets", icon: MessageSquare, label: "Тикеты" },
-];
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 const STATUS_STYLES: Record<string, string> = {
   open: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
   claimed: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
   escalated: "bg-red-500/20 text-red-400 border border-red-500/30",
   closed: "bg-slate-700 text-slate-400",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  open: "Открыт",
-  claimed: "В работе",
-  escalated: "Эскалирован",
-  closed: "Закрыт",
 };
 
 type FilterStatus = "all" | "open" | "claimed" | "escalated" | "closed";
@@ -34,9 +25,14 @@ function relativeTime(ts: number): string {
 }
 
 export function SupportDashboard() {
+  const { lang } = useLang();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>("open");
   const [replyText, setReplyText] = useState("");
+
+  const supportNavItems: NavItem[] = [
+    { href: "#tickets", icon: MessageSquare, label: t("support.tickets", lang) },
+  ];
 
   const allTickets = api.support.getAllTickets.useQuery(
     { status: filter === "all" ? undefined : filter },
@@ -60,18 +56,22 @@ export function SupportDashboard() {
   });
 
   const filterLabels: Record<FilterStatus, string> = {
-    all: "Все", open: "Открытые", claimed: "В работе", escalated: "Эскалированные", closed: "Закрытые",
+    all: t("support.all", lang),
+    open: t("status.open", lang),
+    claimed: t("status.claimed", lang),
+    escalated: t("status.escalated", lang),
+    closed: t("status.closed", lang),
   };
 
   // Ticket detail view
   if (selectedId) {
     return (
-      <Shell navItems={supportNavItems} title="Поддержка" subtitle="ManicBot Support">
+      <Shell navItems={supportNavItems} title={t("support.title", lang)} subtitle="ManicBot Support">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setSelectedId(null)}
               className="flex items-center gap-1 text-slate-400 hover:text-white text-sm transition-colors">
-              <ArrowLeft className="h-4 w-4" /> Назад
+              <ArrowLeft className="h-4 w-4" /> {t("common.back", lang)}
             </button>
           </div>
 
@@ -85,11 +85,11 @@ export function SupportDashboard() {
                   <div>
                     <p className="font-bold text-white">{ticketDetail.data.ticket.clientName ?? `#${ticketDetail.data.ticket.clientChatId}`}</p>
                     <p className="text-xs text-slate-500">
-                      {ticketDetail.data.ticket.tenantId ?? "Платформа"} · {relativeTime(ticketDetail.data.ticket.createdAt)}
+                      {ticketDetail.data.ticket.tenantId ?? t("support.platform", lang)} · {relativeTime(ticketDetail.data.ticket.createdAt)}
                     </p>
                   </div>
                   <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[ticketDetail.data.ticket.status] ?? ""}`}>
-                    {STATUS_LABELS[ticketDetail.data.ticket.status] ?? ticketDetail.data.ticket.status}
+                    {t(`status.${ticketDetail.data.ticket.status}` as any, lang) ?? ticketDetail.data.ticket.status}
                   </span>
                 </div>
                 {/* Action buttons */}
@@ -98,21 +98,21 @@ export function SupportDashboard() {
                     <button onClick={() => claim.mutate({ ticketId: selectedId })}
                       disabled={claim.isPending}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50">
-                      <UserCheck className="h-3.5 w-3.5" /> Взять в работу
+                      <UserCheck className="h-3.5 w-3.5" /> {t("support.claim", lang)}
                     </button>
                   )}
                   {ticketDetail.data.ticket.status !== "closed" && ticketDetail.data.ticket.status !== "escalated" && (
                     <button onClick={() => escalate.mutate({ ticketId: selectedId })}
                       disabled={escalate.isPending}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50">
-                      <AlertTriangle className="h-3.5 w-3.5" /> Эскалировать
+                      <AlertTriangle className="h-3.5 w-3.5" /> {t("support.escalate", lang)}
                     </button>
                   )}
                   {ticketDetail.data.ticket.status !== "closed" && (
                     <button onClick={() => close.mutate({ ticketId: selectedId })}
                       disabled={close.isPending}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50">
-                      <XCircle className="h-3.5 w-3.5" /> Закрыть
+                      <XCircle className="h-3.5 w-3.5" /> {t("status.closed", lang)}
                     </button>
                   )}
                 </div>
@@ -136,7 +136,7 @@ export function SupportDashboard() {
                   );
                 })}
                 {ticketDetail.data.messages.length === 0 && (
-                  <p className="text-slate-500 text-sm text-center py-4">Сообщений пока нет</p>
+                  <p className="text-slate-500 text-sm text-center py-4">{t("support.noMessages", lang)}</p>
                 )}
               </div>
 
@@ -146,7 +146,7 @@ export function SupportDashboard() {
                   <textarea
                     value={replyText}
                     onChange={e => setReplyText(e.target.value)}
-                    placeholder="Напишите ответ..."
+                    placeholder={t("support.replyPlaceholder", lang)}
                     rows={2}
                     className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
                   />
@@ -168,10 +168,10 @@ export function SupportDashboard() {
 
   // Ticket list view
   return (
-    <Shell navItems={supportNavItems} title="Поддержка" subtitle="ManicBot Support">
+    <Shell navItems={supportNavItems} title={t("support.title", lang)} subtitle="ManicBot Support">
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-white flex-1">Тикеты</h2>
+          <h2 className="text-lg font-bold text-white flex-1">{t("support.tickets", lang)}</h2>
           {allTickets.isRefetching && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
         </div>
 
@@ -201,11 +201,11 @@ export function SupportDashboard() {
                     {ticket.clientName ?? `#${ticket.clientChatId}`}
                   </p>
                   <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[ticket.status] ?? ""}`}>
-                    {STATUS_LABELS[ticket.status] ?? ticket.status}
+                    {t(`status.${ticket.status}` as any, lang) ?? ticket.status}
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  {ticket.tenantId ?? "Платформа"} · {relativeTime(ticket.createdAt)}
+                  {ticket.tenantId ?? t("support.platform", lang)} · {relativeTime(ticket.createdAt)}
                   {ticket.claimedBy ? ` · В работе у #${ticket.claimedBy}` : ""}
                 </p>
               </div>
@@ -215,7 +215,7 @@ export function SupportDashboard() {
           {allTickets.data?.length === 0 && (
             <div className="glass-card rounded-2xl p-8 text-center">
               <MessageSquare className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">Тикетов нет</p>
+              <p className="text-slate-400 text-sm">{t("support.noTickets", lang)}</p>
             </div>
           )}
         </div>

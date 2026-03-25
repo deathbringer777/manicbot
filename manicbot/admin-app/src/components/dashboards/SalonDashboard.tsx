@@ -8,16 +8,8 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
-
-const salonNavItems: NavItem[] = [
-  { href: "#overview", icon: LayoutDashboard, label: "Обзор" },
-  { href: "#appointments", icon: CalendarDays, label: "Записи" },
-  { href: "#masters", icon: Scissors, label: "Мастера" },
-  { href: "#services", icon: UserCheck, label: "Услуги" },
-  { href: "#clients", icon: Users, label: "Клиенты" },
-  { href: "#billing", icon: CreditCard, label: "Тариф" },
-  { href: "#settings", icon: Settings, label: "Настройки" },
-];
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "settings";
 
@@ -81,8 +73,19 @@ function AptCard({ apt }: { apt: any }) {
 }
 
 export function SalonDashboard({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
   const [tab, setTab] = useState<Tab>("overview");
   const [aptDate, setAptDate] = useState("");
+
+  const salonNavItems: NavItem[] = [
+    { href: "#overview", icon: LayoutDashboard, label: t("salon.overview", lang) },
+    { href: "#appointments", icon: CalendarDays, label: t("salon.appointments", lang) },
+    { href: "#masters", icon: Scissors, label: t("salon.masters", lang) },
+    { href: "#services", icon: UserCheck, label: t("salon.services", lang) },
+    { href: "#clients", icon: Users, label: t("salon.clients", lang) },
+    { href: "#billing", icon: CreditCard, label: t("salon.billing", lang) },
+    { href: "#settings", icon: Settings, label: t("common.settings", lang) },
+  ];
 
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
   const apts = api.salon.getAppointments.useQuery(
@@ -95,22 +98,31 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" });
 
+  const tabLabels: Record<Tab, string> = {
+    overview: t("salon.overview", lang),
+    appointments: t("salon.appointments", lang),
+    masters: t("salon.masters", lang),
+    services: t("salon.services", lang),
+    clients: t("salon.clients", lang),
+    billing: t("salon.billing", lang),
+    settings: t("common.settings", lang),
+  };
+
   return (
-    <Shell navItems={salonNavItems} title="Мой салон" subtitle="ManicBot Salon">
+    <Shell navItems={salonNavItems} title={t("salon.title", lang)} subtitle="ManicBot Salon">
       {/* Tab bar */}
       <div className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
-        {(["overview", "appointments", "masters", "services", "clients", "billing", "settings"] as Tab[]).map(t => (
+        {(["overview", "appointments", "masters", "services", "clients", "billing", "settings"] as Tab[]).map(tab_ => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tab_}
+            onClick={() => setTab(tab_)}
             className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-              tab === t
+              tab === tab_
                 ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                 : "text-slate-500 hover:text-slate-300"
             }`}
           >
-            {({ overview: "Обзор", appointments: "Записи", masters: "Мастера",
-               services: "Услуги", clients: "Клиенты", billing: "Тариф", settings: "Настройки" })[t]}
+            {tabLabels[tab_]}
           </button>
         ))}
       </div>
@@ -118,20 +130,20 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* OVERVIEW */}
       {tab === "overview" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Обзор</h2>
+          <h2 className="text-lg font-bold text-white">{t("salon.overview", lang)}</h2>
           {overview.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {overview.data && (
             <div className="grid grid-cols-2 gap-3">
-              <StatCard label="Записей сегодня" value={overview.data.todayAppointments}
+              <StatCard label={t("salon.todayApts", lang)} value={overview.data.todayAppointments}
                 icon={CalendarDays} color="bg-brand-500/20 text-brand-400" />
-              <StatCard label="Мастеров" value={overview.data.activeMasters}
+              <StatCard label={t("salon.activeMasters", lang)} value={overview.data.activeMasters}
                 icon={Scissors} color="bg-purple-500/20 text-purple-400" />
-              <StatCard label="Открытых тикетов" value={overview.data.openTickets}
+              <StatCard label={t("salon.openTickets", lang)} value={overview.data.openTickets}
                 icon={AlertCircle} color="bg-amber-500/20 text-amber-400" />
               <StatCard
-                label="Тариф"
+                label={t("billing.plan", lang)}
                 value={PLAN_LABELS[overview.data.plan ?? "start"] ?? overview.data.plan ?? "—"}
-                sub={BILLING_LABELS[overview.data.billingStatus ?? "trialing"]}
+                sub={t(`billing.${overview.data.billingStatus ?? "trialing"}` as any, lang)}
                 icon={CreditCard} color="bg-emerald-500/20 text-emerald-400"
               />
             </div>
@@ -143,14 +155,14 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {tab === "appointments" && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-white flex-1">Записи</h2>
+            <h2 className="text-lg font-bold text-white flex-1">{t("salon.appointments", lang)}</h2>
             <input type="date" value={aptDate} onChange={e => setAptDate(e.target.value)}
               className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-xl px-3 py-1.5" />
           </div>
           {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {apts.data?.map((a: any) => <AptCard key={a.id} apt={a} />)}
-            {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">Записей нет</p>}
+            {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
           </div>
         </div>
       )}
@@ -158,7 +170,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* MASTERS */}
       {tab === "masters" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Мастера</h2>
+          <h2 className="text-lg font-bold text-white">{t("salon.masters", lang)}</h2>
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {mastersList.data?.map((m: any) => (
@@ -173,7 +185,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                 <ChevronRight className="h-4 w-4 text-slate-600 shrink-0" />
               </div>
             ))}
-            {mastersList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">Мастеров нет</p>}
+            {mastersList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noMasters", lang)}</p>}
           </div>
         </div>
       )}
@@ -181,7 +193,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* SERVICES */}
       {tab === "services" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Услуги</h2>
+          <h2 className="text-lg font-bold text-white">{t("salon.services", lang)}</h2>
           {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {svcList.data?.map((s: any) => {
@@ -200,7 +212,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                 </div>
               );
             })}
-            {svcList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">Услуг нет</p>}
+            {svcList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noServices", lang)}</p>}
           </div>
         </div>
       )}
@@ -208,7 +220,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* CLIENTS */}
       {tab === "clients" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Клиенты</h2>
+          <h2 className="text-lg font-bold text-white">{t("salon.clients", lang)}</h2>
           {clients.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {clients.data?.map((c: any) => (
@@ -224,7 +236,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                 </div>
               </div>
             ))}
-            {clients.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">Клиентов нет</p>}
+            {clients.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noClients", lang)}</p>}
           </div>
         </div>
       )}
@@ -232,34 +244,34 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* BILLING */}
       {tab === "billing" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Тариф и оплата</h2>
+          <h2 className="text-lg font-bold text-white">{t("salon.billingTitle", lang)}</h2>
           {billing.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {billing.data && (
             <div className="space-y-3">
               <div className="glass-card rounded-2xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Тариф</span>
+                  <span className="text-slate-400 text-sm">{t("billing.plan", lang)}</span>
                   <span className="font-bold text-white">{PLAN_LABELS[billing.data.plan ?? "start"] ?? billing.data.plan}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Статус</span>
+                  <span className="text-slate-400 text-sm">{t("billing.status", lang)}</span>
                   <span className={`text-sm font-medium ${billing.data.billingStatus === "active" ? "text-emerald-400" : "text-amber-400"}`}>
-                    {BILLING_LABELS[billing.data.billingStatus ?? "trialing"] ?? billing.data.billingStatus}
+                    {t(`billing.${billing.data.billingStatus ?? "trialing"}` as any, lang)}
                   </span>
                 </div>
                 {billing.data.nextPaymentDate && (
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm">Следующий платёж</span>
+                    <span className="text-slate-400 text-sm">{t("billing.nextPayment", lang)}</span>
                     <span className="text-white text-sm">
-                      {new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString("ru")}
+                      {new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString(lang === "en" ? "en" : "ru")}
                     </span>
                   </div>
                 )}
                 {billing.data.trialEndsAt && billing.data.billingStatus === "trialing" && (
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm">Пробный до</span>
+                    <span className="text-slate-400 text-sm">{t("billing.trialUntil", lang)}</span>
                     <span className="text-amber-400 text-sm">
-                      {new Date(billing.data.trialEndsAt * 1000).toLocaleDateString("ru")}
+                      {new Date(billing.data.trialEndsAt * 1000).toLocaleDateString(lang === "en" ? "en" : "ru")}
                     </span>
                   </div>
                 )}
@@ -272,37 +284,35 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* SETTINGS */}
       {tab === "settings" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Настройки салона</h2>
+          <h2 className="text-lg font-bold text-white">{t("salon.salonProfile", lang)}</h2>
           {profile.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {profile.data && (
             <div className="glass-card rounded-2xl p-5 space-y-3">
               <div>
-                <p className="text-xs text-slate-500 mb-1">Название</p>
+                <p className="text-xs text-slate-500 mb-1">{t("salon.name", lang)}</p>
                 <p className="text-white font-medium">{profile.data.name || "—"}</p>
               </div>
               {profile.data.salon?.address && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Адрес</p>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.address", lang)}</p>
                   <p className="text-white text-sm">{profile.data.salon.address}</p>
                 </div>
               )}
               {profile.data.salon?.phone && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Телефон</p>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.phone", lang)}</p>
                   <p className="text-white text-sm">{profile.data.salon.phone}</p>
                 </div>
               )}
               {profile.data.salon?.workHours && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Часы работы</p>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.hours", lang)}</p>
                   <p className="text-white text-sm">
                     {profile.data.salon.workHours.from}:00 — {profile.data.salon.workHours.to}:00
                   </p>
                 </div>
               )}
-              <p className="text-xs text-slate-600 pt-2">
-                Для изменения настроек используйте бота: /settings
-              </p>
+              <p className="text-xs text-slate-600 pt-2">{t("salon.botHint", lang)}</p>
             </div>
           )}
         </div>

@@ -4,14 +4,8 @@ import { useState } from "react";
 import { CalendarDays, Users, TrendingUp, User, Loader2, Clock } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
-
-const masterNavItems: NavItem[] = [
-  { href: "#today", icon: CalendarDays, label: "Сегодня" },
-  { href: "#schedule", icon: Clock, label: "Расписание" },
-  { href: "#clients", icon: Users, label: "Клиенты" },
-  { href: "#earnings", icon: TrendingUp, label: "Доходы" },
-  { href: "#profile", icon: User, label: "Профиль" },
-];
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 type Tab = "today" | "schedule" | "clients" | "earnings" | "profile";
 
@@ -60,10 +54,19 @@ function AptRow({ apt }: { apt: any }) {
 }
 
 export function MasterDashboard({ tenantId, masterId }: { tenantId: string; masterId: number }) {
+  const { lang } = useLang();
   const [tab, setTab] = useState<Tab>("today");
   const [period, setPeriod] = useState<Period>("month");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  const masterNavItems: NavItem[] = [
+    { href: "#today", icon: CalendarDays, label: t("master.today", lang) },
+    { href: "#schedule", icon: Clock, label: t("master.schedule", lang) },
+    { href: "#clients", icon: Users, label: t("master.clients", lang) },
+    { href: "#earnings", icon: TrendingUp, label: t("master.earnings", lang) },
+    { href: "#profile", icon: User, label: t("master.profile", lang) },
+  ];
 
   const today = api.master.getMySchedule.useQuery(
     { tenantId, masterId },
@@ -88,12 +91,15 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
   );
 
   const tabLabels: Record<Tab, string> = {
-    today: "Сегодня", schedule: "Расписание", clients: "Клиенты",
-    earnings: "Доходы", profile: "Профиль",
+    today: t("master.today", lang),
+    schedule: t("master.schedule", lang),
+    clients: t("master.clients", lang),
+    earnings: t("master.earnings", lang),
+    profile: t("master.profile", lang),
   };
 
   return (
-    <Shell navItems={masterNavItems} title="Кабинет мастера" subtitle="ManicBot Master">
+    <Shell navItems={masterNavItems} title={t("master.title", lang)} subtitle="ManicBot Master">
       {/* Tab bar */}
       <div className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
         {(["today", "schedule", "clients", "earnings", "profile"] as Tab[]).map(t => (
@@ -114,12 +120,12 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {/* TODAY */}
       {tab === "today" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Расписание на сегодня</h2>
+          <h2 className="text-lg font-bold text-white">{t("common.today", lang)}</h2>
           {today.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {today.data?.length === 0 && (
             <div className="glass-card rounded-2xl p-8 text-center">
               <CalendarDays className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">На сегодня записей нет</p>
+              <p className="text-slate-400 text-sm">{t("master.noSchedule", lang)}</p>
             </div>
           )}
           <div className="space-y-2">
@@ -145,7 +151,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {tab === "schedule" && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-lg font-bold text-white flex-1">Все записи</h2>
+            <h2 className="text-lg font-bold text-white flex-1">{t("master.allApts", lang)}</h2>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
               className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-xl px-3 py-1.5" />
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
@@ -165,7 +171,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                 </span>
               </div>
             ))}
-            {schedule.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">Записей нет</p>}
+            {schedule.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("master.noApts", lang)}</p>}
           </div>
         </div>
       )}
@@ -173,7 +179,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {/* CLIENTS */}
       {tab === "clients" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Мои клиенты</h2>
+          <h2 className="text-lg font-bold text-white">{t("master.myClients", lang)}</h2>
           {clientsList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {clientsList.data?.map((c: any) => (
@@ -185,13 +191,13 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                   <p className="font-medium text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
                   {c.lastAppointment && (
                     <p className="text-[10px] text-slate-500">
-                      Последняя запись: {c.lastAppointment.date}
+                      {t("master.lastApt", lang)} {c.lastAppointment.date}
                     </p>
                   )}
                 </div>
               </div>
             ))}
-            {clientsList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">Клиентов нет</p>}
+            {clientsList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("master.noClients", lang)}</p>}
           </div>
         </div>
       )}
@@ -200,14 +206,14 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {tab === "earnings" && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-white flex-1">Доходы</h2>
+            <h2 className="text-lg font-bold text-white flex-1">{t("master.earningsTitle", lang)}</h2>
             <div className="flex gap-1">
               {(["week", "month", "year"] as Period[]).map(p => (
                 <button key={p} onClick={() => setPeriod(p)}
                   className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                     period === p ? "bg-brand-500/20 text-brand-400 border border-brand-500/30" : "text-slate-500"
                   }`}>
-                  {PERIOD_LABELS[p]}
+                  {t(`master.${p}` as any, lang)}
                 </button>
               ))}
             </div>
@@ -216,11 +222,11 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
           {earnings.data && (
             <div className="space-y-3">
               <div className="glass-card rounded-2xl p-6 text-center">
-                <p className="text-xs text-slate-500 mb-1">Выручка за {PERIOD_LABELS[period].toLowerCase()}</p>
+                <p className="text-xs text-slate-500 mb-1">{t(`master.${period}Earnings` as any, lang)}</p>
                 <p className="text-4xl font-bold text-white mb-1">
-                  {earnings.data.total.toLocaleString("ru")} <span className="text-2xl text-slate-400">₴</span>
+                  {earnings.data.total.toLocaleString(lang === "en" ? "en" : "ru")} <span className="text-2xl text-slate-400">₴</span>
                 </p>
-                <p className="text-sm text-slate-400">{earnings.data.count} подтверждённых записей</p>
+                <p className="text-sm text-slate-400">{earnings.data.count} {t("master.confirmedApts", lang)}</p>
               </div>
             </div>
           )}
@@ -230,7 +236,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {/* PROFILE */}
       {tab === "profile" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Мой профиль</h2>
+          <h2 className="text-lg font-bold text-white">{t("master.profile", lang)}</h2>
           {profile.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {profile.data && (
             <div className="glass-card rounded-2xl p-5 space-y-3">
@@ -243,11 +249,11 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                   <p className="text-xs text-slate-500">ID: {profile.data.chatId}</p>
                 </div>
               </div>
-              <p className="text-xs text-slate-600">Для изменения профиля используйте бота: /profile</p>
+              <p className="text-xs text-slate-600">{t("master.profileHint", lang)}</p>
             </div>
           )}
           {!profile.isLoading && !profile.data && (
-            <p className="text-slate-500 text-sm text-center py-8">Профиль не найден</p>
+            <p className="text-slate-500 text-sm text-center py-8">{t("master.noProfile", lang)}</p>
           )}
         </div>
       )}

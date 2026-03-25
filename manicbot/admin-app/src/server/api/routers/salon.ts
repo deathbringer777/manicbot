@@ -1,14 +1,19 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import {
-  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles,
+  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, platformRoles,
 } from "~/server/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { env } from "~/env";
 
-// Verify caller is tenant_owner for the given tenantId
+// Verify caller is tenant_owner (or system_admin for preview mode)
 async function assertTenantOwner(ctx: any, tenantId: string) {
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  // System admin bypass (preview mode)
+  if (env.ADMIN_CHAT_ID && String(ctx.user.id) === env.ADMIN_CHAT_ID) return;
+  const platformRow = await ctx.db.select().from(platformRoles).where(eq(platformRoles.chatId, ctx.user.id)).limit(1);
+  if (platformRow.length && platformRow[0]!.role === "system_admin") return;
   const row = await ctx.db
     .select()
     .from(tenantRoles)

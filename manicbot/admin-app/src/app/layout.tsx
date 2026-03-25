@@ -6,6 +6,7 @@ import Script from "next/script";
 
 import { TRPCReactProvider } from "~/trpc/react";
 import { TelegramGate } from "~/components/TelegramGate";
+import { LangProvider } from "~/components/LangContext";
 
 export const metadata: Metadata = {
   title: "God Mode — ManicBot Admin",
@@ -31,7 +32,9 @@ export default function RootLayout({
       </head>
       <body className="bg-slate-950 text-slate-50 antialiased min-h-screen selection:bg-brand-500/30">
         <TRPCReactProvider>
-          <TelegramGate>{children}</TelegramGate>
+          <LangProvider>
+            <TelegramGate>{children}</TelegramGate>
+          </LangProvider>
         </TRPCReactProvider>
       </body>
     </html>

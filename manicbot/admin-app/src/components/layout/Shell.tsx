@@ -15,6 +15,9 @@ import {
   UserCog,
   type LucideIcon,
 } from "lucide-react";
+import { RoleSwitcher } from "~/components/RoleSwitcher";
+import { SettingsSheet } from "~/components/SettingsSheet";
+import { useRole } from "~/components/RoleContext";
 
 export interface NavItem {
   href: string;
@@ -57,6 +60,7 @@ interface ShellProps {
 export function Shell({ children, navItems, title, subtitle }: ShellProps) {
   const pathname = usePathname();
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
+  const { role } = useRole();
   const activeNavItems = navItems ?? godModeNavItems;
   const displayTitle = title ?? "God Mode";
   const displaySubtitle = subtitle ?? "ManicBot Admin";
@@ -104,18 +108,20 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
           })}
         </nav>
 
-        <div className="mt-4 border-t border-border/50 pt-4 px-2">
+        <div className="mt-4 border-t border-border/50 pt-4 px-2 space-y-3">
+          {role === "system_admin" && <RoleSwitcher />}
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-full bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-xs font-bold shadow-lg shadow-brand-500/20 shrink-0">
               {admin.name.charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-white truncate">{admin.name}</p>
               <p className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
                 @{admin.username}
               </p>
             </div>
+            <SettingsSheet />
           </div>
         </div>
       </aside>
@@ -131,7 +137,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
       {/* Mobile Bottom Nav — scrollable row */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t border-border">
-        <div className="flex overflow-x-auto scrollbar-none px-1 py-1.5">
+        <div className="flex overflow-x-auto scrollbar-none px-1 py-1.5 items-center">
           {mobileNavItems.map((item) => {
             const isActive =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -154,6 +160,9 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
               </Link>
             );
           })}
+          <div className="ml-auto flex items-center gap-1 px-2 shrink-0">
+            <SettingsSheet />
+          </div>
         </div>
       </nav>
     </div>

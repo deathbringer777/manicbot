@@ -7,12 +7,19 @@ interface RoleContextValue {
   role: AppRole;
   tenantId: string | null;
   userId: number | null;
+  // Creator-only preview
+  previewRole: AppRole;
+  previewTenantId: string | null;
+  setPreviewRole: (role: AppRole, tenantId?: string | null) => void;
 }
 
 export const RoleContext = createContext<RoleContextValue>({
   role: null,
   tenantId: null,
   userId: null,
+  previewRole: null,
+  previewTenantId: null,
+  setPreviewRole: () => {},
 });
 
 export function useRole() {

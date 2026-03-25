@@ -8,8 +8,16 @@ import { tenantsRouter } from "~/server/api/routers/tenants";
 import { appointmentsRouter } from "~/server/api/routers/appointments";
 import { exportRouter } from "~/server/api/routers/export";
 import { provisioningRouter } from "~/server/api/routers/provisioning";
+import { authRouter } from "~/server/api/routers/auth";
+import { salonRouter } from "~/server/api/routers/salon";
+import { masterRouter } from "~/server/api/routers/masterRouter";
+import { supportRouter } from "~/server/api/routers/support";
 
 export const appRouter = createTRPCRouter({
+  auth: authRouter,
+  salon: salonRouter,
+  master: masterRouter,
+  support: supportRouter,
   system: systemRouter,
   metrics: metricsRouter,
   users: usersRouter,

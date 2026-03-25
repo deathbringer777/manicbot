@@ -38,7 +38,7 @@ export async function isAdmin(ctx, cid) {
       if (platformRole === ROLES.SUPPORT) return false;
     }
   }
-  return (await getAdminId(ctx)) === cid;
+  return String(await getAdminId(ctx)) === String(cid);
 }
 
 export async function isPlatformAdmin(ctx, cid) {
@@ -302,7 +302,7 @@ export async function getRole(ctx, cid) {
     if (role === ROLES.TENANT_OWNER) return 'admin';
     if (role === ROLES.SUPPORT) return 'support';
     if (role === ROLES.MASTER) return 'master';
-    if (role === ROLES.CLIENT && (await getAdminId(ctx)) === cid) return 'admin';
+    if (role === ROLES.CLIENT && String(await getAdminId(ctx)) === String(cid)) return 'admin';
     return 'client';
   }
   if (await isAdmin(ctx, cid)) return 'admin';

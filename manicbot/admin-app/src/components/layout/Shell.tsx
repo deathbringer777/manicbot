@@ -13,9 +13,16 @@ import {
   CalendarDays,
   Zap,
   UserCog,
+  type LucideIcon,
 } from "lucide-react";
 
-const navItems = [
+export interface NavItem {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+}
+
+const godModeNavItems: NavItem[] = [
   { href: "/", icon: Home, label: "Dashboard" },
   { href: "/users", icon: Users, label: "Users" },
   { href: "/tenants", icon: Building2, label: "Tenants" },
@@ -40,15 +47,25 @@ function getAdminInfo() {
   }
 }
 
-export function Shell({ children }: { children: React.ReactNode }) {
+interface ShellProps {
+  children: React.ReactNode;
+  navItems?: NavItem[];
+  title?: string;
+  subtitle?: string;
+}
+
+export function Shell({ children, navItems, title, subtitle }: ShellProps) {
   const pathname = usePathname();
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
+  const activeNavItems = navItems ?? godModeNavItems;
+  const displayTitle = title ?? "God Mode";
+  const displaySubtitle = subtitle ?? "ManicBot Admin";
 
   useEffect(() => {
     setAdmin(getAdminInfo());
   }, []);
 
-  const mobileNavItems = navItems;
+  const mobileNavItems = activeNavItems;
 
   return (
     <div className="flex h-screen w-full flex-col md:flex-row bg-background text-foreground overflow-hidden">
@@ -60,14 +77,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <h1 className="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-400 to-purple-400">
-              God Mode
+              {displayTitle}
             </h1>
-            <p className="text-[10px] text-slate-500 font-mono">ManicBot Admin</p>
+            <p className="text-[10px] text-slate-500 font-mono">{displaySubtitle}</p>
           </div>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {activeNavItems.map((item) => {
             const isActive =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (

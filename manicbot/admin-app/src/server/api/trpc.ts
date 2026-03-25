@@ -14,6 +14,7 @@ import { getDb } from "~/server/db";
 import { platformRoles } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { validateWebAppData } from "~/server/auth/telegram";
+import { env } from "~/env";
 
 /**
  * 1. CONTEXT
@@ -133,9 +134,8 @@ export const adminProcedure = t.procedure
       });
     }
 
-    // Always allow the hardcoded creator
-    const creatorId = 321706035; 
-    let isAdmin = ctx.user.id === creatorId;
+    // Always allow the platform creator (ADMIN_CHAT_ID secret)
+    let isAdmin = env.ADMIN_CHAT_ID ? String(ctx.user.id) === env.ADMIN_CHAT_ID : false;
 
     if (!isAdmin) {
       const dbRole = await ctx.db

@@ -16,11 +16,9 @@ LANDING_URL = "https://manicbot-landing.pages.dev"
 # Admin mini-app (God Mode panel) — Cloudflare Pages
 ADMIN_APP_URL = "https://admin-app-3nc.pages.dev"
 
-# ⚠️  ВНИМАНИЕ: ADMIN_CHAT_ID — это Telegram chat_id создателя платформы.
-# Даёт ПОЛНЫЙ доступ к системной панели. В идеале выносить в секрет:
+# ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID
-# Пока оставлен в vars для совместимости, но значение не является секретом API.
-ADMIN_CHAT_ID = "321706035"
+# (значение: Telegram chat_id создателя платформы — даёт полный root-доступ)
 
 # ─── Секреты (задаются через wrangler secret put, НЕ хранятся в этом файле) ─
 # Следующие переменные ОБЯЗАТЕЛЬНО должны быть установлены как секреты:

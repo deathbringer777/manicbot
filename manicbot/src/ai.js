@@ -325,6 +325,7 @@ export async function runWorkersAIViaRESTOne(ctx, accountId, token, modelId, pro
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(promptBody),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
     if (res.status === 429) console.error('Workers AI REST rate limit (429), trying next model');
@@ -414,15 +415,16 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
       { id: AI_MODEL_FALLBACK, useInput: false },
       { id: AI_MODEL_FALLBACK2, useInput: false },
     ];
+    const aiTimeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('AI binding timeout')), 8000));
     for (const { id: modelId, useInput } of bindingModels) {
       try {
         let out;
         try {
-          out = await ctx.AI.run(modelId, messagesPayload);
+          out = await Promise.race([ctx.AI.run(modelId, messagesPayload), aiTimeout()]);
         } catch (e1) {
           if (useInput && modelId === AI_MODEL) {
             try {
-              out = await ctx.AI.run(modelId, { instructions: sys, input: userText, max_tokens: AI_MAX_TOKENS });
+              out = await Promise.race([ctx.AI.run(modelId, { instructions: sys, input: userText, max_tokens: AI_MAX_TOKENS }), aiTimeout()]);
             } catch (e2) {
               continue;
             }

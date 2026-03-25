@@ -145,6 +145,8 @@ jobs:
       - name: Build for Cloudflare Pages (next-on-pages)
         run: npx next-on-pages
         working-directory: manicbot/admin-app
+        env:
+          SKIP_ENV_VALIDATION: true
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

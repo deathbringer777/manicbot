@@ -147,6 +147,8 @@ cd manicbot && chmod +x scripts/setup-stripe-secrets.sh && ./scripts/setup-strip
 | `META_VERIFY_TOKEN_WA` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_WA` |
 | `META_VERIFY_TOKEN_IG` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_IG` |
 
+Только у **Worker** (не Pages): опциональный секрет `INSTAGRAM_IGNORE_SENDER_IDS` — IGSID через запятую/пробел, чтобы не обрабатывать служебные Instagram-отправители (см. **META_CHANNELS_SETUP.md**, раздел про @username / IGSID).
+
 Инструкция для клиентов салона: **META_CHANNELS_SETUP.md**.
 
 **CLI (альтернатива полям в UI Pages):** из каталога с установленным `wrangler` и авторизацией в аккаунт Cloudflare:

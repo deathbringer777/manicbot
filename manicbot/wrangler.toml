@@ -38,6 +38,10 @@ ADMIN_APP_URL = "https://admin-app.pages.dev"
 # Без STRIPE_PRICE_* кнопки оплаты не будут отображаться (canCheckout = false).
 
 # CLOUDFLARE_ACCOUNT_ID should be set as a secret: wrangler secret put CLOUDFLARE_ACCOUNT_ID
+#
+# Instagram: optional comma/space-separated IGSIDs to never route to onMsg/AI (e.g. platform @manicbot_com).
+#   wrangler secret put INSTAGRAM_IGNORE_SENDER_IDS
+# Value example: "1784360123456789" (get IGSID from Meta webhook logs or Graph API — not the @username).
 
 [triggers]
 crons = ["*/15 * * * *"]

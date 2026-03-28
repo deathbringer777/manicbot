@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { makeInbound, makeOutbound } from '../src/channels/types.js';
 import { TelegramAdapter } from '../src/channels/telegram.js';
 import { WhatsAppAdapter } from '../src/channels/whatsapp.js';
-import { InstagramAdapter } from '../src/channels/instagram.js';
+import { InstagramAdapter, parseInstagramIgnoreSenderIds } from '../src/channels/instagram.js';
 
 // ─── types.js ────────────────────────────────────────────────────────────────
 
@@ -312,13 +312,14 @@ describe('WhatsAppAdapter._buildInteractive', () => {
 
 // ─── InstagramAdapter ─────────────────────────────────────────────────────────
 
-function makeIGAdapter(pageId = 'pg_123', token = 'ig_token') {
+function makeIGAdapter(pageId = 'pg_123', token = 'ig_token', instagramIgnoreSenderIds = undefined) {
   return new InstagramAdapter({
     tenantId: 't_ig',
     channelConfig: {
       config: { page_id: pageId },
       token,
     },
+    ...(instagramIgnoreSenderIds !== undefined ? { instagramIgnoreSenderIds } : {}),
   });
 }
 
@@ -384,6 +385,61 @@ describe('InstagramAdapter.normalize', () => {
   it('returns null for entry with no messaging', () => {
     expect(adapter.normalize({ id: 'pg_123' })).toBeNull();
     expect(adapter.normalize(null)).toBeNull();
+  });
+
+  it('returns null for is_echo (outbound from page)', () => {
+    const entry = {
+      id: 'pg_123',
+      messaging: [{
+        sender: { id: 'page_igsid' },
+        message: { text: 'Hi', is_echo: true },
+        timestamp: 1700000004000,
+      }],
+    };
+    expect(adapter.normalize(entry)).toBeNull();
+  });
+
+  it('returns null when sender IGSID is in ignore set', () => {
+    const blocked = makeIGAdapter('pg_123', 'tok', new Set(['999888777']));
+    const entry = {
+      id: 'pg_123',
+      messaging: [{
+        sender: { id: '999888777' },
+        message: { text: 'Staff account' },
+        timestamp: 1700000005000,
+      }],
+    };
+    expect(blocked.normalize(entry)).toBeNull();
+  });
+
+  it('still normalizes when ignore set does not match sender', () => {
+    const blocked = makeIGAdapter('pg_123', 'tok', new Set(['999888777']));
+    const entry = {
+      id: 'pg_123',
+      messaging: [{
+        sender: { id: '111222333' },
+        message: { text: 'Client' },
+        timestamp: 1700000006000,
+      }],
+    };
+    const inbound = blocked.normalize(entry);
+    expect(inbound).not.toBeNull();
+    expect(inbound.channelUserId).toBe('111222333');
+  });
+});
+
+describe('parseInstagramIgnoreSenderIds', () => {
+  it('returns empty Set for empty input', () => {
+    expect([...parseInstagramIgnoreSenderIds('')]).toEqual([]);
+    expect([...parseInstagramIgnoreSenderIds(null)]).toEqual([]);
+    expect([...parseInstagramIgnoreSenderIds(undefined)]).toEqual([]);
+  });
+
+  it('splits on comma and whitespace', () => {
+    const s = parseInstagramIgnoreSenderIds(' 111 , 222\t333 ');
+    expect(s.has('111')).toBe(true);
+    expect(s.has('222')).toBe(true);
+    expect(s.has('333')).toBe(true);
   });
 });
 

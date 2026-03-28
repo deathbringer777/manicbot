@@ -6,7 +6,7 @@ import {
   buildChannelCtx,
 } from '../channels/resolver.js';
 import { WhatsAppAdapter } from '../channels/whatsapp.js';
-import { InstagramAdapter } from '../channels/instagram.js';
+import { InstagramAdapter, parseInstagramIgnoreSenderIds } from '../channels/instagram.js';
 import { handleInbound } from '../handlers/inbound.js';
 import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
@@ -99,6 +99,7 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
       }
     })();
     if (parsed) {
+      const instagramIgnoreSenderIds = parseInstagramIgnoreSenderIds(env.INSTAGRAM_IGNORE_SENDER_IDS);
       const processIG = async () => {
         try {
           const entries = parsed.entry ?? [];
@@ -112,7 +113,11 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
             }
             const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
             if (!channelConfig) continue;
-            const adapter = new InstagramAdapter({ tenantId: resolved.tenantId, channelConfig });
+            const adapter = new InstagramAdapter({
+              tenantId: resolved.tenantId,
+              channelConfig,
+              instagramIgnoreSenderIds,
+            });
             const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
             if (!ctx) continue;
             await initServices(ctx);

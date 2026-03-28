@@ -15,6 +15,22 @@
 import { makeInbound } from './types.js';
 
 const GRAPH_API = 'https://graph.instagram.com/v21.0';
+
+/**
+ * Parse Worker secret INSTAGRAM_IGNORE_SENDER_IDS (comma/whitespace-separated IGSIDs).
+ * Used to skip platform-owned or echo-equivalent senders that should not hit onMsg/AI.
+ * @param {string|undefined|null} raw
+ * @returns {Set<string>}
+ */
+export function parseInstagramIgnoreSenderIds(raw) {
+  if (raw == null || raw === '') return new Set();
+  return new Set(
+    String(raw)
+      .split(/[\s,]+/)
+      .map(s => s.trim())
+      .filter(Boolean),
+  );
+}
 const MAX_QUICK_REPLIES = 13;
 const MAX_TITLE_LEN = 20;
 
@@ -31,6 +47,10 @@ export class InstagramAdapter {
     const cfg = ctx.channelConfig?.config ?? {};
     this._pageId = cfg.page_id ?? null;
     this._token = ctx.channelConfig?.token ?? null;
+    /** @type {Set<string>} */
+    this._ignoreSenderIds = ctx.instagramIgnoreSenderIds instanceof Set
+      ? ctx.instagramIgnoreSenderIds
+      : parseInstagramIgnoreSenderIds(ctx.instagramIgnoreSenderIds);
   }
 
   // ── normalize ──────────────────────────────────────────────────────────────
@@ -47,7 +67,11 @@ export class InstagramAdapter {
       const messaging = entry?.messaging?.[0];
       if (!messaging) return null;
 
+      if (messaging.message?.is_echo === true) return null;
+
       const senderId = messaging.sender?.id;
+      if (senderId != null && this._ignoreSenderIds.has(String(senderId))) return null;
+
       const ts = messaging.timestamp ?? Date.now();
 
       let text = null;

@@ -63,6 +63,17 @@
 
 Значения verify token на Worker и на Pages должны **совпадать**.
 
+### Служебный аккаунт (например @manicbot_com)
+
+В вебхуке Instagram приходит только **числовой IGSID** отправителя, не @username.
+
+- Сообщения **исходящие от страницы** (echo) Worker уже **не обрабатывает** (`is_echo` в payload).
+- Чтобы не гонять в **LLM** личные/служебные диалоги с фиксированного аккаунта, задайте секрет Worker:
+  - `wrangler secret put INSTAGRAM_IGNORE_SENDER_IDS`
+  - значение: один или несколько IGSID через запятую или пробел, например `1784360123456789`.
+
+**Как узнать IGSID для @manicbot_com:** отправьте тестовое DM боту и посмотрите поле `sender.id` в теле webhook в логах Meta (**Webhook fields** → **Test** / **Recent deliveries**) или запросите профиль через Instagram Graph API для связанного Business-аккаунта (нужны соответствующие права токена).
+
 ## Дымовой чеклист (платформа + салон)
 
 **Автоматически в репозитории:** тест `buildMetaChannelHints` в admin-app (`npm test` в `manicbot/admin-app`) проверяет формирование URL вебхуков и обрезку токенов.

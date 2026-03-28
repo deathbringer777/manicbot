@@ -168,3 +168,6 @@ dist
 
 # Локальная копия ключа админки (никогда не коммитить)
 ADMIN_CREDENTIALS.md
+
+# Локальные verify-токены Meta (генерация wrangler)
+.local-meta-verify.txt

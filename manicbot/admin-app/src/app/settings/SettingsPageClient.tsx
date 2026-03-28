@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { api } from "~/trpc/react";
-import { Shell } from "~/components/layout/Shell";
-import { Save, Bot, Key, Power, Bell, Clock, CheckCircle } from "lucide-react";
+import { Shell, RoleSwitcherInline, LangPickerInline } from "~/components/layout/Shell";
+import { useRole } from "~/components/RoleContext";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
+import { Save, Bot, Key, Power, Clock, CheckCircle, Zap, Globe } from "lucide-react";
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -39,6 +42,8 @@ type SettingsForm = {
 };
 
 export default function SettingsPageClient() {
+  const { role } = useRole();
+  const { lang } = useLang();
   const { data: config, isLoading } = api.settings.getGlobalSettings.useQuery();
   const [form, setForm] = useState<SettingsForm | null>(null);
   const [saved, setSaved] = useState(false);
@@ -101,6 +106,26 @@ export default function SettingsPageClient() {
             )}
           </button>
         </div>
+
+        {/* Creator: preview mode + language (moved from shell to avoid duplicate controls next to Settings tab) */}
+        {role === "system_admin" && (
+          <section className="glass-card rounded-2xl p-4 space-y-5">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+                <h2 className="text-sm font-bold text-white">{t("roleSwitch.title", lang)}</h2>
+              </div>
+              <RoleSwitcherInline placement="settings" />
+            </div>
+            <div className="border-t border-white/5 pt-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Globe className="w-4 h-4 text-sky-400 shrink-0" />
+                <h2 className="text-sm font-bold text-white">{t("settings.language", lang)}</h2>
+              </div>
+              <LangPickerInline placement="settings" />
+            </div>
+          </section>
+        )}
 
         {/* Switches */}
         <section className="glass-card rounded-2xl p-4">

@@ -257,7 +257,10 @@ export async function resolveMasterInput(ctx, msg, txt) {
         masterPhone: null,
       };
     }
-    const chatByUsername = await api(ctx, 'getChat', { chat_id: '@' + username });
+    // getChat is Telegram-only — skip on WA/IG (fallback to DB lookup below)
+    const chatByUsername = (!ctx.channel || ctx.channel.type === 'telegram')
+      ? await api(ctx, 'getChat', { chat_id: '@' + username })
+      : null;
     if (chatByUsername?.ok && isValidChatId(chatByUsername.result?.id)) {
       const r = chatByUsername.result;
       return {

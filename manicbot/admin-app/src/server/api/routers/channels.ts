@@ -5,19 +5,9 @@
 
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { channelConfigs } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
-import { db } from "~/server/db";
-
-/** Helper: ensure the session user is the owner of the given tenantId */
-async function assertTenantOwner(ctx: { session: { user: { id: string } } }, tenantId: string) {
-  // Look up using the existing assertTenantOwner pattern from salon.ts
-  const salon = await db.query.salons.findFirst({
-    where: (s, { eq, and }) => and(eq(s.tenantId, tenantId), eq(s.ownerId, ctx.session.user.id)),
-  });
-  if (!salon) throw new Error("Unauthorized");
-  return salon;
-}
 
 export const channelRouter = createTRPCRouter({
   /**
@@ -27,7 +17,7 @@ export const channelRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      const rows = await db
+      const rows = await ctx.db
         .select({
           id: channelConfigs.id,
           channelType: channelConfigs.channelType,
@@ -51,7 +41,7 @@ export const channelRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string(), id: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      const row = await db
+      const row = await ctx.db
         .select()
         .from(channelConfigs)
         .where(and(eq(channelConfigs.id, input.id), eq(channelConfigs.tenantId, input.tenantId)))
@@ -82,7 +72,7 @@ export const channelRouter = createTRPCRouter({
       const now = Math.floor(Date.now() / 1000);
 
       // Check if a row exists
-      const existing = await db
+      const existing = await ctx.db
         .select({ id: channelConfigs.id })
         .from(channelConfigs)
         .where(
@@ -91,7 +81,7 @@ export const channelRouter = createTRPCRouter({
         .limit(1);
 
       if (existing.length) {
-        await db
+        await ctx.db
           .update(channelConfigs)
           .set({
             config: input.config,
@@ -105,7 +95,7 @@ export const channelRouter = createTRPCRouter({
 
       // Create new
       const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-      await db.insert(channelConfigs).values({
+      await ctx.db.insert(channelConfigs).values({
         id,
         tenantId: input.tenantId,
         channelType: input.channelType,
@@ -126,7 +116,7 @@ export const channelRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       const now = Math.floor(Date.now() / 1000);
-      await db
+      await ctx.db
         .update(channelConfigs)
         .set({ active: input.active ? 1 : 0, updatedAt: now })
         .where(and(eq(channelConfigs.id, input.id), eq(channelConfigs.tenantId, input.tenantId)));
@@ -140,7 +130,7 @@ export const channelRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      await db
+      await ctx.db
         .delete(channelConfigs)
         .where(and(eq(channelConfigs.id, input.id), eq(channelConfigs.tenantId, input.tenantId)));
       return { ok: true };

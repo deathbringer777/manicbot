@@ -6,6 +6,7 @@
  *  - token-manager isTokenExpiring
  */
 import { describe, it, expect, vi } from 'vitest';
+import { makeMockKv } from './helpers/mock-db.js';
 import { isWithinMessageWindow } from '../src/handlers/inbound.js';
 import { isTokenExpiring } from '../src/channels/token-manager.js';
 import { makeInbound } from '../src/channels/types.js';
@@ -99,7 +100,13 @@ describe('handleInbound routing', () => {
 
     const { handleInbound } = await import('../src/handlers/inbound.js');
 
-    const ctx = { db: null, tenantId: null, channel: { type: 'whatsapp' } };
+    const ctx = {
+      db: null,
+      tenantId: null,
+      prefix: 'b:test:',
+      kv: makeMockKv(new Map()),
+      channel: { type: 'whatsapp', send: async () => ({ ok: true }), edit: async () => ({ ok: true }), answerCallback: async () => null, sendPhoto: async () => ({ ok: true }), sendDocument: async () => null },
+    };
     const inbound = makeInbound({
       channel: 'whatsapp',
       channelUserId: '48123',

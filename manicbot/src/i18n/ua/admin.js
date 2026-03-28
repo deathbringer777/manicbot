@@ -85,4 +85,17 @@ export default {
   adm_support_added: '✅ Агента підтримки додано.',
   adm_support_removed: '✅ Агента підтримки видалено.',
   adm_support_limit: '⚠️ Досягнуто ліміт у 50 агентів підтримки.',
+
+  adm_meta_channels_btn: '📱 Instagram / WhatsApp',
+  adm_meta_channels_title: '📱 <b>Instagram і WhatsApp</b>',
+  adm_meta_channels_body:
+    '<b>Як підключити</b>\n\n'
+    + '1) Відкрий Mini App (кнопка нижче або меню «Салон»).\n'
+    + '2) Вкладка <b>Channels</b> — скопіюй Webhook URL і Verify Token.\n'
+    + '3) У <b>Meta for Developers</b> увімкни Instagram Messaging та/або WhatsApp Cloud API → Webhooks.\n'
+    + '4) У Mini App збережи Phone Number ID + токен (WhatsApp) або Page ID + Page Access Token (Instagram).\n\n'
+    + 'Потрібен тариф <b>Pro</b> або <b>Studio</b>.',
+  adm_meta_open_miniapp: '📲 Відкрити Mini App',
+  adm_meta_open_browser: '🔗 Відкрити в браузері',
+  adm_meta_channels_plan: 'ℹ️ Канали Instagram і WhatsApp доступні на тарифі Pro або Studio. Оформи підписку в «Біллінг».',
 };

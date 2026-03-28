@@ -1,5 +1,7 @@
 # Мульти-бот: салоны + мастера
 
+Актуальная схема: **D1** (`tenants`, `bots`) + webhook **`POST /webhook/{botId}`** (numeric bot id из токена). Демо-самопровижининг при секретах `BOT_TOKEN_SALON*` см. `src/http/demoBots.js`. Полная картина — **[CLAUDE.md](CLAUDE.md)**.
+
 **Важно:** если токены светились в чате — в @BotFather нажми «Revoke current token» и в секреты вставь уже **новый** токен.
 
 ## Секреты в Cloudflare (Wrangler)
@@ -25,27 +27,15 @@ wrangler secret put BOT_TOKEN
 
 ## Webhook для каждого бота
 
-После деплоя один раз открой в браузере (подставь домен и ADMIN_KEY):
+После деплоя для **каждого** бота вызови `setWebhook` на URL с **числовым** `botId` (первые цифры до `:` в токене), например:
 
-| Бот | URL |
-|-----|-----|
-| Салон 1 | `https://ТВОЙ_WORKER.workers.dev/setup/salon1?key=ТВОЙ_ADMIN_KEY` |
-| Салон 2 | `https://ТВОЙ_WORKER.workers.dev/setup/salon2?key=ТВОЙ_ADMIN_KEY` |
-| Мастер 1 | `https://ТВОЙ_WORKER.workers.dev/setup/master1?key=ТВОЙ_ADMIN_KEY` |
-| Мастер 2 | `https://ТВОЙ_WORKER.workers.dev/setup/master2?key=ТВОЙ_ADMIN_KEY` |
+`https://manicbot.com/webhook/123456789`
 
-Telegram будет слать обновления на `.../webhook/salon1`, `.../webhook/salon2`, `.../webhook/master1`, `.../webhook/master2`.
+Служебный эндпоинт **`GET /setup?key=ADMIN_KEY`** (см. `adminPanelHttp.js`) выставляет webhook для текущего контекста (`BOT_TOKEN` или бот из D1). Массовая выдача: **`POST /admin/provision?key=...`**.
 
 ## Данные
 
-У каждого бота свой тенант в KV:
-
-- **salon1** → `tenant:salon1:...`
-- **salon2** → `tenant:salon2:...`
-- **master1** → `tenant:master1:...`
-- **master2** → `tenant:master2:...`
-
-Юзеры и записи между ними не пересекаются. Конфиг (адрес, услуги) пока общий; свои конфиги можно позже положить в KV: `tenant:master1:config`, `tenant:master2:config` и т.д.
+У каждого салона свой **`tenant_id`** в D1; KV-префикс для рантайма: **`t:{tenantId}:*`**. Записи и пользователи изолированы по `tenant_id` в SQL.
 
 ## Крон (напоминания)
 

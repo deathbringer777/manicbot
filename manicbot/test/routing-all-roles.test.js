@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createMockD1 } from './helpers/mock-db.js';
+import { createMockD1, makeMockKv } from './helpers/mock-db.js';
 import { setPlatformRole, setTenantRole, ROLES } from '../src/roles/roles.js';
 
 // ── Stub minimal ctx helpers ──────────────────────────────────────────────
@@ -18,7 +18,7 @@ function makeCtx({ tenantId = null, adminChatId = '321706035' } = {}) {
   const db = createMockD1();
   return {
     db,
-    kv: null,
+    kv: makeMockKv(new Map()),
     tenantId,
     adminChatId,          // isCreator() reads ctx.adminChatId (camelCase)
     svc: [],

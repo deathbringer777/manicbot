@@ -108,7 +108,10 @@ export async function showAbout(ctx, cid, idx = 0, msgId = null) {
   if (msgId) {
     const res = await editPhoto(ctx, cid, msgId, photos[safeIdx], aboutTxt, kb);
     if (res && res.ok) return;
-    await api(ctx, 'deleteMessage', { chat_id: cid, message_id: msgId });
+    // deleteMessage is Telegram-only; on WA/IG the photo is re-sent instead (no edit support)
+    if (!ctx.channel || ctx.channel.type === 'telegram') {
+      await api(ctx, 'deleteMessage', { chat_id: cid, message_id: msgId });
+    }
   }
   await sendPhoto(ctx, cid, photos[safeIdx], aboutTxt, kb);
 }

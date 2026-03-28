@@ -5,6 +5,7 @@ import {
   buildLegacyCtx,
   isMigrationDone,
 } from '../src/tenant/resolver.js';
+import { getCtx } from '../src/http/resolveCtx.js';
 import { putTenant, putBot } from '../src/tenant/storage.js';
 import { createMockD1, makeMockKv } from './helpers/mock-db.js';
 
@@ -77,5 +78,24 @@ describe('tenant resolver (D1)', () => {
   it('isMigrationDone returns true when bot exists in D1', async () => {
     await putBot(ctx, '123', { botId: '123', tenantId: 'default', botToken: '123:x', webhookSecret: 'wh', createdAt: Date.now(), updatedAt: Date.now() });
     expect(await isMigrationDone(ctx, '123')).toBe(true);
+  });
+});
+
+describe('getCtx REQUIRE_WEBHOOK_BOT_ID', () => {
+  it('returns null for POST /webhook when REQUIRE_WEBHOOK_BOT_ID=1 and DB bound', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const env = {
+      MANICBOT: kv,
+      DB: db,
+      BOT_TOKEN: '12345:AAxxx',
+      WEBHOOK_SECRET: 'wh',
+      REQUIRE_WEBHOOK_BOT_ID: '1',
+      ADMIN_KEY: 'k',
+    };
+    const url = new URL('https://x/webhook');
+    const req = new Request(url, { method: 'POST' });
+    const out = await getCtx(env, url, req);
+    expect(out).toBeNull();
   });
 });

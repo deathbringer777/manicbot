@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { AppRole } from "~/server/api/routers/auth";
+import {
+  isAdminProcedurePlatformRole,
+  ADMIN_PROCEDURE_PLATFORM_ROLES,
+} from "~/server/api/platformRoles";
 
 describe("AppRole type contract", () => {
   const validRoles: AppRole[] = [
@@ -55,5 +59,28 @@ describe("Role routing logic", () => {
 
   it("null role stays null regardless of previewRole", () => {
     expect(getEffectiveRole(null, "system_admin")).toBeNull();
+  });
+});
+
+describe("adminProcedure platform roles", () => {
+  it("technical_support matches God Mode platform roles (parity with support)", () => {
+    expect(isAdminProcedurePlatformRole("technical_support")).toBe(true);
+    expect(isAdminProcedurePlatformRole("support")).toBe(true);
+    expect(isAdminProcedurePlatformRole("system_admin")).toBe(true);
+  });
+
+  it("tenant and unrelated strings do not match", () => {
+    expect(isAdminProcedurePlatformRole("tenant_owner")).toBe(false);
+    expect(isAdminProcedurePlatformRole("master")).toBe(false);
+    expect(isAdminProcedurePlatformRole(null)).toBe(false);
+    expect(isAdminProcedurePlatformRole(undefined)).toBe(false);
+  });
+
+  it("ADMIN_PROCEDURE_PLATFORM_ROLES lists all three staff roles", () => {
+    expect(ADMIN_PROCEDURE_PLATFORM_ROLES).toEqual([
+      "system_admin",
+      "support",
+      "technical_support",
+    ]);
   });
 });

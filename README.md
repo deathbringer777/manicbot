@@ -10,8 +10,9 @@
 
 - **Онлайн-запись** — выбор услуги, мастера, даты и времени прямо в Telegram
 - **ИИ-ассистент** — Workers AI (Llama) ведёт свободный диалог и понимает намерения клиента
-- **Роли** — system_admin / support / tenant_owner / master / client
-- **Мультитенантность** — неограниченное кол-во салонов в одном воркере, данные изолированы по префиксу `t:{tenantId}:`
+- **Роли** — system_admin / technical_support / support / tenant_owner / master / client
+- **Мультитенантность** — D1 (основной реестр тенантов и ботов) + KV для состояния; префикс `t:{tenantId}:*`; legacy-режим `b:{botId}:*` при одном `BOT_TOKEN`
+- **Омниканал** — WhatsApp / Instagram (Meta webhooks) через общий `handlers/inbound.js` → те же `onMsg` / `onCb`, что и Telegram
 - **Биллинг** — Stripe Checkout и Portal, три тарифа (Start / Pro / Studio)
 - **Поддержка** — тикеты клиент↔мастер и платформенные тикеты клиент↔агент поддержки
 - **Уведомления** — cron каждые 15 мин, напоминания о записях
@@ -27,11 +28,11 @@
 | Слой | Технология |
 |---|---|
 | Runtime | Cloudflare Workers |
-| Хранилище | Cloudflare KV |
+| Хранилище | Cloudflare D1 (SQL) + KV |
 | ИИ | Cloudflare Workers AI (REST, `@cf/meta/llama-3.1-8b-instruct`) |
 | Биллинг | Stripe API |
 | Мессенджер | Telegram Bot API |
-| Тесты | Vitest 4.x + `@cloudflare/vitest-pool-workers` |
+| Тесты | Vitest 4.x + `@cloudflare/vitest-pool-workers` (Worker ~826 тестов); admin-app — отдельный Vitest |
 | Deploy | Wrangler 4.x → `manicbot.com` |
 
 ---
@@ -41,7 +42,8 @@
 ```
 manicbot/
 ├── src/
-│   ├── worker.js              # Точка входа: fetch + scheduled (cron)
+│   ├── worker.js              # Точка входа: оркестрация fetch + scheduled (cron)
+│   ├── http/                  # Обработчики маршрутов (Stripe, admin, Google, webhooks TG/Meta, лендинг)
 │   ├── config.js              # Константы: CB, STEP, DEFAULT_SVC, buildCtx
 │   ├── telegram.js            # send(), api() — Telegram Bot API
 │   ├── ai.js                  # Промпт, теги [BOOK:…], runWorkersAI, executeAIAction
@@ -82,7 +84,9 @@ manicbot/
 │   ├── handlers/
 │   │   ├── message.js         # onMsg: команды, шаги диалога, ИИ
 │   │   ├── callback.js        # onCb: inline-кнопки (запись, админка, тикеты)
+│   │   ├── inbound.js         # Омниканал: нормализация WA/IG → onMsg/onCb
 │   │   └── cron.js            # handleCron: напоминания о записях
+│   ├── channels/              # Адаптеры Meta, Telegram bridge, ui-renderer
 │   │
 │   └── ui/
 │       ├── screens.js         # welcome, prices, contacts, catalog, myApts
@@ -95,7 +99,9 @@ manicbot/
 ├── test/                      # Vitest тесты
 ├── scripts/
 │   ├── run-migrate.js         # Скрипт миграции b: → t:
+│   ├── check-schema-tables.mjs # Сверка имён таблиц schema.sql ↔ Drizzle (npm run check-schema)
 │   └── setup-stripe-secrets.sh
+├── admin-app/                 # Telegram Mini App (Next.js + tRPC + Drizzle) → Cloudflare Pages
 ├── wrangler.toml              # Worker config: KV, AI binding, cron, routes
 └── package.json
 ```
@@ -104,7 +110,9 @@ manicbot/
 
 ## Архитектура данных
 
-Один KV namespace `MANICBOT`. Ключи делятся на глобальные и тенантные:
+**D1** — записи, пользователи, тенанты, боты, роли, биллинг, каналы, `conversations` и т.д. (см. `src/db/schema.sql` и `admin-app/src/server/db/schema.ts`; после миграций запускайте `npm run check-schema`).
+
+**KV** (`MANICBOT`) — эфемерное состояние, блокировки, шифрованные токены, история для ИИ. Ключи:
 
 **Глобальные:**
 - `tenant:{tenantId}` — документ тенанта (plan, billing, stripeCustomerId)
@@ -127,7 +135,8 @@ manicbot/
 | Роль | Область | Права |
 |---|---|---|
 | `system_admin` | Платформа | Полный доступ ко всему |
-| `support` | Платформа | Тикеты поддержки |
+| `technical_support` | Платформа | Техподдержка платформы (Mini App + те же God Mode API, что у `support`, через `platform_roles`) |
+| `support` | Платформа | Агенты поддержки, тикеты |
 | `tenant_owner` | Тенант | Управление салоном, мастерами, биллинг |
 | `master` | Тенант | Расписание, записи клиентов |
 | `client` | Тенант | Запись, просмотр своих записей |
@@ -136,20 +145,25 @@ manicbot/
 
 ## Маршруты Worker
 
+Реализация разнесена по `src/http/*.js` (см. [CLAUDE.md](CLAUDE.md) — таблица модулей).
+
 ```
-POST /webhook/:botId     → Telegram (мультибот)
-POST /webhook            → Telegram (legacy, env BOT_TOKEN)
-POST /stripe/webhook     → Stripe события
-GET  /admin              → HTML-панель тенанта (Basic Auth)
-GET  /admin/billing      → Биллинг по тенантам
-GET  /admin/export/clients.csv
-GET  /admin/export/appointments.csv
-GET  /calendar/:aptId.ics → ICS-файл записи
-GET  /setup?key=         → Установка Telegram webhook
-GET  /                   → Статус воркера
+POST /stripe/webhook       → Stripe
+GET  /stripe/success       → страница успешной оплаты
+GET|POST /webhook/wa       → WhatsApp Cloud API (verify + HMAC)
+GET|POST /webhook/ig       → Instagram Messaging (verify + HMAC)
+POST /webhook/:botId       → Telegram (реестр бота в D1)
+POST /webhook              → Telegram legacy (env BOT_TOKEN); при REQUIRE_WEBHOOK_BOT_ID=1 + D1 → 403
+GET  /admin/migrate*       → миграции (ADMIN_KEY)
+POST /admin/provision      → массовая выдача ботов (ADMIN_KEY; ошибки без stack в JSON)
+GET  /google/*             → OAuth календаря
+GET  /admin, /admin/billing, /admin/export/* → HTML + CSV (Basic Auth)
+GET  /calendar/:id[.ics]   → ICS
+GET  /setup, /remove-webhook → Telegram webhook (ADMIN_KEY)
+… плюс прокси лендинга на LANDING_URL для выбранных GET-путей
 ```
 
-Cron: `*/15 * * * *` → напоминания о предстоящих записях
+Cron: `*/15 * * * *` → `handleCron` по каждому тенанту (D1) или legacy-контекст
 
 ---
 
@@ -186,7 +200,8 @@ curl "https://manicbot.com/setup?key=YOUR_ADMIN_KEY"
 ### Тесты
 
 ```bash
-npx vitest run
+cd manicbot && npm test && npm run check-schema
+cd manicbot/admin-app && npm run typecheck && npm test
 ```
 
 ### Регистрация нового тенанта (салона)
@@ -214,12 +229,15 @@ npx vitest run
 | `STRIPE_PRICE_PRO_MONTHLY` | Stripe Price ID тарифа Pro |
 | `STRIPE_PRICE_STUDIO_MONTHLY` | Stripe Price ID тарифа Studio |
 | `APP_BASE_URL` | Публичный URL воркера (`https://manicbot.com`) |
-| `BOT_ENCRYPTION_KEY` | Опционально: шифрование токенов ботов в KV |
+| `BOT_ENCRYPTION_KEY` | Опционально: шифрование токенов ботов в D1/KV |
+| `REQUIRE_WEBHOOK_BOT_ID` | Опционально: `"1"` — запретить legacy `POST /webhook` без `botId`, если привязан D1 |
+| `META_APP_SECRET`, `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` | Для Meta webhooks (см. `wrangler` / dashboard) |
 
 ---
 
 ## Документация
 
+- [`CLAUDE.md`](CLAUDE.md) — эталон архитектуры для разработки (Worker, Mini App, роли, деплой)
 - [`ARCHITECTURE.md`](manicbot/ARCHITECTURE.md) — детальная карта модулей и потоки данных
 - [`BOT_GUIDE.md`](manicbot/BOT_GUIDE.md) — руководство пользователя бота
 - [`CLOUDFLARE_SETUP.md`](manicbot/CLOUDFLARE_SETUP.md) — настройка Cloudflare

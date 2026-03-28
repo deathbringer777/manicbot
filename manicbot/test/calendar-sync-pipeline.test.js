@@ -5,7 +5,7 @@
  * - APT_ACCEPT persists masterId in DB
  * - google_integration_id included in INSERT
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeCtx } from './helpers/mock-db.js';
 import { saveApt, updateApt, getAptById } from '../src/services/appointments.js';
 import { warsawToUTC } from '../src/utils/date.js';
@@ -50,6 +50,30 @@ describe('saveApt INSERT', () => {
 // ─── confirmAllPendingApts sets masterId ──────────────────────────────────────
 
 describe('confirmAllPendingApts masterId persistence', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('api.telegram.org')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ ok: true, result: { message_id: 1 } }),
+          headers: { get: () => null },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true }),
+        headers: { get: () => null },
+      };
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('sets masterId in DB when confirming pending appointments', async () => {
     const { confirmAllPendingApts } = await import('../src/notifications.js');
     const ctx = makeTenantCtx({ tenantId: 't_cal_confirm_all' });

@@ -42,6 +42,22 @@ jobs:
         run: npm test
         working-directory: manicbot
 
+      - name: Check D1 table names (schema.sql vs Drizzle)
+        run: npm run check-schema
+        working-directory: manicbot
+
+      - name: Admin app — install
+        run: npm ci --legacy-peer-deps
+        working-directory: manicbot/admin-app
+
+      - name: Admin app — typecheck
+        run: npm run typecheck
+        working-directory: manicbot/admin-app
+
+      - name: Admin app — test
+        run: npm test
+        working-directory: manicbot/admin-app
+
   # ─── Bot: deploy to Cloudflare Workers ──────────────────────
   deploy-bot:
     runs-on: ubuntu-latest
@@ -127,6 +143,7 @@ jobs:
   deploy-admin-app:
     runs-on: ubuntu-latest
     name: Admin App — Deploy Pages
+    needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4

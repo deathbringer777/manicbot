@@ -1,29 +1,62 @@
-# Create T3 App
+# ManicBot Admin Mini App
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+Telegram **WebApp** (Mini App) для ролей платформы и салона: God Mode, поддержка, владелец салона, мастер. Отдельный деплой на **Cloudflare Pages** (проект `admin-app`).
 
-## What's next? How do I make an app with this?
+## Стек
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+- Next.js 15 (App Router), React 19
+- tRPC 11 + TanStack Query, SuperJSON
+- Drizzle ORM → та же D1, что у Worker (`manicbot-db`)
+- Tailwind CSS 4
+- Вход: заголовок `x-telegram-init-data`, проверка HMAC в `src/server/auth/telegram.ts`
+- Матрица ролей God Mode: `src/server/api/platformRoles.ts` + `adminProcedure` в `src/server/api/trpc.ts`
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Команды
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+```bash
+npm ci --legacy-peer-deps
+npm run dev              # локально: next dev --turbo
+npm run typecheck        # tsc --noEmit
+npm test                 # vitest
+npm run build            # обычный Next build
+npx next-on-pages        # сборка для Cloudflare Pages (как в CI)
+```
 
-## Learn More
+## Переменные окружения
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+Задаются в Cloudflare Pages (и при локальной разработке — `.env` / `.dev.vars`, не коммитить):
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+| Переменная | Назначение |
+|------------|------------|
+| `TELEGRAM_BOT_TOKEN` | Токен бота для проверки подписи WebApp initData |
+| `ADMIN_CHAT_ID` | Telegram user id создателя — всегда `system_admin` |
+| `DATABASE_URL` | Опционально: LibSQL remote для локальной разработки |
+| `WORKER_PUBLIC_URL` | Публичный URL Worker (вебхуки Meta в UI Channels), без `/` в конце |
+| `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` | Verify token для Meta; должны совпадать с секретами Worker |
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+Остальные секреты/биндинги — по `@t3-oss/env-nextjs` в `src/env.js`.
 
-## How do I deploy this?
+**Секреты через Wrangler (проект Pages `admin-app`):**
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+```bash
+npx wrangler pages secret put WORKER_PUBLIC_URL --project-name=admin-app
+npx wrangler pages secret put META_VERIFY_TOKEN_WA --project-name=admin-app
+npx wrangler pages secret put META_VERIFY_TOKEN_IG --project-name=admin-app
+```
+
+(значения вводятся интерактивно; должны совпадать с `wrangler secret put` у Worker.)
+
+### Два package-lock.json
+
+В репозитории есть `manicbot/package-lock.json` (Worker) и `manicbot/admin-app/package-lock.json` (Mini App). Так сделано намеренно: **GitHub Actions** кэширует зависимости отдельно по `cache-dependency-path` для каждого job. Next.js при сборке может предупреждать о «multiple lockfiles» — на корректность CI это не влияет; унифицировать lockfile в один корневой монорепо-манифест можно отдельной задачей.
+
+## Связь с Worker
+
+- Worker проксирует ссылки на приложение через `ADMIN_APP_URL` в `wrangler.toml`.
+- Каналы и диалоги: роутеры `channels`, `conversations` (tRPC) с `assertTenantOwner` по `tenantId`.
+
+Подробная архитектура: репозиторий **`CLAUDE.md`** (раздел Admin Mini-App).
+
+## Деплой
+
+Push в `main` → GitHub Actions: job `test` (включая `typecheck` + `npm test` для этого пакета) → job `deploy-admin-app` → `pages deploy` в проект `admin-app`.

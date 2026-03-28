@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronRight, Clock, AlertCircle,
@@ -105,18 +105,29 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
   const isNew = !svc;
 
   function handleSave() {
-    const data = {
-      tenantId,
-      name,
-      price: parseFloat(price) || 0,
-      duration: parseInt(duration) || 60,
-      emoji,
-      active,
-    };
+    const namesJson = JSON.stringify({ ru: name, en: name, ua: name, pl: name });
+    const activeNum = active ? 1 : 0;
+    const priceNum = parseFloat(price) || 0;
+    const durationNum = parseInt(duration, 10) || 60;
     if (isNew) {
-      createSvc.mutate(data);
+      createSvc.mutate({
+        tenantId,
+        names: namesJson,
+        price: priceNum,
+        duration: durationNum,
+        emoji,
+        active: activeNum,
+      });
     } else {
-      updateSvc.mutate({ ...data, svcId: svc.svcId });
+      updateSvc.mutate({
+        tenantId,
+        svcId: svc.svcId,
+        names: namesJson,
+        price: priceNum,
+        duration: durationNum,
+        emoji,
+        active: activeNum,
+      });
     }
   }
 
@@ -265,8 +276,12 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
           <Input label={t("salon.workHoursTo", lang)} value={hoursTo} onChange={setHoursTo} type="number" />
         </div>
         <Btn onClick={() => update.mutate({
-          tenantId, name: salonName, address, phone,
-          workHoursFrom: parseInt(hoursFrom), workHoursTo: parseInt(hoursTo),
+          tenantId,
+          name: salonName,
+          address,
+          phone,
+          workHoursFrom: parseInt(hoursFrom, 10) || 9,
+          workHoursTo: parseInt(hoursTo, 10) || 20,
         })} disabled={update.isPending} className="w-full justify-center py-2.5">
           {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("common.save", lang)}
@@ -336,6 +351,7 @@ function ChannelCard({
 function ChannelsTab({ tenantId }: { tenantId: string }) {
   const utils = api.useUtils();
   const channels = api.channels.list.useQuery({ tenantId });
+  const hints = api.salon.getMetaChannelHints.useQuery({ tenantId });
   const upsert = api.channels.upsert.useMutation({
     onSuccess: () => { void utils.channels.list.invalidate(); },
   });
@@ -357,8 +373,10 @@ function ChannelsTab({ tenantId }: { tenantId: string }) {
   const [showWaToken, setShowWaToken] = useState(false);
   const [showIgToken, setShowIgToken] = useState(false);
 
-  const waWebhookUrl = "https://manicbot.com/webhook/wa";
-  const igWebhookUrl = "https://manicbot.com/webhook/ig";
+  const waWebhookUrl = hints.data?.waWebhookUrl ?? "https://manicbot.com/webhook/wa";
+  const igWebhookUrl = hints.data?.igWebhookUrl ?? "https://manicbot.com/webhook/ig";
+  const waVerifyDisplay = hints.data?.waVerifyToken;
+  const igVerifyDisplay = hints.data?.igVerifyToken;
 
   if (channels.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto" />;
 
@@ -450,10 +468,16 @@ function ChannelsTab({ tenantId }: { tenantId: string }) {
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>
-          <div className="flex items-center mt-1">
-            <p className="text-[10px] text-slate-500 flex-1">Verify Token:</p>
-            <code className="text-[10px] text-slate-300 font-mono">manicbot_wa_verify_2026</code>
-            <CopyButton text="manicbot_wa_verify_2026" />
+          <div className="flex items-center mt-1 gap-1 flex-wrap">
+            <p className="text-[10px] text-slate-500 flex-1 min-w-[80px]">Verify Token:</p>
+            {waVerifyDisplay ? (
+              <>
+                <code className="text-[10px] text-slate-300 font-mono break-all">{waVerifyDisplay}</code>
+                <CopyButton text={waVerifyDisplay} />
+              </>
+            ) : (
+              <span className="text-[10px] text-amber-400/90">Set META_VERIFY_TOKEN_WA on Pages (= Worker secret)</span>
+            )}
           </div>
         </div>
       </ChannelCard>
@@ -512,10 +536,16 @@ function ChannelsTab({ tenantId }: { tenantId: string }) {
             <code className="text-[10px] text-slate-300 font-mono flex-1 truncate">{igWebhookUrl}</code>
             <CopyButton text={igWebhookUrl} />
           </div>
-          <div className="flex items-center mt-1">
-            <p className="text-[10px] text-slate-500 flex-1">Verify Token:</p>
-            <code className="text-[10px] text-slate-300 font-mono">manicbot_ig_verify_2026</code>
-            <CopyButton text="manicbot_ig_verify_2026" />
+          <div className="flex items-center mt-1 gap-1 flex-wrap">
+            <p className="text-[10px] text-slate-500 flex-1 min-w-[80px]">Verify Token:</p>
+            {igVerifyDisplay ? (
+              <>
+                <code className="text-[10px] text-slate-300 font-mono break-all">{igVerifyDisplay}</code>
+                <CopyButton text={igVerifyDisplay} />
+              </>
+            ) : (
+              <span className="text-[10px] text-amber-400/90">Set META_VERIFY_TOKEN_IG on Pages (= Worker secret)</span>
+            )}
           </div>
         </div>
       </ChannelCard>
@@ -527,6 +557,12 @@ function ChannelsTab({ tenantId }: { tenantId: string }) {
 export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const [tab, setTab] = useState<Tab>("overview");
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("tab");
+      if (q === "channels" || q === "instagram" || q === "whatsapp") setTab("channels");
+    } catch { /* ignore */ }
+  }, []);
   const [aptDate, setAptDate] = useState("");
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null }>({ open: false, svc: null });
   const [masterModal, setMasterModal] = useState(false);

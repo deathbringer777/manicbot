@@ -72,6 +72,8 @@ export const CB = {
   ADM_ABOUT_PHOTO_DEL: 'adm:abphd:',
   ADM_ABOUT_DESC: 'adm:abdesc',
   ADM_ABOUT_INSTAGRAM: 'adm:abig',
+  /** Instagram / WhatsApp — открыть подсказку и Mini App (вкладка Channels) */
+  ADM_META_CHANNELS: 'adm:meta',
   SVC_LIST:     'svl',
   SVC_EDIT:     'sve:',
   SVC_NAME:     'svn:',

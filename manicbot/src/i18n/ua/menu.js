@@ -15,4 +15,5 @@ export default {
   back: '◀️ Назад',
   back_m: '◀️ Головне меню',
   min: 'хв',
+  salon_miniapp_menu: '💅 Салон',
 };

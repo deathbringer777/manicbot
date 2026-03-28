@@ -15,6 +15,7 @@ import { platformRoles } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { validateWebAppData } from "~/server/auth/telegram";
 import { env } from "~/env";
+import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
 
 /**
  * 1. CONTEXT
@@ -122,6 +123,19 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 export const publicProcedure = t.procedure.use(timingMiddleware);
 
 /**
+ * Authenticated procedure — valid Telegram WebApp init data required (ctx.user).
+ */
+export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Telegram Verification Failed",
+    });
+  }
+  return next({ ctx: { ...ctx, user: ctx.user } });
+});
+
+/**
  * Protected (authenticated) procedure for Bot Admins
  */
 export const adminProcedure = t.procedure
@@ -144,7 +158,7 @@ export const adminProcedure = t.procedure
         .where(eq(platformRoles.chatId, ctx.user.id))
         .limit(1);
       
-      if (dbRole.length > 0 && (dbRole[0]?.role === "system_admin" || dbRole[0]?.role === "support")) {
+      if (dbRole.length > 0 && isAdminProcedurePlatformRole(dbRole[0]?.role)) {
         isAdmin = true;
       }
     }
@@ -156,9 +170,5 @@ export const adminProcedure = t.procedure
       });
     }
 
-    return next({
-      ctx: {
-        user: ctx.user,
-      },
-    });
+    return next({ ctx: { ...ctx, user: ctx.user } });
   });

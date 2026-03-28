@@ -15,4 +15,5 @@ export default {
   back: '◀️ Wstecz',
   back_m: '◀️ Menu główne',
   min: 'min',
+  salon_miniapp_menu: '💅 Salon',
 };

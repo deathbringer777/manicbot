@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Открыть обзор ManicBot</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(160deg, #0f172a, #1e1b4b);
+      color: #e2e8f0;
+      padding: 24px;
+    }
+    h1 { font-size: 1.1rem; font-weight: 600; margin: 0; opacity: 0.9; }
+    a.btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1rem 2rem;
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      background: linear-gradient(180deg, #e11d48, #be123c);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(190, 18, 60, 0.45);
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    a.btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(190, 18, 60, 0.55);
+    }
+    a.btn:active { transform: translateY(0); }
+    p.hint { font-size: 0.8rem; opacity: 0.55; max-width: 320px; text-align: center; margin: 0; }
+  </style>
+</head>
+<body>
+  <h1>ManicBot — архитектурный обзор</h1>
+  <a class="btn" href="ManicBot_Architecture_Review.pdf" download="ManicBot_Architecture_Review.pdf">
+    Скачать PDF
+  </a>
+  <a class="btn" href="ManicBot_Architecture_Review.pdf" target="_blank" rel="noopener" style="background: linear-gradient(180deg, #334155, #1e293b); box-shadow: 0 8px 24px rgba(0,0,0,0.35);">
+    Открыть PDF в браузере
+  </a>
+  <p class="hint">Файл: docs/ManicBot_Architecture_Review.pdf — эта страница только запускает его.</p>
+</body>
+</html>

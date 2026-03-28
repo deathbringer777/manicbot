@@ -219,6 +219,23 @@ describe('adminKb billing button visibility', () => {
       expect(cbs).toContain(CB.CLIENT_VIEW);
     }
   });
+
+  it('adminKb: Instagram/WhatsApp row only for tenant with Pro+ channel plan', async () => {
+    const { CB } = await import('../src/config.js');
+    const proCtx = {
+      tenantId: 't1',
+      db: {},
+      tenant: { plan: 'pro', billingStatus: 'active' },
+    };
+    const startCtx = {
+      tenantId: 't1',
+      db: {},
+      tenant: { plan: 'start', billingStatus: 'active' },
+    };
+    expect(flatCbs(adminKb('ru', proCtx))).toContain(CB.ADM_META_CHANNELS);
+    expect(flatCbs(adminKb('ru', startCtx))).not.toContain(CB.ADM_META_CHANNELS);
+    expect(flatCbs(adminKb('ru', { tenantId: null, db: {} }))).not.toContain(CB.ADM_META_CHANNELS);
+  });
 });
 
 // ── 5. Billing plan buttons hidden for active/trialing subscribers ────────

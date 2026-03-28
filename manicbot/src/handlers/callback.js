@@ -3,7 +3,7 @@ import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2 } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, warsawToUTC, warsawNow, dateStrForOffset, todayStr } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
-import { send, edit, answerCb, sendPhoto, api } from '../telegram.js';
+import { send, edit, answerCb, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang } from '../services/chat.js';
 import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMaster, saveMaster, deleteMaster, blockUser, unblockUser, listMasters, isPlatformAdmin, getRole } from '../services/users.js';
@@ -14,7 +14,7 @@ import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
-import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
+import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminSettings, showTenantSupportList, showMetaChannelsGuide } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick, enterBookingAdjustState } from '../ui/booking.js';
 import { showBillingMenu, showInactiveMessage } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
@@ -518,6 +518,15 @@ export async function onCb(ctx, cb) {
     if (!await isAdmin(ctx, cid)) return;
     if (!ctx.tenantId || !ctx.db) return send(ctx, cid, t(lg, 'billing_no_config'));
     return showBillingMenu(ctx, cid);
+  }
+
+  if (d === CB.ADM_META_CHANNELS) {
+    if (!await isAdmin(ctx, cid)) return;
+    if (!ctx.tenantId) return;
+    if (!canUse(ctx, 'whatsapp') && !canUse(ctx, 'instagram')) {
+      return send(ctx, cid, t(lg, 'adm_meta_channels_plan'));
+    }
+    return showMetaChannelsGuide(ctx, cid);
   }
 
   if (d.startsWith(CB.BILLING_SUBSCRIBE)) {

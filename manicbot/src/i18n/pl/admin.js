@@ -85,4 +85,17 @@ export default {
   adm_support_added: '✅ Agent wsparcia dodany.',
   adm_support_removed: '✅ Agent wsparcia usunięty.',
   adm_support_limit: '⚠️ Osiągnięto limit 50 agentów wsparcia.',
+
+  adm_meta_channels_btn: '📱 Instagram / WhatsApp',
+  adm_meta_channels_title: '📱 <b>Instagram i WhatsApp</b>',
+  adm_meta_channels_body:
+    '<b>Jak podłączyć</b>\n\n'
+    + '1) Otwórz Mini App (przycisk poniżej lub menu „Salon”).\n'
+    + '2) Zakładka <b>Channels</b> — skopiuj Webhook URL i Verify Token.\n'
+    + '3) W <b>Meta for Developers</b> włącz Instagram Messaging i/lub WhatsApp Cloud API → Webhooks.\n'
+    + '4) W Mini App zapisz Phone Number ID + token (WhatsApp) lub Page ID + Page Access Token (Instagram).\n\n'
+    + 'Wymagany plan <b>Pro</b> lub <b>Studio</b>.',
+  adm_meta_open_miniapp: '📲 Otwórz Mini App',
+  adm_meta_open_browser: '🔗 Otwórz w przeglądarce',
+  adm_meta_channels_plan: 'ℹ️ Kanały Instagram i WhatsApp są na planie Pro lub Studio. Zmień plan w sekcji rozliczeń.',
 };

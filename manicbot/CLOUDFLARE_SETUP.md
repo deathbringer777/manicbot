@@ -29,7 +29,7 @@ npx wrangler d1 execute manicbot-db --remote --file src/db/schema.sql
 ```bash
 npx wrangler d1 execute manicbot-db --remote --command "SELECT name FROM sqlite_master WHERE type='table';"
 ```
-Должно вернуть ~15 таблиц: `tenants`, `bots`, `appointments`, `masters`, `services`, `platform_roles`, ...
+Должно вернуть порядка **20+** таблиц (в т.ч. `channel_configs`, `conversations`, `message_windows` для омниканала). После изменений в `migrations/` и `schema.sql` синхронизируй Drizzle (`admin-app/src/server/db/schema.ts`) и прогоняй **`npm run check-schema`** в каталоге `manicbot/`.
 
 ### Существующие данные (если была KV-только установка):
 Если у тебя уже работает бот с KV-хранилищем, выполни миграцию данных — см. **MIGRATION.md**.
@@ -134,3 +134,28 @@ cd manicbot && chmod +x scripts/setup-stripe-secrets.sh && ./scripts/setup-strip
 3. **Cron** уже настроен в wrangler (`*/15 * * * *`): напоминания и очистка выполняются по каждому тенанту.
 
 Подробный разбор кода и конфликтов — в **CODE_ANALYSIS.md**.
+
+---
+
+## Mini App (Pages): Instagram / WhatsApp — подсказки в интерфейсе
+
+Чтобы во вкладке **Channels** отображались те же **Verify Token** и базовый URL вебхука, что использует Worker:
+
+| Переменная (Cloudflare Pages → Settings → Variables) | Назначение |
+|------------------------------------------------------|------------|
+| `WORKER_PUBLIC_URL` | Публичный URL Worker, например `https://manicbot.com` (без `/` в конце) |
+| `META_VERIFY_TOKEN_WA` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_WA` |
+| `META_VERIFY_TOKEN_IG` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_IG` |
+
+Инструкция для клиентов салона: **META_CHANNELS_SETUP.md**.
+
+**CLI (альтернатива полям в UI Pages):** из каталога с установленным `wrangler` и авторизацией в аккаунт Cloudflare:
+
+```bash
+cd manicbot/admin-app
+npx wrangler pages secret put WORKER_PUBLIC_URL --project-name=admin-app
+npx wrangler pages secret put META_VERIFY_TOKEN_WA --project-name=admin-app
+npx wrangler pages secret put META_VERIFY_TOKEN_IG --project-name=admin-app
+```
+
+Подставь те же значения, что заданы у Worker (`wrangler secret put META_VERIFY_TOKEN_WA` и т.д.). После изменения секретов сделай новый деплой Pages (push в `main` или ручной `pages deploy`).

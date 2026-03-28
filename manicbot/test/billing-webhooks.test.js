@@ -39,6 +39,15 @@ describe('Stripe webhook signature', () => {
     const { signature } = await computeStripeSignature(payload, 'whsec_right');
     expect(await verifyStripeSignature(payload, signature, 'whsec_wrong')).toBe(false);
   });
+
+  it('verifyStripeSignature accepts uppercase v1 hex (timing-safe compare)', async () => {
+    const payload = '{"id":"evt_1"}';
+    const secret = 'whsec_test123';
+    const { signature } = await computeStripeSignature(payload, secret);
+    const upper = signature.replace(/v1=([0-9a-f]+)/, (_, hex) => `v1=${hex.toUpperCase()}`);
+    expect(upper).not.toBe(signature);
+    expect(await verifyStripeSignature(payload, upper, secret)).toBe(true);
+  });
 });
 
 describe('handleStripeWebhook (D1)', () => {

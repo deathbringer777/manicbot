@@ -15,4 +15,5 @@ export default {
   back: '◀️ Back',
   back_m: '◀️ Main Menu',
   min: 'min',
+  salon_miniapp_menu: '💅 Salon',
 };

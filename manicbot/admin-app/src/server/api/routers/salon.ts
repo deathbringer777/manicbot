@@ -1,28 +1,13 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
-  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, platformRoles,
+  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles,
 } from "~/server/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
-
-// Verify caller is tenant_owner (or system_admin for preview mode)
-async function assertTenantOwner(ctx: any, tenantId: string) {
-  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-  // System admin bypass (preview mode)
-  if (env.ADMIN_CHAT_ID && String(ctx.user.id) === env.ADMIN_CHAT_ID) return;
-  const platformRow = await ctx.db.select().from(platformRoles).where(eq(platformRoles.chatId, ctx.user.id)).limit(1);
-  if (platformRow.length && platformRow[0]!.role === "system_admin") return;
-  const row = await ctx.db
-    .select()
-    .from(tenantRoles)
-    .where(and(eq(tenantRoles.tenantId, tenantId), eq(tenantRoles.chatId, ctx.user.id)))
-    .limit(1);
-  if (!row.length || row[0]!.role !== "tenant_owner") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Salon owner access required" });
-  }
-}
+import { buildMetaChannelHints } from "~/lib/metaChannelHints";
 
 const tenantIdInput = z.object({ tenantId: z.string() });
 
@@ -124,6 +109,16 @@ export const salonRouter = createTRPCRouter({
     };
   }),
 
+  /** URL вебхуков и verify token для настройки Meta (значения с сервера Pages — совпадают с Worker). */
+  getMetaChannelHints: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    return buildMetaChannelHints({
+      workerPublicUrl: env.WORKER_PUBLIC_URL,
+      waVerify: env.META_VERIFY_TOKEN_WA,
+      igVerify: env.META_VERIFY_TOKEN_IG,
+    });
+  }),
+
   // ── Mutations ──────────────────────────────────────────────────────
 
   updateService: publicProcedure
@@ -203,6 +198,8 @@ export const salonRouter = createTRPCRouter({
       address: z.string().optional(),
       phone: z.string().optional(),
       workHours: z.string().optional(),
+      workHoursFrom: z.number().int().optional(),
+      workHoursTo: z.number().int().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -215,17 +212,32 @@ export const salonRouter = createTRPCRouter({
       if (input.address !== undefined) existing.address = input.address;
       if (input.phone !== undefined) existing.phone = input.phone;
       if (input.workHours !== undefined) existing.workHours = input.workHours;
+      if (input.workHoursFrom !== undefined || input.workHoursTo !== undefined) {
+        const wh =
+          typeof existing.workHours === "object" && existing.workHours !== null
+            ? { ...existing.workHours }
+            : {};
+        if (input.workHoursFrom !== undefined) wh.from = input.workHoursFrom;
+        if (input.workHoursTo !== undefined) wh.to = input.workHoursTo;
+        existing.workHours = wh;
+      }
 
       const tenantUpdate: Record<string, unknown> = { salon: JSON.stringify(existing) };
       if (input.name !== undefined) tenantUpdate.name = input.name;
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 
       // 2. Upsert tenant_config rows for each provided field
+      const workHoursConfig =
+        input.workHours ??
+        (input.workHoursFrom !== undefined || input.workHoursTo !== undefined
+          ? JSON.stringify(existing.workHours ?? {})
+          : undefined);
+
       const configMap: Record<string, string | undefined> = {
         salon_name: input.name,
         address: input.address,
         phone: input.phone,
-        work_hours: input.workHours,
+        work_hours: workHoursConfig,
       };
       for (const [key, value] of Object.entries(configMap)) {
         if (value === undefined) continue;

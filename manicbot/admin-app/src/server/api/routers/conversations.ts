@@ -5,17 +5,9 @@
 
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { conversations } from "~/server/db/schema";
 import { eq, and, desc, lt } from "drizzle-orm";
-import { db } from "~/server/db";
-
-async function assertTenantOwner(ctx: { session: { user: { id: string } } }, tenantId: string) {
-  const salon = await db.query.salons.findFirst({
-    where: (s, { eq, and }) => and(eq(s.tenantId, tenantId), eq(s.ownerId, ctx.session.user.id)),
-  });
-  if (!salon) throw new Error("Unauthorized");
-  return salon;
-}
 
 export const conversationsRouter = createTRPCRouter({
   /**
@@ -39,7 +31,7 @@ export const conversationsRouter = createTRPCRouter({
       if (input.status !== "all") conditions.push(eq(conversations.status, input.status));
       if (input.cursor) conditions.push(lt(conversations.lastMessageAt, input.cursor));
 
-      const rows = await db
+      const rows = await ctx.db
         .select()
         .from(conversations)
         .where(and(...conditions))
@@ -59,7 +51,7 @@ export const conversationsRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string(), id: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      const row = await db
+      const row = await ctx.db
         .select()
         .from(conversations)
         .where(and(eq(conversations.id, input.id), eq(conversations.tenantId, input.tenantId)))
@@ -78,7 +70,7 @@ export const conversationsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      await db
+      await ctx.db
         .update(conversations)
         .set({ status: input.status })
         .where(and(eq(conversations.id, input.id), eq(conversations.tenantId, input.tenantId)));

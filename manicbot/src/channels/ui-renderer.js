@@ -85,3 +85,72 @@ export function extractButtonRows(tgExtra) {
     row.map(btn => ({ text: btn.text ?? '', callbackData: btn.callback_data ?? '' }))
   );
 }
+
+/**
+ * Adapt a calendar grid (7-column Telegram keyboard) for WhatsApp/Instagram.
+ *
+ * Telegram's calKb() produces a ~42-button grid (7 columns × 6 rows) that exceeds
+ * WhatsApp's 10-button and Instagram's 13-button limits. This function strips
+ * NOOP buttons (empty cells, day-of-week headers) and keeps only:
+ *   - Navigation buttons (cm:0, cm:2) — prev/next month
+ *   - Selectable date buttons (dt:YYYY-MM-DD)
+ *   - Action buttons (e.g. "Other service" → book)
+ *
+ * Detection heuristic: more than maxButtons total AND ≥50% are NOOP or date buttons.
+ * Non-calendar button sets (service lists, time slots, etc.) pass through unchanged.
+ *
+ * @param {Array<Array<{text:string, callbackData:string}>>} rows - Normalized button rows
+ * @param {number} maxButtons - Channel button budget (10 for WA list, 13 for IG quick replies)
+ * @returns {Array<Array<{text:string, callbackData:string}>>} Adapted rows (1 button per row)
+ */
+export function adaptCalendarForMeta(rows, maxButtons = 10) {
+  if (!rows) return rows;
+
+  // Flatten and count to detect calendar pattern
+  const allBtns = rows.flat();
+  if (allBtns.length <= maxButtons) return rows; // Already fits, no adaptation needed
+
+  const datePrefix = 'dt:';
+  const noopPrefix = '_';
+  const calMonthPrefix = 'cm:';
+  const dateAndNoop = allBtns.filter(b => b.callbackData.startsWith(datePrefix) || b.callbackData === noopPrefix);
+  if (dateAndNoop.length < allBtns.length * 0.5) return rows; // Not a calendar
+
+  // Extract meaningful buttons
+  const navButtons = []; // month prev/next
+  const dateButtons = []; // selectable dates
+  const actionButtons = []; // "Other service", "Back", etc.
+
+  for (const btn of allBtns) {
+    if (btn.callbackData === noopPrefix) continue; // Skip empty/header cells
+    if (btn.callbackData.startsWith(calMonthPrefix)) {
+      navButtons.push(btn);
+    } else if (btn.callbackData.startsWith(datePrefix)) {
+      dateButtons.push(btn);
+    } else {
+      actionButtons.push(btn);
+    }
+  }
+
+  // Build adapted layout: nav buttons + date buttons (limited) + action buttons
+  const result = [];
+
+  // Navigation (prev/next month) — put in one row
+  if (navButtons.length) {
+    result.push(navButtons);
+  }
+
+  // Date buttons — limit to fit, one per row for WA/IG
+  const dateBudget = maxButtons - result.flat().length - actionButtons.length;
+  const visibleDates = dateButtons.slice(0, Math.max(1, dateBudget));
+  for (const btn of visibleDates) {
+    result.push([btn]);
+  }
+
+  // Action buttons (e.g., "Other service")
+  for (const btn of actionButtons) {
+    result.push([btn]);
+  }
+
+  return result;
+}

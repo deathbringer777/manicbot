@@ -100,6 +100,9 @@ async function showHelp(ctx, cid, lg, realRole) {
       '• «Все записи» / «Записи на сегодня» / «На завтра»',
       '• «Список клиентов» / «Список мастеров»',
       '• «Список услуг» / «Биллинг» / «Открой панель»',
+      '',
+      '<b>📱 Instagram / WhatsApp (тариф Pro+):</b>',
+      'Кнопка в панели админа или меню «Салон» → Mini App → вкладка Channels.',
     ].join('\n');
   } else if (realRole === 'master') {
     text = [
@@ -225,6 +228,12 @@ export async function onMsg(ctx, msg) {
   if (msg.contact && st.step === STEP.REG_PHONE) {
     const phone = String(msg.contact.phone_number || '').slice(0, 20);
     return finishPhone(ctx, cid, phone, st);
+  }
+
+  // WhatsApp: auto-complete phone registration (channelUserId IS the phone number)
+  if (ctx.channel?.type === 'whatsapp' && st.step === STEP.REG_PHONE) {
+    const waPhone = msg._inbound?.channelUserId;
+    if (waPhone) return finishPhone(ctx, cid, String(waPhone).slice(0, 20), st);
   }
 
   const txt = (msg.text || '').trim().slice(0, 200);
@@ -538,6 +547,15 @@ export async function onMsg(ctx, msg) {
         ],
         scope: { type: 'chat', chat_id: cid },
       }).catch(() => null);
+      if (ctx.ADMIN_APP_URL && await isAdmin(ctx, cid)) {
+        const base = ctx.ADMIN_APP_URL.replace(/\/$/, '');
+        const openChannels = canUse(ctx, 'whatsapp') || canUse(ctx, 'instagram');
+        const url = openChannels ? `${base}/?tab=channels` : base;
+        api(ctx, 'setChatMenuButton', {
+          chat_id: cid,
+          menu_button: { type: 'web_app', text: t(hasLang, 'salon_miniapp_menu'), web_app: { url } },
+        }).catch(() => null);
+      }
     }
     if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);

@@ -145,6 +145,10 @@ export function adminKb(lg, ctx = null) {
     // Insert billing button before the last row (to_client)
     rows.splice(rows.length - 1, 0, [{ text: t(lg, 'billing_menu'), callback_data: CB.ADM_BILLING }]);
   }
+  const showMetaChannels = ctx?.tenantId && (canUse(ctx, 'whatsapp') || canUse(ctx, 'instagram'));
+  if (showMetaChannels) {
+    rows.splice(rows.length - 1, 0, [{ text: t(lg, 'adm_meta_channels_btn'), callback_data: CB.ADM_META_CHANNELS }]);
+  }
   return { reply_markup: { inline_keyboard: rows } };
 }
 
@@ -164,8 +168,13 @@ export function masterKb(lg, ctx = null) {
 }
 
 // ─── *Buttons() variants ─────────────────────────────────────────────────────
-// Each returns raw [[{text, callbackData}]] for multi-channel use.
-// Legacy kb functions above remain unchanged for backward compat.
+// Each returns raw [[{text, callbackData}]] — the normalized button format.
+//
+// These are NOT used directly by channel adapters. Instead, the telegram.js
+// bridge calls extractButtonRows() from ui-renderer.js to convert the legacy
+// { reply_markup: { inline_keyboard: [...] } } format produced by the kb*()
+// functions above. The *Buttons() variants below serve as documentation of
+// the normalized format and can be used in tests or future channel-specific code.
 
 /**
  * Convert a Telegram-format inline_keyboard row to the normalized callbackData key.

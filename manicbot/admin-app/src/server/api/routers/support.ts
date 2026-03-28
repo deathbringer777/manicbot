@@ -3,6 +3,7 @@ import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { platformTickets, platformTicketMessages, platformRoles } from "~/server/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
 
 async function assertSupport(ctx: any) {
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -13,7 +14,7 @@ async function assertSupport(ctx: any) {
     .limit(1);
   if (!row.length) throw new TRPCError({ code: "FORBIDDEN" });
   const role = row[0]!.role;
-  if (role !== "support" && role !== "technical_support" && role !== "system_admin") {
+  if (!isAdminProcedurePlatformRole(role)) {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
 }

@@ -41,24 +41,56 @@ KV key patterns:
 - `master:{cid}` — master data (KV legacy mode)
 - `cfg:admin` — admin chat ID (legacy KV mode)
 
+### Legacy single-bot vs D1 multi-tenant
+
+- **D1 path:** Telegram calls `POST /webhook/{botId}`; `resolveTenantFromBotId` loads tenant + encrypted token from D1. KV prefix `t:{tenantId}:*`.
+- **Legacy path:** Single `BOT_TOKEN` + `WEBHOOK_SECRET` in env; `POST /webhook` (no botId in path); `buildLegacyCtx` uses KV prefix `b:{botId}:*`. Used when the bot is not (yet) in the D1 registry or during migration.
+- **Stricter production:** set Worker var `REQUIRE_WEBHOOK_BOT_ID=1` when D1 is bound to reject legacy `POST /webhook` (403 — use `/webhook/{botId}` only). Cron and HTML admin routes are unchanged.
+
+### D1 schema discipline
+
+Any change under `manicbot/migrations/` must stay in sync with:
+
+1. `manicbot/src/db/schema.sql` (reference DDL)
+2. `manicbot/admin-app/src/server/db/schema.ts` (Drizzle)
+
+Run `npm run check-schema` in `manicbot/` in CI to verify table names match.
+
 ---
 
 ## Worker Architecture (`manicbot/src/`)
 
 ```
-Telegram webhook → src/worker.js
-  └─ tenant/resolver.js  → resolves tenantId + bot from URL or env
-  └─ buildTenantCtx(env, resolved)  → ctx with all env + D1 + KV
-       └─ handlers/message.js   ← text messages
-       └─ handlers/callback.js  ← button callbacks
-       └─ handlers/cron.js      ← scheduled tasks (every 15min)
+HTTP request → src/worker.js
+  ├─ src/http/*              → match URL first (landing, Stripe, admin keys, Google OAuth, HTML admin, calendar, webhooks)
+  ├─ src/http/resolveCtx.js  → getCtx() → tenant/resolver.js (POST /webhook/:botId or legacy /webhook)
+  └─ scheduled               → cron per tenant (D1) or legacy ctx
+       └─ handlers/message.js, callback.js, inbound.js → onMsg / onCb (Telegram + омниканал)
+       └─ handlers/cron.js   ← scheduled tasks (every 15min)
 ```
+
+### HTTP modules (`src/http/`)
+
+| Module | Routes / role |
+|--------|----------------|
+| `envCtx.js` | `{ db, kv, globalKv }` helper for handlers |
+| `demoBots.js` | Self-provision demo tenants/bots when env secrets `BOT_TOKEN_SALON*` etc. are set |
+| `resolveCtx.js` | `getCtx(env, url, request)` — D1 webhook by `botId`, legacy `/webhook`, `REQUIRE_WEBHOOK_BOT_ID` |
+| `landingHttp.js` | GET paths proxied to `LANDING_URL` |
+| `stripeHttp.js` | `POST /stripe/webhook`, `GET /stripe/success` |
+| `adminKeyHttp.js` | `GET /admin/migrate`, `migrate-d1`, `seed`; `POST /admin/provision` (ADMIN_KEY) |
+| `googleHttp.js` | `/google/connect`, `callback`, `select`, `webhook` |
+| `adminPanelHttp.js` | `GET /setup`, `remove-webhook`, `/admin`, `/admin/billing`, `/admin/export/*` |
+| `calendarHttp.js` | `GET /calendar/:aptId[.ics]` |
+| `telegramWebhookHttp.js` | `POST /webhook`, `POST /webhook/:botId` (excluding `wa` / `ig`) |
+| `metaWebhooksHttp.js` | `GET|POST /webhook/wa`, `GET|POST /webhook/ig` (Meta verify + HMAC) |
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/worker.js` | Entry point, routing, provisioning endpoints |
+| `src/worker.js` | Entry point; delegates HTTP to `src/http/*.js` |
+| `src/http/` | Isolated route handlers (see table above) |
 | `src/handlers/message.js` | Text message routing, AI chat trigger |
 | `src/handlers/callback.js` | Inline button callbacks |
 | `src/ai.js` | LLM integration (Cloudflare Workers AI, 3-model fallback) |
@@ -93,7 +125,7 @@ Telegram Mini App opens
   → TelegramGate.tsx
       → tg.ready() + tg.expand()
       → api.auth.getMyRole.useQuery()  (sends x-telegram-init-data header)
-          → server: validateWebAppData() → HMAC verify
+          → server: validateWebAppData() → HMAC verify (constant-time hash compare)
           → check ADMIN_CHAT_ID env → system_admin
           → check platform_roles table → system_admin / support / technical_support
           → check tenant_roles table → tenant_owner / master + tenantId
@@ -109,19 +141,29 @@ Telegram Mini App opens
 | `master` | Master Dashboard | `MasterDashboard.tsx` |
 | `support` / `technical_support` | Support Dashboard | `SupportDashboard.tsx` |
 
+### tRPC procedures
+
+- **`publicProcedure`** — no Telegram user required.
+- **`protectedProcedure`** — valid `x-telegram-init-data`; sets `ctx.user`.
+- **`adminProcedure`** — God Mode: `ADMIN_CHAT_ID` **or** `platform_roles.role` in `system_admin` \| `support` \| `technical_support` (see `server/api/platformRoles.ts` for the single source of truth). Same set is used by `support` router access checks.
+
 ### tRPC Routers
 
 | Router | File | Auth |
 |--------|------|------|
 | `auth` | `routers/auth.ts` | public (validates initData in ctx) |
-| `salon` | `routers/salon.ts` | verifies `tenant_owner` for tenantId |
-| `master` | `routers/masterRouter.ts` | verifies `master` or `tenant_owner` for tenantId |
-| `support` | `routers/support.ts` | verifies `support`/`technical_support`/`system_admin` |
+| `salon` | `routers/salon.ts` | `tenant_owner` for tenantId (`assertTenantOwner`) |
+| `master` | `routers/masterRouter.ts` | `master` or `tenant_owner` for tenantId |
+| `support` | `routers/support.ts` | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`) |
+| `channels` | `routers/channels.ts` | protected + `assertTenantOwner` |
+| `conversations` | `routers/conversations.ts` | protected + `assertTenantOwner` |
 | `metrics` | `routers/metrics.ts` | adminProcedure |
 | `users` | `routers/users.ts` | adminProcedure |
 | `tenants` | `routers/tenants.ts` | adminProcedure |
 | `appointments` | `routers/appointments.ts` | adminProcedure |
 | `billing` | `routers/billing.ts` | adminProcedure |
+| `export` | `routers/export.ts` | adminProcedure |
+| `stripe` | `routers/stripe.ts` | adminProcedure |
 | `provisioning` | `routers/provisioning.ts` | adminProcedure |
 | `settings` | `routers/settings.ts` | adminProcedure |
 | `system` | `routers/system.ts` | adminProcedure |
@@ -139,13 +181,28 @@ Telegram Mini App opens
 
 ---
 
+## Local checks (before deploy)
+
+```bash
+cd manicbot/
+npm test                     # Worker Vitest (~826 tests)
+npm run check-schema         # D1: table names in schema.sql vs Drizzle schema.ts
+
+cd admin-app/
+npm run typecheck
+npm test                     # Mini App Vitest (~20 tests)
+```
+
+GitHub Actions `test` job runs the same checks (Worker tests + `check-schema` + admin-app typecheck + tests) before Worker/Pages deploys.
+
 ## Deploy
 
 ### Worker
 ```bash
 source ~/.nvm/nvm.sh
 cd manicbot/
-npx vitest run               # run tests (672 tests)
+npm test                     # or: npx vitest run
+npm run check-schema         # recommended before deploy
 npx wrangler deploy          # deploy to Cloudflare Workers
 ```
 
@@ -160,8 +217,10 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 ### Admin Mini-App
 ```bash
 cd manicbot/admin-app/
-# Push to GitHub → GitHub Actions → Cloudflare Pages auto-deploy
+npm run typecheck && npm test   # optional local gate
+# Push to GitHub → GitHub Actions → Cloudflare Pages (project `admin-app`)
 ```
+Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (includes admin-app typecheck + tests).
 
 **Pages env vars required** (set in Cloudflare Pages dashboard):
 - `TELEGRAM_BOT_TOKEN`
@@ -187,6 +246,9 @@ cd manicbot/admin-app/
 | `local_tickets` | Tenant-local support tickets |
 | `tenant_config` | Key-value config per tenant (salon_name, address, work_hours, etc.) |
 | `support_agents` | Platform support agents (type: 'support' or 'technical_support') |
+| `channel_configs` | WhatsApp / Instagram bindings per tenant |
+| `conversations` | Unified inbox rows (омниканал) |
+| `message_windows` | Last user message time (WA/IG 24h policy) |
 
 ---
 

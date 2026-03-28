@@ -6,35 +6,41 @@
 
 - **Стек:** Cloudflare Workers, KV, D1 (Cloudflare SQLite), Workers AI (REST), Stripe API, Telegram Bot API.
 - **Языки интерфейса:** RU, UA, EN, PL.
-- **Точка входа:** `src/worker.js` (fetch + scheduled).
+- **Точка входа:** `src/worker.js` (fetch + scheduled); HTTP-ветки вынесены в `src/http/*.js`.
 
 ---
 
 ## 2. Точки входа и маршрутизация
 
-```
-POST /stripe/webhook          → Stripe webhooks (подписки)
-GET  /stripe/success          → Страница "Оплата успешна"
-GET  /admin/migrate?key=      → Миграция b:{botId}: → t:default:
-GET  /admin/seed?key=&master= → Сид: 2 салона + мастер
-GET  /                       → Статус воркера
-GET  /setup?key=              → Установка webhook текущего бота
-GET  /remove-webhook?key=     → Снятие webhook
-GET  /admin                   → HTML: админка (записи, клиенты) — Basic Auth
-GET  /admin/billing           → HTML: биллинг по тенантам
-GET  /admin/export/clients.csv
-GET  /admin/export/appointments.csv
-GET  /calendar/:aptId.ics     → ICS файл записи
-POST /webhook                 → Telegram (legacy, env BOT_TOKEN)
-POST /webhook/:botId          → Telegram (мультибот, botId из KV)
+Реализация по файлам: `landingHttp`, `stripeHttp`, `adminKeyHttp`, `googleHttp`, `adminPanelHttp`, `calendarHttp`, `telegramWebhookHttp`, `metaWebhooksHttp`, плюс `resolveCtx.js` (`getCtx`).
 
-scheduled (cron */15 * * * *) → handleCron (напоминания и т.д.)
+```
+POST /stripe/webhook           → Stripe (billing/webhooks.js)
+GET  /stripe/success           → HTML «оплата успешна»
+GET  /admin/migrate?key=       → Миграция KV legacy → t:default (ключ ADMIN_KEY)
+GET  /admin/migrate-d1?key=    → Скрипт migrate-kv-to-d1
+GET  /admin/seed?key=         → Сид D1
+POST /admin/provision?key=    → Массовая регистрация ботов (ответ ошибки без stack trace)
+GET|POST /webhook/wa          → WhatsApp (Meta verify + HMAC)
+GET|POST /webhook/ig          → Instagram (Meta verify + HMAC)
+POST /webhook/:botId          → Telegram, бот в D1 (`resolveTenantFromBotId`)
+POST /webhook                 → Telegram legacy (BOT_TOKEN); при REQUIRE_WEBHOOK_BOT_ID=1 и D1 → 403
+GET  /google/connect|callback|select  → OAuth Google Calendar
+POST /google/webhook          → Push-календарь
+GET  /setup?key=              → setWebhook + команды
+GET  /remove-webhook?key=
+GET  /admin, /admin/billing, /admin/export/*  → HTML + CSV (Basic Auth)
+GET  /calendar/:aptId[.ics]    → ICS
+GET  <landing paths>          → Прокси на LANDING_URL (landing-pages-proxy)
+
+scheduled (cron */15 * * * *)  → по списку tenantId из D1 — handleCron для первого бота тенанта; иначе legacy/buildCtx
 ```
 
-**Построение контекста (getCtx):**
-- `POST /webhook/:botId` → по botId из KV: tenantId, bot, prefix = `t:{tenantId}:`
-- Иначе, если есть env.BOT_TOKEN и миграция выполнена (botId есть в botmap) → тот же tenant-контекст
-- Иначе → legacy: prefix = `b:{botId}:`, tenant = null
+**Построение контекста (`getCtx` в `src/http/resolveCtx.js`):**
+- `POST /webhook/:botId` → `resolveTenantFromBotId` (**D1** `bots` + `tenants`), prefix `t:{tenantId}:`
+- Если `REQUIRE_WEBHOOK_BOT_ID=1` и привязан `DB` → для `POST /webhook` без botId контекст не строится (legacy отключён на уровне worker)
+- Иначе при `BOT_TOKEN` и бот зарегистрирован в D1 (`isMigrationDone`) → tenant-контекст как выше
+- Иначе → `buildLegacyCtx`: prefix `b:{botId}:`, `tenantId = null`
 
 ---
 
@@ -42,14 +48,16 @@ scheduled (cron */15 * * * *) → handleCron (напоминания и т.д.)
 
 | Роль              | D1-таблица / механизм                              | Кто назначает                             |
 |-------------------|----------------------------------------------------|-------------------------------------------|
-| system_admin      | D1 `platform_roles` (role='system_admin')          | Env ADMIN_CHAT_ID или /sysadmin           |
-| technical_support | D1 `support_agents` (type='technical_support')     | system_admin                              |
-| support           | D1 `support_agents` (type='support')               | system_admin                              |
-| tenant_owner      | D1 `tenant_roles` (role='tenant_owner')            | system_admin: /grant_owner                |
-| master            | D1 `tenant_roles` (role='master') + `masters`      | tenant_owner в панели                     |
+| system_admin      | `platform_roles` и/или секрет `ADMIN_CHAT_ID`      | Создатель платформы, команды sysadmin     |
+| technical_support | `platform_roles` (role=`technical_support`)        | system_admin (God Mode / provisioning)  |
+| support           | `platform_roles` (role=`support`)                  | system_admin                              |
+| tenant_owner      | `tenant_roles` (role=`tenant_owner`)             | system_admin: /grant_owner и т.п.         |
+| master            | `tenant_roles` (role=`master`) + `masters`         | tenant_owner                              |
 | client            | По умолчанию (нет записи)                          | —                                         |
 
-Приоритет: platform (system_admin > technical_support > support) → tenant (tenant_owner > master) → client.
+Таблица `support_agents` используется для учёта агентов в админских сценариях; **доступ к Mini App God Mode (`adminProcedure`) и к support-router** завязан на `platform_roles` и `ADMIN_CHAT_ID` (см. `admin-app/src/server/api/platformRoles.ts`).
+
+Приоритет в продукте: platform (creator / system_admin / technical_support / support) → tenant (tenant_owner > master) → client.
 
 ---
 
@@ -140,13 +148,18 @@ flowchart TB
     W["worker.js\n(fetch + scheduled)"]
   end
 
+  subgraph HttpLayer["HTTP слой"]
+    HttpMod["src/http/*.js\nlanding stripe adminKey\ngoogle adminPanel\ncalendar telegramWebhook\nmetaWebhooks"]
+  end
+
   subgraph Routing["Маршрутизация и контекст"]
-    getCtx["getCtx(env, url)"]
+    getCtx["http/resolveCtx.js\ngetCtx"]
     Resolver["tenant/resolver.js\nresolveTenantFromBotId\nbuildTenantCtx\nbuildLegacyCtx"]
     StorageT["tenant/storage.js\ngetTenant, getBot\ngetTenantIdByBotId\nlistTenantIds"]
   end
 
-  subgraph Handlers["Обработчики Telegram"]
+  subgraph Handlers["Обработчики сообщений"]
+    Inbound["handlers/inbound.js\nhandleInbound"]
     onMsg["handlers/message.js\nonMsg(ctx, msg)"]
     onCb["handlers/callback.js\nonCb(ctx, cb)"]
     Cron["handlers/cron.js\nhandleCron(ctx)"]
@@ -206,13 +219,17 @@ flowchart TB
     AdminAppUI["admin-app/\nNext.js + Drizzle ORM\nCloudflare Pages"]
   end
 
-  W --> getCtx
+  W --> HttpMod
+  HttpMod --> getCtx
   getCtx --> Resolver
   Resolver --> StorageT
-  W --> onMsg
-  W --> onCb
+  HttpMod --> onMsg
+  HttpMod --> onCb
+  HttpMod --> Inbound
+  Inbound --> onMsg
+  Inbound --> onCb
   W --> Cron
-  W --> Webhooks
+  HttpMod --> Webhooks
 
   onMsg --> Users
   onMsg --> Roles
@@ -273,7 +290,19 @@ flowchart TB
 ```
 manicbot/
 ├── src/
-│   ├── worker.js              # Точка входа: fetch + scheduled
+│   ├── worker.js              # Точка входа: fetch + scheduled; вызывает http/*
+│   ├── http/                  # Маршруты HTTP (см. CLAUDE.md — таблица модулей)
+│   │   ├── envCtx.js
+│   │   ├── demoBots.js
+│   │   ├── resolveCtx.js      # getCtx
+│   │   ├── landingHttp.js
+│   │   ├── stripeHttp.js
+│   │   ├── adminKeyHttp.js
+│   │   ├── googleHttp.js
+│   │   ├── adminPanelHttp.js
+│   │   ├── calendarHttp.js
+│   │   ├── telegramWebhookHttp.js
+│   │   └── metaWebhooksHttp.js
 │   ├── config.js              # Константы, CB, STEP, DEFAULT_SVC, buildCtx
 │   ├── telegram.js            # send(), api() → Telegram Bot API
 │   ├── ai.js                  # Промпт, теги, runWorkersAI, executeAIAction
@@ -325,7 +354,10 @@ manicbot/
 │   ├── handlers/
 │   │   ├── message.js         # onMsg: команды, шаги, ИИ, grant_master, add_support
 │   │   ├── callback.js        # onCb: inline-кнопки (запись, админка, тикеты)
+│   │   ├── inbound.js         # handleInbound: WA/IG → псевдо Telegram → onMsg/onCb
 │   │   └── cron.js            # handleCron: напоминания
+│   │
+│   ├── channels/              # whatsapp, instagram, telegram bridge, meta-verify, ui-renderer
 │   │
 │   ├── ui/
 │   │   ├── screens.js         # showWelcome, showPrices, showContacts, showCatalog, showMyApts
@@ -345,11 +377,12 @@ manicbot/
 │       └── ics.js             # makeICS для календаря
 │
 ├── wrangler.toml              # name=manicbot, main=src/worker.js, KV MANICBOT, D1 DB, AI
-├── package.json               # deploy, dev, test, migrate
+├── package.json               # deploy, dev, test, migrate, check-schema
 ├── vitest.config.js
 ├── test/                      # config, kv, tenant-resolver, billing-webhooks, master-selection, ...
 ├── scripts/
 │   ├── run-migrate.js
+│   ├── check-schema-tables.mjs  # npm run check-schema — имена таблиц schema.sql vs Drizzle
 │   └── setup-stripe-secrets.sh
 ├── BOT_GUIDE.md
 ├── CLOUDFLARE_SETUP.md
@@ -359,12 +392,15 @@ manicbot/
 ├── BILLING.md
 └── ARCHITECTURE.md            # этот файл
 
-admin-app/                     # Отдельный пакет (Cloudflare Pages)
+admin-app/                     # Telegram Mini App (Cloudflare Pages)
 ├── src/
 │   ├── app/                   # Next.js App Router
-│   ├── server/                # tRPC routers + Drizzle ORM
-│   └── db/                    # Drizzle schema → D1 (manicbot-db)
-├── package.json
+│   ├── server/
+│   │   ├── api/               # tRPC (platformRoles.ts — роли God Mode)
+│   │   ├── auth/              # validateWebAppData (Telegram initData)
+│   │   └── db/                # Drizzle schema — синхронизировать с src/db/schema.sql
+│   └── components/            # TelegramGate, dashboards, Shell
+├── package.json               # typecheck, test, pages:build
 └── wrangler.toml
 ```
 

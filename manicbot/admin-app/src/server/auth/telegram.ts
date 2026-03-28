@@ -1,5 +1,22 @@
 import { env } from "~/env";
 
+function hexToBytes32(hex: string): Uint8Array | null {
+  const h = hex.trim().toLowerCase();
+  if (h.length !== 64 || !/^[0-9a-f]{64}$/.test(h)) return null;
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
+}
+
 export interface TelegramUser {
   id: number;
   is_bot?: boolean;
@@ -57,11 +74,9 @@ export async function validateWebAppData(telegramInitData: string): Promise<{ us
       encoder.encode(dataCheckString)
     );
     
-    const calculatedHash = Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-    
-    if (calculatedHash !== hash) {
+    const calculatedBytes = new Uint8Array(signature);
+    const providedBytes = hexToBytes32(hash);
+    if (!providedBytes || !timingSafeEqualBytes(calculatedBytes, providedBytes)) {
       return { user: null, valid: false };
     }
     

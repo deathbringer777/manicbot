@@ -13,6 +13,17 @@ import { nowSec, msToSec } from '../utils/time.js';
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
 
+/** Constant-time compare for equal-length lowercase hex (Stripe v1); no Node-only APIs. */
+function timingSafeEqualLowerHex(expectedLowerHex, receivedRawHex) {
+  const b = receivedRawHex.toLowerCase();
+  if (expectedLowerHex.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expectedLowerHex.length; i++) {
+    diff |= expectedLowerHex.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export async function verifyStripeSignature(payload, signature, secret) {
   if (!secret || !signature) return false;
   const parts = {};
@@ -34,7 +45,7 @@ export async function verifyStripeSignature(payload, signature, secret) {
   );
   const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(signedPayload));
   const expectedHex = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return expectedHex === v1.toLowerCase();
+  return timingSafeEqualLowerHex(expectedHex, v1);
 }
 
 async function resolveTenantIdByCustomer(ctx, customerId) {

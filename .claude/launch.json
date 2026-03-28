@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "manicbot",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "source ~/.nvm/nvm.sh && cd /Users/vdovin/Desktop/44444444/manicbot && npx wrangler dev --port 8787"],
+      "port": 8787
+    },
+    {
+      "name": "manicbot-analysis",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/vdovin/Desktop/44444444/manicbot-analysis && npx vite --port 5199"],
+      "port": 5199
+    },
+    {
+      "name": "admin-app",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "source ~/.nvm/nvm.sh && cd /Users/vdovin/Desktop/44444444/manicbot/admin-app && SKIP_ENV_VALIDATION=1 npm run dev -- --port 3000"],
+      "port": 3000
+    }
+  ]
+}

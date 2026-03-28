@@ -8,6 +8,9 @@ import { initServices } from '../services/services.js';
 import { checkBillingExpiry } from '../billing/lifecycle.js';
 import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { canUse } from '../billing/features.js';
+import { isWithinMessageWindow } from './inbound.js';
+import { sendTemplateMessage, canSendTemplate, trackTemplateUsage, buildReminderComponents } from '../channels/whatsapp-templates.js';
+import { getChannelConfig } from '../channels/resolver.js';
 
 export async function handleCron(ctx) {
   try {
@@ -54,8 +57,81 @@ export async function handleCron(ctx) {
         const tenantAddr = ctx.tenant?.salon?.address || ADDRESS;
         const tenantMaps = ctx.tenant?.salon?.mapsUrl || MAPS_URL;
         const vars = { svc: svcName(ctx, lg, row.svc_id), dt: fmtDT(lg, row.date, row.time), addr: tenantAddr, maps: tenantMaps };
-        if (do24) await send(ctx, row.chat_id, fill(t(lg, 'rem_24'), vars));
-        if (do2) await send(ctx, row.chat_id, fill(t(lg, 'rem_2'), vars));
+
+        // Check if client has a non-Telegram channel identity
+        let sent = false;
+        if (ctx.db && ctx.tenantId) {
+          const identities = await dbAll(ctx,
+            "SELECT channel_type, channel_user_id FROM channel_identities WHERE tenant_id = ? AND internal_user_id = ? AND channel_type != 'telegram'",
+            ctx.tenantId, row.chat_id,
+          );
+          for (const identity of identities) {
+            if (identity.channel_type === 'whatsapp' && canUse(ctx, 'whatsapp')) {
+              const withinWindow = await isWithinMessageWindow(ctx, 'whatsapp', identity.channel_user_id);
+              if (withinWindow) {
+                // Free-form message within 24h window
+                const reminderText = fill(t(lg, do24 ? 'rem_24' : 'rem_2'), vars);
+                const channelConfig = await getChannelConfig(ctx, ctx.tenantId, 'whatsapp', ctx.BOT_ENCRYPTION_KEY || null);
+                if (channelConfig?.token && channelConfig?.config?.phone_number_id) {
+                  try {
+                    const { WhatsAppAdapter } = await import('../channels/whatsapp.js');
+                    const adapter = new WhatsAppAdapter({ tenantId: ctx.tenantId, channelConfig });
+                    await adapter.send(identity.channel_user_id, { text: reminderText });
+                    sent = true;
+                  } catch (e) {
+                    console.error('[cron] WA free-form reminder failed:', e.message);
+                  }
+                }
+              } else if (await canSendTemplate(ctx)) {
+                // Outside 24h — use template
+                const channelConfig = await getChannelConfig(ctx, ctx.tenantId, 'whatsapp', ctx.BOT_ENCRYPTION_KEY || null);
+                if (channelConfig?.token && channelConfig?.config?.phone_number_id) {
+                  try {
+                    const templateName = do24 ? 'appointment_reminder_24h' : 'appointment_reminder_2h';
+                    await sendTemplateMessage(
+                      channelConfig.config.phone_number_id,
+                      channelConfig.token,
+                      identity.channel_user_id,
+                      templateName,
+                      'en_US',
+                      buildReminderComponents(vars),
+                    );
+                    await trackTemplateUsage(ctx, templateName, 0);
+                    sent = true;
+                  } catch (e) {
+                    console.error('[cron] WA template reminder failed:', e.message);
+                  }
+                }
+              }
+              // Outside 24h and no quota — skip silently
+            } else if (identity.channel_type === 'instagram' && canUse(ctx, 'instagram')) {
+              const withinWindow = await isWithinMessageWindow(ctx, 'instagram', identity.channel_user_id);
+              if (withinWindow) {
+                // IG: only send within 24h window (no templates)
+                const reminderText = fill(t(lg, do24 ? 'rem_24' : 'rem_2'), vars);
+                const channelConfig = await getChannelConfig(ctx, ctx.tenantId, 'instagram', ctx.BOT_ENCRYPTION_KEY || null);
+                if (channelConfig?.token && channelConfig?.config?.page_id) {
+                  try {
+                    const { InstagramAdapter } = await import('../channels/instagram.js');
+                    const adapter = new InstagramAdapter({ tenantId: ctx.tenantId, channelConfig });
+                    await adapter.send(identity.channel_user_id, { text: reminderText });
+                    sent = true;
+                  } catch (e) {
+                    console.error('[cron] IG reminder failed:', e.message);
+                  }
+                }
+              }
+              // Outside 24h on IG — skip (no template system)
+            }
+            if (sent) break;
+          }
+        }
+
+        // Fallback to Telegram if not sent via other channel
+        if (!sent) {
+          if (do24) await send(ctx, row.chat_id, fill(t(lg, 'rem_24'), vars));
+          if (do2) await send(ctx, row.chat_id, fill(t(lg, 'rem_2'), vars));
+        }
       } catch (e) {
         console.error(`Cron reminder error for apt ${row.id}:`, e.message);
       }

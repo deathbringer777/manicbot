@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx parcel:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(npx vitest:*)",
+      "Bash(npx wrangler:*)",
+      "Bash(git push:*)",
+      "mcp__magic__21st_magic_component_builder",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npx tsc:*)",
+      "Bash(gh run:*)",
+      "Bash(for dir:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/vdovin/Desktop/44444444/src/**)",
+      "Bash(done)",
+      "Bash(grep -E \"from [''''\"\"][^''''\"\"]*[''''\"\"];?$\")",
+      "Bash(for lang:*)",
+      "Read(//Users/vdovin/Desktop/44444444/src/i18n/**)"
+    ]
+  }
+}

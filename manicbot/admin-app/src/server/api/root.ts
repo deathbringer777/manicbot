@@ -12,12 +12,16 @@ import { authRouter } from "~/server/api/routers/auth";
 import { salonRouter } from "~/server/api/routers/salon";
 import { masterRouter } from "~/server/api/routers/masterRouter";
 import { supportRouter } from "~/server/api/routers/support";
+import { channelRouter } from "~/server/api/routers/channels";
+import { conversationsRouter } from "~/server/api/routers/conversations";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
   salon: salonRouter,
   master: masterRouter,
   support: supportRouter,
+  channels: channelRouter,
+  conversations: conversationsRouter,
   system: systemRouter,
   metrics: metricsRouter,
   users: usersRouter,

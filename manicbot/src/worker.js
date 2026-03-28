@@ -11,6 +11,7 @@ import { makeICS } from './utils/ics.js';
 import { onMsg } from './handlers/message.js';
 import { onCb } from './handlers/callback.js';
 import { handleCron } from './handlers/cron.js';
+import { handleInbound } from './handlers/inbound.js';
 import { resolveTenantFromBotId, buildTenantCtx, buildLegacyCtx, isMigrationDone } from './tenant/resolver.js';
 import { runMigration } from './tenant/migration.js';
 import { handleStripeWebhook } from './billing/webhooks.js';
@@ -24,6 +25,11 @@ import {
   handleGoogleWebhook,
 } from './services/google-calendar-oauth.js';
 import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from './utils/landing-pages-proxy.js';
+import { verifyMetaSignature, handleHubChallenge } from './channels/meta-verify.js';
+import { resolveTenantFromWhatsApp, resolveTenantFromInstagram, getChannelConfig, buildChannelCtx } from './channels/resolver.js';
+import { WhatsAppAdapter } from './channels/whatsapp.js';
+import { InstagramAdapter } from './channels/instagram.js';
+
 
 function envCtx(env) {
   return { db: env.DB || null, kv: env.MANICBOT, globalKv: env.MANICBOT };
@@ -529,7 +535,7 @@ tr:hover td{background:#fdf2f8}
       });
     }
 
-    if (request.method === 'POST' && (url.pathname === '/webhook' || url.pathname.match(/^\/webhook\/([^/]+)$/))) {
+    if (request.method === 'POST' && (url.pathname === '/webhook' || url.pathname.match(/^\/webhook\/(?!wa$|ig$)[^/]+$/))) {
       const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
       if (!timingSafeEqual(secret, ctx.WEBHOOK_SECRET)) {
         return new Response('Unauthorized', { status: 403 });
@@ -560,6 +566,93 @@ tr:hover td{background:#fdf2f8}
         }
       } catch (e) {
         console.error('Webhook error:', e.message, e.stack);
+      }
+      return new Response('OK');
+    }
+
+    // ── WhatsApp Cloud API webhook ──────────────────────────────────────────
+    if (request.method === 'GET' && url.pathname === '/webhook/wa') {
+      return handleHubChallenge(url, env.META_VERIFY_TOKEN_WA || '');
+    }
+
+    if (request.method === 'POST' && url.pathname === '/webhook/wa') {
+      // 1. Verify HMAC signature
+      const sig = request.headers.get('X-Hub-Signature-256') || '';
+      let body;
+      try { body = await request.text(); } catch { return new Response('OK'); }
+      const valid = await verifyMetaSignature(body, sig, env.META_APP_SECRET || '');
+      if (!valid) return new Response('Forbidden', { status: 403 });
+
+      // 2. Parse + dispatch (background)
+      const ec = envCtx(env);
+      const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+      if (parsed) {
+        const processWA = async () => {
+          try {
+            const entries = parsed?.entry ?? [];
+            for (const entry of entries) {
+              const changes = entry.changes ?? [];
+              for (const change of changes) {
+                const phoneNumberId = change.value?.metadata?.phone_number_id;
+                if (!phoneNumberId) continue;
+                const resolved = await resolveTenantFromWhatsApp(ec, phoneNumberId);
+                if (!resolved) { console.warn('[wa] unresolved phone_number_id:', phoneNumberId); continue; }
+                const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'whatsapp', env.BOT_ENCRYPTION_KEY || null);
+                if (!channelConfig) continue;
+                const adapter = new WhatsAppAdapter({ tenantId: resolved.tenantId, channelConfig });
+                const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
+                if (!ctx) continue;
+                await initServices(ctx);
+                const inbound = adapter.normalize(entry);
+                if (inbound) await handleInbound(ctx, inbound);
+              }
+            }
+          } catch (e) {
+            console.error('[wa] process error:', e.message);
+          }
+        };
+        ctx?.waitUntil ? ctx.waitUntil(processWA()) : processWA().catch(() => {});
+      }
+      return new Response('OK');
+    }
+
+    // ── Instagram Messaging API webhook ────────────────────────────────────
+    if (request.method === 'GET' && url.pathname === '/webhook/ig') {
+      return handleHubChallenge(url, env.META_VERIFY_TOKEN_IG || '');
+    }
+
+    if (request.method === 'POST' && url.pathname === '/webhook/ig') {
+      const sig = request.headers.get('X-Hub-Signature-256') || '';
+      let body;
+      try { body = await request.text(); } catch { return new Response('OK'); }
+      const valid = await verifyMetaSignature(body, sig, env.META_APP_SECRET || '');
+      if (!valid) return new Response('Forbidden', { status: 403 });
+
+      const ec = envCtx(env);
+      const parsed = (() => { try { return JSON.parse(body); } catch { return null; } })();
+      if (parsed) {
+        const processIG = async () => {
+          try {
+            const entries = parsed.entry ?? [];
+            for (const entry of entries) {
+              const pageId = entry.id;
+              if (!pageId) continue;
+              const resolved = await resolveTenantFromInstagram(ec, pageId);
+              if (!resolved) { console.warn('[ig] unresolved page_id:', pageId); continue; }
+              const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
+              if (!channelConfig) continue;
+              const adapter = new InstagramAdapter({ tenantId: resolved.tenantId, channelConfig });
+              const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
+              if (!ctx) continue;
+              await initServices(ctx);
+              const inbound = adapter.normalize(entry);
+              if (inbound) await handleInbound(ctx, inbound);
+            }
+          } catch (e) {
+            console.error('[ig] process error:', e.message);
+          }
+        };
+        ctx?.waitUntil ? ctx.waitUntil(processIG()) : processIG().catch(() => {});
       }
       return new Response('OK');
     }

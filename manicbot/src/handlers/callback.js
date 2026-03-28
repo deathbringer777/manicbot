@@ -157,12 +157,13 @@ export async function onCb(ctx, cb) {
   // Inactive/canceled billing: block all except billing-related callbacks for non-platform-admins
   if (isInactive(ctx) && !(await isPlatformAdmin(ctx, cid))) {
     const isBillingCb = d === CB.ADM_BILLING || d === CB.BILLING_PORTAL || d === CB.BILLING_BACK
-      || d.startsWith(CB.BILLING_SUBSCRIBE) || d === CB.MAIN || d === CB.LANG;
+      || d.startsWith(CB.BILLING_SUBSCRIBE) || d === CB.MAIN || d === CB.CLIENT_VIEW || d === CB.LANG;
     if (!isBillingCb) return showInactiveMessage(ctx, cid);
   }
 
-  if (d === CB.MAIN)     return showHomeByRole(ctx, cid, name);
-  if (d === CB.LANG)     return showLangPick(ctx, cid);
+  if (d === CB.MAIN)        return showHomeByRole(ctx, cid, name);
+  if (d === CB.CLIENT_VIEW) return showWelcome(ctx, cid, name);
+  if (d === CB.LANG)        return showLangPick(ctx, cid);
   if (d === CB.BOOK)     return startBooking(ctx, cid, cb.from);
 
   if (d === CB.BOOK_PICK_SVC) {

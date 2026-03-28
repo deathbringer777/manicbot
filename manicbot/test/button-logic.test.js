@@ -215,7 +215,8 @@ describe('adminKb billing button visibility', () => {
       expect(cbs).toContain(CB.ADM_MASTERS);
       expect(cbs).toContain(CB.ADM_CLIENTS);
       expect(cbs).toContain(CB.ADM_SETTINGS);
-      expect(cbs).toContain(CB.MAIN);
+      // "Режим клиента" uses CLIENT_VIEW (not MAIN) so it calls showWelcome() directly
+      expect(cbs).toContain(CB.CLIENT_VIEW);
     }
   });
 });

@@ -127,6 +127,45 @@ const translations = {
   "gate.forbidden":         { ru: "Доступ запрещён", ua: "Доступ заборонено", en: "Access denied", pl: "Dostęp zabroniony" },
   "gate.forbiddenDesc":     { ru: "У вас нет доступа к панели управления.", ua: "У вас немає доступу до панелі керування.", en: "You don't have access to this panel.", pl: "Nie masz dostępu do tego panelu." },
   "gate.init":              { ru: "Инициализация...", ua: "Ініціалізація...", en: "Initializing...", pl: "Inicjalizacja..." },
+
+  // ── CRUD actions ────────────────────────────────────────────────────────────
+  "action.add":             { ru: "Добавить",       ua: "Додати",          en: "Add",        pl: "Dodaj" },
+  "action.edit":            { ru: "Редактировать",  ua: "Редагувати",      en: "Edit",       pl: "Edytuj" },
+  "action.delete":          { ru: "Удалить",        ua: "Видалити",        en: "Delete",     pl: "Usuń" },
+  "action.cancel":          { ru: "Отмена",         ua: "Скасувати",       en: "Cancel",     pl: "Anuluj" },
+  "action.confirm":         { ru: "Подтвердить",    ua: "Підтвердити",     en: "Confirm",    pl: "Potwierdź" },
+  "action.reject":          { ru: "Отклонить",      ua: "Відхилити",       en: "Reject",     pl: "Odrzuć" },
+  "action.create":          { ru: "Создать",        ua: "Створити",        en: "Create",     pl: "Utwórz" },
+  "action.search":          { ru: "Поиск",          ua: "Пошук",           en: "Search",     pl: "Szukaj" },
+
+  // ── Service fields ────────────────────────────────────────────────────────
+  "service.name":           { ru: "Название услуги", ua: "Назва послуги",  en: "Service name", pl: "Nazwa usługi" },
+  "service.price":          { ru: "Цена",           ua: "Ціна",            en: "Price",      pl: "Cena" },
+  "service.duration":       { ru: "Длительность (мин)", ua: "Тривалість (хв)", en: "Duration (min)", pl: "Czas (min)" },
+  "service.emoji":          { ru: "Иконка",         ua: "Іконка",          en: "Icon",       pl: "Ikona" },
+  "service.active":         { ru: "Активна",        ua: "Активна",         en: "Active",     pl: "Aktywna" },
+  "service.hidden":         { ru: "Скрыта",         ua: "Приховано",       en: "Hidden",     pl: "Ukryta" },
+
+  // ── Master fields ─────────────────────────────────────────────────────────
+  "master.chatId":          { ru: "Telegram ID мастера", ua: "Telegram ID майстра", en: "Master's Telegram ID", pl: "Telegram ID mistrza" },
+  "master.name":            { ru: "Имя мастера",    ua: "Ім'я майстра",    en: "Master's name", pl: "Imię mistrza" },
+  "master.addMaster":       { ru: "Добавить мастера", ua: "Додати майстра", en: "Add master", pl: "Dodaj mistrza" },
+  "master.removeMaster":    { ru: "Удалить мастера", ua: "Видалити майстра", en: "Remove master", pl: "Usuń mistrza" },
+
+  // ── Salon settings ────────────────────────────────────────────────────────
+  "salon.editProfile":      { ru: "Редактировать профиль", ua: "Редагувати профіль", en: "Edit profile", pl: "Edytuj profil" },
+  "salon.workHoursFrom":    { ru: "Начало работы",  ua: "Початок роботи",  en: "Start time", pl: "Godzina otwarcia" },
+  "salon.workHoursTo":      { ru: "Конец работы",   ua: "Кінець роботи",   en: "End time",   pl: "Godzina zamknięcia" },
+
+  // ── Confirmations ─────────────────────────────────────────────────────────
+  "confirm.deleteService":  { ru: "Удалить услугу?", ua: "Видалити послугу?", en: "Delete service?", pl: "Usunąć usługę?" },
+  "confirm.removeMaster":   { ru: "Удалить мастера?", ua: "Видалити майстра?", en: "Remove master?", pl: "Usunąć mistrza?" },
+  "confirm.cancelApt":      { ru: "Отменить запись?", ua: "Скасувати запис?", en: "Cancel appointment?", pl: "Anulować wizytę?" },
+
+  // ── Toast/success messages ────────────────────────────────────────────────
+  "toast.saved":            { ru: "Сохранено",      ua: "Збережено",       en: "Saved",      pl: "Zapisano" },
+  "toast.created":          { ru: "Создано",        ua: "Створено",        en: "Created",    pl: "Utworzono" },
+  "toast.deleted":          { ru: "Удалено",        ua: "Видалено",        en: "Deleted",    pl: "Usunięto" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

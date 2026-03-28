@@ -176,3 +176,68 @@ export const tenantSupportAgents = sqliteTable("tenant_support_agents", {
   tenantId: text("tenant_id").notNull(),
   chatId: integer("chat_id").notNull(),
 });
+
+// ─── Multi-channel tables ─────────────────────────────────────────────────────
+
+export const channelConfigs = sqliteTable("channel_configs", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  channelType: text("channel_type").notNull(),
+  config: text("config"),
+  tokenEncrypted: text("token_encrypted"),
+  tokenExpiresAt: integer("token_expires_at"),
+  webhookVerifyToken: text("webhook_verify_token"),
+  active: integer("active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_cc_tenant").on(t.tenantId),
+  index("idx_cc_type").on(t.channelType),
+  uniqueIndex("idx_cc_tenant_type").on(t.tenantId, t.channelType),
+]);
+
+export const channelIdentities = sqliteTable("channel_identities", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  internalUserId: integer("internal_user_id"),
+  channelType: text("channel_type").notNull(),
+  channelUserId: text("channel_user_id").notNull(),
+  displayName: text("display_name"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_ci_unique").on(t.tenantId, t.channelType, t.channelUserId),
+  index("idx_ci_internal").on(t.tenantId, t.internalUserId),
+]);
+
+export const messageWindows = sqliteTable("message_windows", {
+  tenantId: text("tenant_id").notNull(),
+  channelType: text("channel_type").notNull(),
+  channelUserId: text("channel_user_id").notNull(),
+  lastUserMessageAt: integer("last_user_message_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_mw_pk").on(t.tenantId, t.channelType, t.channelUserId),
+]);
+
+export const templateUsage = sqliteTable("template_usage", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  channelType: text("channel_type").notNull().default("whatsapp"),
+  templateName: text("template_name").notNull(),
+  sentAt: integer("sent_at").notNull(),
+  costUsd: real("cost_usd").notNull().default(0),
+}, (t) => [
+  index("idx_tu_tenant_sent").on(t.tenantId, t.sentAt),
+]);
+
+export const conversations = sqliteTable("conversations", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  channelType: text("channel_type").notNull(),
+  channelUserId: text("channel_user_id").notNull(),
+  internalUserId: integer("internal_user_id"),
+  status: text("status").notNull().default("open"),
+  lastMessageAt: integer("last_message_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_conv_tenant_msg").on(t.tenantId, t.lastMessageAt),
+]);

@@ -4,6 +4,7 @@
  */
 
 import { getTenant, getTenantIdByBotId, getBot, getBotToken } from './storage.js';
+import { TelegramAdapter } from '../channels/telegram.js';
 
 const DEFAULT_TENANT_ID = 'default';
 
@@ -35,7 +36,7 @@ export async function resolveTenantFromBotId(ctx, botId, encryptionKey = null) {
 export function buildTenantCtx(env, resolved) {
   const { tenantId, tenant, bot, TG } = resolved;
   const prefix = `t:${tenantId}:`;
-  return {
+  const ctx = {
     ...env,
     kv: env.MANICBOT,
     globalKv: env.MANICBOT,
@@ -54,6 +55,8 @@ export function buildTenantCtx(env, resolved) {
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
     baseUrl: null,
   };
+  ctx.channel = new TelegramAdapter(ctx);
+  return ctx;
 }
 
 /**
@@ -62,7 +65,7 @@ export function buildTenantCtx(env, resolved) {
 export function buildLegacyCtx(env) {
   const botId = env.BOT_TOKEN.split(':')[0];
   const prefix = `b:${botId}:`;
-  return {
+  const ctx = {
     ...env,
     kv: env.MANICBOT,
     globalKv: env.MANICBOT,
@@ -80,6 +83,8 @@ export function buildLegacyCtx(env) {
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
     baseUrl: null,
   };
+  ctx.channel = new TelegramAdapter(ctx);
+  return ctx;
 }
 
 /**

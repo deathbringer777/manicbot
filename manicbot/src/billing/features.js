@@ -14,6 +14,9 @@ const FEATURE_PLAN_FIELD = {
   calendar:       'calendar',
   masters_add:    null,
   white_label:    'whiteLabel',
+  // Channel features: checked via the `channels` array in PLAN_LIMITS
+  whatsapp:       '_channel_whatsapp',
+  instagram:      '_channel_instagram',
 };
 
 /**
@@ -32,7 +35,7 @@ export function canUse(ctx, feature) {
   // Completely blocked statuses
   if (status === 'inactive' || status === 'canceled') return false;
 
-  // Grace period — only core booking works; no AI, support, calendar
+  // Grace period — only core booking works; no AI, support, calendar, channels
   if (status === 'grace_period') {
     return feature === 'booking';
   }
@@ -43,8 +46,16 @@ export function canUse(ctx, feature) {
   if (planField === null) return true;       // no plan restriction
 
   const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.start;
+
+  // Channel features: check the `channels` array
+  if (planField === '_channel_whatsapp') return (limits.channels ?? ['telegram']).includes('whatsapp');
+  if (planField === '_channel_instagram') return (limits.channels ?? ['telegram']).includes('instagram');
+
   return limits[planField] === true;
 }
+
+// Re-export template helpers for convenience
+export { canSendTemplate, getTemplateUsageThisMonth } from '../channels/whatsapp-templates.js';
 
 /**
  * Maximum number of masters allowed for the current tenant's plan.

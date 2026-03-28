@@ -139,7 +139,7 @@ export function adminKb(lg, ctx = null) {
     [{ text: t(lg, 'm_about'), callback_data: CB.ADM_ABOUT }],
     [{ text: t(lg, 'adm_support_btn'), callback_data: CB.ADM_SUPPORT_LIST },
      { text: t(lg, 'm_tech_support'), callback_data: CB.TECH_SUPPORT_REQ }],
-    [{ text: t(lg, 'adm_to_client'), callback_data: CB.MAIN }],
+    [{ text: t(lg, 'adm_to_client'), callback_data: CB.CLIENT_VIEW }],
   ];
   if (showBilling) {
     // Insert billing button before the last row (to_client)
@@ -159,6 +159,73 @@ export function masterKb(lg, ctx = null) {
     rows.push([{ text: t(lg, 'mst_calendar'), callback_data: CB.MST_CALENDAR }]);
   }
   rows.push([{ text: t(lg, 'm_tech_support'), callback_data: CB.TECH_SUPPORT_REQ }]);
-  rows.push([{ text: t(lg, 'mst_to_client'), callback_data: CB.MAIN }]);
+  rows.push([{ text: t(lg, 'mst_to_client'), callback_data: CB.CLIENT_VIEW }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
+
+// ─── *Buttons() variants ─────────────────────────────────────────────────────
+// Each returns raw [[{text, callbackData}]] for multi-channel use.
+// Legacy kb functions above remain unchanged for backward compat.
+
+/**
+ * Convert a Telegram-format inline_keyboard row to the normalized callbackData key.
+ * @private
+ */
+function _norm(rows) {
+  return rows.map(row => row.map(btn => ({
+    text: btn.text,
+    callbackData: btn.callback_data ?? btn.callbackData ?? '',
+    ...(btn.url ? { url: btn.url } : {}),
+  })));
+}
+
+/** Raw rows for mainKb (without reply_markup wrapper). */
+export function mainKbButtons(lg, role = 'client', ctx = null) {
+  return _norm(mainKb(lg, role, ctx).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for svcKb. */
+export function svcKbButtons(ctx, lg) {
+  return _norm(svcKb(ctx, lg).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for calKb. */
+export function calKbButtons(lg, mo = 0) {
+  return _norm(calKb(lg, mo).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for timeKb. */
+export function timeKbButtons(slots, lg) {
+  return _norm(timeKb(slots, lg).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for adminKb. */
+export function adminKbButtons(lg, ctx = null) {
+  return _norm(adminKb(lg, ctx).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for masterKb. */
+export function masterKbButtons(lg, ctx = null) {
+  return _norm(masterKb(lg, ctx).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for langKb. */
+export function langKbButtons() {
+  return _norm(langKb().reply_markup.inline_keyboard);
+}
+
+/** Raw rows for catListKb. */
+export function catListKbButtons(ctx, lg) {
+  return _norm(catListKb(ctx, lg).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for catPhotoKb. */
+export function catPhotoKbButtons(lg, svcId, idx, total) {
+  return _norm(catPhotoKb(lg, svcId, idx, total).reply_markup.inline_keyboard);
+}
+
+/** Raw rows for aboutPhotoKb. */
+export function aboutPhotoKbButtons(lg, idx, total, instagramUrl) {
+  return _norm(aboutPhotoKb(lg, idx, total, instagramUrl).reply_markup.inline_keyboard);
+}
+

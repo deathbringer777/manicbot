@@ -9,8 +9,9 @@ export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const TIME_RE = /^\d{2}:\d{2}$/;
 
 export const CB = {
-  NOOP:      '_',
-  MAIN:      'main',
+  NOOP:        '_',
+  MAIN:        'main',
+  CLIENT_VIEW: 'cv',    // Switch to client view (admin/master → see salon as a client)
   BOOK:      'book',
   MY:        'my',
   PRICES:    'prices',

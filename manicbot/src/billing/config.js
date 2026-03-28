@@ -21,9 +21,9 @@ export const BILLING_STATUS = {
 };
 
 export const PLAN_LIMITS = {
-  start:  { masters: 1,        ai: false, support: false, calendar: false, whiteLabel: false },
-  pro:    { masters: 5,        ai: true,  support: true,  calendar: true,  whiteLabel: false },
-  studio: { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true  },
+  start:  { masters: 1,        ai: false, support: false, calendar: false, whiteLabel: false, channels: ['telegram'],                             wa_templates_monthly: 0    },
+  pro:    { masters: 5,        ai: true,  support: true,  calendar: true,  whiteLabel: false, channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 500  },
+  studio: { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true,  channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 5000 },
 };
 
 export const TRIAL_DURATION_MS = 7 * 24 * 3600 * 1000;  // 7 дней

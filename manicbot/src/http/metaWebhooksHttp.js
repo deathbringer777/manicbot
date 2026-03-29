@@ -15,10 +15,16 @@ import { envCtx } from './envCtx.js';
  * @param {Request} request
  * @param {any} env
  * @param {URL} url
- * @param {any} [telegramCtx] context from getCtx — optional waitUntil (usually undefined)
+ * @param {any} [execCtx] Cloudflare `ExecutionContext` with waitUntil, or legacy ctx with optional waitUntil
  * @returns {Promise<Response | null>}
  */
-export async function tryMetaWebhooks(request, env, url, telegramCtx) {
+function scheduleBackground(execCtx, task) {
+  const wu = execCtx && typeof execCtx.waitUntil === 'function' ? execCtx.waitUntil.bind(execCtx) : null;
+  if (wu) wu(task);
+  else task.catch(e => console.error('[meta] background task:', e?.message || e));
+}
+
+export async function tryMetaWebhooks(request, env, url, execCtx) {
   if (request.method === 'GET' && url.pathname === '/webhook/wa') {
     return handleHubChallenge(url, env.META_VERIFY_TOKEN_WA || '');
   }
@@ -70,7 +76,7 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
           console.error('[wa] process error:', e.message);
         }
       };
-      telegramCtx?.waitUntil ? telegramCtx.waitUntil(processWA()) : processWA().catch(() => {});
+      scheduleBackground(execCtx, processWA());
     }
     return new Response('OK');
   }
@@ -113,6 +119,9 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
             }
             const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
             if (!channelConfig) continue;
+            if (!channelConfig.token) {
+              console.warn('[ig] no token after getChannelConfig — cannot send replies; tenant:', resolved.tenantId);
+            }
             const adapter = new InstagramAdapter({
               tenantId: resolved.tenantId,
               channelConfig,
@@ -121,14 +130,16 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
             const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
             if (!ctx) continue;
             await initServices(ctx);
-            const inbound = adapter.normalize(entry);
-            if (inbound) await handleInbound(ctx, inbound);
+            for (const m of entry?.messaging ?? []) {
+              const inbound = adapter.normalizeMessaging(m, entry);
+              if (inbound) await handleInbound(ctx, inbound);
+            }
           }
         } catch (e) {
           console.error('[ig] process error:', e.message);
         }
       };
-      telegramCtx?.waitUntil ? telegramCtx.waitUntil(processIG()) : processIG().catch(() => {});
+      scheduleBackground(execCtx, processIG());
     }
     return new Response('OK');
   }

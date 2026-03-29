@@ -77,7 +77,8 @@ export async function handleInbound(ctx, inbound) {
  */
 export async function isWithinMessageWindow(ctx, channelType, channelUserId) {
   if (!ctx?.db || !ctx.tenantId) return false;
-  const rows = await dbAll(ctx,
+  const rows = await dbAll(
+    ctx,
     'SELECT last_user_message_at FROM message_windows WHERE tenant_id = ? AND channel_type = ? AND channel_user_id = ? LIMIT 1',
     ctx.tenantId, channelType, channelUserId,
   );
@@ -135,7 +136,14 @@ async function upsertConversation(ctx, inbound) {
  * @private
  */
 function _inboundToMsg(inbound) {
-  const cid = parseInt(inbound.channelUserId, 10) || inbound.channelUserId;
+  const raw = inbound.channelUserId;
+  const cid =
+    inbound.channel === 'whatsapp' || inbound.channel === 'instagram'
+      ? String(raw ?? '')
+      : (() => {
+          const n = parseInt(raw, 10);
+          return Number.isFinite(n) ? n : String(raw ?? '');
+        })();
   return {
     chat: { id: cid, type: 'private' },
     from: {
@@ -158,7 +166,14 @@ function _inboundToMsg(inbound) {
  * @private
  */
 function _inboundToCb(inbound) {
-  const cid = parseInt(inbound.channelUserId, 10) || inbound.channelUserId;
+  const raw = inbound.channelUserId;
+  const cid =
+    inbound.channel === 'whatsapp' || inbound.channel === 'instagram'
+      ? String(raw ?? '')
+      : (() => {
+          const n = parseInt(raw, 10);
+          return Number.isFinite(n) ? n : String(raw ?? '');
+        })();
   const msgId = inbound.callbackMessageId ? parseInt(inbound.callbackMessageId, 10) : 0;
   return {
     id: `${inbound.channel}_${inbound.channelUserId}_${Date.now()}`,

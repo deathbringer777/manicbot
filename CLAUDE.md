@@ -214,6 +214,16 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 - `CLOUDFLARE_ACCOUNT_ID`
 - `WORKERS_AI_API_TOKEN`
 
+**Meta channels** (WhatsApp / Instagram via [`metaWebhooksHttp.js`](manicbot/src/http/metaWebhooksHttp.js)):
+- `META_APP_SECRET` — must match the Meta app; required for signed POST webhooks (otherwise 403).
+- `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` — webhook verification; same values on Pages for Mini App hints.
+- `BOT_ENCRYPTION_KEY` — decrypts `channel_configs.token_encrypted` for outbound Graph calls.
+- Optional: `INSTAGRAM_IGNORE_SENDER_IDS`, `INSTAGRAM_AI_TRIGGER` — see [META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md).
+
+**Outbound Instagram** uses `graph.facebook.com` + Page ID + Page access token ([`channels/instagram.js`](manicbot/src/channels/instagram.js)); **`entry.id`** is matched to `page_id` / `instagram_business_id` / `ig_account_id` in D1 ([`channels/resolver.js`](manicbot/src/channels/resolver.js)).
+
+**IG E2E fixture:** `cd manicbot && npm run ig-e2e:tenant -- --owner=TG_USER_ID --bot-id=BOT_ID` (optional `--dry-run` / `--local`) — see [`META_CHANNELS_SETUP.md`](manicbot/META_CHANNELS_SETUP.md) § «Тестовый тенант для E2E».
+
 ### Admin Mini-App
 ```bash
 cd manicbot/admin-app/

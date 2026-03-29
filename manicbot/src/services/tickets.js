@@ -1,5 +1,6 @@
 import { dbGet, dbRun } from '../utils/db.js';
 import { getChatHistory } from './chat.js';
+import { kvDel } from '../utils/kv.js';
 
 export async function getHumanRequestCount(ctx, cid) {
   if (!ctx?.db || !ctx?.tenantId) return 0;
@@ -70,6 +71,7 @@ export async function clearTicket(ctx, clientCid) {
     'UPDATE local_tickets SET open = 0 WHERE tenant_id = ? AND client_cid = ?',
     ctx.tenantId, clientCid,
   );
+  if (ctx.kv) await kvDel(ctx, `ticket_fwd_ack:${clientCid}`);
 }
 
 export function isTicketCloseWord(txt) {

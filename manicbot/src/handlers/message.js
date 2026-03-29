@@ -2,9 +2,13 @@ import { CB, STEP } from '../config.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
-import { escHtml, fill, t, svcName, isValidChatId, detectLang } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
+
+function ticketFwdAckKey(cid) {
+  return `ticket_fwd_ack:${cid}`;
+}
 import { send, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';
@@ -206,7 +210,12 @@ export async function onMsg(ctx, msg) {
   if (msg.chat.type !== 'private') return;
 
   const cid = msg.chat.id;
-  if (!isValidChatId(cid)) return;
+  if (!isValidChatId(cid)) {
+    if (ctx.channel?.type === 'instagram' || ctx.channel?.type === 'whatsapp') {
+      console.warn('[onMsg] invalid channel user id (rejected):', ctx.channel?.type, typeof cid, String(cid).slice(0, 80));
+    }
+    return;
+  }
   if (!await checkRateLimit(ctx, cid)) {
     const lg = (await getLang(ctx, cid)) || 'ru';
     await send(ctx, cid, t(lg, 'rate_limit'));
@@ -430,6 +439,18 @@ export async function onMsg(ctx, msg) {
           for (const m of masters) if (m.chatId && !m.onVacation) await send(ctx, m.chatId, toSend);
           if (adminId) await send(ctx, adminId, toSend);
           if (ctx.adminChatId) await send(ctx, ctx.adminChatId, toSend);
+        }
+        if (ctx.kv) {
+          const ackK = ticketFwdAckKey(cid);
+          const seen = await kvGet(ctx, ackK);
+          if (!seen) {
+            await kvPut(ctx, ackK, true, { expirationTtl: 172800 });
+            await send(ctx, cid, t(lg, 'ticket_forwarded_ok'));
+          } else {
+            await send(ctx, cid, '✅');
+          }
+        } else {
+          await send(ctx, cid, t(lg, 'ticket_forwarded_ok'));
         }
         return;
       }
@@ -1237,6 +1258,9 @@ export async function onMsg(ctx, msg) {
     return showAdminCancelAllConfirm(ctx, cid);
   }
 
+  if (!instagramAiTriggerAllows(ctx, txt)) {
+    return send(ctx, cid, t(lg, 'ig_ai_trigger_hint'));
+  }
   return handleAIChat(ctx, cid, txt, lg, realRole, msg.from);
 }
 

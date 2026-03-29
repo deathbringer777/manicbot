@@ -15,6 +15,8 @@ export default {
   consultant_notify: '👤 <b>Client requests a consultant</b>\n\n👤 {name}\n📱 {phone}\n🔗 {username}\n\nConnect or decline — client is waiting.',
   consultant_constructive: '🙏 Let\'s keep the conversation constructive. Need help? Press /start or "Connect with consultant".',
 
+  ig_ai_trigger_hint: '💬 For the assistant to reply, include a keyword from the salon profile or pinned post (e.g. about booking or services).',
+
   ticket_desc: '💬 <b>Chat mode with consultant</b>\n\nYou\'re connecting with a specialist or admin. The bot will enter chat mode: your messages go to the specialist, replies to you. To end — write STOP.',
   ticket_taken_by: '✅ <b>{name}</b> has joined. Write messages — they\'ll reach the specialist.',
   ticket_taken_else: '⚠️ This ticket was already claimed by another agent.',
@@ -26,6 +28,7 @@ export default {
   ticket_closed_master: '🔒 Ticket closed. Client is back to normal mode.',
   ticket_declined: '🙏 Sorry, all specialists are busy. Try again in 30 minutes or press /start to book.',
   ticket_from_client: '💬 <b>Client:</b>\n{msg}',
+  ticket_forwarded_ok: '✅ Your message was sent to the team. Please wait for a reply here. To leave consultant chat — write STOP.',
   ticket_reply_sent: '✅ Sent to client.',
   ticket_master_hint: '💬 Chat with client. Write messages here — they\'ll go to the client. Press "Close ticket" when the issue is resolved.',
   ticket_internal_note: '📋 <i>Context (only for specialist/admin):</i>\n\n{note}',

@@ -32,6 +32,43 @@ export function detectLang(code) {
   return null;
 }
 
+/**
+ * Telegram chat/user IDs are numeric. WhatsApp and Instagram use string identifiers
+ * (phone digits or IGSID) that must not be passed through JS Number — large Instagram
+ * IDs exceed Number.MAX_SAFE_INTEGER and would corrupt KV / D1 lookups.
+ */
+/** Meta IGSID / WA ids can be long strings; keep numeric-only to match Telegram-style ids. */
+const OMNICHANNEL_CHAT_ID_RE = /^\+?[0-9]{1,64}$/;
+
 export function isValidChatId(id) {
-  return typeof id === 'number' && Number.isFinite(id) && id !== 0;
+  if (typeof id === 'number' && Number.isFinite(id) && id !== 0) return true;
+  if (typeof id === 'string' && OMNICHANNEL_CHAT_ID_RE.test(id)) return true;
+  return false;
+}
+
+/**
+ * Parse comma-separated trigger substrings from Worker secret INSTAGRAM_AI_TRIGGER.
+ * @param {string|undefined|null} raw
+ * @returns {string[]} lowercased non-empty tokens
+ */
+export function parseInstagramAiTriggers(raw) {
+  if (raw == null || String(raw).trim() === '') return [];
+  return String(raw)
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * If Instagram channel and triggers are configured, text must contain at least one trigger substring.
+ * @param {{ channel?: { type?: string }, INSTAGRAM_AI_TRIGGER?: string }} ctxOrEnv
+ * @param {string} txt
+ * @returns {boolean} true when handleAIChat may run for this message
+ */
+export function instagramAiTriggerAllows(ctxOrEnv, txt) {
+  if (ctxOrEnv?.channel?.type !== 'instagram') return true;
+  const triggers = parseInstagramAiTriggers(ctxOrEnv?.INSTAGRAM_AI_TRIGGER);
+  if (triggers.length === 0) return true;
+  const lower = String(txt ?? '').toLowerCase();
+  return triggers.some(t => t.length > 0 && lower.includes(t));
 }

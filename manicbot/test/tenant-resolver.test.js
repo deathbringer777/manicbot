@@ -81,6 +81,42 @@ describe('tenant resolver (D1)', () => {
   });
 });
 
+describe('getCtx Meta webhook paths', () => {
+  it('does not treat /webhook/ig as Telegram bot id (no resolveTenantFromBotId ig)', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const env = {
+      MANICBOT: kv,
+      DB: db,
+      BOT_TOKEN: '12345:AAxxx',
+      WEBHOOK_SECRET: 'wh',
+      ADMIN_KEY: 'k',
+    };
+    const url = new URL('https://x/webhook/ig');
+    const req = new Request(url, { method: 'POST' });
+    const out = await getCtx(env, url, req);
+    expect(out).not.toBeNull();
+    expect(out.prefix).toBe('b:12345:');
+  });
+
+  it('does not treat /webhook/wa as Telegram bot id', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const env = {
+      MANICBOT: kv,
+      DB: db,
+      BOT_TOKEN: '999:AA',
+      WEBHOOK_SECRET: 'wh',
+      ADMIN_KEY: 'k',
+    };
+    const url = new URL('https://x/webhook/wa');
+    const req = new Request(url, { method: 'POST' });
+    const out = await getCtx(env, url, req);
+    expect(out).not.toBeNull();
+    expect(out.prefix).toBe('b:999:');
+  });
+});
+
 describe('getCtx REQUIRE_WEBHOOK_BOT_ID', () => {
   it('returns null for POST /webhook when REQUIRE_WEBHOOK_BOT_ID=1 and DB bound', async () => {
     const db = createMockD1();

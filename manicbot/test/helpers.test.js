@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { escHtml, fill, t, p2, detectLang, isValidChatId, isCorrectionSvc } from '../src/utils/helpers.js';
+import {
+  escHtml, fill, t, p2, detectLang, isValidChatId, isCorrectionSvc,
+  parseInstagramAiTriggers, instagramAiTriggerAllows,
+} from '../src/utils/helpers.js';
 
 describe('escHtml', () => {
   it('escapes HTML entities', () => {
@@ -80,13 +83,20 @@ describe('isValidChatId', () => {
   it('accepts valid IDs', () => {
     expect(isValidChatId(123456)).toBe(true);
     expect(isValidChatId(-100123)).toBe(true);
+    expect(isValidChatId('48123456789')).toBe(true);
+    expect(isValidChatId('+48123456789')).toBe(true);
+    expect(isValidChatId('17841405357341234')).toBe(true);
+    expect(isValidChatId('1' + '2'.repeat(40))).toBe(true);
   });
 
   it('rejects invalid IDs', () => {
     expect(isValidChatId(0)).toBe(false);
     expect(isValidChatId(NaN)).toBe(false);
     expect(isValidChatId(Infinity)).toBe(false);
-    expect(isValidChatId('123')).toBe(false);
+    expect(isValidChatId('')).toBe(false);
+    expect(isValidChatId('12a')).toBe(false);
+    expect(isValidChatId('not-digits')).toBe(false);
+    expect(isValidChatId('1' + '2'.repeat(65))).toBe(false);
   });
 });
 
@@ -95,5 +105,51 @@ describe('isCorrectionSvc', () => {
     expect(isCorrectionSvc('correction')).toBe(true);
     expect(isCorrectionSvc('classic')).toBe(false);
     expect(isCorrectionSvc(null)).toBe(false);
+  });
+});
+
+describe('parseInstagramAiTriggers', () => {
+  it('returns empty for null/empty', () => {
+    expect(parseInstagramAiTriggers(null)).toEqual([]);
+    expect(parseInstagramAiTriggers('')).toEqual([]);
+    expect(parseInstagramAiTriggers('  \t  ')).toEqual([]);
+  });
+
+  it('splits on comma and lowercases', () => {
+    expect(parseInstagramAiTriggers('Запись, ВОПРОС ,manic')).toEqual(['запись', 'вопрос', 'manic']);
+  });
+
+  it('drops empty segments between commas', () => {
+    expect(parseInstagramAiTriggers(',,запись,, ,')).toEqual(['запись']);
+  });
+});
+
+describe('instagramAiTriggerAllows', () => {
+  const igCtx = triggers => ({
+    channel: { type: 'instagram' },
+    INSTAGRAM_AI_TRIGGER: triggers,
+  });
+
+  it('allows when not instagram', () => {
+    expect(instagramAiTriggerAllows({ channel: { type: 'telegram' } }, 'hello')).toBe(true);
+    expect(instagramAiTriggerAllows({}, 'x')).toBe(true);
+  });
+
+  it('allows when triggers empty', () => {
+    expect(instagramAiTriggerAllows(igCtx(''), 'привет')).toBe(true);
+    expect(instagramAiTriggerAllows(igCtx(undefined), 'привет')).toBe(true);
+  });
+
+  it('allows when text contains any trigger substring', () => {
+    expect(instagramAiTriggerAllows(igCtx('запись,вопрос'), 'Хочу ЗАПИСЬ на завтра')).toBe(true);
+    expect(instagramAiTriggerAllows(igCtx('manic'), 'MANIC bot')).toBe(true);
+  });
+
+  it('blocks when no trigger matches', () => {
+    expect(instagramAiTriggerAllows(igCtx('запись'), 'только привет')).toBe(false);
+  });
+
+  it('allows when all comma segments empty after trim (no effective triggers)', () => {
+    expect(instagramAiTriggerAllows(igCtx(' , , '), 'привет')).toBe(true);
   });
 });

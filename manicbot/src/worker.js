@@ -28,7 +28,7 @@ function disallowLegacyWebhook(env, request, url) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, executionCtx) {
     const url = new URL(request.url);
 
     await ensureDemoBotsProvisioned(env);
@@ -43,6 +43,10 @@ export default {
     if (res) return res;
 
     res = await tryGoogle(request, env, url);
+    if (res) return res;
+
+    // Meta WA/IG before getCtx: paths /webhook/wa and /webhook/ig are not Telegram bot ids.
+    res = await tryMetaWebhooks(request, env, url, executionCtx);
     if (res) return res;
 
     const isAdminPath = url.pathname.startsWith('/admin/');
@@ -83,9 +87,6 @@ export default {
     if (res) return res;
 
     res = await tryTelegramWebhook(request, ctx, url);
-    if (res) return res;
-
-    res = await tryMetaWebhooks(request, env, url, ctx);
     if (res) return res;
 
     return new Response('Not Found', { status: 404 });

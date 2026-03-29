@@ -57,6 +57,23 @@ function hasRequestContact(extra) {
   return kb.some(row => row.some(btn => btn.request_contact));
 }
 
+/**
+ * WA/IG adapters return `{ ok: false, error }` on Graph failures; handlers rarely check.
+ * Log so Cloudflare logs show why DMs are silent.
+ * @param {Promise<unknown>} p
+ * @param {string} op
+ * @param {string} channelType
+ */
+function logMetaAdapterResult(p, op, channelType) {
+  const label = channelType || 'meta';
+  return Promise.resolve(p).then(r => {
+    if (r && typeof r === 'object' && r.ok === false) {
+      console.error(`[${label}] ${op} failed:`, r.error ?? r.status ?? r);
+    }
+    return r;
+  });
+}
+
 // ── Telegram API (original, used for TG channel) ────────────────────────────
 
 async function tgApi(ctx, method, body) {
@@ -107,19 +124,31 @@ export function send(ctx, chatId, text, extra = {}) {
   // ── WA / IG bridge ──
   // Handle request_contact keyboard → replace with text prompt
   if (hasRequestContact(extra)) {
-    return ctx.channel.send(String(chatId), {
-      text: text + '\n\nPlease type your phone number (e.g. +48123456789):',
-      parseMode: 'HTML',
-    });
+    return logMetaAdapterResult(
+      ctx.channel.send(String(chatId), {
+        text: text + '\n\nPlease type your phone number (e.g. +48123456789):',
+        parseMode: 'HTML',
+      }),
+      'send',
+      ctx.channel.type,
+    );
   }
 
   // Handle remove_keyboard → send text only
   if (extra?.reply_markup?.remove_keyboard) {
-    return ctx.channel.send(String(chatId), { text, parseMode: 'HTML' });
+    return logMetaAdapterResult(
+      ctx.channel.send(String(chatId), { text, parseMode: 'HTML' }),
+      'send',
+      ctx.channel.type,
+    );
   }
 
   const buttons = extractAndTruncateButtons(extra, ctx.channel.type);
-  return ctx.channel.send(String(chatId), { text, buttons, parseMode: 'HTML' });
+  return logMetaAdapterResult(
+    ctx.channel.send(String(chatId), { text, buttons, parseMode: 'HTML' }),
+    'send',
+    ctx.channel.type,
+  );
 }
 
 export function edit(ctx, chatId, msgId, text, extra = {}) {
@@ -127,7 +156,11 @@ export function edit(ctx, chatId, msgId, text, extra = {}) {
     return tgApi(ctx, 'editMessageText', { chat_id: chatId, message_id: msgId, text, parse_mode: 'HTML', ...extra });
   }
   const buttons = extractAndTruncateButtons(extra, ctx.channel.type);
-  return ctx.channel.edit(String(chatId), msgId, { text, buttons, parseMode: 'HTML' });
+  return logMetaAdapterResult(
+    ctx.channel.edit(String(chatId), msgId, { text, buttons, parseMode: 'HTML' }),
+    'edit',
+    ctx.channel.type,
+  );
 }
 
 export function answerCb(ctx, cbId, text = '') {
@@ -144,7 +177,11 @@ export async function sendPhoto(ctx, chatId, url, caption, extra = {}) {
     return send(ctx, chatId, `🖼 ${caption}`, extra);
   }
   try {
-    return await ctx.channel.sendPhoto(String(chatId), url, caption, extra);
+    return await logMetaAdapterResult(
+      ctx.channel.sendPhoto(String(chatId), url, caption, extra),
+      'sendPhoto',
+      ctx.channel.type,
+    );
   } catch (e) {
     // Fallback: send as text with caption
     return send(ctx, chatId, `🖼 ${caption}`, extra);
@@ -167,7 +204,11 @@ export async function editPhoto(ctx, chatId, msgId, url, caption, extra = {}) {
   }
   // WA/IG: no edit support, send new photo
   try {
-    return await ctx.channel.sendPhoto(String(chatId), url, caption, extra);
+    return await logMetaAdapterResult(
+      ctx.channel.sendPhoto(String(chatId), url, caption, extra),
+      'sendPhoto',
+      ctx.channel.type,
+    );
   } catch (_) {
     return null;
   }
@@ -191,7 +232,11 @@ export async function sendIcs(ctx, chatId, content, fname, caption) {
   }
   // WA/IG: try sendDocument, fallback to text
   try {
-    return await ctx.channel.sendDocument(String(chatId), content, fname, caption);
+    return await logMetaAdapterResult(
+      ctx.channel.sendDocument(String(chatId), content, fname, caption),
+      'sendDocument',
+      ctx.channel.type,
+    );
   } catch (e) {
     console.error('sendIcs channel error:', e.message);
     return send(ctx, chatId, caption);

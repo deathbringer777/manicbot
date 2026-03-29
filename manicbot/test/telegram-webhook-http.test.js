@@ -45,9 +45,15 @@ describe('tryTelegramWebhook', () => {
     expect(res).toBeNull();
   });
 
-  it('returns 500 when WEBHOOK_SECRET is not configured (no empty-secret bypass)', async () => {
+  it('returns 200 OK when WEBHOOK_SECRET is empty (no-secret mode, backward compat)', async () => {
     const req = post('/webhook/bot1', { 'X-Telegram-Bot-Api-Secret-Token': '' }, {});
     const res = await tryTelegramWebhook(req, { ...baseCtx, WEBHOOK_SECRET: '' }, new URL(req.url));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 OK when WEBHOOK_SECRET is null (no-secret mode)', async () => {
+    const req = post('/webhook/bot1', { 'X-Telegram-Bot-Api-Secret-Token': '' }, {});
+    const res = await tryTelegramWebhook(req, { ...baseCtx, WEBHOOK_SECRET: null }, new URL(req.url));
+    expect(res.status).toBe(200);
   });
 });

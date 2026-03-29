@@ -21,4 +21,20 @@ describe('checkAdmin', () => {
   it('returns false for invalid base64', () => {
     expect(checkAdmin(makeRequest('Basic !!!invalid!!!'), 'key')).toBe(false);
   });
+
+  it('returns true for correct Basic credentials', () => {
+    // Base64 of "user:correctkey"
+    const b64 = btoa('user:correctkey');
+    expect(checkAdmin(makeRequest(`Basic ${b64}`), 'correctkey')).toBe(true);
+  });
+
+  it('returns false for wrong password', () => {
+    const b64 = btoa('user:wrongkey');
+    expect(checkAdmin(makeRequest(`Basic ${b64}`), 'correctkey')).toBe(false);
+  });
+
+  it('returns false when no colon separator in decoded string', () => {
+    const b64 = btoa('nocolon');
+    expect(checkAdmin(makeRequest(`Basic ${b64}`), 'nocolon')).toBe(false);
+  });
 });

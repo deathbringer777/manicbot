@@ -37,10 +37,7 @@ export async function verifyMetaSignature(body, signatureHeader, appSecret) {
     const hex = Array.from(new Uint8Array(sig), b => b.toString(16).padStart(2, '0')).join('');
 
     // Constant-time comparison
-    if (hex.length !== expected.length) return false;
-    const a = new TextEncoder().encode(hex);
-    const b = new TextEncoder().encode(expected);
-    return await crypto.subtle.timingSafeEqual(a, b);
+    return timingSafeEqual(hex, expected);
   } catch (e) {
     console.error('[meta-verify] signature check failed:', e.message);
     return false;

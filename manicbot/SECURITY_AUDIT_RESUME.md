@@ -30,17 +30,24 @@
 - **Файл:** `src/utils/helpers.js`.
 - **Тест:** в `test/helpers.test.js` добавлена проверка `escHtml("'apos'") === '&#39;apos&#39;'`.
 
-### 3. Telegram webhook: пустой `WEBHOOK_SECRET` (2026-03-29)
+### 3. Telegram webhook: секрет (2026-03-29, пересмотрено 2026-03-29)
 
-- **Проблема:** при пустом секрете в контексте и пустом заголовке `X-Telegram-Bot-Api-Secret-Token` сравнение давало «совпадение»; запросы проходили без настоящей аутентификации. Пустой секрет в D1 для бота также давал неочевидное поведение.
-- **Исправление:** если `WEBHOOK_SECRET` отсутствует или пустая строка — ответ **500** и лог `[telegram-webhook] WEBHOOK_SECRET missing...`; иначе проверка через `timingSafeEqual` как раньше.
+- **Проблема A:** при пустом секрете в контексте и пустом заголовке сравнение давало «совпадение»; запросы проходили без аутентификации.
+- **Исправление A (первичное — было отменено):** возврат 500 при пустом `WEBHOOK_SECRET`. **Вызвало регрессию** — боты, зарегистрированные без `secret_token`, перестали отвечать.
+- **Исправление B (финальное):** если `WEBHOOK_SECRET` задан и непустой — строгое сравнение через `timingSafeEqual`, иначе (пустой/null) — запрос проходит с предупреждением в лог `[telegram-webhook] WEBHOOK_SECRET not set...`. Обратная совместимость сохранена.
 - **Файлы:** `src/http/telegramWebhookHttp.js`, `test/telegram-webhook-http.test.js`.
 
 ### 4. Meta hub verify: сравнение токена (2026-03-29)
 
-- **Проблема:** `hub.verify_token` сравнивался с `===` (не constant-time для строк одинаковой длины).
-- **Исправление:** `timingSafeEqual(token, storedVerifyToken)` при непустых токенах (условие `token && storedVerifyToken` сохранено).
+- **Проблема:** `hub.verify_token` сравнивался с `===` (не constant-time).
+- **Исправление:** `timingSafeEqual(token, storedVerifyToken)` при непустых токенах.
 - **Файл:** `src/channels/meta-verify.js`.
+
+### 5. Meta signature verify: портируемость (2026-03-29)
+
+- **Проблема:** `verifyMetaSignature` использовал `crypto.subtle.timingSafeEqual` — Cloudflare Workers extension, в Node.js/тестах отсутствует (требовал polyfill в тестах).
+- **Исправление:** заменено на `timingSafeEqual(hex, expected)` из `../utils/security.js` (уже импортирован). Polyfill из `test/meta-verify.test.js` удалён.
+- **Файлы:** `src/channels/meta-verify.js`, `test/meta-verify.test.js`.
 
 ---
 

@@ -67,6 +67,7 @@ export const tenantRoles = sqliteTable("tenant_roles", {
   tenantId: text("tenant_id").notNull(),
   chatId: integer("chat_id").notNull(),
   role: text("role").notNull(),
+  createdAt: integer("created_at").notNull(),
 }, (t) => [uniqueIndex("idx_tenant_role_unique").on(t.tenantId, t.chatId)]);
 
 export const platformRoles = sqliteTable("platform_roles", {

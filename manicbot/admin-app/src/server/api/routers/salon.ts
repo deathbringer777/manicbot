@@ -301,9 +301,10 @@ export const salonRouter = createTRPCRouter({
         name: input.name,
       });
       // Also assign tenant_roles entry so master can access the mini-app
+      const now = Math.floor(Date.now() / 1000);
       await ctx.db.insert(tenantRoles)
-        .values({ tenantId: input.tenantId, chatId: input.chatId, role: "master" })
-        .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master" } });
+        .values({ tenantId: input.tenantId, chatId: input.chatId, role: "master", createdAt: now })
+        .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
       return { success: true };
     }),
 

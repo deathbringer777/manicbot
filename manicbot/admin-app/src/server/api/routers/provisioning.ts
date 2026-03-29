@@ -192,12 +192,14 @@ export const provisioningRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const now = Math.floor(Date.now() / 1000);
       await ctx.db
         .insert(tenantRoles)
         .values({
           tenantId: input.tenantId,
           chatId: input.chatId,
           role: input.role,
+          createdAt: now,
         })
         .onConflictDoNothing();
       return { ok: true };

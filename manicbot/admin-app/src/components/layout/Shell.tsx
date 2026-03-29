@@ -282,10 +282,14 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
   useEffect(() => { setAdmin(getAdminInfo()); }, []);
 
-  // Mobile: show max 5 tabs. If more, last slot = "More" (Settings icon)
+  // Mobile: keep Settings visible because creator preview/language live there.
   const mobileNavItems = activeNavItems.length <= 5
     ? activeNavItems
-    : activeNavItems.slice(0, 5);
+    : (() => {
+        const settingsItem = activeNavItems.find((item) => item.href === "/settings");
+        const leading = activeNavItems.filter((item) => item.href !== "/settings").slice(0, 4);
+        return settingsItem ? [...leading, settingsItem] : activeNavItems.slice(0, 5);
+      })();
 
   return (
     <div className="flex h-screen w-full flex-col md:flex-row bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
@@ -306,6 +310,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
         <nav className="flex-1 space-y-0.5 overflow-y-auto">
           {activeNavItems.map((item) => {
             const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const isSettingsHub = item.href === "/settings" && role === "system_admin" && !previewRole;
             return (
               <Link
                 key={item.href}
@@ -318,6 +323,11 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
               >
                 <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-brand-400" : ""}`} />
                 <span>{item.label}</span>
+                {isSettingsHub && (
+                  <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                    Mode
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -366,6 +376,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
           <div className="flex items-center justify-around px-1 py-1 safe-area-pb">
             {mobileNavItems.map((item) => {
               const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              const isSettingsHub = item.href === "/settings" && role === "system_admin" && !previewRole;
               return (
                 <Link
                   key={item.href}
@@ -374,8 +385,9 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
                     isActive ? "text-brand-400" : "text-slate-500"
                   }`}
                 >
-                  <div className={`p-1 rounded-lg transition-all ${isActive ? "bg-brand-500/20 scale-110" : ""}`}>
+                  <div className={`relative p-1 rounded-lg transition-all ${isActive ? "bg-brand-500/20 scale-110" : ""}`}>
                     <item.icon className="h-5 w-5" />
+                    {isSettingsHub && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />}
                   </div>
                   <span className={`text-[9px] font-medium mt-0.5 ${isActive ? "text-brand-400" : "text-slate-600"}`}>
                     {item.label}

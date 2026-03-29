@@ -54,7 +54,7 @@ Any change under `manicbot/migrations/` must stay in sync with:
 1. `manicbot/src/db/schema.sql` (reference DDL)
 2. `manicbot/admin-app/src/server/db/schema.ts` (Drizzle)
 
-Run `npm run check-schema` in `manicbot/` in CI to verify table names match.
+Run `npm run check-schema` in `manicbot/` in CI to verify table names and columns match.
 
 ---
 
@@ -156,6 +156,7 @@ Telegram Mini App opens
 | `master` | `routers/masterRouter.ts` | `master` or `tenant_owner` for tenantId |
 | `support` | `routers/support.ts` | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`) |
 | `channels` | `routers/channels.ts` | protected + `assertTenantOwner` |
+| `googleCalendar` | `routers/googleCalendar.ts` | protected + `assertTenantOwner` |
 | `conversations` | `routers/conversations.ts` | protected + `assertTenantOwner` |
 | `metrics` | `routers/metrics.ts` | adminProcedure |
 | `users` | `routers/users.ts` | adminProcedure |
@@ -186,7 +187,7 @@ Telegram Mini App opens
 ```bash
 cd manicbot/
 npm test                     # Worker Vitest (~826 tests)
-npm run check-schema         # D1: table names in schema.sql vs Drizzle schema.ts
+npm run check-schema         # D1: table + column parity between schema.sql and Drizzle schema.ts
 
 cd admin-app/
 npm run typecheck
@@ -259,6 +260,8 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 | `channel_configs` | WhatsApp / Instagram bindings per tenant |
 | `conversations` | Unified inbox rows (омниканал) |
 | `message_windows` | Last user message time (WA/IG 24h policy) |
+| `google_integrations` | Tenant/master Google OAuth integrations + sync status |
+| `google_busy_blocks` | Cached external busy windows loaded from Google Calendar |
 
 ---
 
@@ -290,3 +293,18 @@ if (await isAdmin(ctx, chatId)) { ... }
 // Type-safe chat ID comparison — always String()
 String(ctx.adminChatId) === String(cid)
 ```
+
+## Debugging Bot Silence
+
+When the bot "does not respond", check the context resolution chain in this order:
+
+1. `src/http/resolveCtx.js` / `getCtx()` — D1 tenant/bot resolution for `POST /webhook/{botId}`
+2. `buildLegacyCtx(env)` — legacy single-bot fallback for `POST /webhook`
+3. `buildCtx(env)` — last-resort fallback when D1/legacy resolution partially fails
+
+Notes:
+
+- `src/worker.js` now logs `[worker] context resolution failed` and `[worker] fallback context build failed` with request path/method and stack, but never serializes the full `ctx`.
+- If `REQUIRE_WEBHOOK_BOT_ID=1`, legacy `POST /webhook` is rejected with 403. Use `/webhook/{botId}`.
+- If the worker still serves old behavior, confirm the latest local commit is actually deployed.
+- For Google OAuth connect URLs from Telegram callbacks, `APP_BASE_URL` must be set on the Worker so the bot can mint absolute `/google/connect` links.

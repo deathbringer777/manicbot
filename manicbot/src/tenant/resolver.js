@@ -53,7 +53,15 @@ export function buildTenantCtx(env, resolved) {
     AI: env.AI || null,
     WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
+    BOT_ENCRYPTION_KEY: env.BOT_ENCRYPTION_KEY || null,
+    GOOGLE_SERVICE_ACCOUNT_KEY: env.GOOGLE_SERVICE_ACCOUNT_KEY || null,
+    GOOGLE_OAUTH_CLIENT_ID: env.GOOGLE_OAUTH_CLIENT_ID || null,
+    GOOGLE_OAUTH_CLIENT_SECRET: env.GOOGLE_OAUTH_CLIENT_SECRET || null,
+    GOOGLE_OAUTH_REDIRECT_URI: env.GOOGLE_OAUTH_REDIRECT_URI || null,
+    GOOGLE_TOKEN_ENCRYPTION_KEY: env.GOOGLE_TOKEN_ENCRYPTION_KEY || null,
+    APP_BASE_URL: env.APP_BASE_URL || null,
     baseUrl: null,
+    ADMIN_APP_URL: env.ADMIN_APP_URL || null,
   };
   ctx.channel = new TelegramAdapter(ctx);
   return ctx;
@@ -78,10 +86,19 @@ export function buildLegacyCtx(env) {
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: env.WEBHOOK_SECRET,
     adminChatId: env.ADMIN_CHAT_ID || null,
+    ADMIN_CHAT_ID: env.ADMIN_CHAT_ID || null,
     AI: env.AI || null,
     WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
+    BOT_ENCRYPTION_KEY: env.BOT_ENCRYPTION_KEY || null,
+    GOOGLE_SERVICE_ACCOUNT_KEY: env.GOOGLE_SERVICE_ACCOUNT_KEY || null,
+    GOOGLE_OAUTH_CLIENT_ID: env.GOOGLE_OAUTH_CLIENT_ID || null,
+    GOOGLE_OAUTH_CLIENT_SECRET: env.GOOGLE_OAUTH_CLIENT_SECRET || null,
+    GOOGLE_OAUTH_REDIRECT_URI: env.GOOGLE_OAUTH_REDIRECT_URI || null,
+    GOOGLE_TOKEN_ENCRYPTION_KEY: env.GOOGLE_TOKEN_ENCRYPTION_KEY || null,
+    APP_BASE_URL: env.APP_BASE_URL || null,
     baseUrl: null,
+    ADMIN_APP_URL: env.ADMIN_APP_URL || null,
   };
   ctx.channel = new TelegramAdapter(ctx);
   return ctx;

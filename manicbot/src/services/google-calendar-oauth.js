@@ -553,6 +553,12 @@ export async function deleteGoogleIntegration(ctx, { scope = 'tenant', masterCha
   const integration = await getGoogleIntegration(ctx, { scope, masterChatId });
   if (!integration) return false;
   await stopWatchForIntegration(ctx, integration);
+  await dbRun(
+    ctx,
+    'UPDATE appointments SET google_integration_id = NULL, google_calendar_id = NULL, google_event_id = NULL WHERE tenant_id = ? AND google_integration_id = ?',
+    ctx.tenantId,
+    integration.id,
+  );
   await dbRun(ctx, 'DELETE FROM google_busy_blocks WHERE integration_id = ?', integration.id);
   await dbRun(ctx, 'DELETE FROM google_integrations WHERE id = ? AND tenant_id = ?', integration.id, ctx.tenantId);
   if (scope === 'master' && masterChatId != null) {

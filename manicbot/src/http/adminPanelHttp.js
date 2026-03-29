@@ -211,8 +211,9 @@ tr:hover td{background:#fdf2f8}
 
     // ── Channels section ──
     html += `<h2>📡 Каналы</h2>`;
-    html += `<table><tr><th>Канал</th><th>Статус</th><th>ID</th><th>Webhook</th></tr>`;
-    html += `<tr><td>🤖 Telegram</td><td><span class="badge badge-ok">Подключён</span></td><td>${escHtml(ctx.bot?.botId || '—')}</td><td>${escHtml(url.origin + '/webhook/' + (ctx.bot?.botId || ''))}</td></tr>`;
+    html += `<table><tr><th>Канал</th><th>Статус</th><th>ID (page_id / phone_number_id)</th><th>Webhook</th></tr>`;
+    const telegramWebhook = ctx.bot?.botId ? `${url.origin}/webhook/${ctx.bot.botId}` : `${url.origin}/webhook`;
+    html += `<tr><td>🤖 Telegram</td><td><span class="badge badge-ok">Подключён</span></td><td>${escHtml(ctx.bot?.botId || '—')}</td><td>${escHtml(telegramWebhook)}</td></tr>`;
     for (const ch of channelRows) {
       const type = ch.channel_type;
       const icon = type === 'whatsapp' ? '💬' : type === 'instagram' ? '📸' : '📡';

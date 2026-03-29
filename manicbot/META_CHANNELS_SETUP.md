@@ -35,6 +35,16 @@
 
 **Маршрут Worker:** запросы на `POST /webhook/ig` и `POST /webhook/wa` обрабатываются **до** логики Telegram-`/webhook/{botId}`; сегменты `ig` и `wa` не считаются numeric bot id. Фоновая обработка сообщений привязана к `waitUntil` Cloudflare, чтобы ответ Meta «OK» не обрывал пайплайн.
 
+## HTML admin panel (`/admin`)
+
+Read-only канал-статус теперь виден и в HTML-панели Worker:
+
+- **Telegram** — bot id + webhook URL
+- **WhatsApp** — active/inactive + `phone_number_id` + `/webhook/wa`
+- **Instagram** — active/inactive + `page_id` / `ig_account_id` + `/webhook/ig`
+
+Редактирование и сохранение токенов остаётся только в **Mini App → Channels**.
+
 ## Шаг 3. Сохраните учётные данные в Mini App
 
 ### WhatsApp
@@ -107,6 +117,13 @@
 3. **Meta:** в приложении разработчика нажать **Verify** для webhook — ответ должен быть успешным (Worker обрабатывает challenge).
 4. **Instagram:** в **Recent deliveries** для POST на URL вида `…/webhook/ig` статус **200** (не 403). Если 403 — проверить `META_APP_SECRET` и тело ответа Worker.
 5. **Telegram:** у владельца после `/start` есть меню **«Салон»** (или кнопка каналов в панели админа на Pro+) и ссылка открывает Mini App с `?tab=channels` при наличии каналов в тарифе.
+
+## Troubleshooting
+
+- **Meta verification проходит, но бот молчит:** проверьте, что на Worker заданы `META_APP_SECRET`, нужный `META_VERIFY_TOKEN_*`, и что задеплоен актуальный код. Для Telegram/D1 fallback теперь смотрите логи Worker по сообщениям `[worker] context resolution failed`.
+- **Mini App не показывает verify token:** это обычно Pages env. Выставьте `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` и `WORKER_PUBLIC_URL` в проекте `admin-app`.
+- **`/admin` не показывает IG/WA канал:** проверьте, что у тенанта есть строки в `channel_configs` и вы открываете `/admin` внутри tenant-aware контекста Worker, а не только platform billing page.
+- **Instagram webhook отдаёт 403:** сравните `META_APP_SECRET` с секретом приложения Meta и проверьте тело ответа Worker в Recent deliveries.
 
 ## Тестовый тенант для E2E (Instagram как чат с ботом)
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildCtx, CB, STEP, VALID_LANGS, WORK, TIMEZONE } from '../src/config.js';
+import { buildLegacyCtx, buildTenantCtx } from '../src/tenant/resolver.js';
 
 describe('buildCtx', () => {
   it('builds context from env', () => {
@@ -17,6 +18,84 @@ describe('buildCtx', () => {
     expect(ctx.WEBHOOK_SECRET).toBe(env.WEBHOOK_SECRET);
     expect(ctx.prefix).toBe('b:123456789:');
     expect(ctx.adminChatId).toBe('999');
+  });
+
+  it('exposes the fallback properties handlers rely on', () => {
+    const env = {
+      BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw',
+      ADMIN_KEY: 'test-admin-key',
+      WEBHOOK_SECRET: 'test-secret',
+      MANICBOT: {},
+      ADMIN_CHAT_ID: '999',
+      BOT_ENCRYPTION_KEY: 'x'.repeat(32),
+      GOOGLE_OAUTH_CLIENT_ID: 'cid',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'secret',
+      GOOGLE_OAUTH_REDIRECT_URI: 'https://example.com/google/callback',
+      GOOGLE_TOKEN_ENCRYPTION_KEY: 'y'.repeat(32),
+      APP_BASE_URL: 'https://worker.example.com',
+      ADMIN_APP_URL: 'https://admin.example.com',
+    };
+    const ctx = buildCtx(env);
+
+    expect(ctx.ADMIN_CHAT_ID).toBe('999');
+    expect(ctx.tenantId).toBeNull();
+    expect(ctx.tenant).toBeNull();
+    expect(ctx.bot).toEqual({
+      botId: '123456789',
+      botToken: env.BOT_TOKEN,
+      webhookSecret: env.WEBHOOK_SECRET,
+    });
+    expect(ctx.channel).toBeNull();
+    expect(ctx.BOT_ENCRYPTION_KEY).toBe(env.BOT_ENCRYPTION_KEY);
+  });
+
+  it('keeps the shared compatibility keys across fallback, legacy, and tenant contexts', () => {
+    const env = {
+      BOT_TOKEN: '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw',
+      ADMIN_KEY: 'test-admin-key',
+      WEBHOOK_SECRET: 'test-secret',
+      MANICBOT: {},
+      ADMIN_CHAT_ID: '999',
+      BOT_ENCRYPTION_KEY: 'x'.repeat(32),
+      GOOGLE_SERVICE_ACCOUNT_KEY: '{"type":"service_account"}',
+      GOOGLE_OAUTH_CLIENT_ID: 'cid',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'secret',
+      GOOGLE_OAUTH_REDIRECT_URI: 'https://example.com/google/callback',
+      GOOGLE_TOKEN_ENCRYPTION_KEY: 'y'.repeat(32),
+      APP_BASE_URL: 'https://worker.example.com',
+      ADMIN_APP_URL: 'https://admin.example.com',
+    };
+    const tenantResolved = {
+      tenantId: 'tenant_demo',
+      tenant: { id: 'tenant_demo', name: 'Demo Salon' },
+      bot: { botId: '123456789', botToken: env.BOT_TOKEN, webhookSecret: env.WEBHOOK_SECRET },
+      TG: `https://api.telegram.org/bot${env.BOT_TOKEN}`,
+    };
+
+    const fallbackCtx = buildCtx(env);
+    const legacyCtx = buildLegacyCtx(env);
+    const tenantCtx = buildTenantCtx(env, tenantResolved);
+
+    const sharedKeys = [
+      'ADMIN_CHAT_ID',
+      'BOT_ENCRYPTION_KEY',
+      'GOOGLE_SERVICE_ACCOUNT_KEY',
+      'GOOGLE_OAUTH_CLIENT_ID',
+      'GOOGLE_OAUTH_CLIENT_SECRET',
+      'GOOGLE_OAUTH_REDIRECT_URI',
+      'GOOGLE_TOKEN_ENCRYPTION_KEY',
+      'APP_BASE_URL',
+      'ADMIN_APP_URL',
+    ];
+
+    for (const key of sharedKeys) {
+      expect(fallbackCtx).toHaveProperty(key);
+      expect(legacyCtx).toHaveProperty(key);
+      expect(tenantCtx).toHaveProperty(key);
+    }
+
+    expect(legacyCtx.channel?.type).toBe('telegram');
+    expect(tenantCtx.channel?.type).toBe('telegram');
   });
 
   it('throws on missing BOT_TOKEN', () => {

@@ -11,8 +11,11 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      "~": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      { find: "~", replacement: path.resolve(__dirname, "./src") },
+      // Stub next-auth in test env (avoids importing next/server in Node.js)
+      { find: /^next-auth\/providers\/credentials$/, replacement: path.resolve(__dirname, "src/__mocks__/next-auth-providers-credentials.ts") },
+      { find: /^next-auth$/, replacement: path.resolve(__dirname, "src/__mocks__/next-auth.ts") },
+    ],
   },
 });

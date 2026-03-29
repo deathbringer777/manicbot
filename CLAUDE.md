@@ -225,6 +225,36 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 
 **IG E2E fixture:** `cd manicbot && npm run ig-e2e:tenant -- --owner=TG_USER_ID --bot-id=BOT_ID` (optional `--dry-run` / `--local`) — see [`META_CHANNELS_SETUP.md`](manicbot/META_CHANNELS_SETUP.md) § «Тестовый тенант для E2E».
 
+**Instagram channel provisioning (new client onboarding):**
+
+```bash
+# Create IG channel for existing tenant:
+curl -X POST "https://manicbot.com/admin/ig-channel?key=ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "EAAxxxxxxx...",
+    "pageId": "1784360123456",
+    "tenantId": "t_existing_tenant",
+    "igAccountId": "17841437...",
+    "instagramBusinessId": "25881183..."
+  }'
+
+# Create IG-only tenant (no Telegram bot required):
+curl -X POST "https://manicbot.com/admin/ig-channel?key=ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "EAAxxxxxxx...",
+    "pageId": "1784360123456",
+    "tenantName": "New Salon Name"
+  }'
+```
+
+To update an existing IG token: `POST /admin/ig-token?key=ADMIN_KEY` with `{ "token": "EAA...", "tenantId": "t_xxx" }`.
+
+**IG-only tenants** are fully supported — `buildChannelCtx` works without a Telegram bot (`ctx.bot = null`, `ctx.TG = null`).
+
+**Billing model:** Clients (regular users) always have free access to the bot (booking, info, catalog). Billing gates (`isInactive`) only restrict staff features (admin panel, master panel, AI, calendar, support). Platform admins (`ADMIN_CHAT_ID` / `system_admin`) always bypass all billing checks.
+
 ### Admin Mini-App
 ```bash
 cd manicbot/admin-app/

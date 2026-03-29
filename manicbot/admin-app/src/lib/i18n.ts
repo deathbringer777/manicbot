@@ -127,6 +127,7 @@ const translations = {
   "gate.forbidden":         { ru: "Доступ запрещён", ua: "Доступ заборонено", en: "Access denied", pl: "Dostęp zabroniony" },
   "gate.forbiddenDesc":     { ru: "У вас нет доступа к панели управления.", ua: "У вас немає доступу до панелі керування.", en: "You don't have access to this panel.", pl: "Nie masz dostępu do tego panelu." },
   "gate.init":              { ru: "Инициализация...", ua: "Ініціалізація...", en: "Initializing...", pl: "Inicjalizacja..." },
+  "gate.webLogin":          { ru: "Войти через сайт", ua: "Увійти через сайт", en: "Log in via web", pl: "Zaloguj się przez web" },
 
   // ── CRUD actions ────────────────────────────────────────────────────────────
   "action.add":             { ru: "Добавить",       ua: "Додати",          en: "Add",        pl: "Dodaj" },

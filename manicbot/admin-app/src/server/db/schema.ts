@@ -288,3 +288,20 @@ export const googleBusyBlocks = sqliteTable("google_busy_blocks", {
 }, (t) => [
   index("idx_gcal_busy_lookup").on(t.integrationId, t.startTs, t.endTs),
 ]);
+
+// ─── Web Auth (email/password login for tenant owners) ────────────────────────
+
+export const webUsers = sqliteTable("web_users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  /** Tenant this web user belongs to (required for tenant_owner / master) */
+  tenantId: text("tenant_id"),
+  /** Role: tenant_owner | system_admin | support | technical_support */
+  role: text("role").notNull().default("tenant_owner"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_web_user_email").on(t.email),
+  index("idx_web_user_tenant").on(t.tenantId),
+]);

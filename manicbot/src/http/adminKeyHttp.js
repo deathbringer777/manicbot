@@ -345,5 +345,51 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, count: results.length, results });
   }
 
+  // POST /admin/web-user?key=ADMIN_KEY — create or update a web (email/password) user for the admin-app
+  // Body: { email, password, tenantId?, role? }
+  if (request.method === 'POST' && url.pathname === '/admin/web-user') {
+    const key = url.searchParams.get('key') || '';
+    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+
+    let body;
+    try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400 }); }
+
+    const { email, password, tenantId = null, role = 'tenant_owner' } = body || {};
+    if (!email || !password) return Response.json({ error: 'email and password required' }, { status: 400 });
+    if (password.length < 8) return Response.json({ error: 'password must be at least 8 characters' }, { status: 400 });
+
+    // Hash password with PBKDF2 (Web Crypto — same algorithm as admin-app/src/server/auth/password.ts)
+    const enc = new TextEncoder();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMaterial, 256);
+    const hexEncode = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const passwordHash = `pbkdf2:${hexEncode(salt.buffer)}:${hexEncode(bits)}`;
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const now = Math.floor(Date.now() / 1000);
+    const id = `wu_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+
+    // Upsert (insert or replace on email conflict)
+    try {
+      await env.DB.prepare(
+        `INSERT INTO web_users (id, email, password_hash, tenant_id, role, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET
+           password_hash = excluded.password_hash,
+           tenant_id = excluded.tenant_id,
+           role = excluded.role,
+           updated_at = excluded.updated_at`
+      ).bind(id, normalizedEmail, passwordHash, tenantId, role, now, now).run();
+    } catch (e) {
+      return Response.json({ error: e.message }, { status: 500 });
+    }
+
+    return Response.json({ ok: true, email: normalizedEmail, tenantId, role });
+  }
+
   return null;
 }

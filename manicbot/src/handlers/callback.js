@@ -154,11 +154,14 @@ export async function onCb(ctx, cb) {
 
   if (await isBlocked(ctx, cid)) return send(ctx, cid, t(lg, 'client_blocked'));
 
-  // Inactive/canceled billing: block all except billing-related callbacks for non-platform-admins
+  // Inactive/canceled billing: block staff callbacks, let clients through freely
   if (isInactive(ctx) && !(await isPlatformAdmin(ctx, cid))) {
-    const isBillingCb = d === CB.ADM_BILLING || d === CB.BILLING_PORTAL || d === CB.BILLING_BACK
-      || d.startsWith(CB.BILLING_SUBSCRIBE) || d === CB.MAIN || d === CB.CLIENT_VIEW || d === CB.LANG;
-    if (!isBillingCb) return showInactiveMessage(ctx, cid);
+    const role = await getRole(ctx, cid);
+    if (role !== 'client') {
+      const isBillingCb = d === CB.ADM_BILLING || d === CB.BILLING_PORTAL || d === CB.BILLING_BACK
+        || d.startsWith(CB.BILLING_SUBSCRIBE) || d === CB.MAIN || d === CB.CLIENT_VIEW || d === CB.LANG;
+      if (!isBillingCb) return showInactiveMessage(ctx, cid);
+    }
   }
 
   if (d === CB.MAIN)        return showHomeByRole(ctx, cid, name);
@@ -1180,6 +1183,21 @@ export async function onCb(ctx, cb) {
   }
 
   if (d === CB.CAL_BACK) return send(ctx, cid, t(lg, 'choose_date'), calKb(lg, 0));
+
+  // Instagram: service list page navigation
+  if (d.startsWith(CB.SVC_PAGE)) {
+    const page = Math.max(0, parseInt(d.slice(CB.SVC_PAGE.length)) || 0);
+    return edit(ctx, cid, mid, t(lg, 'choose_svc'), svcKb(ctx, lg, page));
+  }
+
+  // Instagram: master list page navigation
+  if (d.startsWith(CB.MASTER_PAGE)) {
+    const page = Math.max(0, parseInt(d.slice(CB.MASTER_PAGE.length)) || 0);
+    const st = await getState(ctx, cid);
+    if (!st.svcId || !st.date) return;
+    await showMasterPick(ctx, cid, st.svcId, st.date, st, page);
+    return;
+  }
 
   // Master selection: "any available master"
   if (d === CB.MASTER_ANY) {

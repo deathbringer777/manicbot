@@ -82,7 +82,7 @@ describe("googleCalendarRouter", () => {
       ],
       [{ chatId: 42, name: "Anna Master" }],
     ]);
-    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, headers: new Headers() });
+    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, webUser: null, headers: new Headers() });
 
     const rows = await caller.list({ tenantId: "tenant_demo" });
 
@@ -99,7 +99,7 @@ describe("googleCalendarRouter", () => {
     const dbMock = createDbMock([
       [{ botId: "123456789", botUsername: "@demo_salon_bot" }],
     ]);
-    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, headers: new Headers() });
+    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, webUser: null, headers: new Headers() });
 
     const info = await caller.getConnectInfo({ tenantId: "tenant_demo" });
 
@@ -112,7 +112,7 @@ describe("googleCalendarRouter", () => {
 
   it("toggleSync stores integer flags and millisecond timestamps", async () => {
     const dbMock = createDbMock();
-    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, headers: new Headers() });
+    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, webUser: null, headers: new Headers() });
     const before = Date.now();
 
     const result = await caller.toggleSync({
@@ -131,7 +131,7 @@ describe("googleCalendarRouter", () => {
     const dbMock = createDbMock([
       [{ id: "int_1", scope: "master", masterChatId: 42 }],
     ]);
-    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, headers: new Headers() });
+    const caller = createCaller({ db: dbMock.db as never, user: { id: 1, first_name: "Test" }, webUser: null, headers: new Headers() });
 
     const result = await caller.disconnect({
       tenantId: "tenant_demo",

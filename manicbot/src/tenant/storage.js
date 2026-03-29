@@ -151,7 +151,8 @@ export async function getBotToken(ctx, botId, encryptionKey = null) {
   try {
     const raw = await kv.get(BOT_TOKEN_PREFIX + botId, 'text');
     if (!raw) return null;
-    if (encryptionKey && raw.includes(':')) {
+    // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.
+    if (encryptionKey && !raw.includes(':')) {
       return await decryptToken(raw, encryptionKey);
     }
     return raw;

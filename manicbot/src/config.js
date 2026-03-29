@@ -137,6 +137,9 @@ export const CB = {
   // Master selection during booking
   MASTER_ANY:  'ma',       // client picks "any available master"
   MASTER_SEL:  'ms:',      // client picks specific master: ms:{chatId}
+  // Instagram pagination (>13-button limit)
+  SVC_PAGE:    'svpg:',    // service list page nav (Instagram): svpg:{pageNum}
+  MASTER_PAGE: 'mspg:',    // master list page nav (Instagram): mspg:{pageNum}
   // Admin assigns master to unassigned appointment
   ADM_ASSIGN_M: 'adm:asm:', // show master list for apt: adm:asm:{aptId}
   ADM_SET_M:    'adm:stm:', // set master for apt: adm:stm:{aptId}:{masterId}

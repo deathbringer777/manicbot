@@ -32,7 +32,7 @@ export const provisioningRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const tenantId = "t_" + randomId(6);
       const now = Math.floor(Date.now() / 1000);
-      const trialEndsAt = now + 30 * 24 * 3600; // 30 days
+      const trialEndsAt = now + 7 * 24 * 3600; // 7 days — matches Worker TRIAL_DURATION_MS
 
       await ctx.db.insert(tenants).values({
         id: tenantId,

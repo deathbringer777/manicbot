@@ -9,25 +9,28 @@ export const pl: Translations = {
     features: "Możliwości",
     howItWorks: "Jak to działa",
     pricing: "Cennik",
+    channels: "Kanały",
+    login: "Zaloguj się",
     cta: "Wypróbuj ManicBot",
   },
 
   hero: {
-    badge: "Twój salon w Telegramie",
-    headline: "Rezerwacje bez zbędnego stresu",
-    headlineAccent: "dla Ciebie i gości",
-    sub: "Gość nie musi instalować nic nowego — pisze jak na czacie, a Ty dostajesz jasne potwierdzenie, godzinę i cenę w jednej wiadomości.",
+    badge: "Telegram · Instagram · WhatsApp",
+    headline: "Rezerwacje tam, gdzie Twoi klienci już rozmawiają",
+    headlineAccent: "bez pobierania aplikacji",
+    sub: "Klienci rezerwują bezpośrednio w komunikatorze, którego już używają. Ty dostajesz czyste potwierdzenia i pełny grafik — wszystko w jednym miejscu.",
     ctaPrimary: "Jak to działa",
     ctaSecondary: "Zobacz cennik",
-    trustLine: "Dla salonów i prywatnych mistrzów",
+    trustLine: "Dla salonów i niezależnych mistrzów w całej Europie",
     demoCaption: "Tak to wygląda w Telegramie",
+    channelBadges: ["✈️ Telegram", "📷 Instagram", "💬 WhatsApp"],
   },
 
   stats: [
-    { value: "4", label: "Języki" },
+    { value: "3", label: "Kanały" },
     { value: "24/7", label: "Zawsze online" },
     { value: "0", label: "Zbędnych aplikacji" },
-    { value: "1", label: "Link dla gości" },
+    { value: "4", label: "Języki" },
   ],
 
   phoneDemo: {
@@ -61,69 +64,69 @@ export const pl: Translations = {
   },
 
   features: {
-    title: "Wygodnie na co dzień",
-    sub: "Czytelne przyciski, spokojne przypomnienia — ten sam format, który wszyscy znają z czatu.",
+    title: "Wszystko czego potrzebujesz, nic zbędnego",
+    sub: "Rezerwacje przez Telegram, Instagram i WhatsApp — z AI, przypomnieniami i synchronizacją kalendarza.",
     items: [
       {
         icon: "calendar",
-        title: "Inteligentne rezerwacje",
-        desc: "Klienci wybierają usługę, mistrza i godzinę bezpośrednio w Telegram. Bez pobierania aplikacji.",
+        title: "Rezerwacje wielokanałowe",
+        desc: "Klienci rezerwują przez Telegram, Instagram Direct lub WhatsApp. Bez aplikacji. Bez rejestracji. Tylko czat.",
       },
       {
         icon: "brain",
-        title: "Pomocnik w tle",
-        desc: "Odpowiada na typowe pytania i delikatnie prowadzi do dogodnej godziny — Ty decydujesz.",
+        title: "Asystent AI do rezerwacji",
+        desc: "Rozumie naturalne wiadomości jak \"zapisz mnie jutro na klasyczny manicure\" i znajduje wolny termin.",
       },
       {
         icon: "layout-panel",
-        title: "Panel pod właściciela",
-        desc: "Usługi, ceny i grafik w jednym miejscu — mniej chaosu w czatach i arkuszach.",
+        title: "Panel administracyjny",
+        desc: "Potwierdzaj, przenoś i anuluj wizyty. Przeglądaj grafik z dowolnego urządzenia.",
       },
       {
         icon: "globe",
         title: "4 języki",
-        desc: "Angielski, rosyjski, ukraiński, polski — bot automatycznie mówi językiem klienta.",
+        desc: "Angielski, rosyjski, ukraiński, polski — bot automatycznie przełącza się na język klienta.",
       },
       {
         icon: "calendar-sync",
         title: "Synchronizacja z Google Calendar",
-        desc: "Wszystkie rezerwacje synchronizują się z Google Calendar w czasie rzeczywistym.",
+        desc: "Wszystkie rezerwacje pojawiają się w Google Calendar natychmiast. Konflikty blokowane automatycznie.",
       },
       {
         icon: "bell",
-        title: "Przypomnienia i powiadomienia",
-        desc: "Automatyczne przypomnienia przed wizytą. Klienci potwierdzają lub anulują jednym kliknięciem.",
+        title: "Inteligentne przypomnienia",
+        desc: "Automatyczne przypomnienia przed wizytą — przez ten sam kanał, przez który klient zarezerwował.",
       },
       {
         icon: "users",
         title: "Multi-mistrz",
-        desc: "Zarządzaj kilkoma mistrzami lub oddziałami w jednym bocie. Osobne grafiki dla każdego.",
+        desc: "Wielu mistrzów, grafiki i usługi w jednym koncie. Każdy mistrz widzi tylko swój kalendarz.",
       },
       {
         icon: "shield",
-        title: "Prywatność",
-        desc: "Dane salonów są oddzielone. Jest ochrona przed spamem i nadużyciami.",
+        title: "Prywatność by design",
+        desc: "Dane Twoich klientów nie trafiają na żaden marketplace. Bez profili, bez wyszukiwania, bez wycieków.",
       },
     ],
   },
 
   how: {
-    title: "Trzy spokojne kroki",
+    title: "Uruchom w kilka minut",
     steps: [
       {
         num: "01",
-        title: "Podłącz bota",
-        desc: "Połącz token swojego bota Telegram z ManicBot. Zajmuje 2 minuty.",
+        title: "Podłącz kanały",
+        desc: "Połącz bota Telegram, stronę Instagram lub numer WhatsApp. Każde połączenie zajmuje do 3 minut.",
       },
       {
         num: "02",
         title: "Dodaj usługi i mistrzów",
-        desc: "Skonfiguruj usługi, ceny i godziny pracy. Resztą zajmiemy się my.",
+        desc: "Skonfiguruj usługi, ceny i godziny pracy. Przeprowadzimy Cię przez każdy krok.",
       },
       {
         num: "03",
         title: "Udostępnij link",
-        desc: "Wyślij link Telegram klientom. Rezerwacje zaczną napływać od razu.",
+        desc: "Wyślij link klientom. Rezerwują w komunikatorze, który wolą.",
       },
     ],
   },
@@ -204,7 +207,7 @@ export const pl: Translations = {
     items: [
       {
         q: "Czy klienci muszą coś instalować?",
-        a: "Nie. Potrzebują tylko Telegram, który już mają. Jedno kliknięcie w link — gotowe.",
+        a: "Nie. Potrzebują tylko Telegram, Instagram lub WhatsApp — który już mają. Jedno kliknięcie w link — gotowe.",
       },
       {
         q: "Mam już system rezerwacji. Co zrobić?",
@@ -249,18 +252,21 @@ export const pl: Translations = {
   },
 
   compare: {
-    title: "Dlaczego ManicBot",
-    subtitle: "Nie wszystkie narzędzia do rezerwacji są takie same.",
-    col2: "Tradycyjne platformy",
-    col3: "Boty jednokanałowe",
+    title: "ManicBot vs alternatywy",
+    subtitle: "Porównaj nas z marketplace'ami rezerwacji i botami jednokanałowymi.",
+    note: "* Marketplace rezerwacji = platforma, gdzie klienci muszą pobrać ich aplikację i założyć konto, żeby zarezerwować.",
+    col2: "Marketplace rezerwacji *",
+    col3: "Bot jednokanałowy",
     rows: [
-      { label: "Wielokanałowość (Telegram + Instagram)", mb: true,  c2: false, c3: false },
-      { label: "Asystent AI",                            mb: true,  c2: false, c3: null  },
-      { label: "Synchronizacja Google Calendar",         mb: true,  c2: null,  c3: false },
-      { label: "Brak dodatkowej aplikacji dla klientów", mb: true,  c2: false, c3: true  },
-      { label: "Gotowe w kilka minut",                   mb: true,  c2: false, c3: true  },
-      { label: "4 języki interfejsu",                    mb: true,  c2: null,  c3: false },
-      { label: "White label",                            mb: true,  c2: false, c3: false },
+      { label: "Działa w komunikatorze klienta",          mb: true,  c2: false, c3: null  },
+      { label: "Bez pobierania aplikacji",                 mb: true,  c2: false, c3: true  },
+      { label: "Rezerwacje przez Instagram Direct",        mb: true,  c2: false, c3: false },
+      { label: "Asystent AI do rezerwacji",                mb: true,  c2: false, c3: null  },
+      { label: "Synchronizacja Google Calendar",           mb: true,  c2: null,  c3: false },
+      { label: "Brak prowizji marketplace",                mb: true,  c2: false, c3: true  },
+      { label: "Twoja marka — nie ich",                    mb: true,  c2: false, c3: true  },
+      { label: "Opcja white label",                        mb: true,  c2: false, c3: false },
+      { label: "4 języki interfejsu",                      mb: true,  c2: null,  c3: false },
     ],
   },
 

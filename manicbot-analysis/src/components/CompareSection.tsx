@@ -29,10 +29,10 @@ export function CompareSection() {
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-200/90 dark:border-white/[0.07]">
-          <table className="w-full min-w-[480px] border-collapse">
+          <table className="w-full min-w-[520px] border-collapse">
             <thead>
               <tr className="border-b border-slate-200/90 bg-slate-50/80 dark:border-white/[0.06] dark:bg-white/[0.025]">
-                <th className="w-[44%] px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30" />
+                <th className="w-[42%] px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30" />
                 <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
                   ManicBot
                 </th>
@@ -67,6 +67,11 @@ export function CompareSection() {
             </tbody>
           </table>
         </div>
+        {cp.note && (
+          <p className="mt-4 text-center text-[11px] leading-relaxed text-slate-400 dark:text-white/25">
+            {cp.note}
+          </p>
+        )}
       </div>
     </section>
   );

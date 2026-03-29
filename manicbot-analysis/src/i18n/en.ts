@@ -7,25 +7,28 @@ export const en = {
     features: "What it does",
     howItWorks: "How it works",
     pricing: "Pricing",
+    channels: "Channels",
+    login: "Log in",
     cta: "Try ManicBot",
   },
 
   hero: {
-    badge: "Your salon, inside Telegram",
-    headline: "Booking that feels familiar",
-    headlineAccent: "for you and your clients",
-    sub: "No new apps to learn. Guests write as they already chat — you get a clear confirmation, time, and price in one place.",
+    badge: "Telegram · Instagram · WhatsApp",
+    headline: "Booking where your clients already chat",
+    headlineAccent: "no app downloads needed",
+    sub: "Clients book directly in the messenger they already use. You get clean confirmations and a full schedule — all in one place.",
     ctaPrimary: "See how it works",
     ctaSecondary: "View pricing",
-    trustLine: "For salons and independent masters running their own business",
+    trustLine: "Used by salons and independent masters across Europe",
     demoCaption: "How it looks in Telegram",
+    channelBadges: ["✈️ Telegram", "📷 Instagram", "💬 WhatsApp"],
   },
 
   stats: [
-    { value: "4", label: "Languages" },
+    { value: "3", label: "Channels" },
     { value: "24/7", label: "Always on" },
     { value: "0", label: "Extra apps" },
-    { value: "1", label: "Link to share" },
+    { value: "4", label: "Languages" },
   ],
 
   phoneDemo: {
@@ -59,69 +62,69 @@ export const en = {
   },
 
   features: {
-    title: "Made for everyday use",
-    sub: "Clear menus, gentle reminders, and a flow guests already know from messaging.",
+    title: "Everything you need, nothing you don’t",
+    sub: "Booking via Telegram, Instagram and WhatsApp — with AI, reminders, and calendar sync.",
     items: [
       {
         icon: "calendar",
-        title: "Smart Booking",
-        desc: "Clients choose service, master and time slot directly in Telegram. No app download needed.",
+        title: "Multi-channel booking",
+        desc: "Clients book via Telegram, Instagram DM, or WhatsApp. No app download. No account creation. Just chat.",
       },
       {
         icon: "brain",
-        title: "Helpful assistant",
-        desc: "Answers common questions and nudges guests toward a time that fits — you stay in control.",
+        title: "AI booking assistant",
+        desc: "Understands natural messages like \"book me tomorrow for a classic manicure\" and finds the right slot.",
       },
       {
         icon: "layout-panel",
-        title: "Owner-friendly control",
-        desc: "Services, prices, and slots in one place — less juggling chats and spreadsheets.",
+        title: "Admin panel",
+        desc: "Confirm, reschedule, or cancel appointments. View your schedule from any device — phone or desktop.",
       },
       {
         icon: "globe",
         title: "4 Languages",
-        desc: "English, Russian, Ukrainian, Polish — the bot speaks the client's language automatically.",
+        desc: "English, Russian, Ukrainian, Polish — the bot switches to the client’s language automatically.",
       },
       {
         icon: "calendar-sync",
-        title: "Google Calendar Sync",
-        desc: "All bookings sync to your Google Calendar in real time. Never double-book again.",
+        title: "Google Calendar sync",
+        desc: "All bookings appear instantly in Google Calendar. Conflicts blocked automatically.",
       },
       {
         icon: "bell",
-        title: "Reminders & Notifications",
-        desc: "Automatic reminders before appointments. Clients confirm or cancel with one tap.",
+        title: "Smart reminders",
+        desc: "Automatic reminders before appointments via the same channel the client booked from.",
       },
       {
         icon: "users",
         title: "Multi-master",
-        desc: "Manage multiple masters or branches under one bot. Separate schedules and services per master.",
+        desc: "Multiple masters, schedules and services under one account. Each master sees only their own calendar.",
       },
       {
         icon: "shield",
         title: "Private by design",
-        desc: "Each salon’s data stays separate. Standard protections against spam and abuse.",
+        desc: "Your clients’ data never touches a marketplace. No profiles, no discovery, no data leaks.",
       },
     ],
   },
 
   how: {
-    title: "Three calm steps",
+    title: "Up and running in minutes",
     steps: [
       {
         num: "01",
-        title: "Connect your bot",
-        desc: "Link your Telegram bot token to ManicBot. Takes 2 minutes.",
+        title: "Connect your channels",
+        desc: "Link your Telegram bot, Instagram page, or WhatsApp number. Each takes under 3 minutes.",
       },
       {
         num: "02",
         title: "Add services & masters",
-        desc: "Set up your services, prices, and working hours. We handle the rest.",
+        desc: "Set services, prices, working hours and assign masters. We walk you through it.",
       },
       {
         num: "03",
-        title: "Share the link",
-        desc: "Send your Telegram link to clients. Bookings start coming in immediately.",
+        title: "Share your link",
+        desc: "Send your booking link to clients. They book in whatever messenger they prefer.",
       },
     ],
   },
@@ -202,7 +205,7 @@ export const en = {
     items: [
       {
         q: "Do clients need to install anything?",
-        a: "No. They just need Telegram, which they already have. One tap on the link — done.",
+        a: "No. They just need Telegram, Instagram or WhatsApp — whichever they already use. One tap on the link — done.",
       },
       {
         q: "What if I already have a booking system?",
@@ -247,18 +250,21 @@ export const en = {
   },
 
   compare: {
-    title: "Why ManicBot",
-    subtitle: "Not all booking tools are built the same way.",
-    col2: "Traditional platforms",
-    col3: "Single-channel bots",
+    title: "ManicBot vs the alternatives",
+    subtitle: "See how we stack up against booking marketplaces and single-channel bots.",
+    note: "* Booking marketplace = a platform where clients must download the platform's own app and create an account to book.",
+    col2: "Booking marketplace *",
+    col3: "Single-channel bot",
     rows: [
-      { label: "Multi-channel (Telegram + Instagram)", mb: true,  c2: false, c3: false },
-      { label: "AI assistant",                         mb: true,  c2: false, c3: null  },
-      { label: "Google Calendar sync",                 mb: true,  c2: null,  c3: false },
-      { label: "No extra app for clients",             mb: true,  c2: false, c3: true  },
-      { label: "Ready in minutes",                     mb: true,  c2: false, c3: true  },
-      { label: "4 interface languages",                mb: true,  c2: null,  c3: false },
-      { label: "White label option",                   mb: true,  c2: false, c3: false },
+      { label: "Works inside client's existing messenger", mb: true,  c2: false, c3: null  },
+      { label: "No app download for clients",              mb: true,  c2: false, c3: true  },
+      { label: "Instagram DM booking",                     mb: true,  c2: false, c3: false },
+      { label: "AI booking assistant",                     mb: true,  c2: false, c3: null  },
+      { label: "Google Calendar sync",                     mb: true,  c2: null,  c3: false },
+      { label: "No marketplace / referral fees",           mb: true,  c2: false, c3: true  },
+      { label: "Your own brand — not theirs",              mb: true,  c2: false, c3: true  },
+      { label: "White label option",                       mb: true,  c2: false, c3: false },
+      { label: "4 interface languages",                    mb: true,  c2: null,  c3: false },
     ],
   },
 

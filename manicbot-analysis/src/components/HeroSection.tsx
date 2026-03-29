@@ -45,7 +45,7 @@ export function HeroSection() {
               {t.hero.sub}
             </p>
 
-            <div className="mb-8 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
+            <div className="mb-5 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
               <button
                 type="button"
                 onClick={() => scrollTo("how")}
@@ -63,6 +63,17 @@ export function HeroSection() {
               >
                 {t.hero.ctaSecondary}
               </button>
+            </div>
+
+            <div className="mb-6 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+              {t.hero.channelBadges.map((badge) => (
+                <span
+                  key={badge}
+                  className="inline-flex items-center rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/55"
+                >
+                  {badge}
+                </span>
+              ))}
             </div>
 
             <p className="mb-6 max-w-md text-center text-xs leading-relaxed text-slate-500 dark:text-white/40 lg:mb-6 lg:max-w-none lg:text-left">

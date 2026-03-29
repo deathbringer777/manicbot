@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldOff, Smartphone } from "lucide-react";
+import { ShieldOff } from "lucide-react";
 import { api } from "~/trpc/react";
 import { RoleContext } from "~/components/RoleContext";
 import { SalonDashboard } from "~/components/dashboards/SalonDashboard";
@@ -43,40 +43,28 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     setPreviewTenantId(tenantId ?? null);
   }
 
-  // — No Telegram + loading web session check
-  if (initStatus === "no-telegram" && roleQuery.isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
-        <div className="flex flex-col items-center gap-4">
+  // — No Telegram context: check web session (next-auth cookie)
+  if (initStatus === "no-telegram") {
+    // Still loading web session — show spinner
+    if (roleQuery.isLoading) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-slate-950">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-brand-500" />
-          <p className="text-sm text-slate-400">{t("gate.init", lang)}</p>
         </div>
-      </div>
-    );
-  }
-
-  // — No Telegram and no web session → redirect to login
-  if (initStatus === "no-telegram" && !roleQuery.isLoading && !roleQuery.data?.role) {
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-      window.location.href = "/login";
+      );
     }
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-6 bg-slate-950 px-8 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-800">
-          <Smartphone className="h-10 w-10 text-brand-400" />
+    // No web session — redirect to login silently (no blocking screen)
+    if (!roleQuery.data?.role) {
+      if (typeof window !== "undefined") {
+        window.location.replace("/login");
+      }
+      return (
+        <div className="flex h-screen items-center justify-center bg-slate-950">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-brand-500" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">{t("gate.tgOnly", lang)}</h1>
-          <p className="mt-2 text-slate-400">{t("gate.tgOnlyDesc", lang)}</p>
-          <a
-            href="/login"
-            className="mt-4 inline-block rounded-lg bg-brand-500 px-6 py-2 text-sm font-medium text-white hover:bg-brand-600"
-          >
-            {t("gate.webLogin", lang)}
-          </a>
-        </div>
-      </div>
-    );
+      );
+    }
+    // Web session found — fall through to render dashboard below
   }
 
   // — Loading

@@ -158,14 +158,26 @@ export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({
 
 /**
  * Protected (authenticated) procedure for Bot Admins
+ * Accepts both Telegram Mini App auth AND web session (email/password login).
  */
 export const adminProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
+    // Web session path: webUser with a platform-level admin role
+    if (!ctx.user && ctx.webUser) {
+      if (isAdminProcedurePlatformRole(ctx.webUser.webRole)) {
+        return next({ ctx });
+      }
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You do not have administration privileges.",
+      });
+    }
+
     if (!ctx.user) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
-        message: "Telegram Verification Failed",
+        message: "Authentication required.",
       });
     }
 
@@ -178,7 +190,7 @@ export const adminProcedure = t.procedure
         .from(platformRoles)
         .where(eq(platformRoles.chatId, ctx.user.id))
         .limit(1);
-      
+
       if (dbRole.length > 0 && isAdminProcedurePlatformRole(dbRole[0]?.role)) {
         isAdmin = true;
       }

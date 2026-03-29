@@ -68,4 +68,23 @@
 
 ---
 
-**Деплой не выполнялся.** После проверки можно выкатить изменения: `npm test && npx wrangler deploy`.
+---
+
+## Дополнение: исправления 2026-03-29 (задеплоены)
+
+### 5. Admin-app: D1 binding и ADMIN_CHAT_ID в Pages
+
+- **Проблема:** Cloudflare Pages проект `admin-app` не имел привязки к D1 и переменной `ADMIN_CHAT_ID` → при открытии мини-апп все получали экран «Forbidden» вместо своих дашбордов.
+- **Исправление:** `ADMIN_CHAT_ID` задан через `wrangler pages secret put`; Pages пересобрана с `--branch main` — D1 binding подтянулся из `wrangler.toml`.
+
+### 6. Instagram: нет валидного Page Access Token
+
+- **Проблема:** `INSTAGRAM_ACCESS_TOKEN` в Cloudflare secrets содержал IGAA-токен (Instagram user token), непригодный для вызовов `POST /{page-id}/messages`. Graph API возвращает код 190 «Cannot parse access token».
+- **Исправление:** добавлен защищённый endpoint `POST /admin/ig-token?key=ADMIN_KEY` для валидации и сохранения EAA Page Access Token в D1. **Требует действия:** сгенерировать Facebook Page Access Token (EAA…) через Graph API Explorer и залить через этот endpoint.
+
+### 7. Admin Worker: endpoint `/admin/ig-token`
+
+- Принимает `{ token, tenantId }`, валидирует через `GET /v21.0/me`, сохраняет plaintext EAA в `channel_configs.token_encrypted`.
+- Защищён через `timingSafeEqual(key, ADMIN_KEY)`.
+
+**Все изменения задеплоены:** Worker `17b4db51`, Pages `2467d47b`.

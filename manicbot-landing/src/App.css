@@ -397,6 +397,201 @@
   border-color: rgba(232, 121, 160, 0.2);
 }
 
+/* ===================== HERO CHANNEL BADGES ===================== */
+.hero-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.hero-ch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid;
+}
+
+.hero-ch-tg {
+  color: #5bbcef;
+  border-color: rgba(91, 188, 239, 0.3);
+  background: rgba(91, 188, 239, 0.08);
+}
+
+.hero-ch-ig {
+  color: #e879a0;
+  border-color: rgba(232, 121, 160, 0.3);
+  background: rgba(232, 121, 160, 0.08);
+}
+
+.hero-ch-wa {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.25);
+  background: rgba(74, 222, 128, 0.06);
+}
+
+/* ===================== CHANNELS SECTION ===================== */
+.channels-section {
+  padding: 5rem 0;
+}
+
+.channels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.channel-card {
+  padding: 2rem;
+  background: var(--surface);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+}
+
+.channel-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 20px 20px 0 0;
+}
+
+.channel-tg::before  { background: linear-gradient(90deg, #2AABEE, #229ED9); }
+.channel-ig::before  { background: linear-gradient(90deg, #833AB4, #E1306C, #FD1D1D); }
+.channel-wa::before  { background: linear-gradient(90deg, #25D366, #128C7E); opacity: 0.45; }
+
+.channel-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.channel-icon {
+  font-size: 2.25rem;
+  display: block;
+  margin-bottom: 0.85rem;
+}
+
+.channel-card h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.5rem;
+}
+
+.channel-card p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0 0 1rem;
+  line-height: 1.55;
+}
+
+.channel-badge {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid;
+}
+
+.channel-badge-live {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.channel-badge-soon {
+  color: var(--text-muted);
+  border-color: rgba(168, 155, 181, 0.2);
+  background: rgba(168, 155, 181, 0.07);
+}
+
+/* ===================== COMPARE SECTION ===================== */
+.compare-section {
+  padding: 4rem 0 5rem;
+}
+
+.compare-wrap {
+  overflow-x: auto;
+  margin-top: 2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+}
+
+.compare-table thead th {
+  padding: 1rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+.compare-th-feature {
+  text-align: left !important;
+  width: 42%;
+}
+
+.compare-th-mb {
+  color: var(--accent) !important;
+  background: rgba(232, 121, 160, 0.07) !important;
+}
+
+.compare-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.2s;
+}
+
+.compare-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.compare-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.compare-label {
+  padding: 0.9rem 1.25rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.compare-cell {
+  padding: 0.9rem 1.25rem;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.compare-cell-mb {
+  background: rgba(232, 121, 160, 0.04);
+}
+
+.compare-yes   { color: #4ade80; }
+.compare-no    { color: rgba(168, 155, 181, 0.3); }
+.compare-maybe { color: var(--gold); }
+
+/* ===================== CONTACTS ===================== */
 /* Contacts */
 .contacts-section {
   padding: 4rem 0;
@@ -959,6 +1154,22 @@
 }
 
 /* All sections — reduce padding on mobile */
+@media (max-width: 768px) {
+  .channels-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .channels-section,
+  .compare-section {
+    padding: 3rem 0;
+  }
+
+  .hero-channels {
+    justify-content: center;
+  }
+}
+
 @media (max-width: 768px) {
   .about,
   .features,

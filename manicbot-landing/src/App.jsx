@@ -30,6 +30,19 @@ function useReveal(alwaysVisible = false) {
 const LANGS = ['ru', 'en', 'pl', 'uk'];
 const LANGUAGE_LABELS = { ru: 'Русский', en: 'English', pl: 'Polski', uk: 'Українська' };
 
+const COMPARE_ROWS = [
+  { key: 'multichannel', mb: true,  c2: false, c3: false },
+  { key: 'ai',           mb: true,  c2: false, c3: null  },
+  { key: 'calendar',     mb: true,  c2: null,  c3: false },
+  { key: 'noapp',        mb: true,  c2: false, c3: true  },
+  { key: 'setup',        mb: true,  c2: false, c3: true  },
+  { key: 'multilang',    mb: true,  c2: null,  c3: false },
+  { key: 'whitelabel',   mb: true,  c2: false, c3: false },
+];
+
+function cmpSym(val) { return val === true ? '✓' : val === false ? '✗' : '±'; }
+function cmpCls(val) { return val === true ? 'compare-yes' : val === false ? 'compare-no' : 'compare-maybe'; }
+
 function LangSwitcher() {
   const { i18n } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -63,6 +76,7 @@ function Nav({ onNavClick, mobileOpen, setMobileOpen }) {
   const links = [
     { id: 'about', label: t('nav.about') },
     { id: 'features', label: t('nav.features') },
+    { id: 'channels', label: t('nav.channels') },
     { id: 'how-it-works', label: t('nav.howItWorks') },
     { id: 'ai', label: t('nav.ai') },
     { id: 'pricing', label: t('nav.pricing') },
@@ -146,8 +160,10 @@ export default function App() {
   const [aboutRef, aboutVisible] = useReveal();
   const [featRef, featVisible] = useReveal();
   const [howRef, howVisible] = useReveal();
+  const [channelsRef, channelsVisible] = useReveal();
   const [carouselRef, carouselVisible] = useReveal();
   const [aiRef, aiVisible] = useReveal();
+  const [compareRef, compareVisible] = useReveal();
   const [pricingRef, pricingVisible] = useReveal();
   const [contactsRef, contactsVisible] = useReveal();
   const [ctaRef, ctaVisible] = useReveal();
@@ -211,6 +227,11 @@ export default function App() {
               <a href="https://t.me/manic_preview_bot" target="_blank" rel="noopener noreferrer" className={`hero-cta reveal delay-4 ${heroVisible ? 'visible' : ''}`}>
                 {t('hero.cta')}
               </a>
+              <div className={`hero-channels reveal delay-5 ${heroVisible ? 'visible' : ''}`}>
+                <span className="hero-ch hero-ch-tg">✈️ Telegram</span>
+                <span className="hero-ch hero-ch-ig">📷 Instagram</span>
+                <span className="hero-ch hero-ch-wa">💬 WhatsApp</span>
+              </div>
             </div>
             <div className={`hero-mockup reveal delay-2 ${heroVisible ? 'visible' : ''}`}>
               <ChatMockup messages={chatMessages} />
@@ -259,6 +280,34 @@ export default function App() {
           </div>
         </section>
 
+        {/* Channels */}
+        <section className="channels-section" id="channels" ref={channelsRef}>
+          <div className="section-inner">
+            <h2 className={`section-title reveal ${channelsVisible ? 'visible' : ''}`}>{t('channels.title')}</h2>
+            <p className={`section-sub reveal delay-1 ${channelsVisible ? 'visible' : ''}`}>{t('channels.subtitle')}</p>
+            <div className={`channels-grid reveal delay-2 ${channelsVisible ? 'visible' : ''}`}>
+              <div className="channel-card channel-tg">
+                <span className="channel-icon">✈️</span>
+                <h3>Telegram</h3>
+                <p>{t('channels.items.telegram.desc')}</p>
+                <span className="channel-badge channel-badge-live">{t('channels.live')}</span>
+              </div>
+              <div className="channel-card channel-ig">
+                <span className="channel-icon">📷</span>
+                <h3>Instagram</h3>
+                <p>{t('channels.items.instagram.desc')}</p>
+                <span className="channel-badge channel-badge-live">{t('channels.live')}</span>
+              </div>
+              <div className="channel-card channel-wa">
+                <span className="channel-icon">💬</span>
+                <h3>WhatsApp</h3>
+                <p>{t('channels.items.whatsapp.desc')}</p>
+                <span className="channel-badge channel-badge-soon">{t('channels.soon')}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* How it works */}
         <section className="how-section" id="how-it-works" ref={howRef}>
           <div className="section-inner">
@@ -295,6 +344,36 @@ export default function App() {
               <p>{t('ai.points.understands')}</p>
               <p>{t('ai.points.guides')}</p>
               <p>{t('ai.points.savesTime')}</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Compare */}
+        <section className="compare-section" ref={compareRef}>
+          <div className="section-inner">
+            <h2 className={`section-title reveal ${compareVisible ? 'visible' : ''}`}>{t('compare.title')}</h2>
+            <p className={`section-sub reveal delay-1 ${compareVisible ? 'visible' : ''}`}>{t('compare.subtitle')}</p>
+            <div className={`compare-wrap reveal delay-2 ${compareVisible ? 'visible' : ''}`}>
+              <table className="compare-table">
+                <thead>
+                  <tr>
+                    <th className="compare-th-feature"></th>
+                    <th className="compare-th-mb">ManicBot</th>
+                    <th>{t('compare.col2')}</th>
+                    <th>{t('compare.col3')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARE_ROWS.map(({ key, mb, c2, c3 }) => (
+                    <tr key={key}>
+                      <td className="compare-label">{t(`compare.rows.${key}`)}</td>
+                      <td className={`compare-cell compare-cell-mb ${cmpCls(mb)}`}>{cmpSym(mb)}</td>
+                      <td className={`compare-cell ${cmpCls(c2)}`}>{cmpSym(c2)}</td>
+                      <td className={`compare-cell ${cmpCls(c3)}`}>{cmpSym(c3)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </section>

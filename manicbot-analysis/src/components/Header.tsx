@@ -58,7 +58,7 @@ export function Header() {
           <ThemeToggle />
           <LanguageSwitcher />
           <a
-            href="https://dashboard.manicbot.com"
+            href="https://manicbot.com/dashboard"
             className="hidden items-center rounded-xl border border-slate-200/80 px-3.5 py-2 text-xs font-medium text-slate-600 transition-all duration-200 hover:border-slate-300 hover:text-slate-900 sm:flex dark:border-white/10 dark:text-white/50 dark:hover:border-white/20 dark:hover:text-white/80"
           >
             {t.nav.login}

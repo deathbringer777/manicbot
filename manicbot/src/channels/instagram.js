@@ -1,7 +1,10 @@
 /**
  * @fileoverview InstagramAdapter — implements ChannelAdapter for Instagram Messaging API.
  *
- * API reference: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging
+ * Outbound messages use **graph.facebook.com** with **Page ID** + **Page access token**
+ * (Messenger Platform / Instagram-connected Page). This matches channel config in Mini App.
+ *
+ * API reference: https://developers.facebook.com/docs/messenger-platform/instagram
  * Graph API version: v21.0
  *
  * Instagram constraints:
@@ -14,7 +17,7 @@
 
 import { makeInbound } from './types.js';
 
-const GRAPH_API = 'https://graph.instagram.com/v21.0';
+const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
 /**
  * Parse Worker secret INSTAGRAM_IGNORE_SENDER_IDS (comma/whitespace-separated IGSIDs).
@@ -47,6 +50,12 @@ export class InstagramAdapter {
     const cfg = ctx.channelConfig?.config ?? {};
     this._pageId = cfg.page_id ?? null;
     this._token = ctx.channelConfig?.token ?? null;
+    if (this._token && String(this._token).startsWith('IGAA')) {
+      console.warn(
+        '[ig] Token starts with IGAA — Instagram product tokens often cannot call POST /{page-id}/messages. ' +
+          'Use a Facebook Page access token (usually EAA…) for the Page linked to this IG account; save it in Mini App → Channels.',
+      );
+    }
     /** @type {Set<string>} */
     this._ignoreSenderIds = ctx.instagramIgnoreSenderIds instanceof Set
       ? ctx.instagramIgnoreSenderIds
@@ -56,18 +65,27 @@ export class InstagramAdapter {
   // ── normalize ──────────────────────────────────────────────────────────────
 
   /**
-   * Convert a raw Instagram webhook entry into an InboundMessage.
-   * IG sends: { object: 'instagram', entry: [{ id, messaging: [...] }] }
+   * One webhook entry may contain several `messaging` items (read receipt, then text).
+   * Meta often puts the user message after a non-message event — we must scan all items.
    *
-   * @param {object} entry - A single entry from the webhook payload
+   * @param {object} messaging - Single element from entry.messaging[]
+   * @param {object} entry - Full entry (stored on inbound.rawEvent)
    * @returns {import('./types.js').InboundMessage|null}
    */
-  normalize(entry) {
+  normalizeMessaging(messaging, entry) {
     try {
-      const messaging = entry?.messaging?.[0];
       if (!messaging) return null;
-
       if (messaging.message?.is_echo === true) return null;
+      // Read / delivery / typing — no user payload for the bot
+      if (!messaging.message && !messaging.postback) return null;
+
+      if (messaging.message) {
+        const rawT = messaging.message.text;
+        const hasText = rawT != null && String(rawT).trim().length > 0;
+        const hasAttach = !!(messaging.message.attachments?.length);
+        const hasQr = !!messaging.message.quick_reply;
+        if (!hasText && !hasAttach && !hasQr) return null;
+      }
 
       const senderId = messaging.sender?.id;
       if (senderId != null && this._ignoreSenderIds.has(String(senderId))) return null;
@@ -84,13 +102,11 @@ export class InstagramAdapter {
           const att = messaging.message.attachments[0];
           if (att.type === 'image') photo = att.payload?.url ?? null;
         }
-        // Quick reply (user tapped a quick reply button)
         if (messaging.message.quick_reply) {
           callbackData = messaging.message.quick_reply.payload ?? null;
         }
       }
 
-      // Postback (from persistent menu or CTA buttons)
       if (messaging.postback) {
         callbackData = messaging.postback.payload ?? null;
         text = messaging.postback.title ?? null;
@@ -98,8 +114,8 @@ export class InstagramAdapter {
 
       return makeInbound({
         channel: 'instagram',
-        channelUserId: String(senderId ?? ''),
         tenantId: this._ctx.tenantId ?? null,
+        channelUserId: String(senderId ?? ''),
         text,
         photo,
         callbackData,
@@ -107,9 +123,24 @@ export class InstagramAdapter {
         timestamp: ts,
       });
     } catch (e) {
-      console.error('[ig] normalize error:', e.message);
+      console.error('[ig] normalizeMessaging error:', e.message);
       return null;
     }
+  }
+
+  /**
+   * Convert a raw Instagram webhook entry into an InboundMessage (first actionable item).
+   * For full batches use normalizeMessaging per item in the HTTP layer.
+   *
+   * @param {object} entry - A single entry from the webhook payload
+   * @returns {import('./types.js').InboundMessage|null}
+   */
+  normalize(entry) {
+    for (const m of entry?.messaging ?? []) {
+      const one = this.normalizeMessaging(m, entry);
+      if (one) return one;
+    }
+    return null;
   }
 
   // ── send ───────────────────────────────────────────────────────────────────

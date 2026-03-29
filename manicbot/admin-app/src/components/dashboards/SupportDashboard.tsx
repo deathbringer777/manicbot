@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle } from "lucide-react";
+import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle, ChevronRight } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
@@ -12,6 +12,13 @@ const STATUS_STYLES: Record<string, string> = {
   claimed: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
   escalated: "bg-red-500/20 text-red-400 border border-red-500/30",
   closed: "bg-slate-700 text-slate-400",
+};
+
+const TICKET_BORDER: Record<string, string> = {
+  open:      "border-l-amber-400",
+  claimed:   "border-l-brand-400",
+  escalated: "border-l-red-500",
+  closed:    "border-l-slate-700",
 };
 
 type FilterStatus = "all" | "open" | "claimed" | "escalated" | "closed";
@@ -189,29 +196,42 @@ export function SupportDashboard() {
           ))}
         </div>
 
-        {allTickets.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+        {allTickets.isLoading && (
+          <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
+        )}
 
         <div className="space-y-2">
-          {allTickets.data?.map((ticket: any) => (
-            <button key={ticket.id} onClick={() => setSelectedId(ticket.id)}
-              className="w-full glass-card rounded-xl p-3 flex items-start gap-3 text-left hover:bg-slate-800/60 transition-colors">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-medium text-white text-sm truncate">
-                    {ticket.clientName ?? `#${ticket.clientChatId}`}
-                  </p>
-                  <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[ticket.status] ?? ""}`}>
-                    {t(`status.${ticket.status}` as any, lang) ?? ticket.status}
-                  </span>
+          {allTickets.data?.map((ticket: any) => {
+            const nameStr = ticket.clientName ?? `#${ticket.clientChatId}`;
+            const words = nameStr.trim().split(/\s+/);
+            const initials = words.length >= 2
+              ? (words[0]![0]! + words[1]![0]!).toUpperCase()
+              : nameStr.slice(0, 2).toUpperCase();
+            const border = TICKET_BORDER[ticket.status] ?? "border-l-slate-700";
+            return (
+              <button key={ticket.id} onClick={() => setSelectedId(ticket.id)}
+                className={`w-full glass-card rounded-xl border-l-2 ${border} flex items-center gap-3 text-left hover:bg-slate-800/60 transition-colors overflow-hidden`}>
+                <div className="p-3 flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400">
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="font-semibold text-white text-sm truncate">{nameStr}</p>
+                      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLES[ticket.status] ?? ""}`}>
+                        {t(`status.${ticket.status}` as any, lang) ?? ticket.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {ticket.tenantId ?? t("support.platform", lang)} · {relativeTime(ticket.createdAt)}
+                      {ticket.claimedBy ? ` · #${ticket.claimedBy}` : ""}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-600 shrink-0" />
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  {ticket.tenantId ?? t("support.platform", lang)} · {relativeTime(ticket.createdAt)}
-                  {ticket.claimedBy ? ` · В работе у #${ticket.claimedBy}` : ""}
-                </p>
-              </div>
-              <MessageSquare className="h-4 w-4 text-slate-600 shrink-0 mt-0.5" />
-            </button>
-          ))}
+              </button>
+            );
+          })}
           {allTickets.data?.length === 0 && (
             <div className="glass-card rounded-2xl p-8 text-center">
               <MessageSquare className="h-12 w-12 text-slate-600 mx-auto mb-3" />

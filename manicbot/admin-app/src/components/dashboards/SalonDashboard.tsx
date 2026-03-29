@@ -11,7 +11,7 @@ import {
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, type Lang } from "~/lib/i18n";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "settings";
 
@@ -22,23 +22,92 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-red-500/15 text-red-400 border border-red-500/20",
 };
 
+const APT_BORDER: Record<string, string> = {
+  confirmed: "border-l-emerald-500",
+  pending:   "border-l-amber-400",
+  cancelled: "border-l-red-500/40",
+  rejected:  "border-l-red-500/40",
+};
+
 // ─── Reusable components ─────────────────────────────────────────
 function StatCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string | number; sub?: string;
   icon: React.ElementType; color: string;
 }) {
   return (
-    <div className="glass-card rounded-2xl p-4">
+    <div className="glass-card rounded-2xl p-4 relative overflow-hidden">
       <div className="flex items-center gap-3">
         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${color}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <div className="min-w-0">
-          <p className="text-2xl font-bold text-white">{value}</p>
-          <p className="text-xs text-slate-400">{label}</p>
-          {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+        <div className="min-w-0 flex-1">
+          <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
+          <p className="text-xs text-slate-400 leading-tight">{label}</p>
+          {sub && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{sub}</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Appointment Card ────────────────────────────────────────────
+function AptCard({ a, lang, onAction }: {
+  a: any; lang: Lang; onAction?: (id: any, status: "confirmed" | "cancelled" | "rejected") => void;
+}) {
+  const [hh, mm] = (a.time ?? "00:00").split(":");
+  const border = APT_BORDER[a.status] ?? "border-l-slate-700";
+  const nameWords = (a.userName ?? "?").trim().split(/\s+/);
+  const initials = nameWords.length >= 2
+    ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
+    : (a.userName ?? "?").slice(0, 2).toUpperCase();
+
+  return (
+    <div className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden`}>
+      <div className="p-3 flex items-start gap-3">
+        {/* Avatar */}
+        <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400 mt-0.5">
+          {initials}
+        </div>
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-white text-sm leading-tight truncate">{a.userName ?? `#${a.chatId}`}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5 truncate">{a.svcId}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-base font-bold text-white tabular-nums leading-none">
+                {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
+              </p>
+              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
+                {t(`status.${a.status}` as any, lang)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Actions */}
+      {onAction && a.status === "pending" && (
+        <div className="flex border-t border-white/5">
+          <button onClick={() => onAction(a.id, "confirmed")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/10 transition-colors">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {t("action.confirm", lang)}
+          </button>
+          <div className="w-px bg-white/5" />
+          <button onClick={() => onAction(a.id, "rejected")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400 text-xs font-semibold hover:bg-red-500/10 transition-colors">
+            <XCircle className="h-3.5 w-3.5" /> {t("action.reject", lang)}
+          </button>
+        </div>
+      )}
+      {onAction && a.status === "confirmed" && (
+        <div className="flex border-t border-white/5">
+          <button onClick={() => onAction(a.id, "cancelled")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400/60 text-xs font-medium hover:bg-red-500/10 transition-colors">
+            <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -287,6 +356,183 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
           {t("common.save", lang)}
         </Btn>
       </div>
+    </div>
+  );
+}
+
+// ─── Google Calendar Section ─────────────────────────────────────
+function GoogleCalendarSection({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const integrations = api.googleCalendar.list.useQuery({ tenantId });
+  const connectInfo = api.googleCalendar.getConnectInfo.useQuery({ tenantId });
+  const utils = api.useUtils();
+  const toggleSync = api.googleCalendar.toggleSync.useMutation({
+    onSuccess: () => utils.googleCalendar.list.invalidate(),
+  });
+  const disconnect = api.googleCalendar.disconnect.useMutation({
+    onSuccess: () => utils.googleCalendar.list.invalidate(),
+  });
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
+
+  const rows = integrations.data ?? [];
+  const connectButtonLabel =
+    lang === "ru" ? "Открыть бот для подключения" :
+    lang === "ua" ? "Відкрити бота для підключення" :
+    lang === "pl" ? "Otwórz bota, aby połączyć" :
+    "Open bot to connect";
+  const connectHint =
+    lang === "ru" ? "Безопасное подключение запускается в Telegram-боте, где Worker создаёт короткую OAuth-сессию." :
+    lang === "ua" ? "Безпечне підключення запускається в Telegram-боті, де Worker створює коротку OAuth-сесію." :
+    lang === "pl" ? "Bezpieczne połączenie startuje w bocie Telegram, gdzie Worker tworzy krótką sesję OAuth." :
+    "Secure connection starts in the Telegram bot, where the Worker creates a short-lived OAuth session.";
+  const salonScopeLabel =
+    lang === "ru" ? "Салон" :
+    lang === "ua" ? "Салон" :
+    lang === "pl" ? "Salon" :
+    "Salon";
+  const masterScopeLabel =
+    lang === "ru" ? "Мастер" :
+    lang === "ua" ? "Майстер" :
+    lang === "pl" ? "Master" :
+    "Master";
+
+  return (
+    <div className="space-y-4 mt-6">
+      <SectionHeader
+        title="Google Calendar"
+        action={connectInfo.data?.botLink ? (
+          <Btn
+            onClick={() => window.open(connectInfo.data?.botLink ?? "", "_blank", "noopener,noreferrer")}
+            className="shrink-0"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            {connectButtonLabel}
+          </Btn>
+        ) : undefined}
+      />
+      <div className="glass-card rounded-2xl p-4 space-y-2">
+        <p className="text-xs text-slate-400">{connectHint}</p>
+        {connectInfo.data?.botUsername ? (
+          <p className="text-[11px] text-slate-500">
+            @{connectInfo.data.botUsername}
+          </p>
+        ) : (
+          <p className="text-[11px] text-amber-400">
+            {lang === "ru" ? "Активный username бота не найден. Откройте салонный бот вручную и зайдите в Google Calendar." :
+             lang === "ua" ? "Активний username бота не знайдено. Відкрийте салонного бота вручну і зайдіть у Google Calendar." :
+             lang === "pl" ? "Nie znaleziono aktywnego username bota. Otwórz bota salonu ręcznie i przejdź do Google Calendar." :
+             "No active bot username found. Open the salon bot manually and use its Google Calendar panel."}
+          </p>
+        )}
+      </div>
+      {integrations.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+      {!integrations.isLoading && rows.length === 0 && (
+        <div className="glass-card rounded-2xl p-4 text-center">
+          <CalendarDays className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-slate-400">
+            {lang === "ru" ? "Нет подключённых календарей" :
+             lang === "ua" ? "Немає підключених календарів" :
+             lang === "pl" ? "Brak podpiętych kalendarzy" :
+             "No calendars connected"}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            {lang === "ru" ? "Подключение начинается из бота салона, где открывается защищённая OAuth-сессия." :
+             lang === "ua" ? "Підключення починається в боті салону, де відкривається захищена OAuth-сесія." :
+             lang === "pl" ? "Połączenie zaczyna się w bocie salonu, gdzie otwierana jest chroniona sesja OAuth." :
+             "Connection starts in the salon bot, where a protected OAuth session is created."}
+          </p>
+        </div>
+      )}
+      {rows.map((row) => (
+        <div key={row.id} className="glass-card rounded-2xl p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarDays className="h-4 w-4 text-brand-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm text-white font-medium truncate">
+                  {row.calendarSummary || row.calendarId}
+                </p>
+                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                  <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] uppercase tracking-wide">
+                    {row.scope === "tenant" ? salonScopeLabel : masterScopeLabel}
+                  </span>
+                  {row.masterName && <span>{row.masterName}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {row.syncEnabled ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <XCircle className="h-4 w-4 text-slate-500" />
+              )}
+            </div>
+          </div>
+          {row.providerAccountEmail && (
+            <p className="text-[10px] text-slate-500">{row.providerAccountEmail}</p>
+          )}
+          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+            {row.lastSyncAt && (
+              <span>
+                {lang === "ru" ? "Последняя синхр." :
+                 lang === "ua" ? "Остання синхр." :
+                 lang === "pl" ? "Ostatnia synchronizacja" :
+                 "Last sync"}: {new Date(row.lastSyncAt).toLocaleString()}
+              </span>
+            )}
+            {row.lastSyncStatus && (
+              <span className={row.lastSyncStatus === "ok" ? "text-emerald-400" : "text-amber-400"}>
+                ({row.lastSyncStatus})
+              </span>
+            )}
+          </div>
+          {row.lastSyncError && (
+            <p className="text-[11px] text-amber-400">{row.lastSyncError}</p>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <Btn
+              variant={row.syncEnabled ? "ghost" : "primary"}
+              onClick={() => toggleSync.mutate({ tenantId, integrationId: row.id, enabled: !row.syncEnabled })}
+              disabled={toggleSync.isPending || disconnect.isPending}
+            >
+              {row.syncEnabled
+                ? (lang === "ru" ? "Выкл. синхр." :
+                   lang === "ua" ? "Вимк. синхр." :
+                   lang === "pl" ? "Wstrzymaj sync" :
+                   "Pause sync")
+                : (lang === "ru" ? "Вкл. синхр." :
+                   lang === "ua" ? "Увімк. синхр." :
+                   lang === "pl" ? "Wznów sync" :
+                   "Resume sync")}
+            </Btn>
+            {confirmDisconnect === row.id ? (
+              <>
+                <Btn
+                  variant="danger"
+                  onClick={() => { disconnect.mutate({ tenantId, integrationId: row.id }); setConfirmDisconnect(null); }}
+                  disabled={disconnect.isPending}
+                >
+                  {lang === "ru" ? "Да, отключить" :
+                   lang === "ua" ? "Так, відключити" :
+                   lang === "pl" ? "Tak, odłącz" :
+                   "Yes, disconnect"}
+                </Btn>
+                <Btn variant="ghost" onClick={() => setConfirmDisconnect(null)} disabled={disconnect.isPending}>
+                  <X className="h-3 w-3" />
+                </Btn>
+              </>
+            ) : (
+              <Btn variant="danger" onClick={() => setConfirmDisconnect(row.id)} disabled={disconnect.isPending}>
+                <Trash2 className="h-3 w-3" />
+                {lang === "ru" ? "Отключить" :
+                 lang === "ua" ? "Відключити" :
+                 lang === "pl" ? "Odłącz" :
+                 "Disconnect"}
+              </Btn>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -577,7 +823,9 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { href: "#settings", icon: Settings, label: t("common.settings", lang) },
   ];
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
+  const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
   const apts = api.salon.getAppointments.useQuery({ tenantId, date: aptDate || undefined }, { enabled: tab === "appointments" });
   const mastersList = api.salon.getMasters.useQuery({ tenantId }, { enabled: tab === "masters" });
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
@@ -637,6 +885,35 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                 icon={CreditCard} color="bg-emerald-500/20 text-emerald-400" />
             </div>
           )}
+
+          {/* Today's appointments feed */}
+          {todayApts.isLoading && (
+            <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
+          )}
+          {todayApts.data && todayApts.data.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">{t("salon.todayApts", lang)}</h3>
+                <button onClick={() => setTab("appointments")}
+                  className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+                  {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              {todayApts.data.slice(0, 4).map((a: any) => (
+                <AptCard key={a.id} a={a} lang={lang}
+                  onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })} />
+              ))}
+              {todayApts.data.length > 4 && (
+                <button onClick={() => setTab("appointments")}
+                  className="w-full text-xs text-slate-500 text-center py-2 hover:text-slate-300 transition-colors">
+                  +{todayApts.data.length - 4} {t("salon.appointments", lang).toLowerCase()}
+                </button>
+              )}
+            </div>
+          )}
+          {todayApts.data?.length === 0 && (
+            <p className="text-slate-500 text-sm text-center py-4">{t("salon.noApts", lang)}</p>
+          )}
         </div>
       )}
 
@@ -651,38 +928,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {apts.data?.map((a: any) => (
-              <div key={a.id} className="glass-card rounded-xl p-3">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
-                    <p className="text-xs text-slate-400">{a.svcId} · {a.date} {a.time}</p>
-                  </div>
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
-                    {t(`status.${a.status}` as any, lang)}
-                  </span>
-                </div>
-                {/* Action buttons for pending appointments */}
-                {a.status === "pending" && (
-                  <div className="flex gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button onClick={() => updateAptStatus.mutate({ tenantId, appointmentId: a.id, status: "confirmed" })}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> {t("action.confirm", lang)}
-                    </button>
-                    <button onClick={() => updateAptStatus.mutate({ tenantId, appointmentId: a.id, status: "rejected" })}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-medium hover:bg-red-500/25 transition-colors">
-                      <XCircle className="h-3.5 w-3.5" /> {t("action.reject", lang)}
-                    </button>
-                  </div>
-                )}
-                {a.status === "confirmed" && (
-                  <div className="flex gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button onClick={() => updateAptStatus.mutate({ tenantId, appointmentId: a.id, status: "cancelled" })}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-red-500/10 text-red-400/70 text-xs font-medium hover:bg-red-500/20 transition-colors">
-                      <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <AptCard key={a.id} a={a} lang={lang}
+                onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })} />
             ))}
             {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
           </div>
@@ -821,6 +1068,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {profile.isLoading ? <Loader2 className="animate-spin text-brand-400 mx-auto" /> : (
             <SalonSettingsEditor tenantId={tenantId} profile={profile.data} />
           )}
+          <GoogleCalendarSection tenantId={tenantId} />
         </>
       )}
 

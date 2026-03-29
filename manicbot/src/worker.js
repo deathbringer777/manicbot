@@ -27,8 +27,19 @@ function disallowLegacyWebhook(env, request, url) {
   );
 }
 
+function logWorkerError(label, request, url, error, extra = {}) {
+  const payload = {
+    method: request.method,
+    path: url.pathname,
+    message: error?.message || String(error || label),
+    ...extra,
+  };
+  if (error?.stack) payload.stack = error.stack;
+  console.error(`[worker] ${label}`, payload);
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, executionCtx) {
     const url = new URL(request.url);
 
     await ensureDemoBotsProvisioned(env);
@@ -45,6 +56,10 @@ export default {
     res = await tryGoogle(request, env, url);
     if (res) return res;
 
+    // Meta WA/IG before getCtx: paths /webhook/wa and /webhook/ig are not Telegram bot ids.
+    res = await tryMetaWebhooks(request, env, url, executionCtx);
+    if (res) return res;
+
     const isAdminPath = url.pathname.startsWith('/admin/');
     let ctx;
     try {
@@ -55,12 +70,15 @@ export default {
         else if (!skipLegacy) ctx = buildCtx(env);
       }
     } catch (e) {
+      logWorkerError('context resolution failed', request, url, e);
       if (url.pathname !== '/' && !isAdminPath) {
         try {
           const skipLegacy = disallowLegacyWebhook(env, request, url);
           if (env.BOT_TOKEN && env.WEBHOOK_SECRET && !skipLegacy) ctx = buildLegacyCtx(env);
           else if (!skipLegacy) ctx = buildCtx(env);
-        } catch (_) {}
+        } catch (fallbackError) {
+          logWorkerError('fallback context build failed', request, url, fallbackError);
+        }
       }
       if (!ctx) return new Response(e?.message || 'Server Error', { status: 500 });
     }
@@ -83,9 +101,6 @@ export default {
     if (res) return res;
 
     res = await tryTelegramWebhook(request, ctx, url);
-    if (res) return res;
-
-    res = await tryMetaWebhooks(request, env, url, ctx);
     if (res) return res;
 
     return new Response('Not Found', { status: 404 });
@@ -112,7 +127,10 @@ export default {
         env.BOT_TOKEN && env.WEBHOOK_SECRET ? buildLegacyCtx(env) : buildCtx(env);
       _scheduledCtx.waitUntil(handleCron(ctx));
     } catch (e) {
-      console.error('Cron init error:', e.message);
+      console.error('Cron init error:', {
+        message: e?.message || String(e),
+        stack: e?.stack || null,
+      });
     }
   },
 };

@@ -2,15 +2,16 @@
   "nav": {
     "about": "O bocie",
     "features": "Funkcje",
+    "channels": "Kanały",
     "howItWorks": "Jak działa",
     "ai": "Asystent AI",
     "pricing": "Cennik",
     "contacts": "Kontakt"
   },
   "hero": {
-    "tagline": "Bot Telegram do rezerwacji manicure",
+    "tagline": "Wielokanałowy bot do rezerwacji beauty",
     "title": "Rezerwacje w Telegramie bez niekończącej się korespondencji",
-    "subtitle": "ManicBot pomaga klientom wybrać usługę, znaleźć dogodny termin i potwierdzić wizytę w znanym czacie.",
+    "subtitle": "ManicBot pomaga klientom wybrać usługę, znaleźć dogodny termin i potwierdzić wizytę — przez Telegram, Instagram lub WhatsApp.",
     "cta": "Wypróbuj bota"
   },
   "stats": {
@@ -149,9 +150,35 @@
     "userTime": "14:30",
     "success": "Gotowe! Zapisane na jutro 14:30. Jeśli coś się zmieni — napisz tutaj."
   },
+  "channels": {
+    "title": "Jedna platforma — wszystkie kanały",
+    "subtitle": "Twoi klienci są na różnych platformach. ManicBot dociera do nich tam, gdzie już są.",
+    "live": "Działa",
+    "soon": "Wkrótce",
+    "items": {
+      "telegram": { "desc": "Natywny bot z przyciskami, szybkimi odpowiedziami i synchronizacją z Kalendarzem Google." },
+      "instagram": { "desc": "Odpowiadaj bezpośrednio z Instagram Direct. Przyciski automatycznie dostosowują się do limitu Instagrama." },
+      "whatsapp": { "desc": "Pełny proces rezerwacji w najpopularniejszym komunikatorze na świecie." }
+    }
+  },
+  "compare": {
+    "title": "Dlaczego ManicBot",
+    "subtitle": "Nie wszystkie narzędzia do rezerwacji są takie same.",
+    "col2": "Tradycyjne platformy",
+    "col3": "Boty jednokanałowe",
+    "rows": {
+      "multichannel": "Wielokanałowość (Telegram + Instagram)",
+      "ai": "Asystent AI",
+      "calendar": "Synchronizacja z Google Calendar",
+      "noapp": "Brak dodatkowej aplikacji dla klientów",
+      "setup": "Gotowe w kilka minut",
+      "multilang": "4 języki interfejsu",
+      "whitelabel": "White label"
+    }
+  },
   "footer": {
     "copy": "© 2025 ManicBot",
-    "tagline": "Bot Telegram do rezerwacji w branży beauty",
+    "tagline": "Wielokanałowy bot do rezerwacji w branży beauty",
     "links": {
       "telegram": "Telegram",
       "email": "Email"

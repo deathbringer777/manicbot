@@ -137,6 +137,9 @@ export const CB = {
   // Master selection during booking
   MASTER_ANY:  'ma',       // client picks "any available master"
   MASTER_SEL:  'ms:',      // client picks specific master: ms:{chatId}
+  // Instagram pagination (>13-button limit)
+  SVC_PAGE:    'svpg:',    // service list page nav (Instagram): svpg:{pageNum}
+  MASTER_PAGE: 'mspg:',    // master list page nav (Instagram): mspg:{pageNum}
   // Admin assigns master to unassigned appointment
   ADM_ASSIGN_M: 'adm:asm:', // show master list for apt: adm:asm:{aptId}
   ADM_SET_M:    'adm:stm:', // set master for apt: adm:stm:{aptId}:{masterId}
@@ -280,17 +283,24 @@ export function buildCtx(env) {
   if (!env.WEBHOOK_SECRET) throw new Error('Missing secret: WEBHOOK_SECRET');
   const botId = env.BOT_TOKEN.split(':')[0];
   return {
+    ...env,
     TG: `https://api.telegram.org/bot${env.BOT_TOKEN}`,
     ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: env.WEBHOOK_SECRET,
     kv: env.MANICBOT,
     globalKv: env.MANICBOT,
     db: env.DB || null,
+    tenantId: null,
+    tenant: null,
+    bot: { botId, botToken: env.BOT_TOKEN, webhookSecret: env.WEBHOOK_SECRET },
     adminChatId: env.ADMIN_CHAT_ID || null,
+    ADMIN_CHAT_ID: env.ADMIN_CHAT_ID || null,
     prefix: `b:${botId}:`,
+    channel: null,
     AI: env.AI || null,
     WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
     CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
+    BOT_ENCRYPTION_KEY: env.BOT_ENCRYPTION_KEY || null,
     GOOGLE_SERVICE_ACCOUNT_KEY: env.GOOGLE_SERVICE_ACCOUNT_KEY || null,
     GOOGLE_OAUTH_CLIENT_ID: env.GOOGLE_OAUTH_CLIENT_ID || null,
     GOOGLE_OAUTH_CLIENT_SECRET: env.GOOGLE_OAUTH_CLIENT_SECRET || null,

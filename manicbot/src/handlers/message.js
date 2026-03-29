@@ -2,9 +2,13 @@ import { CB, STEP } from '../config.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
-import { escHtml, fill, t, svcName, isValidChatId, detectLang } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
+
+function ticketFwdAckKey(cid) {
+  return `ticket_fwd_ack:${cid}`;
+}
 import { send, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';
@@ -198,7 +202,7 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
     return;
   }
   const toSend = (aiText ? escHtml(aiText) : t(lg, 'unknown')) + finalHint;
-  await send(ctx, cid, toSend, extraConsult);
+  return send(ctx, cid, toSend, extraConsult);
 }
 
 export async function onMsg(ctx, msg) {
@@ -206,7 +210,13 @@ export async function onMsg(ctx, msg) {
   if (msg.chat.type !== 'private') return;
 
   const cid = msg.chat.id;
-  if (!isValidChatId(cid)) return;
+  if (!isValidChatId(cid)) {
+    console.warn('[onMsg] invalid chat id rejected:', { channel: ctx.channel?.type, type: typeof cid, value: String(cid).slice(0, 80), tenantId: ctx.tenantId });
+    return;
+  }
+  if (ctx.channel?.type) {
+    console.log('[onMsg] channel message accepted:', { channel: ctx.channel.type, cid: String(cid).slice(0, 20), tenantId: ctx.tenantId });
+  }
   if (!await checkRateLimit(ctx, cid)) {
     const lg = (await getLang(ctx, cid)) || 'ru';
     await send(ctx, cid, t(lg, 'rate_limit'));
@@ -220,9 +230,10 @@ export async function onMsg(ctx, msg) {
 
   if (await isBlocked(ctx, cid)) return send(ctx, cid, t(lg, 'client_blocked'));
 
-  // Inactive/canceled billing: block all access except billing callbacks for non-platform-admins
+  // Inactive/canceled billing: block staff access, let clients through freely
   if (isInactive(ctx) && !(await isPlatformAdmin(ctx, cid))) {
-    return showInactiveMessage(ctx, cid);
+    const role = await getRole(ctx, cid);
+    if (role !== 'client') return showInactiveMessage(ctx, cid);
   }
 
   if (msg.contact && st.step === STEP.REG_PHONE) {
@@ -341,7 +352,7 @@ export async function onMsg(ctx, msg) {
   }
 
   if (txt === '/resetwebhooks') {
-    if (!(await isPlatformAdmin(ctx, cid))) return;
+    if (!(await isPlatformAdmin(ctx, cid))) return send(ctx, cid, t(lg, 'sysadm_no_access'));
     if (!ctx.db || !ctx.baseUrl) return send(ctx, cid, '❌ DB или baseUrl недоступны');
     await send(ctx, cid, '🔄 Обновляю вебхуки для всех ботов...');
     let ok = 0, fail = 0;
@@ -430,6 +441,18 @@ export async function onMsg(ctx, msg) {
           for (const m of masters) if (m.chatId && !m.onVacation) await send(ctx, m.chatId, toSend);
           if (adminId) await send(ctx, adminId, toSend);
           if (ctx.adminChatId) await send(ctx, ctx.adminChatId, toSend);
+        }
+        if (ctx.kv) {
+          const ackK = ticketFwdAckKey(cid);
+          const seen = await kvGet(ctx, ackK);
+          if (!seen) {
+            await kvPut(ctx, ackK, true, { expirationTtl: 172800 });
+            await send(ctx, cid, t(lg, 'ticket_forwarded_ok'));
+          } else {
+            await send(ctx, cid, '✅');
+          }
+        } else {
+          await send(ctx, cid, t(lg, 'ticket_forwarded_ok'));
         }
         return;
       }
@@ -1237,6 +1260,9 @@ export async function onMsg(ctx, msg) {
     return showAdminCancelAllConfirm(ctx, cid);
   }
 
+  if (!instagramAiTriggerAllows(ctx, txt)) {
+    return send(ctx, cid, t(lg, 'ig_ai_trigger_hint'));
+  }
   return handleAIChat(ctx, cid, txt, lg, realRole, msg.from);
 }
 

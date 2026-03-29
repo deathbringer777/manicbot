@@ -277,6 +277,18 @@ export const salonRouter = createTRPCRouter({
       }
 
       await ctx.db.update(appointments).set(setObj).where(eq(appointments.id, input.appointmentId));
+
+      // Fire-and-forget: notify Worker to send Telegram message + sync calendar
+      const workerUrl = env.WORKER_PUBLIC_URL;
+      const adminKey = env.ADMIN_KEY;
+      if (workerUrl && adminKey) {
+        fetch(`${workerUrl}/admin/appointment-action?key=${encodeURIComponent(adminKey)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: input.status, appointmentId: input.appointmentId, tenantId: input.tenantId, confirmedBy: setObj.confirmedBy ?? null }),
+        }).catch(e => console.error("[salon] Worker notification error:", e.message));
+      }
+
       return { success: true };
     }),
 
@@ -301,9 +313,10 @@ export const salonRouter = createTRPCRouter({
         name: input.name,
       });
       // Also assign tenant_roles entry so master can access the mini-app
+      const now = Math.floor(Date.now() / 1000);
       await ctx.db.insert(tenantRoles)
-        .values({ tenantId: input.tenantId, chatId: input.chatId, role: "master" })
-        .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master" } });
+        .values({ tenantId: input.tenantId, chatId: input.chatId, role: "master", createdAt: now })
+        .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
       return { success: true };
     }),
 

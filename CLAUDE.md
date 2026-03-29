@@ -54,7 +54,7 @@ Any change under `manicbot/migrations/` must stay in sync with:
 1. `manicbot/src/db/schema.sql` (reference DDL)
 2. `manicbot/admin-app/src/server/db/schema.ts` (Drizzle)
 
-Run `npm run check-schema` in `manicbot/` in CI to verify table names match.
+Run `npm run check-schema` in `manicbot/` in CI to verify table names and columns match.
 
 ---
 
@@ -156,6 +156,7 @@ Telegram Mini App opens
 | `master` | `routers/masterRouter.ts` | `master` or `tenant_owner` for tenantId |
 | `support` | `routers/support.ts` | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`) |
 | `channels` | `routers/channels.ts` | protected + `assertTenantOwner` |
+| `googleCalendar` | `routers/googleCalendar.ts` | protected + `assertTenantOwner` |
 | `conversations` | `routers/conversations.ts` | protected + `assertTenantOwner` |
 | `metrics` | `routers/metrics.ts` | adminProcedure |
 | `users` | `routers/users.ts` | adminProcedure |
@@ -186,7 +187,7 @@ Telegram Mini App opens
 ```bash
 cd manicbot/
 npm test                     # Worker Vitest (~826 tests)
-npm run check-schema         # D1: table names in schema.sql vs Drizzle schema.ts
+npm run check-schema         # D1: table + column parity between schema.sql and Drizzle schema.ts
 
 cd admin-app/
 npm run typecheck
@@ -213,6 +214,46 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 - `STRIPE_PRICE_START_MONTHLY`, `_PRO_MONTHLY`, `_STUDIO_MONTHLY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `WORKERS_AI_API_TOKEN`
+
+**Meta channels** (WhatsApp / Instagram via [`metaWebhooksHttp.js`](manicbot/src/http/metaWebhooksHttp.js)):
+- `META_APP_SECRET` — must match the Meta app; required for signed POST webhooks (otherwise 403).
+- `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` — webhook verification; same values on Pages for Mini App hints.
+- `BOT_ENCRYPTION_KEY` — decrypts `channel_configs.token_encrypted` for outbound Graph calls.
+- Optional: `INSTAGRAM_IGNORE_SENDER_IDS`, `INSTAGRAM_AI_TRIGGER` — see [META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md).
+
+**Outbound Instagram** uses `graph.facebook.com` + Page ID + Page access token ([`channels/instagram.js`](manicbot/src/channels/instagram.js)); **`entry.id`** is matched to `page_id` / `instagram_business_id` / `ig_account_id` in D1 ([`channels/resolver.js`](manicbot/src/channels/resolver.js)).
+
+**IG E2E fixture:** `cd manicbot && npm run ig-e2e:tenant -- --owner=TG_USER_ID --bot-id=BOT_ID` (optional `--dry-run` / `--local`) — see [`META_CHANNELS_SETUP.md`](manicbot/META_CHANNELS_SETUP.md) § «Тестовый тенант для E2E».
+
+**Instagram channel provisioning (new client onboarding):**
+
+```bash
+# Create IG channel for existing tenant:
+curl -X POST "https://manicbot.com/admin/ig-channel?key=ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "EAAxxxxxxx...",
+    "pageId": "1784360123456",
+    "tenantId": "t_existing_tenant",
+    "igAccountId": "17841437...",
+    "instagramBusinessId": "25881183..."
+  }'
+
+# Create IG-only tenant (no Telegram bot required):
+curl -X POST "https://manicbot.com/admin/ig-channel?key=ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "EAAxxxxxxx...",
+    "pageId": "1784360123456",
+    "tenantName": "New Salon Name"
+  }'
+```
+
+To update an existing IG token: `POST /admin/ig-token?key=ADMIN_KEY` with `{ "token": "EAA...", "tenantId": "t_xxx" }`.
+
+**IG-only tenants** are fully supported — `buildChannelCtx` works without a Telegram bot (`ctx.bot = null`, `ctx.TG = null`).
+
+**Billing model:** Clients (regular users) always have free access to the bot (booking, info, catalog). Billing gates (`isInactive`) only restrict staff features (admin panel, master panel, AI, calendar, support). Platform admins (`ADMIN_CHAT_ID` / `system_admin`) always bypass all billing checks.
 
 ### Admin Mini-App
 ```bash
@@ -249,6 +290,8 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 | `channel_configs` | WhatsApp / Instagram bindings per tenant |
 | `conversations` | Unified inbox rows (омниканал) |
 | `message_windows` | Last user message time (WA/IG 24h policy) |
+| `google_integrations` | Tenant/master Google OAuth integrations + sync status |
+| `google_busy_blocks` | Cached external busy windows loaded from Google Calendar |
 
 ---
 
@@ -280,3 +323,18 @@ if (await isAdmin(ctx, chatId)) { ... }
 // Type-safe chat ID comparison — always String()
 String(ctx.adminChatId) === String(cid)
 ```
+
+## Debugging Bot Silence
+
+When the bot "does not respond", check the context resolution chain in this order:
+
+1. `src/http/resolveCtx.js` / `getCtx()` — D1 tenant/bot resolution for `POST /webhook/{botId}`
+2. `buildLegacyCtx(env)` — legacy single-bot fallback for `POST /webhook`
+3. `buildCtx(env)` — last-resort fallback when D1/legacy resolution partially fails
+
+Notes:
+
+- `src/worker.js` now logs `[worker] context resolution failed` and `[worker] fallback context build failed` with request path/method and stack, but never serializes the full `ctx`.
+- If `REQUIRE_WEBHOOK_BOT_ID=1`, legacy `POST /webhook` is rejected with 403. Use `/webhook/{botId}`.
+- If the worker still serves old behavior, confirm the latest local commit is actually deployed.
+- For Google OAuth connect URLs from Telegram callbacks, `APP_BASE_URL` must be set on the Worker so the bot can mint absolute `/google/connect` links.

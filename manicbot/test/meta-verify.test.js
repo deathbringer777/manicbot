@@ -2,26 +2,9 @@
  * Tests for meta-verify.js:
  *  - verifyMetaSignature (HMAC-SHA256)
  *  - handleHubChallenge (hub.challenge verification)
- *
- * Note: crypto.subtle.timingSafeEqual is a Cloudflare Workers extension.
- * We polyfill it for Node.js test environment.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { verifyMetaSignature, handleHubChallenge } from '../src/channels/meta-verify.js';
-
-// Polyfill crypto.subtle.timingSafeEqual for Node.js (Workers-only API)
-beforeAll(() => {
-  if (typeof crypto !== 'undefined' && crypto.subtle && !crypto.subtle.timingSafeEqual) {
-    crypto.subtle.timingSafeEqual = (a, b) => {
-      const ua = new Uint8Array(a instanceof ArrayBuffer ? a : a.buffer);
-      const ub = new Uint8Array(b instanceof ArrayBuffer ? b : b.buffer);
-      if (ua.length !== ub.length) return false;
-      let diff = 0;
-      for (let i = 0; i < ua.length; i++) diff |= ua[i] ^ ub[i];
-      return diff === 0;
-    };
-  }
-});
 
 // ─── verifyMetaSignature ──────────────────────────────────────────────────────
 

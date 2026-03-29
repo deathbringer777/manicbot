@@ -1,12 +1,15 @@
+/**
+ * Constant-time comparison of two strings (UTF-8 bytes).
+ * Do not use crypto.subtle.timingSafeEqual here: it returns a Promise; callers expect a boolean.
+ */
 export function timingSafeEqual(a, b) {
   if (a == null || b == null) return false;
   const ta = new TextEncoder().encode(String(a));
   const tb = new TextEncoder().encode(String(b));
-  if (ta.length !== tb.length) {
-    crypto.subtle.timingSafeEqual(tb, tb);
-    return false;
-  }
-  return crypto.subtle.timingSafeEqual(ta, tb);
+  if (ta.length !== tb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ta.length; i++) diff |= ta[i] ^ tb[i];
+  return diff === 0;
 }
 
 export function checkAdmin(request, adminKey) {

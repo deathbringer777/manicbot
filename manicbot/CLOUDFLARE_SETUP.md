@@ -147,7 +147,14 @@ cd manicbot && chmod +x scripts/setup-stripe-secrets.sh && ./scripts/setup-strip
 | `META_VERIFY_TOKEN_WA` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_WA` |
 | `META_VERIFY_TOKEN_IG` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_IG` |
 
-Только у **Worker** (не Pages): опциональный секрет `INSTAGRAM_IGNORE_SENDER_IDS` — IGSID через запятую/пробел, чтобы не обрабатывать служебные Instagram-отправители (см. **META_CHANNELS_SETUP.md**, раздел про @username / IGSID).
+Только у **Worker** (не Pages):
+
+| Секрет | Назначение |
+|--------|------------|
+| `META_APP_SECRET` | App Secret из Meta — подпись `X-Hub-Signature-256` на POST `/webhook/wa` и `/webhook/ig`. Без совпадения с приложением Meta ответ **403**, сообщения не обрабатываются (GET challenge может проходить). |
+| `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` | Строки верификации вебхука (дублируются в Pages для Mini App). |
+| `INSTAGRAM_IGNORE_SENDER_IDS` | Опционально: IGSID через запятую/пробел — не обрабатывать этих отправителей (служебные аккаунты). См. **META_CHANNELS_SETUP.md**. |
+| `INSTAGRAM_AI_TRIGGER` | Опционально: подстроки через запятую — если задано, свободный текст в Instagram без совпадения не уходит в LLM (см. **META_CHANNELS_SETUP.md**). Пусто = как Telegram. |
 
 Инструкция для клиентов салона: **META_CHANNELS_SETUP.md**.
 

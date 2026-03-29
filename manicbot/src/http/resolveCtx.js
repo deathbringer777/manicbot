@@ -10,9 +10,13 @@ export async function getCtx(env, url, request) {
   const ec = envCtx(env);
   const webhookBotMatch = url.pathname.match(/^\/webhook\/([^/]+)$/);
   if (request.method === 'POST' && webhookBotMatch) {
-    const resolved = await resolveTenantFromBotId(ec, webhookBotMatch[1], env.BOT_ENCRYPTION_KEY || null);
-    if (!resolved) return null;
-    return buildTenantCtx(env, resolved);
+    const seg = webhookBotMatch[1];
+    // Meta WhatsApp / Instagram — not Telegram bot ids (see tryMetaWebhooks, tryTelegramWebhook)
+    if (seg !== 'wa' && seg !== 'ig') {
+      const resolved = await resolveTenantFromBotId(ec, seg, env.BOT_ENCRYPTION_KEY || null);
+      if (!resolved) return null;
+      return buildTenantCtx(env, resolved);
+    }
   }
   // Optional: forbid legacy POST /webhook (no botId) when D1 is bound — use /webhook/{botId} only.
   if (

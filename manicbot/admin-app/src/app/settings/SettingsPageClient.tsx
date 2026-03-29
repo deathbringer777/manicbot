@@ -6,7 +6,7 @@ import { Shell, RoleSwitcherInline, LangPickerInline } from "~/components/layout
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { Save, Bot, Key, Power, Clock, CheckCircle, Zap, Globe } from "lucide-react";
+import { Save, Bot, Key, Power, Clock, CheckCircle, Zap, Globe, Info } from "lucide-react";
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -110,6 +110,17 @@ export default function SettingsPageClient() {
         {/* Creator: preview mode + language (moved from shell to avoid duplicate controls next to Settings tab) */}
         {role === "system_admin" && (
           <section className="glass-card rounded-2xl p-4 space-y-5">
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3">
+              <div className="flex items-start gap-2">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-200">Preview mode and language live here now</p>
+                  <p className="mt-1 text-[11px] text-amber-100/80">
+                    The mobile shell keeps a highlighted Settings tab so role switching does not disappear when controls move out of the header.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="w-4 h-4 text-amber-400 shrink-0" />

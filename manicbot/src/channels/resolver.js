@@ -10,6 +10,42 @@ import { decryptToken } from '../utils/security.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
 import { getTenant, getBot, getBotIdsByTenantId, getBotToken } from '../tenant/storage.js';
 
+/** @param {unknown} v */
+function channelIdString(v) {
+  if (v == null || v === '') return null;
+  return String(v);
+}
+
+/**
+ * Mini App / migrations may store Meta access tokens as plaintext in `token_encrypted`.
+ * When BOT_ENCRYPTION_KEY is unset or decrypt fails, still use the value if it looks like a token.
+ * @param {string} s
+ */
+function isLikelyPlaintextMetaChannelToken(s) {
+  if (!s || typeof s !== 'string' || s.length < 50) return false;
+  if (!/^[A-Za-z0-9_-]+$/.test(s)) return false;
+  return s.startsWith('EAA') || s.startsWith('IGAA');
+}
+
+/**
+ * True if webhook `entry.id` matches stored Instagram channel config.
+ * Compares string forms of `page_id` and optional `ig_account_id` / `instagram_business_id`.
+ *
+ * @param {string|number} webhookEntryId - Meta `entry.id` (string or number in JSON)
+ * @param {Record<string, unknown>} cfg - Parsed channel_configs.config
+ * @returns {boolean}
+ */
+export function instagramWebhookEntryIdMatchesConfig(webhookEntryId, cfg) {
+  const needle = channelIdString(webhookEntryId);
+  if (!needle) return false;
+  const keys = ['page_id', 'ig_account_id', 'instagram_business_id'];
+  for (const k of keys) {
+    const cand = channelIdString(cfg[k]);
+    if (cand && cand === needle) return true;
+  }
+  return false;
+}
+
 /**
  * Resolve tenant from a WhatsApp phone_number_id.
  * The phone_number_id is stored in channel_configs.config JSON as { phone_number_id }.
@@ -20,13 +56,16 @@ import { getTenant, getBot, getBotIdsByTenantId, getBotToken } from '../tenant/s
  */
 export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
   if (!ctx?.db || !phoneNumberId) return null;
+  const needle = channelIdString(phoneNumberId);
+  if (!needle) return null;
   const rows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1",
   );
   for (const row of rows) {
     try {
       const cfg = row.config ? JSON.parse(row.config) : {};
-      if (cfg.phone_number_id === phoneNumberId) {
+      const stored = channelIdString(cfg.phone_number_id);
+      if (stored && stored === needle) {
         return { tenantId: row.tenant_id, channelConfig: row };
       }
     } catch { /* skip malformed */ }
@@ -43,14 +82,14 @@ export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
  * @returns {Promise<{tenantId: string, channelConfig: object}|null>}
  */
 export async function resolveTenantFromInstagram(ctx, igPageId) {
-  if (!ctx?.db || !igPageId) return null;
+  if (!ctx?.db || igPageId == null || igPageId === '') return null;
   const rows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'instagram' AND active = 1",
   );
   for (const row of rows) {
     try {
       const cfg = row.config ? JSON.parse(row.config) : {};
-      if (cfg.page_id === igPageId) {
+      if (instagramWebhookEntryIdMatchesConfig(igPageId, cfg)) {
         return { tenantId: row.tenant_id, channelConfig: row };
       }
     } catch { /* skip malformed */ }
@@ -76,9 +115,12 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
   );
   if (!rows.length) return null;
   const row = rows[0];
-  const token = row.token_encrypted && encKey
-    ? await decryptToken(row.token_encrypted, encKey)
-    : null;
+  let token = null;
+  const rawTok = row.token_encrypted;
+  if (rawTok) {
+    if (encKey) token = await decryptToken(rawTok, encKey);
+    if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) token = rawTok;
+  }
   const config = row.config ? JSON.parse(row.config) : {};
   return { ...row, token, config };
 }

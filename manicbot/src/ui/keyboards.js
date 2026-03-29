@@ -44,8 +44,30 @@ export function langKb() {
   ] } };
 }
 
-export function svcKb(ctx, lg) {
-  const rows = ctx.svc.filter(s => s.active !== false && s.hidden !== true).map(s => [{
+const IG_SVC_PAGE_SIZE = 10; // max services per page on Instagram (leaves room for nav + back)
+
+export function svcKb(ctx, lg, page = 0) {
+  const all = ctx.svc.filter(s => s.active !== false && s.hidden !== true);
+  const isIG = ctx.channel?.type === 'instagram';
+
+  // Instagram: paginate when >12 services (13th button would be cut off)
+  if (isIG && all.length > 12) {
+    const totalPages = Math.ceil(all.length / IG_SVC_PAGE_SIZE);
+    const p = Math.max(0, Math.min(page, totalPages - 1));
+    const slice = all.slice(p * IG_SVC_PAGE_SIZE, (p + 1) * IG_SVC_PAGE_SIZE);
+    const rows = slice.map(s => [{
+      text: `${s.e} ${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
+      callback_data: CB.SERVICE + s.id,
+    }]);
+    const nav = [];
+    if (p > 0) nav.push({ text: '◀', callback_data: CB.SVC_PAGE + (p - 1) });
+    if (p < totalPages - 1) nav.push({ text: '▶', callback_data: CB.SVC_PAGE + (p + 1) });
+    if (nav.length) rows.push(nav);
+    rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
+    return { reply_markup: { inline_keyboard: rows } };
+  }
+
+  const rows = all.map(s => [{
     text: `${s.e} ${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
     callback_data: CB.SERVICE + s.id,
   }]);

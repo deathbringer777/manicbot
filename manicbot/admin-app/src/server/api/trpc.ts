@@ -16,6 +16,7 @@ import { eq } from "drizzle-orm";
 import { validateWebAppData } from "~/server/auth/telegram";
 import { env } from "~/env";
 import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
+import { auth } from "~/server/auth/auth";
 
 /**
  * 1. CONTEXT
@@ -30,6 +31,7 @@ import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
  * @see https://trpc.io/docs/server/context
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
+  // 1. Try Telegram Mini App auth (x-telegram-init-data header)
   const telegramInitData = opts.headers.get("x-telegram-init-data");
   let user = null;
   if (telegramInitData) {
@@ -39,11 +41,30 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
     }
   }
 
+  // 2. Fallback: next-auth web session (JWT cookie) for browser-based logins
+  let webUser: { id: string; email: string; tenantId: string | null; webRole: string } | null = null;
+  if (!user) {
+    try {
+      const session = await auth();
+      if (session?.user?.email) {
+        webUser = {
+          id: (session.user as any).id ?? session.user.email,
+          email: session.user.email,
+          tenantId: (session.user as any).tenantId ?? null,
+          webRole: (session.user as any).webRole ?? "tenant_owner",
+        };
+      }
+    } catch {
+      // auth() may throw in non-request contexts — ignore
+    }
+  }
+
   const db = getDb();
 
   return {
     db,
-    user,
+    user,       // Telegram user (id = Telegram chatId)
+    webUser,    // Web session user (id = web user UUID)
     ...opts,
   };
 };
@@ -123,16 +144,16 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 export const publicProcedure = t.procedure.use(timingMiddleware);
 
 /**
- * Authenticated procedure — valid Telegram WebApp init data required (ctx.user).
+ * Authenticated procedure — requires valid Telegram WebApp init data OR a web session.
  */
 export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({ ctx, next }) => {
-  if (!ctx.user) {
+  if (!ctx.user && !ctx.webUser) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: "Telegram Verification Failed",
+      message: "Authentication required",
     });
   }
-  return next({ ctx: { ...ctx, user: ctx.user } });
+  return next({ ctx });
 });
 
 /**

@@ -90,12 +90,15 @@ export async function enterBookingAdjustState(ctx, cid, prev) {
   });
 }
 
+const IG_MASTER_PAGE_SIZE = 10; // max masters per page on Instagram
+
 /**
  * Show master selection step during booking.
  * Called after date is chosen. Lists active masters + "any" option.
  * If no masters, skips directly to time selection.
+ * On Instagram with >11 masters, paginates to stay within the 13-button limit.
  */
-export async function showMasterPick(ctx, cid, svcId, date, st) {
+export async function showMasterPick(ctx, cid, svcId, date, st, page = 0) {
   const lg = await getLang(ctx, cid) || 'ru';
   const masters = (await listMasters(ctx)).filter(m => !m.onVacation && m.active !== false);
   if (!masters.length) {
@@ -106,12 +109,33 @@ export async function showMasterPick(ctx, cid, svcId, date, st) {
     return send(ctx, cid, `📅 <b>${fmtDate(lg, date)}</b>\n${svcName(ctx, lg, svcId)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
   }
   await setState(ctx, cid, { ...st, step: STEP.MASTER_PICK });
+
+  const isIG = ctx.channel?.type === 'instagram';
   const btns = [];
-  btns.push([{ text: t(lg, 'book_any_master'), callback_data: CB.MASTER_ANY }]);
-  for (const m of masters) {
-    btns.push([{ text: fill(t(lg, 'book_master_label'), { name: escHtml(m.name) }), callback_data: CB.MASTER_SEL + m.chatId }]);
+
+  if (isIG && masters.length > 11) {
+    // Instagram: paginate master list (>11 masters won't fit with "any" + back in 13 slots)
+    const totalPages = Math.ceil(masters.length / IG_MASTER_PAGE_SIZE);
+    const p = Math.max(0, Math.min(page, totalPages - 1));
+    const slice = masters.slice(p * IG_MASTER_PAGE_SIZE, (p + 1) * IG_MASTER_PAGE_SIZE);
+    // "Any master" only on first page
+    if (p === 0) btns.push([{ text: t(lg, 'book_any_master'), callback_data: CB.MASTER_ANY }]);
+    for (const m of slice) {
+      btns.push([{ text: fill(t(lg, 'book_master_label'), { name: escHtml(m.name) }), callback_data: CB.MASTER_SEL + m.chatId }]);
+    }
+    const nav = [];
+    if (p > 0) nav.push({ text: '◀', callback_data: CB.MASTER_PAGE + (p - 1) });
+    if (p < totalPages - 1) nav.push({ text: '▶', callback_data: CB.MASTER_PAGE + (p + 1) });
+    if (nav.length) btns.push(nav);
+    btns.push([{ text: t(lg, 'back'), callback_data: CB.CAL_BACK }]);
+  } else {
+    btns.push([{ text: t(lg, 'book_any_master'), callback_data: CB.MASTER_ANY }]);
+    for (const m of masters) {
+      btns.push([{ text: fill(t(lg, 'book_master_label'), { name: escHtml(m.name) }), callback_data: CB.MASTER_SEL + m.chatId }]);
+    }
+    btns.push([{ text: t(lg, 'back'), callback_data: CB.CAL_BACK }]);
   }
-  btns.push([{ text: t(lg, 'back'), callback_data: CB.CAL_BACK }]);
+
   await send(ctx, cid, t(lg, 'book_choose_master'), { reply_markup: { inline_keyboard: btns } });
 }
 

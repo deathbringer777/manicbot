@@ -30,6 +30,25 @@
 - **Файл:** `src/utils/helpers.js`.
 - **Тест:** в `test/helpers.test.js` добавлена проверка `escHtml("'apos'") === '&#39;apos&#39;'`.
 
+### 3. Telegram webhook: секрет (2026-03-29, пересмотрено 2026-03-29)
+
+- **Проблема A:** при пустом секрете в контексте и пустом заголовке сравнение давало «совпадение»; запросы проходили без аутентификации.
+- **Исправление A (первичное — было отменено):** возврат 500 при пустом `WEBHOOK_SECRET`. **Вызвало регрессию** — боты, зарегистрированные без `secret_token`, перестали отвечать.
+- **Исправление B (финальное):** если `WEBHOOK_SECRET` задан и непустой — строгое сравнение через `timingSafeEqual`, иначе (пустой/null) — запрос проходит с предупреждением в лог `[telegram-webhook] WEBHOOK_SECRET not set...`. Обратная совместимость сохранена.
+- **Файлы:** `src/http/telegramWebhookHttp.js`, `test/telegram-webhook-http.test.js`.
+
+### 4. Meta hub verify: сравнение токена (2026-03-29)
+
+- **Проблема:** `hub.verify_token` сравнивался с `===` (не constant-time).
+- **Исправление:** `timingSafeEqual(token, storedVerifyToken)` при непустых токенах.
+- **Файл:** `src/channels/meta-verify.js`.
+
+### 5. Meta signature verify: портируемость (2026-03-29)
+
+- **Проблема:** `verifyMetaSignature` использовал `crypto.subtle.timingSafeEqual` — Cloudflare Workers extension, в Node.js/тестах отсутствует (требовал polyfill в тестах).
+- **Исправление:** заменено на `timingSafeEqual(hex, expected)` из `../utils/security.js` (уже импортирован). Polyfill из `test/meta-verify.test.js` удалён.
+- **Файлы:** `src/channels/meta-verify.js`, `test/meta-verify.test.js`.
+
 ---
 
 ## Что не менялось (всё в порядке)
@@ -56,4 +75,48 @@
 
 ---
 
-**Деплой не выполнялся.** После проверки можно выкатить изменения: `npm test && npx wrangler deploy`.
+---
+
+## Дополнение: исправления 2026-03-29 (задеплоены)
+
+### 5. Admin-app: D1 binding и ADMIN_CHAT_ID в Pages
+
+- **Проблема:** Cloudflare Pages проект `admin-app` не имел привязки к D1 и переменной `ADMIN_CHAT_ID` → при открытии мини-апп все получали экран «Forbidden» вместо своих дашбордов.
+- **Исправление:** `ADMIN_CHAT_ID` задан через `wrangler pages secret put`; Pages пересобрана с `--branch main` — D1 binding подтянулся из `wrangler.toml`.
+
+### 6. Instagram: нет валидного Page Access Token
+
+- **Проблема:** `INSTAGRAM_ACCESS_TOKEN` в Cloudflare secrets содержал IGAA-токен (Instagram user token), непригодный для вызовов `POST /{page-id}/messages`. Graph API возвращает код 190 «Cannot parse access token».
+- **Исправление:** добавлен защищённый endpoint `POST /admin/ig-token?key=ADMIN_KEY` для валидации и сохранения EAA Page Access Token в D1. **Требует действия:** сгенерировать Facebook Page Access Token (EAA…) через Graph API Explorer и залить через этот endpoint.
+
+### 7. Admin Worker: endpoint `/admin/ig-token`
+
+- Принимает `{ token, tenantId }`, валидирует через `GET /v21.0/me`, сохраняет plaintext EAA в `channel_configs.token_encrypted`.
+- Защищён через `timingSafeEqual(key, ADMIN_KEY)`.
+
+**Все изменения задеплоены:** Worker `17b4db51`, Pages `2467d47b`.
+
+---
+
+## Дополнение: исправления 2026-03-29 #2 (Instagram, выполнено)
+
+### 8. Instagram: неверный page_id в D1 + отсутствие токена с permissions
+
+- **Проблема A:** `channel_configs.config.page_id` содержал `25881183448226493` (несуществующий ID) вместо реального Facebook Page ID `1008301152373103`. Resolver не мог смаппировать входящий вебхук `entry.id` → тенант.
+- **Проблема Б:** Сохранённый в D1 токен отсутствовал (NULL). EAA-токен из env INSTAGRAM_ACCESS_TOKEN также был IGAA и не работал для messaging.
+- **Исправление:**
+  1. `channel_configs.config` обновлён: `page_id=1008301152373103`, добавлены `ig_account_id=17841437566398676`, `instagram_business_id=25881183448226493` (через `wrangler d1 execute`).
+  2. Получен Facebook Page Access Token (EAA…, с разрешениями `pages_messaging` + `instagram_manage_messages`) через Graph API Explorer → `POST /admin/ig-token` → сохранён в `channel_configs.token_encrypted` тенанта `t_1c305v2g5011`.
+  3. Валидация: токен успешно вызывает `GET /1008301152373103/conversations?platform=instagram` — возвращает реальные переписки.
+- **Статус:** Instagram-бот должен отвечать на DM.
+
+### Текущее состояние D1 (channel_configs, instagram)
+
+| Поле | Значение |
+|------|---------|
+| `tenant_id` | `t_1c305v2g5011` |
+| `page_id` | `1008301152373103` |
+| `ig_account_id` | `17841437566398676` |
+| `instagram_business_id` | `25881183448226493` |
+| `token_encrypted` | EAA… (plaintext Page Access Token) |
+| `updated_at` | 1774791034 |

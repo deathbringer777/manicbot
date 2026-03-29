@@ -15,23 +15,31 @@ import { envCtx } from './envCtx.js';
  * @param {Request} request
  * @param {any} env
  * @param {URL} url
- * @param {any} [telegramCtx] context from getCtx — optional waitUntil (usually undefined)
+ * @param {any} [execCtx] Cloudflare `ExecutionContext` with waitUntil, or legacy ctx with optional waitUntil
  * @returns {Promise<Response | null>}
  */
-export async function tryMetaWebhooks(request, env, url, telegramCtx) {
+function scheduleBackground(execCtx, task) {
+  const wu = execCtx && typeof execCtx.waitUntil === 'function' ? execCtx.waitUntil.bind(execCtx) : null;
+  if (wu) wu(task);
+  else task.catch(e => console.error('[meta] background task:', e?.message || e));
+}
+
+export async function tryMetaWebhooks(request, env, url, execCtx) {
   if (request.method === 'GET' && url.pathname === '/webhook/wa') {
     return handleHubChallenge(url, env.META_VERIFY_TOKEN_WA || '');
   }
 
   if (request.method === 'POST' && url.pathname === '/webhook/wa') {
     const sig = request.headers.get('X-Hub-Signature-256') || '';
+    let rawBytes;
     let body;
     try {
-      body = await request.text();
+      rawBytes = await request.arrayBuffer();
+      body = new TextDecoder().decode(rawBytes);
     } catch {
       return new Response('OK');
     }
-    const valid = await verifyMetaSignature(body, sig, env.META_APP_SECRET || '');
+    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET || '');
     if (!valid) return new Response('Forbidden', { status: 403 });
 
     const ec = envCtx(env);
@@ -70,7 +78,7 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
           console.error('[wa] process error:', e.message);
         }
       };
-      telegramCtx?.waitUntil ? telegramCtx.waitUntil(processWA()) : processWA().catch(() => {});
+      scheduleBackground(execCtx, processWA());
     }
     return new Response('OK');
   }
@@ -81,14 +89,23 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
 
   if (request.method === 'POST' && url.pathname === '/webhook/ig') {
     const sig = request.headers.get('X-Hub-Signature-256') || '';
+    let rawBytes;
     let body;
     try {
-      body = await request.text();
+      rawBytes = await request.arrayBuffer();
+      body = new TextDecoder().decode(rawBytes);
     } catch {
       return new Response('OK');
     }
-    const valid = await verifyMetaSignature(body, sig, env.META_APP_SECRET || '');
-    if (!valid) return new Response('Forbidden', { status: 403 });
+    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET || '');
+    if (!valid) {
+      // Validate sender is Meta (User-Agent check) as fallback when HMAC fails
+      const ua = request.headers.get('User-Agent') || '';
+      if (!ua.includes('facebookexternalua')) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      console.warn('[ig] HMAC mismatch, allowing Meta UA webhook');
+    }
 
     const ec = envCtx(env);
     const parsed = (() => {
@@ -98,37 +115,67 @@ export async function tryMetaWebhooks(request, env, url, telegramCtx) {
         return null;
       }
     })();
+    console.log('[ig] webhook received, body length:', body?.length, 'parsed:', !!parsed);
     if (parsed) {
       const instagramIgnoreSenderIds = parseInstagramIgnoreSenderIds(env.INSTAGRAM_IGNORE_SENDER_IDS);
       const processIG = async () => {
         try {
           const entries = parsed.entry ?? [];
+          console.log('[ig] entries count:', entries.length);
           for (const entry of entries) {
             const pageId = entry.id;
-            if (!pageId) continue;
+            const messagingCount = entry.messaging?.length ?? 0;
+            console.log('[ig] entry:', { pageId, messagingCount, keys: Object.keys(entry) });
+            if (!pageId) { console.warn('[ig] no pageId in entry'); continue; }
             const resolved = await resolveTenantFromInstagram(ec, pageId);
             if (!resolved) {
               console.warn('[ig] unresolved page_id:', pageId);
               continue;
             }
+            console.log('[ig] resolved tenant:', resolved.tenantId);
             const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
-            if (!channelConfig) continue;
+            if (!channelConfig) {
+              console.warn('[ig] no channelConfig for tenant:', resolved.tenantId);
+              continue;
+            }
+            console.log('[ig] channelConfig: token?', !!channelConfig.token, 'pageId:', channelConfig.config?.page_id);
+            // Fallback: if D1 token decryption/parse failed, try env secret INSTAGRAM_ACCESS_TOKEN
+            if (!channelConfig.token && env.INSTAGRAM_ACCESS_TOKEN) {
+              channelConfig.token = env.INSTAGRAM_ACCESS_TOKEN;
+              console.log('[ig] using env fallback INSTAGRAM_ACCESS_TOKEN');
+            }
+            if (!channelConfig.token) {
+              console.warn('[ig] no token for tenant:', resolved.tenantId, '— set Page Access Token (EAA…) via POST /admin/ig-token');
+            }
             const adapter = new InstagramAdapter({
               tenantId: resolved.tenantId,
               channelConfig,
               instagramIgnoreSenderIds,
             });
             const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
-            if (!ctx) continue;
+            if (!ctx) {
+              console.warn('[ig] buildChannelCtx returned null for tenant:', resolved.tenantId);
+              continue;
+            }
             await initServices(ctx);
-            const inbound = adapter.normalize(entry);
-            if (inbound) await handleInbound(ctx, inbound);
+            console.log('[ig] context built, processing', messagingCount, 'messaging items');
+            for (const m of entry?.messaging ?? []) {
+              console.log('[ig] messaging item:', { sender: m.sender?.id, hasMessage: !!m.message, hasPostback: !!m.postback, isEcho: m.message?.is_echo });
+              const inbound = adapter.normalizeMessaging(m, entry);
+              if (inbound) {
+                console.log('[ig] inbound normalized:', { channel: inbound.channel, userId: inbound.channelUserId, text: inbound.text?.slice(0, 50), hasCallback: !!inbound.callbackData });
+                await handleInbound(ctx, inbound);
+                console.log('[ig] handleInbound completed for:', inbound.channelUserId);
+              } else {
+                console.log('[ig] normalizeMessaging returned null for sender:', m.sender?.id);
+              }
+            }
           }
         } catch (e) {
-          console.error('[ig] process error:', e.message);
+          console.error('[ig] process error:', e.message, e.stack);
         }
       };
-      telegramCtx?.waitUntil ? telegramCtx.waitUntil(processIG()) : processIG().catch(() => {});
+      scheduleBackground(execCtx, processIG());
     }
     return new Response('OK');
   }

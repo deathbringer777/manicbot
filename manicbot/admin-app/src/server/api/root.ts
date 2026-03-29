@@ -14,6 +14,7 @@ import { masterRouter } from "~/server/api/routers/masterRouter";
 import { supportRouter } from "~/server/api/routers/support";
 import { channelRouter } from "~/server/api/routers/channels";
 import { conversationsRouter } from "~/server/api/routers/conversations";
+import { googleCalendarRouter } from "~/server/api/routers/googleCalendar";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -22,6 +23,7 @@ export const appRouter = createTRPCRouter({
   support: supportRouter,
   channels: channelRouter,
   conversations: conversationsRouter,
+  googleCalendar: googleCalendarRouter,
   system: systemRouter,
   metrics: metricsRouter,
   users: usersRouter,

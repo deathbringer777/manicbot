@@ -5,6 +5,8 @@
  * Meta sends the same HMAC-SHA256 signature scheme on both platforms.
  */
 
+import { timingSafeEqual } from '../utils/security.js';
+
 /**
  * Verify the X-Hub-Signature-256 header sent by Meta on POST webhooks.
  *
@@ -35,10 +37,7 @@ export async function verifyMetaSignature(body, signatureHeader, appSecret) {
     const hex = Array.from(new Uint8Array(sig), b => b.toString(16).padStart(2, '0')).join('');
 
     // Constant-time comparison
-    if (hex.length !== expected.length) return false;
-    const a = new TextEncoder().encode(hex);
-    const b = new TextEncoder().encode(expected);
-    return crypto.subtle.timingSafeEqual(a, b);
+    return timingSafeEqual(hex, expected);
   } catch (e) {
     console.error('[meta-verify] signature check failed:', e.message);
     return false;
@@ -62,7 +61,12 @@ export function handleHubChallenge(url, storedVerifyToken) {
   const challenge = url.searchParams.get('hub.challenge');
   const token = url.searchParams.get('hub.verify_token');
 
-  if (mode === 'subscribe' && token && storedVerifyToken && token === storedVerifyToken) {
+  if (
+    mode === 'subscribe' &&
+    token &&
+    storedVerifyToken &&
+    timingSafeEqual(token, storedVerifyToken)
+  ) {
     return new Response(challenge ?? '', { status: 200 });
   }
   return new Response('Forbidden — verify_token mismatch', { status: 403 });

@@ -15,6 +15,8 @@ export default {
   consultant_notify: '👤 <b>Klient prosi o konsultanta</b>\n\n👤 {name}\n📱 {phone}\n🔗 {username}\n\nPołącz się lub odrzuć — klient czeka.',
   consultant_constructive: '🙏 Zachowajmy konstruktywną rozmowę. Potrzebujesz pomocy? Naciśnij /start lub «Połącz z konsultantem».',
 
+  ig_ai_trigger_hint: '💬 Aby asystent odpowiedział, napisz wiadomość ze słowem kluczowym z opisu profilu salonu lub przypiętego posta (np. o rezerwacji lub usługach).',
+
   ticket_desc: '💬 <b>Tryb czatu z konsultantem</b>\n\nŁączysz się z mistrzem lub adminem. Bot przejdzie w tryb czatu: twoje wiadomości trafią do specjalisty, odpowiedzi — do ciebie. Aby zakończyć — napisz STOP.',
   ticket_taken_by: '✅ <b>{name}</b> dołączył. Pisz wiadomości — trafią do mistrza.',
   ticket_taken_else: '⚠️ Ten ticket został już przejęty przez innego agenta.',
@@ -26,6 +28,7 @@ export default {
   ticket_closed_master: '🔒 Ticket zamknięty. Klient w zwykłym trybie.',
   ticket_declined: '🙏 Przepraszamy, wszyscy specjaliści są zajęci. Spróbuj za 30 minut lub naciśnij /start, aby się zapisać.',
   ticket_from_client: '💬 <b>Klient:</b>\n{msg}',
+  ticket_forwarded_ok: '✅ Wiadomość przekazana do zespołu. Odpowiedź pojawi się tutaj. Aby zakończyć czat z konsultantem — napisz STOP.',
   ticket_reply_sent: '✅ Wysłano do klienta.',
   ticket_master_hint: '💬 Czat z klientem. Pisz wiadomości w tym czacie — trafią do klienta. Naciśnij «Zamknij ticket», gdy sprawa rozwiązana.',
   ticket_internal_note: '📋 <i>Kontekst rozmowy (tylko dla mistrza/admina):</i>\n\n{note}',

@@ -5,7 +5,7 @@
  *  - whatsapp.js (WhatsAppAdapter.normalize, htmlToWhatsApp, _buildInteractive)
  *  - instagram.js (InstagramAdapter.normalize, htmlToPlainText)
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { makeInbound, makeOutbound } from '../src/channels/types.js';
 import { TelegramAdapter } from '../src/channels/telegram.js';
 import { WhatsAppAdapter } from '../src/channels/whatsapp.js';
@@ -382,6 +382,19 @@ describe('InstagramAdapter.normalize', () => {
     expect(inbound.photo).toBe('https://cdn.example.com/photo.jpg');
   });
 
+  it('picks user text when read receipt is the first messaging item', () => {
+    const entry = {
+      id: 'pg_123',
+      messaging: [
+        { sender: { id: 'u1' }, recipient: { id: 'pg_123' }, timestamp: 1, read: { watermark: 100 } },
+        { sender: { id: 'u1' }, message: { text: 'hello after read' }, timestamp: 2 },
+      ],
+    };
+    const inbound = adapter.normalize(entry);
+    expect(inbound?.text).toBe('hello after read');
+    expect(inbound?.channelUserId).toBe('u1');
+  });
+
   it('returns null for entry with no messaging', () => {
     expect(adapter.normalize({ id: 'pg_123' })).toBeNull();
     expect(adapter.normalize(null)).toBeNull();
@@ -480,5 +493,19 @@ describe('InstagramAdapter quick_replies limit', () => {
   it('renderButtons returns instagram_quick_replies metadata', () => {
     const rows = [[{ text: 'Yes', callbackData: 'yes' }]];
     expect(makeIGAdapter().renderButtons(rows)).toEqual({ type: 'instagram_quick_replies', rows });
+  });
+});
+
+describe('InstagramAdapter outbound Graph host', () => {
+  it('POSTs to graph.facebook.com with Page id path', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message_id: 'mid' }), { status: 200 }),
+    );
+    const adapter = makeIGAdapter('my_page_id', 'page_token');
+    await adapter.send('igsid_user', { text: 'hello' });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toMatch(/^https:\/\/graph\.facebook\.com\/v21\.0\/my_page_id\/messages$/);
+    fetchSpy.mockRestore();
   });
 });

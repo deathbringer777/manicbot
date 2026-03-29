@@ -2,15 +2,16 @@
   "nav": {
     "about": "About",
     "features": "Features",
+    "channels": "Channels",
     "howItWorks": "How it works",
     "ai": "AI assistant",
     "pricing": "Pricing",
     "contacts": "Contacts"
   },
   "hero": {
-    "tagline": "Telegram bot for nail bookings",
+    "tagline": "Multi-channel booking bot for beauty salons",
     "title": "Bookings in Telegram without endless back-and-forth",
-    "subtitle": "ManicBot helps clients choose a service, find a suitable time, and confirm their appointment in a familiar chat.",
+    "subtitle": "ManicBot helps clients choose a service, find a suitable time, and confirm their appointment — via Telegram, Instagram, or WhatsApp.",
     "cta": "Try the bot"
   },
   "stats": {
@@ -149,9 +150,35 @@
     "userTime": "14:30 please",
     "success": "Done! You're booked for tomorrow at 14:30. If anything changes, just write here."
   },
+  "channels": {
+    "title": "One platform, all channels",
+    "subtitle": "Your clients are on different platforms. ManicBot meets them where they are.",
+    "live": "Live",
+    "soon": "Coming soon",
+    "items": {
+      "telegram": { "desc": "Native bot experience with inline buttons, quick replies, and Google Calendar sync." },
+      "instagram": { "desc": "Respond directly from Instagram DMs. Quick replies auto-adapt to Instagram's 13-button limit." },
+      "whatsapp": { "desc": "Full booking flow in the most popular messenger worldwide." }
+    }
+  },
+  "compare": {
+    "title": "Why ManicBot",
+    "subtitle": "Not all booking tools are built the same way.",
+    "col2": "Traditional platforms",
+    "col3": "Single-channel bots",
+    "rows": {
+      "multichannel": "Multi-channel (Telegram + Instagram)",
+      "ai": "AI assistant",
+      "calendar": "Google Calendar sync",
+      "noapp": "No extra app for clients",
+      "setup": "Ready in minutes",
+      "multilang": "4 interface languages",
+      "whitelabel": "White label option"
+    }
+  },
   "footer": {
     "copy": "© 2025 ManicBot",
-    "tagline": "Telegram booking bot for beauty professionals",
+    "tagline": "Multi-channel booking bot for beauty professionals",
     "links": {
       "telegram": "Telegram",
       "email": "Email"

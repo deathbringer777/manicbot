@@ -32,8 +32,9 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     setInitStatus("ok");
   }, []);
 
+  // Always query role: works for Telegram Mini App AND web sessions (next-auth cookie)
   const roleQuery = api.auth.getMyRole.useQuery(undefined, {
-    enabled: initStatus === "ok",
+    enabled: initStatus !== "loading",
     retry: false,
   });
 
@@ -42,8 +43,23 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     setPreviewTenantId(tenantId ?? null);
   }
 
-  // — No Telegram
-  if (initStatus === "no-telegram") {
+  // — No Telegram + loading web session check
+  if (initStatus === "no-telegram" && roleQuery.isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-brand-500" />
+          <p className="text-sm text-slate-400">{t("gate.init", lang)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // — No Telegram and no web session → redirect to login
+  if (initStatus === "no-telegram" && !roleQuery.isLoading && !roleQuery.data?.role) {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-6 bg-slate-950 px-8 text-center">
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-800">
@@ -52,6 +68,12 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
         <div>
           <h1 className="text-2xl font-bold text-white">{t("gate.tgOnly", lang)}</h1>
           <p className="mt-2 text-slate-400">{t("gate.tgOnlyDesc", lang)}</p>
+          <a
+            href="/login"
+            className="mt-4 inline-block rounded-lg bg-brand-500 px-6 py-2 text-sm font-medium text-white hover:bg-brand-600"
+          >
+            {t("gate.webLogin", lang)}
+          </a>
         </div>
       </div>
     );

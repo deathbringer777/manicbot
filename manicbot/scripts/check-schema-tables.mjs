@@ -5,32 +5,24 @@
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  tablesFromSql,
+  tablesFromDrizzle,
+  tableColumnsFromSql,
+  tableColumnsFromDrizzle,
+} from './schema-compare-utils.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const sqlPath = join(root, 'src/db/schema.sql');
 const drizzlePath = join(root, 'admin-app/src/server/db/schema.ts');
 
-function tablesFromSql(src) {
-  const re = /CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(/gi;
-  const out = new Set();
-  let m;
-  while ((m = re.exec(src)) !== null) out.add(m[1]);
-  return out;
-}
-
-function tablesFromDrizzle(src) {
-  const re = /sqliteTable\s*\(\s*["']([^"']+)["']/g;
-  const out = new Set();
-  let m;
-  while ((m = re.exec(src)) !== null) out.add(m[1]);
-  return out;
-}
-
 const sql = readFileSync(sqlPath, 'utf8');
 const ts = readFileSync(drizzlePath, 'utf8');
 const sqlTables = tablesFromSql(sql);
 const drizzleTables = tablesFromDrizzle(ts);
+const sqlColumns = tableColumnsFromSql(sql);
+const drizzleColumns = tableColumnsFromDrizzle(ts);
 
 const onlySql = [...sqlTables].filter((t) => !drizzleTables.has(t)).sort();
 const onlyDrizzle = [...drizzleTables].filter((t) => !sqlTables.has(t)).sort();
@@ -42,4 +34,25 @@ if (onlySql.length || onlyDrizzle.length) {
   process.exit(1);
 }
 
-console.log(`OK: ${sqlTables.size} tables match between schema.sql and Drizzle schema.ts`);
+const mismatchedTables = [...sqlTables]
+  .filter((table) => drizzleTables.has(table))
+  .map((table) => {
+    const sqlCols = sqlColumns.get(table) || [];
+    const drizzleCols = drizzleColumns.get(table) || [];
+    const onlySqlCols = sqlCols.filter((c) => !drizzleCols.includes(c));
+    const onlyDrizzleCols = drizzleCols.filter((c) => !sqlCols.includes(c));
+    return { table, onlySqlCols, onlyDrizzleCols };
+  })
+  .filter((entry) => entry.onlySqlCols.length || entry.onlyDrizzleCols.length);
+
+if (mismatchedTables.length) {
+  console.error('Schema column mismatch.');
+  for (const { table, onlySqlCols, onlyDrizzleCols } of mismatchedTables) {
+    console.error(`  Table ${table}:`);
+    if (onlySqlCols.length) console.error(`    In schema.sql only: ${onlySqlCols.join(', ')}`);
+    if (onlyDrizzleCols.length) console.error(`    In Drizzle only: ${onlyDrizzleCols.join(', ')}`);
+  }
+  process.exit(1);
+}
+
+console.log(`OK: ${sqlTables.size} tables and their columns match between schema.sql and Drizzle schema.ts`);

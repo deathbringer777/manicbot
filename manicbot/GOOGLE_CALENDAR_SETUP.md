@@ -1,0 +1,59 @@
+# Google Calendar OAuth Setup
+
+Google Calendar sync has two surfaces:
+
+- **Worker** handles OAuth, webhook callbacks, token encryption, and busy-block sync.
+- **Mini App** shows connected calendars, sync state, pause/resume, and disconnect actions.
+
+## End-to-end flow
+
+1. In **Mini App → Settings → Google Calendar**, tap **Open bot to connect**.
+2. The salon bot opens the existing Google Calendar panel.
+3. The bot creates a short-lived signed OAuth session in KV and sends the user to Worker `/google/connect?...`.
+4. Worker redirects to Google OAuth, stores the encrypted refresh token, lets the user pick a calendar, then starts watch/sync.
+5. Mini App reads `google_integrations` and shows status, last sync, and errors.
+
+This split is intentional: the secure session is minted in the Worker/bot flow, not by exposing an open `tenant_id` connect URL from Pages.
+
+## Worker env / secrets
+
+Required for OAuth mode:
+
+- `APP_BASE_URL` — public Worker origin, used to build absolute `/google/connect` and `/google/callback` URLs from Telegram callbacks.
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_TOKEN_ENCRYPTION_KEY` or `BOT_ENCRYPTION_KEY`
+
+Optional / recommended:
+
+- `GOOGLE_OAUTH_REDIRECT_URI` — explicit callback URL. If omitted, Worker uses `${APP_BASE_URL}/google/callback`.
+- `GOOGLE_SERVICE_ACCOUNT_KEY` — enables the older manual Calendar ID fallback for masters.
+- `ADMIN_APP_URL` — useful for cross-linking back to the Mini App.
+
+## Data model
+
+Tables used by the OAuth sync path:
+
+- `google_integrations` — one row per tenant/master integration, refresh token ciphertext, watch state, sync timestamps
+- `google_busy_blocks` — cached external busy windows pulled from Google
+- `appointments.google_integration_id` — link from synced appointments back to the integration
+
+## Mini App behavior
+
+The Google Calendar card in **SalonDashboard → Settings** now shows:
+
+- connected calendars
+- tenant/master scope
+- last sync time and status
+- last sync error, when present
+- sync pause/resume
+- disconnect
+
+Connection still begins in Telegram because the Worker must create the OAuth session securely.
+
+## Common issues
+
+- **Connect button opens bot but no OAuth link appears:** verify `APP_BASE_URL`, `GOOGLE_OAUTH_CLIENT_ID`, and `GOOGLE_OAUTH_CLIENT_SECRET` on the Worker.
+- **Calendar connects but sync stays red:** check `last_sync_error` in `google_integrations` and Worker logs from `google-calendar-oauth.js`.
+- **Disconnect removes status but Google still lists the app:** Mini App disconnect removes ManicBot sync state. If you also want to revoke Google consent immediately, do it from the bot flow or the Google account security page.
+- **Nothing appears in Mini App:** make sure the tenant owner is opening the Mini App for the same tenant whose bot started the OAuth flow.

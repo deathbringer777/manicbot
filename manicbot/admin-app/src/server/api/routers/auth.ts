@@ -13,6 +13,13 @@ export type AppRole =
 
 export const authRouter = createTRPCRouter({
   getMyRole: publicProcedure.query(async ({ ctx }) => {
+    // Web session path (email/password login)
+    if (!ctx.user && ctx.webUser) {
+      const role = ctx.webUser.webRole as AppRole;
+      const tenantId = ctx.webUser.tenantId ?? null;
+      return { role, tenantId };
+    }
+
     if (!ctx.user) {
       return { role: null as AppRole, tenantId: null };
     }

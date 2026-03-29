@@ -11,7 +11,7 @@ import {
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, type Lang } from "~/lib/i18n";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "settings";
 
@@ -22,23 +22,92 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-red-500/15 text-red-400 border border-red-500/20",
 };
 
+const APT_BORDER: Record<string, string> = {
+  confirmed: "border-l-emerald-500",
+  pending:   "border-l-amber-400",
+  cancelled: "border-l-red-500/40",
+  rejected:  "border-l-red-500/40",
+};
+
 // ─── Reusable components ─────────────────────────────────────────
 function StatCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string | number; sub?: string;
   icon: React.ElementType; color: string;
 }) {
   return (
-    <div className="glass-card rounded-2xl p-4">
+    <div className="glass-card rounded-2xl p-4 relative overflow-hidden">
       <div className="flex items-center gap-3">
         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${color}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <div className="min-w-0">
-          <p className="text-2xl font-bold text-white">{value}</p>
-          <p className="text-xs text-slate-400">{label}</p>
-          {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+        <div className="min-w-0 flex-1">
+          <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
+          <p className="text-xs text-slate-400 leading-tight">{label}</p>
+          {sub && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{sub}</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Appointment Card ────────────────────────────────────────────
+function AptCard({ a, lang, onAction }: {
+  a: any; lang: Lang; onAction?: (id: any, status: "confirmed" | "cancelled" | "rejected") => void;
+}) {
+  const [hh, mm] = (a.time ?? "00:00").split(":");
+  const border = APT_BORDER[a.status] ?? "border-l-slate-700";
+  const nameWords = (a.userName ?? "?").trim().split(/\s+/);
+  const initials = nameWords.length >= 2
+    ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
+    : (a.userName ?? "?").slice(0, 2).toUpperCase();
+
+  return (
+    <div className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden`}>
+      <div className="p-3 flex items-start gap-3">
+        {/* Avatar */}
+        <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400 mt-0.5">
+          {initials}
+        </div>
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-white text-sm leading-tight truncate">{a.userName ?? `#${a.chatId}`}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5 truncate">{a.svcId}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-base font-bold text-white tabular-nums leading-none">
+                {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
+              </p>
+              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
+                {t(`status.${a.status}` as any, lang)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* Actions */}
+      {onAction && a.status === "pending" && (
+        <div className="flex border-t border-white/5">
+          <button onClick={() => onAction(a.id, "confirmed")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/10 transition-colors">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {t("action.confirm", lang)}
+          </button>
+          <div className="w-px bg-white/5" />
+          <button onClick={() => onAction(a.id, "rejected")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400 text-xs font-semibold hover:bg-red-500/10 transition-colors">
+            <XCircle className="h-3.5 w-3.5" /> {t("action.reject", lang)}
+          </button>
+        </div>
+      )}
+      {onAction && a.status === "confirmed" && (
+        <div className="flex border-t border-white/5">
+          <button onClick={() => onAction(a.id, "cancelled")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400/60 text-xs font-medium hover:bg-red-500/10 transition-colors">
+            <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -754,7 +823,9 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { href: "#settings", icon: Settings, label: t("common.settings", lang) },
   ];
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
+  const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
   const apts = api.salon.getAppointments.useQuery({ tenantId, date: aptDate || undefined }, { enabled: tab === "appointments" });
   const mastersList = api.salon.getMasters.useQuery({ tenantId }, { enabled: tab === "masters" });
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
@@ -814,6 +885,35 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                 icon={CreditCard} color="bg-emerald-500/20 text-emerald-400" />
             </div>
           )}
+
+          {/* Today's appointments feed */}
+          {todayApts.isLoading && (
+            <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
+          )}
+          {todayApts.data && todayApts.data.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">{t("salon.todayApts", lang)}</h3>
+                <button onClick={() => setTab("appointments")}
+                  className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+                  {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              {todayApts.data.slice(0, 4).map((a: any) => (
+                <AptCard key={a.id} a={a} lang={lang}
+                  onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })} />
+              ))}
+              {todayApts.data.length > 4 && (
+                <button onClick={() => setTab("appointments")}
+                  className="w-full text-xs text-slate-500 text-center py-2 hover:text-slate-300 transition-colors">
+                  +{todayApts.data.length - 4} {t("salon.appointments", lang).toLowerCase()}
+                </button>
+              )}
+            </div>
+          )}
+          {todayApts.data?.length === 0 && (
+            <p className="text-slate-500 text-sm text-center py-4">{t("salon.noApts", lang)}</p>
+          )}
         </div>
       )}
 
@@ -828,38 +928,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           <div className="space-y-2">
             {apts.data?.map((a: any) => (
-              <div key={a.id} className="glass-card rounded-xl p-3">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
-                    <p className="text-xs text-slate-400">{a.svcId} · {a.date} {a.time}</p>
-                  </div>
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
-                    {t(`status.${a.status}` as any, lang)}
-                  </span>
-                </div>
-                {/* Action buttons for pending appointments */}
-                {a.status === "pending" && (
-                  <div className="flex gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button onClick={() => updateAptStatus.mutate({ tenantId, appointmentId: a.id, status: "confirmed" })}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> {t("action.confirm", lang)}
-                    </button>
-                    <button onClick={() => updateAptStatus.mutate({ tenantId, appointmentId: a.id, status: "rejected" })}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-medium hover:bg-red-500/25 transition-colors">
-                      <XCircle className="h-3.5 w-3.5" /> {t("action.reject", lang)}
-                    </button>
-                  </div>
-                )}
-                {a.status === "confirmed" && (
-                  <div className="flex gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button onClick={() => updateAptStatus.mutate({ tenantId, appointmentId: a.id, status: "cancelled" })}
-                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-red-500/10 text-red-400/70 text-xs font-medium hover:bg-red-500/20 transition-colors">
-                      <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <AptCard key={a.id} a={a} lang={lang}
+                onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })} />
             ))}
             {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
           </div>

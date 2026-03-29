@@ -21,6 +21,12 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменено",
 };
 
+const APT_BORDER: Record<string, string> = {
+  confirmed: "border-l-emerald-500",
+  pending:   "border-l-amber-400",
+  cancelled: "border-l-red-500/40",
+};
+
 type Period = "week" | "month" | "year";
 
 const PERIOD_LABELS: Record<Period, string> = {
@@ -40,15 +46,32 @@ function getPeriodDates(period: Period): { from: string; to: string } {
 }
 
 function AptRow({ apt }: { apt: any }) {
+  const [hh, mm] = (apt.time ?? "00:00").split(":");
+  const nameWords = (apt.userName ?? "?").trim().split(/\s+/);
+  const initials = nameWords.length >= 2
+    ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
+    : (apt.userName ?? "?").slice(0, 2).toUpperCase();
+  const border = APT_BORDER[apt.status] ?? "border-l-slate-700";
+
   return (
-    <div className="glass-card rounded-xl p-3 flex items-center gap-3">
-      <div className="flex-col flex-1 min-w-0">
-        <p className="font-medium text-white text-sm truncate">{apt.userName ?? `#${apt.chatId}`}</p>
-        <p className="text-xs text-slate-400">{apt.svcId} · {apt.time}</p>
+    <div className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden`}>
+      <div className="p-3 flex items-center gap-3">
+        <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400">
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-white text-sm leading-tight truncate">{apt.userName ?? `#${apt.chatId}`}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5 truncate">{apt.svcId}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-base font-bold text-white tabular-nums leading-none">
+            {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
+          </p>
+          <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[apt.status] ?? "bg-slate-700 text-slate-300"}`}>
+            {STATUS_LABELS[apt.status] ?? apt.status}
+          </span>
+        </div>
       </div>
-      <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[apt.status] ?? "bg-slate-700 text-slate-300"}`}>
-        {STATUS_LABELS[apt.status] ?? apt.status}
-      </span>
     </div>
   );
 }

@@ -35,17 +35,8 @@ export function ChannelsSection() {
                 }}
               />
 
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4">
                 <span className="text-3xl">{item.icon}</span>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                    item.live
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
-                      : "border-slate-300/30 bg-slate-100/50 text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-white/30"
-                  }`}
-                >
-                  {item.live ? ch.live : ch.soon}
-                </span>
               </div>
 
               <h3 className="mb-2 text-lg font-bold text-slate-900 dark:text-white">

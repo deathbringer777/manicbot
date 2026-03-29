@@ -29,18 +29,15 @@ export function CompareSection() {
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-200/90 dark:border-white/[0.07]">
-          <table className="w-full min-w-[520px] border-collapse">
+          <table className="w-full min-w-[380px] border-collapse">
             <thead>
               <tr className="border-b border-slate-200/90 bg-slate-50/80 dark:border-white/[0.06] dark:bg-white/[0.025]">
-                <th className="w-[42%] px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30" />
-                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                <th className="w-[56%] px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30" />
+                <th className="px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
                   ManicBot
                 </th>
-                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30">
+                <th className="px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30">
                   {cp.col2}
-                </th>
-                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-white/30">
-                  {cp.col3}
                 </th>
               </tr>
             </thead>
@@ -53,14 +50,11 @@ export function CompareSection() {
                   <td className="px-5 py-3 text-sm text-slate-600 dark:text-white/50">
                     {row.label}
                   </td>
-                  <td className={`px-4 py-3 text-center text-base font-bold ${cellCls(row.mb)} bg-violet-500/[0.03] dark:bg-violet-500/[0.04]`}>
+                  <td className={`px-6 py-3 text-center text-base font-bold ${cellCls(row.mb)} bg-violet-500/[0.03] dark:bg-violet-500/[0.04]`}>
                     {sym(row.mb)}
                   </td>
-                  <td className={`px-4 py-3 text-center text-base font-bold ${cellCls(row.c2)}`}>
+                  <td className={`px-6 py-3 text-center text-base font-bold ${cellCls(row.c2)}`}>
                     {sym(row.c2)}
-                  </td>
-                  <td className={`px-4 py-3 text-center text-base font-bold ${cellCls(row.c3)}`}>
-                    {sym(row.c3)}
                   </td>
                 </tr>
               ))}

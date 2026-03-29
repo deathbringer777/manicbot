@@ -30,6 +30,18 @@
 - **Файл:** `src/utils/helpers.js`.
 - **Тест:** в `test/helpers.test.js` добавлена проверка `escHtml("'apos'") === '&#39;apos&#39;'`.
 
+### 3. Telegram webhook: пустой `WEBHOOK_SECRET` (2026-03-29)
+
+- **Проблема:** при пустом секрете в контексте и пустом заголовке `X-Telegram-Bot-Api-Secret-Token` сравнение давало «совпадение»; запросы проходили без настоящей аутентификации. Пустой секрет в D1 для бота также давал неочевидное поведение.
+- **Исправление:** если `WEBHOOK_SECRET` отсутствует или пустая строка — ответ **500** и лог `[telegram-webhook] WEBHOOK_SECRET missing...`; иначе проверка через `timingSafeEqual` как раньше.
+- **Файлы:** `src/http/telegramWebhookHttp.js`, `test/telegram-webhook-http.test.js`.
+
+### 4. Meta hub verify: сравнение токена (2026-03-29)
+
+- **Проблема:** `hub.verify_token` сравнивался с `===` (не constant-time для строк одинаковой длины).
+- **Исправление:** `timingSafeEqual(token, storedVerifyToken)` при непустых токенах (условие `token && storedVerifyToken` сохранено).
+- **Файл:** `src/channels/meta-verify.js`.
+
 ---
 
 ## Что не менялось (всё в порядке)

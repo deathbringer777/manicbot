@@ -118,9 +118,16 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               continue;
             }
             const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
-            if (!channelConfig) continue;
+            if (!channelConfig) {
+              console.warn('[ig] no channelConfig for tenant:', resolved.tenantId);
+              continue;
+            }
+            // Fallback: if D1 token decryption/parse failed, try env secret INSTAGRAM_ACCESS_TOKEN
+            if (!channelConfig.token && env.INSTAGRAM_ACCESS_TOKEN) {
+              channelConfig.token = env.INSTAGRAM_ACCESS_TOKEN;
+            }
             if (!channelConfig.token) {
-              console.warn('[ig] no token after getChannelConfig — cannot send replies; tenant:', resolved.tenantId);
+              console.warn('[ig] no token for tenant:', resolved.tenantId, '— set Page Access Token (EAA…) via POST /admin/ig-token');
             }
             const adapter = new InstagramAdapter({
               tenantId: resolved.tenantId,
@@ -128,7 +135,10 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               instagramIgnoreSenderIds,
             });
             const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
-            if (!ctx) continue;
+            if (!ctx) {
+              console.warn('[ig] buildChannelCtx returned null for tenant:', resolved.tenantId);
+              continue;
+            }
             await initServices(ctx);
             for (const m of entry?.messaging ?? []) {
               const inbound = adapter.normalizeMessaging(m, entry);
@@ -136,7 +146,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             }
           }
         } catch (e) {
-          console.error('[ig] process error:', e.message);
+          console.error('[ig] process error:', e.message, e.stack);
         }
       };
       scheduleBackground(execCtx, processIG());

@@ -17,8 +17,13 @@ export async function tryTelegramWebhook(request, ctx, url) {
     return null;
   }
 
+  const expected = ctx.WEBHOOK_SECRET;
+  if (expected == null || String(expected).length === 0) {
+    console.error('[telegram-webhook] WEBHOOK_SECRET missing for this bot; set secret in D1 bots row or env and re-register webhook');
+    return new Response('Webhook not configured', { status: 500 });
+  }
   const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
-  if (!timingSafeEqual(secret, ctx.WEBHOOK_SECRET)) {
+  if (!timingSafeEqual(secret, expected)) {
     return new Response('Unauthorized', { status: 403 });
   }
 

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { checkAdmin } from '../src/utils/security.js';
 
-// timingSafeEqual uses crypto.subtle.timingSafeEqual (Workers-only API)
-// Tests for it must run in Workers runtime, skipped in Node.js
+// timingSafeEqual is a sync UTF-8 byte compare in utils/security.js (see test/telegram-webhook-http.test.js).
 
 describe('checkAdmin', () => {
   function makeRequest(authHeader) {

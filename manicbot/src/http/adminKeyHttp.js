@@ -121,5 +121,42 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
+  // POST /admin/ig-token?key=ADMIN_KEY — set and validate Instagram Page Access Token
+  if (request.method === 'POST' && url.pathname === '/admin/ig-token') {
+    const key = url.searchParams.get('key') || '';
+    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    try {
+      const { token, tenantId } = await request.json();
+      if (!token || !tenantId) return Response.json({ error: 'token and tenantId required' }, { status: 400 });
+
+      // Validate token against Graph API
+      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${token}`);
+      const meData = await meRes.json().catch(() => ({}));
+      if (!meRes.ok) {
+        return Response.json({ error: 'Token validation failed', graphError: meData.error?.message, graphCode: meData.error?.code }, { status: 400 });
+      }
+
+      // Store as plaintext in token_encrypted (resolver handles plaintext EAA tokens)
+      const ec = envCtx(env);
+      const { dbRun } = await import('../utils/db.js');
+      await dbRun(ec,
+        `UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE tenant_id = ? AND channel_type = 'instagram'`,
+        token, Math.floor(Date.now() / 1000), tenantId,
+      );
+
+      return Response.json({
+        ok: true,
+        graphMe: { id: meData.id, name: meData.name },
+        tokenPrefix: token.slice(0, 4),
+        tenantId,
+      });
+    } catch (e) {
+      return Response.json({ error: e.message }, { status: 400 });
+    }
+  }
+
   return null;
 }

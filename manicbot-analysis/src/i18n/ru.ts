@@ -236,6 +236,34 @@ export const ru: Translations = {
     ogSiteName: "ManicBot",
   },
 
+  channels: {
+    title: "Одна платформа — все каналы",
+    subtitle: "Ваши клиенты в разных мессенджерах. ManicBot приходит к ним туда, где они уже есть.",
+    live: "Работает",
+    soon: "Скоро",
+    items: [
+      { icon: "✈️", name: "Telegram", desc: "Нативный бот с кнопками, быстрыми ответами и синхронизацией с Google Календарём.", live: true },
+      { icon: "📷", name: "Instagram", desc: "Ответы прямо из Instagram Direct. Кнопки автоматически адаптируются под лимит Instagram.", live: true },
+      { icon: "💬", name: "WhatsApp", desc: "Полный процесс записи в самом популярном мессенджере мира.", live: false },
+    ],
+  },
+
+  compare: {
+    title: "Почему ManicBot",
+    subtitle: "Не все инструменты для записи устроены одинаково.",
+    col2: "Классические платформы",
+    col3: "Одноканальные боты",
+    rows: [
+      { label: "Мультиканал (Telegram + Instagram)", mb: true,  c2: false, c3: false },
+      { label: "ИИ-помощник",                        mb: true,  c2: false, c3: null  },
+      { label: "Синхронизация Google Calendar",       mb: true,  c2: null,  c3: false },
+      { label: "Не нужно отдельное приложение",       mb: true,  c2: false, c3: true  },
+      { label: "Готово за несколько минут",           mb: true,  c2: false, c3: true  },
+      { label: "4 языка интерфейса",                  mb: true,  c2: null,  c3: false },
+      { label: "Белая метка",                         mb: true,  c2: false, c3: false },
+    ],
+  },
+
   theme: {
     toggleGroup: "Тема оформления",
     dark: "Тёмная",

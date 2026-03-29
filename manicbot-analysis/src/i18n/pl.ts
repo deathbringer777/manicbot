@@ -236,6 +236,34 @@ export const pl: Translations = {
     ogSiteName: "ManicBot",
   },
 
+  channels: {
+    title: "Jedna platforma — wszystkie kanały",
+    subtitle: "Twoi klienci są na różnych platformach. ManicBot dociera do nich tam, gdzie już są.",
+    live: "Działa",
+    soon: "Wkrótce",
+    items: [
+      { icon: "✈️", name: "Telegram", desc: "Natywny bot z przyciskami, szybkimi odpowiedziami i synchronizacją z Kalendarzem Google.", live: true },
+      { icon: "📷", name: "Instagram", desc: "Odpowiadaj bezpośrednio z Instagram Direct. Przyciski automatycznie dostosowują się do limitu Instagrama.", live: true },
+      { icon: "💬", name: "WhatsApp", desc: "Pełny proces rezerwacji w najpopularniejszym komunikatorze na świecie.", live: false },
+    ],
+  },
+
+  compare: {
+    title: "Dlaczego ManicBot",
+    subtitle: "Nie wszystkie narzędzia do rezerwacji są takie same.",
+    col2: "Tradycyjne platformy",
+    col3: "Boty jednokanałowe",
+    rows: [
+      { label: "Wielokanałowość (Telegram + Instagram)", mb: true,  c2: false, c3: false },
+      { label: "Asystent AI",                            mb: true,  c2: false, c3: null  },
+      { label: "Synchronizacja Google Calendar",         mb: true,  c2: null,  c3: false },
+      { label: "Brak dodatkowej aplikacji dla klientów", mb: true,  c2: false, c3: true  },
+      { label: "Gotowe w kilka minut",                   mb: true,  c2: false, c3: true  },
+      { label: "4 języki interfejsu",                    mb: true,  c2: null,  c3: false },
+      { label: "White label",                            mb: true,  c2: false, c3: false },
+    ],
+  },
+
   theme: {
     toggleGroup: "Motyw strony",
     dark: "Ciemny",

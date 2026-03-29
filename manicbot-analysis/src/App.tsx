@@ -3,7 +3,9 @@ import { LanguageProvider } from "@/i18n";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { FeaturesSection } from "@/components/FeaturesSection";
+import { ChannelsSection } from "@/components/ChannelsSection";
 import { HowSection } from "@/components/HowSection";
+import { CompareSection } from "@/components/CompareSection";
 import { PricingSection } from "@/components/PricingSection";
 import { TestimonialsSection } from "@/components/TestimonialsSection";
 import { FaqSection } from "@/components/FaqSection";
@@ -71,8 +73,10 @@ function Landing() {
         <Header />
         <HeroSection />
         <FeaturesSection />
+        <ChannelsSection />
         <HowSection />
         <TestimonialsSection />
+        <CompareSection />
         <PricingSection />
         <FaqSection />
         <CtaSection />

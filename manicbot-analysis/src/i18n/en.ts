@@ -234,6 +234,34 @@ export const en = {
     ogSiteName: "ManicBot",
   },
 
+  channels: {
+    title: "One platform, all channels",
+    subtitle: "Your clients are on different platforms. ManicBot meets them where they are.",
+    live: "Live",
+    soon: "Coming soon",
+    items: [
+      { icon: "✈️", name: "Telegram", desc: "Native bot with inline buttons, quick replies and Google Calendar sync.", live: true },
+      { icon: "📷", name: "Instagram", desc: "Respond from Instagram Direct. Quick replies auto-adapt to Instagram's 13-button limit.", live: true },
+      { icon: "💬", name: "WhatsApp", desc: "Full booking flow in the most popular messenger worldwide.", live: false },
+    ],
+  },
+
+  compare: {
+    title: "Why ManicBot",
+    subtitle: "Not all booking tools are built the same way.",
+    col2: "Traditional platforms",
+    col3: "Single-channel bots",
+    rows: [
+      { label: "Multi-channel (Telegram + Instagram)", mb: true,  c2: false, c3: false },
+      { label: "AI assistant",                         mb: true,  c2: false, c3: null  },
+      { label: "Google Calendar sync",                 mb: true,  c2: null,  c3: false },
+      { label: "No extra app for clients",             mb: true,  c2: false, c3: true  },
+      { label: "Ready in minutes",                     mb: true,  c2: false, c3: true  },
+      { label: "4 interface languages",                mb: true,  c2: null,  c3: false },
+      { label: "White label option",                   mb: true,  c2: false, c3: false },
+    ],
+  },
+
   theme: {
     toggleGroup: "Site theme",
     dark: "Dark",

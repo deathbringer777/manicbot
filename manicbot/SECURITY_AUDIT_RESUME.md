@@ -95,3 +95,28 @@
 - Защищён через `timingSafeEqual(key, ADMIN_KEY)`.
 
 **Все изменения задеплоены:** Worker `17b4db51`, Pages `2467d47b`.
+
+---
+
+## Дополнение: исправления 2026-03-29 #2 (Instagram, выполнено)
+
+### 8. Instagram: неверный page_id в D1 + отсутствие токена с permissions
+
+- **Проблема A:** `channel_configs.config.page_id` содержал `25881183448226493` (несуществующий ID) вместо реального Facebook Page ID `1008301152373103`. Resolver не мог смаппировать входящий вебхук `entry.id` → тенант.
+- **Проблема Б:** Сохранённый в D1 токен отсутствовал (NULL). EAA-токен из env INSTAGRAM_ACCESS_TOKEN также был IGAA и не работал для messaging.
+- **Исправление:**
+  1. `channel_configs.config` обновлён: `page_id=1008301152373103`, добавлены `ig_account_id=17841437566398676`, `instagram_business_id=25881183448226493` (через `wrangler d1 execute`).
+  2. Получен Facebook Page Access Token (EAA…, с разрешениями `pages_messaging` + `instagram_manage_messages`) через Graph API Explorer → `POST /admin/ig-token` → сохранён в `channel_configs.token_encrypted` тенанта `t_1c305v2g5011`.
+  3. Валидация: токен успешно вызывает `GET /1008301152373103/conversations?platform=instagram` — возвращает реальные переписки.
+- **Статус:** Instagram-бот должен отвечать на DM.
+
+### Текущее состояние D1 (channel_configs, instagram)
+
+| Поле | Значение |
+|------|---------|
+| `tenant_id` | `t_1c305v2g5011` |
+| `page_id` | `1008301152373103` |
+| `ig_account_id` | `17841437566398676` |
+| `instagram_business_id` | `25881183448226493` |
+| `token_encrypted` | EAA… (plaintext Page Access Token) |
+| `updated_at` | 1774791034 |

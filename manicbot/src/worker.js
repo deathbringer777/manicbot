@@ -42,6 +42,13 @@ export default {
   async fetch(request, env, executionCtx) {
     const url = new URL(request.url);
 
+    // /dashboard* → redirect to admin-app Cloudflare Pages (runs before everything else)
+    if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
+      const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
+      const rest = url.pathname.slice('/dashboard'.length) || '/';
+      return Response.redirect(pagesBase + rest + url.search, 302);
+    }
+
     await ensureDemoBotsProvisioned(env);
 
     let res = await tryLanding(request, env, url);

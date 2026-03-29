@@ -16,7 +16,7 @@ LANDING_URL = "https://manicbot-landing.pages.dev"
 # Admin mini-app (God Mode) — must match Cloudflare Pages production URL.
 # GitHub Actions deploys with --project-name=admin-app → https://admin-app.pages.dev
 # If you use a custom domain or another Pages project name, set ADMIN_APP_URL in the Worker dashboard.
-ADMIN_APP_URL = "https://admin-app.pages.dev"
+ADMIN_APP_URL = "https://admin-app-3nc.pages.dev"
 # Optional: when D1 is bound, set to "1" to reject legacy POST /webhook (no botId) — use POST /webhook/{botId} only.
 # REQUIRE_WEBHOOK_BOT_ID = "1"
 

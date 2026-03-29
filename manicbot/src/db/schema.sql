@@ -262,3 +262,43 @@ CREATE TABLE IF NOT EXISTS conversations (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_conv_tenant_msg ON conversations(tenant_id, last_message_at);
+
+-- ─── Google Calendar integration ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS google_integrations (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  master_chat_id INTEGER,
+  provider_account_email TEXT,
+  calendar_id TEXT NOT NULL,
+  calendar_summary TEXT,
+  refresh_token_enc TEXT NOT NULL,
+  sync_enabled INTEGER NOT NULL DEFAULT 1,
+  sync_direction TEXT NOT NULL DEFAULT 'two_way',
+  watch_channel_id TEXT,
+  watch_resource_id TEXT,
+  watch_expiration INTEGER,
+  last_sync_at INTEGER,
+  last_sync_status TEXT,
+  last_sync_error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gcal_integration_scope ON google_integrations(tenant_id, scope, master_chat_id);
+
+CREATE TABLE IF NOT EXISTS google_busy_blocks (
+  id TEXT PRIMARY KEY,
+  integration_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  external_event_id TEXT NOT NULL,
+  summary TEXT,
+  description TEXT,
+  location TEXT,
+  creator TEXT,
+  start_ts INTEGER NOT NULL,
+  end_ts INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gcal_busy_lookup ON google_busy_blocks(integration_id, start_ts, end_ts);

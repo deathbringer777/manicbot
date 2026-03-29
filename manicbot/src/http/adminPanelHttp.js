@@ -155,6 +155,15 @@ tr:hover td{background:#fdf2f8}
         registered: u.registeredAt ? new Date(u.registeredAt).toISOString().slice(0, 16).replace('T', ' ') : '—',
       }));
 
+    // Channels info
+    let channelRows = [];
+    try {
+      const tid = ctx.tenantId;
+      if (tid && ctx.db) {
+        channelRows = await dbAll(ctx, 'SELECT * FROM channel_configs WHERE tenant_id = ?', tid);
+      }
+    } catch {}
+
     let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>ManicBot Admin</title>
 <style>
@@ -169,6 +178,9 @@ tr:hover td{background:#fdf2f8}
 .stat b{font-size:1.5em;display:block;color:#ec4899}
 .export{display:inline-block;padding:8px 16px;background:#ec4899;color:#fff;border-radius:8px;text-decoration:none;font-size:.85em;margin:4px}
 .export:hover{background:#db2777}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.75em;font-weight:600}
+.badge-ok{background:#d1fae5;color:#065f46}
+.badge-off{background:#fee2e2;color:#991b1b}
 </style></head><body>
 <h1>💅 ManicBot — Админ-панель</h1>
 
@@ -195,7 +207,33 @@ tr:hover td{background:#fdf2f8}
     for (const a of appointments) {
       html += `<tr><td>${escHtml(a.id)}</td><td>${escHtml(a.client)}</td><td>${escHtml(a.chatId)}</td><td>${escHtml(a.service)}</td><td>${escHtml(a.date)}</td><td>${escHtml(a.time)}</td><td>${escHtml(a.status)}</td><td>${escHtml(a.created)}</td></tr>`;
     }
-    html += `</table></body></html>`;
+    html += `</table>`;
+
+    // ── Channels section ──
+    html += `<h2>📡 Каналы</h2>`;
+    html += `<table><tr><th>Канал</th><th>Статус</th><th>ID</th><th>Webhook</th></tr>`;
+    html += `<tr><td>🤖 Telegram</td><td><span class="badge badge-ok">Подключён</span></td><td>${escHtml(ctx.bot?.botId || '—')}</td><td>${escHtml(url.origin + '/webhook/' + (ctx.bot?.botId || ''))}</td></tr>`;
+    for (const ch of channelRows) {
+      const type = ch.channel_type;
+      const icon = type === 'whatsapp' ? '💬' : type === 'instagram' ? '📸' : '📡';
+      const label = type === 'whatsapp' ? 'WhatsApp' : type === 'instagram' ? 'Instagram' : escHtml(type);
+      const active = ch.active === 1;
+      const badge = active ? '<span class="badge badge-ok">Активен</span>' : '<span class="badge badge-off">Выкл</span>';
+      let identifier = '—';
+      try {
+        const cfg = ch.config ? JSON.parse(ch.config) : {};
+        if (type === 'whatsapp') identifier = cfg.phone_number_id || '—';
+        if (type === 'instagram') identifier = cfg.page_id || cfg.ig_account_id || '—';
+      } catch {}
+      const whPath = type === 'whatsapp' ? '/webhook/wa' : type === 'instagram' ? '/webhook/ig' : '';
+      html += `<tr><td>${icon} ${label}</td><td>${badge}</td><td>${escHtml(identifier)}</td><td>${escHtml(whPath ? url.origin + whPath : '—')}</td></tr>`;
+    }
+    if (channelRows.length === 0) {
+      html += `<tr><td colspan="4" style="text-align:center;color:#9ca3af">Нет подключённых каналов (настройте через Mini App → Channels)</td></tr>`;
+    }
+    html += `</table>`;
+
+    html += `</body></html>`;
 
     return new Response(html, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
   }

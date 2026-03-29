@@ -291,6 +291,111 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
   );
 }
 
+// ─── Google Calendar Section ─────────────────────────────────────
+function GoogleCalendarSection({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const integrations = api.googleCalendar.list.useQuery({ tenantId });
+  const utils = api.useUtils();
+  const toggleSync = api.googleCalendar.toggleSync.useMutation({
+    onSuccess: () => utils.googleCalendar.list.invalidate(),
+  });
+  const disconnect = api.googleCalendar.disconnect.useMutation({
+    onSuccess: () => utils.googleCalendar.list.invalidate(),
+  });
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
+
+  const rows = integrations.data ?? [];
+
+  return (
+    <div className="space-y-4 mt-6">
+      <SectionHeader title="Google Calendar" />
+      {integrations.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+      {!integrations.isLoading && rows.length === 0 && (
+        <div className="glass-card rounded-2xl p-4 text-center">
+          <CalendarDays className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-slate-400">
+            {lang === "ru" ? "Нет подключённых календарей" :
+             lang === "ua" ? "Немає підключених календарів" :
+             lang === "pl" ? "Brak podpiętych kalendarzy" :
+             "No calendars connected"}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            {lang === "ru" ? "Подключите Google Calendar через бота командой /google" :
+             lang === "ua" ? "Підключіть Google Calendar через бота командою /google" :
+             lang === "pl" ? "Podłącz Google Calendar przez bota komendą /google" :
+             "Connect Google Calendar via bot using /google command"}
+          </p>
+        </div>
+      )}
+      {rows.map((row) => (
+        <div key={row.id} className="glass-card rounded-2xl p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarDays className="h-4 w-4 text-brand-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm text-white font-medium truncate">
+                  {row.calendarSummary || row.calendarId}
+                </p>
+                {row.masterName && (
+                  <p className="text-[10px] text-slate-500">{row.masterName}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {row.syncEnabled ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <XCircle className="h-4 w-4 text-slate-500" />
+              )}
+            </div>
+          </div>
+          {row.providerAccountEmail && (
+            <p className="text-[10px] text-slate-500">{row.providerAccountEmail}</p>
+          )}
+          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+            {row.lastSyncAt && (
+              <span>
+                {lang === "ru" ? "Последняя синхр." : "Last sync"}: {new Date(row.lastSyncAt * 1000).toLocaleString()}
+              </span>
+            )}
+            {row.lastSyncStatus && (
+              <span className={row.lastSyncStatus === "ok" ? "text-emerald-400" : "text-amber-400"}>
+                ({row.lastSyncStatus})
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Btn
+              variant={row.syncEnabled ? "ghost" : "primary"}
+              onClick={() => toggleSync.mutate({ tenantId, integrationId: row.id, enabled: !row.syncEnabled })}
+              disabled={toggleSync.isPending}
+            >
+              {row.syncEnabled
+                ? (lang === "ru" ? "Выкл. синхр." : "Pause sync")
+                : (lang === "ru" ? "Вкл. синхр." : "Resume sync")}
+            </Btn>
+            {confirmDisconnect === row.id ? (
+              <>
+                <Btn variant="danger" onClick={() => { disconnect.mutate({ tenantId, integrationId: row.id }); setConfirmDisconnect(null); }}>
+                  {lang === "ru" ? "Да, отключить" : "Yes, disconnect"}
+                </Btn>
+                <Btn variant="ghost" onClick={() => setConfirmDisconnect(null)}>
+                  <X className="h-3 w-3" />
+                </Btn>
+              </>
+            ) : (
+              <Btn variant="danger" onClick={() => setConfirmDisconnect(row.id)}>
+                <Trash2 className="h-3 w-3" />
+                {lang === "ru" ? "Отключить" : "Disconnect"}
+              </Btn>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Channels Tab ────────────────────────────────────────────────
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -821,6 +926,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {profile.isLoading ? <Loader2 className="animate-spin text-brand-400 mx-auto" /> : (
             <SalonSettingsEditor tenantId={tenantId} profile={profile.data} />
           )}
+          <GoogleCalendarSection tenantId={tenantId} />
         </>
       )}
 

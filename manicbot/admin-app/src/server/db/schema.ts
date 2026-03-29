@@ -52,11 +52,15 @@ export const masters = sqliteTable("masters", {
   tenantId: text("tenant_id").notNull(),
   chatId: integer("chat_id").notNull(),
   name: text("name"),
+  tgUsername: text("tg_username"),
   services: text("services"),
   workHours: text("work_hours"),
   workDays: text("work_days"),
-  vacationUntil: integer("vacation_until"),
+  onVacation: integer("on_vacation").notNull().default(0),
+  active: integer("active").notNull().default(1),
+  addedAt: integer("added_at"),
   googleCalendarId: text("google_calendar_id"),
+  calendarEnabled: integer("calendar_enabled").notNull().default(0),
 }, (t) => [index("idx_master_tenant").on(t.tenantId)]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {
@@ -240,4 +244,46 @@ export const conversations = sqliteTable("conversations", {
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_conv_tenant_msg").on(t.tenantId, t.lastMessageAt),
+]);
+
+// ─── Google Calendar integration ─────────────────────────────────────────────
+
+export const googleIntegrations = sqliteTable("google_integrations", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  scope: text("scope").notNull(),
+  masterChatId: integer("master_chat_id"),
+  providerAccountEmail: text("provider_account_email"),
+  calendarId: text("calendar_id").notNull(),
+  calendarSummary: text("calendar_summary"),
+  refreshTokenEnc: text("refresh_token_enc").notNull(),
+  syncEnabled: integer("sync_enabled").notNull().default(1),
+  syncDirection: text("sync_direction").notNull().default("two_way"),
+  watchChannelId: text("watch_channel_id"),
+  watchResourceId: text("watch_resource_id"),
+  watchExpiration: integer("watch_expiration"),
+  lastSyncAt: integer("last_sync_at"),
+  lastSyncStatus: text("last_sync_status"),
+  lastSyncError: text("last_sync_error"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_gcal_integration_scope").on(t.tenantId, t.scope, t.masterChatId),
+]);
+
+export const googleBusyBlocks = sqliteTable("google_busy_blocks", {
+  id: text("id").primaryKey(),
+  integrationId: text("integration_id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  calendarId: text("calendar_id").notNull(),
+  externalEventId: text("external_event_id").notNull(),
+  summary: text("summary"),
+  description: text("description"),
+  location: text("location"),
+  creator: text("creator"),
+  startTs: integer("start_ts").notNull(),
+  endTs: integer("end_ts").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_gcal_busy_lookup").on(t.integrationId, t.startTs, t.endTs),
 ]);

@@ -45,6 +45,10 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
 
   // — No Telegram context: check web session (next-auth cookie)
   if (initStatus === "no-telegram") {
+    // On /login page — always render children directly (the login form)
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/login")) {
+      return <>{children}</>;
+    }
     // Still loading web session — show spinner
     if (roleQuery.isLoading) {
       return (
@@ -53,7 +57,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
         </div>
       );
     }
-    // No web session — redirect to login silently (no blocking screen)
+    // No web session — redirect to login silently
     if (!roleQuery.data?.role) {
       if (typeof window !== "undefined") {
         window.location.replace("/login");

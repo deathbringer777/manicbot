@@ -302,3 +302,16 @@ CREATE TABLE IF NOT EXISTS google_busy_blocks (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_gcal_busy_lookup ON google_busy_blocks(integration_id, start_ts, end_ts);
+
+-- Web Auth (email/password login for admin-app users)
+CREATE TABLE IF NOT EXISTS web_users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  tenant_id TEXT,
+  role TEXT NOT NULL DEFAULT 'tenant_owner',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_user_email ON web_users(email);
+CREATE INDEX IF NOT EXISTS idx_web_user_tenant ON web_users(tenant_id);

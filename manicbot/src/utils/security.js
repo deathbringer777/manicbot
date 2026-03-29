@@ -6,9 +6,10 @@ export function timingSafeEqual(a, b) {
   if (a == null || b == null) return false;
   const ta = new TextEncoder().encode(String(a));
   const tb = new TextEncoder().encode(String(b));
-  if (ta.length !== tb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ta.length; i++) diff |= ta[i] ^ tb[i];
+  // XOR lengths into diff first — no early return to avoid timing side-channel
+  const maxLen = Math.max(ta.length, tb.length);
+  let diff = ta.length ^ tb.length;
+  for (let i = 0; i < maxLen; i++) diff |= (ta[i] || 0) ^ (tb[i] || 0);
   return diff === 0;
 }
 

@@ -61,6 +61,7 @@ export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
   const rows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1",
   );
+  if (rows.length > 50) console.warn('[resolver] WhatsApp tenant scan hit', rows.length, 'rows — consider adding a channel_external_id index');
   for (const row of rows) {
     try {
       const cfg = row.config ? JSON.parse(row.config) : {};
@@ -86,6 +87,7 @@ export async function resolveTenantFromInstagram(ctx, igPageId) {
   const rows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'instagram' AND active = 1",
   );
+  if (rows.length > 50) console.warn('[resolver] Instagram tenant scan hit', rows.length, 'rows — consider adding a channel_external_id index');
   for (const row of rows) {
     try {
       const cfg = row.config ? JSON.parse(row.config) : {};
@@ -119,7 +121,10 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
   const rawTok = row.token_encrypted;
   if (rawTok) {
     if (encKey) token = await decryptToken(rawTok, encKey);
-    if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) token = rawTok;
+    if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) {
+      console.warn('[resolver] Using plaintext Meta token for tenant:', tenantId, '— set BOT_ENCRYPTION_KEY to encrypt at rest');
+      token = rawTok;
+    }
   }
   const config = row.config ? JSON.parse(row.config) : {};
   return { ...row, token, config };

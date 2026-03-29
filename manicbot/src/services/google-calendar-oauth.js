@@ -644,7 +644,13 @@ export async function handleGoogleCallback(ctx, url) {
   if (!code) {
     return new Response('Missing Google authorization code.', { status: 400 });
   }
-  const tokens = await exchangeCodeForTokens(ctx, code);
+  let tokens;
+  try {
+    tokens = await exchangeCodeForTokens(ctx, code);
+  } catch (e) {
+    console.error('[google] exchangeCodeForTokens failed:', e.message);
+    return new Response('Google token exchange failed. Please try again.', { status: 500 });
+  }
   const key = getTokenEncryptionKey(ctx);
   const refreshTokenEnc = tokens.refresh_token && key
     ? await encryptToken(tokens.refresh_token, key)

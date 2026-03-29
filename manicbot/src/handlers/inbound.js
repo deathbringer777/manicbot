@@ -10,7 +10,7 @@
 
 import { onMsg } from './message.js';
 import { onCb } from './callback.js';
-import { dbRun, dbAll } from '../utils/db.js';
+import { dbRunSafe, dbAll } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { randomId } from '../utils/security.js';
 
@@ -51,7 +51,7 @@ export async function handleInbound(ctx, inbound) {
     );
 
     // Non-blocking — don't await, let handlers proceed immediately
-    Promise.all(sideEffects).catch(() => {});
+    Promise.all(sideEffects).catch(e => console.error('[inbound] side-effect batch error:', e.message));
   }
 
   // 2. Route to the appropriate handler
@@ -92,7 +92,7 @@ export async function isWithinMessageWindow(ctx, channelType, channelUserId) {
 
 async function updateMessageWindow(ctx, inbound) {
   if (!ctx?.db || !inbound.tenantId) return;
-  await dbRun(ctx,
+  await dbRunSafe(ctx,
     `INSERT INTO message_windows (tenant_id, channel_type, channel_user_id, last_user_message_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(tenant_id, channel_type, channel_user_id)
@@ -103,7 +103,7 @@ async function updateMessageWindow(ctx, inbound) {
 
 async function upsertChannelIdentity(ctx, inbound) {
   if (!ctx?.db || !inbound.tenantId) return;
-  await dbRun(ctx,
+  await dbRunSafe(ctx,
     `INSERT INTO channel_identities (id, tenant_id, channel_type, channel_user_id, display_name, created_at)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(tenant_id, channel_type, channel_user_id)
@@ -116,14 +116,14 @@ async function upsertChannelIdentity(ctx, inbound) {
 async function upsertConversation(ctx, inbound) {
   if (!ctx?.db || !inbound.tenantId) return;
   const now = nowSec();
-  await dbRun(ctx,
+  await dbRunSafe(ctx,
     `INSERT INTO conversations (id, tenant_id, channel_type, channel_user_id, status, last_message_at, created_at)
      VALUES (?, ?, ?, ?, 'open', ?, ?)
      ON CONFLICT(id) DO NOTHING`,
     randomId(16), inbound.tenantId, inbound.channel, inbound.channelUserId, now, now,
   );
   // Update last_message_at on every message
-  await dbRun(ctx,
+  await dbRunSafe(ctx,
     `UPDATE conversations SET last_message_at = ?, status = 'open'
      WHERE tenant_id = ? AND channel_type = ? AND channel_user_id = ?`,
     now, inbound.tenantId, inbound.channel, inbound.channelUserId,

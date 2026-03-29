@@ -28,6 +28,21 @@ export async function dbRun(ctx, sql, ...params) {
   return result;
 }
 
+/**
+ * Safe variant of dbRun: catches SQL errors and returns { ok, error } instead of throwing.
+ * Use for fire-and-forget mutations where a crash would be worse than a silent failure.
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export async function dbRunSafe(ctx, sql, ...params) {
+  try {
+    await ctx.db.prepare(sql).bind(...params).run();
+    return { ok: true };
+  } catch (e) {
+    console.error('D1 RUN fail:', sql, e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
 export async function dbBatch(ctx, statements) {
   const prepared = statements.map(([sql, ...params]) =>
     ctx.db.prepare(sql).bind(...params),

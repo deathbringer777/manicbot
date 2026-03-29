@@ -85,9 +85,11 @@ export const salonRouter = createTRPCRouter({
       ctx.db.select().from(tenantConfig).where(eq(tenantConfig.tenantId, input.tenantId)),
     ]);
     const cfg = Object.fromEntries(configRows.map((r: any) => [r.key, r.value]));
+    let salon = {};
+    try { salon = tenantRow[0]?.salon ? JSON.parse(tenantRow[0].salon) : {}; } catch { /* ignore malformed JSON */ }
     return {
       name: tenantRow[0]?.name ?? "",
-      salon: tenantRow[0]?.salon ? JSON.parse(tenantRow[0].salon) : {},
+      salon,
       config: cfg,
     };
   }),
@@ -208,14 +210,15 @@ export const salonRouter = createTRPCRouter({
       const tenantRow = await ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
       if (!tenantRow.length) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
 
-      const existing = tenantRow[0]!.salon ? JSON.parse(tenantRow[0]!.salon!) : {};
+      let existing: Record<string, unknown> = {};
+      try { existing = tenantRow[0]!.salon ? JSON.parse(tenantRow[0]!.salon!) : {}; } catch { /* ignore malformed JSON */ }
       if (input.address !== undefined) existing.address = input.address;
       if (input.phone !== undefined) existing.phone = input.phone;
       if (input.workHours !== undefined) existing.workHours = input.workHours;
       if (input.workHoursFrom !== undefined || input.workHoursTo !== undefined) {
-        const wh =
+        const wh: Record<string, unknown> =
           typeof existing.workHours === "object" && existing.workHours !== null
-            ? { ...existing.workHours }
+            ? { ...(existing.workHours as Record<string, unknown>) }
             : {};
         if (input.workHoursFrom !== undefined) wh.from = input.workHoursFrom;
         if (input.workHoursTo !== undefined) wh.to = input.workHoursTo;

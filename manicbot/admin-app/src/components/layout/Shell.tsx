@@ -13,6 +13,7 @@ import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { t, LANGS } from "~/lib/i18n";
 import { api } from "~/trpc/react";
+import { useInWebShell } from "~/components/layout/WebShell";
 import type { AppRole } from "~/server/api/routers/auth";
 
 export interface NavItem {
@@ -269,6 +270,10 @@ interface ShellProps {
 }
 
 export function Shell({ children, navItems, title, subtitle }: ShellProps) {
+  // If inside WebShell (web dashboard), render only children — WebShell provides the chrome.
+  const inWebShell = useInWebShell();
+  if (inWebShell) return <>{children}</>;
+
   const pathname = usePathname();
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
   const { role, previewRole } = useRole();

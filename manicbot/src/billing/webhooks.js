@@ -13,13 +13,14 @@ import { nowSec, msToSec } from '../utils/time.js';
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
 
-/** Constant-time compare for equal-length lowercase hex (Stripe v1); no Node-only APIs. */
+/** Constant-time compare for lowercase hex (Stripe v1); no Node-only APIs. */
 function timingSafeEqualLowerHex(expectedLowerHex, receivedRawHex) {
   const b = receivedRawHex.toLowerCase();
-  if (expectedLowerHex.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expectedLowerHex.length; i++) {
-    diff |= expectedLowerHex.charCodeAt(i) ^ b.charCodeAt(i);
+  // XOR lengths into diff — no early return to avoid timing side-channel
+  const maxLen = Math.max(expectedLowerHex.length, b.length);
+  let diff = expectedLowerHex.length ^ b.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (expectedLowerHex.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   }
   return diff === 0;
 }

@@ -8,6 +8,8 @@ export const env = createEnv({
     ADMIN_CHAT_ID: z.string().optional(),
     /** Публичный URL Worker (без слэша в конце), для подсказок webhook в Mini App */
     WORKER_PUBLIC_URL: z.string().optional(),
+    /** Worker ADMIN_KEY — for calling internal Worker APIs (appointment-action, etc.) */
+    ADMIN_KEY: z.string().optional(),
     /** Должны совпадать с секретами Worker META_VERIFY_TOKEN_WA / META_VERIFY_TOKEN_IG */
     META_VERIFY_TOKEN_WA: z.string().optional(),
     META_VERIFY_TOKEN_IG: z.string().optional(),
@@ -23,6 +25,7 @@ export const env = createEnv({
     TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
     ADMIN_CHAT_ID: process.env.ADMIN_CHAT_ID,
     WORKER_PUBLIC_URL: process.env.WORKER_PUBLIC_URL,
+    ADMIN_KEY: process.env.ADMIN_KEY,
     META_VERIFY_TOKEN_WA: process.env.META_VERIFY_TOKEN_WA,
     META_VERIFY_TOKEN_IG: process.env.META_VERIFY_TOKEN_IG,
     NODE_ENV: process.env.NODE_ENV,

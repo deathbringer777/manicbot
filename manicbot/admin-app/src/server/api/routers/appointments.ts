@@ -2,6 +2,33 @@ import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { appointments } from "~/server/db/schema";
 import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
+import { env } from "~/env";
+
+/**
+ * Fire-and-forget call to Worker endpoint to trigger notifications + calendar sync.
+ * Non-blocking: errors are logged but don't affect the mutation response.
+ */
+async function notifyWorker(action: string, appointmentId: string, tenantId: string, confirmedBy?: string | number | null) {
+  const workerUrl = env.WORKER_PUBLIC_URL;
+  const adminKey = env.ADMIN_KEY;
+  if (!workerUrl || !adminKey) {
+    console.warn("[appointments] WORKER_PUBLIC_URL or ADMIN_KEY not set — skipping Worker notification");
+    return;
+  }
+  try {
+    const resp = await fetch(`${workerUrl}/admin/appointment-action?key=${encodeURIComponent(adminKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, appointmentId, tenantId, confirmedBy }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      console.error(`[appointments] Worker notification failed ${resp.status}:`, text);
+    }
+  } catch (e) {
+    console.error("[appointments] Worker notification error:", (e as Error).message);
+  }
+}
 
 export const appointmentsRouter = createTRPCRouter({
   getAll: adminProcedure
@@ -123,7 +150,21 @@ export const appointmentsRouter = createTRPCRouter({
         updates.cancelReason = input.comment ?? "";
         updates.cancelled = 1;
       }
+      // Get tenantId before update (needed for Worker notification)
+      const aptRow = await ctx.db
+        .select({ tenantId: appointments.tenantId })
+        .from(appointments)
+        .where(eq(appointments.id, input.id))
+        .limit(1);
+      const tenantId = aptRow[0]?.tenantId;
+
       await ctx.db.update(appointments).set(updates).where(eq(appointments.id, input.id));
+
+      // Fire-and-forget: notify Worker to send Telegram message + sync calendar
+      if (tenantId && (input.status === "confirmed" || input.status === "rejected" || input.status === "cancelled")) {
+        notifyWorker(input.status, input.id, tenantId, updates.confirmedBy ?? null).catch(() => {});
+      }
+
       return { success: true, updatedAt: Date.now() };
     }),
 });

@@ -202,7 +202,7 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
     return;
   }
   const toSend = (aiText ? escHtml(aiText) : t(lg, 'unknown')) + finalHint;
-  await send(ctx, cid, toSend, extraConsult);
+  return send(ctx, cid, toSend, extraConsult);
 }
 
 export async function onMsg(ctx, msg) {
@@ -211,10 +211,11 @@ export async function onMsg(ctx, msg) {
 
   const cid = msg.chat.id;
   if (!isValidChatId(cid)) {
-    if (ctx.channel?.type === 'instagram' || ctx.channel?.type === 'whatsapp') {
-      console.warn('[onMsg] invalid channel user id (rejected):', ctx.channel?.type, typeof cid, String(cid).slice(0, 80));
-    }
+    console.warn('[onMsg] invalid chat id rejected:', { channel: ctx.channel?.type, type: typeof cid, value: String(cid).slice(0, 80), tenantId: ctx.tenantId });
     return;
+  }
+  if (ctx.channel?.type) {
+    console.log('[onMsg] channel message accepted:', { channel: ctx.channel.type, cid: String(cid).slice(0, 20), tenantId: ctx.tenantId });
   }
   if (!await checkRateLimit(ctx, cid)) {
     const lg = (await getLang(ctx, cid)) || 'ru';
@@ -229,9 +230,10 @@ export async function onMsg(ctx, msg) {
 
   if (await isBlocked(ctx, cid)) return send(ctx, cid, t(lg, 'client_blocked'));
 
-  // Inactive/canceled billing: block all access except billing callbacks for non-platform-admins
+  // Inactive/canceled billing: block staff access, let clients through freely
   if (isInactive(ctx) && !(await isPlatformAdmin(ctx, cid))) {
-    return showInactiveMessage(ctx, cid);
+    const role = await getRole(ctx, cid);
+    if (role !== 'client') return showInactiveMessage(ctx, cid);
   }
 
   if (msg.contact && st.step === STEP.REG_PHONE) {
@@ -350,7 +352,7 @@ export async function onMsg(ctx, msg) {
   }
 
   if (txt === '/resetwebhooks') {
-    if (!(await isPlatformAdmin(ctx, cid))) return;
+    if (!(await isPlatformAdmin(ctx, cid))) return send(ctx, cid, t(lg, 'sysadm_no_access'));
     if (!ctx.db || !ctx.baseUrl) return send(ctx, cid, '❌ DB или baseUrl недоступны');
     await send(ctx, cid, '🔄 Обновляю вебхуки для всех ботов...');
     let ok = 0, fail = 0;

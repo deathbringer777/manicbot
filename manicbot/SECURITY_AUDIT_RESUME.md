@@ -120,3 +120,53 @@
 | `instagram_business_id` | `25881183448226493` |
 | `token_encrypted` | EAA… (plaintext Page Access Token) |
 | `updated_at` | 1774791034 |
+
+---
+
+## Дополнение: исправления 2026-03-29 #3 (аудит кодовой базы)
+
+### 9. timingSafeEqual: утечка длины через ранний return
+
+- **Проблема:** `if (ta.length !== tb.length) return false;` в `src/utils/security.js` — ранний выход утекает длину сравниваемых строк через timing (атака по времени ответа).
+- **Исправление:** убран ранний return; длина XOR-ится в `diff`, цикл всегда проходит `max(ta.length, tb.length)` итераций.
+- **Файл:** `src/utils/security.js:5-13`.
+
+### 10. timingSafeEqualLowerHex: та же проблема
+
+- **Проблема:** локальная функция в `src/billing/webhooks.js` имела такой же ранний return.
+- **Исправление:** применена та же техника — XOR длин в diff, цикл до maxLen.
+- **Файл:** `src/billing/webhooks.js:17-25`.
+
+### 11. dbRun: нет обработки ошибок (в отличие от dbGet/dbAll)
+
+- **Проблема:** `dbGet`/`dbAll` имеют try/catch + лог, но `dbRun` бросал ошибку напрямую. В `inbound.js` функции `updateMessageWindow`, `upsertChannelIdentity`, `upsertConversation` вызывались fire-and-forget без try/catch.
+- **Исправление:** добавлена `dbRunSafe()` в `src/utils/db.js` — ловит ошибки, логирует, возвращает `{ ok, error }`. Callers в `inbound.js` переведены на `dbRunSafe`.
+- **Файлы:** `src/utils/db.js`, `src/handlers/inbound.js`.
+
+### 12. Тихое поглощение ошибок в inbound.js
+
+- **Проблема:** `Promise.all(sideEffects).catch(() => {})` полностью скрывал ошибки side-effect операций (message_window, conversations, channel_identities).
+- **Исправление:** `.catch(e => console.error('[inbound] side-effect batch error:', e.message))`.
+- **Файл:** `src/handlers/inbound.js:54`.
+
+### 13. JSON.parse без try/catch в salon router (admin-app)
+
+- **Проблема:** `JSON.parse(tenantRow[0].salon)` (строки 90 и 211) в `salon.ts` мог крашнуть запрос при повреждённых данных в D1.
+- **Исправление:** обёрнут в try/catch с fallback `{}`.
+- **Файл:** `admin-app/src/server/api/routers/salon.ts`.
+
+### 14. Google OAuth callback: unhandled throw
+
+- **Проблема:** `await exchangeCodeForTokens(ctx, code)` в `handleGoogleCallback` мог бросить исключение — Handler крашил с 500 без user-friendly ошибки.
+- **Исправление:** обёрнут в try/catch, возвращает `Response('Google token exchange failed.', { status: 500 })`.
+- **Файл:** `src/services/google-calendar-oauth.js:647`.
+
+### 15. Предупреждение о plaintext Meta токенах
+
+- **Добавлено:** `console.warn` при использовании plaintext (незашифрованного) Meta access token — напоминание настроить `BOT_ENCRYPTION_KEY`.
+- **Файл:** `src/channels/resolver.js`.
+
+### 16. Предупреждение о масштабировании channel resolution
+
+- **Добавлено:** `console.warn` в `resolveTenantFromWhatsApp/Instagram` при количестве строк > 50 — сигнал добавить индекс `channel_external_id`.
+- **Файл:** `src/channels/resolver.js`.

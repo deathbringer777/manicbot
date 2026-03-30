@@ -391,5 +391,41 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, email: normalizedEmail, tenantId, role });
   }
 
+  // GET /admin/events?key=ADMIN_KEY&limit=100&type=...&tenantId=...
+  if (request.method === 'GET' && url.pathname === '/admin/events') {
+    const key = url.searchParams.get('key') || '';
+    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!env.MANICBOT) return Response.json({ error: 'KV not bound' }, { status: 500 });
+
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
+    const typeFilter = url.searchParams.get('type') || '';
+    const tenantIdFilter = url.searchParams.get('tenantId') || '';
+
+    let list = [];
+    try {
+      const raw = await env.MANICBOT.get('adminlog:recent');
+      if (raw) list = JSON.parse(raw);
+    } catch { /* ignore */ }
+
+    if (typeFilter) list = list.filter(e => e.type === typeFilter || e.type.startsWith(typeFilter + '.'));
+    if (tenantIdFilter) list = list.filter(e => e.tenantId === tenantIdFilter);
+    list = list.slice(0, limit);
+
+    return Response.json({ events: list });
+  }
+
+  // DELETE /admin/events/clear?key=ADMIN_KEY
+  if (request.method === 'DELETE' && url.pathname === '/admin/events/clear') {
+    const key = url.searchParams.get('key') || '';
+    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!env.MANICBOT) return Response.json({ error: 'KV not bound' }, { status: 500 });
+    await env.MANICBOT.delete('adminlog:recent');
+    return Response.json({ ok: true });
+  }
+
   return null;
 }

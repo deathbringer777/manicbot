@@ -115,7 +115,7 @@ export default function LoginPage() {
           <p className="mt-4 text-center text-xs text-slate-500">
             Нет доступа?{" "}
             <a
-              href="https://t.me/manicbot"
+              href="https://t.me/manic_preview_bot"
               className="text-brand-400 hover:underline"
             >
               Откройте через Telegram

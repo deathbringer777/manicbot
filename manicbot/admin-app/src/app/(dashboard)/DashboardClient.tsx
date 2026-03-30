@@ -13,21 +13,64 @@ import {
   Clock,
 } from "lucide-react";
 
+// ─── Color palette ────────────────────────────────────────────────
+
+const STAT_COLORS = {
+  violet: {
+    iconBg: "bg-violet-500/15",
+    iconColor: "text-violet-400",
+    topBar: "from-violet-500/80 via-violet-400/30 to-transparent",
+  },
+  cyan: {
+    iconBg: "bg-cyan-500/15",
+    iconColor: "text-cyan-400",
+    topBar: "from-cyan-500/80 via-cyan-400/30 to-transparent",
+  },
+  emerald: {
+    iconBg: "bg-emerald-500/15",
+    iconColor: "text-emerald-400",
+    topBar: "from-emerald-500/80 via-emerald-400/30 to-transparent",
+  },
+  amber: {
+    iconBg: "bg-amber-500/15",
+    iconColor: "text-amber-400",
+    topBar: "from-amber-500/80 via-amber-400/30 to-transparent",
+  },
+  pink: {
+    iconBg: "bg-pink-500/15",
+    iconColor: "text-pink-400",
+    topBar: "from-pink-500/80 via-pink-400/30 to-transparent",
+  },
+  blue: {
+    iconBg: "bg-blue-500/15",
+    iconColor: "text-blue-400",
+    topBar: "from-blue-500/80 via-blue-400/30 to-transparent",
+  },
+} as const;
+
+// ─── StatCard ─────────────────────────────────────────────────────
+
 function StatCard({
   title,
   value,
   sub,
   icon: Icon,
-  accent,
+  iconBg,
+  iconColor,
+  topBar,
 }: {
   title: string;
   value: string | number;
   sub?: string;
   icon: React.ElementType;
-  accent: string;
+  iconBg: string;
+  iconColor: string;
+  topBar: string;
 }) {
   return (
-    <div className={`glass-card rounded-2xl p-4 relative overflow-hidden border ${accent}`}>
+    <div className="glass-card rounded-2xl p-4 relative overflow-hidden">
+      {/* 2px gradient top bar */}
+      <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${topBar}`} />
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <p className="text-xs text-slate-400 truncate">{title}</p>
@@ -36,19 +79,41 @@ function StatCard({
           </p>
           {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
         </div>
-        <div className="shrink-0 ml-2 opacity-60">
-          <Icon className="w-5 h-5 text-white" />
+        <div className={`shrink-0 ml-2 w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
+          <Icon className={`w-5 h-5 ${iconColor}`} />
         </div>
       </div>
     </div>
   );
 }
 
+// ─── StatCardSkeleton ─────────────────────────────────────────────
+
+function StatCardSkeleton() {
+  return (
+    <div className="glass-card rounded-2xl p-4 relative overflow-hidden animate-pulse">
+      {/* top bar placeholder */}
+      <div className="absolute inset-x-0 top-0 h-[2px] bg-slate-700/60" />
+      <div className="flex items-start justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="h-3 w-20 bg-slate-700/60 rounded mb-2" />
+          <div className="h-7 w-14 bg-slate-700/60 rounded" />
+        </div>
+        <div className="shrink-0 ml-2 w-10 h-10 rounded-xl bg-slate-700/60" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Period switcher ──────────────────────────────────────────────
+
 const PERIODS = [
   { label: "7д", days: 7 },
   { label: "30д", days: 30 },
   { label: "90д", days: 90 },
 ];
+
+// ─── Main component ───────────────────────────────────────────────
 
 export default function DashboardClient() {
   const [period, setPeriod] = useState(30);
@@ -68,10 +133,11 @@ export default function DashboardClient() {
           <p className="text-xs text-slate-400 mt-1">Метрики платформы в реальном времени</p>
         </header>
 
+        {/* Stat cards */}
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="glass-card rounded-2xl p-4 h-20 animate-pulse" />
+              <StatCardSkeleton key={i} />
             ))}
           </div>
         ) : (
@@ -80,40 +146,40 @@ export default function DashboardClient() {
               title="Пользователи"
               value={s?.totalUsers ?? 0}
               icon={Users}
-              accent="border-brand-500/20"
+              {...STAT_COLORS.violet}
             />
             <StatCard
               title="Салоны"
               value={s?.totalTenants ?? 0}
               sub={`${s?.trialingCount ?? 0} на триале`}
               icon={Building2}
-              accent="border-purple-500/20"
+              {...STAT_COLORS.cyan}
             />
             <StatCard
               title="Подписки"
               value={s?.activeSubscriptions ?? 0}
               icon={CreditCard}
-              accent="border-emerald-500/20"
+              {...STAT_COLORS.emerald}
             />
             <StatCard
               title="MRR"
               value={`$${s?.mrr ?? 0}`}
               sub="расчётный"
               icon={TrendingUp}
-              accent="border-amber-500/20"
+              {...STAT_COLORS.amber}
             />
             <StatCard
               title="Всего записей"
               value={s?.totalAppointments ?? 0}
               icon={CalendarDays}
-              accent="border-cyan-500/20"
+              {...STAT_COLORS.pink}
             />
             <StatCard
               title="Сегодня"
               value={s?.todayAppointments ?? 0}
               sub="записей"
               icon={Clock}
-              accent="border-rose-500/20"
+              {...STAT_COLORS.blue}
             />
           </div>
         )}
@@ -148,7 +214,7 @@ export default function DashboardClient() {
             {(s?.recentActivity ?? []).map((a, i) => (
               <div
                 key={a.id + i}
-                className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0"
+                className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0 rounded-lg transition-colors hover:bg-white/[0.03]"
               >
                 <div className="h-8 w-8 shrink-0 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-400 text-xs font-bold">
                   {a.name.charAt(0).toUpperCase()}
@@ -157,7 +223,7 @@ export default function DashboardClient() {
                   <p className="text-xs font-medium text-white truncate">{a.name}</p>
                   <p className="text-[10px] text-slate-500 truncate">{a.action}</p>
                 </div>
-                <span className="text-[10px] text-slate-600 shrink-0">{a.time}</span>
+                <span className="text-[10px] text-slate-600 shrink-0 tabular-nums">{a.time}</span>
               </div>
             ))}
             {!isLoading && (s?.recentActivity ?? []).length === 0 && (

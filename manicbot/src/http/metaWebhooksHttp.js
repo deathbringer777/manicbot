@@ -10,6 +10,7 @@ import { InstagramAdapter, parseInstagramIgnoreSenderIds } from '../channels/ins
 import { handleInbound } from '../handlers/inbound.js';
 import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
+import { logEvent } from '../utils/events.js';
 
 /**
  * @param {Request} request
@@ -43,6 +44,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
     if (!valid) return new Response('Forbidden', { status: 403 });
 
     const ec = envCtx(env);
+    void logEvent(ec, 'webhook.meta', { message: 'Meta webhook: wa' });
     const parsed = (() => {
       try {
         return JSON.parse(body);
@@ -108,6 +110,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
     }
 
     const ec = envCtx(env);
+    void logEvent(ec, 'webhook.meta', { message: 'Meta webhook: ig' });
     const parsed = (() => {
       try {
         return JSON.parse(body);

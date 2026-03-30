@@ -17,6 +17,7 @@ import { tryAdminPanel } from './http/adminPanelHttp.js';
 import { tryCalendar } from './http/calendarHttp.js';
 import { tryTelegramWebhook } from './http/telegramWebhookHttp.js';
 import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
+import { logEvent } from './utils/events.js';
 
 function disallowLegacyWebhook(env, request, url) {
   return (
@@ -78,6 +79,7 @@ export default {
       }
     } catch (e) {
       logWorkerError('context resolution failed', request, url, e);
+      void logEvent(envCtx(env), 'error.handler', { level: 'error', message: e?.message ?? 'Unknown error', stack: e?.stack?.slice(0, 300) });
       if (url.pathname !== '/' && !isAdminPath) {
         try {
           const skipLegacy = disallowLegacyWebhook(env, request, url);
@@ -85,6 +87,7 @@ export default {
           else if (!skipLegacy) ctx = buildCtx(env);
         } catch (fallbackError) {
           logWorkerError('fallback context build failed', request, url, fallbackError);
+          void logEvent(envCtx(env), 'error.handler', { level: 'error', message: fallbackError?.message ?? 'Unknown error', stack: fallbackError?.stack?.slice(0, 300) });
         }
       }
       if (!ctx) return new Response(e?.message || 'Server Error', { status: 500 });

@@ -1,5 +1,6 @@
 import { handleStripeWebhook } from '../billing/webhooks.js';
 import { envCtx } from './envCtx.js';
+import { logEvent } from '../utils/events.js';
 
 /**
  * @param {Request} request
@@ -18,7 +19,12 @@ export async function tryStripe(request, env, url) {
     } catch {
       return new Response('Bad body', { status: 400 });
     }
-    const result = await handleStripeWebhook(envCtx(env), body, signature, secret);
+    const ec = envCtx(env);
+    const result = await handleStripeWebhook(ec, body, signature, secret);
+    if (result.ok && !result.skipped) {
+      const stripeType = (() => { try { return JSON.parse(body)?.type ?? 'unknown'; } catch { return 'unknown'; } })();
+      void logEvent(ec, 'stripe.event', { message: `Stripe: ${stripeType}` });
+    }
     return new Response(result.skipped ? 'OK (duplicate)' : 'OK', { status: result.status });
   }
 

@@ -471,7 +471,8 @@ export async function tryAdminKeyRoutes(request, env, url) {
           parts.push(...Object.values(names).filter(Boolean));
         } catch { /* ignore */ }
       }
-      const searchText = [...new Set(parts)].join(' ');
+      // Store lowercase so LIKE queries work for Cyrillic (SQLite LIKE is ASCII-only)
+      const searchText = [...new Set(parts)].join(' ').toLowerCase();
 
       // Update tenant: set slug, search_text, public_active=1
       await dbRun(ec,

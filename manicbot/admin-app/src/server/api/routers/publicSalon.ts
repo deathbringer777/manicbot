@@ -161,16 +161,19 @@ export const publicSalonRouter = createTRPCRouter({
       const conditions: any[] = [eq(tenants.publicActive, 1)];
 
       if (city) {
-        conditions.push(like(tenants.city, `%${city}%`));
-      }
-      if (query) {
+        // search_text is stored lowercase; city column may be title-case
+        // Match against both for reliability
+        const cityLow = city.toLowerCase();
         conditions.push(
           or(
-            like(tenants.name, `%${query}%`),
-            like(tenants.description, `%${query}%`),
-            like(tenants.city, `%${query}%`),
+            like(tenants.city, `%${city}%`),
+            like(tenants.searchText, `%${cityLow}%`),
           ),
         );
+      }
+      if (query) {
+        // search_text is stored lowercase — use lowercased query for Cyrillic case-insensitive match
+        conditions.push(like(tenants.searchText, `%${query.toLowerCase()}%`));
       }
 
       const rows = await ctx.db
@@ -256,8 +259,8 @@ export const publicSalonRouter = createTRPCRouter({
       const q = input.q.trim();
       if (q.length < 2) return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
 
-      // Search salons using LIKE (FTS5 used when search_text is populated)
-      const likeQ = `%${q}%`;
+      // search_text is stored lowercase — use lowercased query for Cyrillic case-insensitive match
+      const likeQ = `%${q.toLowerCase()}%`;
       const rows = await ctx.db
         .select({
           slug: tenants.slug,
@@ -269,11 +272,7 @@ export const publicSalonRouter = createTRPCRouter({
         .where(
           and(
             eq(tenants.publicActive, 1),
-            or(
-              like(tenants.name, likeQ),
-              like(tenants.description, likeQ),
-              like(tenants.city, likeQ),
-            ),
+            like(tenants.searchText, likeQ),
           ),
         )
         .limit(5);

@@ -33,5 +33,6 @@ export async function buildSearchText(
     } catch { /* ignore */ }
   }
 
-  return [...new Set(parts)].join(" ");
+  // Lowercase so LIKE comparisons work for Cyrillic (SQLite LIKE is case-insensitive for ASCII only)
+  return [...new Set(parts)].join(" ").toLowerCase();
 }

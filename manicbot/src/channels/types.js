@@ -31,6 +31,7 @@
  * @property {string|null}   [photo]           - Photo URL to send
  * @property {object|null}   [document]        - Document to send: { content, filename, caption }
  * @property {string|null}   [editMessageId]   - If set, request an edit of this message ID
+ * @property {string|null}   [lang]            - BCP-47 lang code for channel-specific UI chrome (WA section titles)
  */
 
 /**

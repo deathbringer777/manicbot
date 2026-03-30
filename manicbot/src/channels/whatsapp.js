@@ -22,6 +22,16 @@ const MAX_BUTTON_BUTTONS = 3;
 const MAX_LIST_ITEMS = 10;
 const MAX_BUTTON_TITLE = 20;
 
+/** Static i18n for WA interactive list chrome (section title + action button). */
+const WA_I18N = {
+  ru: { options: 'Варианты', more: 'Ещё', button: 'Выбрать' },
+  en: { options: 'Options',  more: 'More',  button: 'Choose'  },
+  pl: { options: 'Opcje',    more: 'Więcej', button: 'Wybierz' },
+  ua: { options: 'Варіанти', more: 'Ще',    button: 'Вибрати' },
+};
+/** @param {string|null|undefined} lang */
+function waI18n(lang) { return WA_I18N[lang] ?? WA_I18N.ru; }
+
 /** @implements {import('./interface.js').ChannelAdapter} */
 export class WhatsAppAdapter {
   /**
@@ -141,7 +151,7 @@ export class WhatsAppAdapter {
         text: { body: text, preview_url: false },
       };
     } else {
-      body = this._buildInteractive(userId, text, buttons);
+      body = this._buildInteractive(userId, text, buttons, outbound.lang ?? null);
     }
 
     return this._post(`/${this._phoneNumberId}/messages`, body);
@@ -245,9 +255,14 @@ export class WhatsAppAdapter {
 
   /**
    * Build an interactive message body for WA.
+   * @param {string} userId
+   * @param {string} text
+   * @param {Array} buttonRows
+   * @param {string|null} [lang]
    * @private
    */
-  _buildInteractive(userId, text, buttonRows) {
+  _buildInteractive(userId, text, buttonRows, lang = null) {
+    const i18n = waI18n(lang);
     const flat = buttonRows.flat();
 
     if (flat.length <= MAX_BUTTON_BUTTONS) {
@@ -277,7 +292,7 @@ export class WhatsAppAdapter {
     for (let i = 0; i < flat.length; i += MAX_LIST_ITEMS) {
       const chunk = flat.slice(i, i + MAX_LIST_ITEMS);
       sections.push({
-        title: sections.length === 0 ? 'Options' : `More (${sections.length + 1})`,
+        title: sections.length === 0 ? i18n.options : `${i18n.more} (${sections.length + 1})`,
         rows: chunk.map(btn => ({
           id: (btn.callbackData ?? btn.callback_data ?? btn.text).slice(0, 200),
           title: (btn.text ?? '').slice(0, MAX_BUTTON_TITLE),
@@ -293,7 +308,7 @@ export class WhatsAppAdapter {
         type: 'list',
         body: { text: text.slice(0, 1024) || ' ' },
         action: {
-          button: 'Choose',
+          button: i18n.button,
           sections,
         },
       },

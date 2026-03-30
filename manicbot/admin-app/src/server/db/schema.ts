@@ -21,6 +21,12 @@ export const tenants = sqliteTable("tenants", {
   nextPaymentDate: integer("next_payment_date"),
   billingEmail: text("billing_email"),
   cancelAtPeriodEnd: integer("cancel_at_period_end").notNull().default(0),
+  slug: text("slug"),
+  description: text("description"),
+  lat: real("lat"),
+  lng: real("lng"),
+  city: text("city"),
+  publicActive: integer("public_active").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

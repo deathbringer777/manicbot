@@ -136,9 +136,19 @@ CREATE TABLE IF NOT EXISTS tenants (
   next_payment_date INTEGER,
   billing_email TEXT,
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  slug TEXT,
+  description TEXT,
+  lat REAL,
+  lng REAL,
+  city TEXT,
+  public_active INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_slug ON tenants(slug);
+CREATE INDEX IF NOT EXISTS idx_tenant_city ON tenants(city);
+CREATE INDEX IF NOT EXISTS idx_tenant_location ON tenants(lat, lng);
+CREATE INDEX IF NOT EXISTS idx_tenant_public ON tenants(public_active, city);
 
 CREATE TABLE IF NOT EXISTS bots (
   bot_id TEXT PRIMARY KEY,

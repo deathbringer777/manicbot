@@ -145,7 +145,7 @@ export function send(ctx, chatId, text, extra = {}) {
 
   const buttons = extractAndTruncateButtons(extra, ctx.channel.type);
   return logMetaAdapterResult(
-    ctx.channel.send(String(chatId), { text, buttons, parseMode: 'HTML' }),
+    ctx.channel.send(String(chatId), { text, buttons, parseMode: 'HTML', lang: extra?.lang ?? null }),
     'send',
     ctx.channel.type,
   );

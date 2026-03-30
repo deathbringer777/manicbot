@@ -50,6 +50,12 @@ export default {
       return Response.redirect(pagesBase + rest + url.search, 302);
     }
 
+    // /salon/* and /search → public salon directory on admin-app Pages
+    if (url.pathname.startsWith('/salon/') || url.pathname === '/search' || url.pathname.startsWith('/search/')) {
+      const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
+      return Response.redirect(pagesBase + url.pathname + url.search, 302);
+    }
+
     await ensureDemoBotsProvisioned(env);
 
     let res = await tryLanding(request, env, url);

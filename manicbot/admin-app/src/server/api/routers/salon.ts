@@ -91,6 +91,12 @@ export const salonRouter = createTRPCRouter({
       name: tenantRow[0]?.name ?? "",
       salon,
       config: cfg,
+      slug: tenantRow[0]?.slug ?? null,
+      description: tenantRow[0]?.description ?? null,
+      city: tenantRow[0]?.city ?? null,
+      lat: tenantRow[0]?.lat ?? null,
+      lng: tenantRow[0]?.lng ?? null,
+      publicActive: tenantRow[0]?.publicActive ?? 0,
     };
   }),
 
@@ -202,6 +208,13 @@ export const salonRouter = createTRPCRouter({
       workHours: z.string().optional(),
       workHoursFrom: z.number().int().optional(),
       workHoursTo: z.number().int().optional(),
+      // Public profile fields
+      slug: z.string().regex(/^[a-z0-9-]+$/, "Только строчные латинские буквы, цифры и дефис").optional(),
+      description: z.string().max(1000).optional(),
+      city: z.string().max(100).optional(),
+      lat: z.number().min(-90).max(90).optional(),
+      lng: z.number().min(-180).max(180).optional(),
+      publicActive: z.number().min(0).max(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -227,6 +240,12 @@ export const salonRouter = createTRPCRouter({
 
       const tenantUpdate: Record<string, unknown> = { salon: JSON.stringify(existing) };
       if (input.name !== undefined) tenantUpdate.name = input.name;
+      if (input.slug !== undefined) tenantUpdate.slug = input.slug || null;
+      if (input.description !== undefined) tenantUpdate.description = input.description || null;
+      if (input.city !== undefined) tenantUpdate.city = input.city || null;
+      if (input.lat !== undefined) tenantUpdate.lat = input.lat;
+      if (input.lng !== undefined) tenantUpdate.lng = input.lng;
+      if (input.publicActive !== undefined) tenantUpdate.publicActive = input.publicActive;
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 
       // 2. Upsert tenant_config rows for each provided field

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronRight, AlertCircle,
   Loader2, Plus, Pencil, Trash2, Save, X,
-  Eye, EyeOff,
+  Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -15,7 +15,7 @@ import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "settings";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "settings" | "public_profile";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: () => void; tenantId: string }) {
@@ -212,6 +212,194 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
   );
 }
 
+// ─── Public Profile Editor ───────────────────────────────────────
+function PublicProfileEditor({ tenantId }: { tenantId: string }) {
+  const utils = api.useUtils();
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId });
+  const [editing, setEditing] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [city, setCity] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
+  const [slugError, setSlugError] = useState("");
+
+  const data = profile.data as any;
+
+  useEffect(() => {
+    if (data && !editing) {
+      setSlug(data.slug ?? "");
+      setDescription(data.description ?? "");
+      setCity(data.city ?? "");
+      setLat(data.lat != null ? String(data.lat) : "");
+      setLng(data.lng != null ? String(data.lng) : "");
+      setIsPublic(!!data.publicActive);
+    }
+  }, [data, editing]);
+
+  const update = api.salon.updateSalonProfile.useMutation({
+    onSuccess: () => { utils.salon.getSalonProfile.invalidate(); setEditing(false); },
+  });
+
+  function validateSlug(v: string) {
+    if (v && !/^[a-z0-9-]+$/.test(v)) {
+      setSlugError("Только строчные латинские буквы, цифры и дефис");
+      return false;
+    }
+    setSlugError("");
+    return true;
+  }
+
+  function handleSave() {
+    if (!validateSlug(slug)) return;
+    update.mutate({
+      tenantId,
+      slug: slug || undefined,
+      description: description || undefined,
+      city: city || undefined,
+      lat: lat ? parseFloat(lat) : undefined,
+      lng: lng ? parseFloat(lng) : undefined,
+      publicActive: isPublic ? 1 : 0,
+    });
+  }
+
+  const publicUrl = slug ? `/salon/${slug}` : null;
+
+  if (profile.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Публичный профиль"
+        action={editing
+          ? <Btn variant="ghost" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" />Отмена</Btn>
+          : <Btn onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Редактировать</Btn>
+        }
+      />
+
+      {/* Status banner */}
+      <div className={`rounded-xl p-4 flex items-center gap-3 ${isPublic ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-slate-800/60 border border-slate-700"}`}>
+        {isPublic
+          ? <ToggleRight className="h-6 w-6 text-emerald-400 shrink-0" />
+          : <ToggleLeft className="h-6 w-6 text-slate-500 shrink-0" />}
+        <div className="flex-1">
+          <p className={`text-sm font-semibold ${isPublic ? "text-emerald-300" : "text-slate-400"}`}>
+            {isPublic ? "Салон виден в каталоге" : "Салон скрыт из каталога"}
+          </p>
+          {publicUrl && isPublic && (
+            <a href={publicUrl} target="_blank" rel="noopener noreferrer"
+              className="mt-0.5 flex items-center gap-1 text-xs text-brand-400 hover:underline">
+              <Globe className="h-3 w-3" />
+              manicbot.com{publicUrl}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+        {!editing && (
+          <button onClick={() => {
+            const newVal = isPublic ? 0 : 1;
+            setIsPublic(!!newVal);
+            update.mutate({ tenantId, publicActive: newVal });
+          }}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${isPublic ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"}`}>
+            {isPublic ? "Скрыть" : "Опубликовать"}
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          {[
+            { label: "URL (slug)", value: data?.slug, icon: Globe },
+            { label: "Город", value: data?.city, icon: MapPin },
+            { label: "Описание", value: data?.description, icon: null },
+            { label: "Координаты", value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
+          ].map(({ label, value, icon: Icon }) => value ? (
+            <div key={label} className="flex items-start gap-3">
+              {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
+              <div>
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="text-sm text-white">{value}</p>
+              </div>
+            </div>
+          ) : null)}
+          {!data?.slug && (
+            <p className="text-xs text-amber-400/80 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Задайте slug чтобы получить ссылку на публичный профиль
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          {/* Toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white">Показывать в каталоге</p>
+              <p className="text-xs text-slate-500">Клиенты смогут найти ваш салон через поиск</p>
+            </div>
+            <button onClick={() => setIsPublic((v) => !v)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-700"}`}>
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+
+          <div className="border-t border-white/5 pt-3 space-y-3">
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">URL slug</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600 shrink-0">manicbot.com/salon/</span>
+                <input value={slug} onChange={(e) => { setSlug(e.target.value.toLowerCase()); validateSlug(e.target.value.toLowerCase()); }}
+                  placeholder="moi-salon-moskva"
+                  className="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+              {slugError && <p className="text-xs text-red-400 mt-1">{slugError}</p>}
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Город</label>
+              <input value={city} onChange={(e) => setCity(e.target.value)}
+                placeholder="Москва"
+                className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Описание</label>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                rows={3} placeholder="Расскажите о своём салоне..."
+                className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Широта (lat)</label>
+                <input value={lat} onChange={(e) => setLat(e.target.value)} type="number" step="0.0001"
+                  placeholder="55.7558"
+                  className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Долгота (lng)</label>
+                <input value={lng} onChange={(e) => setLng(e.target.value)} type="number" step="0.0001"
+                  placeholder="37.6173"
+                  className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              💡 Координаты можно взять из Google Maps — нажмите на точку на карте, они появятся внизу экрана
+            </p>
+          </div>
+
+          <Btn onClick={handleSave} disabled={update.isPending || !!slugError} className="w-full justify-center py-2.5">
+            {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Сохранить публичный профиль
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ──────────────────────────────────────────────
 export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
@@ -244,7 +432,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" });
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" });
 
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
     onSuccess: () => utils.salon.getAppointments.invalidate(),
@@ -264,6 +452,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { key: "clients", label: t("salon.clients", lang) },
     { key: "billing", label: t("salon.billing", lang) },
     { key: "channels", label: "Channels" },
+    { key: "public_profile", label: "🌐 Профиль" },
     { key: "settings", label: t("common.settings", lang) },
   ];
 
@@ -473,6 +662,11 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
 
       {/* ── CHANNELS ── */}
       {tab === "channels" && <SalonChannelsTab tenantId={tenantId} />}
+
+      {/* ── PUBLIC PROFILE ── */}
+      {tab === "public_profile" && (
+        <PublicProfileEditor tenantId={tenantId} />
+      )}
 
       {/* ── SETTINGS ── */}
       {tab === "settings" && (

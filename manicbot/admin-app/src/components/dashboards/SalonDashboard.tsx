@@ -224,6 +224,9 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const [lng, setLng] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [slugError, setSlugError] = useState("");
+  const [slugChecked, setSlugChecked] = useState<boolean | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [newPhotoUrl, setNewPhotoUrl] = useState("");
 
   const data = profile.data as any;
 
@@ -235,6 +238,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       setLat(data.lat != null ? String(data.lat) : "");
       setLng(data.lng != null ? String(data.lng) : "");
       setIsPublic(!!data.publicActive);
+      try { setPhotos(data.salon?.photos ? JSON.parse(data.salon.photos) : (data.photos ?? [])); } catch { setPhotos([]); }
     }
   }, [data, editing]);
 
@@ -242,9 +246,15 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
     onSuccess: () => { utils.salon.getSalonProfile.invalidate(); setEditing(false); },
   });
 
+  const slugCheck = api.salon.checkSlugAvailable.useQuery(
+    { slug, tenantId },
+    { enabled: editing && slug.length > 0 && !slugError, staleTime: 5000 },
+  );
+
   function validateSlug(v: string) {
     if (v && !/^[a-z0-9-]+$/.test(v)) {
       setSlugError("Только строчные латинские буквы, цифры и дефис");
+      setSlugChecked(null);
       return false;
     }
     setSlugError("");
@@ -261,7 +271,15 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       lat: lat ? parseFloat(lat) : undefined,
       lng: lng ? parseFloat(lng) : undefined,
       publicActive: isPublic ? 1 : 0,
+      photos,
     });
+  }
+
+  function addPhoto() {
+    const url = newPhotoUrl.trim();
+    if (!url) return;
+    setPhotos((prev) => [...prev, url]);
+    setNewPhotoUrl("");
   }
 
   const publicUrl = slug ? `/salon/${slug}` : null;
@@ -324,6 +342,16 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           ) : null)}
+          {photos.length > 0 && (
+            <div>
+              <p className="text-xs text-slate-500 mb-2">Фотографии ({photos.length})</p>
+              <div className="flex flex-wrap gap-2">
+                {photos.map((url, i) => (
+                  <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-700" />
+                ))}
+              </div>
+            </div>
+          )}
           {!data?.slug && (
             <p className="text-xs text-amber-400/80 flex items-center gap-1">
               <AlertCircle className="h-3.5 w-3.5" />
@@ -353,6 +381,11 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                 <input value={slug} onChange={(e) => { setSlug(e.target.value.toLowerCase()); validateSlug(e.target.value.toLowerCase()); }}
                   placeholder="moi-salon-moskva"
                   className="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {slug && !slugError && (
+                  <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
+                    {slugCheck.isLoading ? "..." : slugCheck.data?.available === false ? "❌ Занят" : slugCheck.data?.available ? "✅" : ""}
+                  </span>
+                )}
               </div>
               {slugError && <p className="text-xs text-red-400 mt-1">{slugError}</p>}
             </div>
@@ -388,9 +421,44 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             <p className="text-xs text-slate-500">
               💡 Координаты можно взять из Google Maps — нажмите на точку на карте, они появятся внизу экрана
             </p>
+
+            {/* Photos */}
+            <div className="border-t border-white/5 pt-3">
+              <label className="text-xs text-slate-400 mb-2 block">Фотографии салона</label>
+              {photos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {photos.map((url, i) => (
+                    <div key={i} className="relative group">
+                      <img src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-700" />
+                      <button
+                        type="button"
+                        onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-[10px]"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  value={newPhotoUrl}
+                  onChange={(e) => setNewPhotoUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addPhoto())}
+                  placeholder="https://example.com/photo.jpg"
+                  className="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-xs text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500"
+                />
+                <button type="button" onClick={addPhoto}
+                  className="shrink-0 rounded-lg bg-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-600 flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" />
+                  Добавить
+                </button>
+              </div>
+            </div>
           </div>
 
-          <Btn onClick={handleSave} disabled={update.isPending || !!slugError} className="w-full justify-center py-2.5">
+          <Btn onClick={handleSave} disabled={update.isPending || !!slugError || slugCheck.data?.available === false} className="w-full justify-center py-2.5">
             {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Сохранить публичный профиль
           </Btn>

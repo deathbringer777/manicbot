@@ -1,0 +1,256 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Search, X, MapPin, ChevronRight, FileText } from "lucide-react";
+import { api } from "~/trpc/react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+interface Props {
+  initialValue?: string;
+  onSearch?: (q: string) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}
+
+export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = "Название салона, город или услуга...", autoFocus }: Props) {
+  const [value, setValue] = useState(initialValue);
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  // Debounce input → query
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(value.trim()), 300);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const { data, isFetching } = api.publicSalon.autocomplete.useQuery(
+    { q: debouncedQ },
+    { enabled: debouncedQ.length >= 2, staleTime: 30_000 },
+  );
+
+  const salons = data?.salons ?? [];
+  const articles = data?.articles ?? [];
+  const hasResults = salons.length > 0 || articles.length > 0;
+  const showDropdown = open && debouncedQ.length >= 2;
+
+  // All navigable items (salons first, then articles, then "show all")
+  const items = [
+    ...salons.map((s) => ({ type: "salon" as const, data: s })),
+    ...articles.map((a) => ({ type: "article" as const, data: a })),
+    { type: "all" as const, data: null },
+  ];
+
+  const handleSelect = useCallback((idx: number) => {
+    const item = items[idx];
+    if (!item) return;
+    if (item.type === "salon" && item.data?.slug) {
+      router.push(`/salon/${item.data.slug}`);
+    } else if (item.type === "article") {
+      router.push(`/blog/${item.data?.slug}`);
+    } else {
+      router.push(`/search?q=${encodeURIComponent(value)}`);
+    }
+    setOpen(false);
+  }, [items, value, router]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (value.trim()) {
+      if (onSearch) {
+        onSearch(value.trim());
+      } else {
+        router.push(`/search?q=${encodeURIComponent(value.trim())}`);
+      }
+      setOpen(false);
+    }
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, items.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, -1));
+    } else if (e.key === "Enter" && activeIdx >= 0) {
+      e.preventDefault();
+      handleSelect(activeIdx);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setActiveIdx(-1);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            ref={inputRef}
+            autoFocus={autoFocus}
+            type="text"
+            value={value}
+            onChange={(e) => { setValue(e.target.value); setOpen(true); setActiveIdx(-1); }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="w-full rounded-2xl border border-slate-700/60 bg-slate-900 py-3.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 shadow-lg shadow-black/20 ring-0 outline-none transition focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20"
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={() => { setValue(""); setDebouncedQ(""); inputRef.current?.focus(); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <button
+          type="submit"
+          className="shrink-0 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-violet-900/30 transition hover:bg-violet-500 hover:scale-[1.02]"
+        >
+          Найти
+        </button>
+      </form>
+
+      {/* Dropdown */}
+      {showDropdown && (
+        <div
+          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/95 shadow-2xl shadow-black/40 backdrop-blur-xl"
+          style={{
+            animation: "dropdownIn 0.15s ease-out",
+          }}
+        >
+          <style>{`
+            @keyframes dropdownIn {
+              from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+              to   { opacity: 1; transform: translateY(0)   scale(1); }
+            }
+          `}</style>
+
+          {isFetching && !hasResults && (
+            <div className="space-y-2 p-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex animate-pulse items-center gap-3 rounded-xl p-2">
+                  <div className="h-10 w-10 shrink-0 rounded-lg bg-slate-800" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-2/3 rounded bg-slate-800" />
+                    <div className="h-2.5 w-1/3 rounded bg-slate-800" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!isFetching && !hasResults && debouncedQ.length >= 2 && (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm text-slate-500">Ничего не найдено по «{debouncedQ}»</p>
+              <Link
+                href={`/search?q=${encodeURIComponent(debouncedQ)}`}
+                className="mt-2 inline-block text-xs text-violet-400 hover:text-violet-300"
+                onClick={() => setOpen(false)}
+              >
+                Показать все результаты →
+              </Link>
+            </div>
+          )}
+
+          {hasResults && (
+            <div className="py-2">
+              {/* Salons section */}
+              {salons.length > 0 && (
+                <>
+                  <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                    Салоны
+                  </p>
+                  {salons.map((salon, i) => (
+                    <Link
+                      key={salon.slug ?? i}
+                      href={salon.slug ? `/salon/${salon.slug}` : "#"}
+                      onClick={() => setOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2 transition hover:bg-slate-800/70 ${activeIdx === i ? "bg-slate-800/70" : ""}`}
+                    >
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+                        {salon.coverPhoto ? (
+                          <img src={salon.coverPhoto} alt={salon.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-lg">💅</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-white">{salon.name}</p>
+                        {salon.city && (
+                          <p className="flex items-center gap-1 text-xs text-slate-500">
+                            <MapPin className="h-3 w-3" />
+                            {salon.city}
+                          </p>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
+                    </Link>
+                  ))}
+                </>
+              )}
+
+              {/* Articles section */}
+              {articles.length > 0 && (
+                <>
+                  <div className="mx-3 my-1.5 border-t border-slate-800" />
+                  <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                    Статьи
+                  </p>
+                  {articles.map((art, i) => {
+                    const idx = salons.length + i;
+                    return (
+                      <Link
+                        key={art.slug}
+                        href={`/blog/${art.slug}`}
+                        onClick={() => setOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2 transition hover:bg-slate-800/70 ${activeIdx === idx ? "bg-slate-800/70" : ""}`}
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-lg">
+                          <FileText className="h-5 w-5 text-violet-400" />
+                        </div>
+                        <p className="truncate text-sm text-slate-300">{art.title}</p>
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Show all results */}
+              <div className="mx-3 my-1.5 border-t border-slate-800" />
+              <Link
+                href={`/search?q=${encodeURIComponent(debouncedQ)}`}
+                onClick={() => setOpen(false)}
+                className={`flex items-center justify-between px-4 py-2.5 text-sm transition hover:bg-slate-800/70 ${activeIdx === items.length - 1 ? "bg-slate-800/70" : ""}`}
+              >
+                <span className="text-violet-400 font-medium">Показать все результаты для «{debouncedQ}»</span>
+                <ChevronRight className="h-4 w-4 text-violet-400" />
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

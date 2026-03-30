@@ -12,6 +12,7 @@ export const ua: Translations = {
     channels: "Канали",
     login: "Увійти",
     cta: "Спробувати ManicBot",
+    findSalon: "Знайти салон",
   },
 
   hero: {
@@ -23,6 +24,7 @@ export const ua: Translations = {
     ctaSecondary: "Подивитись ціни",
     trustLine: "Для салонів і приватних майстрів по всій Європі",
     demoCaption: "Так це виглядає в Telegram",
+    searchPlaceholder: "Знайти салон за містом або послугою...",
     channelBadges: ["✈️ Telegram", "📷 Instagram", "💬 WhatsApp"],
   },
 

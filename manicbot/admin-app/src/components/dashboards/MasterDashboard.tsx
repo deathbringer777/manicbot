@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
@@ -78,6 +78,7 @@ function AptRow({ apt }: { apt: any }) {
 
 export function MasterDashboard({ tenantId, masterId }: { tenantId: string; masterId: number }) {
   const { lang } = useLang();
+  const utils = api.useUtils();
   const [tab, setTab] = useState<Tab>("today");
   const [period, setPeriod] = useState<Period>("month");
   const [dateFrom, setDateFrom] = useState("");
@@ -112,6 +113,12 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
     { tenantId, masterId },
     { enabled: tab === "profile" }
   );
+  const [bioEdit, setBioEdit] = useState(false);
+  const [bio, setBio] = useState("");
+  const [photo, setPhoto] = useState("");
+  const updateProfile = api.master.updateProfile.useMutation({
+    onSuccess: () => { utils.master.getMyProfile.invalidate(); setBioEdit(false); },
+  });
 
   const tabLabels: Record<Tab, string> = {
     today: t("master.today", lang),
@@ -259,20 +266,63 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {/* PROFILE */}
       {tab === "profile" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">{t("master.profile", lang)}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white">{t("master.profile", lang)}</h2>
+            {profile.data && !bioEdit && (
+              <button onClick={() => { setBio((profile.data as any).bio ?? ""); setPhoto((profile.data as any).photo ?? ""); setBioEdit(true); }}
+                className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700">
+                <Pencil className="h-3.5 w-3.5" />Редактировать
+              </button>
+            )}
+            {bioEdit && (
+              <button onClick={() => setBioEdit(false)}
+                className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-700">
+                <X className="h-3.5 w-3.5" />Отмена
+              </button>
+            )}
+          </div>
           {profile.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {profile.data && (
-            <div className="glass-card rounded-2xl p-5 space-y-3">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-2xl font-bold text-white">
-                  {(profile.data.name ?? "M").charAt(0).toUpperCase()}
+            <div className="glass-card rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-2xl overflow-hidden bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-2xl font-bold text-white shrink-0">
+                  {(profile.data as any).photo
+                    ? <img src={(profile.data as any).photo} alt="" className="h-full w-full object-cover" />
+                    : (profile.data.name ?? "M").charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <p className="text-xl font-bold text-white">{profile.data.name ?? "Мастер"}</p>
-                  <p className="text-xs text-slate-500">ID: {profile.data.chatId}</p>
+                  <p className="text-xs text-slate-500">ID: {(profile.data as any).chatId}</p>
+                  {(profile.data as any).bio && !bioEdit && (
+                    <p className="mt-1 text-xs text-slate-400">{(profile.data as any).bio}</p>
+                  )}
                 </div>
               </div>
-              <p className="text-xs text-slate-600">{t("master.profileHint", lang)}</p>
+
+              {bioEdit && (
+                <div className="space-y-3 border-t border-white/5 pt-3">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">Фото (URL)</label>
+                    <input value={photo} onChange={(e) => setPhoto(e.target.value)}
+                      placeholder="https://example.com/photo.jpg"
+                      className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">Описание (bio)</label>
+                    <textarea value={bio} onChange={(e) => setBio(e.target.value)}
+                      rows={3} maxLength={500} placeholder="Мастер маникюра с 5-летним опытом..."
+                      className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
+                    <p className="text-right text-[10px] text-slate-600">{bio.length}/500</p>
+                  </div>
+                  <button
+                    onClick={() => updateProfile.mutate({ tenantId, masterId, bio: bio || undefined, photo: photo || undefined })}
+                    disabled={updateProfile.isPending}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500/20 border border-brand-500/30 px-4 py-2.5 text-sm font-medium text-brand-400 hover:bg-brand-500/30 transition disabled:opacity-50">
+                    {updateProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Сохранить профиль
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {!profile.isLoading && !profile.data && (

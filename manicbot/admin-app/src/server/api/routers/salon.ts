@@ -4,7 +4,7 @@ import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles,
 } from "~/server/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, ne } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
@@ -127,6 +127,18 @@ export const salonRouter = createTRPCRouter({
     });
   }),
 
+  checkSlugAvailable: publicProcedure
+    .input(z.object({ slug: z.string(), tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      if (!input.slug) return { available: true };
+      const row = await ctx.db
+        .select({ id: tenants.id })
+        .from(tenants)
+        .where(and(eq(tenants.slug, input.slug), ne(tenants.id, input.tenantId)))
+        .limit(1);
+      return { available: row.length === 0 };
+    }),
+
   // ── Mutations ──────────────────────────────────────────────────────
 
   updateService: publicProcedure
@@ -215,6 +227,7 @@ export const salonRouter = createTRPCRouter({
       lat: z.number().min(-90).max(90).optional(),
       lng: z.number().min(-180).max(180).optional(),
       publicActive: z.number().min(0).max(1).optional(),
+      photos: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -246,6 +259,7 @@ export const salonRouter = createTRPCRouter({
       if (input.lat !== undefined) tenantUpdate.lat = input.lat;
       if (input.lng !== undefined) tenantUpdate.lng = input.lng;
       if (input.publicActive !== undefined) tenantUpdate.publicActive = input.publicActive;
+      if (input.photos !== undefined) tenantUpdate.photos = JSON.stringify(input.photos);
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 
       // 2. Upsert tenant_config rows for each provided field

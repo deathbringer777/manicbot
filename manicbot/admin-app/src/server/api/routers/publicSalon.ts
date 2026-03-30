@@ -3,6 +3,37 @@ import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { tenants, services, masters, tenantConfig, bots } from "~/server/db/schema";
 import { eq, and, like, or, isNotNull, sql } from "drizzle-orm";
 
+/** Static blog article list used in autocomplete suggestions. */
+const BLOG_ARTICLES: Array<{ slug: string; titles: Record<string, string> }> = [
+  {
+    slug: "manicbot-telegram-booking",
+    titles: {
+      ru: "Онлайн-запись через Telegram: как это работает",
+      en: "Online booking via Telegram: how it works",
+      ua: "Онлайн-запис через Telegram: як це працює",
+      pl: "Rezerwacje online przez Telegram: jak to działa",
+    },
+  },
+  {
+    slug: "ai-beauty-europe-poland",
+    titles: {
+      ru: "ИИ-ассистент для nail-студий в Европе",
+      en: "AI assistant for nail studios in Europe",
+      ua: "ШІ-асистент для нейл-студій у Європі",
+      pl: "Asystent AI dla studiów paznokci w Europie",
+    },
+  },
+  {
+    slug: "gel-polish-care-guide",
+    titles: {
+      ru: "Уход за гель-лаком: советы от мастеров",
+      en: "Gel polish care guide from nail masters",
+      ua: "Догляд за гель-лаком: поради від майстрів",
+      pl: "Poradnik pielęgnacji żelowego lakieru",
+    },
+  },
+];
+
 /** Public salon directory — no authentication required. */
 export const publicSalonRouter = createTRPCRouter({
 
@@ -217,4 +248,53 @@ export const publicSalonRouter = createTRPCRouter({
       .limit(100);
     return rows.map((r) => r.city).filter(Boolean) as string[];
   }),
+
+  /** Autocomplete: returns top 5 salon suggestions + matched blog articles for the search dropdown. */
+  autocomplete: publicProcedure
+    .input(z.object({ q: z.string().min(1).max(100) }))
+    .query(async ({ ctx, input }) => {
+      const q = input.q.trim();
+      if (q.length < 2) return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
+
+      // Search salons using LIKE (FTS5 used when search_text is populated)
+      const likeQ = `%${q}%`;
+      const rows = await ctx.db
+        .select({
+          slug: tenants.slug,
+          name: tenants.name,
+          city: tenants.city,
+          photos: tenants.photos,
+        })
+        .from(tenants)
+        .where(
+          and(
+            eq(tenants.publicActive, 1),
+            or(
+              like(tenants.name, likeQ),
+              like(tenants.description, likeQ),
+              like(tenants.city, likeQ),
+            ),
+          ),
+        )
+        .limit(5);
+
+      const salons = rows.map((t) => {
+        let coverPhoto: string | null = null;
+        try {
+          const photos = t.photos ? JSON.parse(t.photos) : [];
+          coverPhoto = photos[0] ?? null;
+        } catch { /* ignore */ }
+        return { slug: t.slug, name: t.name, city: t.city, coverPhoto };
+      });
+
+      // Match articles using simple substring match
+      const qLow = q.toLowerCase();
+      const articles = BLOG_ARTICLES.filter((a) =>
+        Object.values(a.titles).some((title) =>
+          title.toLowerCase().includes(qLow),
+        ),
+      ).map((a) => ({ slug: a.slug, title: a.titles["ru"] ?? a.titles["en"] ?? a.slug, lang: "ru" as const }));
+
+      return { salons, articles };
+    }),
 });

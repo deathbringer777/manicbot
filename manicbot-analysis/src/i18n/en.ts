@@ -10,6 +10,7 @@ export const en = {
     channels: "Channels",
     login: "Log in",
     cta: "Try ManicBot",
+    findSalon: "Find salon",
   },
 
   hero: {
@@ -21,6 +22,7 @@ export const en = {
     ctaSecondary: "View pricing",
     trustLine: "Used by salons and independent masters across Europe",
     demoCaption: "How it looks in Telegram",
+    searchPlaceholder: "Find a salon by city or service...",
     channelBadges: ["✈️ Telegram", "📷 Instagram", "💬 WhatsApp"],
   },
 

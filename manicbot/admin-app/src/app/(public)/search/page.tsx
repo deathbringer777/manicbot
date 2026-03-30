@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Search, MapPin, Locate, X, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { MapPin, Locate, X, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { api } from "~/trpc/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { SearchAutocomplete } from "~/components/public/SearchAutocomplete";
 
 const SERVICE_CHIPS = [
   { label: "Маникюр", value: "маникюр" },
@@ -26,7 +28,6 @@ function SalonCard({ item }: { item: {
       href={item.slug ? `/salon/${item.slug}` : "#"}
       className="group flex flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 transition hover:border-brand-500/40 hover:shadow-lg hover:shadow-brand-500/10"
     >
-      {/* Cover */}
       <div className="relative h-44 bg-slate-800">
         {item.coverPhoto ? (
           <img src={item.coverPhoto} alt={item.name} className="h-full w-full object-cover" />
@@ -41,8 +42,6 @@ function SalonCard({ item }: { item: {
           </span>
         )}
       </div>
-
-      {/* Info */}
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-semibold text-white group-hover:text-brand-400">{item.name}</h3>
         {(item.city ?? item.address) && (
@@ -78,8 +77,11 @@ function SkeletonCard() {
   );
 }
 
-export default function SearchPage() {
-  const [query, setQuery] = useState("");
+function SearchPageContent() {
+  const searchParams = useSearchParams();
+  const urlQ = searchParams.get("q") ?? "";
+
+  const [query, setQuery] = useState(urlQ);
   const [city, setCity] = useState("");
   const [activeChips, setActiveChips] = useState<string[]>([]);
   const [lat, setLat] = useState<number | undefined>();
@@ -87,6 +89,11 @@ export default function SearchPage() {
   const [locating, setLocating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
+
+  // Sync URL param on mount
+  useEffect(() => {
+    if (urlQ) setQuery(urlQ);
+  }, [urlQ]);
 
   const fullQuery = [query, ...activeChips].filter(Boolean).join(" ");
 
@@ -134,26 +141,18 @@ export default function SearchPage() {
         <p className="mt-1 text-slate-400">Онлайн-запись через Telegram — быстро и удобно</p>
       </div>
 
-      {/* Search bar */}
-      <div className="flex flex-col gap-3 sm:flex-row">
-        {/* Keyword */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Название салона или услуга..."
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
-            className="w-full rounded-xl bg-slate-900 py-3 pl-10 pr-4 text-sm text-white placeholder-slate-500 ring-1 ring-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-          {query && (
-            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+      {/* Search bar with autocomplete */}
+      <div className="mb-4">
+        <SearchAutocomplete
+          initialValue={query}
+          onSearch={(q) => { setQuery(q); setPage(1); }}
+          placeholder="Название салона, город или услуга..."
+          autoFocus={false}
+        />
+      </div>
 
-        {/* City */}
+      {/* City + geo + filters row */}
+      <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative sm:w-48">
           <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
@@ -169,7 +168,6 @@ export default function SearchPage() {
           </datalist>
         </div>
 
-        {/* Locate */}
         <button
           onClick={locate}
           disabled={locating}
@@ -180,7 +178,6 @@ export default function SearchPage() {
           <span className="hidden sm:inline">{lat != null ? "Рядом" : "Рядом"}</span>
         </button>
 
-        {/* Filters toggle */}
         <button
           onClick={() => setShowFilters((v) => !v)}
           className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium ring-1 transition ${showFilters ? "bg-slate-700 text-white ring-slate-600" : "bg-slate-900 text-slate-300 ring-slate-800 hover:bg-slate-800"}`}
@@ -195,7 +192,6 @@ export default function SearchPage() {
         </button>
       </div>
 
-      {/* Filter chips */}
       {showFilters && (
         <div className="mt-3 flex flex-wrap gap-2">
           {SERVICE_CHIPS.map((chip) => (
@@ -221,7 +217,6 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Active location badge */}
       {lat != null && (
         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand-500/15 px-3 py-1 text-sm text-brand-300">
           <Locate className="h-3.5 w-3.5" />
@@ -232,7 +227,6 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Results */}
       <div className="mt-8">
         {searchQuery.isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -282,5 +276,28 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="h-10 w-48 rounded bg-slate-800 animate-pulse mb-8" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 animate-pulse">
+              <div className="h-44 bg-slate-800" />
+              <div className="p-4 space-y-2">
+                <div className="h-4 w-2/3 rounded bg-slate-800" />
+                <div className="h-3 w-1/2 rounded bg-slate-800" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    }>
+      <SearchPageContent />
+    </Suspense>
   );
 }

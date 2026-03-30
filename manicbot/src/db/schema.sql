@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS masters (
   added_at INTEGER,
   google_calendar_id TEXT,
   calendar_enabled INTEGER NOT NULL DEFAULT 0,
+  bio TEXT,
+  photo TEXT,
   PRIMARY KEY (tenant_id, chat_id)
 );
 
@@ -142,6 +144,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   lng REAL,
   city TEXT,
   public_active INTEGER NOT NULL DEFAULT 0,
+  search_text TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

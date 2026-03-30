@@ -63,14 +63,6 @@ export function Header() {
           >
             {t.nav.login}
           </a>
-          <button
-            type="button"
-            onClick={() => scrollTo("pricing")}
-            className="hidden items-center rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-500/30 transition-all duration-200 hover:scale-[1.02] hover:opacity-95 sm:flex"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
-          >
-            {t.nav.cta}
-          </button>
         </div>
       </div>
     </header>

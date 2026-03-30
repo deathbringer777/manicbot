@@ -12,6 +12,7 @@ export const pl: Translations = {
     channels: "Kanały",
     login: "Zaloguj się",
     cta: "Wypróbuj ManicBot",
+    findSalon: "Znajdź salon",
   },
 
   hero: {
@@ -23,6 +24,7 @@ export const pl: Translations = {
     ctaSecondary: "Zobacz cennik",
     trustLine: "Dla salonów i niezależnych mistrzów w całej Europie",
     demoCaption: "Tak to wygląda w Telegramie",
+    searchPlaceholder: "Znajdź salon według miasta lub usługi...",
     channelBadges: ["✈️ Telegram", "📷 Instagram", "💬 WhatsApp"],
   },
 

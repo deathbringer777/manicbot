@@ -116,4 +116,23 @@ export const masterRouter = createTRPCRouter({
         .limit(1);
       return row[0] ?? null;
     }),
+
+  updateProfile: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number(),
+      bio: z.string().max(500).optional(),
+      photo: z.string().url().optional().or(z.literal("")),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      const setObj: Record<string, unknown> = {};
+      if (input.bio !== undefined) setObj.bio = input.bio || null;
+      if (input.photo !== undefined) setObj.photo = input.photo || null;
+      if (Object.keys(setObj).length === 0) return { success: true };
+      await ctx.db.update(masters)
+        .set(setObj)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
+      return { success: true };
+    }),
 });

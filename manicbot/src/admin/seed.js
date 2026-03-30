@@ -148,5 +148,15 @@ export async function runSeed(ctx, env, masterUsername = 'dezbringer') {
   }
   log.push(`@${masterUsername} (${masterChatId}) set as master and owner for ${t1} and ${t2}`);
 
+  // Make demo salons publicly visible
+  try {
+    await dbRun(ctx, `UPDATE tenants SET slug = 'nails-studio', city = 'Варшава', description = ?, public_active = 1 WHERE name = ?`,
+      SALON1.aboutDesc, SALON1.name);
+    await dbRun(ctx, `UPDATE tenants SET slug = 'luxe-manicure', city = 'Варшава', description = ?, public_active = 1 WHERE name = ?`,
+      SALON2.aboutDesc, SALON2.name);
+  } catch(e) {
+    console.warn('[seed] Could not set public profile fields:', e?.message);
+  }
+
   return { ok: true, log, tenants: [t1, t2], masterAssigned: true, masterChatId, masterUsername: '@' + masterUsername };
 }

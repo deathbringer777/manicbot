@@ -427,5 +427,67 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true });
   }
 
+  // GET /admin/index-salons?key=ADMIN_KEY — bulk-index all tenants into FTS + set public_active=1
+  if (url.pathname === '/admin/index-salons') {
+    const key = url.searchParams.get('key') || '';
+    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const ec = envCtx(env);
+    const { dbAll, dbRun } = await import('../utils/db.js');
+
+    // Get all active tenants
+    const tenantRows = await dbAll(ec, `SELECT id, name, description, city FROM tenants WHERE active = 1`);
+    let indexed = 0;
+
+    for (const t of tenantRows) {
+      // Auto-generate slug if missing
+      let slug = (await dbAll(ec, `SELECT slug FROM tenants WHERE id = ?`, t.id))[0]?.slug;
+      if (!slug) {
+        const base = (t.name || t.id)
+          .toLowerCase()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .slice(0, 50);
+        // Ensure uniqueness
+        let candidate = base;
+        let suffix = 1;
+        while (true) {
+          const existing = await dbAll(ec, `SELECT id FROM tenants WHERE slug = ? AND id != ?`, candidate, t.id);
+          if (!existing.length) { slug = candidate; break; }
+          candidate = `${base}-${suffix++}`;
+        }
+      }
+
+      // Build search text
+      const svcRows = await dbAll(ec, `SELECT names, active, hidden FROM services WHERE tenant_id = ?`, t.id);
+      const parts = [t.name, t.description, t.city].filter(Boolean);
+      for (const svc of svcRows) {
+        if (!svc.active || svc.hidden) continue;
+        try {
+          const names = JSON.parse(svc.names || '{}');
+          parts.push(...Object.values(names).filter(Boolean));
+        } catch { /* ignore */ }
+      }
+      const searchText = [...new Set(parts)].join(' ');
+
+      // Update tenant: set slug, search_text, public_active=1
+      await dbRun(ec,
+        `UPDATE tenants SET slug = ?, search_text = ?, public_active = 1 WHERE id = ?`,
+        slug, searchText, t.id,
+      );
+
+      // Upsert FTS5 index row
+      await dbRun(ec, `DELETE FROM tenant_fts WHERE tenant_id = ?`, t.id);
+      await dbRun(ec, `INSERT INTO tenant_fts(tenant_id, content) VALUES (?, ?)`, t.id, searchText);
+
+      indexed++;
+    }
+
+    return Response.json({ ok: true, indexed });
+  }
+
   return null;
 }

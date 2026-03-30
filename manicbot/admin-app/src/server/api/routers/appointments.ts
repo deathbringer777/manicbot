@@ -161,8 +161,10 @@ export const appointmentsRouter = createTRPCRouter({
       await ctx.db.update(appointments).set(updates).where(eq(appointments.id, input.id));
 
       // Fire-and-forget: notify Worker to send Telegram message + sync calendar
-      if (tenantId && (input.status === "confirmed" || input.status === "rejected" || input.status === "cancelled")) {
-        notifyWorker(input.status, input.id, tenantId, updates.confirmedBy ?? null).catch(() => {});
+      // Worker expects bare verb ("confirm" / "reject" / "cancel"), not past tense
+      const workerActionMap: Record<string, string> = { confirmed: "confirm", rejected: "reject", cancelled: "cancel" };
+      if (tenantId && workerActionMap[input.status]) {
+        notifyWorker(workerActionMap[input.status]!, input.id, tenantId, updates.confirmedBy ?? null).catch(() => {});
       }
 
       return { success: true, updatedAt: Date.now() };

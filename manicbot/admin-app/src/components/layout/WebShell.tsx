@@ -31,89 +31,209 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const GOD_GROUPS: NavGroup[] = [
-  {
-    label: "Overview",
-    items: [
-      { href: "/", icon: Home, label: "Dashboard" },
-    ],
+/** Per-language label sets for nav items and groups. */
+const NAV_LABELS: Record<string, Record<string, string>> = {
+  ru: {
+    // God Mode groups
+    "Overview": "Обзор",
+    "Management": "Управление",
+    "Platform": "Платформа",
+    // God Mode items
+    "Dashboard": "Дашборд",
+    "Users": "Пользователи",
+    "Tenants": "Салоны",
+    "Appointments": "Записи",
+    "Inbox": "Переписка",
+    "Agents": "Агенты",
+    "Billing": "Биллинг",
+    "Events": "События",
+    "System": "Система",
+    "Settings": "Настройки",
+    // Salon nav
+    "Services": "Услуги",
+    "Masters": "Мастера",
+    "Clients": "Клиенты",
+    "Channels": "Каналы",
+    // Master nav
+    "Today": "Сегодня",
+    "Schedule": "Расписание",
+    "Earnings": "Доходы",
+    "Profile": "Профиль",
+    // Support
+    "Tickets": "Тикеты",
+    // Role info
+    "Admin Panel": "Панель администратора",
+    "God Mode": "God Mode",
+    "My Salon": "Мой салон",
+    "My Schedule": "Моё расписание",
+    "Master": "Мастер",
+    "Support": "Поддержка",
+    "Tech Support": "Тех. поддержка",
+    "Agent Hub": "Центр агентов",
+    "Logout": "Выйти",
+    "Collapse": "Свернуть",
   },
-  {
-    label: "Data",
-    items: [
-      { href: "/users", icon: Users, label: "Users" },
-      { href: "/tenants", icon: Building2, label: "Tenants" },
-      { href: "/appointments", icon: CalendarDays, label: "Appointments" },
-      { href: "/conversations", icon: MessageSquare, label: "Inbox" },
-      { href: "/agents", icon: UserCog, label: "Agents" },
-    ],
+  ua: {
+    "Overview": "Огляд",
+    "Management": "Управління",
+    "Platform": "Платформа",
+    "Dashboard": "Дашборд",
+    "Users": "Користувачі",
+    "Tenants": "Салони",
+    "Appointments": "Записи",
+    "Inbox": "Листування",
+    "Agents": "Агенти",
+    "Billing": "Білінг",
+    "Events": "Події",
+    "System": "Система",
+    "Settings": "Налаштування",
+    "Services": "Послуги",
+    "Masters": "Майстри",
+    "Clients": "Клієнти",
+    "Channels": "Канали",
+    "Today": "Сьогодні",
+    "Schedule": "Розклад",
+    "Earnings": "Доходи",
+    "Profile": "Профіль",
+    "Tickets": "Тікети",
+    "Admin Panel": "Панель адміністратора",
+    "God Mode": "God Mode",
+    "My Salon": "Мій салон",
+    "My Schedule": "Мій розклад",
+    "Master": "Майстер",
+    "Support": "Підтримка",
+    "Tech Support": "Тех. підтримка",
+    "Agent Hub": "Центр агентів",
+    "Logout": "Вийти",
+    "Collapse": "Згорнути",
   },
-  {
-    label: "Platform",
-    items: [
-      { href: "/billing", icon: CreditCard, label: "Billing" },
-      { href: "/events", icon: ScrollText, label: "Events" },
-      { href: "/system", icon: Activity, label: "System" },
-      { href: "/settings", icon: Settings, label: "Settings" },
-    ],
+  pl: {
+    "Overview": "Przegląd",
+    "Management": "Zarządzanie",
+    "Platform": "Platforma",
+    "Dashboard": "Panel",
+    "Users": "Użytkownicy",
+    "Tenants": "Salony",
+    "Appointments": "Wizyty",
+    "Inbox": "Wiadomości",
+    "Agents": "Agenci",
+    "Billing": "Płatności",
+    "Events": "Zdarzenia",
+    "System": "System",
+    "Settings": "Ustawienia",
+    "Services": "Usługi",
+    "Masters": "Mistrzowie",
+    "Clients": "Klienci",
+    "Channels": "Kanały",
+    "Today": "Dziś",
+    "Schedule": "Harmonogram",
+    "Earnings": "Zarobki",
+    "Profile": "Profil",
+    "Tickets": "Zgłoszenia",
+    "Admin Panel": "Panel administratora",
+    "God Mode": "God Mode",
+    "My Salon": "Mój salon",
+    "My Schedule": "Mój harmonogram",
+    "Master": "Mistrz",
+    "Support": "Wsparcie",
+    "Tech Support": "Wsparcie tech.",
+    "Agent Hub": "Centrum agentów",
+    "Logout": "Wyloguj",
+    "Collapse": "Zwiń",
   },
-];
+};
 
-const GOD_FLAT: NavItem[] = GOD_GROUPS.flatMap(g => g.items);
+function tNav(key: string, lang: string): string {
+  return NAV_LABELS[lang]?.[key] ?? key;
+}
 
-const SALON_NAV: NavItem[] = [
-  { href: "/", icon: LayoutGrid, label: "Overview" },
-  { href: "/?tab=appointments", icon: CalendarDays, label: "Appointments" },
-  { href: "/?tab=services", icon: Scissors, label: "Services" },
-  { href: "/?tab=masters", icon: UserRound, label: "Masters" },
-  { href: "/?tab=clients", icon: Users, label: "Clients" },
-  { href: "/?tab=billing", icon: Wallet, label: "Billing" },
-  { href: "/?tab=channels", icon: MessageSquare, label: "Channels" },
-  { href: "/?tab=settings", icon: Settings, label: "Settings" },
-];
+function buildGodGroups(lang: string): NavGroup[] {
+  return [
+    {
+      label: tNav("Overview", lang),
+      items: [
+        { href: "/", icon: Home, label: tNav("Dashboard", lang) },
+      ],
+    },
+    {
+      label: tNav("Management", lang),
+      items: [
+        { href: "/tenants", icon: Building2, label: tNav("Tenants", lang) },
+        { href: "/users", icon: Users, label: tNav("Users", lang) },
+        { href: "/appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
+        { href: "/conversations", icon: MessageSquare, label: tNav("Inbox", lang) },
+        { href: "/agents", icon: UserCog, label: tNav("Agents", lang) },
+      ],
+    },
+    {
+      label: tNav("Platform", lang),
+      items: [
+        { href: "/billing", icon: CreditCard, label: tNav("Billing", lang) },
+        { href: "/events", icon: ScrollText, label: tNav("Events", lang) },
+        { href: "/system", icon: Activity, label: tNav("System", lang) },
+        { href: "/settings", icon: Settings, label: tNav("Settings", lang) },
+      ],
+    },
+  ];
+}
 
-const MASTER_NAV: NavItem[] = [
-  { href: "/", icon: Home, label: "Today" },
-  { href: "/?tab=schedule", icon: CalendarCheck, label: "Schedule" },
-  { href: "/?tab=clients", icon: Users, label: "Clients" },
-  { href: "/?tab=earnings", icon: Wallet, label: "Earnings" },
-  { href: "/?tab=profile", icon: UserRound, label: "Profile" },
-];
+function buildSalonNav(lang: string): NavItem[] {
+  return [
+    { href: "/", icon: LayoutGrid, label: tNav("Dashboard", lang) },
+    { href: "/?tab=appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
+    { href: "/?tab=services", icon: Scissors, label: tNav("Services", lang) },
+    { href: "/?tab=masters", icon: UserRound, label: tNav("Masters", lang) },
+    { href: "/?tab=clients", icon: Users, label: tNav("Clients", lang) },
+    { href: "/?tab=billing", icon: Wallet, label: tNav("Billing", lang) },
+    { href: "/?tab=channels", icon: MessageSquare, label: tNav("Channels", lang) },
+    { href: "/?tab=settings", icon: Settings, label: tNav("Settings", lang) },
+  ];
+}
 
-const SUPPORT_NAV: NavItem[] = [
-  { href: "/", icon: HeadphonesIcon, label: "Tickets" },
-];
+function buildMasterNav(lang: string): NavItem[] {
+  return [
+    { href: "/", icon: Home, label: tNav("Today", lang) },
+    { href: "/?tab=schedule", icon: CalendarCheck, label: tNav("Schedule", lang) },
+    { href: "/?tab=clients", icon: Users, label: tNav("Clients", lang) },
+    { href: "/?tab=earnings", icon: Wallet, label: tNav("Earnings", lang) },
+    { href: "/?tab=profile", icon: UserRound, label: tNav("Profile", lang) },
+  ];
+}
 
-function getNavGroups(role: string | null): NavGroup[] {
-  if (role === "system_admin") return GOD_GROUPS;
-  const flat = role === "tenant_owner" ? SALON_NAV
-    : role === "master" ? MASTER_NAV
-    : role === "support" || role === "technical_support" ? SUPPORT_NAV
-    : [{ href: "/", icon: Home, label: "Dashboard" }];
+function buildSupportNav(lang: string): NavItem[] {
+  return [{ href: "/", icon: HeadphonesIcon, label: tNav("Tickets", lang) }];
+}
+
+function getNavGroups(role: string | null, lang: string): NavGroup[] {
+  if (role === "system_admin") return buildGodGroups(lang);
+  const flat = role === "tenant_owner" ? buildSalonNav(lang)
+    : role === "master" ? buildMasterNav(lang)
+    : role === "support" || role === "technical_support" ? buildSupportNav(lang)
+    : [{ href: "/", icon: Home, label: tNav("Dashboard", lang) }];
   return [{ label: "", items: flat }];
 }
 
-function getFlatNav(role: string | null): NavItem[] {
-  return getNavGroups(role).flatMap(g => g.items);
+function getFlatNav(role: string | null, lang: string): NavItem[] {
+  return getNavGroups(role, lang).flatMap(g => g.items);
 }
 
-function getRoleInfo(role: string | null): { title: string; subtitle: string; badge?: string } {
+function getRoleInfo(role: string | null, lang: string): { title: string; subtitle: string; badge?: string } {
   switch (role) {
-    case "system_admin": return { title: "ManicBot", subtitle: "Admin Panel", badge: "God Mode" };
-    case "tenant_owner": return { title: "My Salon", subtitle: "Dashboard" };
-    case "master": return { title: "My Schedule", subtitle: "Master" };
-    case "support": return { title: "Support", subtitle: "Agent Hub" };
-    case "technical_support": return { title: "Tech Support", subtitle: "Agent Hub" };
-    default: return { title: "ManicBot", subtitle: "Dashboard" };
+    case "system_admin": return { title: "ManicBot", subtitle: tNav("Admin Panel", lang), badge: tNav("God Mode", lang) };
+    case "tenant_owner": return { title: tNav("My Salon", lang), subtitle: tNav("Dashboard", lang) };
+    case "master": return { title: tNav("My Schedule", lang), subtitle: tNav("Master", lang) };
+    case "support": return { title: tNav("Support", lang), subtitle: tNav("Agent Hub", lang) };
+    case "technical_support": return { title: tNav("Tech Support", lang), subtitle: tNav("Agent Hub", lang) };
+    default: return { title: "ManicBot", subtitle: tNav("Dashboard", lang) };
   }
 }
 
-function getPageTitle(pathname: string, role: string | null): string {
-  const flat = role === "system_admin" ? GOD_FLAT : getFlatNav(role);
+function getPageTitle(pathname: string, role: string | null, lang: string): string {
+  const flat = role === "system_admin" ? buildGodGroups(lang).flatMap(g => g.items) : getFlatNav(role, lang);
   const exact = flat.find(n => n.href === pathname);
   if (exact) return exact.label;
   const match = flat.find(n => n.href !== "/" && pathname.startsWith(n.href));
-  return match?.label ?? "Dashboard";
+  return match?.label ?? tNav("Dashboard", lang);
 }
 
 function NavLink({ item, active, collapsed, onClick }: {
@@ -150,11 +270,11 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const [collapsed, setCollapsed] = useState(false);
 
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const navGroups = getNavGroups(effectiveRole);
-  const flatNav = getFlatNav(effectiveRole);
-  const roleInfo = getRoleInfo(effectiveRole);
+  const navGroups = getNavGroups(effectiveRole, lang);
+  const flatNav = getFlatNav(effectiveRole, lang);
+  const roleInfo = getRoleInfo(effectiveRole, lang);
   const showRoleSwitcher = role === "system_admin";
-  const pageTitle = getPageTitle(pathname, effectiveRole);
+  const pageTitle = getPageTitle(pathname, effectiveRole, lang);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -242,10 +362,10 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               className={`flex items-center gap-3 rounded-xl px-3 py-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all w-full ${
                 collapsed ? "justify-center px-0" : ""
               }`}
-              title="Logout"
+              title={tNav("Logout", lang)}
             >
               <LogOut className="h-[17px] w-[17px] shrink-0" />
-              {!collapsed && <span className="text-[13px]">Logout</span>}
+              {!collapsed && <span className="text-[13px]">{tNav("Logout", lang)}</span>}
             </button>
 
             <button
@@ -254,7 +374,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             >
               {collapsed
                 ? <ChevronRight className="h-4 w-4" />
-                : <><ChevronLeft className="h-4 w-4" /><span className="text-[11px]">Collapse</span></>
+                : <><ChevronLeft className="h-4 w-4" /><span className="text-[11px]">{tNav("Collapse", lang)}</span></>
               }
             </button>
           </div>
@@ -321,7 +441,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   className="flex items-center gap-3 rounded-xl px-3 py-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all w-full"
                 >
                   <LogOut className="h-[17px] w-[17px]" />
-                  <span className="text-[13px]">Logout</span>
+                  <span className="text-[13px]">{tNav("Logout", lang)}</span>
                 </button>
               </div>
             </aside>

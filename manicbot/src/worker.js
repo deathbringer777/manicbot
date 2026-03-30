@@ -50,14 +50,10 @@ export default {
       return Response.redirect(pagesBase + rest + url.search, 302);
     }
 
-    // /salon/* and /search → proxy to admin-app Pages (no redirect for better SEO)
+    // /salon/* and /search → redirect to admin-app Pages
     if (url.pathname.startsWith('/salon/') || url.pathname === '/search' || url.pathname.startsWith('/search/')) {
       const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
-      return fetch(pagesBase + url.pathname + url.search, {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
-      });
+      return Response.redirect(pagesBase + url.pathname + url.search, 302);
     }
 
     await ensureDemoBotsProvisioned(env);

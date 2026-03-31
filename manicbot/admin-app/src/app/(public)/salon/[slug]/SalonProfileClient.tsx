@@ -54,8 +54,12 @@ function formatHours(wh: WorkHours): string {
   if (!wh) return "Уточните у салона";
   if (typeof wh === "string") return wh;
   if (typeof wh === "object" && wh !== null) {
-    const { from, to } = wh as { from?: number; to?: number };
-    if (from !== undefined && to !== undefined) return `${from}:00 – ${to}:00`;
+    const { from, to } = wh as { from?: number | string; to?: number | string };
+    if (from !== undefined && to !== undefined) {
+      // from/to can be strings ("10:00") or numbers (10)
+      const fmtTime = (v: number | string) => typeof v === "string" ? v : `${v}:00`;
+      return `${fmtTime(from)} – ${fmtTime(to)}`;
+    }
   }
   return "Уточните у салона";
 }

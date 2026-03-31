@@ -221,13 +221,13 @@ export function SearchAutocomplete() {
           {!isFetching && !hasResults && debouncedQ.length >= 2 && (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-slate-500 dark:text-slate-500">
-                Ничего не найдено по «{debouncedQ}»
+                {t.search.noResults} «{debouncedQ}»
               </p>
               <a
                 href={`${API_BASE}/search?q=${encodeURIComponent(debouncedQ)}`}
                 className="mt-2 inline-block text-xs text-violet-600 hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
               >
-                Показать все результаты →
+                {t.search.showAll} →
               </a>
             </div>
           )}
@@ -239,7 +239,7 @@ export function SearchAutocomplete() {
               {salons.length > 0 && (
                 <>
                   <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                    Салоны
+                    {t.search.salonsLabel}
                   </p>
                   {salons.map((salon, i) => (
                     <a
@@ -286,7 +286,7 @@ export function SearchAutocomplete() {
                 <>
                   <div className="mx-3 my-1.5 border-t border-slate-100 dark:border-slate-800" />
                   <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                    Статьи
+                    {t.search.articlesLabel}
                   </p>
                   {articles.map((art, i) => {
                     const idx = salons.length + i;
@@ -317,7 +317,7 @@ export function SearchAutocomplete() {
                 className={`flex items-center justify-between px-4 py-2.5 text-sm transition hover:bg-slate-50 dark:hover:bg-slate-800/70 ${activeIdx === items.length - 1 ? "bg-slate-50 dark:bg-slate-800/70" : ""}`}
               >
                 <span className="font-medium text-violet-600 dark:text-violet-400">
-                  Показать все результаты для «{debouncedQ}»
+                  {t.search.showAllFor} «{debouncedQ}»
                 </span>
                 <svg className="h-4 w-4 text-violet-600 dark:text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

@@ -283,6 +283,14 @@ export const ru: Translations = {
     light: "Светлая",
   },
 
+  search: {
+    salonsLabel: "Салоны",
+    articlesLabel: "Статьи",
+    noResults: "Ничего не найдено по",
+    showAll: "Показать все результаты",
+    showAllFor: "Показать все результаты для",
+  },
+
   footer: {
     tagline: "ManicBot — запись в Telegram.",
     links: ["Конфиденциальность", "Условия", "Поддержка"],

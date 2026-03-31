@@ -283,6 +283,14 @@ export const pl: Translations = {
     light: "Jasny",
   },
 
+  search: {
+    salonsLabel: "Salony",
+    articlesLabel: "Artykuły",
+    noResults: "Nic nie znaleziono dla",
+    showAll: "Pokaż wszystkie wyniki",
+    showAllFor: "Pokaż wszystkie wyniki dla",
+  },
+
   footer: {
     tagline: "ManicBot — rezerwacje w Telegramie.",
     links: ["Prywatność", "Regulamin", "Wsparcie"],

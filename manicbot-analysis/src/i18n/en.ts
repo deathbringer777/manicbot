@@ -281,6 +281,14 @@ export const en = {
     light: "Light",
   },
 
+  search: {
+    salonsLabel: "Salons",
+    articlesLabel: "Articles",
+    noResults: "Nothing found for",
+    showAll: "Show all results",
+    showAllFor: "Show all results for",
+  },
+
   footer: {
     tagline: "ManicBot — booking in Telegram.",
     links: ["Privacy", "Terms", "Support"],

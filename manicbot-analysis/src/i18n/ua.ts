@@ -283,6 +283,14 @@ export const ua: Translations = {
     light: "Світла",
   },
 
+  search: {
+    salonsLabel: "Салони",
+    articlesLabel: "Статті",
+    noResults: "Нічого не знайдено за",
+    showAll: "Показати всі результати",
+    showAllFor: "Показати всі результати для",
+  },
+
   footer: {
     tagline: "ManicBot — запис у Telegram.",
     links: ["Конфіденційність", "Умови", "Підтримка"],

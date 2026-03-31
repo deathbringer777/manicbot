@@ -22,7 +22,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Debounce input → query
+  // Debounce input -> query
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(value.trim()), 300);
     return () => clearTimeout(t);
@@ -102,7 +102,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
     <div ref={containerRef} className="relative w-full">
       <form onSubmit={handleSubmit} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             ref={inputRef}
             autoFocus={autoFocus}
@@ -112,13 +112,13 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="w-full rounded-2xl border border-slate-700/60 bg-slate-900 py-3.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 shadow-lg shadow-black/20 ring-0 outline-none transition focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20"
+            className="w-full rounded-2xl border border-slate-200/80 bg-white py-3.5 pl-10 pr-10 text-sm text-slate-800 placeholder-slate-400 shadow-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 dark:shadow-lg dark:shadow-black/20 dark:focus:border-violet-500/60 dark:focus:ring-violet-500/20"
           />
           {value && (
             <button
               type="button"
               onClick={() => { setValue(""); setDebouncedQ(""); inputRef.current?.focus(); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-white transition"
             >
               <X className="h-4 w-4" />
             </button>
@@ -126,7 +126,8 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
         </div>
         <button
           type="submit"
-          className="shrink-0 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-violet-900/30 transition hover:bg-violet-500 hover:scale-[1.02]"
+          className="shrink-0 rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-md shadow-violet-500/25 transition hover:scale-[1.02] hover:opacity-95 dark:shadow-violet-900/30"
+          style={{ background: "linear-gradient(135deg,#6d28d9,#0891b2)" }}
         >
           Найти
         </button>
@@ -135,7 +136,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
       {/* Dropdown */}
       {showDropdown && (
         <div
-          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/95 shadow-2xl shadow-black/40 backdrop-blur-xl"
+          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:border-slate-700/60 dark:bg-slate-900/95 dark:shadow-black/40"
           style={{
             animation: "dropdownIn 0.15s ease-out",
           }}
@@ -151,10 +152,10 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
             <div className="space-y-2 p-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex animate-pulse items-center gap-3 rounded-xl p-2">
-                  <div className="h-10 w-10 shrink-0 rounded-lg bg-slate-800" />
+                  <div className="h-10 w-10 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800" />
                   <div className="flex-1 space-y-1.5">
-                    <div className="h-3 w-2/3 rounded bg-slate-800" />
-                    <div className="h-2.5 w-1/3 rounded bg-slate-800" />
+                    <div className="h-3 w-2/3 rounded bg-slate-100 dark:bg-slate-800" />
+                    <div className="h-2.5 w-1/3 rounded bg-slate-100 dark:bg-slate-800" />
                   </div>
                 </div>
               ))}
@@ -166,10 +167,10 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
               <p className="text-sm text-slate-500">Ничего не найдено по «{debouncedQ}»</p>
               <Link
                 href={`/search?q=${encodeURIComponent(debouncedQ)}`}
-                className="mt-2 inline-block text-xs text-violet-400 hover:text-violet-300"
+                className="mt-2 inline-block text-xs text-violet-600 hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
                 onClick={() => setOpen(false)}
               >
-                Показать все результаты →
+                Показать все результаты &rarr;
               </Link>
             </div>
           )}
@@ -179,7 +180,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
               {/* Salons section */}
               {salons.length > 0 && (
                 <>
-                  <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                  <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
                     Салоны
                   </p>
                   {salons.map((salon, i) => (
@@ -187,9 +188,9 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                       key={salon.slug ?? i}
                       href={salon.slug ? `/salon/${salon.slug}` : "#"}
                       onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 transition hover:bg-slate-800/70 ${activeIdx === i ? "bg-slate-800/70" : ""}`}
+                      className={`flex items-center gap-3 px-3 py-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/70 ${activeIdx === i ? "bg-slate-50 dark:bg-slate-800/70" : ""}`}
                     >
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-800">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
                         {salon.coverPhoto ? (
                           <img src={salon.coverPhoto} alt={salon.name} className="h-full w-full object-cover" />
                         ) : (
@@ -197,7 +198,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-white">{salon.name}</p>
+                        <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{salon.name}</p>
                         {salon.city && (
                           <p className="flex items-center gap-1 text-xs text-slate-500">
                             <MapPin className="h-3 w-3" />
@@ -205,7 +206,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                           </p>
                         )}
                       </div>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600" />
                     </Link>
                   ))}
                 </>
@@ -214,8 +215,8 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
               {/* Articles section */}
               {articles.length > 0 && (
                 <>
-                  <div className="mx-3 my-1.5 border-t border-slate-800" />
-                  <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                  <div className="mx-3 my-1.5 border-t border-slate-100 dark:border-slate-800" />
+                  <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
                     Статьи
                   </p>
                   {articles.map((art, i) => {
@@ -225,12 +226,12 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                         key={art.slug}
                         href={`/blog/${art.slug}`}
                         onClick={() => setOpen(false)}
-                        className={`flex items-center gap-3 px-3 py-2 transition hover:bg-slate-800/70 ${activeIdx === idx ? "bg-slate-800/70" : ""}`}
+                        className={`flex items-center gap-3 px-3 py-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/70 ${activeIdx === idx ? "bg-slate-50 dark:bg-slate-800/70" : ""}`}
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-lg">
-                          <FileText className="h-5 w-5 text-violet-400" />
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10 text-lg">
+                          <FileText className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                         </div>
-                        <p className="truncate text-sm text-slate-300">{art.title}</p>
+                        <p className="truncate text-sm text-slate-700 dark:text-slate-300">{art.title}</p>
                       </Link>
                     );
                   })}
@@ -238,14 +239,14 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
               )}
 
               {/* Show all results */}
-              <div className="mx-3 my-1.5 border-t border-slate-800" />
+              <div className="mx-3 my-1.5 border-t border-slate-100 dark:border-slate-800" />
               <Link
                 href={`/search?q=${encodeURIComponent(debouncedQ)}`}
                 onClick={() => setOpen(false)}
-                className={`flex items-center justify-between px-4 py-2.5 text-sm transition hover:bg-slate-800/70 ${activeIdx === items.length - 1 ? "bg-slate-800/70" : ""}`}
+                className={`flex items-center justify-between px-4 py-2.5 text-sm transition hover:bg-slate-50 dark:hover:bg-slate-800/70 ${activeIdx === items.length - 1 ? "bg-slate-50 dark:bg-slate-800/70" : ""}`}
               >
-                <span className="text-violet-400 font-medium">Показать все результаты для «{debouncedQ}»</span>
-                <ChevronRight className="h-4 w-4 text-violet-400" />
+                <span className="text-violet-600 font-medium dark:text-violet-400">Показать все результаты для «{debouncedQ}»</span>
+                <ChevronRight className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               </Link>
             </div>
           )}

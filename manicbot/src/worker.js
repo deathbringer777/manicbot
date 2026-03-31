@@ -17,6 +17,7 @@ import { tryAdminPanel } from './http/adminPanelHttp.js';
 import { tryCalendar } from './http/calendarHttp.js';
 import { tryTelegramWebhook } from './http/telegramWebhookHttp.js';
 import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
+import { trySearchApi } from './http/searchHttp.js';
 import { logEvent } from './utils/events.js';
 
 function disallowLegacyWebhook(env, request, url) {
@@ -48,6 +49,24 @@ export default {
       const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
       const rest = url.pathname.slice('/dashboard'.length) || '/';
       return Response.redirect(pagesBase + rest + url.search, 302);
+    }
+
+    // Public search API (CORS-enabled, no auth)
+    if (url.pathname.startsWith('/api/search/')) {
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Max-Age': '86400',
+          },
+        });
+      }
+      const searchRes = await trySearchApi(request, env, url);
+      if (searchRes) return searchRes;
     }
 
     // /salon/* and /search → redirect to admin-app Pages

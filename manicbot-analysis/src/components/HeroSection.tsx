@@ -1,5 +1,6 @@
 import { useLanguage } from "@/i18n";
 import { TelegramPhoneDemo } from "./TelegramPhoneDemo";
+import { SearchAutocomplete } from "./SearchAutocomplete";
 
 export function HeroSection() {
   const { t } = useLanguage();
@@ -41,9 +42,14 @@ export function HeroSection() {
               </span>
             </h1>
 
-            <p className="mx-auto mb-8 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0 dark:text-white/50">
+            <p className="mx-auto mb-6 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0 dark:text-white/50">
               {t.hero.sub}
             </p>
+
+            {/* Search with autocomplete — positioned above CTAs for maximum prominence */}
+            <div className="mb-6">
+              <SearchAutocomplete />
+            </div>
 
             <div className="mb-5 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
               <button
@@ -64,38 +70,6 @@ export function HeroSection() {
                 {t.hero.ctaSecondary}
               </button>
             </div>
-
-            {/* Search bar */}
-            <form
-              action="https://manicbot.com/search"
-              method="get"
-              className="mb-5 flex w-full max-w-xl items-center gap-2 mx-auto lg:mx-0"
-            >
-              <div className="relative flex-1">
-                <svg
-                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" />
-                </svg>
-                <input
-                  name="q"
-                  type="search"
-                  placeholder={t.hero.searchPlaceholder}
-                  className="w-full rounded-2xl border border-slate-200/80 bg-white/80 py-3 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 shadow-sm backdrop-blur-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:placeholder-white/35 dark:focus:border-violet-500/50"
-                />
-              </div>
-              <button
-                type="submit"
-                className="shrink-0 rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-md shadow-violet-500/25 transition hover:scale-[1.02] hover:opacity-95"
-                style={{ background: "linear-gradient(135deg,#6d28d9,#0891b2)" }}
-              >
-                {t.nav.findSalon}
-              </button>
-            </form>
 
             <div className="mb-6 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
               {t.hero.channelBadges.map((badge) => (

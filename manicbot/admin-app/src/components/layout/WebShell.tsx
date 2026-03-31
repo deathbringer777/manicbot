@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
-import { RoleSwitcherInline, LangPickerInline } from "~/components/layout/Shell";
+import { RoleSwitcherInline } from "~/components/layout/Shell";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
@@ -304,16 +304,27 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             collapsed ? "w-[72px]" : "w-64"
           }`}
         >
-          {/* Logo */}
-          <div className={`flex items-center gap-3 h-16 border-b border-white/[0.06] ${collapsed ? "px-4 justify-center" : "px-5"}`}>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-700 shadow-lg shadow-brand-500/25 shrink-0">
-              <Zap className="h-5 w-5 text-white" />
-            </div>
-            {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <h1 className="text-sm font-bold text-white tracking-tight">{roleInfo.title}</h1>
-                <p className="text-[10px] text-slate-500">{roleInfo.subtitle}</p>
+          {/* Logo — clickable */}
+          <div className={`relative flex items-center gap-3 h-16 border-b border-white/[0.06] ${collapsed ? "px-4 justify-center" : "px-5"}`}>
+            <Link href="/" className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-700 shadow-lg shadow-brand-500/25 shrink-0">
+                <Zap className="h-5 w-5 text-white" />
               </div>
+              {!collapsed && (
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-sm font-bold text-white tracking-tight">{roleInfo.title}</h1>
+                  <p className="text-[10px] text-slate-500">{roleInfo.subtitle}</p>
+                </div>
+              )}
+            </Link>
+            {!collapsed ? (
+              <button onClick={() => setCollapsed(true)} className="p-1 rounded-lg text-slate-600 hover:text-slate-400 transition-colors shrink-0">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            ) : (
+              <button onClick={() => setCollapsed(false)} className="absolute -right-3 top-5 z-10 h-6 w-6 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-slate-500 hover:text-slate-300 transition-colors">
+                <ChevronRight className="h-3 w-3" />
+              </button>
             )}
           </div>
 
@@ -335,48 +346,44 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             ))}
           </nav>
 
-          {/* Bottom: user info + controls */}
+          {/* Bottom: role switcher + compact user card */}
           <div className="border-t border-white/[0.06] p-3 space-y-2">
             {showRoleSwitcher && !collapsed && <RoleSwitcherInline />}
-            {!collapsed && <LangPickerInline />}
 
-            {/* User info */}
-            {!collapsed && (
-              <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-white/[0.03]">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                  {avatarLetter}
-                </div>
-                <div className="min-w-0 flex-1">
-                  {roleInfo.badge && (
-                    <span className="inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-brand-500/20 text-brand-300 mb-0.5">
-                      {roleInfo.badge}
-                    </span>
-                  )}
-                  <p className="text-[11px] text-slate-400 truncate">{userEmail ?? "admin"}</p>
-                </div>
+            {/* Compact user row */}
+            <div className={`flex items-center gap-2.5 rounded-xl ${collapsed ? "justify-center py-2" : "px-2 py-2 bg-white/[0.03]"}`}>
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                {avatarLetter}
               </div>
+              {!collapsed && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    {roleInfo.badge && (
+                      <span className="inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-brand-500/20 text-brand-300 mb-0.5">
+                        {roleInfo.badge}
+                      </span>
+                    )}
+                    <p className="text-[11px] text-slate-400 truncate">{userEmail ?? "admin"}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+                    title={tNav("Logout", lang)}
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+            {collapsed && (
+              <button
+                onClick={handleLogout}
+                className="flex items-center justify-center p-2 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all w-full"
+                title={tNav("Logout", lang)}
+              >
+                <LogOut className="h-[17px] w-[17px]" />
+              </button>
             )}
-
-            <button
-              onClick={handleLogout}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all w-full ${
-                collapsed ? "justify-center px-0" : ""
-              }`}
-              title={tNav("Logout", lang)}
-            >
-              <LogOut className="h-[17px] w-[17px] shrink-0" />
-              {!collapsed && <span className="text-[13px]">{tNav("Logout", lang)}</span>}
-            </button>
-
-            <button
-              onClick={() => setCollapsed(v => !v)}
-              className="flex items-center gap-2 px-3 py-1 text-slate-700 hover:text-slate-500 transition-colors w-full justify-center"
-            >
-              {collapsed
-                ? <ChevronRight className="h-4 w-4" />
-                : <><ChevronLeft className="h-4 w-4" /><span className="text-[11px]">{tNav("Collapse", lang)}</span></>
-              }
-            </button>
           </div>
         </aside>
 
@@ -385,18 +392,18 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           <div className="lg:hidden fixed inset-0 z-50 flex">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
             <aside className="relative w-72 max-w-[85vw] bg-[rgba(10,13,28,0.98)] border-r border-white/[0.06] flex flex-col">
-              {/* Header */}
+              {/* Header — clickable logo */}
               <div className="flex items-center justify-between h-16 px-5 border-b border-white/[0.06]">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-700">
+                <Link href="/" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-700 shrink-0">
                     <Zap className="h-5 w-5 text-white" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h1 className="text-sm font-bold text-white">{roleInfo.title}</h1>
                     <p className="text-[10px] text-slate-500">{roleInfo.subtitle}</p>
                   </div>
-                </div>
-                <button onClick={() => setSidebarOpen(false)} className="p-2 rounded-xl hover:bg-white/5 text-slate-400">
+                </Link>
+                <button onClick={() => setSidebarOpen(false)} className="p-2 rounded-xl hover:bg-white/5 text-slate-400 shrink-0">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -424,25 +431,29 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 ))}
               </nav>
 
-              {/* Bottom */}
+              {/* Bottom: role switcher + compact user card */}
               <div className="border-t border-white/[0.06] p-3 space-y-2">
                 {showRoleSwitcher && <RoleSwitcherInline />}
-                <LangPickerInline />
-                {userEmail && (
-                  <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-white/[0.03]">
-                    <div className="h-7 w-7 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                      {avatarLetter}
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate flex-1">{userEmail}</p>
+                <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-white/[0.03]">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                    {avatarLetter}
                   </div>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all w-full"
-                >
-                  <LogOut className="h-[17px] w-[17px]" />
-                  <span className="text-[13px]">{tNav("Logout", lang)}</span>
-                </button>
+                  <div className="min-w-0 flex-1">
+                    {roleInfo.badge && (
+                      <span className="inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-brand-500/20 text-brand-300 mb-0.5">
+                        {roleInfo.badge}
+                      </span>
+                    )}
+                    <p className="text-[11px] text-slate-400 truncate">{userEmail ?? "admin"}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+                    title={tNav("Logout", lang)}
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </aside>
           </div>
@@ -469,11 +480,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             <div className="hidden lg:block flex-1">
               <h2 className="text-sm font-semibold text-white">{pageTitle}</h2>
             </div>
-            {/* Right controls (desktop) */}
-            <div className="flex items-center gap-2">
-              {showRoleSwitcher && <RoleSwitcherInline />}
-              <LangPickerInline />
-            </div>
+            {/* Right: intentionally empty — controls live in sidebar */}
+            <div />
           </header>
 
           {/* Content */}

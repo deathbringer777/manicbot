@@ -43,7 +43,7 @@ export function SupportDashboard() {
 
   const allTickets = api.support.getAllTickets.useQuery(
     { status: filter === "all" ? undefined : filter },
-    { refetchInterval: 15000 }
+    { refetchInterval: !selectedId ? 15000 : false, refetchIntervalInBackground: false }
   );
   const ticketDetail = api.support.getTicket.useQuery(
     { ticketId: selectedId! },
@@ -83,6 +83,7 @@ export function SupportDashboard() {
           </div>
 
           {ticketDetail.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {ticketDetail.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
 
           {ticketDetail.data && (
             <>
@@ -199,6 +200,7 @@ export function SupportDashboard() {
         {allTickets.isLoading && (
           <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
         )}
+        {allTickets.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
 
         <div className="space-y-2">
           {allTickets.data?.map((ticket: any) => {

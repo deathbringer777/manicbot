@@ -53,7 +53,7 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
       <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-white">{isNew ? t("action.create", lang) : t("action.edit", lang)}</h3>
@@ -102,7 +102,7 @@ function AddMasterModal({ onClose, tenantId }: { onClose: () => void; tenantId: 
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
       <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-white">{t("master.addMaster", lang)}</h3>
@@ -285,6 +285,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const publicUrl = slug ? `/salon/${slug}` : null;
 
   if (profile.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
+  if (profile.isError) return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>;
 
   return (
     <div className="space-y-5">
@@ -545,6 +546,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
         <div className="space-y-4">
           {overview.isLoading ? (
             <div className="grid grid-cols-2 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
+          ) : overview.isError ? (
+            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>
           ) : overview.data && (
             <div className="grid grid-cols-2 gap-3">
               <StatCard label={t("salon.todayApts", lang)} value={overview.data.todayAppointments} icon={CalendarDays} color="bg-brand-500/20 text-brand-400" />
@@ -558,6 +561,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {todayApts.isLoading && (
             <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
           )}
+          {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           {todayApts.data && todayApts.data.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -594,6 +598,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               className="text-xs bg-white/5 border border-white/10 text-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500" />
           </div>
           {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {apts.data?.map((a: any) => (
               <AptCard key={a.id} a={a} lang={lang}
@@ -611,6 +616,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
             <Btn onClick={() => setSvcModal({ open: true, svc: null })}><Plus className="h-3.5 w-3.5" />{t("action.add", lang)}</Btn>
           } />
           {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {svcList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {svcList.data?.map((s: any) => {
               let names: Record<string, string> = {};
@@ -653,6 +659,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
             <Btn onClick={() => setMasterModal(true)}><Plus className="h-3.5 w-3.5" />{t("action.add", lang)}</Btn>
           } />
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {mastersList.data?.map((m: any) => (
               <div key={m.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
@@ -679,6 +686,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
         <div className="space-y-3">
           <SectionHeader title={t("salon.clients", lang)} />
           {clients.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {clients.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {clients.data?.map((c: any) => (
               <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
@@ -703,6 +711,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
         <div className="space-y-4">
           <SectionHeader title={t("salon.billingTitle", lang)} />
           {billing.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {billing.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           {billing.data && (
             <div className="glass-card rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -739,7 +748,9 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {/* ── SETTINGS ── */}
       {tab === "settings" && (
         <>
-          {profile.isLoading ? <Loader2 className="animate-spin text-brand-400 mx-auto" /> : (
+          {profile.isLoading ? <Loader2 className="animate-spin text-brand-400 mx-auto" /> : profile.isError ? (
+            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>
+          ) : (
             <SalonSettingsEditor tenantId={tenantId} profile={profile.data} />
           )}
           <SalonCalendarSection tenantId={tenantId} />

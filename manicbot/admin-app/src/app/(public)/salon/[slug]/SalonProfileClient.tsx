@@ -267,7 +267,7 @@ export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
                   onClick={() => setPhotoIdx(i)}
                   className={`aspect-square overflow-hidden rounded-xl border-2 transition ${photoIdx === i ? "border-violet-500 dark:border-brand-500" : "border-transparent"}`}
                 >
-                  <img src={url} alt={`Фото ${i + 1}`} className="h-full w-full object-cover" />
+                  <img src={url} alt={`Фото ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>

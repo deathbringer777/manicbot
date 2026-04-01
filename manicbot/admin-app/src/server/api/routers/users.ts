@@ -15,17 +15,10 @@ export const usersRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Get all user rows, sorted by name
-      const allRows = await ctx.db
-        .select()
-        .from(users)
-        .orderBy(asc(users.name))
-        .limit(1000);
-
-      // Filter to a specific tenant first if requested
+      // Filter in SQL when tenant specified
       const rows = input.tenantId
-        ? allRows.filter((u) => u.tenantId === input.tenantId)
-        : allRows;
+        ? await ctx.db.select().from(users).where(eq(users.tenantId, input.tenantId)).orderBy(asc(users.name)).limit(1000)
+        : await ctx.db.select().from(users).orderBy(asc(users.name)).limit(1000);
 
       const uniqueIds = [...new Set(rows.map((u) => u.chatId))];
 

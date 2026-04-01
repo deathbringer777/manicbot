@@ -100,14 +100,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
       return new Response('OK');
     }
     const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET || '');
-    if (!valid) {
-      // Validate sender is Meta (User-Agent check) as fallback when HMAC fails
-      const ua = request.headers.get('User-Agent') || '';
-      if (!ua.includes('facebookexternalua')) {
-        return new Response('Forbidden', { status: 403 });
-      }
-      console.warn('[ig] HMAC mismatch, allowing Meta UA webhook');
-    }
+    if (!valid) return new Response('Forbidden', { status: 403 });
 
     const ec = envCtx(env);
     void logEvent(ec, 'webhook.meta', { message: 'Meta webhook: ig' });
@@ -118,37 +111,29 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
         return null;
       }
     })();
-    console.log('[ig] webhook received, body length:', body?.length, 'parsed:', !!parsed);
     if (parsed) {
       const instagramIgnoreSenderIds = parseInstagramIgnoreSenderIds(env.INSTAGRAM_IGNORE_SENDER_IDS);
       const processIG = async () => {
         try {
           const entries = parsed.entry ?? [];
-          console.log('[ig] entries count:', entries.length);
           for (const entry of entries) {
             const pageId = entry.id;
-            const messagingCount = entry.messaging?.length ?? 0;
-            console.log('[ig] entry:', { pageId, messagingCount, keys: Object.keys(entry) });
             if (!pageId) { console.warn('[ig] no pageId in entry'); continue; }
             const resolved = await resolveTenantFromInstagram(ec, pageId);
             if (!resolved) {
               console.warn('[ig] unresolved page_id:', pageId);
               continue;
             }
-            console.log('[ig] resolved tenant:', resolved.tenantId);
             const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
             if (!channelConfig) {
               console.warn('[ig] no channelConfig for tenant:', resolved.tenantId);
               continue;
             }
-            console.log('[ig] channelConfig: token?', !!channelConfig.token, 'pageId:', channelConfig.config?.page_id);
-            // Fallback: if D1 token decryption/parse failed, try env secret INSTAGRAM_ACCESS_TOKEN
             if (!channelConfig.token && env.INSTAGRAM_ACCESS_TOKEN) {
               channelConfig.token = env.INSTAGRAM_ACCESS_TOKEN;
-              console.log('[ig] using env fallback INSTAGRAM_ACCESS_TOKEN');
             }
             if (!channelConfig.token) {
-              console.warn('[ig] no token for tenant:', resolved.tenantId, '— set Page Access Token (EAA…) via POST /admin/ig-token');
+              console.warn('[ig] no token for tenant — set via POST /admin/ig-token');
             }
             const adapter = new InstagramAdapter({
               tenantId: resolved.tenantId,
@@ -157,25 +142,17 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             });
             const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
             if (!ctx) {
-              console.warn('[ig] buildChannelCtx returned null for tenant:', resolved.tenantId);
+              console.warn('[ig] buildChannelCtx returned null');
               continue;
             }
             await initServices(ctx);
-            console.log('[ig] context built, processing', messagingCount, 'messaging items');
             for (const m of entry?.messaging ?? []) {
-              console.log('[ig] messaging item:', { sender: m.sender?.id, hasMessage: !!m.message, hasPostback: !!m.postback, isEcho: m.message?.is_echo });
               const inbound = adapter.normalizeMessaging(m, entry);
-              if (inbound) {
-                console.log('[ig] inbound normalized:', { channel: inbound.channel, userId: inbound.channelUserId, text: inbound.text?.slice(0, 50), hasCallback: !!inbound.callbackData });
-                await handleInbound(ctx, inbound);
-                console.log('[ig] handleInbound completed for:', inbound.channelUserId);
-              } else {
-                console.log('[ig] normalizeMessaging returned null for sender:', m.sender?.id);
-              }
+              if (inbound) await handleInbound(ctx, inbound);
             }
           }
         } catch (e) {
-          console.error('[ig] process error:', e.message, e.stack);
+          console.error('[ig] process error:', e.message);
         }
       };
       scheduleBackground(execCtx, processIG());

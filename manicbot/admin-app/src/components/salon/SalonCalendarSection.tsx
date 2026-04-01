@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import { SectionHeader, Btn } from "./SalonShared";
 
 export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
@@ -22,26 +23,10 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
 
   const rows = integrations.data ?? [];
-  const connectButtonLabel =
-    lang === "ru" ? "Открыть бот для подключения" :
-    lang === "ua" ? "Відкрити бота для підключення" :
-    lang === "pl" ? "Otwórz bota, aby połączyć" :
-    "Open bot to connect";
-  const connectHint =
-    lang === "ru" ? "Безопасное подключение запускается в Telegram-боте, где Worker создаёт короткую OAuth-сессию." :
-    lang === "ua" ? "Безпечне підключення запускається в Telegram-боті, де Worker створює коротку OAuth-сесію." :
-    lang === "pl" ? "Bezpieczne połączenie startuje w bocie Telegram, gdzie Worker tworzy krótką sesję OAuth." :
-    "Secure connection starts in the Telegram bot, where the Worker creates a short-lived OAuth session.";
-  const salonScopeLabel =
-    lang === "ru" ? "Салон" :
-    lang === "ua" ? "Салон" :
-    lang === "pl" ? "Salon" :
-    "Salon";
-  const masterScopeLabel =
-    lang === "ru" ? "Мастер" :
-    lang === "ua" ? "Майстер" :
-    lang === "pl" ? "Master" :
-    "Master";
+  const connectButtonLabel = t("gcal.openBotToConnect", lang);
+  const connectHint = t("gcal.connectHint", lang);
+  const salonScopeLabel = t("gcal.scopeSalon", lang);
+  const masterScopeLabel = t("gcal.scopeMaster", lang);
 
   return (
     <div className="space-y-4 mt-6">
@@ -65,10 +50,7 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
           </p>
         ) : (
           <p className="text-[11px] text-amber-400">
-            {lang === "ru" ? "Активный username бота не найден. Откройте салонный бот вручную и зайдите в Google Calendar." :
-             lang === "ua" ? "Активний username бота не знайдено. Відкрийте салонного бота вручну і зайдіть у Google Calendar." :
-             lang === "pl" ? "Nie znaleziono aktywnego username bota. Otwórz bota salonu ręcznie i przejdź do Google Calendar." :
-             "No active bot username found. Open the salon bot manually and use its Google Calendar panel."}
+            {t("gcal.noBotUsername", lang)}
           </p>
         )}
       </div>
@@ -77,16 +59,10 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
         <div className="glass-card rounded-2xl p-4 text-center">
           <CalendarDays className="h-8 w-8 text-slate-600 mx-auto mb-2" />
           <p className="text-sm text-slate-400">
-            {lang === "ru" ? "Нет подключённых календарей" :
-             lang === "ua" ? "Немає підключених календарів" :
-             lang === "pl" ? "Brak podpiętych kalendarzy" :
-             "No calendars connected"}
+            {t("gcal.noCalendars", lang)}
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            {lang === "ru" ? "Подключение начинается из бота салона, где открывается защищённая OAuth-сессия." :
-             lang === "ua" ? "Підключення починається в боті салону, де відкривається захищена OAuth-сесія." :
-             lang === "pl" ? "Połączenie zaczyna się w bocie salonu, gdzie otwierana jest chroniona sesja OAuth." :
-             "Connection starts in the salon bot, where a protected OAuth session is created."}
+            {t("gcal.connectionHint", lang)}
           </p>
         </div>
       )}
@@ -121,10 +97,7 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
           <div className="flex items-center gap-2 text-[10px] text-slate-500">
             {row.lastSyncAt && (
               <span>
-                {lang === "ru" ? "Последняя синхр." :
-                 lang === "ua" ? "Остання синхр." :
-                 lang === "pl" ? "Ostatnia synchronizacja" :
-                 "Last sync"}: {new Date(row.lastSyncAt).toLocaleString()}
+                {t("gcal.lastSync", lang)}: {new Date(row.lastSyncAt).toLocaleString()}
               </span>
             )}
             {row.lastSyncStatus && (
@@ -143,14 +116,8 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
               disabled={toggleSync.isPending || disconnect.isPending}
             >
               {row.syncEnabled
-                ? (lang === "ru" ? "Выкл. синхр." :
-                   lang === "ua" ? "Вимк. синхр." :
-                   lang === "pl" ? "Wstrzymaj sync" :
-                   "Pause sync")
-                : (lang === "ru" ? "Вкл. синхр." :
-                   lang === "ua" ? "Увімк. синхр." :
-                   lang === "pl" ? "Wznów sync" :
-                   "Resume sync")}
+                ? t("gcal.pauseSync", lang)
+                : t("gcal.resumeSync", lang)}
             </Btn>
             {confirmDisconnect === row.id ? (
               <>
@@ -159,10 +126,7 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
                   onClick={() => { disconnect.mutate({ tenantId, integrationId: row.id }); setConfirmDisconnect(null); }}
                   disabled={disconnect.isPending}
                 >
-                  {lang === "ru" ? "Да, отключить" :
-                   lang === "ua" ? "Так, відключити" :
-                   lang === "pl" ? "Tak, odłącz" :
-                   "Yes, disconnect"}
+                  {t("gcal.confirmDisconnect", lang)}
                 </Btn>
                 <Btn variant="ghost" onClick={() => setConfirmDisconnect(null)} disabled={disconnect.isPending}>
                   <X className="h-3 w-3" />
@@ -171,10 +135,7 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
             ) : (
               <Btn variant="danger" onClick={() => setConfirmDisconnect(row.id)} disabled={disconnect.isPending}>
                 <Trash2 className="h-3 w-3" />
-                {lang === "ru" ? "Отключить" :
-                 lang === "ua" ? "Відключити" :
-                 lang === "pl" ? "Odłącz" :
-                 "Disconnect"}
+                {t("gcal.disconnect", lang)}
               </Btn>
             )}
           </div>

@@ -54,23 +54,19 @@ export const appointmentsRouter = createTRPCRouter({
       if (input.dateFrom) conditions.push(gte(appointments.date, input.dateFrom));
       if (input.dateTo) conditions.push(lte(appointments.date, input.dateTo));
 
-      const allApts =
-        conditions.length > 0
-          ? await ctx.db
-              .select()
-              .from(appointments)
-              .where(and(...conditions))
-              .orderBy(desc(appointments.ts))
-              .limit(200)
-          : await ctx.db
-              .select()
-              .from(appointments)
-              .orderBy(desc(appointments.ts))
-              .limit(200);
+      const baseQuery = conditions.length > 0
+        ? ctx.db.select().from(appointments).where(and(...conditions))
+        : ctx.db.select().from(appointments);
+
+      const [countResult, rows] = await Promise.all([
+        ctx.db.select({ count: sql<number>`count(*)` }).from(appointments)
+          .where(conditions.length > 0 ? and(...conditions) : undefined),
+        baseQuery.orderBy(desc(appointments.ts)).limit(input.limit).offset(input.offset),
+      ]);
 
       return {
-        appointments: allApts.slice(input.offset, input.offset + input.limit),
-        total: allApts.length,
+        appointments: rows,
+        total: countResult[0]?.count ?? 0,
       };
     }),
 

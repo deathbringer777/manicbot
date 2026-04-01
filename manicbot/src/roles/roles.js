@@ -184,7 +184,7 @@ export async function addTenantSupportAgent(ctx, chatId) {
 }
 
 export async function removeTenantSupportAgent(ctx, chatId) {
-  if (!ctx?.db || !ctx?.tenantId) return false;
+  if (!ctx?.db || !ctx?.tenantId || chatId == null) return false;
   try {
     await dbRun(ctx,
       'DELETE FROM tenant_support_agents WHERE tenant_id = ? AND chat_id = ?',

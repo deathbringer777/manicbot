@@ -152,6 +152,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-white">{t("common.today", lang)}</h2>
           {today.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {today.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           {today.data?.length === 0 && (
             <div className="glass-card rounded-2xl p-8 text-center">
               <CalendarDays className="h-12 w-12 text-slate-600 mx-auto mb-3" />
@@ -188,6 +189,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
               className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-xl px-3 py-1.5" />
           </div>
           {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {schedule.data?.map((a: any) => (
               <div key={a.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
@@ -211,6 +213,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-white">{t("master.myClients", lang)}</h2>
           {clientsList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {clientsList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {clientsList.data?.map((c: any) => (
               <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
@@ -249,6 +252,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
             </div>
           </div>
           {earnings.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {earnings.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           {earnings.data && (
             <div className="space-y-3">
               <div className="glass-card rounded-2xl p-6 text-center">
@@ -282,6 +286,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
             )}
           </div>
           {profile.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {profile.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           {profile.data && (
             <div className="glass-card rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-4">

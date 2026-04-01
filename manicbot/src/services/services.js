@@ -4,6 +4,7 @@ import { dbAll, dbRun, dbGet } from '../utils/db.js';
 
 const _svcCacheByTenant = new Map();
 const SVC_CACHE_TTL_MS = 60000;
+const SVC_CACHE_MAX_SIZE = 200;
 
 export function buildDefaultSvc() {
   return DEFAULT_SVC.map((s, i) => ({
@@ -19,6 +20,11 @@ export function buildDefaultSvc() {
   }));
 }
 
+function safeParse(str, fallback) {
+  if (!str) return fallback;
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
 function svcRowToDoc(row) {
   return {
     id: row.svc_id,
@@ -28,9 +34,9 @@ function svcRowToDoc(row) {
     active: row.active === 1,
     hidden: row.hidden === 1,
     order: row.sort_order,
-    names: row.names ? JSON.parse(row.names) : null,
-    desc: row.description ? JSON.parse(row.description) : { ru: null, ua: null, en: null, pl: null },
-    photos: row.photos ? JSON.parse(row.photos) : [],
+    names: safeParse(row.names, null),
+    desc: safeParse(row.description, { ru: null, ua: null, en: null, pl: null }),
+    photos: safeParse(row.photos, []),
   };
 }
 
@@ -141,6 +147,7 @@ export async function saveInstagramUrl(ctx, url) {
 }
 
 export function syncSvcNames(ctx) {
+  if (!ctx.svc) return;
   for (const s of ctx.svc) {
     for (const lang of ['ru', 'ua', 'en', 'pl']) {
       if (s.names?.[lang]) L[lang]['svc_' + s.id] = s.names[lang];
@@ -155,6 +162,10 @@ export async function initServices(ctx) {
     ctx.svc = cached.data;
   } else {
     ctx.svc = await loadServices(ctx);
+    if (_svcCacheByTenant.size >= SVC_CACHE_MAX_SIZE) {
+      const oldest = [..._svcCacheByTenant.entries()].sort((a, b) => a[1].ts - b[1].ts);
+      for (let i = 0; i < Math.floor(SVC_CACHE_MAX_SIZE / 4); i++) _svcCacheByTenant.delete(oldest[i][0]);
+    }
     _svcCacheByTenant.set(tid, { data: ctx.svc, ts: Date.now() });
   }
   ctx.svcIds = new Set(ctx.svc.filter(s => s.active !== false).map(s => s.id));

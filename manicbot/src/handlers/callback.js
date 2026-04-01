@@ -434,7 +434,7 @@ export async function onCb(ctx, cb) {
   if (d.startsWith(CB.ADM_SUPPORT_REMOVE)) {
     if (!await isAdmin(ctx, cid)) return;
     const agentChatId = parseInt(d.slice(CB.ADM_SUPPORT_REMOVE.length).trim(), 10);
-    if (!agentChatId || !ctx.kv) return showTenantSupportList(ctx, cid);
+    if (!Number.isFinite(agentChatId) || agentChatId <= 0 || !ctx.kv) return showTenantSupportList(ctx, cid);
     await removeTenantSupportAgent(ctx, agentChatId);
     await send(ctx, cid, t(lg, 'adm_support_removed'));
     return showTenantSupportList(ctx, cid);

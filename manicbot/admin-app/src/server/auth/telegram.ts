@@ -85,11 +85,12 @@ export async function validateWebAppData(telegramInitData: string): Promise<{ us
     
     const user = JSON.parse(userStr) as TelegramUser;
     
-    // Check expiration (optional but recommended: 24h)
+    // Check expiration: 5-minute window with 60s clock skew tolerance
     const authDate = initData.get("auth_date");
     if (authDate) {
       const now = Math.floor(Date.now() / 1000);
-      if (now - parseInt(authDate) > 86400) {
+      const diff = now - parseInt(authDate);
+      if (diff < -60 || diff > 300) {
         return { user: null, valid: false };
       }
     }

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { appointments, masters, users, services, tenantRoles, platformRoles } from "~/server/db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 
@@ -99,7 +99,7 @@ export const masterRouter = createTRPCRouter({
       const clientIds = Array.from(seen.keys());
       if (!clientIds.length) return [];
       const clientRows = await ctx.db.select().from(users)
-        .where(eq(users.tenantId, input.tenantId));
+        .where(and(eq(users.tenantId, input.tenantId), inArray(users.chatId, clientIds)));
       const clientMap = Object.fromEntries(clientRows.map((u: any) => [u.chatId, u]));
       return clientIds.map(id => ({
         ...clientMap[id],

@@ -167,6 +167,20 @@ const translations = {
   "toast.saved":            { ru: "Сохранено",      ua: "Збережено",       en: "Saved",      pl: "Zapisano" },
   "toast.created":          { ru: "Создано",        ua: "Створено",        en: "Created",    pl: "Utworzono" },
   "toast.deleted":          { ru: "Удалено",        ua: "Видалено",        en: "Deleted",    pl: "Usunięto" },
+
+  // ── Google Calendar section ────────────────────────────────────────────────
+  "gcal.openBotToConnect":  { ru: "Открыть бот для подключения", ua: "Відкрити бота для підключення", en: "Open bot to connect", pl: "Otwórz bota, aby połączyć" },
+  "gcal.connectHint":       { ru: "Безопасное подключение запускается в Telegram-боте, где Worker создаёт короткую OAuth-сессию.", ua: "Безпечне підключення запускається в Telegram-боті, де Worker створює коротку OAuth-сесію.", en: "Secure connection starts in the Telegram bot, where the Worker creates a short-lived OAuth session.", pl: "Bezpieczne połączenie startuje w bocie Telegram, gdzie Worker tworzy krótką sesję OAuth." },
+  "gcal.scopeSalon":        { ru: "Салон", ua: "Салон", en: "Salon", pl: "Salon" },
+  "gcal.scopeMaster":       { ru: "Мастер", ua: "Майстер", en: "Master", pl: "Master" },
+  "gcal.noBotUsername":     { ru: "Активный username бота не найден. Откройте салонный бот вручную и зайдите в Google Calendar.", ua: "Активний username бота не знайдено. Відкрийте салонного бота вручну і зайдіть у Google Calendar.", en: "No active bot username found. Open the salon bot manually and use its Google Calendar panel.", pl: "Nie znaleziono aktywnego username bota. Otwórz bota salonu ręcznie i przejdź do Google Calendar." },
+  "gcal.noCalendars":       { ru: "Нет подключённых календарей", ua: "Немає підключених календарів", en: "No calendars connected", pl: "Brak podpiętych kalendarzy" },
+  "gcal.connectionHint":    { ru: "Подключение начинается из бота салона, где открывается защищённая OAuth-сессия.", ua: "Підключення починається в боті салону, де відкривається захищена OAuth-сесія.", en: "Connection starts in the salon bot, where a protected OAuth session is created.", pl: "Połączenie zaczyna się w bocie salonu, gdzie otwierana jest chroniona sesja OAuth." },
+  "gcal.lastSync":          { ru: "Последняя синхр.", ua: "Остання синхр.", en: "Last sync", pl: "Ostatnia synchronizacja" },
+  "gcal.pauseSync":         { ru: "Выкл. синхр.", ua: "Вимк. синхр.", en: "Pause sync", pl: "Wstrzymaj sync" },
+  "gcal.resumeSync":        { ru: "Вкл. синхр.", ua: "Увімк. синхр.", en: "Resume sync", pl: "Wznów sync" },
+  "gcal.confirmDisconnect": { ru: "Да, отключить", ua: "Так, відключити", en: "Yes, disconnect", pl: "Tak, odłącz" },
+  "gcal.disconnect":        { ru: "Отключить", ua: "Відключити", en: "Disconnect", pl: "Odłącz" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

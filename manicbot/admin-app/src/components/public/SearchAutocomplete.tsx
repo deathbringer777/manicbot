@@ -192,7 +192,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                     >
                       <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
                         {salon.coverPhoto ? (
-                          <img src={salon.coverPhoto} alt={salon.name} className="h-full w-full object-cover" />
+                          <img src={salon.coverPhoto} alt={salon.name} loading="lazy" className="h-full w-full object-cover" />
                         ) : (
                           <div className="flex h-full items-center justify-center text-lg">💅</div>
                         )}

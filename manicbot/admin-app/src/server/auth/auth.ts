@@ -72,18 +72,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user, account }) {
       // Google OAuth: only allow if email exists in web_users table
       if (account?.provider === "google" && user.email) {
-        const db = getDb();
-        const rows = await db
-          .select()
-          .from(webUsers)
-          .where(eq(webUsers.email, user.email.toLowerCase().trim()))
-          .limit(1);
-        if (!rows.length) return false;
-        // Attach web_users data to the user object for JWT callback
-        const webUser = rows[0]!;
-        (user as any).tenantId = webUser.tenantId ?? null;
-        (user as any).webRole = webUser.role;
-        (user as any).id = webUser.id;
+        try {
+          const db = getDb();
+          const rows = await db
+            .select()
+            .from(webUsers)
+            .where(eq(webUsers.email, user.email.toLowerCase().trim()))
+            .limit(1);
+          if (!rows.length) {
+            console.error("[auth] Google signIn denied: email not in web_users:", user.email);
+            return false;
+          }
+          // Attach web_users data to the user object for JWT callback
+          const webUser = rows[0]!;
+          (user as any).tenantId = webUser.tenantId ?? null;
+          (user as any).webRole = webUser.role;
+          (user as any).id = webUser.id;
+        } catch (err) {
+          console.error("[auth] Google signIn error:", err);
+          return false;
+        }
       }
       return true;
     },

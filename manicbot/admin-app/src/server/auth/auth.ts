@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getDb } from "~/server/db";
@@ -59,9 +60,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         } as any;
       },
     }),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [Google({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        })]
+      : []),
   ],
   session: { strategy: "jwt" },
   callbacks: {
+    async signIn({ user, account }) {
+      // Google OAuth: only allow if email exists in web_users table
+      if (account?.provider === "google" && user.email) {
+        const db = getDb();
+        const rows = await db
+          .select()
+          .from(webUsers)
+          .where(eq(webUsers.email, user.email.toLowerCase().trim()))
+          .limit(1);
+        if (!rows.length) return false;
+        // Attach web_users data to the user object for JWT callback
+        const webUser = rows[0]!;
+        (user as any).tenantId = webUser.tenantId ?? null;
+        (user as any).webRole = webUser.role;
+        (user as any).id = webUser.id;
+      }
+      return true;
+    },
     jwt({ token, user }) {
       if (user) {
         token.tenantId = (user as any).tenantId ?? null;

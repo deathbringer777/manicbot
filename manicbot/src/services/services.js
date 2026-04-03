@@ -6,7 +6,7 @@ const _svcCacheByTenant = new Map();
 const SVC_CACHE_TTL_MS = 60000;
 const SVC_CACHE_MAX_SIZE = 200;
 
-export function buildDefaultSvc() {
+function buildDefaultSvc() {
   return DEFAULT_SVC.map((s, i) => ({
     id: s.id, e: s.e, dur: s.dur, price: s.price, active: true, order: i,
     names: {
@@ -40,7 +40,7 @@ function svcRowToDoc(row) {
   };
 }
 
-export async function loadServices(ctx) {
+async function loadServices(ctx) {
   if (!ctx?.db || !ctx?.tenantId) return [...buildDefaultSvc(), CORRECTION_SVC];
 
   const rows = await dbAll(ctx, 'SELECT * FROM services WHERE tenant_id = ? ORDER BY sort_order', ctx.tenantId);
@@ -146,7 +146,7 @@ export async function saveInstagramUrl(ctx, url) {
   await setConfig(ctx, 'instagram_url', v || null);
 }
 
-export function syncSvcNames(ctx) {
+function syncSvcNames(ctx) {
   if (!ctx.svc) return;
   for (const s of ctx.svc) {
     for (const lang of ['ru', 'ua', 'en', 'pl']) {
@@ -173,7 +173,7 @@ export async function initServices(ctx) {
   syncSvcNames(ctx);
 }
 
-export function invalidateServiceCache(tenantId = null) {
+function invalidateServiceCache(tenantId = null) {
   if (tenantId != null) _svcCacheByTenant.delete(tenantId);
   else _svcCacheByTenant.clear();
 }

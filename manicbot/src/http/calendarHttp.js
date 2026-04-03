@@ -15,13 +15,6 @@ async function verifyCalendarSig(aptId, sig, secret) {
   return diff === 0;
 }
 
-export async function makeCalendarSig(aptId, secret) {
-  if (!secret) return '';
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(aptId));
-  return Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 /**
  * @param {Request} request

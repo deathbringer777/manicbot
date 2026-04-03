@@ -62,7 +62,7 @@ export function dateStrForOffset(offset) {
   return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`;
 }
 
-export const DAY_OF_WEEK_MAP = {
+const DAY_OF_WEEK_MAP = {
   '0': [/воскресенье|неділя|sunday|niedziela/i],
   '1': [/понедельник|понеділок|monday|poniedziałek/i],
   '2': [/вторник|вівторок|tuesday|wtorek/i],

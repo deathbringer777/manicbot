@@ -7,7 +7,7 @@ import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
 import { getMaster } from './users.js';
 import { deleteAppointmentCalendar, loadExternalBusyBlocks } from './google-calendar-oauth.js';
 
-export function allKey(dateStr) {
+function allKey(dateStr) {
   return `all:${dateStr.slice(0, 7)}`;
 }
 
@@ -15,7 +15,7 @@ function dayIndexKey(date, masterId = null) {
   return `d:${date}`;
 }
 
-export function getAptMasterId(apt) { return apt?.masterId || apt?.master_id || null; }
+function getAptMasterId(apt) { return apt?.masterId || apt?.master_id || null; }
 function isSharedApt(apt) { return !getAptMasterId(apt); }
 
 function aptRowToDoc(row) {

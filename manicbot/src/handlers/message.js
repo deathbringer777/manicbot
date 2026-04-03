@@ -533,10 +533,10 @@ export async function onMsg(ctx, msg) {
     // Support/technical_support do NOT see platform panel on /start — only isPlatformAdmin.
     if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) {
       // Set the Web App menu button (God Mode) so it appears both inside chat and as OPEN in chat list
-      if (ctx.ADMIN_APP_URL) {
+      if (ctx.APP_BASE_URL) {
         api(ctx, 'setChatMenuButton', {
           chat_id: cid,
-          menu_button: { type: 'web_app', text: '⚡ God Mode', web_app: { url: ctx.ADMIN_APP_URL } },
+          menu_button: { type: 'web_app', text: '⚡ God Mode', web_app: { url: `${ctx.APP_BASE_URL}/tg` } },
         }).catch(() => null);
       }
       // Auto-register god-mode commands for this chat so they show in the / menu
@@ -570,13 +570,13 @@ export async function onMsg(ctx, msg) {
         ],
         scope: { type: 'chat', chat_id: cid },
       }).catch(() => null);
-      if (ctx.ADMIN_APP_URL && await isAdmin(ctx, cid)) {
-        const base = ctx.ADMIN_APP_URL.replace(/\/$/, '');
+      if (ctx.APP_BASE_URL && await isAdmin(ctx, cid)) {
+        const base = ctx.APP_BASE_URL.replace(/\/$/, '');
         const openChannels = canUse(ctx, 'whatsapp') || canUse(ctx, 'instagram');
-        const url = openChannels ? `${base}/?tab=channels` : base;
+        const miniUrl = openChannels ? `${base}/tg?tab=channels` : `${base}/tg`;
         api(ctx, 'setChatMenuButton', {
           chat_id: cid,
-          menu_button: { type: 'web_app', text: t(hasLang, 'salon_miniapp_menu'), web_app: { url } },
+          menu_button: { type: 'web_app', text: t(hasLang, 'salon_miniapp_menu'), web_app: { url: miniUrl } },
         }).catch(() => null);
       }
     }

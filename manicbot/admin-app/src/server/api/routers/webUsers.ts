@@ -1,16 +1,63 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
 import { webUsers } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 
 export const webUsersRouter = createTRPCRouter({
+  /** Create a web user (God Mode only). */
+  create: adminProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        password: z.string().min(12, "Минимум 12 символов"),
+        role: z.enum(["system_admin", "tenant_owner", "support", "technical_support"]),
+        tenantId: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase().trim();
+      const existing = await ctx.db
+        .select()
+        .from(webUsers)
+        .where(eq(webUsers.email, email))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "User with this email already exists" });
+      }
+      const id = crypto.randomUUID();
+      const passwordHash = await hashPassword(input.password);
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db.insert(webUsers).values({
+        id,
+        email,
+        passwordHash,
+        role: input.role,
+        tenantId: input.tenantId ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { id, email };
+    }),
+
+  /** List all web users (God Mode only). */
+  list: adminProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.select({
+      id: webUsers.id,
+      email: webUsers.email,
+      role: webUsers.role,
+      tenantId: webUsers.tenantId,
+      createdAt: webUsers.createdAt,
+    }).from(webUsers);
+    return rows;
+  }),
+
   changePassword: protectedProcedure
     .input(
       z.object({
         currentPassword: z.string().min(1),
-        newPassword: z.string().min(8, "Минимум 8 символов"),
+        newPassword: z.string().min(12, "Минимум 12 символов"),
       })
     )
     .mutation(async ({ ctx, input }) => {

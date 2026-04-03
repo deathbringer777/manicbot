@@ -59,13 +59,7 @@ function ticketRowToDoc(row, messages = []) {
   };
 }
 
-export async function getOpenTicketIds(ctx) {
-  if (!ctx?.db) return [];
-  const rows = await dbAll(ctx, "SELECT id FROM platform_tickets WHERE status = 'open'");
-  return rows.map(r => r.id);
-}
-
-export async function getTicketById(ctx, ticketId) {
+async function getTicketById(ctx, ticketId) {
   if (!ctx?.db) return null;
   const row = await dbGet(ctx, 'SELECT * FROM platform_tickets WHERE id = ?', ticketId);
   if (!row) return null;
@@ -115,30 +109,6 @@ export async function claimTicket(ctx, ticketId, agentChatId) {
   ticket.claimedAt = now;
   ticket.updatedAt = now;
   return { ok: true, ticket };
-}
-
-export async function getAgentTicketIds(ctx, agentChatId) {
-  if (!ctx?.db) return [];
-  const rows = await dbAll(ctx,
-    "SELECT id FROM platform_tickets WHERE claimed_by = ? AND status = 'claimed'",
-    agentChatId,
-  );
-  return rows.map(r => r.id);
-}
-
-export async function appendMessage(ctx, ticketId, from, text) {
-  if (!ctx?.db) return false;
-  const ticket = await dbGet(ctx, 'SELECT id FROM platform_tickets WHERE id = ?', ticketId);
-  if (!ticket) return false;
-  await dbRun(ctx,
-    'INSERT INTO platform_ticket_messages (ticket_id, sender, text, created_at) VALUES (?, ?, ?, ?)',
-    ticketId, from, text, nowSec(),
-  );
-  await dbRun(ctx,
-    'UPDATE platform_tickets SET updated_at = ? WHERE id = ?',
-    nowSec(), ticketId,
-  );
-  return true;
 }
 
 export async function closeTicket(ctx, ticketId) {

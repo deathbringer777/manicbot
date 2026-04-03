@@ -60,12 +60,3 @@ export function getStripeConfig(env) {
   };
 }
 
-/**
- * Check if Stripe is configured enough for checkout (need at least one price and baseUrl for success_url).
- */
-export function isStripeReadyForCheckout(env) {
-  const c = getStripeConfig(env);
-  if (!c.ok) return false;
-  const hasPrice = Object.values(c.priceIds || {}).some(Boolean);
-  return hasPrice && !!c.baseUrl;
-}

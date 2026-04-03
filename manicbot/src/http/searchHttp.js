@@ -5,10 +5,30 @@ import { envCtx } from './envCtx.js';
  * GET /api/search/autocomplete?q=...
  * Returns JSON: { salons: [{slug,name,city,coverPhoto}], articles: [{slug,title}] }
  */
+const RATE_LIMIT_WINDOW = 60;  // seconds
+const RATE_LIMIT_MAX = 30;     // requests per window per IP
+
+async function checkSearchRateLimit(kv, ip) {
+  if (!kv || !ip) return true;
+  const key = `rl:search:${ip}`;
+  const val = await kv.get(key, 'text');
+  const count = val ? parseInt(val, 10) : 0;
+  if (count >= RATE_LIMIT_MAX) return false;
+  await kv.put(key, String(count + 1), { expirationTtl: RATE_LIMIT_WINDOW });
+  return true;
+}
+
 export async function trySearchApi(request, env, url) {
   // Only handle GET /api/search/autocomplete
   if (request.method !== 'GET' || url.pathname !== '/api/search/autocomplete') {
     return null;
+  }
+
+  // Rate limit by IP
+  const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown';
+  const allowed = await checkSearchRateLimit(env.MANICBOT, ip);
+  if (!allowed) {
+    return Response.json({ error: 'Too many requests' }, { status: 429, headers: corsHeaders() });
   }
 
   const q = (url.searchParams.get('q') || '').trim();

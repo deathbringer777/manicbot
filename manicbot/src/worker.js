@@ -20,6 +20,68 @@ import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
 import { trySearchApi } from './http/searchHttp.js';
 import { logEvent } from './utils/events.js';
 
+const ADMIN_APP_PATHS = ['/dashboard', '/login', '/tg', '/salon/', '/search', '/_next/', '/api/trpc/', '/api/auth/'];
+
+function isAdminAppPath(pathname) {
+  return ADMIN_APP_PATHS.some(p => pathname === p || pathname.startsWith(p));
+}
+
+async function proxyToAdminApp(request, env, url) {
+  const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
+  const target = new URL(url.pathname + url.search, pagesBase);
+  const proxyReq = new Request(target.toString(), {
+    method: request.method,
+    headers: request.headers,
+    body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : null,
+    redirect: 'manual',
+  });
+  const resp = await fetch(proxyReq);
+  const headers = new Headers(resp.headers);
+  // Remove any Location headers pointing to the Pages domain — rewrite to origin
+  const location = headers.get('location');
+  if (location && location.includes(pagesBase.replace('https://', ''))) {
+    headers.set('location', location.replace(pagesBase, url.origin));
+  }
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers,
+  });
+}
+
+async function generateSitemap(env, origin) {
+  const base = origin || 'https://manicbot.com';
+  const staticPages = [
+    { loc: '/', priority: '1.0', changefreq: 'weekly' },
+    { loc: '/search', priority: '0.8', changefreq: 'daily' },
+    { loc: '/login', priority: '0.3', changefreq: 'monthly' },
+    { loc: '/blog/', priority: '0.7', changefreq: 'weekly' },
+  ];
+  let salonUrls = [];
+  if (env.DB) {
+    try {
+      const result = await env.DB.prepare('SELECT slug FROM tenants WHERE public_active = 1 AND slug IS NOT NULL').all();
+      salonUrls = (result.results || []).map(r => ({
+        loc: `/salon/${r.slug}`,
+        priority: '0.6',
+        changefreq: 'weekly',
+      }));
+    } catch { /* ignore */ }
+  }
+  const allPages = [...staticPages, ...salonUrls];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allPages.map(p => `  <url>
+    <loc>${base}${p.loc}</loc>
+    <changefreq>${p.changefreq}</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+  return new Response(xml, {
+    headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' },
+  });
+}
+
 function disallowLegacyWebhook(env, request, url) {
   return (
     env.REQUIRE_WEBHOOK_BOT_ID === '1' &&
@@ -44,11 +106,14 @@ export default {
   async fetch(request, env, executionCtx) {
     const url = new URL(request.url);
 
-    // /dashboard* → redirect to admin-app Cloudflare Pages (runs before everything else)
-    if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
-      const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
-      const rest = url.pathname.slice('/dashboard'.length) || '/';
-      return Response.redirect(pagesBase + rest + url.search, 302);
+    // Sitemap
+    if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
+      return generateSitemap(env, url.origin);
+    }
+
+    // Admin-app routes → proxy to Cloudflare Pages (dashboard, login, tg, salon, search, _next, trpc, auth)
+    if (isAdminAppPath(url.pathname)) {
+      return proxyToAdminApp(request, env, url);
     }
 
     // Public search API (CORS-enabled, no auth)
@@ -67,12 +132,6 @@ export default {
       }
       const searchRes = await trySearchApi(request, env, url);
       if (searchRes) return searchRes;
-    }
-
-    // /salon/* and /search → redirect to admin-app Pages
-    if (url.pathname.startsWith('/salon/') || url.pathname === '/search' || url.pathname.startsWith('/search/')) {
-      const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
-      return Response.redirect(pagesBase + url.pathname + url.search, 302);
     }
 
     await ensureDemoBotsProvisioned(env);

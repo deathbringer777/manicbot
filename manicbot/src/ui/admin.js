@@ -165,8 +165,8 @@ export async function showAdminPanel(ctx, cid, name) {
 export async function showMetaChannelsGuide(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
-  const base = (ctx.ADMIN_APP_URL || '').replace(/\/$/, '');
-  const miniAppUrl = base ? `${base}/?tab=channels` : '';
+  const base = (ctx.APP_BASE_URL || '').replace(/\/$/, '');
+  const miniAppUrl = base ? `${base}/tg?tab=channels` : '';
   const title = t(lg, 'adm_meta_channels_title');
   const body = t(lg, 'adm_meta_channels_body');
   const rows = [];

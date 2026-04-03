@@ -29,9 +29,12 @@ function isAdminAppPath(pathname) {
 async function proxyToAdminApp(request, env, url) {
   const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
   const target = new URL(url.pathname + url.search, pagesBase);
+  const proxyHeaders = new Headers(request.headers);
+  proxyHeaders.set('x-forwarded-host', url.hostname);
+  proxyHeaders.set('x-forwarded-proto', url.protocol.replace(':', ''));
   const proxyReq = new Request(target.toString(), {
     method: request.method,
-    headers: request.headers,
+    headers: proxyHeaders,
     body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : null,
     redirect: 'manual',
   });

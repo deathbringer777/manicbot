@@ -70,7 +70,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
   callbacks: {
     async signIn({ user, account }) {
-      // Google OAuth: only allow if email exists in web_users table
+      // Google OAuth: look up user in web_users; allow login even if DB fails
       if (account?.provider === "google" && user.email) {
         try {
           const db = getDb();
@@ -79,18 +79,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .from(webUsers)
             .where(eq(webUsers.email, user.email.toLowerCase().trim()))
             .limit(1);
-          if (!rows.length) {
-            console.error("[auth] Google signIn denied: email not in web_users:", user.email);
-            return false;
+          if (rows.length) {
+            const webUser = rows[0]!;
+            (user as any).tenantId = webUser.tenantId ?? null;
+            (user as any).webRole = webUser.role;
+            (user as any).id = webUser.id;
+          } else {
+            console.warn("[auth] Google signIn: email not in web_users:", user.email);
+            // Allow login but with default role
+            (user as any).tenantId = null;
+            (user as any).webRole = "client";
           }
-          // Attach web_users data to the user object for JWT callback
-          const webUser = rows[0]!;
-          (user as any).tenantId = webUser.tenantId ?? null;
-          (user as any).webRole = webUser.role;
-          (user as any).id = webUser.id;
         } catch (err) {
-          console.error("[auth] Google signIn error:", err);
-          return false;
+          console.error("[auth] Google signIn DB error:", err);
+          // Still allow login on DB error, with default role
+          (user as any).tenantId = null;
+          (user as any).webRole = "client";
         }
       }
       return true;

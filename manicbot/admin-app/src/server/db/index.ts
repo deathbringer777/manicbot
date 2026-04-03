@@ -14,10 +14,10 @@ export function getDb() {
   }
 
   if (!DB) {
-    // Mock DB instance for Next.js build-time RSC parsing
-    // This allows the build to succeed without crashing
+    // At build-time this is expected; at runtime it means D1 binding is missing
+    console.error("[getDb] D1 binding not found — using mock (build-time only!)");
     DB = {
-      prepare: () => ({ bind: () => ({ all: () => [], first: () => null, run: () => null }) }),
+      prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }), first: () => null, run: () => null }) }),
       exec: () => null
     };
   }

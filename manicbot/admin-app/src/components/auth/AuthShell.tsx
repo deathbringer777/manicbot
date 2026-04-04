@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, MessageCircleMore, Moon, Sun, Users2 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { PublicThemeProvider, usePublicTheme } from "~/components/public/ThemeProvider";
-import { LANGS } from "~/lib/i18n";
+import { LangDropdown } from "~/components/public/LangDropdown";
 import { authCopy } from "./copy";
 
 type AuthShellProps = {
@@ -130,23 +130,8 @@ function AuthShellInner({
 
           {/* Right controls */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Language pills */}
-            <div className="flex items-center rounded-full border border-slate-200/90 bg-white/90 p-1 dark:border-white/10 dark:bg-white/[0.05]">
-              {LANGS.map(({ code, label }) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setLang(code)}
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
-                    lang === code
-                      ? "bg-[linear-gradient(135deg,#7c3aed,#06b6d4)] text-white"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* Language dropdown */}
+            <LangDropdown lang={lang} setLang={setLang} />
 
             {/* Theme toggle */}
             <button

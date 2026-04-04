@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
-import { RoleSwitcherInline } from "~/components/layout/Shell";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
@@ -273,7 +272,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const navGroups = getNavGroups(effectiveRole, lang);
   const flatNav = getFlatNav(effectiveRole, lang);
   const roleInfo = getRoleInfo(effectiveRole, lang);
-  const showRoleSwitcher = role === "system_admin";
   const pageTitle = getPageTitle(pathname, effectiveRole, lang);
 
   const handleLogout = async () => {
@@ -348,8 +346,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
           {/* Bottom: role switcher + compact user card */}
           <div className="border-t border-white/[0.06] p-3 space-y-2">
-            {showRoleSwitcher && !collapsed && <RoleSwitcherInline />}
-
             {/* Compact user row */}
             <div className={`flex items-center gap-2.5 rounded-xl ${collapsed ? "justify-center py-2" : "px-2 py-2 bg-white/[0.03]"}`}>
               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
@@ -433,7 +429,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
               {/* Bottom: role switcher + compact user card */}
               <div className="border-t border-white/[0.06] p-3 space-y-2">
-                {showRoleSwitcher && <RoleSwitcherInline />}
                 <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-white/[0.03]">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
                     {avatarLetter}

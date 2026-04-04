@@ -20,10 +20,34 @@ import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
 import { trySearchApi } from './http/searchHttp.js';
 import { logEvent } from './utils/events.js';
 
-const ADMIN_APP_PATHS = ['/dashboard', '/login', '/tg', '/salon/', '/search', '/_next/', '/api/trpc/', '/api/auth/'];
-
+/**
+ * Paths proxied to Cloudflare Pages (admin-app). Must cover every browser route under src/app.
+ * '/' is admin home (Next route group (dashboard)/page.tsx), not tryLanding.
+ */
 function isAdminAppPath(pathname) {
-  return ADMIN_APP_PATHS.some(p => pathname === p || pathname.startsWith(p));
+  if (pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
+  if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
+  if (pathname.startsWith('/_next/')) return true;
+  if (pathname.startsWith('/api/trpc/')) return true;
+  if (pathname.startsWith('/api/auth/')) return true;
+  if (pathname.startsWith('/salon/')) return true;
+  if (pathname === '/search' || pathname.startsWith('/search/')) return true;
+  const dash = [
+    '/tenants',
+    '/users',
+    '/appointments',
+    '/conversations',
+    '/agents',
+    '/billing',
+    '/events',
+    '/system',
+    '/settings',
+    '/stripe',
+  ];
+  for (const p of dash) {
+    if (pathname === p || pathname.startsWith(p + '/')) return true;
+  }
+  return false;
 }
 
 async function proxyToAdminApp(request, env, url) {
@@ -135,7 +159,7 @@ export default {
       return addSecurityHeaders(await generateSitemap(env, url.origin));
     }
 
-    // Admin-app routes → proxy to Cloudflare Pages (dashboard, login, tg, salon, search, _next, trpc, auth)
+    // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath)
     if (isAdminAppPath(url.pathname)) {
       return addSecurityHeaders(await proxyToAdminApp(request, env, url));
     }

@@ -193,6 +193,16 @@ export default function SettingsPageClient() {
           )}
         </div>
 
+        {role === "system_admin" && (
+          <section className="glass-card rounded-2xl p-4 space-y-3 mb-6">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+              <h2 className="text-sm font-bold text-white">{t("roleSwitch.title", lang)}</h2>
+            </div>
+            <RoleSwitcherInline placement="settings" />
+          </section>
+        )}
+
         {/* Tab bar */}
         <div className="flex gap-1 border-b border-slate-800 mb-6">
           <TabButton
@@ -336,17 +346,6 @@ export default function SettingsPageClient() {
         {/* ── Platform tab (system_admin only) ────────────────────── */}
         {activeTab === "platform" && role === "system_admin" && (
           <div className="space-y-4">
-            {/* Role switcher */}
-            <section className="glass-card rounded-2xl p-4 space-y-5">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                  <h2 className="text-sm font-bold text-white">{t("roleSwitch.title", lang)}</h2>
-                </div>
-                <RoleSwitcherInline placement="settings" />
-              </div>
-            </section>
-
             {/* Switches */}
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">

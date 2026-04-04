@@ -1,0 +1,87 @@
+sequenceDiagram
+    autonumber
+    participant U as Пользователь
+    participant TG as Telegram API
+    participant W as Worker
+    participant KV as KV Store
+    participant D1 as D1 Database
+    participant GC as Google Calendar
+    participant AI as Workers AI
+
+    Note over U,AI: Сценарий: Бронирование через Telegram
+
+    U->>TG: Сообщение "Хочу записаться"
+    TG->>W: POST /webhook/:botId
+
+    rect rgb(230, 245, 255)
+        Note over W: Резолвинг контекста
+        W->>D1: SELECT * FROM bots WHERE bot_id = ?
+        D1-->>W: tenant_id, encrypted_token
+        W->>W: decryptToken() + buildTenantCtx()
+    end
+
+    rect rgb(255, 245, 230)
+        Note over W: Обработка сообщения
+        W->>KV: getState(chatId)
+        KV-->>W: { step: null }
+        W->>D1: SELECT role FROM tenant_roles
+        D1-->>W: role = 'client'
+        W->>W: parsePatterns(text)
+    end
+
+    rect rgb(230, 255, 230)
+        Note over W: AI-обработка
+        W->>D1: SELECT * FROM services, masters, tenant_config
+        D1-->>W: Контекст салона
+        W->>AI: runWorkersAI(systemPrompt + history + text)
+        AI-->>W: "Конечно! [BOOK]"
+        W->>W: parseAIActions() → tag=BOOK
+    end
+
+    W->>TG: Показать список услуг
+    TG-->>U: Кнопки выбора услуг
+
+    U->>TG: Нажимает "Маникюр"
+    TG->>W: callback_query: book_svc_1
+
+    W->>KV: setState({ step: DATE, svcId: 1 })
+    W->>D1: SELECT * FROM appointments WHERE date >= today
+    D1-->>W: Занятые слоты
+
+    opt Google Calendar интеграция
+        W->>D1: SELECT * FROM google_busy_blocks
+        D1-->>W: Внешние занятые блоки
+    end
+
+    W->>W: getSlots() → свободные слоты
+    W->>TG: Показать календарь
+    TG-->>U: Кнопки с датами
+
+    U->>TG: Выбирает дату и время
+    TG->>W: callback_query: time_10:00
+
+    rect rgb(255, 230, 230)
+        Note over W,D1: Сохранение записи
+        W->>D1: INSERT INTO appointments (...)
+        D1-->>W: OK (id = apt_xxx)
+        W->>KV: addToIndexes(date, masterId)
+    end
+
+    par Уведомления
+        W->>TG: Клиенту: "Запись создана!"
+        W->>TG: Мастеру: "Новая запись на 10:00"
+        W->>TG: Админу: "Подтвердите запись"
+    end
+
+    opt Google Calendar Sync
+        W->>GC: POST /calendars/.../events
+        GC-->>W: eventId
+        W->>D1: UPDATE appointments SET google_event_id = ?
+    end
+
+    Note over W: Cron (каждые 15 мин)
+    rect rgb(245, 245, 255)
+        W->>D1: SELECT * FROM appointments WHERE status='confirmed' AND reminder
+        D1-->>W: Записи за 24ч / 2ч
+        W->>TG: Напоминание клиенту
+    end

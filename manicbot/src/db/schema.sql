@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   google_event_id TEXT,
   google_calendar_id TEXT,
   google_integration_id TEXT,
+  sync_retries INTEGER DEFAULT 0,
+  sync_retry_after INTEGER DEFAULT NULL,
+  sync_last_error TEXT DEFAULT NULL,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);

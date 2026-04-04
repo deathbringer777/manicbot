@@ -55,16 +55,16 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
 
   return (
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
-      <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-white">{isNew ? t("action.create", lang) : t("action.edit", lang)}</h3>
-          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">{isNew ? t("action.create", lang) : t("action.edit", lang)}</h3>
+          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="flex items-center gap-3">
           <input value={emoji} onChange={e => setEmoji(e.target.value)} maxLength={4}
-            className="w-14 h-14 text-center text-3xl bg-white/5 border border-white/10 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand-500" />
+            className="w-14 h-14 text-center text-3xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand-500" />
           <div className="flex-1">
             <Input label={t("service.name", lang)} value={name} onChange={setName} placeholder="Маникюр" />
           </div>
@@ -104,10 +104,10 @@ function AddMasterModal({ onClose, tenantId }: { onClose: () => void; tenantId: 
 
   return (
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
-      <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-white">{t("master.addMaster", lang)}</h3>
-          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("master.addMaster", lang)}</h3>
+          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -149,7 +149,7 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
             <Settings className="h-4 w-4 text-slate-500 shrink-0" />
             <div>
               <p className="text-xs text-slate-500">{t("salon.name", lang)}</p>
-              <p className="text-sm text-white font-medium">{profile?.name || "—"}</p>
+              <p className="text-sm text-slate-900 dark:text-white font-medium">{profile?.name || "—"}</p>
             </div>
           </div>
           {profile?.salon?.address && (
@@ -157,7 +157,7 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               <Settings className="h-4 w-4 text-slate-500 shrink-0" />
               <div>
                 <p className="text-xs text-slate-500">{t("salon.address", lang)}</p>
-                <p className="text-sm text-white">{profile.salon.address}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.salon.address}</p>
               </div>
             </div>
           )}
@@ -166,7 +166,7 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               <Settings className="h-4 w-4 text-slate-500 shrink-0" />
               <div>
                 <p className="text-xs text-slate-500">{t("salon.phone", lang)}</p>
-                <p className="text-sm text-white">{profile.salon.phone}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.salon.phone}</p>
               </div>
             </div>
           )}
@@ -175,7 +175,7 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               <Settings className="h-4 w-4 text-slate-500 shrink-0" />
               <div>
                 <p className="text-xs text-slate-500">{t("salon.hours", lang)}</p>
-                <p className="text-sm text-white">{profile.salon.workHours.from}:00 — {profile.salon.workHours.to}:00</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.salon.workHours.from}:00 — {profile.salon.workHours.to}:00</p>
               </div>
             </div>
           )}
@@ -299,7 +299,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       />
 
       {/* Status banner */}
-      <div className={`rounded-xl p-4 flex items-center gap-3 ${isPublic ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-slate-800/60 border border-slate-700"}`}>
+      <div className={`rounded-xl p-4 flex items-center gap-3 ${isPublic ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"}`}>
         {isPublic
           ? <ToggleRight className="h-6 w-6 text-emerald-400 shrink-0" />
           : <ToggleLeft className="h-6 w-6 text-slate-500 shrink-0" />}
@@ -340,7 +340,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
               <div>
                 <p className="text-xs text-slate-500">{label}</p>
-                <p className="text-sm text-white">{value}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{value}</p>
               </div>
             </div>
           ) : null)}
@@ -349,7 +349,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               <p className="text-xs text-slate-500 mb-2">Фотографии ({photos.length})</p>
               <div className="flex flex-wrap gap-2">
                 {photos.map((url, i) => (
-                  <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-700" />
+                  <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
                 ))}
               </div>
             </div>
@@ -366,23 +366,23 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           {/* Toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-white">Показывать в каталоге</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">Показывать в каталоге</p>
               <p className="text-xs text-slate-500">Клиенты смогут найти ваш салон через поиск</p>
             </div>
             <button onClick={() => setIsPublic((v) => !v)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-700"}`}>
+              className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-700"}`}>
               <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-6" : "translate-x-1"}`} />
             </button>
           </div>
 
-          <div className="border-t border-white/5 pt-3 space-y-3">
+          <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
             <div>
               <label className="text-xs text-slate-400 mb-1 block">URL slug</label>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-600 shrink-0">manicbot.com/salon/</span>
                 <input value={slug} onChange={(e) => { setSlug(e.target.value.toLowerCase()); validateSlug(e.target.value.toLowerCase()); }}
                   placeholder="moi-salon-moskva"
-                  className="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                  className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
                 {slug && !slugError && (
                   <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
                     {slugCheck.isLoading ? "..." : slugCheck.data?.available === false ? "❌ Занят" : slugCheck.data?.available ? "✅" : ""}
@@ -396,14 +396,14 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               <label className="text-xs text-slate-400 mb-1 block">Город</label>
               <input value={city} onChange={(e) => setCity(e.target.value)}
                 placeholder="Москва"
-                className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
             </div>
 
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Описание</label>
               <textarea value={description} onChange={(e) => setDescription(e.target.value)}
                 rows={3} placeholder="Расскажите о своём салоне..."
-                className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -411,13 +411,13 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                 <label className="text-xs text-slate-400 mb-1 block">Широта (lat)</label>
                 <input value={lat} onChange={(e) => setLat(e.target.value)} type="number" step="0.0001"
                   placeholder="55.7558"
-                  className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Долгота (lng)</label>
                 <input value={lng} onChange={(e) => setLng(e.target.value)} type="number" step="0.0001"
                   placeholder="37.6173"
-                  className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
               </div>
             </div>
             <p className="text-xs text-slate-500">
@@ -425,13 +425,13 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             </p>
 
             {/* Photos */}
-            <div className="border-t border-white/5 pt-3">
-              <label className="text-xs text-slate-400 mb-2 block">Фотографии салона</label>
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3">
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Фотографии салона</label>
               {photos.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
                   {photos.map((url, i) => (
                     <div key={i} className="relative group">
-                      <img src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-700" />
+                      <img src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
                       <button
                         type="button"
                         onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
@@ -449,10 +449,10 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   onChange={(e) => setNewPhotoUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addPhoto())}
                   placeholder="https://example.com/photo.jpg"
-                  className="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-xs text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500"
+                  className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
                 />
                 <button type="button" onClick={addPhoto}
-                  className="shrink-0 rounded-lg bg-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-600 flex items-center gap-1">
+                  className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center gap-1">
                   <Plus className="h-3.5 w-3.5" />
                   Добавить
                 </button>
@@ -535,7 +535,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
             className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
               tab === tb.key
                 ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
-                : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+                : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
             }`}>
             {tb.label}
           </button>
@@ -566,7 +566,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {todayApts.data && todayApts.data.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">{t("salon.todayApts", lang)}</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.todayApts", lang)}</h3>
                 <button onClick={() => setTab("appointments")}
                   className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
                   {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
@@ -594,9 +594,9 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       {tab === "appointments" && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-white flex-1">{t("salon.appointments", lang)}</h2>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("salon.appointments", lang)}</h2>
             <input type="date" value={aptDate} onChange={e => setAptDate(e.target.value)}
-              className="text-xs bg-white/5 border border-white/10 text-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              className="text-xs bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500" />
           </div>
           {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
@@ -628,16 +628,16 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                   <div className="flex items-center gap-3">
                     <span className="text-2xl shrink-0">{s.emoji ?? "💅"}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white text-sm">{name}</p>
-                      <p className="text-xs text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {s.price} ₴</p>
+                      <p className="font-medium text-slate-900 dark:text-white text-sm">{name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {s.price} ₴</p>
                     </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.active ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-700 text-slate-500"}`}>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.active ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-200 dark:bg-slate-700 text-slate-500"}`}>
                       {s.active ? t("service.active", lang) : t("service.hidden", lang)}
                     </span>
                   </div>
-                  <div className="flex gap-2 mt-2 pt-2 border-t border-white/5">
+                  <div className="flex gap-2 mt-2 pt-2 border-t border-slate-200 dark:border-white/5">
                     <button onClick={() => setSvcModal({ open: true, svc: s })}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 text-slate-400 text-xs hover:text-white hover:bg-white/10 transition-colors">
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
                       <Pencil className="h-3 w-3" /> {t("action.edit", lang)}
                     </button>
                     <button onClick={() => { if (confirm(t("confirm.deleteService", lang))) deleteSvc.mutate({ tenantId, svcId: s.svcId }); }}
@@ -668,7 +668,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                   {(m.name ?? "?").charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white text-sm">{m.name ?? `#${m.chatId}`}</p>
+                  <p className="font-medium text-slate-900 dark:text-white text-sm">{m.name ?? `#${m.chatId}`}</p>
                   <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>
                 </div>
                 <button onClick={() => { if (confirm(t("confirm.removeMaster", lang))) removeMaster.mutate({ tenantId, chatId: m.chatId }); }}
@@ -691,11 +691,11 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           <div className="space-y-2">
             {clients.data?.map((c: any) => (
               <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-400 shrink-0">
+                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-400 shrink-0">
                   {(c.name ?? "?").charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
+                  <p className="font-medium text-slate-900 dark:text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
                   <p className="text-[10px] text-slate-500">
                     {c.tgUsername ? `@${c.tgUsername}` : ""} {c.phone ?? ""}
                   </p>
@@ -716,11 +716,11 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           {billing.data && (
             <div className="glass-card rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">{t("billing.plan", lang)}</span>
-                <span className="font-bold text-white text-lg">{(billing.data.plan ?? "start").toUpperCase()}</span>
+                <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.plan", lang)}</span>
+                <span className="font-bold text-slate-900 dark:text-white text-lg">{(billing.data.plan ?? "start").toUpperCase()}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">{t("billing.status", lang)}</span>
+                <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.status", lang)}</span>
                 <span className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
                   billing.data.billingStatus === "active" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
                 }`}>
@@ -729,8 +729,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               </div>
               {billing.data.nextPaymentDate && (
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">{t("billing.nextPayment", lang)}</span>
-                  <span className="text-white text-sm">{new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString()}</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.nextPayment", lang)}</span>
+                  <span className="text-slate-900 dark:text-white text-sm">{new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString()}</span>
                 </div>
               )}
             </div>

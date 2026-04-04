@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -327,6 +327,10 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
     const stored = localStorage.getItem("manicbot_web_theme");
     return stored !== "light";
   });
+  // Sync with document.documentElement so CSS variables (:root:not(.dark)) respond to theme toggle
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
   const toggleTheme = () => {
     setIsDark(v => {
       const next = !v;

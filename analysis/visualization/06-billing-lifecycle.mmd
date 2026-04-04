@@ -1,0 +1,46 @@
+stateDiagram-v2
+    [*] --> trialing : Тенант создан (автостарт 14 дней)
+
+    trialing --> active : checkout.session.completed
+    trialing --> inactive : trial_ends_at истёк (Cron)
+
+    active --> grace : invoice.payment_failed
+    active --> canceled : subscription.deleted
+    active --> active : invoice.paid (продление)
+
+    grace --> active : invoice.paid (повторная оплата)
+    grace --> inactive : grace_ends_at истёк (3 дня, Cron)
+
+    canceled --> inactive : Немедленно
+
+    inactive --> active : Новая подписка
+
+    state trialing {
+        [*] --> trial_active
+        trial_active : 14 дней бесплатно
+        trial_active : План: start (1 мастер)
+    }
+
+    state active {
+        [*] --> plan_choice
+        plan_choice --> start : $X/мес
+        plan_choice --> pro : $Y/мес
+        plan_choice --> studio : $Z/мес
+
+        start : 1 мастер, базовое бронирование
+        pro : 5 мастеров, AI, Calendar, WA+IG
+        studio : Без лимитов, все фичи
+    }
+
+    state grace {
+        [*] --> grace_active
+        grace_active : 3 дня после неудачной оплаты
+        grace_active : Функции ещё работают
+    }
+
+    state inactive {
+        [*] --> blocked
+        blocked : Бот работает для клиентов
+        blocked : Панель заблокирована для staff
+        blocked : ADMIN_CHAT_ID обходит блокировку
+    }

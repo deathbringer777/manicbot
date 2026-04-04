@@ -52,7 +52,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     // Still loading web session — show spinner
     if (roleQuery.isLoading) {
       return (
-        <div className="flex h-screen items-center justify-center bg-slate-950">
+        <div className="flex h-screen items-center justify-center bg-background">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-brand-500" />
         </div>
       );
@@ -63,7 +63,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
         window.location.replace("/login");
       }
       return (
-        <div className="flex h-screen items-center justify-center bg-slate-950">
+        <div className="flex h-screen items-center justify-center bg-background">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-brand-500" />
         </div>
       );
@@ -74,7 +74,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
   // — Loading
   if (initStatus === "loading" || roleQuery.isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-brand-500" />
           <p className="text-sm text-slate-400">{t("gate.init", lang)}</p>
@@ -86,7 +86,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
   // — No role (forbidden)
   if (roleQuery.isError || !roleQuery.data?.role) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-6 bg-slate-950 px-8 text-center">
+      <div className="flex h-screen flex-col items-center justify-center gap-6 bg-background px-8 text-center">
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
           <ShieldOff className="h-10 w-10 text-red-400" />
         </div>
@@ -124,7 +124,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
       ) : effectiveRole === "support" || effectiveRole === "technical_support" ? (
         <SupportDashboard />
       ) : (
-        <div className="flex h-screen flex-col items-center justify-center gap-6 bg-slate-950 px-8 text-center">
+        <div className="flex h-screen flex-col items-center justify-center gap-6 bg-background px-8 text-center">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
             <ShieldOff className="h-10 w-10 text-red-400" />
           </div>

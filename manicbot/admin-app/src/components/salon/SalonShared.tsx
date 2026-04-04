@@ -30,8 +30,8 @@ export function StatCard({ label, value, sub, icon: Icon, color }: {
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
-          <p className="text-xs text-slate-400 leading-tight">{label}</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{value}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight">{label}</p>
           {sub && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{sub}</p>}
         </div>
       </div>
@@ -59,14 +59,14 @@ export function AptCard({ a, lang, onAction }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-semibold text-white text-sm leading-tight truncate">{a.userName ?? `#${a.chatId}`}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5 truncate">{a.svcId}</p>
+              <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{a.userName ?? `#${a.chatId}`}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{a.svcId}</p>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-base font-bold text-white tabular-nums leading-none">
+              <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
                 {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
               </p>
-              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
+              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[a.status] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>
                 {t(`status.${a.status}` as any, lang)}
               </span>
             </div>
@@ -74,12 +74,12 @@ export function AptCard({ a, lang, onAction }: {
         </div>
       </div>
       {onAction && a.status === "pending" && (
-        <div className="flex border-t border-white/5">
+        <div className="flex border-t border-slate-200 dark:border-white/5">
           <button onClick={() => onAction(a.id, "confirmed")}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/10 transition-colors">
             <CheckCircle2 className="h-3.5 w-3.5" /> {t("action.confirm", lang)}
           </button>
-          <div className="w-px bg-white/5" />
+          <div className="w-px bg-slate-200 dark:bg-white/5" />
           <button onClick={() => onAction(a.id, "rejected")}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400 text-xs font-semibold hover:bg-red-500/10 transition-colors">
             <XCircle className="h-3.5 w-3.5" /> {t("action.reject", lang)}
@@ -87,7 +87,7 @@ export function AptCard({ a, lang, onAction }: {
         </div>
       )}
       {onAction && a.status === "confirmed" && (
-        <div className="flex border-t border-white/5">
+        <div className="flex border-t border-slate-200 dark:border-white/5">
           <button onClick={() => onAction(a.id, "cancelled")}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400/60 text-xs font-medium hover:bg-red-500/10 transition-colors">
             <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
@@ -102,7 +102,7 @@ export function AptCard({ a, lang, onAction }: {
 export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-lg font-bold text-white">{title}</h2>
+      <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
       {action}
     </div>
   );
@@ -115,7 +115,7 @@ export function Btn({ children, onClick, variant = "primary", disabled, classNam
 }) {
   const styles = {
     primary: "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30",
-    ghost: "bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10",
+    ghost: "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10",
     danger: "bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30",
   };
   return (
@@ -134,7 +134,7 @@ export function Input({ label, value, onChange, type = "text", placeholder }: {
     <div>
       <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-600" />
+        className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
     </div>
   );
 }

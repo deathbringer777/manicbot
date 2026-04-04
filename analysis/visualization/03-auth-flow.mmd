@@ -1,0 +1,96 @@
+flowchart TD
+    START((Запрос)) --> CHECK{Источник?}
+
+    CHECK -->|"x-telegram-init-data<br/>header"| TG_PATH
+    CHECK -->|"next-auth cookie"| WEB_PATH
+    CHECK -->|"Нет auth"| PUBLIC["publicProcedure<br/>Без авторизации"]
+
+    subgraph TG_PATH["Telegram Mini App Auth"]
+        TG1["TelegramGate.tsx<br/>tg.ready() + tg.expand()"]
+        TG2["Отправка initData<br/>в x-telegram-init-data"]
+        TG3["validateWebAppData()<br/>HMAC-SHA256 проверка"]
+        TG4{Подпись<br/>валидна?}
+        TG5{auth_date<br/>< 5 мин?}
+        TG6["Извлечение user.id<br/>(Telegram chatId)"]
+
+        TG1 --> TG2 --> TG3 --> TG4
+        TG4 -->|"Нет"| DENY1["401 Unauthorized"]
+        TG4 -->|"Да"| TG5
+        TG5 -->|"Нет"| DENY2["401 Expired"]
+        TG5 -->|"Да"| TG6
+    end
+
+    subgraph WEB_PATH["Web Session Auth (NextAuth)"]
+        WEB1["Страница /login"]
+        WEB2{Метод?}
+        WEB3["Email + Password<br/>Credentials Provider"]
+        WEB4["Google OAuth<br/>Provider"]
+        WEB5["SELECT * FROM web_users<br/>WHERE email = ?"]
+        WEB6["verifyPassword()<br/>PBKDF2 310K итераций<br/>timing-safe сравнение"]
+        WEB7{Пароль<br/>верный?}
+        WEB8{emailVerified?}
+        WEB9["JWT Token<br/>(7 дней)"]
+
+        WEB1 --> WEB2
+        WEB2 -->|"Email/Pass"| WEB3 --> WEB5 --> WEB6 --> WEB7
+        WEB2 -->|"Google"| WEB4 --> WEB5
+        WEB7 -->|"Нет"| DENY3["401 Invalid"]
+        WEB7 -->|"Да"| WEB8
+        WEB8 -->|"Нет"| DENY4["403 Not verified"]
+        WEB8 -->|"Да"| WEB9
+    end
+
+    TG6 --> ROLE_CHECK
+    WEB9 --> ROLE_CHECK
+
+    subgraph ROLE_CHECK["Определение роли"]
+        R1{chatId ==<br/>ADMIN_CHAT_ID?}
+        R2["SELECT role FROM<br/>platform_roles"]
+        R3{Есть<br/>platform role?}
+        R4["SELECT role, tenant_id<br/>FROM tenant_roles"]
+        R5{Есть<br/>tenant role?}
+        R6["system_admin"]
+        R7["support /<br/>technical_support"]
+        R8["tenant_owner /<br/>master"]
+        R9["client<br/>(нет доступа к панели)"]
+
+        R1 -->|"Да"| R6
+        R1 -->|"Нет"| R2 --> R3
+        R3 -->|"Да"| R7
+        R3 -->|"Нет"| R4 --> R5
+        R5 -->|"Да"| R8
+        R5 -->|"Нет"| R9
+    end
+
+    ROLE_CHECK --> ROUTING
+
+    subgraph ROUTING["Маршрутизация по роли"]
+        D1["God Mode Dashboard<br/>Полный доступ"]
+        D2["Salon Dashboard<br/>Управление салоном"]
+        D3["Master Dashboard<br/>Расписание, клиенты"]
+        D4["Support Dashboard<br/>Тикеты, эскалация"]
+        D5["Forbidden<br/>Нет доступа"]
+
+        R6 --> D1
+        R8 -->|"tenant_owner"| D2
+        R8 -->|"master"| D3
+        R7 --> D4
+        R9 --> D5
+    end
+
+    subgraph PROCEDURES["tRPC Процедуры"]
+        P1["publicProcedure<br/>Без auth"]
+        P2["protectedProcedure<br/>TG или Web сессия"]
+        P3["adminProcedure<br/>system_admin или ADMIN_CHAT_ID"]
+        P4["assertTenantOwner<br/>tenant_owner + tenantId"]
+    end
+
+    classDef success fill:#10b981,stroke:#059669,color:#fff
+    classDef danger fill:#ef4444,stroke:#dc2626,color:#fff
+    classDef info fill:#3b82f6,stroke:#2563eb,color:#fff
+    classDef warn fill:#f59e0b,stroke:#d97706,color:#fff
+
+    class R6,D1 success
+    class DENY1,DENY2,DENY3,DENY4,D5 danger
+    class R7,R8,D2,D3,D4 info
+    class R9 warn

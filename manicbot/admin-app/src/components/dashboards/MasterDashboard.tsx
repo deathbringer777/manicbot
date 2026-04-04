@@ -60,11 +60,11 @@ function AptRow({ apt }: { apt: any }) {
           {initials}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-white text-sm leading-tight truncate">{apt.userName ?? `#${apt.chatId}`}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5 truncate">{apt.svcId}</p>
+          <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{apt.userName ?? `#${apt.chatId}`}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{apt.svcId}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-base font-bold text-white tabular-nums leading-none">
+          <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
             {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
           </p>
           <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[apt.status] ?? "bg-slate-700 text-slate-300"}`}>
@@ -166,8 +166,8 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                   {a.time}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
-                  <p className="text-xs text-slate-400">{a.svcId}</p>
+                  <p className="font-medium text-slate-900 dark:text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{a.svcId}</p>
                 </div>
                 <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
                   {STATUS_LABELS[a.status] ?? a.status}
@@ -182,23 +182,23 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {tab === "schedule" && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-lg font-bold text-white flex-1">{t("master.allApts", lang)}</h2>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("master.allApts", lang)}</h2>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-xl px-3 py-1.5" />
+              className="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5" />
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="text-xs bg-slate-800 border border-slate-700 text-slate-300 rounded-xl px-3 py-1.5" />
+              className="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5" />
           </div>
           {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {schedule.data?.map((a: any) => (
               <div key={a.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="text-xs text-slate-400 w-20 shrink-0">{a.date} {a.time}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 w-20 shrink-0">{a.date} {a.time}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
+                  <p className="font-medium text-slate-900 dark:text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
                   <p className="text-[10px] text-slate-500">{a.svcId}</p>
                 </div>
-                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
+                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>
                   {STATUS_LABELS[a.status] ?? a.status}
                 </span>
               </div>
@@ -211,17 +211,17 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {/* CLIENTS */}
       {tab === "clients" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">{t("master.myClients", lang)}</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.myClients", lang)}</h2>
           {clientsList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {clientsList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {clientsList.data?.map((c: any) => (
               <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-300 shrink-0">
+                <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300 shrink-0">
                   {(c.name ?? "?").charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
+                  <p className="font-medium text-slate-900 dark:text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
                   {c.lastAppointment && (
                     <p className="text-[10px] text-slate-500">
                       {t("master.lastApt", lang)} {c.lastAppointment.date}
@@ -239,7 +239,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {tab === "earnings" && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-white flex-1">{t("master.earningsTitle", lang)}</h2>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("master.earningsTitle", lang)}</h2>
             <div className="flex gap-1">
               {(["week", "month", "year"] as Period[]).map(p => (
                 <button key={p} onClick={() => setPeriod(p)}
@@ -257,11 +257,11 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
             <div className="space-y-3">
               <div className="glass-card rounded-2xl p-6 text-center">
                 <p className="text-xs text-slate-500 mb-1">{t(`master.${period}Earnings` as any, lang)}</p>
-                <p className="text-4xl font-bold text-white mb-1">
+                <p className="text-4xl font-bold text-slate-900 dark:text-white mb-1">
                   {earnings.data.total.toLocaleString(lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU")}{" "}
                   <span className="text-2xl text-slate-400">zł</span>
                 </p>
-                <p className="text-sm text-slate-400">{earnings.data.count} {t("master.confirmedApts", lang)}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{earnings.data.count} {t("master.confirmedApts", lang)}</p>
               </div>
             </div>
           )}
@@ -272,16 +272,16 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
       {tab === "profile" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">{t("master.profile", lang)}</h2>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.profile", lang)}</h2>
             {profile.data && !bioEdit && (
               <button onClick={() => { setBio((profile.data as any).bio ?? ""); setPhoto((profile.data as any).photo ?? ""); setBioEdit(true); }}
-                className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700">
+                className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
                 <Pencil className="h-3.5 w-3.5" />Редактировать
               </button>
             )}
             {bioEdit && (
               <button onClick={() => setBioEdit(false)}
-                className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-700">
+                className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700">
                 <X className="h-3.5 w-3.5" />Отмена
               </button>
             )}
@@ -297,27 +297,27 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                     : (profile.data.name ?? "M").charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-xl font-bold text-white">{profile.data.name ?? "Мастер"}</p>
+                  <p className="text-xl font-bold text-slate-900 dark:text-white">{profile.data.name ?? "Мастер"}</p>
                   <p className="text-xs text-slate-500">ID: {(profile.data as any).chatId}</p>
                   {(profile.data as any).bio && !bioEdit && (
-                    <p className="mt-1 text-xs text-slate-400">{(profile.data as any).bio}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{(profile.data as any).bio}</p>
                   )}
                 </div>
               </div>
 
               {bioEdit && (
-                <div className="space-y-3 border-t border-white/5 pt-3">
+                <div className="space-y-3 border-t border-slate-200 dark:border-white/5 pt-3">
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Фото (URL)</label>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Фото (URL)</label>
                     <input value={photo} onChange={(e) => setPhoto(e.target.value)}
                       placeholder="https://example.com/photo.jpg"
-                      className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                      className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Описание (bio)</label>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Описание (bio)</label>
                     <textarea value={bio} onChange={(e) => setBio(e.target.value)}
                       rows={3} maxLength={500} placeholder="Мастер маникюра с 5-летним опытом..."
-                      className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-white ring-1 ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
+                      className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
                     <p className="text-right text-[10px] text-slate-600">{bio.length}/500</p>
                   </div>
                   <button

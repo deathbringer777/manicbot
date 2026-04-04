@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ManicBot — технический аудит (презентация)</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --critical: #ef4444;
+      --high: #f97316;
+      --border: #2d3a4d;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .deck {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .slide {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      padding: 2.5rem 3rem 5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      animation: fadeIn 0.25s ease;
+    }
+    .slide.active {
+      display: flex;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    h1 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      margin: 0 0 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+      font-weight: 600;
+      margin: 0 0 1rem;
+      color: var(--accent);
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin-bottom: 2rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      background: var(--surface);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    th, td {
+      padding: 0.65rem 0.85rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: rgba(59, 130, 246, 0.12);
+      font-weight: 600;
+    }
+    tr:last-child td { border-bottom: none; }
+    .sev-critical { color: var(--critical); font-weight: 600; }
+    .sev-high { color: var(--high); font-weight: 600; }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+    }
+    .metric strong { display: block; font-size: 1.35rem; color: var(--accent); }
+    .metric span { font-size: 0.8rem; color: var(--muted); }
+    .diagram-wrap {
+      flex: 1;
+      min-height: 0;
+      margin-top: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      overflow: auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .diagram-wrap img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    .diagram-caption {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+    .diagram-caption a {
+      color: var(--accent);
+    }
+    ul.links {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    ul.links li {
+      margin: 0.5rem 0;
+      padding: 0.65rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    ul.links a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    ul.links a:hover { text-decoration: underline; }
+    .hint {
+      position: fixed;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.75rem;
+      color: var(--muted);
+      z-index: 20;
+      pointer-events: none;
+    }
+    .progress {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--border);
+      z-index: 15;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.2s ease;
+    }
+    .nav-hit {
+      position: fixed;
+      top: 0;
+      bottom: 3px;
+      width: 18%;
+      z-index: 10;
+      cursor: pointer;
+    }
+    .nav-hit.prev { left: 0; }
+    .nav-hit.next { right: 0; }
+    .slide-counter {
+      position: fixed;
+      top: 1rem;
+      right: 1.25rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+    <div class="slide-counter" id="counter" aria-live="polite"></div>
+
+    <section class="slide active" data-slide="0" aria-label="Титул">
+      <h1>ManicBot — технический аудит</h1>
+      <p class="subtitle">
+        Дата: 4 апреля 2026 · Версия 1.0 · Scope: кодовая база, архитектура, безопасность, производительность
+      </p>
+      <p style="color: var(--muted); max-width: 36rem; line-height: 1.55;">
+        Multi-tenant SaaS для бронирования в салонах: Telegram, WhatsApp, Instagram, Cloudflare Workers, Admin Mini-App (Next.js).
+      </p>
+    </section>
+
+    <section class="slide" data-slide="1" aria-label="Резюме">
+      <h2>Ключевые метрики и находки</h2>
+      <div class="metrics-grid">
+        <div class="metric"><strong>31,391</strong><span>LOC всего</span></div>
+        <div class="metric"><strong>26</strong><span>таблиц D1</span></div>
+        <div class="metric"><strong>~900</strong><span>тестов (Worker)</span></div>
+        <div class="metric"><strong>6</strong><span>внешних интеграций</span></div>
+      </div>
+      <h2 style="margin-top: 1.75rem;">Критические находки (Executive Summary)</h2>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Severity</th><th>Проблема</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>S1</td><td class="sev-critical">CRITICAL</td><td>Race condition при одновременном бронировании</td></tr>
+          <tr><td>S2</td><td class="sev-high">HIGH</td><td>Нет rate limiting на auth endpoints admin-app</td></tr>
+          <tr><td>S3</td><td class="sev-high">HIGH</td><td>AI prompt injection — пользовательский текст не санитизирован</td></tr>
+          <tr><td>S4</td><td class="sev-high">HIGH</td><td>BOT_ENCRYPTION_KEY опционален — plaintext токены в D1</td></tr>
+          <tr><td>S5</td><td class="sev-high">HIGH</td><td>Google Calendar sync без backoff — риск DOS</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="slide" data-slide="2" aria-label="Диаграмма 1">
+      <h2>1. Архитектура системы</h2>
+      <div class="diagram-wrap"><img src="../visualization/01-system-architecture.svg" alt="Архитектура системы ManicBot" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/01-system-architecture.mmd">01-system-architecture.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="3" aria-label="Диаграмма 2">
+      <h2>2. Data flow: бронирование</h2>
+      <div class="diagram-wrap"><img src="../visualization/02-data-flow.svg" alt="Data flow бронирования" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/02-data-flow.mmd">02-data-flow.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="4" aria-label="Диаграмма 3">
+      <h2>3. Auth flow (двойная авторизация)</h2>
+      <div class="diagram-wrap"><img src="../visualization/03-auth-flow.svg" alt="Схема авторизации" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/03-auth-flow.mmd">03-auth-flow.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="5" aria-label="Диаграмма 4">
+      <h2>4. Booking flow (жизненный цикл)</h2>
+      <div class="diagram-wrap"><img src="../visualization/04-booking-flow.svg" alt="Жизненный цикл бронирования" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/04-booking-flow.mmd">04-booking-flow.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="6" aria-label="Диаграмма 5">
+      <h2>5. Multi-channel (TG / WA / IG)</h2>
+      <div class="diagram-wrap"><img src="../visualization/05-multi-channel-flow.svg" alt="Омниканальная обработка" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/05-multi-channel-flow.mmd">05-multi-channel-flow.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="7" aria-label="Диаграмма 6">
+      <h2>6. Billing lifecycle (Stripe)</h2>
+      <div class="diagram-wrap"><img src="../visualization/06-billing-lifecycle.svg" alt="Биллинг Stripe" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/06-billing-lifecycle.mmd">06-billing-lifecycle.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="8" aria-label="Диаграмма 7">
+      <h2>7. State machine (25+ состояний)</h2>
+      <div class="diagram-wrap"><img src="../visualization/07-state-machine.svg" alt="Конечный автомат диалога" /></div>
+      <p class="diagram-caption">Исходник: <a href="../visualization/07-state-machine.mmd">07-state-machine.mmd</a></p>
+    </section>
+
+    <section class="slide" data-slide="9" aria-label="Fix proposals">
+      <h2>Fix proposals</h2>
+      <ul class="links">
+        <li><a href="../fixes/01-booking-race-condition.md">01 — CRITICAL: race condition при бронировании</a></li>
+        <li><a href="../fixes/02-google-calendar-backoff.md">02 — HIGH: Google Calendar sync, backoff</a></li>
+        <li><a href="../fixes/03-ai-prompt-sanitization.md">03 — HIGH: AI prompt sanitization</a></li>
+        <li><a href="../fixes/04-rate-limit-auth.md">04 — HIGH: rate limiting на auth</a></li>
+        <li><a href="../fixes/05-encryption-enforcement.md">05 — HIGH: encryption enforcement</a></li>
+      </ul>
+    </section>
+
+    <section class="slide" data-slide="10" aria-label="Документы">
+      <h2>Документы и данные</h2>
+      <ul class="links">
+        <li><a href="../AUDIT_REPORT.md">AUDIT_REPORT.md</a> — полный отчёт</li>
+        <li><a href="../README.md">README.md</a> — оглавление папки analysis</li>
+        <li><a href="../summary/metrics.json">summary/metrics.json</a></li>
+        <li><a href="../summary/dependency-audit.json">summary/dependency-audit.json</a></li>
+      </ul>
+      <p class="subtitle" style="margin-top: 2rem;">Навигация: стрелки ← →, клик по левому/правому краю. Для показа с картинками: из корня репозитория <code style="color:var(--accent)">npx serve analysis</code> → открыть <code style="color:var(--accent)">/presentation/</code>.</p>
+    </section>
+
+    <div class="nav-hit prev" id="navPrev" role="button" tabindex="0" aria-label="Предыдущий слайд"></div>
+    <div class="nav-hit next" id="navNext" role="button" tabindex="0" aria-label="Следующий слайд"></div>
+    <div class="progress" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+    <p class="hint">← → · края экрана</p>
+  </div>
+
+  <script>
+    (function () {
+      var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+      var total = slides.length;
+      var i = 0;
+      var counter = document.getElementById("counter");
+      var bar = document.getElementById("progressBar");
+
+      function show(n) {
+        if (n < 0) n = 0;
+        if (n >= total) n = total - 1;
+        i = n;
+        slides.forEach(function (el, idx) {
+          el.classList.toggle("active", idx === i);
+        });
+        counter.textContent = i + 1 + " / " + total;
+        bar.style.width = ((i + 1) / total * 100) + "%";
+      }
+
+      function next() { show(i + 1); }
+      function prev() { show(i - 1); }
+
+      document.getElementById("navNext").addEventListener("click", next);
+      document.getElementById("navPrev").addEventListener("click", prev);
+
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
+          e.preventDefault();
+          next();
+        } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+          e.preventDefault();
+          prev();
+        } else if (e.key === "Home") {
+          show(0);
+        } else if (e.key === "End") {
+          show(total - 1);
+        }
+      });
+
+      show(0);
+    })();
+  </script>
+</body>
+</html>

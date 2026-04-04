@@ -1,0 +1,107 @@
+stateDiagram-v2
+    [*] --> idle
+
+    state "Регистрация клиента" as registration {
+        idle --> rc : Первый визит
+        rc --> rn : Подтверждает
+        rn --> rp : Вводит имя
+        rp --> idle : Вводит телефон ✓
+    }
+
+    state "Бронирование" as booking {
+        idle --> master_pick : Выбор мастера
+        idle --> date : Один мастер / "любой"
+        master_pick --> date : Мастер выбран
+        date --> time : Дата выбрана
+        time --> conf : Время выбрано
+        conf --> idle : Подтверждено ✓
+        conf --> badj : Хочет изменить
+        badj --> date : Новая дата
+        badj --> master_pick : Другой мастер
+    }
+
+    state "Действия с записями" as apt_actions {
+        idle --> client_cancel_comment : Клиент отменяет
+        client_cancel_comment --> idle : Причина указана
+
+        idle --> reject_comment : Мастер/админ отклоняет
+        reject_comment --> idle : Причина указана
+
+        idle --> counter_time : Предлагает другое время
+        counter_time --> counter_comment : Время указано
+        counter_comment --> idle : Комментарий отправлен
+
+        idle --> admin_cancel_reason : Админ отменяет
+        admin_cancel_reason --> idle : Причина указана
+
+        idle --> client_reply : Клиент отвечает мастеру
+        client_reply --> idle : Сообщение отправлено
+    }
+
+    state "Управление услугами (Админ)" as svc_mgmt {
+        idle --> svc_new_name : Новая услуга
+        svc_new_name --> svc_new_duration : Имя указано
+        svc_new_duration --> svc_new_price : Длительность указана
+        svc_new_price --> svc_new_emoji : Цена указана
+        svc_new_emoji --> idle : Emoji выбран ✓
+
+        idle --> svc_edit_name : Редактирование
+        svc_edit_name --> idle : Имя обновлено
+
+        idle --> svc_edit_duration : Редактирование
+        svc_edit_duration --> idle : Длительность обновлена
+
+        idle --> svc_edit_price : Редактирование
+        svc_edit_price --> idle : Цена обновлена
+    }
+
+    state "Настройки салона (Админ)" as settings {
+        idle --> edit_salon_name : Изменить название
+        edit_salon_name --> idle : Сохранено ✓
+
+        idle --> edit_address : Изменить адрес
+        edit_address --> idle : Сохранено ✓
+
+        idle --> edit_phone : Изменить телефон
+        edit_phone --> idle : Сохранено ✓
+
+        idle --> edit_work_hours : Рабочие часы
+        edit_work_hours --> idle : Сохранено ✓
+
+        idle --> edit_slot_interval : Интервал слотов
+        edit_slot_interval --> idle : Сохранено ✓
+    }
+
+    state "Платформа (SysAdmin)" as platform {
+        idle --> create_tenant_name : Создать тенант
+        create_tenant_name --> idle : Тенант создан ✓
+
+        idle --> bot_new_token : Добавить бот
+        bot_new_token --> idle : Бот зарегистрирован ✓
+
+        idle --> assign_support : Назначить саппорт
+        assign_support --> idle : Роль назначена ✓
+
+        idle --> assign_tech : Назначить тех. саппорт
+        assign_tech --> idle : Роль назначена ✓
+
+        idle --> remove_role_confirm : Удалить роль
+        remove_role_confirm --> idle : Роль удалена ✓
+
+        idle --> tenant_deactivate : Деактивировать тенант
+        tenant_deactivate --> idle : Тенант деактивирован ✓
+    }
+
+    state "Поддержка" as support {
+        idle --> support_msg : Клиент пишет в поддержку
+        support_msg --> idle : Сообщение доставлено агенту
+
+        idle --> tech_support_msg : Тикет в тех. поддержку
+        tech_support_msg --> idle : Тикет создан в platform_tickets
+    }
+
+    note right of idle
+        KV key: st:{chatId}
+        TTL: 7200 сек (2 часа)
+        Автоочистка по истечении
+    end note

@@ -109,6 +109,9 @@ export const appointments = sqliteTable("appointments", {
   googleEventId: text("google_event_id"),
   googleCalendarId: text("google_calendar_id"),
   googleIntegrationId: text("google_integration_id"),
+  syncRetries: integer("sync_retries").default(0),
+  syncRetryAfter: integer("sync_retry_after"),
+  syncLastError: text("sync_last_error"),
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_apt_tenant_date").on(t.tenantId, t.date),

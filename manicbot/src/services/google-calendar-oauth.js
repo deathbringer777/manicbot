@@ -39,6 +39,7 @@ function getTokenEncryptionKey(ctx) {
   if (ctx?.BOT_ENCRYPTION_KEY) return ctx.BOT_ENCRYPTION_KEY;
   const fallback = String(ctx?.ADMIN_KEY || '');
   if (!fallback) return null;
+  console.warn('[SECURITY] Using ADMIN_KEY as Google token encryption key — set BOT_ENCRYPTION_KEY for proper key separation');
   return `${fallback}${fallback}${fallback}${fallback}`;
 }
 

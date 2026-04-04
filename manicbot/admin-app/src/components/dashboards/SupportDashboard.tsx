@@ -11,14 +11,14 @@ const STATUS_STYLES: Record<string, string> = {
   open: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
   claimed: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
   escalated: "bg-red-500/20 text-red-400 border border-red-500/30",
-  closed: "bg-slate-700 text-slate-400",
+  closed: "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400",
 };
 
 const TICKET_BORDER: Record<string, string> = {
   open:      "border-l-amber-400",
   claimed:   "border-l-brand-400",
   escalated: "border-l-red-500",
-  closed:    "border-l-slate-700",
+  closed:    "border-l-slate-300 dark:border-l-slate-700",
 };
 
 type FilterStatus = "all" | "open" | "claimed" | "escalated" | "closed";
@@ -86,7 +86,7 @@ export function SupportDashboard() {
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setSelectedId(null)}
-              className="flex items-center gap-1 text-slate-400 hover:text-white text-sm transition-colors">
+              className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm transition-colors">
               <ArrowLeft className="h-4 w-4" /> {t("common.back", lang)}
             </button>
           </div>
@@ -100,7 +100,7 @@ export function SupportDashboard() {
               <div className="glass-card rounded-2xl p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-bold text-white">{ticketDetail.data.ticket.clientName ?? `#${ticketDetail.data.ticket.clientChatId}`}</p>
+                    <p className="font-bold text-slate-900 dark:text-white">{ticketDetail.data.ticket.clientName ?? `#${ticketDetail.data.ticket.clientChatId}`}</p>
                     <p className="text-xs text-slate-500">
                       {ticketDetail.data.ticket.tenantId ?? t("support.platform", lang)} · {relativeTime(ticketDetail.data.ticket.createdAt)}
                     </p>
@@ -144,8 +144,8 @@ export function SupportDashboard() {
                     <div key={msg.id} className={`flex ${isSupport ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
                         isSupport
-                          ? "bg-brand-500/20 text-brand-100 border border-brand-500/30"
-                          : "glass-card text-slate-200"
+                          ? "bg-brand-500/20 text-brand-700 dark:text-brand-100 border border-brand-500/30"
+                          : "glass-card text-slate-800 dark:text-slate-200"
                       }`}>
                         <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
                         {att?.startsWith("http") && (
@@ -179,7 +179,7 @@ export function SupportDashboard() {
                     value={replyAttachmentUrl}
                     onChange={(e) => setReplyAttachmentUrl(e.target.value)}
                     placeholder="Attachment URL (optional)"
-                    className="w-full bg-slate-800/80 border border-slate-700 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-500/50"
+                    className="w-full bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-500/50"
                   />
                   <div className="flex gap-2">
                     <textarea
@@ -187,7 +187,7 @@ export function SupportDashboard() {
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder={t("support.replyPlaceholder", lang)}
                       rows={2}
-                      className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
+                      className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
                     />
                     <button
                       onClick={() =>
@@ -217,7 +217,7 @@ export function SupportDashboard() {
     <Shell navItems={supportNavItems} title={t("support.title", lang)} subtitle="ManicBot Support">
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-white flex-1">{t("support.tickets", lang)}</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("support.tickets", lang)}</h2>
           {allTickets.isRefetching && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
         </div>
 
@@ -228,7 +228,7 @@ export function SupportDashboard() {
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
             placeholder="Search name, ticket id, tenant…"
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
+            className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
           />
         </div>
 
@@ -239,7 +239,7 @@ export function SupportDashboard() {
               className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
                 filter === f
                   ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
-                  : "text-slate-500 hover:text-slate-300"
+                  : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               }`}>
               {filterLabels[f]}
             </button>
@@ -261,14 +261,14 @@ export function SupportDashboard() {
             const border = TICKET_BORDER[ticket.status] ?? "border-l-slate-700";
             return (
               <button key={ticket.id} onClick={() => setSelectedId(ticket.id)}
-                className={`w-full glass-card rounded-xl border-l-2 ${border} flex items-center gap-3 text-left hover:bg-slate-800/60 transition-colors overflow-hidden`}>
+                className={`w-full glass-card rounded-xl border-l-2 ${border} flex items-center gap-3 text-left hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors overflow-hidden`}>
                 <div className="p-3 flex items-center gap-3 flex-1 min-w-0">
                   <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400">
                     {initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="font-semibold text-white text-sm truncate">{nameStr}</p>
+                      <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{nameStr}</p>
                       <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLES[ticket.status] ?? ""}`}>
                         {t(`status.${ticket.status}` as any, lang) ?? ticket.status}
                       </span>

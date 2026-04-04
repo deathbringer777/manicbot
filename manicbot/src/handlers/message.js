@@ -28,7 +28,7 @@ import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm, enterBookingAdjustState } from '../ui/booking.js';
-import { runWorkersAI, parseAIActions, executeAIAction } from '../ai.js';
+import { runWorkersAI, parseAIActions, executeAIAction, validateActionParams } from '../ai.js';
 import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage, isBookingConfirmDeclineText, parseServiceMention } from '../patterns.js';
 // timingSafeEqual imported above from security.js
 
@@ -181,6 +181,10 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
   let didAction = false;
   for (const { tag, param } of actions) {
     if (pageActions.includes(tag) || (tag === 'BOOK' && param)) {
+      if (!validateActionParams(tag, param)) {
+        console.warn(`[ai] rejected invalid action params: [${tag}:${param}]`);
+        continue;
+      }
       const ran = await executeAIAction(ctx, cid, realRole, tag, param, from);
       if (ran) { didAction = true; break; }
     }

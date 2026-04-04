@@ -144,13 +144,19 @@ export async function handleCron(ctx) {
       }
     }
 
-    // Phase 2: retry calendar sync for confirmed appointments missing a google_event_id
+    // Phase 2: retry calendar sync with exponential backoff (max 10 per cron run)
+    const MAX_SYNC_PER_CRON = 10;
     if (canUse(ctx, 'calendar')) {
       try {
         const futureTs = now - 60 * 60 * 1000; // allow 1h window for recently-past apts
         const unsynced = await dbAll(ctx,
-          "SELECT * FROM appointments WHERE tenant_id = ? AND status = 'confirmed' AND cancelled = 0 AND google_event_id IS NULL AND ts > ?",
-          ctx.tenantId, futureTs,
+          `SELECT * FROM appointments
+           WHERE tenant_id = ? AND status = 'confirmed' AND cancelled = 0
+             AND google_event_id IS NULL AND ts > ?
+             AND (sync_retries IS NULL OR sync_retries < 5)
+             AND (sync_retry_after IS NULL OR sync_retry_after < ?)
+           ORDER BY created_at ASC LIMIT ?`,
+          ctx.tenantId, futureTs, now, MAX_SYNC_PER_CRON,
         );
         for (const row of unsynced) {
           try {
@@ -166,13 +172,30 @@ export async function handleCron(ctx) {
             const result = await syncAppointmentCalendar(ctx, apt);
             if (result?.ok) {
               console.log(`[gcal] cron re-synced apt ${apt.id} (${apt.date} ${apt.time})`);
+              await dbRun(ctx,
+                'UPDATE appointments SET sync_retries = 0, sync_retry_after = NULL, sync_last_error = NULL WHERE id = ? AND tenant_id = ?',
+                apt.id, ctx.tenantId);
             } else if (result?.skipped) {
               // calendar not connected — skip silently
             } else {
-              console.warn(`[gcal] cron sync failed for apt ${apt.id}:`, result?.error);
+              const retries = (row.sync_retries || 0) + 1;
+              const backoffMs = Math.min(15 * 60 * 1000 * Math.pow(2, retries), 24 * 60 * 60 * 1000);
+              await dbRun(ctx,
+                'UPDATE appointments SET sync_retries = ?, sync_retry_after = ?, sync_last_error = ? WHERE id = ? AND tenant_id = ?',
+                retries, now + backoffMs, (result?.error || 'sync failed').slice(0, 200), apt.id, ctx.tenantId);
+              if (retries >= 5) {
+                console.error(`[gcal] sync permanently failed for apt ${apt.id} after ${retries} retries`);
+              } else {
+                console.warn(`[gcal] cron sync failed for apt ${apt.id} (retry ${retries}):`, result?.error);
+              }
             }
           } catch (e) {
-            console.error(`[gcal] cron sync error for apt ${row.id}:`, e.message);
+            const retries = (row.sync_retries || 0) + 1;
+            const backoffMs = Math.min(15 * 60 * 1000 * Math.pow(2, retries), 24 * 60 * 60 * 1000);
+            await dbRun(ctx,
+              'UPDATE appointments SET sync_retries = ?, sync_retry_after = ?, sync_last_error = ? WHERE id = ? AND tenant_id = ?',
+              retries, now + backoffMs, (e.message || 'unknown error').slice(0, 200), row.id, ctx.tenantId).catch(() => {});
+            console.error(`[gcal] cron sync error for apt ${row.id} (retry ${retries}):`, e.message);
           }
         }
       } catch (e) {

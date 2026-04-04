@@ -135,8 +135,14 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
   if (rawTok) {
     if (encKey) token = await decryptToken(rawTok, encKey);
     if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) {
-      console.error('[resolver] SECURITY: Using plaintext Meta token for tenant:', tenantId, '— set BOT_ENCRYPTION_KEY to encrypt at rest');
-      token = rawTok;
+      if (encKey) {
+        // Encryption key is set but decrypt failed — token is likely corrupted or not yet migrated
+        console.error('[resolver] SECURITY: Decrypt failed with BOT_ENCRYPTION_KEY set for tenant:', tenantId, '— run encrypt-tokens migration');
+      } else {
+        console.error('[resolver] SECURITY: Using plaintext Meta token for tenant:', tenantId, '— set BOT_ENCRYPTION_KEY to encrypt at rest');
+      }
+      // Allow plaintext fallback only when no encryption key is configured
+      token = encKey ? null : rawTok;
     }
   }
   const config = row.config ? JSON.parse(row.config) : {};

@@ -113,8 +113,24 @@ function addSecurityHeaders(resp) {
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
 
+let _securityValidated = false;
+function validateSecurityConfig(env) {
+  if (_securityValidated) return;
+  _securityValidated = true;
+  if (!env.BOT_ENCRYPTION_KEY) {
+    console.warn('[SECURITY] BOT_ENCRYPTION_KEY not set — tokens stored in plaintext in D1');
+  }
+  if (!env.META_APP_SECRET && (env.META_VERIFY_TOKEN_WA || env.META_VERIFY_TOKEN_IG)) {
+    console.warn('[SECURITY] META_APP_SECRET not set but Meta channels configured — webhooks unverified');
+  }
+  if (env.ADMIN_KEY && env.ADMIN_KEY.length < 32) {
+    console.warn('[SECURITY] ADMIN_KEY shorter than 32 chars — consider using a stronger key');
+  }
+}
+
 export default {
   async fetch(request, env, executionCtx) {
+    validateSecurityConfig(env);
     const url = new URL(request.url);
 
     // robots.txt

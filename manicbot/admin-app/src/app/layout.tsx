@@ -23,12 +23,12 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru" className={`${geist.variable}`} suppressHydrationWarning>
-      {/* Blocking script: add .dark class before first paint so dark:* Tailwind classes apply by default.
-          PublicThemeProvider removes .dark for auth pages when user switches to light theme. */}
+      {/* Blocking script: apply .dark before first paint based on stored preference (avoids flash).
+          Default is dark. Removed on toggle via WebShell which syncs document.documentElement. */}
       <head>
-        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('dark')" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('manicbot_web_theme')==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}" }} />
       </head>
-      <body className="bg-slate-950 text-slate-50 antialiased min-h-screen selection:bg-brand-500/30">
+      <body className="antialiased min-h-screen selection:bg-brand-500/30">
         <AuthProvider>
           <TRPCReactProvider>
             <LangProvider>{children}</LangProvider>

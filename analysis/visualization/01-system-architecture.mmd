@@ -1,0 +1,83 @@
+graph TD
+    subgraph Clients["Клиенты"]
+        TG_USER["Telegram пользователь"]
+        WA_USER["WhatsApp пользователь"]
+        IG_USER["Instagram пользователь"]
+        WEB_USER["Web браузер"]
+        TG_MINI["Telegram Mini App"]
+    end
+
+    subgraph External["Внешние сервисы"]
+        TG_API["Telegram Bot API"]
+        META_API["Meta Graph API<br/>(WhatsApp + Instagram)"]
+        STRIPE["Stripe API<br/>(Подписки, биллинг)"]
+        GOOGLE["Google Calendar API<br/>(OAuth2, синхронизация)"]
+        CF_AI["Cloudflare Workers AI<br/>(3 модели, fallback chain)"]
+    end
+
+    subgraph CloudflareEdge["Cloudflare Edge"]
+        subgraph Worker["Worker — manicbot/src/"]
+            ENTRY["worker.js<br/>HTTP Router + Cron"]
+            HTTP["http/*<br/>Route Handlers"]
+            HANDLERS["handlers/*<br/>message.js, callback.js,<br/>inbound.js, cron.js"]
+            SERVICES["services/*<br/>appointments, users,<br/>calendar, chat, state"]
+            CHANNELS["channels/*<br/>telegram, whatsapp,<br/>instagram adapters"]
+            BILLING["billing/*<br/>stripe, webhooks,<br/>features, lifecycle"]
+            AI_MOD["ai.js<br/>LLM integration +<br/>action tag parser"]
+            TENANT["tenant/*<br/>resolver, storage,<br/>migration"]
+            ROLES["roles/roles.js<br/>RBAC platform + tenant"]
+        end
+
+        subgraph Pages["Cloudflare Pages"]
+            ADMIN["Admin Mini-App<br/>Next.js 15 + tRPC 11<br/>admin-app/"]
+            LANDING["Landing Page<br/>React 19 + Vite<br/>manicbot-analysis/"]
+        end
+
+        subgraph Storage["Хранилище"]
+            D1[("Cloudflare D1<br/>SQLite<br/>26 таблиц")]
+            KV[("Cloudflare KV<br/>Состояние, кэш,<br/>TTL-данные")]
+        end
+    end
+
+    TG_USER -->|"Сообщение"| TG_API
+    WA_USER -->|"Сообщение"| META_API
+    IG_USER -->|"Сообщение"| META_API
+    WEB_USER -->|"HTTPS"| LANDING
+    TG_MINI -->|"HTTPS"| ADMIN
+
+    TG_API -->|"POST /webhook/:botId"| ENTRY
+    META_API -->|"POST /webhook/wa\nPOST /webhook/ig"| ENTRY
+
+    ENTRY --> HTTP
+    HTTP --> HANDLERS
+    HANDLERS --> SERVICES
+    HANDLERS --> AI_MOD
+    HANDLERS --> CHANNELS
+
+    SERVICES --> D1
+    SERVICES --> KV
+    TENANT --> D1
+    ROLES --> D1
+    BILLING --> D1
+
+    CHANNELS -->|"send()"| TG_API
+    CHANNELS -->|"Graph API"| META_API
+    BILLING -->|"Webhooks"| STRIPE
+    SERVICES -->|"OAuth2 + Events"| GOOGLE
+    AI_MOD -->|"REST / Binding"| CF_AI
+
+    ADMIN -->|"Drizzle ORM"| D1
+    ENTRY -->|"proxyToAdminApp()"| ADMIN
+    ENTRY -->|"tryLanding()"| LANDING
+
+    classDef client fill:#4a9eff,stroke:#2563eb,color:#fff
+    classDef external fill:#f59e0b,stroke:#d97706,color:#fff
+    classDef worker fill:#10b981,stroke:#059669,color:#fff
+    classDef pages fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    classDef storage fill:#ef4444,stroke:#dc2626,color:#fff
+
+    class TG_USER,WA_USER,IG_USER,WEB_USER,TG_MINI client
+    class TG_API,META_API,STRIPE,GOOGLE,CF_AI external
+    class ENTRY,HTTP,HANDLERS,SERVICES,CHANNELS,BILLING,AI_MOD,TENANT,ROLES worker
+    class ADMIN,LANDING pages
+    class D1,KV storage

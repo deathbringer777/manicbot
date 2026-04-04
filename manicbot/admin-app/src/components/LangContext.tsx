@@ -22,6 +22,13 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
+      // URL param from landing takes priority (e.g. /login?lang=pl)
+      const urlLang = new URLSearchParams(window.location.search).get("lang") as Lang | null;
+      if (urlLang && (["ru", "ua", "en", "pl"] as string[]).includes(urlLang)) {
+        setLangState(urlLang);
+        localStorage.setItem("manicbot_lang", urlLang);
+        return;
+      }
       const stored = localStorage.getItem("manicbot_lang") as Lang | null;
       if (stored && ["ru", "ua", "en", "pl"].includes(stored)) {
         setLangState(stored);

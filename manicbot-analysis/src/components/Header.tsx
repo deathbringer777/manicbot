@@ -7,7 +7,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import brandMark from "@/assets/manicbot-emoji-mark-ui.png";
 
 export function Header() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { theme } = useTheme();
   const [q, setQ] = useState("");
 
@@ -19,7 +19,7 @@ export function Header() {
       : "/search";
   };
 
-  const loginHref = `/login?theme=${theme}`;
+  const loginHref = `/login?theme=${theme}&lang=${locale}`;
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[rgba(5,8,18,0.82)]">

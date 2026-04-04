@@ -9,7 +9,7 @@ export function PublicLayoutClient({ children }: { children: React.ReactNode }) 
   return (
     <PublicThemeProvider>
       <LangProvider>
-        <div className="min-h-screen bg-slate-50 text-slate-900 antialiased transition-colors dark:bg-slate-950 dark:text-slate-50">
+        <div className="min-h-screen bg-slate-50 text-slate-900 antialiased transition-colors dark:bg-slate-950 dark:text-slate-50 animate-fade-in">
           <PublicHeader />
           <main className="pt-16">{children}</main>
           <PublicFooter />

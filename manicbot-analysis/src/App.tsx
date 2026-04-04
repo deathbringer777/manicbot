@@ -13,13 +13,7 @@ import { CtaSection } from "@/components/CtaSection";
 import { Footer } from "@/components/Footer";
 import { SeoHead } from "@/components/SeoHead";
 import { LegalPage } from "@/pages/LegalPage";
-
-const LEGAL_ROUTES: Record<string, string> = {
-  "/privacy": "privacy",
-  "/terms": "terms",
-  "/cookies": "cookies",
-  "/support": "support",
-};
+import { getLegalPage } from "@/lib/routes";
 
 function Landing() {
   return (
@@ -95,8 +89,7 @@ function Landing() {
 }
 
 export default function App() {
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
-  const legalPage = LEGAL_ROUTES[path];
+  const legalPage = getLegalPage();
 
   return (
     <ThemeProvider>

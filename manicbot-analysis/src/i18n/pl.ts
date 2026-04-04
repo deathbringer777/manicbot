@@ -297,7 +297,7 @@ export const pl: Translations = {
 
   footer: {
     tagline: "ManicBot — rezerwacje w Telegramie.",
-    links: ["Prywatność", "Regulamin", "Wsparcie"],
+    links: ["Prywatność", "Regulamin", "Zasady", "Wsparcie"],
     copy: "© 2026 ManicBot. Wszelkie prawa zastrzeżone.",
   },
 };

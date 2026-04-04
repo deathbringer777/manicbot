@@ -1,6 +1,6 @@
 import { useLanguage } from "@/i18n";
 
-const LINK_HREFS = ["/privacy", "/terms", "/support"];
+const LINK_HREFS = ["/privacy", "/terms", "/rules", "/support"];
 
 export function Footer() {
   const { t } = useLanguage();

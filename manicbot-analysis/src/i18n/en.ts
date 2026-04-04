@@ -287,6 +287,10 @@ export const en = {
     noResults: "Nothing found for",
     showAll: "Show all results",
     showAllFor: "Show all results for",
+    popularCities: "Popular cities",
+    quickHint: "Start typing a salon, city, or service, or pick a city below.",
+    keepTyping: "Type at least 2 characters to search salons and services.",
+    openCatalog: "Open catalog",
   },
 
   footer: {

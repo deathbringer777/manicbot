@@ -35,6 +35,13 @@ export const webUsersRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const hasEmailVerificationDelivery = Boolean(
+        process.env.RESEND_API_KEY ||
+        process.env.SMTP_HOST ||
+        process.env.MAILGUN_API_KEY ||
+        process.env.SENDGRID_API_KEY
+      );
+
       // Rate limit by IP
       const ip = (ctx as any).headers?.get?.("x-forwarded-for")?.split(",")[0]?.trim()
         ?? (ctx as any).headers?.get?.("cf-connecting-ip")
@@ -63,14 +70,19 @@ export const webUsersRouter = createTRPCRouter({
         role: input.role,
         name: input.name ?? null,
         referralSource: input.referralSource ?? null,
-        emailVerified: 0,
-        verificationToken,
-        verificationTokenExpiresAt: tokenExpiresAt,
+        emailVerified: hasEmailVerificationDelivery ? 0 : 1,
+        verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
+        verificationTokenExpiresAt: hasEmailVerificationDelivery ? tokenExpiresAt : null,
         tenantId: null,
         createdAt: now,
         updatedAt: now,
       });
-      return { id, email, verificationToken };
+      return {
+        id,
+        email,
+        verificationRequired: hasEmailVerificationDelivery,
+        verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
+      };
     }),
 
   /** Verify email address with token. */

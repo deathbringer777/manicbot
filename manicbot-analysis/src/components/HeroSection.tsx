@@ -9,7 +9,7 @@ export function HeroSection() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
   return (
-    <section className="relative overflow-hidden px-4 pb-16 pt-28 sm:pb-24">
+    <section className="relative overflow-visible px-4 pb-16 pt-28 sm:pb-24">
       <div
         className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(124,58,237,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(124,58,237,0.06)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(ellipse_90%_70%_at_50%_40%,black_28%,transparent_100%)] dark:[background-image:linear-gradient(rgba(124,58,237,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(124,58,237,0.05)_1px,transparent_1px)] dark:[background-size:60px_60px]"
         style={{
@@ -19,6 +19,10 @@ export function HeroSection() {
       />
 
       <div className="relative mx-auto max-w-6xl">
+        <div className="mx-auto mb-10 max-w-4xl lg:mb-12">
+          <SearchAutocomplete className="mx-auto max-w-4xl" />
+        </div>
+
         <div className="grid items-center gap-12 lg:grid-cols-[1fr_minmax(260px,320px)] lg:gap-16">
           <div className="order-2 text-center lg:order-1 lg:text-left">
             <div className="mb-5 inline-flex lg:flex">
@@ -45,11 +49,6 @@ export function HeroSection() {
             <p className="mx-auto mb-6 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0 dark:text-white/50">
               {t.hero.sub}
             </p>
-
-            {/* Search with autocomplete — positioned above CTAs for maximum prominence */}
-            <div className="mb-6">
-              <SearchAutocomplete />
-            </div>
 
             <div className="mb-5 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
               <button

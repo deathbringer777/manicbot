@@ -289,6 +289,10 @@ export const pl: Translations = {
     noResults: "Nic nie znaleziono dla",
     showAll: "Pokaż wszystkie wyniki",
     showAllFor: "Pokaż wszystkie wyniki dla",
+    popularCities: "Popularne miasta",
+    quickHint: "Zacznij wpisywać salon, miasto lub usługę albo wybierz miasto poniżej.",
+    keepTyping: "Wpisz co najmniej 2 znaki, aby szukać salonów i usług.",
+    openCatalog: "Otwórz katalog",
   },
 
   footer: {

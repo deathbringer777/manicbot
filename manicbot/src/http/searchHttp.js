@@ -4,6 +4,9 @@ import { envCtx } from './envCtx.js';
  * Public search API — no auth required.
  * GET /api/search/autocomplete?q=...
  * Returns JSON: { salons: [{slug,name,city,coverPhoto}], articles: [{slug,title}] }
+ *
+ * GET /api/search/cities
+ * Returns JSON: { cities: string[] }
  */
 const RATE_LIMIT_WINDOW = 60;  // seconds
 const RATE_LIMIT_MAX = 30;     // requests per window per IP
@@ -19,8 +22,10 @@ async function checkSearchRateLimit(kv, ip) {
 }
 
 export async function trySearchApi(request, env, url) {
-  // Only handle GET /api/search/autocomplete
-  if (request.method !== 'GET' || url.pathname !== '/api/search/autocomplete') {
+  const isAutocomplete = url.pathname === '/api/search/autocomplete';
+  const isCities = url.pathname === '/api/search/cities';
+
+  if (request.method !== 'GET' || (!isAutocomplete && !isCities)) {
     return null;
   }
 
@@ -29,6 +34,39 @@ export async function trySearchApi(request, env, url) {
   const allowed = await checkSearchRateLimit(env.MANICBOT, ip);
   if (!allowed) {
     return Response.json({ error: 'Too many requests' }, { status: 429, headers: corsHeaders() });
+  }
+
+  if (!isAutocomplete) {
+    const ec = envCtx(env);
+    if (!ec.db) {
+      return Response.json({ cities: [] }, {
+        headers: corsHeaders(),
+      });
+    }
+
+    let cities = [];
+    try {
+      const stmt = ec.db.prepare(
+        `SELECT MIN(city) AS city, COUNT(*) AS total
+           FROM tenants
+          WHERE public_active = 1
+            AND city IS NOT NULL
+            AND TRIM(city) <> ''
+          GROUP BY LOWER(TRIM(city))
+          ORDER BY total DESC, LOWER(MIN(city)) ASC
+          LIMIT 8`
+      );
+      const result = await stmt.all();
+      cities = (result.results || [])
+        .map((row) => (row.city || '').trim())
+        .filter(Boolean);
+    } catch (e) {
+      console.error('[search/cities] D1 error:', e?.message);
+    }
+
+    return Response.json({ cities }, {
+      headers: corsHeaders(),
+    });
   }
 
   const q = (url.searchParams.get('q') || '').trim();

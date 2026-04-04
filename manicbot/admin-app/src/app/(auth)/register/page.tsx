@@ -5,6 +5,7 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Lock, Mail, User, Building2 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
 import { api } from "~/trpc/react";
 import {
   AuthShell,
@@ -13,9 +14,12 @@ import {
   authPrimaryButtonClassName,
   authSecondaryButtonClassName,
 } from "~/components/auth/AuthShell";
+import { authCopy } from "~/components/auth/copy";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { lang } = useLang();
+  const copy = authCopy[lang];
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,6 +29,7 @@ export default function RegisterPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [hasGoogle, setHasGoogle] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -68,32 +73,38 @@ export default function RegisterPage() {
       form.submit();
     } catch {
       setGoogleLoading(false);
-      setError("Не удалось начать вход через Google");
+      setError(copy.register.googleStartError);
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuccessMessage(null);
 
     if (password !== confirmPassword) {
-      setError("Пароли не совпадают");
+      setError(copy.register.passwordsMismatch);
       return;
     }
     if (password.length < 12) {
-      setError("Пароль должен содержать минимум 12 символов");
+      setError(copy.register.passwordTooShort);
       return;
     }
 
     startTransition(async () => {
       try {
-        await registerMutation.mutateAsync({
+        const registration = await registerMutation.mutateAsync({
           email: email.trim().toLowerCase(),
           password,
           role,
           name: name.trim() || undefined,
           referralSource: referralSource || undefined,
         });
+
+        if (registration.verificationRequired) {
+          setSuccessMessage(copy.register.verifyNotice);
+          return;
+        }
 
         const result = await signIn("credentials", {
           email: email.trim().toLowerCase(),
@@ -108,10 +119,10 @@ export default function RegisterPage() {
         }
       } catch (err: any) {
         const msg = err?.message ?? "";
-        if (msg.includes("already exists")) {
-          setError("Пользователь с таким email уже существует");
+        if (msg.includes("already exists") || msg.includes("Registration failed")) {
+          setError(copy.register.conflict);
         } else {
-          setError(msg || "Ошибка регистрации");
+          setError(msg || copy.register.registrationError);
         }
       }
     });
@@ -119,16 +130,16 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      badge="Create Workspace"
-      title="Регистрация в том же визуальном ритме, что и лендинг, без ощущения отдельного сервиса."
-      description="Создайте кабинет для салона или мастера, а дальше уже подключайте каналы, календарь и публичную страницу. Экран собран так, чтобы и на телефоне, и на ноутбуке он ощущался аккуратно и живо."
-      panelTitle="Создать кабинет"
-      panelDescription="Заполните базовые данные, выберите роль и продолжайте настройку без лишних шагов."
+      eyebrow={copy.register.kicker}
+      title={copy.register.title}
+      description={copy.register.description}
+      panelTitle={copy.register.panelTitle}
+      panelDescription={copy.register.panelDescription}
       footer={
         <p className="text-center text-sm">
-          Уже есть аккаунт?{" "}
-          <Link href="/login" className="font-medium text-cyan-200 transition hover:text-white">
-            Войти
+          {copy.register.hasAccount}{" "}
+          <Link href="/login" className="font-medium text-cyan-700 transition hover:text-slate-900 dark:text-cyan-200 dark:hover:text-white">
+            {copy.register.login}
           </Link>
         </p>
       }
@@ -136,7 +147,7 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.login.email}</label>
             <div className="relative">
               <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -152,36 +163,36 @@ export default function RegisterPage() {
           </div>
 
           <div className="sm:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-200">Роль</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.role}</label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => setRole("tenant_owner")}
                 className={`rounded-2xl border px-4 py-3 text-sm font-medium transition ${
                   role === "tenant_owner"
-                    ? "border-cyan-300/30 bg-cyan-400/12 text-cyan-100"
-                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                    ? "border-cyan-300/40 bg-cyan-50 text-cyan-700 dark:border-cyan-300/30 dark:bg-cyan-400/12 dark:text-cyan-100"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]"
                 }`}
               >
-                Владелец салона
+                {copy.register.roleOwner}
               </button>
               <button
                 type="button"
                 onClick={() => setRole("master")}
                 className={`rounded-2xl border px-4 py-3 text-sm font-medium transition ${
                   role === "master"
-                    ? "border-cyan-300/30 bg-cyan-400/12 text-cyan-100"
-                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                    ? "border-cyan-300/40 bg-cyan-50 text-cyan-700 dark:border-cyan-300/30 dark:bg-cyan-400/12 dark:text-cyan-100"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]"
                 }`}
               >
-                Мастер
+                {copy.register.roleMaster}
               </button>
             </div>
           </div>
 
           <div className="sm:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-200">
-              {role === "tenant_owner" ? "Название салона" : "Ваше имя"}
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              {role === "tenant_owner" ? copy.register.salonName : copy.register.yourName}
             </label>
             <div className="relative">
               {role === "tenant_owner" ? (
@@ -193,15 +204,15 @@ export default function RegisterPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={role === "tenant_owner" ? "Beauty Studio" : "Анна Иванова"}
+                placeholder={role === "tenant_owner" ? "Beauty Studio" : "Anna Ivanova"}
                 className={authFieldWithIconsClassName}
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">
-              Пароль <span className="font-normal text-slate-400">(мин. 12 символов)</span>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              {copy.register.password} <span className="font-normal text-slate-400">({copy.register.passwordHint})</span>
             </label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -217,8 +228,8 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setShowPwd((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-200"
-                aria-label={showPwd ? "Скрыть пароль" : "Показать пароль"}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
+                aria-label={showPwd ? copy.register.hidePassword : copy.register.showPassword}
               >
                 {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -226,7 +237,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Подтверждение пароля</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.confirmPassword}</label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -241,8 +252,8 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-200"
-                aria-label={showConfirm ? "Скрыть пароль" : "Показать пароль"}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
+                aria-label={showConfirm ? copy.register.hidePassword : copy.register.showPassword}
               >
                 {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -250,24 +261,30 @@ export default function RegisterPage() {
           </div>
 
           <div className="sm:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-200">Где узнали о нас?</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.referral}</label>
             <select
               value={referralSource}
               onChange={(e) => setReferralSource(e.target.value)}
               className={`${authFieldClassName} appearance-none`}
             >
-              <option value="">Выберите источник</option>
-              <option value="google">Google</option>
-              <option value="instagram">Instagram</option>
-              <option value="telegram">Telegram</option>
-              <option value="friends">Друзья / знакомые</option>
-              <option value="other">Другое</option>
+              <option value="">{copy.register.referralPlaceholder}</option>
+              <option value="google">{copy.register.referralGoogle}</option>
+              <option value="instagram">{copy.register.referralInstagram}</option>
+              <option value="telegram">{copy.register.referralTelegram}</option>
+              <option value="friends">{copy.register.referralFriends}</option>
+              <option value="other">{copy.register.referralOther}</option>
             </select>
           </div>
         </div>
 
+        {successMessage && (
+          <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+            {successMessage}
+          </p>
+        )}
+
         {error && (
-          <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
             {error}
           </p>
         )}
@@ -277,16 +294,16 @@ export default function RegisterPage() {
           disabled={isPending}
           className={authPrimaryButtonClassName}
         >
-          {isPending ? "Регистрация..." : "Зарегистрироваться"}
+          {isPending ? copy.register.submitting : copy.register.submit}
         </button>
       </form>
 
       {hasGoogle && (
         <>
           <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/10" />
-            <span className="text-xs uppercase tracking-[0.24em] text-slate-400">или</span>
-            <div className="h-px flex-1 bg-white/10" />
+            <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+            <span className="text-xs uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">{copy.shared.or}</span>
+            <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
           </div>
 
           <button
@@ -301,7 +318,7 @@ export default function RegisterPage() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
-            {googleLoading ? "Перенаправление..." : "Войти через Google"}
+            {googleLoading ? copy.register.googleLoading : copy.register.google}
           </button>
         </>
       )}

@@ -16,6 +16,7 @@
 
 import { makeInbound } from './types.js';
 import { nowSec } from '../utils/time.js';
+import { graphPost } from './graph-api.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 const MAX_BUTTON_BUTTONS = 3;
@@ -324,24 +325,6 @@ export class WhatsAppAdapter {
       console.error('[wa] missing token or phone_number_id');
       return { ok: false, error: 'not_configured' };
     }
-    try {
-      const res = await fetch(`${GRAPH_API}${path}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this._token}`,
-        },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        console.error(`[wa] POST ${path} failed ${res.status}:`, JSON.stringify(data));
-        return { ok: false, status: res.status, error: data.error?.message ?? 'unknown' };
-      }
-      return { ok: true, data };
-    } catch (e) {
-      console.error('[wa] fetch error:', e.message);
-      return { ok: false, error: e.message };
-    }
+    return graphPost(path, this._token, body, { label: 'wa' });
   }
 }

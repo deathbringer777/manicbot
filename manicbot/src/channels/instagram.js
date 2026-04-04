@@ -17,8 +17,7 @@
 
 import { makeInbound } from './types.js';
 import { isWithinMessageWindow } from '../handlers/inbound.js';
-
-const GRAPH_API = 'https://graph.facebook.com/v21.0';
+import { graphPost } from './graph-api.js';
 
 /**
  * Parse Worker secret INSTAGRAM_IGNORE_SENDER_IDS (comma/whitespace-separated IGSIDs).
@@ -100,8 +99,14 @@ export class InstagramAdapter {
       if (messaging.message) {
         text = messaging.message.text ?? null;
         if (messaging.message.attachments?.length) {
-          const att = messaging.message.attachments[0];
-          if (att.type === 'image') photo = att.payload?.url ?? null;
+          for (const att of messaging.message.attachments) {
+            if (att.type === 'image' && !photo) {
+              photo = att.payload?.url ?? null;
+            }
+          }
+          if (messaging.message.attachments.length > 1) {
+            console.warn('[ig] normalizeMessaging: received', messaging.message.attachments.length, 'attachments, only first image kept');
+          }
         }
         if (messaging.message.quick_reply) {
           callbackData = messaging.message.quick_reply.payload ?? null;
@@ -292,24 +297,6 @@ export class InstagramAdapter {
       console.error('[ig] missing token or page_id');
       return { ok: false, error: 'not_configured' };
     }
-    try {
-      const res = await fetch(`${GRAPH_API}${path}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this._token}`,
-        },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        console.error(`[ig] POST ${path} failed ${res.status}:`, JSON.stringify(data));
-        return { ok: false, status: res.status, error: data.error?.message ?? 'unknown' };
-      }
-      return { ok: true, data };
-    } catch (e) {
-      console.error('[ig] fetch error:', e.message);
-      return { ok: false, error: e.message };
-    }
+    return graphPost(path, this._token, body, { label: 'ig' });
   }
 }

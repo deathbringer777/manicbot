@@ -180,10 +180,17 @@ export async function handleCron(ctx) {
       }
     }
 
-    // Phase 3: cleanup
+    // Phase 3: cleanup expired/cancelled appointments
     await dbRun(ctx,
       'DELETE FROM appointments WHERE tenant_id = ? AND (cancelled = 1 OR ts < ?)',
       ctx.tenantId, now - CLEANUP_AFTER_MS,
+    );
+
+    // Phase 4: cleanup stale message windows (>30 days inactive)
+    const staleThresholdSec = Math.floor((now - 30 * 24 * 3600 * 1000) / 1000);
+    await dbRun(ctx,
+      'DELETE FROM message_windows WHERE tenant_id = ? AND last_user_message_at < ?',
+      ctx.tenantId, staleThresholdSec,
     );
   } catch (e) {
     console.error('Cron error:', e.message);

@@ -4,6 +4,7 @@ import { runSeed } from '../admin/seed.js';
 import { registerBot, createTenant } from '../admin/provisioning.js';
 import { getTenant, putTenant, putBot, listTenantIds, getBotIdsByTenantId, getBot, getBotToken } from '../tenant/storage.js';
 import { envCtx } from './envCtx.js';
+import { logEvent } from '../utils/events.js';
 
 /**
  * @param {Request} request
@@ -114,6 +115,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
         }).catch(() => {});
         results.push({ botId, tenantId, webhook: whRes.ok, webhookUrl: whUrl });
       }
+      void logEvent(ec, 'admin.provision', { level: 'info', message: `Provisioned ${results.length} bot(s)` });
       return Response.json({ ok: true, results });
     } catch (e) {
       console.error('[admin/provision]', e?.message, e?.stack);
@@ -156,6 +158,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
         tokenToStore, Math.floor(Date.now() / 1000), tenantId,
       );
 
+      void logEvent(ec, 'admin.ig_token', { tenantId, level: 'info', message: 'IG token updated' });
       return Response.json({
         ok: true,
         graphMe: { id: meData.id, name: meData.name },
@@ -397,6 +400,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       return Response.json({ error: e.message }, { status: 500 });
     }
 
+    void logEvent(ec, 'admin.web_user', { tenantId, level: 'info', message: `Web user created: ${normalizedEmail} (${role})` });
     return Response.json({ ok: true, email: normalizedEmail, tenantId, role });
   }
 

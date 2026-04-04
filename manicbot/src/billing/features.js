@@ -36,7 +36,9 @@ export function canUse(ctx, feature) {
   if (status === 'inactive' || status === 'canceled') return false;
 
   // Grace period — only core booking works; no AI, support, calendar, channels
+  // If grace period expired (graceEndsAt passed), treat as inactive
   if (status === 'grace_period') {
+    if (ctx.tenant.graceEndsAt && nowSec() > ctx.tenant.graceEndsAt) return false;
     return feature === 'booking';
   }
 

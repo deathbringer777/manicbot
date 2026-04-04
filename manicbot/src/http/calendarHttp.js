@@ -3,11 +3,19 @@ import { getLang } from '../services/chat.js';
 import { makeICS } from '../utils/ics.js';
 import { initServices } from '../services/services.js';
 
-async function verifyCalendarSig(aptId, sig, secret) {
+const ICS_LINK_MAX_AGE_SEC = 7 * 24 * 3600; // 7 days
+
+async function verifyCalendarSig(aptId, sig, secret, ts) {
   if (!sig || !secret) return false;
+  // If timestamp provided, reject links older than 7 days
+  if (ts) {
+    const age = Date.now() / 1000 - Number(ts);
+    if (!Number.isFinite(age) || age > ICS_LINK_MAX_AGE_SEC || age < -300) return false;
+  }
+  const payload = ts ? `${aptId}:${ts}` : aptId; // backward compat: old links have no ts
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(aptId));
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
   const expected = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
   if (sig.length !== expected.length) return false;
   let diff = 0;
@@ -33,8 +41,9 @@ export async function tryCalendar(request, ctx, url) {
   }
 
   const sig = url.searchParams.get('sig') || '';
+  const ts = url.searchParams.get('ts') || null;
   const secret = ctx.BOT_ENCRYPTION_KEY || ctx.ADMIN_KEY || '';
-  if (!await verifyCalendarSig(aptId, sig, secret)) {
+  if (!await verifyCalendarSig(aptId, sig, secret, ts)) {
     return new Response('Forbidden', { status: 403 });
   }
 

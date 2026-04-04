@@ -8,12 +8,11 @@ import { setupDevPlatform } from "@cloudflare/next-on-pages/next-dev";
 /** @type {import("next").NextConfig} */
 const config = {
   transpilePackages: [],
-  async redirects() {
+  async rewrites() {
     return [
       {
         source: "/dashboard",
         destination: "/",
-        permanent: true,
       },
     ];
   },

@@ -12,9 +12,9 @@ describe("Google sign-in form POST logic", () => {
     expect(action).toBe("/api/auth/signin/google");
   });
 
-  it("callbackUrl should default to / (dashboard root)", () => {
-    const callbackUrl = "/";
-    expect(callbackUrl).toBe("/");
+  it("callbackUrl should be /dashboard (proxied by Worker)", () => {
+    const callbackUrl = "/dashboard";
+    expect(callbackUrl).toBe("/dashboard");
   });
 
   it("CSRF token must be included in form POST", () => {

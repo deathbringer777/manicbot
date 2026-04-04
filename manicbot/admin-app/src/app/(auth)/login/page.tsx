@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { signIn, getProviders } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, Sparkles } from "lucide-react";
 
@@ -14,11 +14,23 @@ export default function LoginPage() {
   const [isPending, startTransition] = useTransition();
   const [hasGoogle, setHasGoogle] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const { status } = useSession();
 
+  // Redirect already-authenticated users to dashboard
   useEffect(() => {
-    getProviders().then((p) => {
-      if (p?.google) setHasGoogle(true);
-    }).catch(() => {});
+    if (status === "authenticated") {
+      router.replace("/dashboard");
+    }
+  }, [status, router]);
+
+  // Check if Google provider is configured (direct fetch, no SessionProvider dependency)
+  useEffect(() => {
+    fetch("/api/auth/providers")
+      .then((r) => r.json())
+      .then((p: Record<string, unknown>) => {
+        if (p?.google) setHasGoogle(true);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleGoogleSignIn() {
@@ -37,7 +49,7 @@ export default function LoginPage() {
       const cbInput = document.createElement("input");
       cbInput.type = "hidden";
       cbInput.name = "callbackUrl";
-      cbInput.value = "/";
+      cbInput.value = "/dashboard";
       form.appendChild(cbInput);
       document.body.appendChild(form);
       form.submit();
@@ -59,7 +71,7 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Неверный email или пароль");
       } else {
-        router.push("/");
+        router.push("/dashboard");
         router.refresh();
       }
     });

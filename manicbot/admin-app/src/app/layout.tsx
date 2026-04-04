@@ -5,6 +5,7 @@ import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "~/trpc/react";
 import { LangProvider } from "~/components/LangContext";
+import { AuthProvider } from "~/components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "ManicBot — Dashboard",
@@ -23,9 +24,11 @@ export default function RootLayout({
   return (
     <html lang="ru" className={`${geist.variable}`}>
       <body className="bg-slate-950 text-slate-50 antialiased min-h-screen selection:bg-brand-500/30">
-        <TRPCReactProvider>
-          <LangProvider>{children}</LangProvider>
-        </TRPCReactProvider>
+        <AuthProvider>
+          <TRPCReactProvider>
+            <LangProvider>{children}</LangProvider>
+          </TRPCReactProvider>
+        </AuthProvider>
       </body>
     </html>
   );

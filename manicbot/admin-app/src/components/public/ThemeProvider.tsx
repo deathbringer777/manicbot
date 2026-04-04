@@ -47,17 +47,14 @@ export function PublicThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
 
   useLayoutEffect(() => {
-    const stored = readStoredTheme();
-    setThemeState(stored);
-    applyDomTheme(stored);
-  }, []);
-
-  useLayoutEffect(() => {
-    applyDomTheme(theme);
-  }, [theme]);
+    const initial = readStoredTheme();
+    setThemeState(initial);
+    applyDomTheme(initial);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
+    applyDomTheme(t);
     try {
       localStorage.setItem(STORAGE_KEY, t);
     } catch {

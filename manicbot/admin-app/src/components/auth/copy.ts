@@ -5,6 +5,7 @@ export const authCopy: Record<
   {
     shared: {
       back: string;
+      loginButton: string;
       brandTitle: string;
       brandSubtitle: string;
       themeLight: string;
@@ -78,6 +79,7 @@ export const authCopy: Record<
   ru: {
     shared: {
       back: "Назад",
+      loginButton: "Войти",
       brandTitle: "ManicBot",
       brandSubtitle: "Платформа записи для салонов и мастеров",
       themeLight: "Светлая",
@@ -150,6 +152,7 @@ export const authCopy: Record<
   ua: {
     shared: {
       back: "Назад",
+      loginButton: "Увійти",
       brandTitle: "ManicBot",
       brandSubtitle: "Платформа запису для салонів і майстрів",
       themeLight: "Світла",
@@ -222,6 +225,7 @@ export const authCopy: Record<
   en: {
     shared: {
       back: "Back",
+      loginButton: "Log in",
       brandTitle: "ManicBot",
       brandSubtitle: "Booking platform for salons and beauty masters",
       themeLight: "Light",
@@ -294,6 +298,7 @@ export const authCopy: Record<
   pl: {
     shared: {
       back: "Wróć",
+      loginButton: "Zaloguj",
       brandTitle: "ManicBot",
       brandSubtitle: "Platforma rezerwacji dla salonów i stylistek",
       themeLight: "Jasna",

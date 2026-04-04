@@ -59,7 +59,7 @@ export function PublicHeader() {
           </button>
           <Link
             href="/login"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200/80 px-2.5 py-2 text-xs font-medium text-slate-600 transition-all duration-200 hover:border-slate-300 hover:text-slate-900 sm:px-3.5 dark:border-white/10 dark:text-white/50 dark:hover:border-white/20 dark:hover:text-white/80"
+            className="flex items-center gap-1.5 rounded-xl border border-violet-300/50 bg-[linear-gradient(135deg,rgba(124,58,237,0.06),rgba(6,182,212,0.06))] px-2.5 py-2 text-xs font-semibold text-violet-700 shadow-[0_0_0_0_rgba(124,58,237,0)] transition-all duration-300 hover:scale-[1.04] hover:border-violet-400 hover:shadow-[0_4px_20px_-6px_rgba(124,58,237,0.3)] sm:px-3.5 dark:border-violet-400/20 dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.12),rgba(6,182,212,0.1))] dark:text-violet-200 dark:hover:border-violet-400/40 dark:hover:shadow-[0_4px_20px_-6px_rgba(124,58,237,0.35)]"
             aria-label="Войти"
           >
             <LogIn className="h-4 w-4 shrink-0" />

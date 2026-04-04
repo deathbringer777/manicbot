@@ -79,7 +79,7 @@ function AuthShellInner({
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 transition-colors dark:bg-[#050816] dark:text-white">
+    <div className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 transition-all duration-500 ease-out dark:bg-[#050816] dark:text-white animate-[fadeIn_0.4s_ease-out]">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(232,121,160,0.15),transparent_26%),radial-gradient(circle_at_top_right,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_50%_120%,rgba(124,58,237,0.16),transparent_38%),linear-gradient(180deg,#f8fbff_0%,#eef2ff_48%,#f8fbff_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(232,121,160,0.18),transparent_28%),radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_24%),radial-gradient(circle_at_50%_120%,rgba(124,58,237,0.22),transparent_38%),linear-gradient(180deg,#080b1a_0%,#050816_52%,#090f1f_100%)]" />
         <div className="absolute -left-10 top-16 h-40 w-40 rounded-full bg-fuchsia-400/20 blur-3xl dark:bg-fuchsia-500/20 sm:h-72 sm:w-72" />
@@ -89,12 +89,12 @@ function AuthShellInner({
       </div>
 
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-4 pb-8 pt-4 sm:px-6 sm:pb-10 sm:pt-6 lg:px-8">
-        <header className="rounded-[28px] border border-slate-200/80 bg-white/75 p-3 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.4)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_30px_100px_-50px_rgba(2,6,23,0.95)]">
+        <header className="animate-fade-in rounded-[28px] border border-slate-200/80 bg-white/75 p-3 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.4)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[0_30px_100px_-50px_rgba(2,6,23,0.95)]">
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={handleBack}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85 dark:hover:bg-white/[0.08]"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition-all duration-200 hover:scale-[1.02] hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85 dark:hover:bg-white/[0.08]"
             >
               <ArrowLeft className="h-4 w-4 shrink-0" />
               <span>{copy.shared.back}</span>
@@ -122,6 +122,14 @@ function AuthShellInner({
             </div>
 
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              {/* "Войти" CTA — matches landing page header style */}
+              <a
+                href="/login"
+                className="hidden items-center rounded-xl border border-violet-300/60 bg-[linear-gradient(135deg,rgba(124,58,237,0.08),rgba(6,182,212,0.08))] px-4 py-2 text-xs font-semibold text-violet-700 shadow-[0_0_0_0_rgba(124,58,237,0)] transition-all duration-300 hover:scale-[1.04] hover:border-violet-400 hover:shadow-[0_4px_20px_-6px_rgba(124,58,237,0.35)] sm:flex dark:border-violet-400/20 dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.15),rgba(6,182,212,0.12))] dark:text-violet-200 dark:hover:border-violet-400/40 dark:hover:shadow-[0_4px_20px_-6px_rgba(124,58,237,0.4)]"
+              >
+                {copy.shared.loginButton}
+              </a>
+
               <div className="flex items-center rounded-full border border-slate-200/90 bg-white/90 p-1 dark:border-white/10 dark:bg-white/[0.05]">
                 <button
                   type="button"
@@ -169,7 +177,7 @@ function AuthShellInner({
           </div>
         </header>
 
-        <div className="grid flex-1 items-center gap-10 pt-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(380px,470px)] lg:gap-14 lg:pt-12">
+        <div className="animate-slide-up grid flex-1 items-center gap-10 pt-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(380px,470px)] lg:gap-14 lg:pt-12">
           <div className="max-w-2xl">
             <div className="inline-flex items-center rounded-full border border-slate-200/90 bg-white/70 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-700 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.05] dark:text-cyan-200/85">
               {eyebrow}

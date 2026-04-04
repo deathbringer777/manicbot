@@ -6,7 +6,7 @@
  * @returns {boolean}
  */
 export function isAdminAppPath(pathname) {
-  if (pathname === '/') return true;
+  // NOTE: '/' is intentionally NOT proxied to admin-app — root serves the landing page.
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
   if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
   if (pathname.startsWith('/_next/')) return true;

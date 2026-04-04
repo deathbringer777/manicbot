@@ -7,7 +7,6 @@ import { isAdminAppPath } from '../src/http/adminAppProxy.js';
 
 describe('isAdminAppPath', () => {
   it.each([
-    ['/'],
     ['/dashboard'],
     ['/dashboard/foo'],
     ['/login'],
@@ -36,6 +35,7 @@ describe('isAdminAppPath', () => {
   });
 
   it.each([
+    ['/'],           // root → landing page, NOT admin-app
     ['/webhook'],
     ['/webhook/bot123'],
     ['/admin/migrate'],

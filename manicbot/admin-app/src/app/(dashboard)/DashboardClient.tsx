@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { OverviewChart } from "~/components/dashboard/OverviewChart";
@@ -11,6 +11,8 @@ import {
   CalendarDays,
   CreditCard,
   Clock,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { formatPlnWhole } from "~/lib/money";
 
@@ -114,6 +116,135 @@ const PERIODS = [
   { label: "90д", days: 90 },
 ];
 
+// ─── MiniCalendar ─────────────────────────────────────────────────
+
+const WEEKDAYS_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+function MiniCalendar({ data }: { data: { date: string; appointments: number }[] }) {
+  const [viewDate, setViewDate] = useState(() => new Date());
+
+  const dayMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    data.forEach((d) => { m[d.date] = (m[d.date] ?? 0) + d.appointments; });
+    return m;
+  }, [data]);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (number | null)[] = [
+    ...Array<null>(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  const today = new Date();
+  const isToday = (day: number) =>
+    today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+
+  const fmtISO = (day: number) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+  const monthLabel = viewDate.toLocaleString("default", { month: "long", year: "numeric" });
+
+  const maxCount = Math.max(1, ...Object.values(dayMap));
+
+  return (
+    <div className="glass-card rounded-2xl p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="w-4 h-4 text-brand-400" />
+          <h2 className="text-sm font-bold text-white capitalize">{monthLabel}</h2>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setViewDate(new Date(year, month - 1))}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewDate(new Date())}
+            className="px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
+          >
+            сейчас
+          </button>
+          <button
+            onClick={() => setViewDate(new Date(year, month + 1))}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {WEEKDAYS_SHORT.map((d) => (
+          <div key={d} className="text-center text-[10px] font-medium text-slate-500 py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-px">
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`empty-${i}`} />;
+          const iso = fmtISO(day);
+          const count = dayMap[iso] ?? 0;
+          const intensity = count > 0 ? Math.min(1, count / maxCount) : 0;
+
+          return (
+            <a
+              key={iso}
+              href={`/appointments?date=${iso}`}
+              className={`relative flex flex-col items-center justify-center rounded-lg h-9 text-xs transition-all group ${
+                isToday(day)
+                  ? "bg-brand-500 text-white font-bold shadow-md shadow-brand-500/30"
+                  : count > 0
+                  ? "hover:bg-brand-500/20 text-slate-200"
+                  : "hover:bg-white/[0.05] text-slate-500"
+              }`}
+              style={
+                !isToday(day) && count > 0
+                  ? { backgroundColor: `rgba(99,102,241,${0.08 + intensity * 0.2})` }
+                  : undefined
+              }
+              title={count > 0 ? `${count} записей` : undefined}
+            >
+              <span>{day}</span>
+              {count > 0 && (
+                <span
+                  className={`text-[8px] font-medium leading-none mt-0.5 ${
+                    isToday(day) ? "text-white/80" : "text-brand-400"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
+            </a>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded bg-brand-500" />
+          <span>Сегодня</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded bg-brand-500/20" />
+          <span>Записи</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────
 
 export default function DashboardClient() {
@@ -123,6 +254,7 @@ export default function DashboardClient() {
     refetchInterval: 60_000,
   });
   const { data: chart } = api.metrics.getChartData.useQuery({ days: period });
+  const { data: chart90 } = api.metrics.getChartData.useQuery({ days: 90 });
 
   const s = stats;
 
@@ -185,27 +317,33 @@ export default function DashboardClient() {
           </div>
         )}
 
-        {/* Chart */}
-        <div className="glass-card rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-white">Записи по дням</h2>
-            <div className="flex gap-1">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.days}
-                  onClick={() => setPeriod(p.days)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    period === p.days
-                      ? "bg-brand-500/20 text-brand-400"
-                      : "text-slate-400 hover:bg-slate-800 active:bg-slate-700"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+        {/* Chart + Calendar side by side on wide screens */}
+        <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+          {/* Chart */}
+          <div className="glass-card rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-bold text-white">Записи по дням</h2>
+              <div className="flex gap-1">
+                {PERIODS.map((p) => (
+                  <button
+                    key={p.days}
+                    onClick={() => setPeriod(p.days)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                      period === p.days
+                        ? "bg-brand-500/20 text-brand-400"
+                        : "text-slate-400 hover:bg-slate-800 active:bg-slate-700"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <OverviewChart data={chart ?? []} />
           </div>
-          <OverviewChart data={chart ?? []} />
+
+          {/* Calendar */}
+          <MiniCalendar data={chart90 ?? []} />
         </div>
 
         {/* Recent activity */}

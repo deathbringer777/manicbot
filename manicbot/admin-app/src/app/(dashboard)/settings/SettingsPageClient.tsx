@@ -133,7 +133,7 @@ export default function SettingsPageClient() {
       setTimeout(() => setPwSuccess(false), 3000);
     },
     onError: (err: { message?: string }) => {
-      setPwError(err.message ?? "Ошибка изменения пароля");
+      setPwError(err.message ?? t("settings.passwordError", lang));
     },
   }) as { mutate: (args: { currentPassword: string; newPassword: string }) => void; isPending: boolean };
 
@@ -141,7 +141,7 @@ export default function SettingsPageClient() {
     e.preventDefault();
     setPwError(null);
     if (pwForm.newPassword !== pwForm.confirmPassword) {
-      setPwError("Пароли не совпадают");
+      setPwError(t("settings.passwordMismatch", lang));
       return;
     }
     changePasswordMut.mutate({
@@ -163,14 +163,22 @@ export default function SettingsPageClient() {
     );
   }
 
+  const toggleDefs = [
+    { key: "maintenanceMode" as const, label: t("settings.maintenanceOn", lang),  sub: t("settings.maintenanceOnSub", lang) },
+    { key: "registrationOpen" as const, label: t("settings.registrationOpen", lang), sub: t("settings.registrationSub", lang) },
+    { key: "aiEnabled" as const,        label: t("settings.aiEnabled", lang),      sub: t("settings.aiEnabledSub", lang) },
+    { key: "notifyOnNew" as const,      label: t("settings.notifyNew", lang),      sub: t("settings.notifyNewSub", lang) },
+    { key: "notifyOnCancel" as const,   label: t("settings.notifyCancel", lang),   sub: t("settings.notifyNewSub", lang) },
+  ];
+
   return (
     <Shell>
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Settings</h1>
-            <p className="text-xs text-slate-400 mt-1">Настройки аккаунта и платформы</p>
+            <h1 className="text-2xl font-extrabold tracking-tight">{t("settings.title", lang)}</h1>
+            <p className="text-xs text-slate-400 mt-1">{t("settings.tabs.account", lang)} &amp; {t("settings.tabs.platform", lang)}</p>
           </div>
           {activeTab === "platform" && role === "system_admin" && (
             <button
@@ -181,12 +189,12 @@ export default function SettingsPageClient() {
               {saved ? (
                 <>
                   <CheckCircle className="w-4 h-4" />
-                  Сохранено!
+                  {t("settings.savedOk", lang)}
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  {updateMut.isPending ? "..." : "Сохранить"}
+                  {updateMut.isPending ? t("settings.saving", lang) : t("common.save", lang)}
                 </>
               )}
             </button>
@@ -206,19 +214,19 @@ export default function SettingsPageClient() {
         {/* Tab bar */}
         <div className="flex gap-1 border-b border-slate-800 mb-6">
           <TabButton
-            label="Аккаунт"
+            label={t("settings.tabs.account", lang)}
             active={activeTab === "account"}
             onClick={() => setActiveTab("account")}
           />
           {role === "system_admin" && (
             <TabButton
-              label="Платформа"
+              label={t("settings.tabs.platform", lang)}
               active={activeTab === "platform"}
               onClick={() => setActiveTab("platform")}
             />
           )}
           <TabButton
-            label="Внешний вид"
+            label={t("settings.tabs.appearance", lang)}
             active={activeTab === "appearance"}
             onClick={() => setActiveTab("appearance")}
           />
@@ -231,23 +239,23 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <User className="w-4 h-4 text-brand-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">Аккаунт</h2>
+                <h2 className="text-sm font-bold text-white">{t("settings.account", lang)}</h2>
               </div>
               <div className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Email
+                    {t("settings.email", lang)}
                   </label>
                   <input
                     type="text"
                     readOnly
-                    value="(недоступно в Telegram)"
+                    value={t("settings.emailNA", lang)}
                     className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none cursor-default select-none"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Роль
+                    {t("settings.role", lang)}
                   </label>
                   <input
                     type="text"
@@ -263,12 +271,12 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="w-4 h-4 text-amber-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">Изменить пароль</h2>
+                <h2 className="text-sm font-bold text-white">{t("settings.changePassword", lang)}</h2>
               </div>
               <form onSubmit={handleChangePassword} className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Текущий пароль
+                    {t("settings.currentPassword", lang)}
                   </label>
                   <input
                     type="password"
@@ -283,7 +291,7 @@ export default function SettingsPageClient() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Новый пароль
+                    {t("settings.newPassword", lang)}
                   </label>
                   <input
                     type="password"
@@ -298,7 +306,7 @@ export default function SettingsPageClient() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Подтвердите новый пароль
+                    {t("settings.confirmPassword", lang)}
                   </label>
                   <input
                     type="password"
@@ -306,10 +314,10 @@ export default function SettingsPageClient() {
                     value={pwForm.confirmPassword}
                     onChange={(e) => {
                       setPwForm((prev) => ({ ...prev, confirmPassword: e.target.value }));
-                      if (pwError === "Пароли не совпадают") setPwError(null);
+                      if (pwError === t("settings.passwordMismatch", lang)) setPwError(null);
                     }}
                     className={`w-full bg-slate-900/70 border rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white ${
-                      pwError === "Пароли не совпадают"
+                      pwError === t("settings.passwordMismatch", lang)
                         ? "border-red-500/60"
                         : "border-slate-700/50"
                     }`}
@@ -326,7 +334,7 @@ export default function SettingsPageClient() {
                 {pwSuccess && (
                   <p className="text-xs text-emerald-400 flex items-center gap-1">
                     <CheckCircle className="w-3.5 h-3.5" />
-                    Пароль успешно изменён
+                    {t("settings.passwordChangedOk", lang)}
                   </p>
                 )}
 
@@ -336,7 +344,7 @@ export default function SettingsPageClient() {
                   className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-70 mt-1"
                 >
                   <Save className="w-4 h-4" />
-                  {changePasswordMut.isPending ? "Сохранение..." : "Изменить пароль"}
+                  {changePasswordMut.isPending ? t("settings.saving", lang) : t("settings.changePasswordBtn", lang)}
                 </button>
               </form>
             </section>
@@ -350,16 +358,10 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Power className="w-4 h-4 text-rose-400" />
-                <h2 className="text-sm font-bold text-white">Режимы</h2>
+                <h2 className="text-sm font-bold text-white">{t("settings.modes", lang)}</h2>
               </div>
               <div className="space-y-2">
-                {[
-                  { key: "maintenanceMode" as const, label: "Режим обслуживания", sub: "Бот не отвечает" },
-                  { key: "registrationOpen" as const, label: "Регистрация открыта", sub: "Новые тенанты" },
-                  { key: "aiEnabled" as const, label: "AI включён", sub: "Обработка через AI" },
-                  { key: "notifyOnNew" as const, label: "Уведомления: новая запись", sub: "Мастеру" },
-                  { key: "notifyOnCancel" as const, label: "Уведомления: отмена", sub: "Мастеру" },
-                ].map(({ key, label, sub }) => (
+                {toggleDefs.map(({ key, label, sub }) => (
                   <div
                     key={key}
                     className="flex items-center justify-between p-3 rounded-xl bg-slate-900/50 border border-border/30"
@@ -378,12 +380,12 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Bot className="w-4 h-4 text-brand-400" />
-                <h2 className="text-sm font-bold text-white">Основные</h2>
+                <h2 className="text-sm font-bold text-white">{t("settings.general", lang)}</h2>
               </div>
               <div className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Username бота
+                    {t("settings.botUsername", lang)}
                   </label>
                   <input
                     type="text"
@@ -394,7 +396,7 @@ export default function SettingsPageClient() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Контакт поддержки
+                    {t("settings.supportContact", lang)}
                   </label>
                   <input
                     type="text"
@@ -405,7 +407,7 @@ export default function SettingsPageClient() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Часовой пояс
+                    {t("settings.timezone", lang)}
                   </label>
                   <input
                     type="text"
@@ -422,12 +424,12 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-4 h-4 text-purple-400" />
-                <h2 className="text-sm font-bold text-white">Записи</h2>
+                <h2 className="text-sm font-bold text-white">{t("salon.appointments", lang)}</h2>
               </div>
               <div className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                    Макс. записей на пользователя
+                    {t("settings.maxApts", lang)}
                   </label>
                   <input
                     type="number"
@@ -441,7 +443,7 @@ export default function SettingsPageClient() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                      Работа с (ч)
+                      {t("settings.workFrom", lang)}
                     </label>
                     <input
                       type="number"
@@ -454,7 +456,7 @@ export default function SettingsPageClient() {
                   </div>
                   <div>
                     <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
-                      до (ч)
+                      {t("settings.workTo", lang)}
                     </label>
                     <input
                       type="number"
@@ -486,7 +488,7 @@ export default function SettingsPageClient() {
             {/* Danger zone */}
             <section className="glass-card rounded-2xl p-4 border border-red-500/20">
               <h2 className="text-sm font-bold text-red-400 mb-1">Danger Zone</h2>
-              <p className="text-[10px] text-slate-400 mb-3">Необратимые действия</p>
+              <p className="text-[10px] text-slate-400 mb-3">{t("settings.dangerZoneDesc", lang)}</p>
               <button
                 onClick={() => {
                   set("maintenanceMode", true);
@@ -494,7 +496,7 @@ export default function SettingsPageClient() {
                 }}
                 className="w-full py-3 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium active:bg-red-500/10 transition-colors"
               >
-                Включить тех. обслуживание
+                {t("settings.enableMaintenance", lang)}
               </button>
             </section>
           </div>

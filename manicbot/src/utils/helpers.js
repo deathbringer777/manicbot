@@ -4,6 +4,14 @@ import { VALID_LANGS } from '../config.js';
 export function t(lang, key) { return L[lang]?.[key] ?? L.ru[key] ?? key; }
 export function p2(n) { return String(n).padStart(2, '0'); }
 
+/**
+ * Safe parseInt — returns fallback (default NaN) when input is not a finite integer.
+ */
+export function safeParseInt(str, fallback = NaN) {
+  const n = parseInt(str, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -13,7 +21,7 @@ export function escHtml(s) {
 export function isCorrectionSvc(svcId) { return svcId === 'correction'; }
 
 export function svcName(ctx, lang, id) {
-  const s = ctx.svc.find(x => x.id === id);
+  const s = ctx.svc?.find(x => x.id === id);
   if (!s) return escHtml(id);
   return `${s.e} ${t(lang, 'svc_' + id)}`;
 }

@@ -58,11 +58,17 @@ export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
   if (!ctx?.db || !phoneNumberId) return null;
   const needle = channelIdString(phoneNumberId);
   if (!needle) return null;
+  // Use json_extract for indexed lookup instead of full table scan
   const rows = await dbAll(ctx,
+    "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1 AND json_extract(config, '$.phone_number_id') = ? LIMIT 1",
+    needle,
+  );
+  if (rows.length) return { tenantId: rows[0].tenant_id, channelConfig: rows[0] };
+  // Fallback: full scan for configs with mismatched types (string vs number)
+  const allRows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1",
   );
-  if (rows.length > 50) console.warn('[resolver] WhatsApp tenant scan hit', rows.length, 'rows — consider adding a channel_external_id index');
-  for (const row of rows) {
+  for (const row of allRows) {
     try {
       const cfg = row.config ? JSON.parse(row.config) : {};
       const stored = channelIdString(cfg.phone_number_id);
@@ -84,11 +90,18 @@ export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
  */
 export async function resolveTenantFromInstagram(ctx, igPageId) {
   if (!ctx?.db || igPageId == null || igPageId === '') return null;
+  const needle = String(igPageId);
+  // Fast path: json_extract on page_id (most common match field)
   const rows = await dbAll(ctx,
+    "SELECT * FROM channel_configs WHERE channel_type = 'instagram' AND active = 1 AND json_extract(config, '$.page_id') = ? LIMIT 1",
+    needle,
+  );
+  if (rows.length) return { tenantId: rows[0].tenant_id, channelConfig: rows[0] };
+  // Fallback: full scan checking ig_account_id / instagram_business_id
+  const allRows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'instagram' AND active = 1",
   );
-  if (rows.length > 50) console.warn('[resolver] Instagram tenant scan hit', rows.length, 'rows — consider adding a channel_external_id index');
-  for (const row of rows) {
+  for (const row of allRows) {
     try {
       const cfg = row.config ? JSON.parse(row.config) : {};
       if (instagramWebhookEntryIdMatchesConfig(igPageId, cfg)) {
@@ -122,7 +135,7 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
   if (rawTok) {
     if (encKey) token = await decryptToken(rawTok, encKey);
     if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) {
-      console.warn('[resolver] Using plaintext Meta token for tenant:', tenantId, '— set BOT_ENCRYPTION_KEY to encrypt at rest');
+      console.error('[resolver] SECURITY: Using plaintext Meta token for tenant:', tenantId, '— set BOT_ENCRYPTION_KEY to encrypt at rest');
       token = rawTok;
     }
   }

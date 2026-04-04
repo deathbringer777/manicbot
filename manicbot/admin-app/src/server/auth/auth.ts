@@ -67,7 +67,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         })]
       : []),
   ],
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 }, // 7 days
   callbacks: {
     async signIn({ user, account }) {
       // Google OAuth: look up user in web_users; allow login even if DB fails
@@ -85,10 +85,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             (user as any).webRole = webUser.role;
             (user as any).id = webUser.id;
           } else {
-            console.warn("[auth] Google signIn: email not in web_users:", user.email);
-            // Allow login but with default role
-            (user as any).tenantId = null;
-            (user as any).webRole = "client";
+            console.warn("[auth] Google signIn: email not in web_users, rejecting:", user.email);
+            return false;
           }
         } catch (err) {
           console.error("[auth] Google signIn DB error:", err);

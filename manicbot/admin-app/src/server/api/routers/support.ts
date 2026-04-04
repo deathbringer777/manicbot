@@ -6,6 +6,12 @@ import { TRPCError } from "@trpc/server";
 import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
 
 async function assertSupport(ctx: any) {
+  // Web session path
+  if (!ctx.user && ctx.webUser) {
+    if (isAdminProcedurePlatformRole(ctx.webUser.webRole)) return;
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+  // Telegram path
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
   const row = await ctx.db
     .select()

@@ -39,6 +39,13 @@ export async function handleCron(ctx) {
       "SELECT * FROM appointments WHERE tenant_id = ? AND date IN (?, ?) AND cancelled = 0 AND status = 'confirmed'",
       ctx.tenantId, reminderDates[0], reminderDates[1],
     );
+    // Pre-load languages for all unique chat IDs to avoid N+1 KV reads
+    const chatIds = [...new Set(apts.map(a => a.chat_id))];
+    const langMap = new Map();
+    await Promise.all(chatIds.map(async cid => {
+      langMap.set(cid, (await getLang(ctx, cid)) || 'ru');
+    }));
+
     for (const row of apts) {
       try {
         const diffH = (row.ts - now) / 3600000;
@@ -53,7 +60,7 @@ export async function handleCron(ctx) {
           const vals = Object.values(updates);
           await dbRun(ctx, `UPDATE appointments SET ${setCols} WHERE id = ? AND tenant_id = ?`, ...vals, row.id, ctx.tenantId);
         }
-        const lg = (await getLang(ctx, row.chat_id)) || 'ru';
+        const lg = langMap.get(row.chat_id) || 'ru';
         const tenantAddr = ctx.tenant?.salon?.address || ADDRESS;
         const tenantMaps = ctx.tenant?.salon?.mapsUrl || MAPS_URL;
         const vars = { svc: svcName(ctx, lg, row.svc_id), dt: fmtDT(lg, row.date, row.time), addr: tenantAddr, maps: tenantMaps };

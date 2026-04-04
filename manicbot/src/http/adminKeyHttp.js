@@ -139,12 +139,21 @@ export async function tryAdminKeyRoutes(request, env, url) {
         return Response.json({ error: 'Token validation failed', graphError: meData.error?.message, graphCode: meData.error?.code }, { status: 400 });
       }
 
-      // Store as plaintext in token_encrypted (resolver handles plaintext EAA tokens)
       const ec = envCtx(env);
       const { dbRun } = await import('../utils/db.js');
+      // Encrypt token if BOT_ENCRYPTION_KEY is set; otherwise store plaintext (legacy fallback)
+      let tokenToStore = token;
+      if (env.BOT_ENCRYPTION_KEY) {
+        const { encryptToken } = await import('../utils/security.js');
+        const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY);
+        if (encrypted) tokenToStore = encrypted;
+        else console.error('[admin] Failed to encrypt IG token for tenant:', tenantId);
+      } else {
+        console.warn('[admin] BOT_ENCRYPTION_KEY not set — storing IG token as plaintext for tenant:', tenantId);
+      }
       await dbRun(ec,
         `UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE tenant_id = ? AND channel_type = 'instagram'`,
-        token, Math.floor(Date.now() / 1000), tenantId,
+        tokenToStore, Math.floor(Date.now() / 1000), tenantId,
       );
 
       return Response.json({

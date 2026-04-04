@@ -50,8 +50,8 @@ export async function handleInbound(ctx, inbound) {
       )
     );
 
-    // Non-blocking — don't await, let handlers proceed immediately
-    Promise.all(sideEffects).catch(e => console.error('[inbound] side-effect batch error:', e.message));
+    // Await side-effects — fast KV/D1 writes, ensures message_window is persisted before send
+    await Promise.all(sideEffects).catch(e => console.error('[inbound] side-effect batch error:', e.message));
   }
 
   // 2. Route to the appropriate handler

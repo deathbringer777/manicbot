@@ -67,11 +67,11 @@ export async function trySearchApi(request, env, url) {
     return { slug: t.slug, name: t.name, city: t.city, coverPhoto };
   });
 
-  // Static blog articles — same list as admin-app tRPC
+  // Static blog articles — canonical source: admin-app/src/server/api/routers/publicSalon.ts
   const BLOG_ARTICLES = [
-    { slug: 'manicbot-telegram-booking', titles: { ru: 'Онлайн-запись через Telegram: как это работает', en: 'Online booking via Telegram: how it works' } },
-    { slug: 'ai-beauty-europe-poland', titles: { ru: 'ИИ-ассистент для nail-студий в Европе', en: 'AI assistant for nail studios in Europe' } },
-    { slug: 'gel-polish-care-guide', titles: { ru: 'Уход за гель-лаком: советы от мастеров', en: 'Gel polish care guide from nail masters' } },
+    { slug: 'manicbot-telegram-booking', titles: { ru: 'Онлайн-запись через Telegram: как это работает', en: 'Online booking via Telegram: how it works', ua: 'Онлайн-запис через Telegram: як це працює', pl: 'Rezerwacje online przez Telegram: jak to działa' } },
+    { slug: 'ai-beauty-europe-poland', titles: { ru: 'ИИ-ассистент для nail-студий в Европе', en: 'AI assistant for nail studios in Europe', ua: 'ШІ-асистент для нейл-студій у Європі', pl: 'Asystent AI dla studiów paznokci w Europie' } },
+    { slug: 'gel-polish-care-guide', titles: { ru: 'Уход за гель-лаком: советы от мастеров', en: 'Gel polish care guide from nail masters', ua: 'Догляд за гель-лаком: поради від майстрів', pl: 'Poradnik pielęgnacji żelowego lakieru' } },
   ];
   const qLow = q.toLowerCase();
   const articles = BLOG_ARTICLES

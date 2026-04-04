@@ -105,18 +105,39 @@ function logWorkerError(label, request, url, error, extra = {}) {
   console.error(`[worker] ${label}`, payload);
 }
 
+/** Append standard security headers to any outgoing response. */
+function addSecurityHeaders(resp) {
+  const h = new Headers(resp.headers);
+  h.set('X-Content-Type-Options', 'nosniff');
+  h.set('X-Frame-Options', 'DENY');
+  h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  if (!h.has('Content-Security-Policy')) {
+    h.set('Content-Security-Policy', "frame-ancestors 'none'");
+  }
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
+}
+
 export default {
   async fetch(request, env, executionCtx) {
     const url = new URL(request.url);
 
+    // robots.txt
+    if (url.pathname === '/robots.txt' && request.method === 'GET') {
+      return new Response(
+        'User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nDisallow: /webhook\nSitemap: ' + url.origin + '/sitemap.xml\n',
+        { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' } },
+      );
+    }
+
     // Sitemap
     if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
-      return generateSitemap(env, url.origin);
+      return addSecurityHeaders(await generateSitemap(env, url.origin));
     }
 
     // Admin-app routes → proxy to Cloudflare Pages (dashboard, login, tg, salon, search, _next, trpc, auth)
     if (isAdminAppPath(url.pathname)) {
-      return proxyToAdminApp(request, env, url);
+      return addSecurityHeaders(await proxyToAdminApp(request, env, url));
     }
 
     // Public search API (CORS-enabled, no auth)
@@ -134,26 +155,26 @@ export default {
         });
       }
       const searchRes = await trySearchApi(request, env, url);
-      if (searchRes) return searchRes;
+      if (searchRes) return addSecurityHeaders(searchRes);
     }
 
     await ensureDemoBotsProvisioned(env);
 
     let res = await tryLanding(request, env, url);
-    if (res) return res;
+    if (res) return addSecurityHeaders(res);
 
     res = await tryStripe(request, env, url);
-    if (res) return res;
+    if (res) return res; // Stripe webhook — no browser headers needed
 
     res = await tryAdminKeyRoutes(request, env, url);
-    if (res) return res;
+    if (res) return addSecurityHeaders(res);
 
     res = await tryGoogle(request, env, url);
-    if (res) return res;
+    if (res) return addSecurityHeaders(res);
 
     // Meta WA/IG before getCtx: paths /webhook/wa and /webhook/ig are not Telegram bot ids.
     res = await tryMetaWebhooks(request, env, url, executionCtx);
-    if (res) return res;
+    if (res) return res; // Webhook — no browser headers needed
 
     const isAdminPath = url.pathname.startsWith('/admin/');
     let ctx;
@@ -192,15 +213,15 @@ export default {
     });
 
     res = await tryAdminPanel(request, ctx, url, ADMIN_401);
-    if (res) return res;
+    if (res) return addSecurityHeaders(res);
 
     res = await tryCalendar(request, ctx, url);
-    if (res) return res;
+    if (res) return addSecurityHeaders(res);
 
     res = await tryTelegramWebhook(request, ctx, url);
-    if (res) return res;
+    if (res) return res; // Telegram webhook — no browser headers needed
 
-    return new Response('Not Found', { status: 404 });
+    return addSecurityHeaders(new Response('Not Found', { status: 404 }));
   },
 
   async scheduled(event, env, _scheduledCtx) {

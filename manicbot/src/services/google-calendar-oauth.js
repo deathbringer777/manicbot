@@ -206,16 +206,34 @@ async function refreshAccessToken(ctx, integration) {
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
   });
-  const res = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  const data = await res.json();
-  if (!res.ok || !data.access_token) {
-    throw new Error(data.error_description || data.error || 'Failed to refresh Google access token');
+
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    let res;
+    try {
+      res = await fetch(GOOGLE_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+    } catch (err) {
+      // Network error — retry if not last attempt
+      if (attempt === MAX_RETRIES - 1) throw err;
+      await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+      continue;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.access_token) return data.access_token;
+    // 4xx = permanent (invalid_grant, etc.) — fail immediately
+    if (res.status < 500) {
+      throw new Error(data.error_description || data.error || 'Failed to refresh Google access token');
+    }
+    // 5xx = transient — retry
+    if (attempt === MAX_RETRIES - 1) {
+      throw new Error(data.error_description || data.error || `Google token refresh failed after ${MAX_RETRIES} attempts (${res.status})`);
+    }
+    await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
   }
-  return data.access_token;
 }
 
 async function googleJsonRequest(url, opts = {}) {
@@ -931,60 +949,70 @@ export async function syncAppointmentCalendar(ctx, apt) {
   });
 
   if (target.type === 'oauth') {
-    if (apt.googleEventId && apt.googleIntegrationId === target.integration.id) {
-      await updateOAuthCalendarEvent(ctx, target.integration, apt.googleEventId, event);
+    try {
+      if (apt.googleEventId && apt.googleIntegrationId === target.integration.id) {
+        await updateOAuthCalendarEvent(ctx, target.integration, apt.googleEventId, event);
+        await saveAppointmentCalendarLink(ctx, apt.id, {
+          googleEventId: apt.googleEventId,
+          googleCalendarId: target.integration.calendarId,
+          googleIntegrationId: target.integration.id,
+        });
+        apt.googleCalendarId = target.integration.calendarId;
+        apt.googleIntegrationId = target.integration.id;
+        return { ok: true, mode: 'oauth', action: 'updated' };
+      }
+
+      if (apt.googleEventId) {
+        await deleteAppointmentCalendar(ctx, apt);
+      }
+
+      const created = await createOAuthCalendarEvent(ctx, target.integration, event);
       await saveAppointmentCalendarLink(ctx, apt.id, {
-        googleEventId: apt.googleEventId,
+        googleEventId: created.id,
         googleCalendarId: target.integration.calendarId,
         googleIntegrationId: target.integration.id,
       });
+      apt.googleEventId = created.id;
       apt.googleCalendarId = target.integration.calendarId;
       apt.googleIntegrationId = target.integration.id;
-      return { ok: true, mode: 'oauth', action: 'updated' };
+      return { ok: true, mode: 'oauth', action: 'created' };
+    } catch (err) {
+      console.error('[gcal-sync] OAuth calendar operation failed for apt:', apt.id, err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  try {
+    if (apt.googleEventId && !apt.googleIntegrationId && apt.googleCalendarId === target.calendarId) {
+      await updateServiceAccountCalendarEvent(ctx, target.calendarId, apt.googleEventId, event);
+      await saveAppointmentCalendarLink(ctx, apt.id, {
+        googleEventId: apt.googleEventId,
+        googleCalendarId: target.calendarId,
+        googleIntegrationId: null,
+      });
+      apt.googleCalendarId = target.calendarId;
+      apt.googleIntegrationId = null;
+      return { ok: true, mode: 'service_account', action: 'updated' };
     }
 
     if (apt.googleEventId) {
       await deleteAppointmentCalendar(ctx, apt);
     }
 
-    const created = await createOAuthCalendarEvent(ctx, target.integration, event);
+    const created = await createServiceAccountCalendarEvent(ctx, target.calendarId, event);
     await saveAppointmentCalendarLink(ctx, apt.id, {
       googleEventId: created.id,
-      googleCalendarId: target.integration.calendarId,
-      googleIntegrationId: target.integration.id,
-    });
-    apt.googleEventId = created.id;
-    apt.googleCalendarId = target.integration.calendarId;
-    apt.googleIntegrationId = target.integration.id;
-    return { ok: true, mode: 'oauth', action: 'created' };
-  }
-
-  if (apt.googleEventId && !apt.googleIntegrationId && apt.googleCalendarId === target.calendarId) {
-    await updateServiceAccountCalendarEvent(ctx, target.calendarId, apt.googleEventId, event);
-    await saveAppointmentCalendarLink(ctx, apt.id, {
-      googleEventId: apt.googleEventId,
       googleCalendarId: target.calendarId,
       googleIntegrationId: null,
     });
+    apt.googleEventId = created.id;
     apt.googleCalendarId = target.calendarId;
     apt.googleIntegrationId = null;
-    return { ok: true, mode: 'service_account', action: 'updated' };
+    return { ok: true, mode: 'service_account', action: 'created' };
+  } catch (err) {
+    console.error('[gcal-sync] Service account calendar operation failed for apt:', apt.id, err.message);
+    return { ok: false, error: err.message };
   }
-
-  if (apt.googleEventId) {
-    await deleteAppointmentCalendar(ctx, apt);
-  }
-
-  const created = await createServiceAccountCalendarEvent(ctx, target.calendarId, event);
-  await saveAppointmentCalendarLink(ctx, apt.id, {
-    googleEventId: created.id,
-    googleCalendarId: target.calendarId,
-    googleIntegrationId: null,
-  });
-  apt.googleEventId = created.id;
-  apt.googleCalendarId = target.calendarId;
-  apt.googleIntegrationId = null;
-  return { ok: true, mode: 'service_account', action: 'created' };
 }
 
 export async function deleteAppointmentCalendar(ctx, apt) {

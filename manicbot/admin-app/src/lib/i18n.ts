@@ -181,6 +181,27 @@ const translations = {
   "gcal.resumeSync":        { ru: "Вкл. синхр.", ua: "Увімк. синхр.", en: "Resume sync", pl: "Wznów sync" },
   "gcal.confirmDisconnect": { ru: "Да, отключить", ua: "Так, відключити", en: "Yes, disconnect", pl: "Tak, odłącz" },
   "gcal.disconnect":        { ru: "Отключить", ua: "Відключити", en: "Disconnect", pl: "Odłącz" },
+  // ── Public search page ─────────────────────────────────────────────────────
+  "search.title":           { ru: "Найти nail-салон", ua: "Знайти nail-салон", en: "Find a nail salon", pl: "Znajdź salon paznokci" },
+  "search.subtitle":        { ru: "Онлайн-запись через Telegram — быстро и удобно", ua: "Онлайн-запис через Telegram — швидко та зручно", en: "Online booking via Telegram — fast & easy", pl: "Rezerwacja online przez Telegram — szybko i wygodnie" },
+  "search.placeholder":     { ru: "Название салона, город или услуга...", ua: "Назва салону, місто або послуга...", en: "Salon name, city or service...", pl: "Nazwa salonu, miasto lub usługa..." },
+  "search.city":            { ru: "Город", ua: "Місто", en: "City", pl: "Miasto" },
+  "search.nearby":          { ru: "Найти рядом", ua: "Знайти поряд", en: "Find nearby", pl: "Znajdź w pobliżu" },
+  "search.nearbyShort":     { ru: "Рядом", ua: "Поряд", en: "Nearby", pl: "W pobliżu" },
+  "search.filters":         { ru: "Фильтры", ua: "Фільтри", en: "Filters", pl: "Filtry" },
+  "search.clear":           { ru: "Сбросить", ua: "Скинути", en: "Clear", pl: "Wyczyść" },
+  "search.nearYou":         { ru: "Показаны салоны рядом с вами", ua: "Показані салони поряд з вами", en: "Showing salons near you", pl: "Salony w Twojej okolicy" },
+  "search.notFound":        { ru: "Салоны не найдены", ua: "Салони не знайдено", en: "No salons found", pl: "Nie znaleziono salonów" },
+  "search.tryOther":        { ru: "Попробуйте изменить фильтры или расширить поиск", ua: "Спробуйте змінити фільтри або розширити пошук", en: "Try adjusting filters or broadening your search", pl: "Spróbuj zmienić filtry lub rozszerzyć wyszukiwanie" },
+  "search.noSalons":        { ru: "Пока нет публичных салонов в каталоге", ua: "Поки немає публічних салонів у каталозі", en: "No public salons in the catalog yet", pl: "Brak publicznych salonów w katalogu" },
+  "search.clearAll":        { ru: "Сбросить все фильтры", ua: "Скинути всі фільтри", en: "Clear all filters", pl: "Wyczyść wszystkie filtry" },
+  "search.findBtn":         { ru: "Найти", ua: "Знайти", en: "Search", pl: "Szukaj" },
+  "search.nothingFound":    { ru: "Ничего не найдено", ua: "Нічого не знайдено", en: "Nothing found", pl: "Nic nie znaleziono" },
+  "search.showAll":         { ru: "Показать ��се результаты", ua: "Показати всі результати", en: "Show all results", pl: "Pokaż wszystkie wyniki" },
+  "search.salons":          { ru: "Салоны", ua: "Салони", en: "Salons", pl: "Salony" },
+  "search.articles":        { ru: "Статьи", ua: "Статті", en: "Articles", pl: "Artykuły" },
+  "search.showAllFor":      { ru: "Показать все результаты для", ua: "Показати всі результати для", en: "Show all results for", pl: "Pokaż wszystkie wyniki dla" },
+  "search.found":           { ru: "Найдено", ua: "Знайдено", en: "Found", pl: "Znaleziono" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

@@ -115,7 +115,9 @@ export const googleCalendarRouter = createTRPCRouter({
 
   /**
    * Delete an integration (disconnect).
-   * Note: does NOT revoke OAuth token — that requires the Worker's google-calendar-oauth service.
+   * WARNING: does NOT revoke the OAuth refresh token at Google — that requires the Worker's
+   * encryption key to decrypt the token. The token remains valid until it expires or the user
+   * revokes ManicBot access in their Google Account settings.
    */
   disconnect: protectedProcedure
     .input(z.object({ tenantId: z.string(), integrationId: z.string() }))

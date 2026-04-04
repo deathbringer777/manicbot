@@ -4,7 +4,7 @@ import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles,
 } from "~/server/db/schema";
-import { eq, and, desc, sql, ne } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
@@ -66,16 +66,18 @@ export const salonRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string(), search: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      const rows = await ctx.db.select().from(users).where(eq(users.tenantId, input.tenantId)).limit(200);
+      const baseWhere = eq(users.tenantId, input.tenantId);
       if (input.search) {
-        const q = input.search.toLowerCase();
-        return rows.filter((u: any) =>
-          u.name?.toLowerCase().includes(q) ||
-          u.tgUsername?.toLowerCase().includes(q) ||
-          u.phone?.includes(q)
-        );
+        const q = `%${input.search.toLowerCase()}%`;
+        return ctx.db.select().from(users)
+          .where(and(baseWhere, or(
+            like(sql`lower(${users.name})`, q),
+            like(sql`lower(${users.tgUsername})`, q),
+            like(users.phone, q),
+          )))
+          .limit(200);
       }
-      return rows;
+      return ctx.db.select().from(users).where(baseWhere).limit(200);
     }),
 
   getSalonProfile: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {

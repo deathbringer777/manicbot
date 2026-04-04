@@ -1,6 +1,6 @@
 import { CB, STEP, VALID_LANGS, LOCK_TTL_SEC, MAX_APTS } from '../config.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
-import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2 } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2, safeParseInt } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, warsawToUTC, warsawNow, dateStrForOffset, todayStr } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
 import { send, edit, answerCb, api } from '../telegram.js';
@@ -213,7 +213,7 @@ export async function onCb(ctx, cb) {
   }
 
   if (d.startsWith(CB.TICKET_DECLINE)) {
-    const clientCid = parseInt(d.slice(CB.TICKET_DECLINE.length), 10);
+    const clientCid = safeParseInt(d.slice(CB.TICKET_DECLINE.length));
     if (!clientCid) return;
     const declRole = await getRole(ctx, cid);
     if (!(await isAdmin(ctx, cid)) && !(await isMaster(ctx, cid)) && declRole !== 'support' && declRole !== 'technical_support') return;
@@ -256,7 +256,7 @@ export async function onCb(ctx, cb) {
       }
       return;
     }
-    const clientCid = parseInt(suffix, 10);
+    const clientCid = safeParseInt(suffix);
     if (!clientCid) return;
     if (cid === clientCid) {
       return send(ctx, cid, t(lg, 'ticket_cannot_take_own'));
@@ -286,7 +286,7 @@ export async function onCb(ctx, cb) {
   }
 
   if (d.startsWith(CB.TICKET_FREE_CORRECTION)) {
-    const clientCid = parseInt(d.slice(CB.TICKET_FREE_CORRECTION.length), 10);
+    const clientCid = safeParseInt(d.slice(CB.TICKET_FREE_CORRECTION.length));
     if (!clientCid) return;
     if (!(await isAdmin(ctx, cid)) && !(await isMaster(ctx, cid)) && (await getRole(ctx, cid)) !== 'support') return;
     const ticket = await getTicket(ctx, clientCid);
@@ -300,7 +300,7 @@ export async function onCb(ctx, cb) {
   }
 
   if (d.startsWith(CB.TICKET_CLOSE)) {
-    const clientCid = parseInt(d.slice(CB.TICKET_CLOSE.length), 10);
+    const clientCid = safeParseInt(d.slice(CB.TICKET_CLOSE.length));
     if (!clientCid) return;
     const ticket = await getTicket(ctx, clientCid);
     const closeRole = await getRole(ctx, cid);
@@ -433,7 +433,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_SUPPORT_REMOVE)) {
     if (!await isAdmin(ctx, cid)) return;
-    const agentChatId = parseInt(d.slice(CB.ADM_SUPPORT_REMOVE.length).trim(), 10);
+    const agentChatId = safeParseInt(d.slice(CB.ADM_SUPPORT_REMOVE.length).trim());
     if (!Number.isFinite(agentChatId) || agentChatId <= 0 || !ctx.kv) return showTenantSupportList(ctx, cid);
     await removeTenantSupportAgent(ctx, agentChatId);
     await send(ctx, cid, t(lg, 'adm_support_removed'));
@@ -604,7 +604,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_RENAME_M)) {
     if (!await isAdmin(ctx, cid)) return;
-    const mId = parseInt(d.slice(CB.ADM_RENAME_M.length));
+    const mId = safeParseInt(d.slice(CB.ADM_RENAME_M.length));
     if (!mId) return showMastersList(ctx, cid);
     const m = await getMaster(ctx, mId);
     if (!m) return showMastersList(ctx, cid);
@@ -616,7 +616,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_DEL_M)) {
     if (!await isAdmin(ctx, cid)) return;
-    const mId = parseInt(d.slice(CB.ADM_DEL_M.length));
+    const mId = safeParseInt(d.slice(CB.ADM_DEL_M.length));
     if (mId) await deleteMaster(ctx, mId);
     await send(ctx, cid, t(lg, 'adm_master_removed'));
     return showMastersList(ctx, cid);
@@ -624,7 +624,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_VACATION)) {
     if (!await isAdmin(ctx, cid)) return;
-    const mId = parseInt(d.slice(CB.ADM_VACATION.length));
+    const mId = safeParseInt(d.slice(CB.ADM_VACATION.length));
     const m = mId ? await getMaster(ctx, mId) : null;
     if (!m) return showMastersList(ctx, cid);
     m.onVacation = !m.onVacation;
@@ -651,7 +651,7 @@ export async function onCb(ctx, cb) {
     if (!await isAdmin(ctx, cid)) return;
     const parts = d.slice(CB.ADM_SET_M.length).split(':');
     const aptId = parts[0];
-    const masterId = parseInt(parts[1]);
+    const masterId = safeParseInt(parts[1]);
     if (!aptId || !masterId) return;
     const apt = await getAptById(ctx, aptId);
     if (!apt || apt.cx) return;
@@ -693,7 +693,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_ALL_APTS_M)) {
     if (!await isAdmin(ctx, cid)) return;
-    const masterId = parseInt(d.slice(CB.ADM_ALL_APTS_M.length));
+    const masterId = safeParseInt(d.slice(CB.ADM_ALL_APTS_M.length));
     return showAdminAllApts(ctx, cid, masterId || null);
   }
 
@@ -704,7 +704,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_CLIENTS_PAGE)) {
     if (!await isAdmin(ctx, cid)) return;
-    const page = parseInt(d.slice(CB.ADM_CLIENTS_PAGE.length)) || 0;
+    const page = safeParseInt(d.slice(CB.ADM_CLIENTS_PAGE.length), 0);
     return showClientsList(ctx, cid, page, mid);
   }
 
@@ -736,7 +736,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_ABOUT_PHOTO_DEL)) {
     if (!await isAdmin(ctx, cid)) return;
-    const idx = parseInt(d.slice(CB.ADM_ABOUT_PHOTO_DEL.length));
+    const idx = safeParseInt(d.slice(CB.ADM_ABOUT_PHOTO_DEL.length), -1);
     const photos = await loadAboutPhotos(ctx);
     if (idx >= 0 && idx < photos.length) {
       photos.splice(idx, 1);
@@ -748,7 +748,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_BLOCK)) {
     if (!await isAdmin(ctx, cid)) return;
-    const targetId = parseInt(d.slice(CB.ADM_BLOCK.length));
+    const targetId = safeParseInt(d.slice(CB.ADM_BLOCK.length));
     if (targetId) await blockUser(ctx, targetId);
     await send(ctx, cid, t(lg, 'adm_blocked'));
     return showClientsList(ctx, cid);
@@ -756,7 +756,7 @@ export async function onCb(ctx, cb) {
 
   if (d.startsWith(CB.ADM_UNBLOCK)) {
     if (!await isAdmin(ctx, cid)) return;
-    const targetId = parseInt(d.slice(CB.ADM_UNBLOCK.length));
+    const targetId = safeParseInt(d.slice(CB.ADM_UNBLOCK.length));
     if (targetId) await unblockUser(ctx, targetId);
     await send(ctx, cid, t(lg, 'adm_unblocked'));
     return showClientsList(ctx, cid);
@@ -1028,7 +1028,7 @@ export async function onCb(ctx, cb) {
     if (!await canManageApt(ctx, cid)) return;
     const parts = d.slice(CB.SVC_PHOTO_DEL.length).split(':');
     const svcId = parts[0];
-    const idx = parseInt(parts[1]);
+    const idx = safeParseInt(parts[1], -1);
     const s = ctx.svc.find(x => x.id === svcId);
     if (s?.photos && idx >= 0 && idx < s.photos.length) {
       s.photos.splice(idx, 1);
@@ -1137,12 +1137,12 @@ export async function onCb(ctx, cb) {
     const parts = d.slice(CB.CAT_PHOTO.length).split(':');
     const svcId = parts[0];
     if (!ctx.svcIds.has(svcId)) return;
-    const idx = Math.max(0, parseInt(parts[1]) || 0);
+    const idx = Math.max(0, safeParseInt(parts[1], 0));
     return showCatPhoto(ctx, cid, svcId, idx, mid);
   }
 
   if (d.startsWith(CB.ABOUT_PHOTO)) {
-    const idx = Math.max(0, parseInt(d.slice(CB.ABOUT_PHOTO.length)) || 0);
+    const idx = Math.max(0, safeParseInt(d.slice(CB.ABOUT_PHOTO.length), 0));
     return showAbout(ctx, cid, idx, mid);
   }
 
@@ -1167,7 +1167,7 @@ export async function onCb(ctx, cb) {
   }
 
   if (d.startsWith(CB.CAL_MONTH)) {
-    const off = Math.max(0, Math.min(2, parseInt(d.slice(CB.CAL_MONTH.length)) || 0));
+    const off = Math.max(0, Math.min(2, safeParseInt(d.slice(CB.CAL_MONTH.length), 0)));
     return edit(ctx, cid, mid, t(lg, 'choose_date'), calKb(lg, off));
   }
 
@@ -1186,13 +1186,13 @@ export async function onCb(ctx, cb) {
 
   // Instagram: service list page navigation
   if (d.startsWith(CB.SVC_PAGE)) {
-    const page = Math.max(0, parseInt(d.slice(CB.SVC_PAGE.length)) || 0);
+    const page = Math.max(0, safeParseInt(d.slice(CB.SVC_PAGE.length), 0));
     return edit(ctx, cid, mid, t(lg, 'choose_svc'), svcKb(ctx, lg, page));
   }
 
   // Instagram: master list page navigation
   if (d.startsWith(CB.MASTER_PAGE)) {
-    const page = Math.max(0, parseInt(d.slice(CB.MASTER_PAGE.length)) || 0);
+    const page = Math.max(0, safeParseInt(d.slice(CB.MASTER_PAGE.length), 0));
     const st = await getState(ctx, cid);
     if (!st.svcId || !st.date) return;
     await showMasterPick(ctx, cid, st.svcId, st.date, st, page);
@@ -1212,7 +1212,7 @@ export async function onCb(ctx, cb) {
 
   // Master selection: specific master chosen
   if (d.startsWith(CB.MASTER_SEL)) {
-    const masterId = parseInt(d.slice(CB.MASTER_SEL.length));
+    const masterId = safeParseInt(d.slice(CB.MASTER_SEL.length));
     if (!masterId) return;
     const st = await getState(ctx, cid);
     if (!st.svcId || !st.date || !ctx.svcIds.has(st.svcId)) return send(ctx, cid, t(lg, 'book_err'), svcKb(ctx, lg));

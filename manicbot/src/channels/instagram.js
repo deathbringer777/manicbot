@@ -16,6 +16,7 @@
  */
 
 import { makeInbound } from './types.js';
+import { isWithinMessageWindow } from '../handlers/inbound.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
@@ -152,6 +153,14 @@ export class InstagramAdapter {
    * @param {import('./types.js').OutboundMessage} outbound
    */
   async send(userId, outbound) {
+    // Instagram: outside 24h window messages will be rejected by Meta
+    if (this._ctx?.db && this._ctx?.tenantId) {
+      const inWindow = await isWithinMessageWindow(this._ctx, 'instagram', String(userId));
+      if (!inWindow) {
+        console.warn('[ig] Skipping send to', userId, '— outside 24h message window');
+        return { ok: false, error: 'outside_message_window' };
+      }
+    }
     const text = this.htmlToPlainText(outbound.text ?? '');
     const buttons = outbound.buttons;
 

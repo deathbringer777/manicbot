@@ -5,6 +5,16 @@ import { Search, X, MapPin, ChevronRight, FileText } from "lucide-react";
 import { api } from "~/trpc/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { t, type Lang } from "~/lib/i18n";
+
+function useLang(): Lang {
+  if (typeof navigator !== "undefined") {
+    const lc = navigator.language?.slice(0, 2);
+    if (lc === "uk") return "ua";
+    if (lc === "en" || lc === "pl") return lc;
+  }
+  return "ru";
+}
 
 interface Props {
   initialValue?: string;
@@ -13,7 +23,8 @@ interface Props {
   autoFocus?: boolean;
 }
 
-export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = "Название салона, город или услуга...", autoFocus }: Props) {
+export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, autoFocus }: Props) {
+  const lang = useLang();
   const [value, setValue] = useState(initialValue);
   const [debouncedQ, setDebouncedQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -21,6 +32,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const resolvedPlaceholder = placeholder ?? t("search.placeholder", lang);
 
   // Debounce input -> query
   useEffect(() => {
@@ -111,7 +123,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
             onChange={(e) => { setValue(e.target.value); setOpen(true); setActiveIdx(-1); }}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             className="w-full rounded-2xl border border-slate-200/80 bg-white py-3.5 pl-10 pr-10 text-sm text-slate-800 placeholder-slate-400 shadow-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 dark:shadow-lg dark:shadow-black/20 dark:focus:border-violet-500/60 dark:focus:ring-violet-500/20"
           />
           {value && (
@@ -129,7 +141,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
           className="shrink-0 rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-md shadow-violet-500/25 transition hover:scale-[1.02] hover:opacity-95 dark:shadow-violet-900/30"
           style={{ background: "linear-gradient(135deg,#6d28d9,#0891b2)" }}
         >
-          Найти
+          {t("search.findBtn", lang)}
         </button>
       </form>
 
@@ -164,13 +176,13 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
 
           {!isFetching && !hasResults && debouncedQ.length >= 2 && (
             <div className="px-4 py-8 text-center">
-              <p className="text-sm text-slate-500">Ничего не найдено по «{debouncedQ}»</p>
+              <p className="text-sm text-slate-500">{t("search.nothingFound", lang)} «{debouncedQ}»</p>
               <Link
                 href={`/search?q=${encodeURIComponent(debouncedQ)}`}
                 className="mt-2 inline-block text-xs text-violet-600 hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
                 onClick={() => setOpen(false)}
               >
-                Показать все результаты &rarr;
+                {t("search.showAll", lang)} &rarr;
               </Link>
             </div>
           )}
@@ -181,7 +193,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
               {salons.length > 0 && (
                 <>
                   <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                    Салоны
+                    {t("search.salons", lang)}
                   </p>
                   {salons.map((salon, i) => (
                     <Link
@@ -217,7 +229,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                 <>
                   <div className="mx-3 my-1.5 border-t border-slate-100 dark:border-slate-800" />
                   <p className="px-4 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                    Статьи
+                    {t("search.articles", lang)}
                   </p>
                   {articles.map((art, i) => {
                     const idx = salons.length + i;
@@ -245,7 +257,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder = 
                 onClick={() => setOpen(false)}
                 className={`flex items-center justify-between px-4 py-2.5 text-sm transition hover:bg-slate-50 dark:hover:bg-slate-800/70 ${activeIdx === items.length - 1 ? "bg-slate-50 dark:bg-slate-800/70" : ""}`}
               >
-                <span className="text-violet-600 font-medium dark:text-violet-400">Показать все результаты для «{debouncedQ}»</span>
+                <span className="text-violet-600 font-medium dark:text-violet-400">{t("search.showAllFor", lang)} «{debouncedQ}»</span>
                 <ChevronRight className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               </Link>
             </div>

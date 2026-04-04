@@ -13,9 +13,6 @@ export function PublicFooter() {
           >
             M
           </div>
-          <span className="text-xs text-slate-500 dark:text-white/40">
-            Платформа записи для nail-салонов
-          </span>
         </div>
 
         <div className="flex items-center gap-5">

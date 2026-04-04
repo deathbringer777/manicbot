@@ -1,6 +1,5 @@
 import { useLanguage } from "@/i18n";
 import { TelegramPhoneDemo } from "./TelegramPhoneDemo";
-import { SearchAutocomplete } from "./SearchAutocomplete";
 
 export function HeroSection() {
   const { t } = useLanguage();
@@ -45,10 +44,6 @@ export function HeroSection() {
             <p className="mx-auto mb-6 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0 dark:text-white/50">
               {t.hero.sub}
             </p>
-
-            <div className="mb-6 w-full max-w-xl mx-auto lg:mx-0">
-              <SearchAutocomplete />
-            </div>
 
             <div className="mb-5 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
               <button

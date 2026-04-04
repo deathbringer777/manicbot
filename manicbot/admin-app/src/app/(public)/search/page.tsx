@@ -6,7 +6,8 @@ import { api } from "~/trpc/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { SearchAutocomplete } from "~/components/public/SearchAutocomplete";
-import { t, type Lang } from "~/lib/i18n";
+import { t } from "~/lib/i18n";
+import { useLang } from "~/components/LangContext";
 
 const SERVICE_CHIPS = [
   { label: "Маникюр", value: "маникюр" },
@@ -18,16 +19,6 @@ const SERVICE_CHIPS = [
   { label: "Покрытие", value: "покрытие" },
   { label: "Снятие", value: "снятие" },
 ];
-
-// Default lang for public pages — detect from navigator or default to ru
-function useLang(): Lang {
-  if (typeof navigator !== "undefined") {
-    const lc = navigator.language?.slice(0, 2);
-    if (lc === "uk") return "ua";
-    if (lc === "en" || lc === "pl") return lc;
-  }
-  return "ru";
-}
 
 function SalonCard({ item }: { item: {
   id: string; slug: string | null; name: string; city: string | null;
@@ -89,7 +80,7 @@ function SkeletonCard() {
 }
 
 function SearchPageContent() {
-  const lang = useLang();
+  const { lang } = useLang();
   const searchParams = useSearchParams();
   const urlQ = searchParams.get("q") ?? "";
 

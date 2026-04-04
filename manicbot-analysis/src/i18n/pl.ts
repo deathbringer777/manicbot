@@ -293,6 +293,8 @@ export const pl: Translations = {
     quickHint: "Zacznij wpisywać salon, miasto lub usługę albo wybierz miasto poniżej.",
     keepTyping: "Wpisz co najmniej 2 znaki, aby szukać salonów i usług.",
     openCatalog: "Otwórz katalog",
+    geoButton: "W pobliżu",
+    geoError: "Lokalizacja niedostępna",
   },
 
   footer: {

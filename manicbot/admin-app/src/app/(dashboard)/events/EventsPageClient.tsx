@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
-import { RefreshCw, Trash2, AlertCircle, AlertTriangle, Info, Filter, X } from "lucide-react";
+import { RefreshCw, Trash2, AlertCircle, AlertTriangle, Info, Filter, X, Search } from "lucide-react";
 
 type EventLevel = "info" | "warn" | "error";
 type AdminEvent = {
@@ -56,13 +56,19 @@ function relativeTime(ts: number): string {
   return `${Math.floor(diff / 86400)}д`;
 }
 
+function rowAccent(level: EventLevel): string {
+  if (level === "error") return "border-l-[3px] border-red-500 bg-red-950/25";
+  if (level === "warn") return "border-l-[3px] border-amber-500 bg-amber-950/15";
+  return "";
+}
+
 function EventRow({ event }: { event: AdminEvent }) {
   const [expanded, setExpanded] = useState(false);
   const hasData = event.data && Object.keys(event.data).length > 0;
 
   return (
     <div
-      className={`border-b border-slate-800/50 last:border-0 transition-colors ${hasData ? "cursor-pointer hover:bg-white/[0.02]" : ""}`}
+      className={`border-b border-slate-800/50 last:border-0 transition-colors ${rowAccent(event.level)} ${hasData ? "cursor-pointer hover:bg-white/[0.02]" : ""}`}
       onClick={() => hasData && setExpanded((v) => !v)}
     >
       <div className="flex items-start gap-2 py-2.5 px-3">
@@ -77,7 +83,9 @@ function EventRow({ event }: { event: AdminEvent }) {
           {event.type}
         </span>
         {/* message */}
-        <span className="text-xs text-slate-300 flex-1 min-w-0 truncate">{event.message}</span>
+        <span className={`text-xs flex-1 min-w-0 truncate ${event.level === "error" ? "text-red-200" : event.level === "warn" ? "text-amber-200" : "text-slate-300"}`}>
+          {event.message}
+        </span>
         {/* tenantId if present */}
         {event.tenantId && (
           <span className="text-[9px] text-slate-600 font-mono shrink-0 hidden sm:block truncate max-w-[80px]">
@@ -96,23 +104,25 @@ function EventRow({ event }: { event: AdminEvent }) {
   );
 }
 
-const TYPE_PRESETS = [
-  "booking",
-  "webhook",
-  "stripe",
-  "auth",
-  "error",
-  "channel",
-];
+const TYPE_PRESETS = ["booking", "webhook", "stripe", "auth", "error", "channel"];
+
+const LEVEL_FILTERS = [
+  { value: "" as const, label: "Все", cls: "text-slate-500 border-slate-700/50 bg-slate-800/50 hover:border-slate-600" },
+  { value: "error" as const, label: "Ошибки", cls: "text-red-400 border-red-500/40 bg-red-500/10 hover:bg-red-500/20" },
+  { value: "warn" as const, label: "Предупрежд.", cls: "text-amber-400 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20" },
+  { value: "info" as const, label: "Инфо", cls: "text-slate-400 border-slate-600/50 bg-slate-800/50 hover:bg-slate-700/50" },
+] as const;
 
 export default function EventsPageClient() {
   const [typeFilter, setTypeFilter] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
+  const [levelFilter, setLevelFilter] = useState<"" | EventLevel>("");
+  const [textSearch, setTextSearch] = useState("");
   const [clearPending, setClearPending] = useState(false);
 
   const { data, isLoading, isFetching, refetch } = api.events.getRecent.useQuery(
-    { limit: 200, type: typeFilter || undefined, tenantId: tenantFilter || undefined },
-    { refetchInterval: 10_000 }
+    { limit: 500, type: typeFilter || undefined, tenantId: tenantFilter || undefined },
+    { refetchInterval: 10_000 },
   );
 
   const clearMut = api.events.clear.useMutation({
@@ -123,7 +133,34 @@ export default function EventsPageClient() {
     onSettled: () => setClearPending(false),
   });
 
-  const events = (data?.events ?? []) as AdminEvent[];
+  const allEvents = (data?.events ?? []) as AdminEvent[];
+
+  // Stats computed from server-loaded events (before client filters)
+  const stats = useMemo(() => {
+    const errors = allEvents.filter((e) => e.level === "error").length;
+    const warns = allEvents.filter((e) => e.level === "warn").length;
+    const infos = allEvents.filter((e) => e.level === "info").length;
+    return { total: allEvents.length, errors, warns, infos };
+  }, [allEvents]);
+
+  // Client-side filtering by level + text
+  const events = useMemo(() => {
+    let list = allEvents;
+    if (levelFilter) list = list.filter((e) => e.level === levelFilter);
+    if (textSearch.trim()) {
+      const q = textSearch.toLowerCase();
+      list = list.filter(
+        (e) =>
+          e.message.toLowerCase().includes(q) ||
+          e.type.toLowerCase().includes(q) ||
+          (e.tenantId ?? "").toLowerCase().includes(q) ||
+          (e.data ? JSON.stringify(e.data).toLowerCase().includes(q) : false),
+      );
+    }
+    return list;
+  }, [allEvents, levelFilter, textSearch]);
+
+  const hasAnyFilter = !!(typeFilter || tenantFilter || levelFilter || textSearch);
 
   return (
     <Shell>
@@ -172,7 +209,62 @@ export default function EventsPageClient() {
           </div>
         </div>
 
-        {/* Filter bar */}
+        {/* Stats bar */}
+        {!isLoading && allEvents.length > 0 && (
+          <div className="grid grid-cols-4 gap-2">
+            <div className="glass-card rounded-xl p-3 text-center">
+              <div className="text-lg font-bold text-slate-200">{stats.total}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Всего</div>
+            </div>
+            <button
+              onClick={() => setLevelFilter(levelFilter === "error" ? "" : "error")}
+              className={`glass-card rounded-xl p-3 text-center transition-colors ${levelFilter === "error" ? "ring-1 ring-red-500/50" : "hover:bg-white/[0.02]"}`}
+            >
+              <div className={`text-lg font-bold ${stats.errors > 0 ? "text-red-400" : "text-slate-500"}`}>
+                {stats.errors}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Ошибок</div>
+            </button>
+            <button
+              onClick={() => setLevelFilter(levelFilter === "warn" ? "" : "warn")}
+              className={`glass-card rounded-xl p-3 text-center transition-colors ${levelFilter === "warn" ? "ring-1 ring-amber-500/50" : "hover:bg-white/[0.02]"}`}
+            >
+              <div className={`text-lg font-bold ${stats.warns > 0 ? "text-amber-400" : "text-slate-500"}`}>
+                {stats.warns}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Предупрежд.</div>
+            </button>
+            <div className="glass-card rounded-xl p-3 text-center">
+              <div className="text-lg font-bold text-slate-400">{stats.infos}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Инфо</div>
+            </div>
+          </div>
+        )}
+
+        {/* Level filter */}
+        <div className="flex flex-wrap gap-1.5">
+          {LEVEL_FILTERS.map(({ value, label, cls }) => (
+            <button
+              key={value || "all"}
+              onClick={() => setLevelFilter(value)}
+              className={`text-[11px] px-2.5 py-1 rounded-lg border font-semibold transition-colors ${
+                levelFilter === value
+                  ? value === "error"
+                    ? "text-red-300 border-red-500/50 bg-red-500/15"
+                    : value === "warn"
+                    ? "text-amber-300 border-amber-500/50 bg-amber-500/15"
+                    : value === "info"
+                    ? "text-slate-300 border-slate-500/50 bg-slate-700/50"
+                    : "text-white border-slate-500 bg-slate-700"
+                  : cls
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Type filter + search row */}
         <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-2">
           <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
           <div className="flex flex-wrap gap-1.5">
@@ -190,17 +282,38 @@ export default function EventsPageClient() {
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            value={tenantFilter}
-            onChange={(e) => setTenantFilter(e.target.value)}
-            placeholder="tenantId..."
-            className="ml-auto w-32 sm:w-44 bg-slate-900/70 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-white placeholder-slate-600"
-          />
-          {(typeFilter || tenantFilter) && (
+
+          {/* Text search */}
+          <div className="ml-auto flex items-center gap-1.5">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none" />
+              <input
+                type="text"
+                value={textSearch}
+                onChange={(e) => setTextSearch(e.target.value)}
+                placeholder="Поиск в логах..."
+                className="pl-7 pr-3 py-1.5 w-36 sm:w-48 bg-slate-900/70 border border-slate-700/50 rounded-xl text-xs outline-none focus:border-brand-500/60 text-white placeholder-slate-600"
+              />
+            </div>
+            <input
+              type="text"
+              value={tenantFilter}
+              onChange={(e) => setTenantFilter(e.target.value)}
+              placeholder="tenantId..."
+              className="w-28 sm:w-36 bg-slate-900/70 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-white placeholder-slate-600"
+            />
+          </div>
+
+          {hasAnyFilter && (
             <button
-              onClick={() => { setTypeFilter(""); setTenantFilter(""); }}
+              onClick={() => {
+                setTypeFilter("");
+                setTenantFilter("");
+                setLevelFilter("");
+                setTextSearch("");
+              }}
               className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors"
+              title="Сбросить фильтры"
             >
               <X className="w-3 h-3 text-slate-400" />
             </button>
@@ -224,7 +337,9 @@ export default function EventsPageClient() {
             <div className="py-16 text-center">
               <p className="text-sm text-slate-500">Нет событий</p>
               <p className="text-[11px] text-slate-600 mt-1">
-                {typeFilter || tenantFilter ? "Попробуйте изменить фильтры" : "События появятся когда Worker начнёт их логировать"}
+                {hasAnyFilter
+                  ? "Попробуйте изменить фильтры"
+                  : "События появятся когда Worker начнёт их логировать"}
               </p>
             </div>
           ) : (
@@ -232,6 +347,9 @@ export default function EventsPageClient() {
               <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 bg-slate-900/30">
                 <span className="text-[10px] text-slate-600 font-medium">
                   {events.length} событи{events.length === 1 ? "е" : "й"}
+                  {allEvents.length !== events.length && (
+                    <span className="text-slate-700"> / {allEvents.length} всего</span>
+                  )}
                 </span>
                 {isFetching && (
                   <span className="text-[10px] text-brand-500/70 flex items-center gap-1">

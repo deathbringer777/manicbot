@@ -291,6 +291,8 @@ export const en = {
     quickHint: "Start typing a salon, city, or service, or pick a city below.",
     keepTyping: "Type at least 2 characters to search salons and services.",
     openCatalog: "Open catalog",
+    geoButton: "Near me",
+    geoError: "Location unavailable",
   },
 
   footer: {

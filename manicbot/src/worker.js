@@ -22,10 +22,10 @@ import { logEvent } from './utils/events.js';
 
 /**
  * Paths proxied to Cloudflare Pages (admin-app). Must cover every browser route under src/app.
- * '/' is admin home (Next route group (dashboard)/page.tsx), not tryLanding.
+ * Root '/' belongs to the public landing on manicbot.com.
  */
 function isAdminAppPath(pathname) {
-  if (pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
+  if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
   if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
   if (pathname.startsWith('/_next/')) return true;
   if (pathname.startsWith('/api/trpc/')) return true;

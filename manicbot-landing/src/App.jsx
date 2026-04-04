@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ChatMockup from './ChatMockup';
 import Carousel from './Carousel';
+import LandingSearch from './LandingSearch';
 import './App.css';
 
 function useReveal(alwaysVisible = false) {
@@ -224,7 +225,10 @@ export default function App() {
               <p className={`hero-tag reveal delay-1 ${heroVisible ? 'visible' : ''}`}>{t('hero.tagline')}</p>
               <h1 className={`hero-title reveal delay-2 ${heroVisible ? 'visible' : ''}`}>{t('hero.title')}</h1>
               <p className={`hero-sub reveal delay-3 ${heroVisible ? 'visible' : ''}`}>{t('hero.subtitle')}</p>
-              <a href="https://t.me/manic_preview_bot" target="_blank" rel="noopener noreferrer" className={`hero-cta reveal delay-4 ${heroVisible ? 'visible' : ''}`}>
+              <div className={`hero-search reveal delay-4 ${heroVisible ? 'visible' : ''}`}>
+                <LandingSearch />
+              </div>
+              <a href="https://t.me/manic_preview_bot" target="_blank" rel="noopener noreferrer" className={`hero-cta reveal delay-5 ${heroVisible ? 'visible' : ''}`}>
                 {t('hero.cta')}
               </a>
               <div className={`hero-channels reveal delay-5 ${heroVisible ? 'visible' : ''}`}>

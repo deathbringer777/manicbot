@@ -244,6 +244,7 @@ export default {
         message: e?.message || String(e),
         stack: e?.stack || null,
       });
+      void logEvent(envCtx(env), 'error.cron', { level: 'error', message: e?.message ?? 'Cron init error', data: { stack: e?.stack?.slice(0, 300) } });
     }
   },
 };

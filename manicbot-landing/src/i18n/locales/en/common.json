@@ -176,6 +176,13 @@
       "whitelabel": "White label option"
     }
   },
+  "search": {
+    "placeholder": "Find a salon near you",
+    "geoButton": "Near me",
+    "showAll": "Show all results",
+    "popularCities": "Popular cities",
+    "noResults": "Nothing found"
+  },
   "footer": {
     "copy": "© 2025 ManicBot",
     "tagline": "Multi-channel booking bot for beauty professionals",

@@ -190,6 +190,7 @@ CREATE TABLE IF NOT EXISTS platform_tickets (
   client_name TEXT,
   status TEXT NOT NULL DEFAULT 'open',
   claimed_by INTEGER,
+  claimed_by_web_user_id TEXT,
   claimed_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -202,6 +203,7 @@ CREATE TABLE IF NOT EXISTS platform_ticket_messages (
   ticket_id TEXT NOT NULL,
   sender TEXT NOT NULL,
   text TEXT,
+  attachment_url TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ptmsg_ticket ON platform_ticket_messages(ticket_id);

@@ -118,7 +118,7 @@ export const webUsersRouter = createTRPCRouter({
       z.object({
         email: z.string().email(),
         password: z.string().min(12, "Минимум 12 символов"),
-        role: z.enum(["system_admin", "tenant_owner", "support", "technical_support"]),
+        role: z.enum(["tenant_owner", "support", "technical_support"]),
         tenantId: z.string().nullable().optional(),
       })
     )

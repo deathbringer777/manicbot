@@ -258,7 +258,8 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
               <div className="glass-card rounded-2xl p-6 text-center">
                 <p className="text-xs text-slate-500 mb-1">{t(`master.${period}Earnings` as any, lang)}</p>
                 <p className="text-4xl font-bold text-white mb-1">
-                  {earnings.data.total.toLocaleString(lang === "en" ? "en" : "ru")} <span className="text-2xl text-slate-400">₴</span>
+                  {earnings.data.total.toLocaleString(lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU")}{" "}
+                  <span className="text-2xl text-slate-400">zł</span>
                 </p>
                 <p className="text-sm text-slate-400">{earnings.data.count} {t("master.confirmedApts", lang)}</p>
               </div>

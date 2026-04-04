@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle, ChevronRight } from "lucide-react";
+import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle, ChevronRight, Search } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
@@ -36,13 +36,18 @@ export function SupportDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>("open");
   const [replyText, setReplyText] = useState("");
+  const [replyAttachmentUrl, setReplyAttachmentUrl] = useState("");
+  const [searchQ, setSearchQ] = useState("");
 
   const supportNavItems: NavItem[] = [
     { href: "#tickets", icon: MessageSquare, label: t("support.tickets", lang) },
   ];
 
   const allTickets = api.support.getAllTickets.useQuery(
-    { status: filter === "all" ? undefined : filter },
+    {
+      status: filter === "all" ? undefined : filter,
+      q: searchQ.trim() || undefined,
+    },
     { refetchInterval: !selectedId ? 15000 : false, refetchIntervalInBackground: false }
   );
   const ticketDetail = api.support.getTicket.useQuery(
@@ -59,7 +64,11 @@ export function SupportDashboard() {
     onSuccess: () => { utils.support.getTicket.invalidate(); utils.support.getAllTickets.invalidate(); }
   });
   const reply = api.support.replyToTicket.useMutation({
-    onSuccess: () => { setReplyText(""); utils.support.getTicket.invalidate(); }
+    onSuccess: () => {
+      setReplyText("");
+      setReplyAttachmentUrl("");
+      utils.support.getTicket.invalidate();
+    },
   });
 
   const filterLabels: Record<FilterStatus, string> = {
@@ -129,7 +138,8 @@ export function SupportDashboard() {
               {/* Messages */}
               <div className="space-y-2">
                 {ticketDetail.data.messages.map((msg: any) => {
-                  const isSupport = msg.sender.startsWith("support:");
+                  const isSupport = typeof msg.sender === "string" && msg.sender.startsWith("support:");
+                  const att = msg.attachmentUrl as string | null | undefined;
                   return (
                     <div key={msg.id} className={`flex ${isSupport ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
@@ -137,7 +147,20 @@ export function SupportDashboard() {
                           ? "bg-brand-500/20 text-brand-100 border border-brand-500/30"
                           : "glass-card text-slate-200"
                       }`}>
-                        <p className="text-sm">{msg.text}</p>
+                        <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                        {att?.startsWith("http") && (
+                          <a
+                            href={att}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-sky-400 underline mt-1 block truncate"
+                          >
+                            {att}
+                          </a>
+                        )}
+                        {att?.startsWith("telegram:") && (
+                          <p className="text-[10px] text-slate-500 mt-1">Вложение в Telegram (откройте диалог в боте)</p>
+                        )}
                         <p className="text-[10px] text-slate-500 mt-1">{relativeTime(msg.createdAt)}</p>
                       </div>
                     </div>
@@ -150,21 +173,36 @@ export function SupportDashboard() {
 
               {/* Reply input */}
               {ticketDetail.data.ticket.status !== "closed" && (
-                <div className="flex gap-2 pt-2">
-                  <textarea
-                    value={replyText}
-                    onChange={e => setReplyText(e.target.value)}
-                    placeholder={t("support.replyPlaceholder", lang)}
-                    rows={2}
-                    className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
+                <div className="space-y-2 pt-2">
+                  <input
+                    type="url"
+                    value={replyAttachmentUrl}
+                    onChange={(e) => setReplyAttachmentUrl(e.target.value)}
+                    placeholder="Attachment URL (optional)"
+                    className="w-full bg-slate-800/80 border border-slate-700 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-500/50"
                   />
-                  <button
-                    onClick={() => reply.mutate({ ticketId: selectedId, text: replyText })}
-                    disabled={reply.isPending || !replyText.trim()}
-                    className="flex items-center justify-center h-full px-3 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 disabled:opacity-50 hover:opacity-80 transition-opacity"
-                  >
-                    {reply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </button>
+                  <div className="flex gap-2">
+                    <textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder={t("support.replyPlaceholder", lang)}
+                      rows={2}
+                      className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
+                    />
+                    <button
+                      onClick={() =>
+                        reply.mutate({
+                          ticketId: selectedId,
+                          text: replyText,
+                          attachmentUrl: replyAttachmentUrl.trim() || undefined,
+                        })
+                      }
+                      disabled={reply.isPending || !replyText.trim()}
+                      className="flex items-center justify-center h-full px-3 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 disabled:opacity-50 hover:opacity-80 transition-opacity"
+                    >
+                      {reply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               )}
             </>
@@ -181,6 +219,17 @@ export function SupportDashboard() {
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-white flex-1">{t("support.tickets", lang)}</h2>
           {allTickets.isRefetching && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Search className="h-4 w-4 text-slate-500 shrink-0" />
+          <input
+            type="search"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Search name, ticket id, tenant…"
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
+          />
         </div>
 
         {/* Filter tabs */}
@@ -226,7 +275,7 @@ export function SupportDashboard() {
                     </div>
                     <p className="text-[11px] text-slate-500 truncate">
                       {ticket.tenantId ?? t("support.platform", lang)} · {relativeTime(ticket.createdAt)}
-                      {ticket.claimedBy ? ` · #${ticket.claimedBy}` : ""}
+                      {ticket.claimedByWebUserId ? " · web" : ticket.claimedBy ? ` · #${ticket.claimedBy}` : ""}
                     </p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-slate-600 shrink-0" />

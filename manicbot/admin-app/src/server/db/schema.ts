@@ -168,6 +168,7 @@ export const platformTickets = sqliteTable("platform_tickets", {
   clientName: text("client_name"),
   status: text("status").notNull().default("open"),
   claimedBy: integer("claimed_by"),
+  claimedByWebUserId: text("claimed_by_web_user_id"),
   claimedAt: integer("claimed_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -178,6 +179,7 @@ export const platformTicketMessages = sqliteTable("platform_ticket_messages", {
   ticketId: text("ticket_id").notNull(),
   sender: text("sender").notNull(),
   text: text("text"),
+  attachmentUrl: text("attachment_url"),
   createdAt: integer("created_at").notNull(),
 });
 

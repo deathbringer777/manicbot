@@ -55,10 +55,10 @@ describe('showHomeByRole — main bot (no tenantId)', () => {
     expect(await resolveHomePanel(ctx, ADMIN_ID)).toBe('platform_admin');
   });
 
-  it('system_admin role (non-creator) → platform_admin panel', async () => {
+  it('non-creator cannot get platform_admin via DB system_admin row', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: '999' });
     await setPlatformRole(ctx, 111, 'system_admin');
-    expect(await resolveHomePanel(ctx, 111)).toBe('platform_admin');
+    expect(await resolveHomePanel(ctx, 111)).toBe('welcome');
   });
 
   it('admin role in main bot → welcome (no tenant context → not admin panel)', async () => {
@@ -83,10 +83,10 @@ describe('showHomeByRole — main bot (no tenantId)', () => {
 describe('showHomeByRole — tenant bot (tenantId set)', () => {
   const T = 't_salon1';
 
-  it('system_admin in tenant bot → admin panel (acts as admin)', async () => {
+  it('non-creator with stale system_admin row in tenant bot → welcome', async () => {
     const ctx = makeCtx({ tenantId: T, adminChatId: '999' });
     await setPlatformRole(ctx, 321, 'system_admin');
-    expect(await resolveHomePanel(ctx, 321)).toBe('admin');
+    expect(await resolveHomePanel(ctx, 321)).toBe('welcome');
   });
 
   it('tenant_owner in tenant bot → admin panel', async () => {
@@ -274,19 +274,17 @@ describe('Regression: system_admin never lands on client welcome', () => {
     expect(panel).toBe('platform_admin');
   });
 
-  it('system_admin DB role in main bot: home panel is NEVER welcome', async () => {
+  it('stale system_admin DB row in main bot does not grant platform_admin', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: '' });
-    await setPlatformRole(ctx, 1234, 'system_admin');
+    await ctx.db.prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)').bind(1234, 'system_admin', 1).run();
     const panel = await resolveHomePanel(ctx, 1234);
-    expect(panel).not.toBe('welcome');
-    expect(panel).toBe('platform_admin');
+    expect(panel).toBe('welcome');
   });
 
-  it('system_admin in tenant bot: home panel is admin, NOT welcome', async () => {
+  it('stale system_admin in tenant bot does not grant admin panel', async () => {
     const ctx = makeCtx({ tenantId: 't_test', adminChatId: '999' });
-    await setPlatformRole(ctx, 555, 'system_admin');
+    await ctx.db.prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)').bind(555, 'system_admin', 1).run();
     const panel = await resolveHomePanel(ctx, 555);
-    expect(panel).toBe('admin');
-    expect(panel).not.toBe('welcome');
+    expect(panel).toBe('welcome');
   });
 });

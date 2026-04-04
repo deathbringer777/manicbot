@@ -47,11 +47,12 @@ describe('isPlatformAdmin', () => {
     expect(await isPlatformAdmin(ctx, 888)).toBe(false);
   });
 
-  it('non-creator with system_admin in D1 is platform admin', async () => {
+  it('system_admin cannot be written via setPlatformRole', async () => {
     const db = createMockD1();
     const ctx = { adminChatId: null, db };
-    await setPlatformRole(ctx, 888, 'system_admin');
-    expect(await isPlatformAdmin(ctx, 888)).toBe(true);
+    const ok = await setPlatformRole(ctx, 888, 'system_admin');
+    expect(ok).toBe(false);
+    expect(await isPlatformAdmin(ctx, 888)).toBe(false);
   });
 
   it('support role in D1 is not platform admin', async () => {

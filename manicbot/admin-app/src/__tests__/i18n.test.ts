@@ -34,7 +34,7 @@ describe("i18n t()", () => {
   });
 
   it("roleSwitch keys exist", () => {
-    expect(t("roleSwitch.godMode", "ru")).toBe("God Mode");
+    expect(t("roleSwitch.godMode", "ru")).toBe("Админ");
     expect(t("roleSwitch.salon", "ru")).toBe("Как салон");
     expect(t("roleSwitch.master", "ru")).toBe("Как мастер");
     expect(t("roleSwitch.support", "ru")).toBe("Как саппорт");

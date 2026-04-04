@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 
 describe("web user creation validation (admin)", () => {
   const MIN_PASSWORD_LENGTH = 12;
-  const VALID_ROLES = ["system_admin", "tenant_owner", "support", "technical_support"];
+  const VALID_ROLES = ["tenant_owner", "support", "technical_support"];
 
   it("rejects passwords shorter than 12 characters", () => {
     const password = "Short1!";

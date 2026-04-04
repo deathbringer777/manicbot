@@ -34,7 +34,7 @@ export async function isAdmin(ctx, cid) {
       if (role === ROLES.SUPPORT || role === ROLES.MASTER) return false;
     } else {
       const platformRole = await getPlatformRole(ctx, cid);
-      if (platformRole === ROLES.SYSTEM_ADMIN) return true;
+      if (platformRole === ROLES.SYSTEM_ADMIN && isCreator(ctx, cid)) return true;
       if (platformRole === ROLES.SUPPORT) return false;
     }
   }
@@ -45,7 +45,7 @@ export async function isPlatformAdmin(ctx, cid) {
   if (isCreator(ctx, cid)) return true;
   if (!ctx.db) return false;
   const platformRole = await getPlatformRole(ctx, cid);
-  return platformRole === ROLES.SYSTEM_ADMIN;
+  return platformRole === ROLES.SYSTEM_ADMIN && isCreator(ctx, cid);
 }
 
 // ── Masters ─────────────────────────────────────────────────────────────────

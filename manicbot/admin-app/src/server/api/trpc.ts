@@ -11,11 +11,8 @@ import superjson from "superjson";
 import { ZodError } from "zod";
 
 import { getDb } from "~/server/db";
-import { platformRoles } from "~/server/db/schema";
-import { eq } from "drizzle-orm";
 import { validateWebAppData, timingSafeEqualStr } from "~/server/auth/telegram";
 import { env } from "~/env";
-import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
 import { auth } from "~/server/auth/auth";
 
 /**
@@ -160,12 +157,12 @@ export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({
  * Protected (authenticated) procedure for Bot Admins
  * Accepts both Telegram Mini App auth AND web session (email/password login).
  */
+/** God Mode API — only platform owner (Telegram ADMIN_CHAT_ID or web session with role system_admin). */
 export const adminProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
-    // Web session path: webUser with a platform-level admin role
     if (!ctx.user && ctx.webUser) {
-      if (isAdminProcedurePlatformRole(ctx.webUser.webRole)) {
+      if (ctx.webUser.webRole === "system_admin") {
         return next({ ctx });
       }
       throw new TRPCError({
@@ -181,27 +178,12 @@ export const adminProcedure = t.procedure
       });
     }
 
-    // Always allow the platform creator (ADMIN_CHAT_ID secret)
-    let isAdmin = env.ADMIN_CHAT_ID ? timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID) : false;
-
-    if (!isAdmin) {
-      const dbRole = await ctx.db
-        .select()
-        .from(platformRoles)
-        .where(eq(platformRoles.chatId, ctx.user.id))
-        .limit(1);
-
-      if (dbRole.length > 0 && isAdminProcedurePlatformRole(dbRole[0]?.role)) {
-        isAdmin = true;
-      }
+    if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) {
+      return next({ ctx: { ...ctx, user: ctx.user } });
     }
 
-    if (!isAdmin) {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "You do not have administration privileges.",
-      });
-    }
-
-    return next({ ctx: { ...ctx, user: ctx.user } });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You do not have administration privileges.",
+    });
   });

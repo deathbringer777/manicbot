@@ -4,12 +4,43 @@
  */
 
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { conversations } from "~/server/db/schema";
-import { eq, and, desc, lt } from "drizzle-orm";
+import { eq, and, desc, lt, like } from "drizzle-orm";
 
 export const conversationsRouter = createTRPCRouter({
+  /**
+   * God Mode: all tenants' omnichannel rows (optional tenant + search on channel_user_id).
+   */
+  listAdmin: adminProcedure
+    .input(
+      z.object({
+        tenantId: z.string().optional(),
+        channelType: z.enum(["telegram", "whatsapp", "instagram", "all"]).default("all"),
+        status: z.enum(["open", "closed", "all"]).default("open"),
+        search: z.string().optional(),
+        limit: z.number().min(1).max(100).default(40),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [];
+      if (input.tenantId) conditions.push(eq(conversations.tenantId, input.tenantId));
+      if (input.channelType !== "all") conditions.push(eq(conversations.channelType, input.channelType));
+      if (input.status !== "all") conditions.push(eq(conversations.status, input.status));
+      if (input.search?.trim()) {
+        const pat = `%${input.search.trim().replace(/%/g, "\\%")}%`;
+        conditions.push(like(conversations.channelUserId, pat));
+      }
+      const rows = await ctx.db
+        .select()
+        .from(conversations)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(conversations.lastMessageAt))
+        .limit(input.limit);
+      return { items: rows };
+    }),
+
   /**
    * List recent conversations for a tenant (paginated, newest first).
    */

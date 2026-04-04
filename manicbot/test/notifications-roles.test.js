@@ -174,14 +174,14 @@ describe('notifyAptStaff — recipient logic', () => {
 // ── Role resolution after KV→D1 migration ────────────────────────────────────
 
 describe('Role resolution — D1 migration correctness', () => {
-  it('platform_roles: system_admin role correctly stored and read', async () => {
+  it('platform_roles: system_admin is not writable via setPlatformRole', async () => {
     const { setPlatformRole, getPlatformRole, ROLES } = await import('../src/roles/roles.js');
     const db = createMockD1();
     const ctx = { db };
 
-    await setPlatformRole(ctx, 321706035, ROLES.SYSTEM_ADMIN);
-    const role = await getPlatformRole(ctx, 321706035);
-    expect(role).toBe('system_admin');
+    const ok = await setPlatformRole(ctx, 321706035, ROLES.SYSTEM_ADMIN);
+    expect(ok).toBe(false);
+    expect(await getPlatformRole(ctx, 321706035)).toBeNull();
   });
 
   it('platform_roles: wrong value "admin" fails the system_admin check', async () => {

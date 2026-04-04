@@ -16,7 +16,7 @@ import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt,
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
-import { createTicket } from '../support/tickets.js';
+import { createTicket, appendTicketMessage } from '../support/tickets.js';
 import { setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
 import { addSupport, removeSupport, createTenant, registerBot, setSystemAdmin, addTechnicalSupport } from '../admin/provisioning.js';
 import { getTenant, putTenant, listTenantIds, getBotIdsByTenantId, getBot, getBotToken } from '../tenant/storage.js';
@@ -284,28 +284,62 @@ export async function onMsg(ctx, msg) {
     }
   }
 
-  if (st.step === STEP.TECH_SUPPORT_MSG && txt) {
-    const isCommand = txt.startsWith('/');
-    const isMenuButton = menuLabels.includes(txt);
-    if (isCommand || isMenuButton) {
-      await clearState(ctx, cid);
+  if (st.step === STEP.TECH_SUPPORT_MSG) {
+    const bodyRaw = (msg.text || msg.caption || '').trim().slice(0, 2000);
+    let attachmentUrl = null;
+    if (msg.photo && msg.photo.length > 0) {
+      const f = msg.photo[msg.photo.length - 1].file_id;
+      attachmentUrl = `telegram:file_id:${f}`;
+    } else if (msg.document?.file_id) {
+      attachmentUrl = `telegram:file_id:${msg.document.file_id}`;
+    }
+    const hasPayload = !!(bodyRaw || attachmentUrl);
+    if (!hasPayload) {
+      /* wait for text or media */
     } else {
-      await clearState(ctx, cid);
-      const senderRole = await getRole(ctx, cid);
-      if (senderRole !== 'master' && senderRole !== 'admin' && senderRole !== 'tenant_owner' && senderRole !== 'system_admin') {
-        return send(ctx, cid, t(lg, 'tech_support_only_staff'));
-      }
-      const agents = ctx.db ? await getTechnicalSupportAgents(ctx) : [];
-      if (agents.length > 0) {
-        const salonName = ctx.tenant?.name || ctx.SALON_NAME || 'Salon';
-        await setTicket(ctx, cid, { open: true, masterCid: null, since: Date.now(), msg: txt.slice(0, 500) });
-        const notice = fill(t(lg, 'tech_support_notify'), { salon: escHtml(salonName), name: escHtml(name), role: senderRole, msg: escHtml(txt).slice(0, 500) });
-        const techClaimKb = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'support_claim_btn'), callback_data: CB.TICKET_TAKE + cid }]] } };
-        for (const agId of agents) {
-          try { await send(ctx, agId, notice, techClaimKb); } catch (_) {}
-        }
-        return send(ctx, cid, t(lg, 'tech_support_created'));
+      const isCommand = bodyRaw.startsWith('/');
+      const isMenuButton = menuLabels.includes(bodyRaw);
+      if (isCommand || isMenuButton) {
+        await clearState(ctx, cid);
       } else {
+        await clearState(ctx, cid);
+        const senderRole = await getRole(ctx, cid);
+        if (senderRole !== 'master' && senderRole !== 'admin' && senderRole !== 'tenant_owner' && senderRole !== 'system_admin') {
+          return send(ctx, cid, t(lg, 'tech_support_only_staff'));
+        }
+        const agents = ctx.db ? await getTechnicalSupportAgents(ctx) : [];
+        if (agents.length > 0 && ctx.db) {
+          const salonName = ctx.tenant?.name || ctx.SALON_NAME || 'Salon';
+          const botId = ctx.bot?.botId || ctx.botId || null;
+          const ticketDoc = await createTicket(ctx, cid, name, botId, bodyRaw, attachmentUrl);
+          if (ticketDoc) {
+            await setTicket(ctx, cid, {
+              open: true,
+              masterCid: null,
+              since: Date.now(),
+              msg: bodyRaw.slice(0, 500),
+              globalTicketId: ticketDoc.id,
+            });
+            const preview = escHtml(bodyRaw || (attachmentUrl ? '[файл]' : '')).slice(0, 500);
+            const notice = fill(t(lg, 'tech_support_notify'), { salon: escHtml(salonName), name: escHtml(name), role: senderRole, msg: preview })
+              + `\n\n<code>${ticketDoc.id}</code>`;
+            const techClaimKb = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'support_claim_btn'), callback_data: CB.TICKET_TAKE + ticketDoc.id }]] } };
+            for (const agId of agents) {
+              try { await send(ctx, agId, notice, techClaimKb); } catch (_) {}
+            }
+            return send(ctx, cid, t(lg, 'tech_support_created'));
+          }
+        }
+        if (agents.length > 0) {
+          const salonName = ctx.tenant?.name || ctx.SALON_NAME || 'Salon';
+          await setTicket(ctx, cid, { open: true, masterCid: null, since: Date.now(), msg: bodyRaw.slice(0, 500) });
+          const notice = fill(t(lg, 'tech_support_notify'), { salon: escHtml(salonName), name: escHtml(name), role: senderRole, msg: escHtml(bodyRaw).slice(0, 500) });
+          const techClaimKb = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'support_claim_btn'), callback_data: CB.TICKET_TAKE + cid }]] } };
+          for (const agId of agents) {
+            try { await send(ctx, agId, notice, techClaimKb); } catch (_) {}
+          }
+          return send(ctx, cid, t(lg, 'tech_support_created'));
+        }
         return send(ctx, cid, t(lg, 'unknown'));
       }
     }
@@ -422,6 +456,33 @@ export async function onMsg(ctx, msg) {
 
   const realRole = await getRole(ctx, cid);
 
+  // Platform tech ticket: staff follow-up (text or media) → D1 + notify agents / claimed agent
+  if (ctx.db && ctx.kv && ctx.tenantId) {
+    const staffRoles = ['master', 'admin', 'tenant_owner', 'system_admin'];
+    const staffLine = (msg.text || msg.caption || '').trim().slice(0, 2000);
+    let staffAtt = null;
+    if (msg.photo?.length) staffAtt = `telegram:file_id:${msg.photo[msg.photo.length - 1].file_id}`;
+    else if (msg.document?.file_id) staffAtt = `telegram:file_id:${msg.document.file_id}`;
+    if (staffRoles.includes(realRole) && (staffLine || staffAtt)) {
+      const platTkt = await getTicket(ctx, cid);
+      if (platTkt?.open && platTkt.globalTicketId) {
+        await appendTicketMessage(ctx, platTkt.globalTicketId, 'client', staffLine, staffAtt);
+        const agents = await getTechnicalSupportAgents(ctx);
+        const tail = `\n\n<code>${platTkt.globalTicketId}</code>`;
+        const snippet = escHtml(staffLine || (staffAtt ? '[файл]' : '')).slice(0, 400);
+        if (platTkt.masterCid) {
+          try { await send(ctx, platTkt.masterCid, `📩 ${snippet}${tail}`); } catch (_) {}
+        } else {
+          for (const agId of agents) {
+            try { await send(ctx, agId, `📩 ${snippet}${tail}`); } catch (_) {}
+          }
+        }
+        await send(ctx, cid, '✅');
+        return;
+      }
+    }
+  }
+
   if (ctx.kv && txt) {
     if (realRole === 'client') {
       const ticket = await getTicket(ctx, cid);
@@ -456,7 +517,7 @@ export async function onMsg(ctx, msg) {
         }
         return;
       }
-    } else if (realRole === 'master' || realRole === 'admin') {
+    } else if (realRole === 'master' || realRole === 'admin' || realRole === 'tenant_owner' || realRole === 'system_admin') {
       const clientCid = await getTicketMaster(ctx, cid);
       if (clientCid) {
         if (isTicketCloseWord(txt)) {
@@ -467,6 +528,12 @@ export async function onMsg(ctx, msg) {
           return;
         }
         await send(ctx, clientCid, escHtml(txt));
+        if (ctx.db) {
+          const staffSide = await getTicket(ctx, clientCid);
+          if (staffSide?.globalTicketId) {
+            await appendTicketMessage(ctx, staffSide.globalTicketId, `support:${cid}`, txt, null);
+          }
+        }
         return;
       }
     }

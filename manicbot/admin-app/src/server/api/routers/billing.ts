@@ -2,8 +2,7 @@ import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { tenants } from "~/server/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
-
-const PLAN_PRICES: Record<string, number> = { start: 29, pro: 79, studio: 149 };
+import { PLAN_PRICES_PLN } from "~/lib/money";
 
 export const billingRouter = createTRPCRouter({
   getOverview: adminProcedure.query(async ({ ctx }) => {
@@ -17,7 +16,7 @@ export const billingRouter = createTRPCRouter({
     );
 
     const mrr = active.reduce(
-      (sum, t) => sum + (PLAN_PRICES[t.plan ?? "start"] ?? 0),
+      (sum, t) => sum + (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0),
       0
     );
 
@@ -50,7 +49,7 @@ export const billingRouter = createTRPCRouter({
         cancelAtPeriodEnd: t.cancelAtPeriodEnd,
         createdAt: t.createdAt,
         monthlyRevenue:
-          t.billingStatus === "active" ? (PLAN_PRICES[t.plan ?? "start"] ?? 0) : 0,
+          t.billingStatus === "active" ? (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0) : 0,
       })),
     };
   }),

@@ -109,7 +109,7 @@ const translations = {
 
   // ── Role switcher ──────────────────────────────────────────────────────────
   "roleSwitch.title":       { ru: "Режим просмотра", ua: "Режим перегляду", en: "Preview mode", pl: "Tryb podglądu" },
-  "roleSwitch.godMode":     { ru: "God Mode",     ua: "God Mode",       en: "God Mode",   pl: "God Mode" },
+  "roleSwitch.godMode":     { ru: "Админ",        ua: "Адмін",          en: "Admin",      pl: "Admin" },
   "roleSwitch.salon":       { ru: "Как салон",    ua: "Як салон",       en: "As Salon",   pl: "Jako salon" },
   "roleSwitch.master":      { ru: "Как мастер",   ua: "Як майстер",     en: "As Master",  pl: "Jako mistrz" },
   "roleSwitch.support":     { ru: "Как саппорт",  ua: "Як підтримка",   en: "As Support", pl: "Jako wsparcie" },

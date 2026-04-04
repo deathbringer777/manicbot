@@ -62,11 +62,11 @@ describe("Role routing logic", () => {
   });
 });
 
-describe("adminProcedure platform roles", () => {
-  it("technical_support matches God Mode platform roles (parity with support)", () => {
+describe("assignable platform staff roles", () => {
+  it("support and technical_support match", () => {
     expect(isAdminProcedurePlatformRole("technical_support")).toBe(true);
     expect(isAdminProcedurePlatformRole("support")).toBe(true);
-    expect(isAdminProcedurePlatformRole("system_admin")).toBe(true);
+    expect(isAdminProcedurePlatformRole("system_admin")).toBe(false);
   });
 
   it("tenant and unrelated strings do not match", () => {
@@ -76,11 +76,7 @@ describe("adminProcedure platform roles", () => {
     expect(isAdminProcedurePlatformRole(undefined)).toBe(false);
   });
 
-  it("ADMIN_PROCEDURE_PLATFORM_ROLES lists all three staff roles", () => {
-    expect(ADMIN_PROCEDURE_PLATFORM_ROLES).toEqual([
-      "system_admin",
-      "support",
-      "technical_support",
-    ]);
+  it("ADMIN_PROCEDURE_PLATFORM_ROLES lists support staff only", () => {
+    expect(ADMIN_PROCEDURE_PLATFORM_ROLES).toEqual(["support", "technical_support"]);
   });
 });

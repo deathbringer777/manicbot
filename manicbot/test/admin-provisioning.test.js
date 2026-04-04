@@ -69,10 +69,10 @@ describe('admin provisioning (D1)', () => {
     expect(role).toBe(ROLES.MASTER);
   });
 
-  it('setSystemAdmin → platform_roles record', async () => {
-    const result = await setSystemAdmin(ctx, 333);
-    expect(result).toBe(true);
-    const role = await getPlatformRole(ctx, 333);
-    expect(role).toBe(ROLES.SYSTEM_ADMIN);
+  it('setSystemAdmin does not write platform_roles; true only when chatId matches adminChatId', async () => {
+    const cctx = { ...ctx, adminChatId: '333' };
+    expect(await setSystemAdmin(cctx, 333)).toBe(true);
+    expect(await getPlatformRole(cctx, 333)).toBeNull();
+    expect(await setSystemAdmin({ ...ctx, adminChatId: '1' }, 333)).toBe(false);
   });
 });

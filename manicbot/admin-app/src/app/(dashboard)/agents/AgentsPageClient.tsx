@@ -5,7 +5,7 @@ import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { Headphones, Wrench, Shield, Plus, Trash2, X, UserCog } from "lucide-react";
 
-type AgentType = "support" | "technical_support" | "system_admin";
+type AgentType = "support" | "technical_support";
 
 const AGENT_TYPES: { key: AgentType; label: string; desc: string; icon: React.ElementType; color: string }[] = [
   {
@@ -21,13 +21,6 @@ const AGENT_TYPES: { key: AgentType; label: string; desc: string; icon: React.El
     desc: "Доступ к техническим вопросам от владельцев салонов",
     icon: Wrench,
     color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  },
-  {
-    key: "system_admin",
-    label: "Системный Администратор",
-    desc: "Полный доступ к платформе (God Mode в боте)",
-    icon: Shield,
-    color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
   },
 ];
 
@@ -52,13 +45,13 @@ export default function AgentsPageClient() {
     if (!data) return [];
     if (type === "support") return data.support;
     if (type === "technical_support") return data.techSupport;
-    if (type === "system_admin") return data.platformAdmins;
     return [];
   }
 
   const totalCount = data
-    ? [...new Set([...data.support, ...data.techSupport, ...data.platformAdmins])].length
+    ? [...new Set([...data.support, ...data.techSupport])].length
     : 0;
+  const legacyAdminIds = data?.platformAdmins ?? [];
 
   return (
     <Shell>
@@ -67,7 +60,10 @@ export default function AgentsPageClient() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Агенты</h1>
-            <p className="text-sm text-slate-400 mt-1">{totalCount} агентов на платформе</p>
+            <p className="text-sm text-slate-400 mt-1">
+              {totalCount} агентов поддержки
+              {legacyAdminIds.length > 0 ? ` · ${legacyAdminIds.length} устаревших записей system_admin в БД` : ""}
+            </p>
           </div>
           <button
             onClick={() => setShowAdd(true)}
@@ -85,8 +81,8 @@ export default function AgentsPageClient() {
             <div>
               <p className="text-xs font-semibold text-white">Платформенные роли</p>
               <p className="text-xs text-slate-400 mt-1">
-                Здесь управляются роли платформы — аналог команд /grant_support, /grant_tech_support в боте.
-                Роли на уровне тенантов (мастер, владелец) настраиваются в разделе Tenants.
+                Админ платформы только вы (через ADMIN_CHAT_ID). Здесь — support и техподдержка, как /grant_support в боте.
+                Владельцы салонов — в разделе Tenants.
               </p>
             </div>
           </div>
@@ -157,6 +153,35 @@ export default function AgentsPageClient() {
                 </div>
               );
             })}
+
+            {legacyAdminIds.length > 0 && (
+              <div className="glass-card rounded-2xl overflow-hidden border border-amber-500/20">
+                <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30 bg-amber-500/5">
+                  <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-white">Устаревшие записи system_admin</p>
+                    <p className="text-[11px] text-slate-400">
+                      Назначение через API отключено. Удалите строки, чтобы очистить БД (ваш ADMIN_CHAT_ID удалить нельзя).
+                    </p>
+                  </div>
+                </div>
+                <div className="divide-y divide-border/20">
+                  {legacyAdminIds.map((chatId) => (
+                    <div key={chatId} className="flex items-center justify-between px-4 py-3">
+                      <p className="text-sm font-mono font-semibold text-white">#{chatId}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeMut.mutate({ chatId })}
+                        disabled={removeMut.isPending}
+                        className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

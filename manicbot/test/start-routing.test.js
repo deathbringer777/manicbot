@@ -7,10 +7,19 @@ import { resolveRole, ROLES, setPlatformRole, setTenantRole } from '../src/roles
 import { createMockD1 } from './helpers/mock-db.js';
 
 describe('resolveRole — platform vs tenant priority (D1)', () => {
-  it('system_admin platform role is returned even in tenant ctx', async () => {
+  it('illegitimate system_admin row ignored; tenant_owner wins', async () => {
     const db = createMockD1();
-    const ctx = { db, tenantId: 't_salon1' };
-    await setPlatformRole(ctx, 111, 'system_admin');
+    const ctx = { db, tenantId: 't_salon1', adminChatId: '999' };
+    await db.prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)').bind(111, 'system_admin', 1).run();
+    await setTenantRole(ctx, 111, 'tenant_owner');
+    const role = await resolveRole(ctx, 111);
+    expect(role).toBe('tenant_owner');
+  });
+
+  it('creator system_admin platform row kept in tenant ctx', async () => {
+    const db = createMockD1();
+    const ctx = { db, tenantId: 't_salon1', adminChatId: '111' };
+    await db.prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)').bind(111, 'system_admin', 1).run();
     await setTenantRole(ctx, 111, 'tenant_owner');
     const role = await resolveRole(ctx, 111);
     expect(role).toBe('system_admin');

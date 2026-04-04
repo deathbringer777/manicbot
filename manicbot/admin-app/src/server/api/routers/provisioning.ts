@@ -1,4 +1,7 @@
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
+import { TRPCError } from "@trpc/server";
+import { env } from "~/env";
+import { timingSafeEqualStr } from "~/server/auth/telegram";
 import {
   tenants,
   bots,
@@ -127,6 +130,7 @@ export const provisioningRouter = createTRPCRouter({
     return {
       support: agents.filter((a) => a.type === "support").map((a) => a.chatId),
       techSupport: agents.filter((a) => a.type === "technical_support").map((a) => a.chatId),
+      /** Legacy rows only — system_admin is never assignable via API. */
       platformAdmins: roles.filter((r) => r.role === "system_admin").map((r) => r.chatId),
     };
   }),
@@ -135,43 +139,41 @@ export const provisioningRouter = createTRPCRouter({
     .input(
       z.object({
         chatId: z.number(),
-        type: z.enum(["support", "technical_support", "system_admin"]),
+        type: z.enum(["support", "technical_support"]),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const now = Math.floor(Date.now() / 1000);
-
-      if (input.type === "system_admin") {
-        await ctx.db
-          .insert(platformRoles)
-          .values({ chatId: input.chatId, role: "system_admin", createdAt: now })
-          .onConflictDoUpdate({
-            target: platformRoles.chatId,
-            set: { role: "system_admin" },
-          });
-      } else {
-        await ctx.db
-          .insert(supportAgents)
-          .values({ chatId: input.chatId, type: input.type })
-          .onConflictDoUpdate({
-            target: supportAgents.chatId,
-            set: { type: input.type },
-          });
-        const role = input.type === "support" ? "support" : "technical_support";
-        await ctx.db
-          .insert(platformRoles)
-          .values({ chatId: input.chatId, role, createdAt: now })
-          .onConflictDoUpdate({
-            target: platformRoles.chatId,
-            set: { role },
-          });
-      }
+      await ctx.db
+        .insert(supportAgents)
+        .values({ chatId: input.chatId, type: input.type })
+        .onConflictDoUpdate({
+          target: supportAgents.chatId,
+          set: { type: input.type },
+        });
+      const role = input.type === "support" ? "support" : "technical_support";
+      await ctx.db
+        .insert(platformRoles)
+        .values({ chatId: input.chatId, role, createdAt: now })
+        .onConflictDoUpdate({
+          target: platformRoles.chatId,
+          set: { role },
+        });
       return { ok: true };
     }),
 
   removeAgent: adminProcedure
     .input(z.object({ chatId: z.number() }))
     .mutation(async ({ ctx, input }) => {
+      if (
+        env.ADMIN_CHAT_ID &&
+        timingSafeEqualStr(String(input.chatId), env.ADMIN_CHAT_ID)
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot remove platform owner.",
+        });
+      }
       await ctx.db
         .delete(supportAgents)
         .where(eq(supportAgents.chatId, input.chatId));

@@ -2,8 +2,7 @@ import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { users, tenants, appointments } from "~/server/db/schema";
 import { sql, desc, and, eq, gte } from "drizzle-orm";
 import { z } from "zod";
-
-const PLAN_PRICES: Record<string, number> = { start: 29, pro: 79, studio: 149 };
+import { PLAN_PRICES_PLN } from "~/lib/money";
 
 function formatTime(ts: number): string {
   const diff = Math.floor(Date.now() / 1000 - ts);
@@ -44,7 +43,7 @@ export const metricsRouter = createTRPCRouter({
       ]);
 
     const mrr = activeTenants.reduce(
-      (sum, t) => sum + (PLAN_PRICES[t.plan ?? "start"] ?? 0),
+      (sum, t) => sum + (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0),
       0
     );
 

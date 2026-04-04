@@ -42,7 +42,8 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Users": "Пользователи",
     "Tenants": "Салоны",
     "Appointments": "Записи",
-    "Inbox": "Переписка",
+    "Inbox": "Омниканал",
+    "Platform tickets": "Тикеты платформы",
     "Agents": "Агенты",
     "Billing": "Биллинг",
     "Events": "События",
@@ -62,7 +63,7 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Tickets": "Тикеты",
     // Role info
     "Admin Panel": "Панель администратора",
-    "God Mode": "God Mode",
+    "God Mode": "Админ",
     "My Salon": "Мой салон",
     "My Schedule": "Моё расписание",
     "Master": "Мастер",
@@ -80,7 +81,8 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Users": "Користувачі",
     "Tenants": "Салони",
     "Appointments": "Записи",
-    "Inbox": "Листування",
+    "Inbox": "Омніканал",
+    "Platform tickets": "Тикети платформи",
     "Agents": "Агенти",
     "Billing": "Білінг",
     "Events": "Події",
@@ -96,7 +98,7 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Profile": "Профіль",
     "Tickets": "Тікети",
     "Admin Panel": "Панель адміністратора",
-    "God Mode": "God Mode",
+    "God Mode": "Адмін",
     "My Salon": "Мій салон",
     "My Schedule": "Мій розклад",
     "Master": "Майстер",
@@ -114,7 +116,8 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Users": "Użytkownicy",
     "Tenants": "Salony",
     "Appointments": "Wizyty",
-    "Inbox": "Wiadomości",
+    "Inbox": "Omnichannel",
+    "Platform tickets": "Zgłoszenia platformy",
     "Agents": "Agenci",
     "Billing": "Płatności",
     "Events": "Zdarzenia",
@@ -130,7 +133,7 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Profile": "Profil",
     "Tickets": "Zgłoszenia",
     "Admin Panel": "Panel administratora",
-    "God Mode": "God Mode",
+    "God Mode": "Admin",
     "My Salon": "Mój salon",
     "My Schedule": "Mój harmonogram",
     "Master": "Mistrz",
@@ -167,6 +170,7 @@ function buildGodGroups(lang: string): NavGroup[] {
     {
       label: tNav("Platform", lang),
       items: [
+        { href: "/platform-support", icon: HeadphonesIcon, label: tNav("Platform tickets", lang) },
         { href: "/billing", icon: CreditCard, label: tNav("Billing", lang) },
         { href: "/events", icon: ScrollText, label: tNav("Events", lang) },
         { href: "/system", icon: Activity, label: tNav("System", lang) },
@@ -344,7 +348,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             ))}
           </nav>
 
-          {/* Bottom: role switcher + compact user card */}
           <div className="border-t border-white/[0.06] p-3 space-y-2">
             {/* Compact user row */}
             <div className={`flex items-center gap-2.5 rounded-xl ${collapsed ? "justify-center py-2" : "px-2 py-2 bg-white/[0.03]"}`}>

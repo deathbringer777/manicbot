@@ -65,7 +65,8 @@ export async function addMasterToTenant(ctx, chatId) {
 }
 
 export async function setSystemAdmin(ctx, chatId) {
-  return setPlatformRole(ctx, chatId, ROLES.SYSTEM_ADMIN);
+  // Creator is god via ADMIN_CHAT_ID only — never persist system_admin in platform_roles.
+  return !!(ctx?.adminChatId != null && String(chatId) === String(ctx.adminChatId));
 }
 
 export async function addSupport(ctx, chatId) {

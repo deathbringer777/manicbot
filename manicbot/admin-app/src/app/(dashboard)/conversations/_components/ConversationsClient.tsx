@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, Loader2, RefreshCw, MessageCircle, Filter } from "lucide-react";
+import { MessageSquare, Loader2, RefreshCw, MessageCircle, Search } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
@@ -34,81 +34,132 @@ export function ConversationsPage() {
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [selected, setSelected] = useState<string | null>(null);
+  const [godTenantFilter, setGodTenantFilter] = useState("");
+  const [convSearch, setConvSearch] = useState("");
 
-  // For system_admin, use first available tenantId (or null for all)
-  const effectiveTenantId = tenantId ?? "";
+  const isGod = role === "system_admin";
 
-  const convs = api.conversations.list.useQuery(
+  const tenants = api.tenants.getAll.useQuery(undefined, { enabled: isGod });
+
+  const convsSalon = api.conversations.list.useQuery(
     {
-      tenantId: effectiveTenantId,
+      tenantId: tenantId ?? "",
       channelType: channelFilter,
       status: statusFilter,
       limit: 30,
     },
-    { enabled: !!effectiveTenantId }
+    { enabled: !isGod && !!tenantId },
   );
+
+  const convsGod = api.conversations.listAdmin.useQuery(
+    {
+      tenantId: godTenantFilter || undefined,
+      channelType: channelFilter,
+      status: statusFilter,
+      search: convSearch.trim() || undefined,
+      limit: 40,
+    },
+    { enabled: isGod },
+  );
+
+  const convs = isGod ? convsGod : convsSalon;
 
   const setStatus = api.conversations.setStatus.useMutation({
     onSuccess: () => void convs.refetch(),
   });
 
-  const selectedConv = convs.data?.items.find(c => c.id === selected);
+  const items = convs.data?.items ?? [];
 
-  if (!effectiveTenantId) {
+  if (!isGod && !tenantId) {
     return (
-      <Shell navItems={[]} title="Conversations" subtitle="Unified inbox">
+      <Shell navItems={[]} title="Conversations" subtitle="Omnichannel inbox">
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <MessageSquare className="h-10 w-10 text-slate-600" />
-          <p className="text-slate-500 text-sm">No tenant selected</p>
+          <p className="text-slate-500 text-sm">No salon context</p>
         </div>
       </Shell>
     );
   }
 
   return (
-    <Shell navItems={[]} title="Conversations" subtitle="Unified multi-channel inbox">
-      {/* Filters */}
+    <Shell
+      navItems={[]}
+      title="Conversations"
+      subtitle="Omnichannel: client chats (TG / WA / IG). Platform staff mail lives in Support tickets."
+    >
+      {isGod && (
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Search className="h-4 w-4 text-slate-500 shrink-0" />
+            <input
+              type="search"
+              value={convSearch}
+              onChange={(e) => setConvSearch(e.target.value)}
+              placeholder="Search channel user id…"
+              className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
+            />
+          </div>
+          <select
+            value={godTenantFilter}
+            onChange={(e) => setGodTenantFilter(e.target.value)}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500/40"
+          >
+            <option value="">All salons</option>
+            {(tenants.data ?? []).map((t: { id: string; name: string | null }) => (
+              <option key={t.id} value={t.id}>
+                {t.name ?? t.id}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {/* Channel filter */}
         <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-          {(["all", "telegram", "whatsapp", "instagram"] as ChannelFilter[]).map(ch => (
-            <button key={ch} onClick={() => setChannelFilter(ch)}
+          {(["all", "telegram", "whatsapp", "instagram"] as ChannelFilter[]).map((ch) => (
+            <button
+              key={ch}
+              onClick={() => setChannelFilter(ch)}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                 channelFilter === ch
                   ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                   : "text-slate-500 hover:text-slate-300"
-              }`}>
+              }`}
+            >
               {ch === "all" ? "All" : ch === "telegram" ? "TG" : ch === "whatsapp" ? "WA" : "IG"}
             </button>
           ))}
         </div>
 
-        {/* Status filter */}
         <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-          {(["open", "closed", "all"] as StatusFilter[]).map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)}
+          {(["open", "closed", "all"] as StatusFilter[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all capitalize ${
                 statusFilter === s
                   ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                   : "text-slate-500 hover:text-slate-300"
-              }`}>
+              }`}
+            >
               {s}
             </button>
           ))}
         </div>
 
-        <button onClick={() => void convs.refetch()}
-          className="ml-auto text-slate-500 hover:text-slate-300 transition-colors">
+        <button
+          onClick={() => void convs.refetch()}
+          className="ml-auto text-slate-500 hover:text-slate-300 transition-colors"
+        >
           <RefreshCw className={`h-4 w-4 ${convs.isFetching ? "animate-spin" : ""}`} />
         </button>
       </div>
 
-      {/* Conversation list */}
       {convs.isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="animate-spin text-brand-400 h-6 w-6" />
         </div>
-      ) : convs.data?.items.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <MessageCircle className="h-10 w-10 text-slate-600" />
           <p className="text-slate-500 text-sm">No conversations found</p>
@@ -116,51 +167,69 @@ export function ConversationsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {convs.data?.items.map(conv => {
-            const badge = CHANNEL_BADGE[conv.channelType] ?? { label: conv.channelType, color: "bg-slate-500/20 text-slate-400 border-slate-500/30" };
+          {items.map((conv) => {
+            const badge = CHANNEL_BADGE[conv.channelType] ?? {
+              label: conv.channelType,
+              color: "bg-slate-500/20 text-slate-400 border-slate-500/30",
+            };
             const isSelected = selected === conv.id;
             return (
-              <div key={conv.id}
+              <div
+                key={conv.id}
                 onClick={() => setSelected(isSelected ? null : conv.id)}
                 className={`glass-card rounded-xl p-3 cursor-pointer transition-all ${
                   isSelected ? "border border-brand-500/40 bg-brand-500/5" : "hover:bg-white/5"
-                }`}>
+                }`}
+              >
                 <div className="flex items-center gap-3">
-                  {/* Channel badge */}
                   <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${badge.color}`}>
                     {badge.label}
                   </span>
 
-                  {/* User info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
-                      {conv.channelUserId}
+                    <p className="text-sm font-medium text-white truncate">{conv.channelUserId}</p>
+                    <p className="text-xs text-slate-500">
+                      {isGod && <span className="font-mono text-slate-600 mr-2">{conv.tenantId}</span>}
+                      {timeAgo(conv.lastMessageAt)}
                     </p>
-                    <p className="text-xs text-slate-500">{timeAgo(conv.lastMessageAt)}</p>
                   </div>
 
-                  {/* Status */}
-                  <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${STATUS_BADGE[conv.status ?? "open"]}`}>
+                  <span
+                    className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${STATUS_BADGE[conv.status ?? "open"]}`}
+                  >
                     {conv.status ?? "open"}
                   </span>
                 </div>
 
-                {/* Expanded actions */}
-                {isSelected && (
+                {isSelected && (isGod ? conv.tenantId : tenantId) && (
                   <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
                     <p className="text-xs text-slate-500 flex-1">
                       ID: <span className="font-mono text-slate-400">{conv.id}</span>
                     </p>
                     {conv.status === "open" ? (
                       <button
-                        onClick={e => { e.stopPropagation(); setStatus.mutate({ tenantId: effectiveTenantId, id: conv.id, status: "closed" }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStatus.mutate({
+                            tenantId: (isGod ? conv.tenantId : tenantId) as string,
+                            id: conv.id,
+                            status: "closed",
+                          });
+                        }}
                         className="text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg px-2.5 py-1 transition-colors"
                       >
                         Close
                       </button>
                     ) : (
                       <button
-                        onClick={e => { e.stopPropagation(); setStatus.mutate({ tenantId: effectiveTenantId, id: conv.id, status: "open" }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStatus.mutate({
+                            tenantId: (isGod ? conv.tenantId : tenantId) as string,
+                            id: conv.id,
+                            status: "open",
+                          });
+                        }}
                         className="text-xs text-brand-400 hover:text-brand-300 border border-brand-500/30 rounded-lg px-2.5 py-1 transition-colors"
                       >
                         Reopen
@@ -172,8 +241,7 @@ export function ConversationsPage() {
             );
           })}
 
-          {/* Load more hint */}
-          {convs.data?.nextCursor && (
+          {!isGod && "nextCursor" in (convs.data ?? {}) && (convs.data as { nextCursor?: number }).nextCursor && (
             <p className="text-center text-xs text-slate-600 py-2">Scroll for more</p>
           )}
         </div>

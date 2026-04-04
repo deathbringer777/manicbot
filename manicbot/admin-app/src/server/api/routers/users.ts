@@ -2,6 +2,9 @@ import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { users, platformRoles, blockedUsers } from "~/server/db/schema";
 import { eq, inArray, and, asc, sql, or, like } from "drizzle-orm";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { env } from "~/env";
+import { timingSafeEqualStr } from "~/server/auth/telegram";
 
 export const usersRouter = createTRPCRouter({
   getAll: adminProcedure
@@ -154,7 +157,7 @@ export const usersRouter = createTRPCRouter({
 
   setRole: adminProcedure
     .input(
-      z.object({ chatId: z.number(), role: z.enum(["system_admin", "support"]) })
+      z.object({ chatId: z.number(), role: z.enum(["support", "technical_support"]) })
     )
     .mutation(async ({ ctx, input }) => {
       await ctx.db
@@ -174,6 +177,15 @@ export const usersRouter = createTRPCRouter({
   removeRole: adminProcedure
     .input(z.object({ chatId: z.number() }))
     .mutation(async ({ ctx, input }) => {
+      if (
+        env.ADMIN_CHAT_ID &&
+        timingSafeEqualStr(String(input.chatId), env.ADMIN_CHAT_ID)
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot remove platform owner role.",
+        });
+      }
       await ctx.db.delete(platformRoles).where(eq(platformRoles.chatId, input.chatId));
       return { success: true };
     }),

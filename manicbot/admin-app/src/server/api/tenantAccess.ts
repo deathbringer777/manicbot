@@ -1,8 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { eq, and } from "drizzle-orm";
-import { platformRoles, tenantRoles } from "~/server/db/schema";
+import { tenantRoles } from "~/server/db/schema";
 import { env } from "~/env";
-import { isAdminProcedurePlatformRole } from "~/server/api/platformRoles";
+import { timingSafeEqualStr } from "~/server/auth/telegram";
 
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
 
@@ -20,18 +20,14 @@ export type TenantAccessCtx = {
 export async function assertTenantOwner(ctx: TenantAccessCtx, tenantId: string): Promise<void> {
   // Web session path
   if (!ctx.user && ctx.webUser) {
-    // system_admin / support / technical_support → full access
-    if (isAdminProcedurePlatformRole(ctx.webUser.webRole)) return;
-    // tenant_owner → check if they own THIS tenant
+    if (ctx.webUser.webRole === "system_admin") return;
     if (ctx.webUser.webRole === "tenant_owner" && ctx.webUser.tenantId === tenantId) return;
     throw new TRPCError({ code: "FORBIDDEN", message: "Salon owner access required" });
   }
 
   // Telegram user path
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (env.ADMIN_CHAT_ID && String(ctx.user.id) === env.ADMIN_CHAT_ID) return;
-  const platformRow = await ctx.db.select().from(platformRoles).where(eq(platformRoles.chatId, ctx.user.id)).limit(1);
-  if (platformRow.length && platformRow[0]!.role === "system_admin") return;
+  if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) return;
   const row = await ctx.db
     .select()
     .from(tenantRoles)

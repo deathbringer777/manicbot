@@ -2,6 +2,7 @@ import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { users, appointments, tenants } from "~/server/db/schema";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
+import { PLAN_PRICES_PLN } from "~/lib/money";
 
 function toCSV(headers: string[], rows: (string | number | null | undefined)[][]): string {
   const escape = (v: string | number | null | undefined) => {
@@ -12,8 +13,6 @@ function toCSV(headers: string[], rows: (string | number | null | undefined)[][]
   };
   return [headers, ...rows].map((r) => r.map(escape).join(",")).join("\n");
 }
-
-const PLAN_PRICES: Record<string, number> = { start: 29, pro: 79, studio: 149 };
 
 export const exportRouter = createTRPCRouter({
   users: adminProcedure
@@ -108,7 +107,7 @@ export const exportRouter = createTRPCRouter({
         plan: t.plan,
         billingStatus: t.billingStatus,
         monthlyRevenue:
-          t.billingStatus === "active" ? (PLAN_PRICES[t.plan ?? "start"] ?? 0) : 0,
+          t.billingStatus === "active" ? (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0) : 0,
         email: t.billingEmail,
         stripeId: t.stripeCustomerId,
         trialEndsAt: t.trialEndsAt

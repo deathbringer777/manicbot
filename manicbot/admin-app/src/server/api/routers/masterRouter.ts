@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { appointments, masters, users, services, tenantRoles, platformRoles } from "~/server/db/schema";
+import { appointments, masters, users, services, tenantRoles } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
@@ -10,16 +10,13 @@ async function assertMaster(ctx: any, tenantId: string) {
   // Web session path
   if (!ctx.user && ctx.webUser) {
     const r = ctx.webUser.webRole;
-    if (r === "system_admin" || r === "support" || r === "technical_support") return;
+    if (r === "system_admin") return;
     if ((r === "master" || r === "tenant_owner") && ctx.webUser.tenantId === tenantId) return;
     throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
   }
   // Telegram path
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-  // System admin bypass (preview mode)
   if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) return;
-  const platformRow = await ctx.db.select().from(platformRoles).where(eq(platformRoles.chatId, ctx.user.id)).limit(1);
-  if (platformRow.length && platformRow[0]!.role === "system_admin") return;
   const row = await ctx.db
     .select()
     .from(tenantRoles)

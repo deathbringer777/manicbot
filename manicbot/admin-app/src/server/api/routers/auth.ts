@@ -40,7 +40,12 @@ export const authRouter = createTRPCRouter({
 
     if (platformRow.length > 0) {
       const role = platformRow[0]!.role as AppRole;
-      if (role === "system_admin" || role === "support" || role === "technical_support") {
+      if (role === "system_admin") {
+        if (env.ADMIN_CHAT_ID && String(userId) === env.ADMIN_CHAT_ID) {
+          return { role: "system_admin" as AppRole, tenantId: null };
+        }
+        // Ignore illegitimate DB rows for non-creator.
+      } else if (role === "support" || role === "technical_support") {
         return { role, tenantId: null };
       }
     }

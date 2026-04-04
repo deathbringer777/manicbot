@@ -23,7 +23,8 @@ export async function getPlatformRole(ctx, chatId) {
 
 export async function setPlatformRole(ctx, chatId, role) {
   if (!ctx?.db || chatId == null || !role) return false;
-  const allowed = [ROLES.SYSTEM_ADMIN, ROLES.SUPPORT, ROLES.TECHNICAL_SUPPORT];
+  // system_admin is never stored in D1 — only ADMIN_CHAT_ID (creator) is platform god.
+  const allowed = [ROLES.SUPPORT, ROLES.TECHNICAL_SUPPORT];
   if (!allowed.includes(role)) return false;
   try {
     await dbRun(ctx,
@@ -72,7 +73,11 @@ export async function setTenantRole(ctx, chatId, role) {
 export async function resolveRole(ctx, chatId) {
   if (chatId == null) return ROLES.CLIENT;
   const platformRole = await getPlatformRole(ctx, chatId);
-  if (platformRole === ROLES.SYSTEM_ADMIN || platformRole === ROLES.SUPPORT || platformRole === ROLES.TECHNICAL_SUPPORT) {
+  if (platformRole === ROLES.SYSTEM_ADMIN) {
+    const creator = ctx?.adminChatId != null && String(chatId) === String(ctx.adminChatId);
+    if (creator) return ROLES.SYSTEM_ADMIN;
+    // Stale/illegitimate row — ignore for privileges; fall through to tenant roles.
+  } else if (platformRole === ROLES.SUPPORT || platformRole === ROLES.TECHNICAL_SUPPORT) {
     return platformRole;
   }
   if (ctx?.tenantId) {

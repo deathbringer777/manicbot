@@ -12,6 +12,7 @@ import {
   CreditCard,
   Clock,
 } from "lucide-react";
+import { formatPlnWhole } from "~/lib/money";
 
 // ─── Color palette ────────────────────────────────────────────────
 
@@ -163,8 +164,8 @@ export default function DashboardClient() {
             />
             <StatCard
               title="MRR"
-              value={`$${s?.mrr ?? 0}`}
-              sub="расчётный"
+              value={formatPlnWhole(s?.mrr ?? 0)}
+              sub="расчётный, PLN"
               icon={TrendingUp}
               {...STAT_COLORS.amber}
             />

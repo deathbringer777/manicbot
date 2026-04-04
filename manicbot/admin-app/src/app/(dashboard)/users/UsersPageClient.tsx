@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 type Filter = "all" | "admins" | "banned";
-type Role = "system_admin" | "support";
+type AssignablePlatformRole = "support" | "technical_support";
 
 type UserItem = {
   id: number;
@@ -36,7 +36,13 @@ function RoleBadge({ role }: { role: string }) {
   if (role === "system_admin")
     return (
       <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 uppercase">
-        system_admin
+        админ
+      </span>
+    );
+  if (role === "technical_support")
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 uppercase">
+        техподдержка
       </span>
     );
   if (role === "support")
@@ -365,26 +371,34 @@ export default function UsersPageClient() {
               </button>
             </div>
 
+            <p className="text-[11px] text-slate-500 mb-2">
+              Роль админа платформы только у владельца (ADMIN_CHAT_ID). Здесь — только поддержка.
+            </p>
             <div className="space-y-2">
-              {(["system_admin", "support"] as Role[]).map((role) => (
+              {(
+                [
+                  { key: "support" as const, label: "Поддержка (support)" },
+                  { key: "technical_support" as const, label: "Техподдержка" },
+                ] as { key: AssignablePlatformRole; label: string }[]
+              ).map(({ key, label }) => (
                 <button
-                  key={role}
-                  onClick={() => setRoleMut.mutate({ chatId: roleModal.id, role })}
+                  key={key}
+                  onClick={() => setRoleMut.mutate({ chatId: roleModal.id, role: key })}
                   disabled={setRoleMut.isPending}
                   className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-slate-800 active:bg-slate-700 text-sm text-white disabled:opacity-50"
                 >
                   <Shield className="w-4 h-4 text-brand-400 shrink-0" />
                   <span>
                     Назначить{" "}
-                    <span className="font-bold text-brand-400 capitalize">{role}</span>
+                    <span className="font-bold text-brand-400">{label}</span>
                   </span>
-                  {roleModal.role === role && (
+                  {roleModal.role === key && (
                     <span className="ml-auto text-[10px] text-brand-400 font-bold">ТЕКУЩАЯ</span>
                   )}
                 </button>
               ))}
 
-              {roleModal.role !== "user" && (
+              {roleModal.role !== "user" && roleModal.role !== "system_admin" && (
                 <button
                   onClick={() => removeRoleMut.mutate({ chatId: roleModal.id })}
                   disabled={removeRoleMut.isPending}

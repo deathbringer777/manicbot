@@ -80,7 +80,7 @@ function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: stri
               <Clock className="h-3.5 w-3.5" />
               {svc.duration} мин
             </span>
-            <span className="font-semibold text-violet-600 dark:text-brand-400">{svc.price > 0 ? `${svc.price} ₽` : "По договорённости"}</span>
+            <span className="font-semibold text-violet-600 dark:text-brand-400">{svc.price > 0 ? `${svc.price}\u00a0zł` : "По договорённости"}</span>
           </div>
           {svc.description && (
             <button

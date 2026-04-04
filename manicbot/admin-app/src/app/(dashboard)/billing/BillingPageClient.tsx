@@ -3,6 +3,7 @@
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { Download, TrendingUp, CheckCircle, Clock } from "lucide-react";
+import { formatPlnWhole } from "~/lib/money";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -71,8 +72,8 @@ export default function BillingPageClient() {
             <div className="glass-card rounded-2xl p-4 col-span-2 flex items-center gap-4">
               <TrendingUp className="w-6 h-6 text-emerald-400 shrink-0" />
               <div>
-                <p className="text-xs text-slate-400">MRR (расчётный)</p>
-                <p className="text-3xl font-extrabold text-white">${m?.mrr ?? 0}</p>
+                <p className="text-xs text-slate-400">MRR (расчётный, PLN)</p>
+                <p className="text-3xl font-extrabold text-white">{formatPlnWhole(m?.mrr ?? 0)}</p>
               </div>
             </div>
             <div className="glass-card rounded-2xl p-4 text-center">
@@ -138,7 +139,7 @@ export default function BillingPageClient() {
               <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-border/30">
                 <span className="text-[10px] font-mono text-slate-600 truncate flex-1">{t.id}</span>
                 <span className="text-sm font-bold text-white shrink-0 ml-2">
-                  {t.monthlyRevenue > 0 ? `$${t.monthlyRevenue}/м` : "—"}
+                  {t.monthlyRevenue > 0 ? `${formatPlnWhole(t.monthlyRevenue)}/мес` : "—"}
                 </span>
               </div>
             </div>

@@ -31,4 +31,13 @@ describe("assertTenantOwner (salon / channels API gate)", () => {
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("rejects web support for any tenant", async () => {
+    await expect(
+      assertTenantOwner(
+        { user: null, webUser: { id: "w3", email: "s@b.com", tenantId: null, webRole: "support" }, db: {} as never },
+        "t_any",
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });

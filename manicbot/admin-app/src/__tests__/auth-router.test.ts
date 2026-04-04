@@ -30,11 +30,14 @@ function getMyRoleLogic(ctx: MockCtx): { role: AppRole; tenantId: string | null 
     return { role: "system_admin", tenantId: null };
   }
 
-  // Platform roles
   const platformRow = ctx.platformRows.find((r) => r.chatId === ctx.user!.id);
   if (platformRow) {
     const role = platformRow.role as AppRole;
-    if (role === "system_admin" || role === "support" || role === "technical_support") {
+    if (role === "system_admin") {
+      if (ctx.adminChatId && String(ctx.user!.id) === ctx.adminChatId) {
+        return { role: "system_admin", tenantId: null };
+      }
+    } else if (role === "support" || role === "technical_support") {
       return { role, tenantId: null };
     }
   }
@@ -115,6 +118,17 @@ describe("getMyRole — ADMIN_CHAT_ID fallback", () => {
 });
 
 describe("getMyRole — platform roles", () => {
+  it("ignores system_admin in DB when user is not ADMIN_CHAT_ID", () => {
+    const result = getMyRoleLogic({
+      user: { id: 100 },
+      webUser: null,
+      adminChatId: "999",
+      platformRows: [{ chatId: 100, role: "system_admin" }],
+      tenantRows: [],
+    });
+    expect(result.role).toBeNull();
+  });
+
   it("returns support role from platform_roles", () => {
     const result = getMyRoleLogic({
       user: { id: 100 },

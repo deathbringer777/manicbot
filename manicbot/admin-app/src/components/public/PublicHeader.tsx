@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, LogIn } from "lucide-react";
 import { usePublicTheme } from "./ThemeProvider";
 
 export function PublicHeader() {
@@ -59,9 +59,11 @@ export function PublicHeader() {
           </button>
           <Link
             href="/login"
-            className="hidden items-center rounded-xl border border-slate-200/80 px-3.5 py-2 text-xs font-medium text-slate-600 transition-all duration-200 hover:border-slate-300 hover:text-slate-900 sm:flex dark:border-white/10 dark:text-white/50 dark:hover:border-white/20 dark:hover:text-white/80"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200/80 px-2.5 py-2 text-xs font-medium text-slate-600 transition-all duration-200 hover:border-slate-300 hover:text-slate-900 sm:px-3.5 dark:border-white/10 dark:text-white/50 dark:hover:border-white/20 dark:hover:text-white/80"
+            aria-label="Войти"
           >
-            Войти
+            <LogIn className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">Войти</span>
           </Link>
         </div>
       </div>

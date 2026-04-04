@@ -222,7 +222,6 @@ function buildGodGroups(lang: string): NavGroup[] {
         { href: "/billing", icon: CreditCard, label: tNav("Billing", lang) },
         { href: "/events", icon: ScrollText, label: tNav("Events", lang) },
         { href: "/system", icon: Activity, label: tNav("System", lang) },
-        { href: "/settings", icon: Settings, label: tNav("Settings", lang) },
       ],
     },
   ];
@@ -280,6 +279,7 @@ function getRoleInfo(role: string | null, lang: string): { title: string; subtit
 }
 
 function getPageTitle(pathname: string, role: string | null, lang: string): string {
+  if (pathname.startsWith("/settings")) return tNav("Settings", lang);
   const flat = role === "system_admin" ? buildGodGroups(lang).flatMap(g => g.items) : getFlatNav(role, lang);
   const exact = flat.find(n => n.href === pathname);
   if (exact) return exact.label;
@@ -344,7 +344,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const handleLogout = async () => {
     setShowLogoutDialog(false);
     await signOut({ redirect: false });
-    router.push("/login");
+    window.location.replace("/login");
   };
 
   const isActive = (item: NavItem) => {
@@ -412,18 +412,39 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             ))}
           </nav>
 
-          {/* Collapsed sidebar: just a logout icon at bottom */}
-          {collapsed && (
-            <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
-              <button
-                onClick={() => setShowLogoutDialog(true)}
-                className="flex items-center justify-center p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all w-full"
-                title={tNav("Logout", lang)}
-              >
-                <LogOut className="h-[17px] w-[17px]" />
-              </button>
-            </div>
-          )}
+          {/* Bottom: Settings + Logout — always visible */}
+          <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
+            {!collapsed ? (
+              <div className="space-y-0.5">
+                <NavLink
+                  item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
+                  active={pathname.startsWith("/settings")}
+                />
+                <button
+                  onClick={() => setShowLogoutDialog(true)}
+                  className="group flex items-center gap-3 rounded-xl px-3 py-2.5 w-full text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 transition-all duration-150 border-l-2 border-transparent"
+                >
+                  <LogOut className="h-[18px] w-[18px] shrink-0" />
+                  <span className="text-[13px]">{tNav("Logout", lang)}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <NavLink
+                  item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
+                  active={pathname.startsWith("/settings")}
+                  collapsed
+                />
+                <button
+                  onClick={() => setShowLogoutDialog(true)}
+                  className="flex items-center justify-center p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all w-full"
+                  title={tNav("Logout", lang)}
+                >
+                  <LogOut className="h-[17px] w-[17px]" />
+                </button>
+              </div>
+            )}
+          </div>
         </aside>
 
         {/* ═══ Mobile Drawer ═══ */}
@@ -470,8 +491,13 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 ))}
               </nav>
 
-              {/* Mobile drawer bottom: user info */}
-              <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
+              {/* Mobile drawer bottom: settings + user info */}
+              <div className="border-t border-slate-200 dark:border-white/[0.06] p-3 space-y-1">
+                <NavLink
+                  item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
+                  active={pathname.startsWith("/settings")}
+                  onClick={() => setSidebarOpen(false)}
+                />
                 <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.03]">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
                     {avatarLetter}
@@ -530,11 +556,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
 
-              {/* User pill — click opens logout dialog */}
-              <button
-                onClick={() => setShowLogoutDialog(true)}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-2.5 py-1.5 hover:border-slate-300 dark:hover:border-white/20 transition-colors"
-              >
+              {/* User pill — display only */}
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-2.5 py-1.5">
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
                   {avatarLetter}
                 </div>
@@ -546,8 +569,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                     {roleInfo.badge}
                   </span>
                 )}
-                <LogOut className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
-              </button>
+              </div>
             </div>
           </header>
 

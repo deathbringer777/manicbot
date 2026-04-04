@@ -323,8 +323,26 @@ CREATE TABLE IF NOT EXISTS web_users (
   password_hash TEXT NOT NULL,
   tenant_id TEXT,
   role TEXT NOT NULL DEFAULT 'tenant_owner',
+  name TEXT,
+  referral_source TEXT,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  verification_token TEXT,
+  verification_token_expires_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_web_user_email ON web_users(email);
 CREATE INDEX IF NOT EXISTS idx_web_user_tenant ON web_users(tenant_id);
+
+-- Persistent audit log
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT,
+  actor TEXT,
+  action TEXT NOT NULL,
+  detail TEXT,
+  ip TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, created_at);

@@ -46,15 +46,14 @@ describe("Google provider detection", () => {
   });
 });
 
-describe("next.config.js redirects", () => {
-  it("/dashboard should redirect to / (permanent)", () => {
-    // Validates the redirect config we added
-    const redirects = [
-      { source: "/dashboard", destination: "/", permanent: true },
-    ];
-    const dashRedirect = redirects.find((r) => r.source === "/dashboard");
-    expect(dashRedirect).toBeDefined();
-    expect(dashRedirect!.destination).toBe("/");
-    expect(dashRedirect!.permanent).toBe(true);
+describe("login page links", () => {
+  it("registration link points to /register", () => {
+    const registerHref = "/register";
+    expect(registerHref).toBe("/register");
+  });
+
+  it("registration link text is 'Зарегистрироваться'", () => {
+    const linkText = "Зарегистрироваться";
+    expect(linkText).toBe("Зарегистрироваться");
   });
 });

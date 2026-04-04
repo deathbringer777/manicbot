@@ -53,7 +53,9 @@ export const webUsersRouter = createTRPCRouter({
       }
       const id = crypto.randomUUID();
       const passwordHash = await hashPassword(input.password);
+      const verificationToken = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
+      const tokenExpiresAt = now + 24 * 3600; // 24 hours
       await ctx.db.insert(webUsers).values({
         id,
         email,
@@ -61,14 +63,44 @@ export const webUsersRouter = createTRPCRouter({
         role: input.role,
         name: input.name ?? null,
         referralSource: input.referralSource ?? null,
+        emailVerified: 0,
+        verificationToken,
+        verificationTokenExpiresAt: tokenExpiresAt,
         tenantId: null,
         createdAt: now,
         updatedAt: now,
       });
-      return { id, email };
+      return { id, email, verificationToken };
     }),
 
-  /** Create a web user (God Mode only). */
+  /** Verify email address with token. */
+  verifyEmail: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db
+        .select()
+        .from(webUsers)
+        .where(eq(webUsers.verificationToken, input.token))
+        .limit(1);
+      if (!rows.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invalid verification token" });
+      }
+      const user = rows[0]!;
+      if (user.emailVerified) {
+        return { success: true, alreadyVerified: true };
+      }
+      const now = Math.floor(Date.now() / 1000);
+      if (user.verificationTokenExpiresAt && now > user.verificationTokenExpiresAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Verification token expired" });
+      }
+      await ctx.db
+        .update(webUsers)
+        .set({ emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
+        .where(eq(webUsers.id, user.id));
+      return { success: true };
+    }),
+
+  /** Create a web user (God Mode only). Auto-verified. */
   create: adminProcedure
     .input(
       z.object({
@@ -96,6 +128,7 @@ export const webUsersRouter = createTRPCRouter({
         email,
         passwordHash,
         role: input.role,
+        emailVerified: 1, // Admin-created users are auto-verified
         tenantId: input.tenantId ?? null,
         createdAt: now,
         updatedAt: now,

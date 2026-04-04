@@ -185,12 +185,12 @@ export default function LoginPage() {
           )}
 
           <p className="mt-4 text-center text-xs text-slate-500">
-            Нет доступа?{" "}
+            Нет аккаунта?{" "}
             <a
-              href="https://t.me/manic_preview_bot"
+              href="/register"
               className="text-brand-400 hover:underline"
             >
-              Откройте через Telegram
+              Зарегистрироваться
             </a>
           </p>
         </div>

@@ -133,6 +133,14 @@ async function ensureGoogleCalendarSchema(ctx) {
   try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN description TEXT'); } catch {}
   try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN location TEXT'); } catch {}
   try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN creator TEXT'); } catch {}
+  // Cascade-delete trigger: clean up busy blocks when an integration is removed
+  await dbRun(ctx, `
+    CREATE TRIGGER IF NOT EXISTS trg_gcal_integration_delete
+    AFTER DELETE ON google_integrations
+    BEGIN
+      DELETE FROM google_busy_blocks WHERE integration_id = OLD.id;
+    END
+  `);
   ctx._gcalSchemaReady = true;
 }
 
@@ -236,7 +244,27 @@ async function refreshAccessToken(ctx, integration) {
   }
 }
 
-async function googleJsonRequest(url, opts = {}) {
+/** In-memory per-tenant Google API quota tracker (resets per isolate). */
+const _quotaCounters = new Map();
+const GCAL_DAILY_QUOTA_WARN = 500;
+
+function trackGcalQuota(tenantId) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `${tenantId || 'global'}:${day}`;
+  const count = (_quotaCounters.get(key) || 0) + 1;
+  _quotaCounters.set(key, count);
+  if (count === GCAL_DAILY_QUOTA_WARN) {
+    console.warn(`[gcal] quota warning: tenant ${tenantId} hit ${GCAL_DAILY_QUOTA_WARN} API calls today`);
+  }
+  // Prune old days (keep only today)
+  for (const k of _quotaCounters.keys()) {
+    if (!k.endsWith(day)) _quotaCounters.delete(k);
+  }
+  return count;
+}
+
+async function googleJsonRequest(url, opts = {}, tenantId = null) {
+  trackGcalQuota(tenantId);
   const res = await fetch(url, opts);
   const text = await res.text();
   let data = {};
@@ -775,10 +803,16 @@ export async function handleGoogleSelect(ctx, url) {
 export async function handleGoogleWebhook(ctx, request) {
   await ensureGoogleCalendarSchema(ctx);
   const integrationId = request.headers.get('X-Goog-Channel-Token') || '';
+  const channelId = request.headers.get('X-Goog-Channel-ID') || '';
   const resourceState = request.headers.get('X-Goog-Resource-State') || '';
   if (!integrationId) return new Response('Missing channel token', { status: 400 });
   const integration = await getGoogleIntegrationById(ctx, integrationId);
   if (!integration) return new Response('Unknown integration', { status: 404 });
+  // Validate the channel ID matches what we registered to prevent spoofed webhooks
+  if (integration.watchChannelId && channelId && integration.watchChannelId !== channelId) {
+    console.warn('[gcal] webhook channel ID mismatch:', channelId, 'vs', integration.watchChannelId);
+    return new Response('Channel ID mismatch', { status: 403 });
+  }
   if (resourceState && resourceState !== 'sync') {
     try {
       await syncGoogleBusyBlocks(ctx, integration);

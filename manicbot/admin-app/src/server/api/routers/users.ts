@@ -1,6 +1,6 @@
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { users, platformRoles, blockedUsers } from "~/server/db/schema";
-import { eq, inArray, and, asc } from "drizzle-orm";
+import { eq, inArray, and, asc, sql, or, like } from "drizzle-orm";
 import { z } from "zod";
 
 export const usersRouter = createTRPCRouter({
@@ -8,105 +8,119 @@ export const usersRouter = createTRPCRouter({
     .input(
       z.object({
         offset: z.number().default(0),
-        limit: z.number().default(50),
+        limit: z.number().min(1).max(200).default(50),
         search: z.string().optional(),
         filter: z.enum(["all", "admins", "banned"]).default("all"),
         tenantId: z.string().optional(),
       })
     )
     .query(async ({ ctx, input }) => {
-      // Filter in SQL when tenant specified
-      const rows = input.tenantId
-        ? await ctx.db.select().from(users).where(eq(users.tenantId, input.tenantId)).orderBy(asc(users.name)).limit(1000)
-        : await ctx.db.select().from(users).orderBy(asc(users.name)).limit(1000);
-
-      const uniqueIds = [...new Set(rows.map((u) => u.chatId))];
-
-      let userRoles: Record<number, string> = {};
-      let bannedChatIds = new Set<number>();
-
-      if (uniqueIds.length > 0) {
-        const [roles, banned] = await Promise.all([
-          ctx.db
-            .select()
-            .from(platformRoles)
-            .where(inArray(platformRoles.chatId, uniqueIds)),
-          ctx.db
-            .select()
-            .from(blockedUsers)
-            .where(inArray(blockedUsers.chatId, uniqueIds)),
-        ]);
-        userRoles = Object.fromEntries(roles.map((r) => [r.chatId, r.role]));
-        banned.forEach((b) => bannedChatIds.add(b.chatId));
+      // Build WHERE conditions
+      const conditions = [];
+      if (input.tenantId) {
+        conditions.push(eq(users.tenantId, input.tenantId));
       }
-
-      // Group by chatId — one entry per unique user
-      const grouped = new Map<
-        number,
-        {
-          id: number;
-          name: string;
-          username: string | null;
-          phone: string | null;
-          lang: string | null;
-          role: string;
-          isBanned: boolean;
-          tenants: string[];
-          joinedAt: string;
-          registeredAt: number;
-        }
-      >();
-
-      for (const row of rows) {
-        if (grouped.has(row.chatId)) {
-          grouped.get(row.chatId)!.tenants.push(row.tenantId);
-        } else {
-          grouped.set(row.chatId, {
-            id: row.chatId,
-            name: row.name ?? "Неизвестный",
-            username: row.tgUsername ? `@${row.tgUsername}` : null,
-            phone: row.phone ?? null,
-            lang: row.tgLang ?? null,
-            role: userRoles[row.chatId] ?? "user",
-            isBanned: bannedChatIds.has(row.chatId),
-            tenants: [row.tenantId],
-            joinedAt: row.registeredAt
-              ? new Date(row.registeredAt * 1000).toLocaleDateString("ru-RU")
-              : "Неизвестно",
-            registeredAt: row.registeredAt ?? 0,
-          });
-        }
-      }
-
-      let result = Array.from(grouped.values());
-
-      // Search
       if (input.search) {
-        const s = input.search.toLowerCase();
-        result = result.filter(
-          (u) =>
-            u.name.toLowerCase().includes(s) ||
-            u.username?.toLowerCase().includes(s) ||
-            String(u.id).includes(s) ||
-            u.phone?.includes(s)
+        const q = `%${input.search.toLowerCase()}%`;
+        conditions.push(
+          or(
+            like(sql`lower(${users.name})`, q),
+            like(sql`lower(${users.tgUsername})`, q),
+            like(users.phone, q),
+            like(sql`CAST(${users.chatId} AS TEXT)`, q),
+          )!,
         );
       }
 
-      // Filter
+      // For "admins" filter, get the set of admin chatIds first
+      let adminChatIds: number[] = [];
       if (input.filter === "admins") {
-        result = result.filter((u) => u.role === "system_admin" || u.role === "support");
+        const roles = await ctx.db.select({ chatId: platformRoles.chatId }).from(platformRoles);
+        adminChatIds = roles.map((r) => r.chatId);
+        if (adminChatIds.length === 0) return { users: [], total: 0 };
+        conditions.push(inArray(users.chatId, adminChatIds));
       }
+
+      // For "banned" filter, get banned chatIds first
+      let bannedChatIdSet = new Set<number>();
       if (input.filter === "banned") {
-        result = result.filter((u) => u.isBanned);
+        const banned = await ctx.db.select({ chatId: blockedUsers.chatId }).from(blockedUsers);
+        const bannedIds = banned.map((b) => b.chatId);
+        if (bannedIds.length === 0) return { users: [], total: 0 };
+        bannedChatIdSet = new Set(bannedIds);
+        conditions.push(inArray(users.chatId, bannedIds));
       }
 
-      // Sort by name
-      result.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+      const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-      return {
-        users: result.slice(input.offset, input.offset + input.limit),
-        total: result.length,
-      };
+      // Count unique users (for pagination total)
+      const countResult = await ctx.db
+        .select({ count: sql<number>`COUNT(DISTINCT ${users.chatId})` })
+        .from(users)
+        .where(where);
+      const total = countResult[0]?.count ?? 0;
+
+      if (total === 0) return { users: [], total: 0 };
+
+      // Get distinct chatIds with pagination (ordered by name)
+      const distinctRows = await ctx.db
+        .select({
+          chatId: users.chatId,
+          name: sql<string>`MIN(${users.name})`,
+          tgUsername: sql<string | null>`MIN(${users.tgUsername})`,
+          phone: sql<string | null>`MIN(${users.phone})`,
+          tgLang: sql<string | null>`MIN(${users.tgLang})`,
+          registeredAt: sql<number | null>`MIN(${users.registeredAt})`,
+        })
+        .from(users)
+        .where(where)
+        .groupBy(users.chatId)
+        .orderBy(asc(sql`MIN(${users.name})`))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const chatIds = distinctRows.map((r) => r.chatId);
+      if (chatIds.length === 0) return { users: [], total };
+
+      // Fetch tenants, roles, and bans in parallel
+      const [tenantRows, roles, banned] = await Promise.all([
+        ctx.db.select({ chatId: users.chatId, tenantId: users.tenantId })
+          .from(users).where(inArray(users.chatId, chatIds)),
+        ctx.db.select().from(platformRoles).where(inArray(platformRoles.chatId, chatIds)),
+        input.filter === "banned"
+          ? Promise.resolve([] as { chatId: number }[])
+          : ctx.db.select({ chatId: blockedUsers.chatId }).from(blockedUsers).where(inArray(blockedUsers.chatId, chatIds)),
+      ]);
+
+      const userRoles: Record<number, string> = Object.fromEntries(roles.map((r) => [r.chatId, r.role]));
+      if (input.filter !== "banned") {
+        bannedChatIdSet = new Set(banned.map((b) => b.chatId));
+      }
+
+      // Group tenant IDs per user
+      const tenantMap = new Map<number, string[]>();
+      for (const t of tenantRows) {
+        const arr = tenantMap.get(t.chatId) || [];
+        arr.push(t.tenantId);
+        tenantMap.set(t.chatId, arr);
+      }
+
+      const result = distinctRows.map((row) => ({
+        id: row.chatId,
+        name: row.name ?? "Неизвестный",
+        username: row.tgUsername ? `@${row.tgUsername}` : null,
+        phone: row.phone ?? null,
+        lang: row.tgLang ?? null,
+        role: userRoles[row.chatId] ?? "user",
+        isBanned: bannedChatIdSet.has(row.chatId),
+        tenants: tenantMap.get(row.chatId) || [],
+        joinedAt: row.registeredAt
+          ? new Date(row.registeredAt * 1000).toLocaleDateString("ru-RU")
+          : "Неизвестно",
+        registeredAt: row.registeredAt ?? 0,
+      }));
+
+      return { users: result, total };
     }),
 
   // Ban user globally (from all their tenants)

@@ -5,6 +5,7 @@ import { registerBot, createTenant } from '../admin/provisioning.js';
 import { getTenant, putTenant, putBot, listTenantIds, getBotIdsByTenantId, getBot, getBotToken } from '../tenant/storage.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
+import { audit } from '../utils/audit.js';
 
 /**
  * @param {Request} request
@@ -59,17 +60,21 @@ export async function tryAdminKeyRoutes(request, env, url) {
       for (const b of bots) {
         const botId = b.botToken.split(':')[0];
         let tenantId = b.tenantId;
+        let createdTenantId = null;
+        try {
         if (tenantId) {
           const existing = await getTenant(ec, tenantId);
           if (!existing) {
             const tRes = await createTenant(ec, b.tenantName || tenantId, env);
             if (tRes.ok) {
+              createdTenantId = tRes.tenantId;
               const tPayload = await getTenant(ec, tRes.tenantId);
               if (tPayload && tRes.tenantId !== tenantId) {
                 tPayload.id = tenantId;
                 if (b.salon) tPayload.salon = b.salon;
                 await putTenant(ec, tenantId, tPayload);
                 await dbRun(ec, 'DELETE FROM tenants WHERE id = ?', tRes.tenantId);
+                createdTenantId = tenantId;
               } else if (tPayload && b.salon) {
                 tPayload.salon = b.salon;
                 await putTenant(ec, tenantId, tPayload);
@@ -86,14 +91,17 @@ export async function tryAdminKeyRoutes(request, env, url) {
           results.push({ botId, error: res.error });
           continue;
         }
+        // Batch config writes for atomicity
+        const configStmts = [];
         if (b.services)
-          await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'svc_list', ?)", tenantId, JSON.stringify(b.services));
+          configStmts.push(ec.db.prepare("INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'svc_list', ?)").bind(tenantId, JSON.stringify(b.services)));
         if (b.aboutDesc)
-          await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_desc', ?)", tenantId, JSON.stringify(b.aboutDesc));
+          configStmts.push(ec.db.prepare("INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_desc', ?)").bind(tenantId, JSON.stringify(b.aboutDesc)));
         if (b.aboutPhotos)
-          await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_photos', ?)", tenantId, JSON.stringify(b.aboutPhotos));
+          configStmts.push(ec.db.prepare("INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'about_photos', ?)").bind(tenantId, JSON.stringify(b.aboutPhotos)));
         if (env.ADMIN_CHAT_ID)
-          await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)", tenantId, env.ADMIN_CHAT_ID);
+          configStmts.push(ec.db.prepare("INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)").bind(tenantId, env.ADMIN_CHAT_ID));
+        if (configStmts.length > 0) await ec.db.batch(configStmts);
         const whUrl = `${url.origin}/webhook/${botId}`;
         const tg = `https://api.telegram.org/bot${b.botToken}`;
         const whRes = await fetch(`${tg}/setWebhook`, {
@@ -114,8 +122,23 @@ export async function tryAdminKeyRoutes(request, env, url) {
           }),
         }).catch(() => {});
         results.push({ botId, tenantId, webhook: whRes.ok, webhookUrl: whUrl });
+        } catch (botErr) {
+          // Rollback: clean up partially-created bot and tenant
+          console.error(`[admin/provision] bot ${botId} failed, rolling back:`, botErr?.message);
+          try {
+            await dbRun(ec, 'DELETE FROM bots WHERE bot_id = ?', botId);
+            if (createdTenantId) {
+              await dbRun(ec, 'DELETE FROM tenant_config WHERE tenant_id = ?', createdTenantId);
+              await dbRun(ec, 'DELETE FROM tenants WHERE id = ?', createdTenantId);
+            }
+          } catch (rbErr) {
+            console.error(`[admin/provision] rollback failed for bot ${botId}:`, rbErr?.message);
+          }
+          results.push({ botId, error: botErr?.message || 'provision_failed' });
+        }
       }
       void logEvent(ec, 'admin.provision', { level: 'info', message: `Provisioned ${results.length} bot(s)` });
+      void audit(ec, 'admin.provision', { detail: { count: results.length, botIds: results.map(r => r.botId) } });
       return Response.json({ ok: true, results });
     } catch (e) {
       console.error('[admin/provision]', e?.message, e?.stack);
@@ -159,6 +182,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       );
 
       void logEvent(ec, 'admin.ig_token', { tenantId, level: 'info', message: 'IG token updated' });
+      void audit(ec, 'admin.ig_token', { tenantId, detail: { graphId: meData.id } });
       return Response.json({
         ok: true,
         graphMe: { id: meData.id, name: meData.name },
@@ -401,6 +425,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
 
     void logEvent(ec, 'admin.web_user', { tenantId, level: 'info', message: `Web user created: ${normalizedEmail} (${role})` });
+    void audit(ec, 'admin.web_user', { tenantId, detail: { email: normalizedEmail, role } });
     return Response.json({ ok: true, email: normalizedEmail, tenantId, role });
   }
 

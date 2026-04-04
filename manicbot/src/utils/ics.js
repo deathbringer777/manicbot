@@ -30,4 +30,26 @@ export function makeICS(ctx, apt, lang) {
   ].join('\r\n');
 }
 
+/**
+ * Generate a signed calendar download URL for an appointment.
+ * The URL includes HMAC-SHA256 signature and timestamp for replay protection.
+ *
+ * @param {object} ctx - Worker context (needs APP_BASE_URL, BOT_ENCRYPTION_KEY or ADMIN_KEY)
+ * @param {string} aptId - Appointment ID
+ * @returns {Promise<string|null>} Full URL or null if missing config
+ */
+export async function makeCalendarUrl(ctx, aptId) {
+  const baseUrl = (ctx?.APP_BASE_URL || '').replace(/\/$/, '');
+  const secret = ctx?.BOT_ENCRYPTION_KEY || ctx?.ADMIN_KEY || '';
+  if (!baseUrl || !secret) return null;
+
+  const ts = String(Math.floor(Date.now() / 1000));
+  const payload = `${aptId}:${ts}`;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  const sig = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${baseUrl}/calendar/${aptId}.ics?sig=${sig}&ts=${ts}`;
+}
+
 export { escIcs };

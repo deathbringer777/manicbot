@@ -5,7 +5,7 @@ import { ADDRESS, MAPS_URL, CB } from './config.js';
 import { listMasters, getAdminId, getUser, canManageApt } from './services/users.js';
 import { getLang } from './services/chat.js';
 import { kvPut, kvGet } from './utils/kv.js';
-import { makeICS } from './utils/ics.js';
+import { makeICS, makeCalendarUrl } from './utils/ics.js';
 import { getAllPendingApts, updateApt } from './services/appointments.js';
 import { canUse } from './billing/features.js';
 import { syncAppointmentCalendar } from './services/google-calendar-oauth.js';
@@ -74,6 +74,12 @@ export async function sendAptConfirmedToClient(ctx, apt) {
   await send(ctx, apt.chatId, fill(t(lg, tpl), vars));
   const ics = makeICS(ctx, apt, lg);
   if (ics) await sendIcs(ctx, apt.chatId, ics, 'manicure.ics', '');
+  // Send a web link for non-Telegram channels or as a fallback
+  const calUrl = await makeCalendarUrl(ctx, apt.id);
+  if (calUrl) {
+    const linkText = { ru: '📅 Добавить в календарь', en: '📅 Add to calendar', pl: '📅 Dodaj do kalendarza', ua: '📅 Додати до календаря' };
+    await send(ctx, apt.chatId, `<a href="${calUrl}">${linkText[lg] || linkText.ru}</a>`, { parse_mode: 'HTML' });
+  }
 }
 
 export async function confirmAllPendingApts(ctx, cid) {

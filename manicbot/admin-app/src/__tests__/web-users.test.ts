@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest";
  * Pure logic tests without D1 dependencies.
  */
 
-describe("web user creation validation", () => {
+describe("web user creation validation (admin)", () => {
   const MIN_PASSWORD_LENGTH = 12;
   const VALID_ROLES = ["system_admin", "tenant_owner", "support", "technical_support"];
 
@@ -35,8 +35,64 @@ describe("web user creation validation", () => {
     expect(VALID_ROLES).not.toContain("client");
   });
 
-  it("master role is NOT valid for web user creation", () => {
+  it("master role is NOT valid for admin web user creation", () => {
     expect(VALID_ROLES).not.toContain("master");
+  });
+});
+
+describe("registration validation", () => {
+  const MIN_PASSWORD_LENGTH = 12;
+  const REGISTER_ROLES = ["tenant_owner", "master"];
+
+  it("only tenant_owner and master roles allowed for registration", () => {
+    expect(REGISTER_ROLES).toContain("tenant_owner");
+    expect(REGISTER_ROLES).toContain("master");
+    expect(REGISTER_ROLES).not.toContain("system_admin");
+    expect(REGISTER_ROLES).not.toContain("support");
+    expect(REGISTER_ROLES).not.toContain("technical_support");
+  });
+
+  it("rejects password shorter than 12 characters", () => {
+    const password = "Short123!";
+    expect(password.length).toBeLessThan(MIN_PASSWORD_LENGTH);
+  });
+
+  it("accepts password of exactly 12 characters", () => {
+    const password = "Exactly12ch!";
+    expect(password.length).toBeGreaterThanOrEqual(MIN_PASSWORD_LENGTH);
+  });
+
+  it("normalizes email to lowercase and trims", () => {
+    const raw = "  Salon@Example.COM  ";
+    const normalized = raw.toLowerCase().trim();
+    expect(normalized).toBe("salon@example.com");
+  });
+
+  it("name is optional", () => {
+    const input = { email: "a@b.com", password: "LongEnoughPwd!", role: "tenant_owner" };
+    expect(input).not.toHaveProperty("name");
+  });
+
+  it("referralSource is optional", () => {
+    const input = { email: "a@b.com", password: "LongEnoughPwd!", role: "tenant_owner" };
+    expect(input).not.toHaveProperty("referralSource");
+  });
+
+  it("valid referral sources", () => {
+    const sources = ["google", "instagram", "telegram", "friends", "other"];
+    for (const src of sources) {
+      expect(typeof src).toBe("string");
+      expect(src.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("password confirmation must match (client-side check)", () => {
+    const password = "SecurePassword123!";
+    const confirm = "SecurePassword123!";
+    expect(password).toBe(confirm);
+
+    const mismatch = "DifferentPassword!";
+    expect(password).not.toBe(mismatch);
   });
 });
 

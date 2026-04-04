@@ -306,11 +306,31 @@ export const webUsers = sqliteTable("web_users", {
   passwordHash: text("password_hash").notNull(),
   /** Tenant this web user belongs to (required for tenant_owner / master) */
   tenantId: text("tenant_id"),
-  /** Role: tenant_owner | system_admin | support | technical_support */
+  /** Role: tenant_owner | system_admin | support | technical_support | master */
   role: text("role").notNull().default("tenant_owner"),
+  name: text("name"),
+  referralSource: text("referral_source"),
+  emailVerified: integer("email_verified").notNull().default(0),
+  verificationToken: text("verification_token"),
+  verificationTokenExpiresAt: integer("verification_token_expires_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [
   uniqueIndex("idx_web_user_email").on(t.email),
   index("idx_web_user_tenant").on(t.tenantId),
+]);
+
+// ─── Persistent Audit Log ───────────────────────────────────────────────────
+
+export const auditLog = sqliteTable("audit_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id"),
+  actor: text("actor"),
+  action: text("action").notNull(),
+  detail: text("detail"),
+  ip: text("ip"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_audit_log_tenant").on(t.tenantId, t.createdAt),
+  index("idx_audit_log_action").on(t.action, t.createdAt),
 ]);

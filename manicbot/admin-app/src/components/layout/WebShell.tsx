@@ -152,7 +152,7 @@ function buildGodGroups(lang: string): NavGroup[] {
     {
       label: tNav("Overview", lang),
       items: [
-        { href: "/", icon: Home, label: tNav("Dashboard", lang) },
+        { href: "/dashboard", icon: Home, label: tNav("Dashboard", lang) },
       ],
     },
     {
@@ -179,29 +179,29 @@ function buildGodGroups(lang: string): NavGroup[] {
 
 function buildSalonNav(lang: string): NavItem[] {
   return [
-    { href: "/", icon: LayoutGrid, label: tNav("Dashboard", lang) },
-    { href: "/?tab=appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
-    { href: "/?tab=services", icon: Scissors, label: tNav("Services", lang) },
-    { href: "/?tab=masters", icon: UserRound, label: tNav("Masters", lang) },
-    { href: "/?tab=clients", icon: Users, label: tNav("Clients", lang) },
-    { href: "/?tab=billing", icon: Wallet, label: tNav("Billing", lang) },
-    { href: "/?tab=channels", icon: MessageSquare, label: tNav("Channels", lang) },
-    { href: "/?tab=settings", icon: Settings, label: tNav("Settings", lang) },
+    { href: "/dashboard", icon: LayoutGrid, label: tNav("Dashboard", lang) },
+    { href: "/dashboard?tab=appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
+    { href: "/dashboard?tab=services", icon: Scissors, label: tNav("Services", lang) },
+    { href: "/dashboard?tab=masters", icon: UserRound, label: tNav("Masters", lang) },
+    { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
+    { href: "/dashboard?tab=billing", icon: Wallet, label: tNav("Billing", lang) },
+    { href: "/dashboard?tab=channels", icon: MessageSquare, label: tNav("Channels", lang) },
+    { href: "/dashboard?tab=settings", icon: Settings, label: tNav("Settings", lang) },
   ];
 }
 
 function buildMasterNav(lang: string): NavItem[] {
   return [
-    { href: "/", icon: Home, label: tNav("Today", lang) },
-    { href: "/?tab=schedule", icon: CalendarCheck, label: tNav("Schedule", lang) },
-    { href: "/?tab=clients", icon: Users, label: tNav("Clients", lang) },
-    { href: "/?tab=earnings", icon: Wallet, label: tNav("Earnings", lang) },
-    { href: "/?tab=profile", icon: UserRound, label: tNav("Profile", lang) },
+    { href: "/dashboard", icon: Home, label: tNav("Today", lang) },
+    { href: "/dashboard?tab=schedule", icon: CalendarCheck, label: tNav("Schedule", lang) },
+    { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
+    { href: "/dashboard?tab=earnings", icon: Wallet, label: tNav("Earnings", lang) },
+    { href: "/dashboard?tab=profile", icon: UserRound, label: tNav("Profile", lang) },
   ];
 }
 
 function buildSupportNav(lang: string): NavItem[] {
-  return [{ href: "/", icon: HeadphonesIcon, label: tNav("Tickets", lang) }];
+  return [{ href: "/dashboard", icon: HeadphonesIcon, label: tNav("Tickets", lang) }];
 }
 
 function getNavGroups(role: string | null, lang: string): NavGroup[] {
@@ -209,7 +209,7 @@ function getNavGroups(role: string | null, lang: string): NavGroup[] {
   const flat = role === "tenant_owner" ? buildSalonNav(lang)
     : role === "master" ? buildMasterNav(lang)
     : role === "support" || role === "technical_support" ? buildSupportNav(lang)
-    : [{ href: "/", icon: Home, label: tNav("Dashboard", lang) }];
+    : [{ href: "/dashboard", icon: Home, label: tNav("Dashboard", lang) }];
   return [{ label: "", items: flat }];
 }
 
@@ -283,7 +283,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
   const isActive = (item: NavItem) => {
     if (item.href.includes("?")) return false;
-    return item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+    return item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href);
   };
 
   // Mobile nav: max 5
@@ -306,7 +306,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
         >
           {/* Logo — clickable */}
           <div className={`relative flex items-center gap-3 h-16 border-b border-white/[0.06] ${collapsed ? "px-4 justify-center" : "px-5"}`}>
-            <Link href="/" className="flex items-center gap-3 flex-1 min-w-0">
+            <Link href="/dashboard" className="flex items-center gap-3 flex-1 min-w-0">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-700 shadow-lg shadow-brand-500/25 shrink-0">
                 <Zap className="h-5 w-5 text-white" />
               </div>
@@ -394,7 +394,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             <aside className="relative w-72 max-w-[85vw] bg-[rgba(10,13,28,0.98)] border-r border-white/[0.06] flex flex-col">
               {/* Header — clickable logo */}
               <div className="flex items-center justify-between h-16 px-5 border-b border-white/[0.06]">
-                <Link href="/" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 min-w-0 flex-1">
+                <Link href="/dashboard" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-700 shrink-0">
                     <Zap className="h-5 w-5 text-white" />
                   </div>

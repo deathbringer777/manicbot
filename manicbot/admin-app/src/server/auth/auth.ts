@@ -52,6 +52,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         );
         if (!valid) return null;
 
+        // Reject unverified email (admin-created users are auto-verified)
+        if (!user.emailVerified) return null;
+
         return {
           id: user.id,
           email: user.email,
@@ -81,6 +84,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .limit(1);
           if (rows.length) {
             const webUser = rows[0]!;
+            // Google OAuth auto-verifies email
+            if (!webUser.emailVerified) {
+              await db.update(webUsers).set({ emailVerified: 1 }).where(eq(webUsers.id, webUser.id));
+            }
             (user as any).tenantId = webUser.tenantId ?? null;
             (user as any).webRole = webUser.role;
             (user as any).id = webUser.id;

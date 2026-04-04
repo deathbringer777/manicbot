@@ -248,6 +248,7 @@ const translations = {
   "search.articles":        { ru: "Статьи", ua: "Статті", en: "Articles", pl: "Artykuły" },
   "search.showAllFor":      { ru: "Показать все результаты для", ua: "Показати всі результати для", en: "Show all results for", pl: "Pokaż wszystkie wyniki dla" },
   "search.found":           { ru: "Найдено", ua: "Знайдено", en: "Found", pl: "Znaleziono" },
+  "search.popularCities":   { ru: "Популярные города", ua: "Популярні міста", en: "Popular cities", pl: "Popularne miasta" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

@@ -36,8 +36,8 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
 
   // Debounce input -> query
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(value.trim()), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebouncedQ(value.trim()), 300);
+    return () => clearTimeout(timer);
   }, [value]);
 
   const { data, isFetching } = api.publicSalon.autocomplete.useQuery(
@@ -45,10 +45,16 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
     { enabled: debouncedQ.length >= 2, staleTime: 30_000 },
   );
 
+  const { data: citiesData } = api.publicSalon.getCities.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+  const popularCities = citiesData ?? [];
+
   const salons = data?.salons ?? [];
   const articles = data?.articles ?? [];
   const hasResults = salons.length > 0 || articles.length > 0;
-  const showDropdown = open && debouncedQ.length >= 2;
+  const isShortQuery = debouncedQ.length < 2;
+  const showDropdown = open && (isShortQuery ? popularCities.length > 0 : true);
 
   // All navigable items (salons first, then articles, then "show all")
   const items = [
@@ -160,7 +166,35 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
             }
           `}</style>
 
-          {isFetching && !hasResults && (
+          {/* Popular cities — shown when query is empty/short */}
+          {isShortQuery && popularCities.length > 0 && (
+            <div className="py-2">
+              <p className="px-4 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
+                {t("search.popularCities", lang)}
+              </p>
+              {popularCities.slice(0, 8).map((city) => (
+                <button
+                  key={city}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setValue(city);
+                    setOpen(false);
+                    if (onSearch) onSearch(city);
+                    else router.push(`/search?q=${encodeURIComponent(city)}`);
+                  }}
+                  className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                    <MapPin className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                  </div>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{city}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!isShortQuery && isFetching && !hasResults && (
             <div className="space-y-2 p-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex animate-pulse items-center gap-3 rounded-xl p-2">
@@ -174,7 +208,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
             </div>
           )}
 
-          {!isFetching && !hasResults && debouncedQ.length >= 2 && (
+          {!isShortQuery && !isFetching && !hasResults && (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-slate-500">{t("search.nothingFound", lang)} «{debouncedQ}»</p>
               <Link

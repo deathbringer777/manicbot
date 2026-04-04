@@ -1,6 +1,5 @@
 import { useLanguage } from "@/i18n";
 import { TelegramPhoneDemo } from "./TelegramPhoneDemo";
-import { SearchAutocomplete } from "./SearchAutocomplete";
 
 export function HeroSection() {
   const { t } = useLanguage();
@@ -19,10 +18,6 @@ export function HeroSection() {
       />
 
       <div className="relative mx-auto max-w-6xl">
-        <div className="mx-auto mb-10 max-w-4xl lg:mb-12">
-          <SearchAutocomplete className="mx-auto max-w-4xl" />
-        </div>
-
         <div className="grid items-center gap-12 lg:grid-cols-[1fr_minmax(260px,320px)] lg:gap-16">
           <div className="order-2 text-center lg:order-1 lg:text-left">
             <div className="mb-5 inline-flex lg:flex">

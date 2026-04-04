@@ -12,6 +12,14 @@ import { FaqSection } from "@/components/FaqSection";
 import { CtaSection } from "@/components/CtaSection";
 import { Footer } from "@/components/Footer";
 import { SeoHead } from "@/components/SeoHead";
+import { LegalPage } from "@/pages/LegalPage";
+
+const LEGAL_ROUTES: Record<string, string> = {
+  "/privacy": "privacy",
+  "/terms": "terms",
+  "/cookies": "cookies",
+  "/support": "support",
+};
 
 function Landing() {
   return (
@@ -87,10 +95,13 @@ function Landing() {
 }
 
 export default function App() {
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const legalPage = LEGAL_ROUTES[path];
+
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <Landing />
+        {legalPage ? <LegalPage page={legalPage} /> : <Landing />}
       </LanguageProvider>
     </ThemeProvider>
   );

@@ -49,16 +49,27 @@ export function TelegramPhoneDemo() {
     return () => timers.forEach(clearTimeout);
   }, [inView, cycle]);
 
-  const tg = {
-    bg: "#0e1621",
-    bubbleIn: "#182533",
-    bubbleOut: "#2b5278",
-    keyboard: "#17212b",
-    keyBtn: "#213246",
-    text: "#e4ecf2",
-    textMuted: "#8b9bab",
-    accent: "#5288c1",
-  };
+  const tg = theme === "light"
+    ? {
+        bg: "#f0f2f5",
+        bubbleIn: "#ffffff",
+        bubbleOut: "#effdde",
+        keyboard: "#e4e6eb",
+        keyBtn: "#ffffff",
+        text: "#1a1a1a",
+        textMuted: "#6b7280",
+        accent: "#2481cc",
+      }
+    : {
+        bg: "#0e1621",
+        bubbleIn: "#182533",
+        bubbleOut: "#2b5278",
+        keyboard: "#17212b",
+        keyBtn: "#213246",
+        text: "#e4ecf2",
+        textMuted: "#8b9bab",
+        accent: "#5288c1",
+      };
 
   return (
     <div
@@ -211,14 +222,14 @@ export function TelegramPhoneDemo() {
                   style={{ opacity: 0, animationFillMode: "forwards" }}
                 >
                   <KeyboardRow>
-                    <KeyBtn full>{p.menuBook}</KeyBtn>
+                    <KeyBtn full tgColors={tg}>{p.menuBook}</KeyBtn>
                   </KeyboardRow>
                   <KeyboardRow>
-                    <KeyBtn>{p.menuCatalog}</KeyBtn>
-                    <KeyBtn>{p.menuPrice}</KeyBtn>
+                    <KeyBtn tgColors={tg}>{p.menuCatalog}</KeyBtn>
+                    <KeyBtn tgColors={tg}>{p.menuPrice}</KeyBtn>
                   </KeyboardRow>
                   <KeyboardRow>
-                    <KeyBtn full>{p.menuMy}</KeyBtn>
+                    <KeyBtn full tgColors={tg}>{p.menuMy}</KeyBtn>
                   </KeyboardRow>
                 </div>
               )}
@@ -330,18 +341,16 @@ function KeyboardRow({ children }: { children: ReactNode }) {
   return <div className="flex gap-1.5">{children}</div>;
 }
 
-function KeyBtn({ children, full }: { children: ReactNode; full?: boolean }) {
+function KeyBtn({ children, tgColors }: { children: ReactNode; full?: boolean; tgColors: { keyBtn: string; text: string } }) {
   return (
     <button
       type="button"
-      className={`text-[11px] font-medium py-2 px-2 rounded-md leading-tight text-center ${
-        full ? "flex-1" : "flex-1"
-      }`}
+      className="flex-1 rounded-md px-2 py-2 text-center text-[11px] font-medium leading-tight"
       style={{
-        background: "#213246",
-        color: "#dbeafe",
-        border: "1px solid rgba(255,255,255,0.05)",
-        boxShadow: "0 1px 0 rgba(0,0,0,0.25)",
+        background: tgColors.keyBtn,
+        color: tgColors.text,
+        border: "1px solid rgba(0,0,0,0.06)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
       }}
     >
       {children}

@@ -27,6 +27,9 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 function readStoredTheme(): Theme {
   try {
+    // URL param takes priority (passed by landing when clicking "Войти")
+    const urlParam = new URLSearchParams(window.location.search).get("theme");
+    if (urlParam === "light" || urlParam === "dark") return urlParam;
     const s = localStorage.getItem(STORAGE_KEY);
     if (s === "light" || s === "dark") return s;
   } catch {

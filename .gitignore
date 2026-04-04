@@ -10,6 +10,7 @@ node_modules/
 # Root-level generated/temp files
 make_logo.py
 manicbot_logo.png
+.cursor-project-analysis-prompt.txt
 
 # Generated static blog output (standalone `node generate.mjs` in manicbot-blog)
 manicbot-blog/dist/

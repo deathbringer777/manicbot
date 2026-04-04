@@ -7,6 +7,15 @@ import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
 import { audit } from '../utils/audit.js';
 
+/** Returns true if the ?key= query param matches env.ADMIN_KEY (timing-safe). */
+function isAdminKeyValid(url, env) {
+  const key = url.searchParams.get('key') || '';
+  return Boolean(env.ADMIN_KEY) && timingSafeEqual(key, env.ADMIN_KEY);
+}
+
+/** Returns a 403 Forbidden response. */
+const forbidden = () => new Response('Forbidden', { status: 403 });
+
 /**
  * @param {Request} request
  * @param {any} env
@@ -15,20 +24,14 @@ import { audit } from '../utils/audit.js';
  */
 export async function tryAdminKeyRoutes(request, env, url) {
   if (url.pathname === '/admin/migrate') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.MANICBOT) return new Response('KV not bound', { status: 500 });
     const result = await runMigration(env.MANICBOT, env);
     return Response.json(result);
   }
 
   if (url.pathname === '/admin/migrate-d1') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB || !env.MANICBOT) return new Response('DB or KV not bound', { status: 500 });
     const { migrateKvToD1 } = await import('../../scripts/migrate-kv-to-d1.js');
     const result = await migrateKvToD1(envCtx(env));
@@ -36,10 +39,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
   }
 
   if (url.pathname === '/admin/seed') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });
     const masterParam = (url.searchParams.get('master') || 'dezbringer').replace(/^@/, '');
     const result = await runSeed(envCtx(env), env, masterParam);
@@ -47,10 +47,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
   }
 
   if (request.method === 'POST' && url.pathname === '/admin/provision') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     const ec = envCtx(env);
     if (!ec.db) return Response.json({ error: 'DB not bound' }, { status: 500 });
     const { dbRun } = await import('../utils/db.js');
@@ -148,10 +145,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // POST /admin/ig-token?key=ADMIN_KEY — set and validate Instagram Page Access Token
   if (request.method === 'POST' && url.pathname === '/admin/ig-token') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     try {
       const { token, tenantId } = await request.json();
@@ -196,10 +190,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // POST /admin/ig-channel?key=ADMIN_KEY — create Instagram channel config for a tenant
   if (request.method === 'POST' && url.pathname === '/admin/ig-channel') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     try {
       const { token, pageId, tenantId, tenantName, igAccountId, instagramBusinessId } = await request.json();
@@ -257,10 +248,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // POST /admin/appointment-action?key=ADMIN_KEY — trigger notifications + calendar sync from admin-app
   if (request.method === 'POST' && url.pathname === '/admin/appointment-action') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     try {
       const { action, appointmentId, tenantId, confirmedBy } = await request.json();
@@ -346,10 +334,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
   // GET /admin/reset-webhooks?key=ADMIN_KEY — re-register Telegram webhooks for all bots
   // Use this when webhook secrets are out of sync (e.g. after timingSafeEqual fix)
   if (url.pathname === '/admin/reset-webhooks') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     const ec = envCtx(env);
     if (!ec.db) return Response.json({ error: 'DB not bound' }, { status: 500 });
     const baseUrl = (env.APP_BASE_URL || url.origin).replace(/\/$/, '');
@@ -384,10 +369,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
   // POST /admin/web-user?key=ADMIN_KEY — create or update a web (email/password) user for the admin-app
   // Body: { email, password, tenantId?, role? }
   if (request.method === 'POST' && url.pathname === '/admin/web-user') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });
 
     let body;
@@ -431,10 +413,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // GET /admin/events?key=ADMIN_KEY&limit=100&type=...&tenantId=...
   if (request.method === 'GET' && url.pathname === '/admin/events') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.MANICBOT) return Response.json({ error: 'KV not bound' }, { status: 500 });
 
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
@@ -456,10 +435,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // DELETE /admin/events/clear?key=ADMIN_KEY
   if (request.method === 'DELETE' && url.pathname === '/admin/events/clear') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.MANICBOT) return Response.json({ error: 'KV not bound' }, { status: 500 });
     await env.MANICBOT.delete('adminlog:recent');
     return Response.json({ ok: true });
@@ -467,10 +443,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // GET /admin/index-salons?key=ADMIN_KEY — bulk-index all tenants into FTS + set public_active=1
   if (url.pathname === '/admin/index-salons') {
-    const key = url.searchParams.get('key') || '';
-    if (!env.ADMIN_KEY || !timingSafeEqual(key, env.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });
     const ec = envCtx(env);
     const { dbAll, dbRun } = await import('../utils/db.js');

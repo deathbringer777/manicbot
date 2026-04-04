@@ -1,3 +1,51 @@
-# Скопируй в .dev.vars и подставь свои значения (или сгенерированный ADMIN_KEY).
-# .dev.vars в .gitignore и не коммитится.
-ADMIN_KEY=your_admin_key_here
+# ─── manicbot Worker — Local Development Variables ───────────────────────────
+# Скопируй в .dev.vars и подставь свои значения.
+# .dev.vars gitignored — НИКОГДА не коммить реальные секреты.
+# wrangler dev читает .dev.vars автоматически.
+# Для production: wrangler secret put <NAME>
+
+# ─── ОБЯЗАТЕЛЬНЫЕ ────────────────────────────────────────────────────────────
+
+# Telegram chat_id создателя — даёт God Mode (полный доступ к платформе)
+# Узнай через @userinfobot в Telegram
+ADMIN_CHAT_ID=123456789
+
+# Admin API key — защищает маршруты /admin/* (длинная случайная строка)
+ADMIN_KEY=your_random_admin_key_here
+
+# Stripe billing
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_START_MONTHLY=price_...
+STRIPE_PRICE_PRO_MONTHLY=price_...
+STRIPE_PRICE_STUDIO_MONTHLY=price_...
+
+# Cloudflare Workers AI (для LLM-чата)
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+WORKERS_AI_API_TOKEN=your_workers_ai_api_token
+
+# ─── ОПЦИОНАЛЬНЫЕ ────────────────────────────────────────────────────────────
+
+# Шифрование токенов IG/WA в D1/KV (ОБЯЗАТЕЛЬНО для Meta-каналов в production)
+# Должен быть установлен ДО провижн Meta-канала
+# BOT_ENCRYPTION_KEY=32_или_более_случайных_символов
+
+# Meta (WhatsApp / Instagram) webhooks
+# META_APP_SECRET=your_meta_app_secret
+# META_VERIFY_TOKEN_WA=your_whatsapp_verify_token
+# META_VERIFY_TOKEN_IG=your_instagram_verify_token
+
+# Instagram: IGSID через запятую — игнорировать (например аккаунт самого бота)
+# INSTAGRAM_IGNORE_SENDER_IDS=1784360123456789
+
+# Google OAuth (для интеграции Google Calendar)
+# GOOGLE_CLIENT_ID=...
+# GOOGLE_CLIENT_SECRET=...
+
+# Отклонять legacy POST /webhook (без botId) — только D1 мультиарендный режим
+# REQUIRE_WEBHOOK_BOT_ID=1
+
+# ─── LEGACY (одиночный бот) ──────────────────────────────────────────────────
+# Нужны только при использовании POST /webhook без botId
+# BOT_TOKEN=123456:ABCdef...
+# WEBHOOK_SECRET=your_webhook_secret

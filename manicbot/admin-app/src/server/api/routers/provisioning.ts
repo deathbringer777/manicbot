@@ -92,7 +92,7 @@ export const provisioningRouter = createTRPCRouter({
   confirmAllPending: adminProcedure
     .input(z.object({ tenantId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const confirmedBy = 321706035; // creator
+      const confirmedBy = ctx.user?.id ? Number(ctx.user.id) : Number(env.ADMIN_CHAT_ID ?? 0);
       await ctx.db
         .update(appointments)
         .set({ status: "confirmed", confirmedBy })

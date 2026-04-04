@@ -45,10 +45,10 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
       const session = await auth();
       if (session?.user?.email) {
         webUser = {
-          id: (session.user as any).id ?? session.user.email,
+          id: session.user.id ?? session.user.email,
           email: session.user.email,
-          tenantId: (session.user as any).tenantId ?? null,
-          webRole: (session.user as any).webRole ?? "tenant_owner",
+          tenantId: session.user.tenantId ?? null,
+          webRole: session.user.webRole ?? "tenant_owner",
         };
       }
     } catch {

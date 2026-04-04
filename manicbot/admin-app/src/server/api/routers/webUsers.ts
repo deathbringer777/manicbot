@@ -5,7 +5,12 @@ import { webUsers } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 
-/* Simple in-memory rate limiter for registration (resets per edge isolate). */
+/*
+ * Simple in-memory rate limiter for registration.
+ * NOTE: resets per Cloudflare edge isolate (not shared across regions).
+ * This is a best-effort first-pass defense — the DB UNIQUE constraint is the
+ * authoritative guard against duplicate registrations.
+ */
 const registerRl = new Map<string, { count: number; resetAt: number }>();
 const RL_MAX = 5;
 const RL_WINDOW = 10 * 60 * 1000; // 10 minutes
@@ -63,20 +68,28 @@ export const webUsersRouter = createTRPCRouter({
       const verificationToken = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
       const tokenExpiresAt = now + 24 * 3600; // 24 hours
-      await ctx.db.insert(webUsers).values({
-        id,
-        email,
-        passwordHash,
-        role: input.role,
-        name: input.name ?? null,
-        referralSource: input.referralSource ?? null,
-        emailVerified: hasEmailVerificationDelivery ? 0 : 1,
-        verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
-        verificationTokenExpiresAt: hasEmailVerificationDelivery ? tokenExpiresAt : null,
-        tenantId: null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      try {
+        await ctx.db.insert(webUsers).values({
+          id,
+          email,
+          passwordHash,
+          role: input.role,
+          name: input.name ?? null,
+          referralSource: input.referralSource ?? null,
+          emailVerified: hasEmailVerificationDelivery ? 0 : 1,
+          verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
+          verificationTokenExpiresAt: hasEmailVerificationDelivery ? tokenExpiresAt : null,
+          tenantId: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err: unknown) {
+        // Handle race condition: another request inserted the same email between our check and insert
+        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+          throw new TRPCError({ code: "CONFLICT", message: "Registration failed. Please try again or use a different email." });
+        }
+        throw err;
+      }
       return {
         id,
         email,

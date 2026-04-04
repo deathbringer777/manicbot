@@ -56,8 +56,8 @@ function formatHours(wh: WorkHours): string {
   if (typeof wh === "object" && wh !== null) {
     const { from, to } = wh as { from?: number | string; to?: number | string };
     if (from !== undefined && to !== undefined) {
-      // from/to can be strings ("10:00") or numbers (10)
-      const fmtTime = (v: number | string) => typeof v === "string" ? v : `${v}:00`;
+      // from/to can be strings ("10:00") or numbers (10); guard null/undefined just in case
+      const fmtTime = (v: number | string | null | undefined) => typeof v === "string" ? v : v != null ? `${v}:00` : "";
       return `${fmtTime(from)} – ${fmtTime(to)}`;
     }
   }

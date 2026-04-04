@@ -38,6 +38,9 @@ const godModeNavItems: NavItem[] = [
 function getAdminInfo() {
   try {
     const tg = (window as any).Telegram?.WebApp;
+    // initDataUnsafe is used here ONLY for display (name, username in the header).
+    // Auth is always done server-side via tg.initData (HMAC-verified in trpc context).
+    // Using unverified data for display is intentional and safe.
     if (!tg?.initDataUnsafe?.user) return { name: "God Mode", username: "creator" };
     const u = tg.initDataUnsafe.user;
     return {

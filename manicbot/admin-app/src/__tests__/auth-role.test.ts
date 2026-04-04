@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { AppRole } from "~/server/api/routers/auth";
 import {
-  isAdminProcedurePlatformRole,
-  ADMIN_PROCEDURE_PLATFORM_ROLES,
+  isAssignablePlatformStaffRole,
+  ASSIGNABLE_PLATFORM_STAFF_ROLES,
 } from "~/server/api/platformRoles";
 
 describe("AppRole type contract", () => {
@@ -64,19 +64,19 @@ describe("Role routing logic", () => {
 
 describe("assignable platform staff roles", () => {
   it("support and technical_support match", () => {
-    expect(isAdminProcedurePlatformRole("technical_support")).toBe(true);
-    expect(isAdminProcedurePlatformRole("support")).toBe(true);
-    expect(isAdminProcedurePlatformRole("system_admin")).toBe(false);
+    expect(isAssignablePlatformStaffRole("technical_support")).toBe(true);
+    expect(isAssignablePlatformStaffRole("support")).toBe(true);
+    expect(isAssignablePlatformStaffRole("system_admin")).toBe(false);
   });
 
   it("tenant and unrelated strings do not match", () => {
-    expect(isAdminProcedurePlatformRole("tenant_owner")).toBe(false);
-    expect(isAdminProcedurePlatformRole("master")).toBe(false);
-    expect(isAdminProcedurePlatformRole(null)).toBe(false);
-    expect(isAdminProcedurePlatformRole(undefined)).toBe(false);
+    expect(isAssignablePlatformStaffRole("tenant_owner")).toBe(false);
+    expect(isAssignablePlatformStaffRole("master")).toBe(false);
+    expect(isAssignablePlatformStaffRole(null)).toBe(false);
+    expect(isAssignablePlatformStaffRole(undefined)).toBe(false);
   });
 
-  it("ADMIN_PROCEDURE_PLATFORM_ROLES lists support staff only", () => {
-    expect(ADMIN_PROCEDURE_PLATFORM_ROLES).toEqual(["support", "technical_support"]);
+  it("ASSIGNABLE_PLATFORM_STAFF_ROLES lists support staff only", () => {
+    expect(ASSIGNABLE_PLATFORM_STAFF_ROLES).toEqual(["support", "technical_support"]);
   });
 });

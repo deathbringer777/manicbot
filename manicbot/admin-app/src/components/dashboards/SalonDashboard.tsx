@@ -23,7 +23,8 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
   const utils = api.useUtils();
   const [name, setName] = useState(() => {
     if (!svc) return "";
-    const names = svc.names ? JSON.parse(svc.names) : {};
+    let names: Record<string, string> = {};
+    try { names = svc.names ? JSON.parse(svc.names) : {}; } catch { /* ignore malformed JSON */ }
     return names.ru ?? names.en ?? svc.svcId ?? "";
   });
   const [price, setPrice] = useState(String(svc?.price ?? ""));

@@ -16,15 +16,3 @@ export function isAssignablePlatformStaffRole(
   return role === "support" || role === "technical_support";
 }
 
-/** @deprecated Use isAssignablePlatformStaffRole — name kept for older imports/tests. */
-export const ADMIN_PROCEDURE_PLATFORM_ROLES = ASSIGNABLE_PLATFORM_STAFF_ROLES;
-
-/** @deprecated Use isAssignablePlatformStaffRole */
-export type AdminProcedurePlatformRole = AssignablePlatformStaffRole;
-
-/** @deprecated */
-export function isAdminProcedurePlatformRole(
-  role: string | undefined | null,
-): role is AdminProcedurePlatformRole {
-  return isAssignablePlatformStaffRole(role);
-}

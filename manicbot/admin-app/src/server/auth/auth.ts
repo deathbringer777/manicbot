@@ -16,8 +16,14 @@ declare module "next-auth" {
       webRole: string;
     };
   }
+  interface User {
+    tenantId?: string | null;
+    webRole?: string;
+  }
 }
 
+/** Local type helper for JWT token with custom fields (next-auth v5 beta doesn't export JWT for augmentation). */
+type ExtendedJWT = { tenantId?: string | null; webRole?: string };
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -60,7 +66,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           tenantId: user.tenantId ?? null,
           webRole: user.role,
-        } as any;
+        };
       },
     }),
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
@@ -88,9 +94,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             if (!webUser.emailVerified) {
               await db.update(webUsers).set({ emailVerified: 1 }).where(eq(webUsers.id, webUser.id));
             }
-            (user as any).tenantId = webUser.tenantId ?? null;
-            (user as any).webRole = webUser.role;
-            (user as any).id = webUser.id;
+            user.tenantId = webUser.tenantId ?? null;
+            user.webRole = webUser.role;
+            user.id = webUser.id;
           } else {
             console.warn("[auth] Google signIn: email not in web_users, rejecting:", user.email);
             return false;
@@ -98,22 +104,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         } catch (err) {
           console.error("[auth] Google signIn DB error:", err);
           // Still allow login on DB error, with default role
-          (user as any).tenantId = null;
-          (user as any).webRole = "client";
+          user.tenantId = null;
+          user.webRole = "client";
         }
       }
       return true;
     },
     jwt({ token, user }) {
+      const t = token as typeof token & ExtendedJWT;
       if (user) {
-        token.tenantId = (user as any).tenantId ?? null;
-        token.webRole = (user as any).webRole ?? "tenant_owner";
+        t.tenantId = user.tenantId ?? null;
+        t.webRole = user.webRole ?? "tenant_owner";
       }
       return token;
     },
     session({ session, token }) {
-      (session.user as any).tenantId = token.tenantId ?? null;
-      (session.user as any).webRole = token.webRole ?? "tenant_owner";
+      const t = token as typeof token & ExtendedJWT;
+      session.user.tenantId = t.tenantId ?? null;
+      session.user.webRole = t.webRole ?? "tenant_owner";
       return session;
     },
   },

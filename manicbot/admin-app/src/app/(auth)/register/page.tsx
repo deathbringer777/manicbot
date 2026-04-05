@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -34,7 +34,33 @@ export default function RegisterPage() {
   const [isPending, startTransition] = useTransition();
   const [hasGoogle, setHasGoogle] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googlePrefillToken, setGooglePrefillToken] = useState<string | null>(null);
+  const [emailFromGoogleLocked, setEmailFromGoogleLocked] = useState(false);
+  const prefillAppliedRef = useRef(false);
   const { status } = useSession();
+
+  useEffect(() => {
+    try {
+      const g = new URLSearchParams(window.location.search).get("g");
+      if (g) setGooglePrefillToken(g);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const prefillQuery = api.webUsers.googlePrefillPreview.useQuery(
+    { token: googlePrefillToken! },
+    { enabled: Boolean(googlePrefillToken), retry: false },
+  );
+
+  useEffect(() => {
+    if (prefillAppliedRef.current || !prefillQuery.data?.ok || !googlePrefillToken) return;
+    prefillAppliedRef.current = true;
+    setEmail(prefillQuery.data.email);
+    if (prefillQuery.data.name) setName(prefillQuery.data.name);
+    setEmailFromGoogleLocked(true);
+    setReferralSource((s) => s || "google");
+  }, [prefillQuery.data, googlePrefillToken]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -109,6 +135,8 @@ export default function RegisterPage() {
           name: name.trim() || undefined,
           referralSource: referralSource || undefined,
           tosAccepted: true as const,
+          googlePrefillToken:
+            emailFromGoogleLocked && googlePrefillToken ? googlePrefillToken : undefined,
         });
 
         if (registration.verificationRequired) {
@@ -155,6 +183,18 @@ export default function RegisterPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {googlePrefillToken && prefillQuery.isFetched && prefillQuery.data && !prefillQuery.data.ok && (
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-100">
+            {copy.register.googlePrefillExpired}
+          </p>
+        )}
+
+        {emailFromGoogleLocked && prefillQuery.data?.ok && (
+          <p className="rounded-2xl border border-cyan-200/50 bg-cyan-50/80 px-4 py-3 text-sm text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-500/10 dark:text-cyan-100">
+            {copy.register.googlePrefillHint}
+          </p>
+        )}
+
         <label className="flex items-start gap-3 cursor-pointer group rounded-2xl border border-cyan-200/40 bg-cyan-50/50 px-4 py-3 transition hover:bg-cyan-50 dark:border-cyan-400/20 dark:bg-cyan-500/5 dark:hover:bg-cyan-500/10">
           <input
             type="checkbox"
@@ -186,8 +226,9 @@ export default function RegisterPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                readOnly={emailFromGoogleLocked}
                 placeholder="salon@example.com"
-                className={authFieldWithIconsClassName}
+                className={`${authFieldWithIconsClassName}${emailFromGoogleLocked ? " opacity-90" : ""}`}
               />
             </div>
           </div>

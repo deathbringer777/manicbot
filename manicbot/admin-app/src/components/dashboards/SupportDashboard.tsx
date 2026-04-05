@@ -233,7 +233,7 @@ export function SupportDashboard() {
         </div>
 
         {/* Filter tabs */}
-        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1">
+        <div data-tour="support-filters" className="flex gap-1 overflow-x-auto scrollbar-none pb-1">
           {(["open", "claimed", "escalated", "all", "closed"] as FilterStatus[]).map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
@@ -251,7 +251,7 @@ export function SupportDashboard() {
         )}
         {allTickets.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
 
-        <div className="space-y-2">
+        <div data-tour="support-list" className="space-y-2">
           {allTickets.data?.map((ticket: any) => {
             const nameStr = ticket.clientName ?? `#${ticket.clientChatId}`;
             const words = nameStr.trim().split(/\s+/);

@@ -6,6 +6,10 @@ import { eq } from "drizzle-orm";
 import { getDb } from "~/server/db";
 import { webUsers } from "~/server/db/schema";
 import { verifyPassword } from "./password";
+import { signGooglePrefillToken } from "./googlePrefillToken";
+import { authPublicBaseUrl } from "./authBaseUrl";
+
+export { authPublicBaseUrl };
 
 declare module "next-auth" {
   interface Session {
@@ -78,8 +82,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 }, // 7 days
   callbacks: {
-    async signIn({ user, account }) {
-      // Google OAuth: look up user in web_users; allow login even if DB fails
+    async signIn({ user, account, profile }) {
+      // Google OAuth: existing web_users → session; new → signed redirect to complete registration
       if (account?.provider === "google" && user.email) {
         try {
           const db = getDb();
@@ -98,8 +102,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             user.webRole = webUser.role;
             user.id = webUser.id;
           } else {
-            console.warn("[auth] Google signIn: email not in web_users, rejecting:", user.email);
-            return false;
+            const secret = process.env.AUTH_SECRET;
+            if (!secret) {
+              console.error("[auth] Google signIn: AUTH_SECRET missing");
+              return false;
+            }
+            const p = profile as { sub?: string; given_name?: string; family_name?: string } | null | undefined;
+            const sub = p?.sub ?? account.providerAccountId ?? "";
+            if (!sub) {
+              console.warn("[auth] Google signIn: missing subject, cannot prefill registration");
+              return false;
+            }
+            const nameFromParts = [p?.given_name, p?.family_name].filter(Boolean).join(" ").trim();
+            const displayName = nameFromParts || (typeof user.name === "string" ? user.name.trim() : "") || null;
+            const token = await signGooglePrefillToken(secret, {
+              email: user.email,
+              name: displayName,
+              sub: String(sub),
+            });
+            const base = authPublicBaseUrl();
+            const path = `/register?g=${encodeURIComponent(token)}`;
+            return base ? `${base}${path}` : path;
           }
         } catch (err) {
           console.error("[auth] Google signIn DB error:", err);

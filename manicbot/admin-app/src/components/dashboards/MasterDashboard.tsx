@@ -131,7 +131,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
   return (
     <Shell navItems={masterNavItems} title={t("master.title", lang)} subtitle="ManicBot Master">
       {/* Tab bar */}
-      <div className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
+      <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
         {(["today", "schedule", "clients", "earnings", "profile"] as Tab[]).map(t => (
           <button
             key={t}

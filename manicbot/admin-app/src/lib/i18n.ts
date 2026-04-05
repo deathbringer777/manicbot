@@ -139,6 +139,10 @@ const translations = {
   "settings.passwordMismatch":  { ru: "Пароли не совпадают",       ua: "Паролі не збігаються",       en: "Passwords don't match",        pl: "Hasła nie pasują" },
   "settings.passwordChangedOk": { ru: "Пароль успешно изменён",    ua: "Пароль успішно змінено",     en: "Password changed successfully",pl: "Hasło zmienione pomyślnie" },
   "settings.passwordError":     { ru: "Ошибка изменения пароля",   ua: "Помилка зміни пароля",       en: "Error changing password",      pl: "Błąd zmiany hasła" },
+  "settings.helpCenter":        { ru: "Справка и статьи",          ua: "Довідка та статті",          en: "Help center",                    pl: "Centrum pomocy" },
+  "settings.helpCenterDesc":    { ru: "Поиск по инструкциям и ответам на частые вопросы.", ua: "Пошук за інструкціями та відповідями.", en: "Search guides and answers to common questions.", pl: "Wyszukaj instrukcje i odpowiedzi." },
+  "settings.tourReplay":        { ru: "Показать тур интерфейса",   ua: "Показати тур інтерфейсу",   en: "Run interface tour",           pl: "Uruchom przewodnik po interfejsie" },
+  "settings.tourReplayDesc":    { ru: "Коротко покажем основные области кабинета.", ua: "Коротко покажемо основні зони кабінету.", en: "A short walkthrough of the main areas.", pl: "Krótki przewodnik po panelu." },
   // Platform section
   "settings.modes":             { ru: "Режимы",                    ua: "Режими",                     en: "Modes",                        pl: "Tryby" },
   "settings.general":           { ru: "Основные",                  ua: "Основні",                    en: "General",                      pl: "Ogólne" },

@@ -15,7 +15,13 @@ export function PublicFooter() {
           </div>
         </div>
 
-        <div className="flex items-center gap-5">
+        <div className="flex flex-wrap items-center justify-center gap-5">
+          <Link
+            href="/help"
+            className="text-xs text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
+          >
+            Помощь
+          </Link>
           <Link
             href="/search"
             className="text-xs text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"

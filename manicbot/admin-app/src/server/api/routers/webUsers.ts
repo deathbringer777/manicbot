@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { webUsers, auditLog } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
+import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
 
 /*
  * Simple in-memory rate limiter for registration.
@@ -28,6 +29,17 @@ function checkRegisterRateLimit(ip: string): boolean {
 }
 
 export const webUsersRouter = createTRPCRouter({
+  /** Decode Google OAuth prefill token (public). */
+  googlePrefillPreview: publicProcedure
+    .input(z.object({ token: z.string().min(1).max(8000) }))
+    .query(async ({ input }) => {
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) return { ok: false as const };
+      const payload = await verifyGooglePrefillToken(secret, input.token);
+      if (!payload) return { ok: false as const };
+      return { ok: true as const, email: payload.email, name: payload.name };
+    }),
+
   /** Self-registration (public). */
   register: publicProcedure
     .input(
@@ -38,6 +50,7 @@ export const webUsersRouter = createTRPCRouter({
         name: z.string().max(200).optional(),
         referralSource: z.string().max(100).optional(),
         tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
+        googlePrefillToken: z.string().min(1).max(8000).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -56,6 +69,23 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many registration attempts. Try again later." });
       }
       const email = input.email.toLowerCase().trim();
+
+      let googleVerified = false;
+      if (input.googlePrefillToken) {
+        const secret = process.env.AUTH_SECRET;
+        if (!secret) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Server misconfiguration" });
+        }
+        const payload = await verifyGooglePrefillToken(secret, input.googlePrefillToken);
+        if (!payload || payload.email !== email) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid or expired Google sign-in. Please use Google sign-in again or register without it.",
+          });
+        }
+        googleVerified = true;
+      }
+
       const existing = await ctx.db
         .select({ id: webUsers.id })
         .from(webUsers)
@@ -69,6 +99,7 @@ export const webUsersRouter = createTRPCRouter({
       const verificationToken = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
       const tokenExpiresAt = now + 24 * 3600; // 24 hours
+      const skipEmailVerification = googleVerified || !hasEmailVerificationDelivery;
       try {
         await ctx.db.insert(webUsers).values({
           id,
@@ -77,9 +108,9 @@ export const webUsersRouter = createTRPCRouter({
           role: input.role,
           name: input.name ?? null,
           referralSource: input.referralSource ?? null,
-          emailVerified: hasEmailVerificationDelivery ? 0 : 1,
-          verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
-          verificationTokenExpiresAt: hasEmailVerificationDelivery ? tokenExpiresAt : null,
+          emailVerified: skipEmailVerification ? 1 : 0,
+          verificationToken: skipEmailVerification ? null : verificationToken,
+          verificationTokenExpiresAt: skipEmailVerification ? null : tokenExpiresAt,
           tosAcceptedAt: now,
           tenantId: null,
           createdAt: now,
@@ -105,8 +136,8 @@ export const webUsersRouter = createTRPCRouter({
       return {
         id,
         email,
-        verificationRequired: hasEmailVerificationDelivery,
-        verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
+        verificationRequired: !skipEmailVerification,
+        verificationToken: !skipEmailVerification ? verificationToken : null,
       };
     }),
 

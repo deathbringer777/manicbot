@@ -76,6 +76,8 @@ export const authCopy: Record<
       tosLabel: string;
       tosLinkText: string;
       tosRequired: string;
+      googlePrefillHint: string;
+      googlePrefillExpired: string;
     };
   }
 > = {
@@ -153,6 +155,10 @@ export const authCopy: Record<
       tosLabel: "Регистрируясь, вы принимаете",
       tosLinkText: "ПРАВИЛА ПОЛЬЗОВАНИЯ",
       tosRequired: "Необходимо принять правила пользования",
+      googlePrefillHint:
+        "Аккаунт Google подтверждён. Укажите пароль и роль — после регистрации вы сразу войдёте в кабинет.",
+      googlePrefillExpired:
+        "Ссылка из Google устарела или недействительна. Зарегистрируйтесь вручную или снова нажмите «Войти через Google».",
     },
   },
   ua: {
@@ -229,6 +235,10 @@ export const authCopy: Record<
       tosLabel: "Реєструючись, ви приймаєте",
       tosLinkText: "ПРАВИЛА КОРИСТУВАННЯ",
       tosRequired: "Необхідно прийняти правила користування",
+      googlePrefillHint:
+        "Обліковий запис Google підтверджено. Задайте пароль і роль — після реєстрації ви одразу увійдете в кабінет.",
+      googlePrefillExpired:
+        "Посилання з Google застаріло або недійсне. Зареєструйтесь вручну або знову натисніть «Увійти через Google».",
     },
   },
   en: {
@@ -305,6 +315,10 @@ export const authCopy: Record<
       tosLabel: "By registering, you agree to the",
       tosLinkText: "TERMS OF USE",
       tosRequired: "You must accept the Terms of Use",
+      googlePrefillHint:
+        "Your Google account is verified. Set a password and role — after registration you will sign in right away.",
+      googlePrefillExpired:
+        "The Google link expired or is invalid. Register manually or try “Continue with Google” again.",
     },
   },
   pl: {
@@ -381,6 +395,10 @@ export const authCopy: Record<
       tosLabel: "Rejestrując się, akceptujesz",
       tosLinkText: "REGULAMIN",
       tosRequired: "Musisz zaakceptować regulamin",
+      googlePrefillHint:
+        "Konto Google jest potwierdzone. Ustaw hasło i rolę — po rejestracji od razu zalogujesz się do panelu.",
+      googlePrefillExpired:
+        "Link z Google wygasł lub jest nieprawidłowy. Zarejestruj się ręcznie lub ponownie użyj „Zaloguj się przez Google”.",
     },
   },
 };

@@ -1,61 +1,33 @@
 import { describe, it, expect } from "vitest";
 
 /**
- * Tests for the NextAuth signIn/jwt/session callback logic.
- * We test the pure logic extracted from auth.ts callbacks,
- * since NextAuth itself is mocked in the test environment.
+ * Pure helpers mirroring NextAuth jwt/session callbacks in auth.ts
+ * (Google redirect + signIn DB branch are covered by google-prefill-token + auth-base-url tests).
  */
 
-describe("signIn callback logic", () => {
-  // Replicate the signIn callback decision logic
-  function shouldAllowGoogleSignIn(
+describe("Google web_users match (case / trim)", () => {
+  function findWebUserRow(
     email: string | undefined,
-    webUserRows: Array<{ id: string; email: string; role: string; tenantId: string | null }>,
-  ): { allowed: boolean; role: string; tenantId: string | null } {
-    if (!email) {
-      return { allowed: true, role: "client", tenantId: null };
-    }
-    const normalizedEmail = email.toLowerCase().trim();
-    const match = webUserRows.find((r) => r.email === normalizedEmail);
-    if (match) {
-      return { allowed: true, role: match.role, tenantId: match.tenantId };
-    }
-    // No match: allow with default role (as per current auth.ts logic)
-    return { allowed: true, role: "client", tenantId: null };
+    rows: Array<{ id: string; email: string; role: string; tenantId: string | null }>,
+  ) {
+    if (!email) return undefined;
+    const normalized = email.toLowerCase().trim();
+    return rows.find((r) => r.email === normalized);
   }
 
   it("matches email case-insensitively", () => {
     const rows = [{ id: "1", email: "admin@test.com", role: "system_admin", tenantId: null }];
-    const result = shouldAllowGoogleSignIn("Admin@Test.COM", rows);
-    expect(result.allowed).toBe(true);
-    expect(result.role).toBe("system_admin");
+    expect(findWebUserRow("Admin@Test.COM", rows)?.role).toBe("system_admin");
   });
 
   it("trims email whitespace", () => {
     const rows = [{ id: "1", email: "admin@test.com", role: "system_admin", tenantId: null }];
-    const result = shouldAllowGoogleSignIn("  admin@test.com  ", rows);
-    expect(result.allowed).toBe(true);
-    expect(result.role).toBe("system_admin");
+    expect(findWebUserRow("  admin@test.com  ", rows)?.role).toBe("system_admin");
   });
 
-  it("returns client role when email not in web_users", () => {
+  it("returns undefined when email not in web_users", () => {
     const rows = [{ id: "1", email: "admin@test.com", role: "system_admin", tenantId: null }];
-    const result = shouldAllowGoogleSignIn("stranger@example.com", rows);
-    expect(result.allowed).toBe(true);
-    expect(result.role).toBe("client");
-  });
-
-  it("returns tenant_owner role with tenantId", () => {
-    const rows = [{ id: "2", email: "owner@salon.com", role: "tenant_owner", tenantId: "t_abc" }];
-    const result = shouldAllowGoogleSignIn("owner@salon.com", rows);
-    expect(result.role).toBe("tenant_owner");
-    expect(result.tenantId).toBe("t_abc");
-  });
-
-  it("allows login when email is undefined", () => {
-    const result = shouldAllowGoogleSignIn(undefined, []);
-    expect(result.allowed).toBe(true);
-    expect(result.role).toBe("client");
+    expect(findWebUserRow("stranger@example.com", rows)).toBeUndefined();
   });
 });
 

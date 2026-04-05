@@ -138,3 +138,10 @@
   .animate-fade-in  { animation: fadeIn 0.35s ease-out both; }
   .animate-slide-up { animation: slideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
+
+/* driver.js tour above WebShell (z-40 header, z-50 drawer, z-100 dialogs) */
+.driver-overlay,
+.driver-popover,
+.driver-active-element {
+  z-index: 220 !important;
+}

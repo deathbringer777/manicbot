@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
@@ -287,16 +288,19 @@ function getPageTitle(pathname: string, role: string | null, lang: string): stri
   return match?.label ?? tNav("Dashboard", lang);
 }
 
-function NavLink({ item, active, collapsed, onClick }: {
+function NavLink({ item, active, collapsed, onClick, dataTour }: {
   item: NavItem;
   active: boolean;
   collapsed?: boolean;
   onClick?: () => void;
+  /** Product tour anchor (e.g. settings link). */
+  dataTour?: string;
 }) {
   return (
     <Link
       href={item.href}
       onClick={onClick}
+      data-tour={dataTour}
       className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-150 relative ${
         active
           ? "bg-brand-500/10 text-brand-500 dark:text-brand-400 font-medium border-l-2 border-brand-500 dark:border-brand-400"
@@ -370,6 +374,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
         {/* ═══ Desktop Sidebar ═══ */}
         <aside
+          data-tour="web-sidebar"
           className={`hidden lg:flex flex-col border-r border-slate-200 dark:border-white/[0.06] bg-white/90 dark:bg-[rgba(10,13,28,0.65)] backdrop-blur-2xl transition-all duration-300 ease-out shrink-0 ${
             collapsed ? "w-[72px]" : "w-64"
           }`}
@@ -409,7 +414,13 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 )}
                 <div className="space-y-0.5">
                   {group.items.map((item) => (
-                    <NavLink key={item.href + item.label} item={item} active={isActive(item)} collapsed={collapsed} />
+                    <NavLink
+                      key={item.href + item.label}
+                      item={item}
+                      active={isActive(item)}
+                      collapsed={collapsed}
+                      dataTour={item.href === "/settings" ? "web-settings" : undefined}
+                    />
                   ))}
                 </div>
               </div>
@@ -423,6 +434,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 <NavLink
                   item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
                   active={pathname.startsWith("/settings")}
+                  dataTour="web-settings"
                 />
                 <button
                   onClick={() => setShowLogoutDialog(true)}
@@ -438,6 +450,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
                   active={pathname.startsWith("/settings")}
                   collapsed
+                  dataTour="web-settings"
                 />
                 <button
                   onClick={() => setShowLogoutDialog(true)}
@@ -488,6 +501,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                           item={item}
                           active={isActive(item)}
                           onClick={() => setSidebarOpen(false)}
+                          dataTour={item.href === "/settings" ? "web-settings" : undefined}
                         />
                       ))}
                     </div>
@@ -501,6 +515,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
                   active={pathname.startsWith("/settings")}
                   onClick={() => setSidebarOpen(false)}
+                  dataTour="web-settings"
                 />
                 <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.03]">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
@@ -530,7 +545,10 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
         {/* ═══ Main area ═══ */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Topbar */}
-          <header className="h-16 flex items-center gap-3 px-4 lg:px-6 border-b border-slate-200 dark:border-white/[0.06] bg-white/95 dark:bg-slate-950/80 backdrop-blur-xl shrink-0 z-30">
+          <header
+            data-tour="web-header"
+            className="h-16 flex items-center gap-3 px-4 lg:px-6 border-b border-slate-200 dark:border-white/[0.06] bg-white/95 dark:bg-slate-950/80 backdrop-blur-xl shrink-0 z-30"
+          >
             <button
               onClick={() => setSidebarOpen(true)}
               className="lg:hidden p-2 -ml-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 dark:text-slate-400"
@@ -583,13 +601,16 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-brand-500/[0.05] blur-[120px]" />
               <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-purple-500/[0.05] blur-[120px]" />
             </div>
-            <div className="relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto max-w-7xl w-full">
+            <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto max-w-7xl w-full">
               {children}
             </div>
           </main>
 
           {/* ═══ Mobile Bottom Nav ═══ */}
-          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[rgba(2,6,23,0.92)] backdrop-blur-xl border-t border-slate-200 dark:border-white/[0.06]">
+          <nav
+            data-tour="web-mobile-nav"
+            className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[rgba(2,6,23,0.92)] backdrop-blur-xl border-t border-slate-200 dark:border-white/[0.06]"
+          >
             <div className="flex items-center justify-around px-1 py-1.5">
               {mobileNav.map((item) => {
                 const active = isActive(item);
@@ -597,6 +618,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   <Link
                     key={item.href + item.label}
                     href={item.href}
+                    data-tour={item.href === "/settings" ? "web-settings" : undefined}
                     className={`flex flex-col items-center justify-center py-1 flex-1 transition-colors ${
                       active ? "text-brand-500 dark:text-brand-400" : "text-slate-400 dark:text-slate-600"
                     }`}
@@ -645,6 +667,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           </div>
         )}
       </div>
+      <DashboardOnboarding />
     </WebShellContext.Provider>
   );
 }

@@ -23,6 +23,52 @@ import {
 } from "lucide-react";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 
+// ─── Web Users Panel (god mode only) ─────────────────────────────
+
+function WebUsersPanel() {
+  const webUsersList = api.webUsers.list.useQuery();
+  const tenantsList = api.tenants.getAll.useQuery();
+  const setTenant = api.webUsers.setTenant.useMutation({
+    onSuccess: () => webUsersList.refetch(),
+  });
+
+  return (
+    <section className="glass-card rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-4">
+        <User className="w-4 h-4 text-sky-400" />
+        <h2 className="text-sm font-bold text-white">Web Users</h2>
+      </div>
+      {webUsersList.isLoading ? (
+        <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-10 rounded-xl bg-slate-700/40 animate-pulse" />)}</div>
+      ) : (
+        <div className="space-y-2">
+          {(webUsersList.data ?? []).map((u) => (
+            <div key={u.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl bg-slate-900/50 border border-border/30">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-white truncate">{u.email}</p>
+                <p className="text-[10px] text-slate-500">{u.role} · {u.tenantId ?? <span className="text-amber-400">no tenant</span>}</p>
+              </div>
+              <select
+                value={u.tenantId ?? ""}
+                onChange={(e) => setTenant.mutate({ userId: u.id, tenantId: e.target.value || null })}
+                className="text-xs rounded-xl bg-slate-800 border border-slate-700 px-2 py-1.5 text-slate-300 focus:outline-none focus:border-brand-500 shrink-0"
+              >
+                <option value="">— no tenant —</option>
+                {(tenantsList.data ?? []).map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
+                ))}
+              </select>
+            </div>
+          ))}
+          {(webUsersList.data ?? []).length === 0 && (
+            <p className="text-xs text-slate-500 py-2 text-center">No web users yet</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Toggle ───────────────────────────────────────────────────────
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -593,6 +639,9 @@ export default function SettingsPageClient() {
                 className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white resize-y"
               />
             </section>
+
+            {/* Web Users */}
+            <WebUsersPanel />
 
             {/* Danger zone */}
             <section className="glass-card rounded-2xl p-4 border border-red-500/20">

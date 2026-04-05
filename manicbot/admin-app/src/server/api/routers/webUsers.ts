@@ -513,4 +513,17 @@ export const webUsersRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  /** Assign or clear tenantId for a web user (God Mode only). */
+  setTenant: adminProcedure
+    .input(z.object({
+      userId: z.string(),
+      tenantId: z.string().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db.select({ id: webUsers.id }).from(webUsers).where(eq(webUsers.id, input.userId)).limit(1);
+      if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Web user not found" });
+      await ctx.db.update(webUsers).set({ tenantId: input.tenantId }).where(eq(webUsers.id, input.userId));
+      return { success: true };
+    }),
 });

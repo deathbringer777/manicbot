@@ -186,7 +186,7 @@ function AuthShellInner({
             <div className="flex items-start justify-center lg:justify-end">
               <div className="w-full max-w-lg rounded-[32px] border border-slate-200/80 bg-white/86 p-5 shadow-[0_35px_100px_-42px_rgba(15,23,42,0.45)] backdrop-blur-2xl dark:border-white/10 dark:bg-slate-950/58 dark:shadow-[0_30px_100px_-40px_rgba(8,145,178,0.55)] sm:p-6 lg:p-7">
                 <div className="mb-6 flex items-start gap-4">
-                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[20px] shadow-[0_18px_40px_-22px_rgba(124,58,237,0.7)]">
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full shadow-[0_18px_40px_-22px_rgba(124,58,237,0.7)]">
                     <Image
                       src="/manicbot-mark-ui.png"
                       alt="ManicBot"

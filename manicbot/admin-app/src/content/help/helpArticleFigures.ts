@@ -162,8 +162,8 @@ export const HELP_FIGURES_BY_SLUG: Record<string, HelpUiFigure[]> = {
       },
       title: { ru: "Услуги", ua: "Послуги", en: "Services", pl: "Usługi" },
       rows: [
-        { label: { ru: "💅 Маникюр · 1200 ₽", ua: "💅 Манікюр · 1200 ₴", en: "💅 Manicure · $25", pl: "💅 Manicure · 120 zł" }, hint: { ru: "60 мин", ua: "60 хв", en: "60 min", pl: "60 min" } },
-        { label: { ru: "✨ Педикюр · 1800 ₽", ua: "✨ Педикюр · 1800 ₴", en: "✨ Pedicure · $35", pl: "✨ Pedicure · 180 zł" } },
+        { label: { ru: "💅 Маникюр · 120 zł", ua: "💅 Манікюр · 120 zł", en: "💅 Manicure · 120 zł", pl: "💅 Manicure · 120 zł" }, hint: { ru: "60 мин", ua: "60 хв", en: "60 min", pl: "60 min" } },
+        { label: { ru: "✨ Педикюр · 180 zł", ua: "✨ Педикюр · 180 zł", en: "✨ Pedicure · 180 zł", pl: "✨ Pedicure · 180 zł" } },
       ],
     },
   ],
@@ -779,10 +779,10 @@ export const HELP_FIGURES_BY_SLUG: Record<string, HelpUiFigure[]> = {
         {
           side: "bot",
           text: {
-            ru: "Педикюр от 1800 ₽ (уточните в каталоге). Записаться?",
-            ua: "Педикюр від … (див. каталог). Записатися?",
-            en: "Pedicure from … (see catalog). Want to book?",
-            pl: "Pedicure od … (zobacz katalog). Zarezerwować?",
+            ru: "Педикюр от 180 zł (уточните в каталоге). Записаться?",
+            ua: "Педикюр від 180 zł (див. каталог). Записатися?",
+            en: "Pedicure from 180 zł (see catalog). Want to book?",
+            pl: "Pedicure od 180 zł (zobacz katalog). Zarezerwować?",
           },
         },
       ],

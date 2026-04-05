@@ -36,6 +36,52 @@ export const authCopy: Record<
       register: string;
       showPassword: string;
       hidePassword: string;
+      forgotPassword: string;
+    };
+    verifyEmail: {
+      kicker: string;
+      title: string;
+      description: string;
+      panelTitle: string;
+      panelDescription: string;
+      verifying: string;
+      success: string;
+      successAlready: string;
+      error: string;
+      missingToken: string;
+      goLogin: string;
+    };
+    forgotPassword: {
+      kicker: string;
+      title: string;
+      description: string;
+      panelTitle: string;
+      panelDescription: string;
+      email: string;
+      submit: string;
+      submitting: string;
+      done: string;
+      error: string;
+      backLogin: string;
+    };
+    resetPassword: {
+      kicker: string;
+      title: string;
+      description: string;
+      panelTitle: string;
+      panelDescription: string;
+      newPassword: string;
+      confirmPassword: string;
+      passwordsMismatch: string;
+      passwordHint: string;
+      submit: string;
+      submitting: string;
+      success: string;
+      error: string;
+      missingToken: string;
+      goLogin: string;
+      showPassword: string;
+      hidePassword: string;
     };
     register: {
       kicker: string;
@@ -113,6 +159,52 @@ export const authCopy: Record<
       googleLoading: "Перенаправление...",
       noAccount: "Нет аккаунта?",
       register: "Зарегистрироваться",
+      showPassword: "Показать пароль",
+      hidePassword: "Скрыть пароль",
+      forgotPassword: "Забыли пароль?",
+    },
+    verifyEmail: {
+      kicker: "Подтверждение email",
+      title: "Подтвердите адрес почты",
+      description: "Мы отправили ссылку на ваш email. Перейдите по ней или откройте эту страницу из письма.",
+      panelTitle: "Подтверждение",
+      panelDescription: "Один момент — проверяем ссылку.",
+      verifying: "Проверяем ссылку…",
+      success: "Email подтверждён. Теперь можно войти.",
+      successAlready: "Этот адрес уже подтверждён. Войдите в кабинет.",
+      error: "Ссылка недействительна или срок её действия истёк.",
+      missingToken: "В ссылке нет кода подтверждения. Откройте страницу из письма.",
+      goLogin: "Перейти ко входу",
+    },
+    forgotPassword: {
+      kicker: "Сброс пароля",
+      title: "Восстановить доступ к кабинету",
+      description: "Укажите email аккаунта. Если он зарегистрирован, мы отправим ссылку для нового пароля.",
+      panelTitle: "Забыли пароль",
+      panelDescription: "Письмо придёт только если такой email есть в системе.",
+      email: "Email",
+      submit: "Отправить ссылку",
+      submitting: "Отправка…",
+      done: "Если этот email зарегистрирован, мы отправили письмо со ссылкой. Проверьте папку «Спам».",
+      error: "Не удалось отправить запрос. Попробуйте позже.",
+      backLogin: "Назад ко входу",
+    },
+    resetPassword: {
+      kicker: "Новый пароль",
+      title: "Задайте новый пароль",
+      description: "Введите пароль не короче 12 символов.",
+      panelTitle: "Сброс пароля",
+      panelDescription: "После сохранения войдите с новым паролем.",
+      newPassword: "Новый пароль",
+      confirmPassword: "Подтверждение пароля",
+      passwordsMismatch: "Пароли не совпадают",
+      passwordHint: "минимум 12 символов",
+      submit: "Сохранить пароль",
+      submitting: "Сохранение…",
+      success: "Пароль обновлён. Теперь можно войти.",
+      error: "Ссылка недействительна или срок её действия истёк.",
+      missingToken: "Нет токена в ссылке. Откройте страницу из письма.",
+      goLogin: "Перейти ко входу",
       showPassword: "Показать пароль",
       hidePassword: "Скрыть пароль",
     },
@@ -195,6 +287,52 @@ export const authCopy: Record<
       register: "Зареєструватися",
       showPassword: "Показати пароль",
       hidePassword: "Сховати пароль",
+      forgotPassword: "Забули пароль?",
+    },
+    verifyEmail: {
+      kicker: "Підтвердження email",
+      title: "Підтвердьте адресу пошти",
+      description: "Ми надіслали посилання на ваш email. Перейдіть за ним або відкрийте цю сторінку з листа.",
+      panelTitle: "Підтвердження",
+      panelDescription: "Зачекайте — перевіряємо посилання.",
+      verifying: "Перевіряємо посилання…",
+      success: "Email підтверджено. Тепер можна увійти.",
+      successAlready: "Цю адресу вже підтверджено. Увійдіть до кабінету.",
+      error: "Посилання недійсне або термін його дії минув.",
+      missingToken: "У посиланні немає коду. Відкрийте сторінку з листа.",
+      goLogin: "До входу",
+    },
+    forgotPassword: {
+      kicker: "Скидання пароля",
+      title: "Відновити доступ до кабінету",
+      description: "Вкажіть email облікового запису. Якщо він зареєстрований, ми надішлемо посилання для нового пароля.",
+      panelTitle: "Забули пароль",
+      panelDescription: "Лист надійде лише якщо такий email є в системі.",
+      email: "Email",
+      submit: "Надіслати посилання",
+      submitting: "Надсилання…",
+      done: "Якщо цей email зареєстровано, ми надіслали лист з посиланням. Перевірте «Спам».",
+      error: "Не вдалося надіслати запит. Спробуйте пізніше.",
+      backLogin: "Назад до входу",
+    },
+    resetPassword: {
+      kicker: "Новий пароль",
+      title: "Задайте новий пароль",
+      description: "Пароль не коротший за 12 символів.",
+      panelTitle: "Скидання пароля",
+      panelDescription: "Після збереження увійдіть з новим паролем.",
+      newPassword: "Новий пароль",
+      confirmPassword: "Підтвердження пароля",
+      passwordsMismatch: "Паролі не збігаються",
+      passwordHint: "мінімум 12 символів",
+      submit: "Зберегти пароль",
+      submitting: "Збереження…",
+      success: "Пароль оновлено. Тепер можна увійти.",
+      error: "Посилання недійсне або термін його дії минув.",
+      missingToken: "У посиланні немає токена. Відкрийте сторінку з листа.",
+      goLogin: "До входу",
+      showPassword: "Показати пароль",
+      hidePassword: "Сховати пароль",
     },
     register: {
       kicker: "Новий кабінет",
@@ -275,6 +413,52 @@ export const authCopy: Record<
       register: "Create one",
       showPassword: "Show password",
       hidePassword: "Hide password",
+      forgotPassword: "Forgot password?",
+    },
+    verifyEmail: {
+      kicker: "Email verification",
+      title: "Confirm your email address",
+      description: "We sent a link to your inbox. Open it or use the link from the email on this page.",
+      panelTitle: "Verification",
+      panelDescription: "Checking your link.",
+      verifying: "Verifying…",
+      success: "Email confirmed. You can sign in now.",
+      successAlready: "This email is already verified. Sign in to your cabinet.",
+      error: "This link is invalid or has expired.",
+      missingToken: "No confirmation code in the URL. Open the page from the email.",
+      goLogin: "Go to sign in",
+    },
+    forgotPassword: {
+      kicker: "Password reset",
+      title: "Restore access to your cabinet",
+      description: "Enter your account email. If it is registered, we will send a link to set a new password.",
+      panelTitle: "Forgot password",
+      panelDescription: "You will only receive an email if this address exists in our system.",
+      email: "Email",
+      submit: "Send reset link",
+      submitting: "Sending…",
+      done: "If this email is registered, we sent a message with a link. Check your spam folder.",
+      error: "Could not send the request. Try again later.",
+      backLogin: "Back to sign in",
+    },
+    resetPassword: {
+      kicker: "New password",
+      title: "Choose a new password",
+      description: "Use at least 12 characters.",
+      panelTitle: "Reset password",
+      panelDescription: "After saving, sign in with your new password.",
+      newPassword: "New password",
+      confirmPassword: "Confirm password",
+      passwordsMismatch: "Passwords do not match",
+      passwordHint: "at least 12 characters",
+      submit: "Save password",
+      submitting: "Saving…",
+      success: "Password updated. You can sign in now.",
+      error: "This link is invalid or has expired.",
+      missingToken: "No token in the URL. Open the page from the email.",
+      goLogin: "Go to sign in",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
     },
     register: {
       kicker: "New cabinet",
@@ -353,6 +537,52 @@ export const authCopy: Record<
       googleLoading: "Przekierowanie...",
       noAccount: "Nie masz konta?",
       register: "Załóż konto",
+      showPassword: "Pokaż hasło",
+      hidePassword: "Ukryj hasło",
+      forgotPassword: "Nie pamiętasz hasła?",
+    },
+    verifyEmail: {
+      kicker: "Weryfikacja email",
+      title: "Potwierdź adres e-mail",
+      description: "Wysłaliśmy link na Twój email. Otwórz go lub użyj linku z wiadomości.",
+      panelTitle: "Potwierdzenie",
+      panelDescription: "Sprawdzamy link.",
+      verifying: "Weryfikacja…",
+      success: "Email potwierdzony. Możesz się zalogować.",
+      successAlready: "Ten adres jest już potwierdzony. Zaloguj się do panelu.",
+      error: "Link jest nieprawidłowy lub wygasł.",
+      missingToken: "Brak kodu w adresie URL. Otwórz stronę z wiadomości.",
+      goLogin: "Przejdź do logowania",
+    },
+    forgotPassword: {
+      kicker: "Reset hasła",
+      title: "Przywróć dostęp do panelu",
+      description: "Podaj email konta. Jeśli jest zarejestrowany, wyślemy link do nowego hasła.",
+      panelTitle: "Nie pamiętasz hasła",
+      panelDescription: "Wiadomość przyjdzie tylko jeśli taki email istnieje w systemie.",
+      email: "Email",
+      submit: "Wyślij link",
+      submitting: "Wysyłanie…",
+      done: "Jeśli ten email jest zarejestrowany, wysłaliśmy wiadomość z linkiem. Sprawdź folder spam.",
+      error: "Nie udało się wysłać żądania. Spróbuj później.",
+      backLogin: "Wróć do logowania",
+    },
+    resetPassword: {
+      kicker: "Nowe hasło",
+      title: "Ustaw nowe hasło",
+      description: "Minimum 12 znaków.",
+      panelTitle: "Reset hasła",
+      panelDescription: "Po zapisaniu zaloguj się nowym hasłem.",
+      newPassword: "Nowe hasło",
+      confirmPassword: "Potwierdź hasło",
+      passwordsMismatch: "Hasła nie są takie same",
+      passwordHint: "minimum 12 znaków",
+      submit: "Zapisz hasło",
+      submitting: "Zapisywanie…",
+      success: "Hasło zaktualizowane. Możesz się zalogować.",
+      error: "Link jest nieprawidłowy lub wygasł.",
+      missingToken: "Brak tokenu w adresie URL. Otwórz stronę z wiadomości.",
+      goLogin: "Przejdź do logowania",
       showPassword: "Pokaż hasło",
       hidePassword: "Ukryj hasło",
     },

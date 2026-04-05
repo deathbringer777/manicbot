@@ -192,6 +192,67 @@ function esc(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 }
 
+const BLOG_BACK = {
+  ru: "На сайт ManicBot",
+  en: "Back to ManicBot",
+  ua: "На сайт ManicBot",
+  pl: "Strona główna ManicBot",
+};
+
+const BLOG_FOOTER = {
+  ru: {
+    links: [
+      ["/help", "Помощь"],
+      ["/privacy", "Конфиденциальность"],
+      ["/terms", "Условия"],
+      ["/rules", "Правила"],
+      ["/support", "Поддержка"],
+    ],
+    copy: "© 2026 ManicBot. Все права защищены.",
+  },
+  en: {
+    links: [
+      ["/help", "Help center"],
+      ["/privacy", "Privacy"],
+      ["/terms", "Terms"],
+      ["/rules", "Rules"],
+      ["/support", "Support"],
+    ],
+    copy: "© 2026 ManicBot. All rights reserved.",
+  },
+  ua: {
+    links: [
+      ["/help", "Довідка"],
+      ["/privacy", "Конфіденційність"],
+      ["/terms", "Умови"],
+      ["/rules", "Правила"],
+      ["/support", "Підтримка"],
+    ],
+    copy: "© 2026 ManicBot. Всі права захищені.",
+  },
+  pl: {
+    links: [
+      ["/help", "Pomoc"],
+      ["/privacy", "Prywatność"],
+      ["/terms", "Regulamin"],
+      ["/rules", "Zasady"],
+      ["/support", "Wsparcie"],
+    ],
+    copy: "© 2026 ManicBot. Wszelkie prawa zastrzeżone.",
+  },
+};
+
+function blogFooterBlock(langCode) {
+  const f = BLOG_FOOTER[langCode] ?? BLOG_FOOTER.en;
+  const nav = f.links.map(([href, label]) => `      <a href="${href}">${label}</a>`).join("\n");
+  return `  <footer class="site-footer">
+    <nav aria-label="Footer">
+${nav}
+    </nav>
+    <p>${f.copy}</p>
+  </footer>`;
+}
+
 function pageHtml({ slug, lang, data }) {
   const url = `${SITE}/${lang.code}/${slug}.html`;
   const alternates = langs
@@ -249,15 +310,9 @@ ${alternates}
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.65; }
-    header { padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(124,58,237,0.15); }
-    .wrap { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-    h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 1rem; letter-spacing: -0.02em; }
-    p { margin: 0 0 1rem; color: var(--muted); }
-    .langs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; font-size: 0.875rem; }
-    .langs a { color: var(--accent); text-decoration: none; }
-    .langs a:hover { text-decoration: underline; }
-    .home { font-size: 0.875rem; }
-    .home a {
+    .site-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid rgba(124,58,237,0.15); }
+    .site-top .home { font-size: 0.875rem; }
+    .site-top .home a.brand {
       background: linear-gradient(135deg, var(--accent), var(--accent2));
       -webkit-background-clip: text;
       background-clip: text;
@@ -265,11 +320,26 @@ ${alternates}
       font-weight: 700;
       text-decoration: none;
     }
+    .site-top .blog-tag { color: var(--muted); font-weight: 500; }
+    .site-top a.back { font-size: 0.875rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+    .site-top a.back:hover { text-decoration: underline; }
+    .site-footer { margin-top: 0; padding: 2rem 1.25rem 2.5rem; border-top: 1px solid rgba(148,163,184,0.25); max-width: 42rem; margin-left: auto; margin-right: auto; }
+    .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
+    .site-footer nav a { font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+    .site-footer nav a:hover { color: var(--accent); }
+    .site-footer p { margin: 0; text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.9; }
+    .wrap { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 1rem; letter-spacing: -0.02em; }
+    p { margin: 0 0 1rem; color: var(--muted); }
+    .langs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; font-size: 0.875rem; }
+    .langs a { color: var(--accent); text-decoration: none; }
+    .langs a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <header>
-    <div class="home"><a href="${MAIN}/">ManicBot</a> — blog</div>
+  <header class="site-top">
+    <div class="home"><a class="brand" href="${MAIN}/">ManicBot</a> <span class="blog-tag">— blog</span></div>
+    <a class="back" href="${MAIN}/">${BLOG_BACK[lang.code] ?? BLOG_BACK.en}</a>
   </header>
   <article class="wrap">
     <h1>${esc(data.h1)}</h1>
@@ -283,6 +353,7 @@ ${langs
   .join("\n")}
     </nav>
   </article>
+${blogFooterBlock(lang.code)}
 </body>
 </html>`;
 }
@@ -318,14 +389,30 @@ async function main() {
   <meta property="og:url" content="${SITE}/" />
   <meta property="og:image" content="${OG_IMG}" />
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #0f172a; }
-    @media (prefers-color-scheme: dark) { body { background: #050812; color: #e2e8f0; } }
-    a { color: #7c3aed; }
+    :root { color-scheme: light dark; --fg: #0f172a; --muted: #64748b; --accent: #7c3aed; --accent2: #06b6d4; --bg: #f8fafc; }
+    @media (prefers-color-scheme: dark) { :root { --fg: #f1f5f9; --muted: #94a3b8; --bg: #050812; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.65; }
+    .site-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid rgba(124,58,237,0.15); }
+    .site-top a.brand { font-weight: 700; text-decoration: none; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .site-top a.back { font-size: 0.875rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+    .site-top a.back:hover { text-decoration: underline; }
+    .wrap { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem 1rem; }
+    a { color: var(--accent); }
     ul { padding-left: 1.2rem; }
+    .site-footer { padding: 2rem 1rem 2.5rem; border-top: 1px solid rgba(148,163,184,0.25); max-width: 40rem; margin: 0 auto; }
+    .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
+    .site-footer nav a { font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+    .site-footer nav a:hover { color: var(--accent); }
+    .site-footer p { margin: 0; text-align: center; font-size: 0.75rem; color: var(--muted); }
   </style>
 </head>
 <body>
-  <p><a href="${MAIN}/">ManicBot</a></p>
+  <header class="site-top">
+    <a class="brand" href="${MAIN}/">ManicBot</a>
+    <a class="back" href="${MAIN}/">На сайт ManicBot</a>
+  </header>
+  <main class="wrap">
   <h1>Blog</h1>
   <p>Материалы для SEO и владельцев салонов (RU/EN/UA/PL).</p>
   <ul>
@@ -333,6 +420,8 @@ async function main() {
     <li><a href="${SITE}/ru/ai-beauty-europe-poland.html">ИИ и beauty в Европе и Польше (RU)</a> — <a href="${SITE}/en/ai-beauty-europe-poland.html">EN</a>, <a href="${SITE}/ua/ai-beauty-europe-poland.html">UA</a>, <a href="${SITE}/pl/ai-beauty-europe-poland.html">PL</a></li>
     <li><a href="${SITE}/ru/automation-sales-europe.html">Автоматизация и продажи (RU)</a> — <a href="${SITE}/en/automation-sales-europe.html">EN</a>, <a href="${SITE}/ua/automation-sales-europe.html">UA</a>, <a href="${SITE}/pl/automation-sales-europe.html">PL</a></li>
   </ul>
+  </main>
+${blogFooterBlock("ru")}
 </body>
 </html>`;
   await writeFile(join(OUT, "index.html"), hub, "utf8");

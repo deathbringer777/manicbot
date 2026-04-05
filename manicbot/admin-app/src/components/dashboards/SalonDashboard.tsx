@@ -629,7 +629,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                     <span className="text-2xl shrink-0">{s.emoji ?? "💅"}</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900 dark:text-white text-sm">{name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {s.price} ₴</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {s.price}\u00a0zł</p>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.active ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-200 dark:bg-slate-700 text-slate-500"}`}>
                       {s.active ? t("service.active", lang) : t("service.hidden", lang)}

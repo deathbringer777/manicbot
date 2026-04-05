@@ -31,15 +31,9 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.65; }
-    header { padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(124,58,237,0.15); }
-    .wrap { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-    h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 1rem; letter-spacing: -0.02em; }
-    p { margin: 0 0 1rem; color: var(--muted); }
-    .langs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; font-size: 0.875rem; }
-    .langs a { color: var(--accent); text-decoration: none; }
-    .langs a:hover { text-decoration: underline; }
-    .home { font-size: 0.875rem; }
-    .home a {
+    .site-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; padding: 1rem 1.5rem; border-bottom: 1px solid rgba(124,58,237,0.15); }
+    .site-top .home { font-size: 0.875rem; }
+    .site-top .home a.brand {
       background: linear-gradient(135deg, var(--accent), var(--accent2));
       -webkit-background-clip: text;
       background-clip: text;
@@ -47,11 +41,26 @@
       font-weight: 700;
       text-decoration: none;
     }
+    .site-top .blog-tag { color: var(--muted); font-weight: 500; }
+    .site-top a.back { font-size: 0.875rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+    .site-top a.back:hover { text-decoration: underline; }
+    .site-footer { margin-top: 0; padding: 2rem 1.25rem 2.5rem; border-top: 1px solid rgba(148,163,184,0.25); max-width: 42rem; margin-left: auto; margin-right: auto; }
+    .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
+    .site-footer nav a { font-size: 0.875rem; color: var(--muted); text-decoration: none; }
+    .site-footer nav a:hover { color: var(--accent); }
+    .site-footer p { margin: 0; text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.9; }
+    .wrap { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 1rem; letter-spacing: -0.02em; }
+    p { margin: 0 0 1rem; color: var(--muted); }
+    .langs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; font-size: 0.875rem; }
+    .langs a { color: var(--accent); text-decoration: none; }
+    .langs a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <header>
-    <div class="home"><a href="https://manicbot.com/">ManicBot</a> — blog</div>
+  <header class="site-top">
+    <div class="home"><a class="brand" href="https://manicbot.com/">ManicBot</a> <span class="blog-tag">— blog</span></div>
+    <a class="back" href="https://manicbot.com/">Back to ManicBot</a>
   </header>
   <article class="wrap">
     <h1>How AI is changing the European beauty sector — with a lens on Poland</h1>
@@ -67,5 +76,15 @@
       <a href="https://manicbot.com/blog/pl/ai-beauty-europe-poland.html" hreflang="pl">PL</a>
     </nav>
   </article>
+  <footer class="site-footer">
+    <nav aria-label="Footer">
+      <a href="/help">Help center</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/rules">Rules</a>
+      <a href="/support">Support</a>
+    </nav>
+    <p>© 2026 ManicBot. All rights reserved.</p>
+  </footer>
 </body>
 </html>

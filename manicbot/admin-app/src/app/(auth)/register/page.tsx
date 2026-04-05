@@ -195,26 +195,6 @@ export default function RegisterPage() {
           </p>
         )}
 
-        <label className="flex items-start gap-3 cursor-pointer group rounded-2xl border border-cyan-200/40 bg-cyan-50/50 px-4 py-3 transition hover:bg-cyan-50 dark:border-cyan-400/20 dark:bg-cyan-500/5 dark:hover:bg-cyan-500/10">
-          <input
-            type="checkbox"
-            checked={tosAccepted}
-            onChange={(e) => setTosAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 dark:border-white/20 dark:bg-white/5 accent-cyan-600"
-          />
-          <span className="text-sm text-slate-600 dark:text-slate-300">
-            {copy.register.tosLabel}{" "}
-            <a
-              href="/rules"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-cyan-700 underline decoration-cyan-400/40 hover:text-cyan-500 dark:text-cyan-300 dark:hover:text-cyan-200"
-            >
-              {copy.register.tosLinkText}
-            </a>
-          </span>
-        </label>
-
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.login.email}</label>
@@ -282,9 +262,10 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-              {copy.register.password} <span className="font-normal text-slate-400">({copy.register.passwordHint})</span>
-            </label>
+            <div className="mb-2 min-h-[3rem]">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.password}</label>
+              <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{copy.register.passwordHint}</p>
+            </div>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -308,7 +289,12 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.confirmPassword}</label>
+            <div className="mb-2 min-h-[3rem]">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.confirmPassword}</label>
+              <p className="invisible mt-0.5 text-xs" aria-hidden>
+                {copy.register.passwordHint}
+              </p>
+            </div>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -359,6 +345,26 @@ export default function RegisterPage() {
             {error}
           </p>
         )}
+
+        <label className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-cyan-200/40 bg-cyan-50/50 px-4 py-3 transition hover:bg-cyan-50 dark:border-cyan-400/20 dark:bg-cyan-500/5 dark:hover:bg-cyan-500/10">
+          <input
+            type="checkbox"
+            checked={tosAccepted}
+            onChange={(e) => setTosAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 accent-cyan-600 dark:border-white/20 dark:bg-white/5"
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-300">
+            {copy.register.tosLabel}{" "}
+            <a
+              href="/rules"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-cyan-700 underline decoration-cyan-400/40 hover:text-cyan-500 dark:text-cyan-300 dark:hover:text-cyan-200"
+            >
+              {copy.register.tosLinkText}
+            </a>
+          </span>
+        </label>
 
         <button
           type="submit"

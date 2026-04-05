@@ -5,6 +5,8 @@ import { webUsers, auditLog } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
+import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
+import { isResendConfigured, sendResendEmail } from "~/server/email/resend";
 
 /*
  * Simple in-memory rate limiter for registration.
@@ -26,6 +28,27 @@ function checkRegisterRateLimit(ip: string): boolean {
   if (entry.count >= RL_MAX) return false;
   entry.count++;
   return true;
+}
+
+const resetRl = new Map<string, { count: number; resetAt: number }>();
+
+function checkPasswordResetRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = resetRl.get(ip);
+  if (!entry || now > entry.resetAt) {
+    resetRl.set(ip, { count: 1, resetAt: now + RL_WINDOW });
+    return true;
+  }
+  if (entry.count >= RL_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+function clientIp(ctx: { headers?: Headers | null }): string {
+  const h = ctx.headers;
+  if (!h?.get) return "unknown";
+  const xff = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return xff || h.get("cf-connecting-ip") || "unknown";
 }
 
 export const webUsersRouter = createTRPCRouter({
@@ -54,17 +77,15 @@ export const webUsersRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const hasEmailVerificationDelivery = Boolean(
-        process.env.RESEND_API_KEY ||
-        process.env.SMTP_HOST ||
-        process.env.MAILGUN_API_KEY ||
-        process.env.SENDGRID_API_KEY
-      );
+      if (isResendConfigured() && !authPublicBaseUrl()) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Email verification is enabled but AUTH_URL (or NEXTAUTH_URL) is not set. Configure a public app URL for verification links.",
+        });
+      }
 
       // Rate limit by IP
-      const ip = (ctx as any).headers?.get?.("x-forwarded-for")?.split(",")[0]?.trim()
-        ?? (ctx as any).headers?.get?.("cf-connecting-ip")
-        ?? "unknown";
+      const ip = clientIp(ctx as { headers?: Headers | null });
       if (!checkRegisterRateLimit(ip)) {
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many registration attempts. Try again later." });
       }
@@ -99,7 +120,7 @@ export const webUsersRouter = createTRPCRouter({
       const verificationToken = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
       const tokenExpiresAt = now + 24 * 3600; // 24 hours
-      const skipEmailVerification = googleVerified || !hasEmailVerificationDelivery;
+      const skipEmailVerification = googleVerified || !isResendConfigured();
       try {
         await ctx.db.insert(webUsers).values({
           id,
@@ -128,16 +149,42 @@ export const webUsersRouter = createTRPCRouter({
           tenantId: null,
           actor: email,
           action: "tos_accepted",
-          detail: JSON.stringify({ channel: "web", userId: id, email }),
+          detail: JSON.stringify({
+            channel: "web",
+            userId: id,
+            email,
+            referralSource: input.referralSource ?? null,
+            role: input.role,
+          }),
           ip,
           createdAt: now,
         });
       } catch { /* non-critical */ }
+
+      if (!skipEmailVerification) {
+        const base = authPublicBaseUrl();
+        const verifyUrl = `${base}/verify-email?token=${encodeURIComponent(verificationToken)}`;
+        const sent = await sendResendEmail({
+          to: email,
+          subject: "Confirm your ManicBot account",
+          html: `<p>Thanks for registering. <a href="${verifyUrl}">Confirm your email</a> to sign in.</p><p>If you did not register, ignore this message.</p>`,
+        });
+        if (!sent.ok) {
+          await ctx.db.delete(webUsers).where(eq(webUsers.id, id));
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message:
+              sent.error === "resend_not_configured"
+                ? "Email could not be sent. Check Resend configuration."
+                : `Could not send verification email: ${sent.error}`,
+          });
+        }
+      }
+
       return {
         id,
         email,
         verificationRequired: !skipEmailVerification,
-        verificationToken: !skipEmailVerification ? verificationToken : null,
       };
     }),
 
@@ -166,6 +213,110 @@ export const webUsersRouter = createTRPCRouter({
         .set({ emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
         .where(eq(webUsers.id, user.id));
       return { success: true };
+    }),
+
+  /** Request password reset email (public). Same response whether or not the email exists. */
+  requestPasswordReset: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const ip = clientIp(ctx as { headers?: Headers | null });
+      if (!checkPasswordResetRateLimit(ip)) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many attempts. Try again later.",
+        });
+      }
+
+      const email = input.email.toLowerCase().trim();
+      const base = authPublicBaseUrl();
+      const canSend = isResendConfigured() && Boolean(base);
+
+      if (isResendConfigured() && !base) {
+        console.error("[webUsers] requestPasswordReset: Resend configured but AUTH_URL is empty");
+      }
+
+      const rows = await ctx.db
+        .select({ id: webUsers.id })
+        .from(webUsers)
+        .where(eq(webUsers.email, email))
+        .limit(1);
+
+      if (rows.length && canSend) {
+        const resetToken = crypto.randomUUID();
+        const now = Math.floor(Date.now() / 1000);
+        const expiresAt = now + 3600; // 1 hour
+        await ctx.db
+          .update(webUsers)
+          .set({
+            passwordResetToken: resetToken,
+            passwordResetExpiresAt: expiresAt,
+            updatedAt: now,
+          })
+          .where(eq(webUsers.id, rows[0]!.id));
+
+        const resetUrl = `${base}/reset-password?token=${encodeURIComponent(resetToken)}`;
+        const sent = await sendResendEmail({
+          to: email,
+          subject: "Reset your ManicBot password",
+          html: `<p>You asked to reset your password. <a href="${resetUrl}">Set a new password</a> (link expires in one hour).</p><p>If you did not request this, ignore this email.</p>`,
+        });
+        if (!sent.ok) {
+          await ctx.db
+            .update(webUsers)
+            .set({
+              passwordResetToken: null,
+              passwordResetExpiresAt: null,
+              updatedAt: now,
+            })
+            .where(eq(webUsers.id, rows[0]!.id));
+          console.error("[webUsers] requestPasswordReset: Resend failed", sent.error);
+        }
+      }
+
+      return { ok: true as const };
+    }),
+
+  /** Complete password reset with token from email (public). */
+  resetPassword: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(1),
+        newPassword: z.string().min(12, "Минимум 12 символов"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db
+        .select()
+        .from(webUsers)
+        .where(eq(webUsers.passwordResetToken, input.token))
+        .limit(1);
+      if (!rows.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid or expired reset link",
+        });
+      }
+      const user = rows[0]!;
+      const now = Math.floor(Date.now() / 1000);
+      if (!user.passwordResetExpiresAt || now > user.passwordResetExpiresAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid or expired reset link",
+        });
+      }
+
+      const newHash = await hashPassword(input.newPassword);
+      await ctx.db
+        .update(webUsers)
+        .set({
+          passwordHash: newHash,
+          passwordResetToken: null,
+          passwordResetExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(eq(webUsers.id, user.id));
+
+      return { success: true as const };
     }),
 
   /** Create a web user (God Mode only). Auto-verified. */
@@ -211,6 +362,7 @@ export const webUsersRouter = createTRPCRouter({
       email: webUsers.email,
       role: webUsers.role,
       tenantId: webUsers.tenantId,
+      referralSource: webUsers.referralSource,
       createdAt: webUsers.createdAt,
     }).from(webUsers);
     return rows;

@@ -151,6 +151,14 @@ export default function LoginPage() {
               )}
             </button>
           </div>
+          <div className="text-right">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-medium text-cyan-700 transition hover:text-slate-900 dark:text-cyan-200 dark:hover:text-white"
+            >
+              {copy.login.forgotPassword}
+            </Link>
+          </div>
         </div>
 
         {error && (

@@ -15,6 +15,7 @@ import {
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding";
+import { PublicFooter } from "~/components/public/PublicFooter";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
@@ -601,8 +602,12 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-brand-500/[0.05] blur-[120px]" />
               <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-purple-500/[0.05] blur-[120px]" />
             </div>
-            <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto max-w-7xl w-full">
+            <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full">
               {children}
+            </div>
+            {/* Same legal/footer links as auth + public pages; pb clears fixed mobile tab bar */}
+            <div className="relative z-10 pb-24 lg:pb-6">
+              <PublicFooter />
             </div>
           </main>
 

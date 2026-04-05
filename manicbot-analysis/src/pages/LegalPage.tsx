@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { useLanguage, type Locale } from "@/i18n";
 
 interface LegalContent {
@@ -734,6 +735,8 @@ export function LegalPage({ page }: { page: string }) {
           ))}
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

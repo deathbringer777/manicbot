@@ -1,52 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { useLang } from "~/components/LangContext";
+import { PUBLIC_FOOTER_BY_LANG } from "~/lib/publicFooterCopy";
 
 export function PublicFooter() {
+  const { lang } = useLang();
+  const { links, copy } = PUBLIC_FOOTER_BY_LANG[lang] ?? PUBLIC_FOOTER_BY_LANG.en;
+
   return (
-    <footer className="border-t border-slate-200/90 bg-white/60 px-4 py-10 backdrop-blur-sm dark:border-white/[0.06] dark:bg-[rgba(5,8,18,0.65)]">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold text-white shadow-sm"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
-          >
-            M
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-5">
-          <Link
-            href="/help"
-            className="text-xs text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
-          >
-            Помощь
-          </Link>
-          <Link
-            href="/search"
-            className="text-xs text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
-          >
-            Найти салон
-          </Link>
-          <Link
-            href="/login"
-            className="text-xs text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
-          >
-            Кабинет
-          </Link>
-          <a
-            href="https://t.me/manic_preview_bot"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
-          >
-            Telegram
-          </a>
-        </div>
-
-        <p className="text-xs text-slate-400 dark:text-white/25">
-          &copy; {new Date().getFullYear()} ManicBot
-        </p>
+    <footer className="border-t border-slate-200/90 bg-white/60 py-8 backdrop-blur-sm dark:border-white/[0.06] dark:bg-[rgba(5,8,18,0.65)]">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left sm:px-6">
+        <nav
+          className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 sm:justify-start"
+          aria-label="Footer"
+        >
+          {links.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="text-sm text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <p className="shrink-0 text-xs text-slate-400 dark:text-white/25 sm:text-right">{copy}</p>
       </div>
     </footer>
   );

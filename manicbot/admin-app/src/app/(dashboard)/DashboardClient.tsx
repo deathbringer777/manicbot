@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { OverviewChart } from "~/components/dashboard/OverviewChart";
+import { ReferralSignupCharts } from "~/components/dashboard/ReferralSignupCharts";
 import {
   Users,
   Building2,
@@ -255,6 +256,10 @@ export default function DashboardClient() {
   });
   const { data: chart } = api.metrics.getChartData.useQuery({ days: period });
   const { data: chart90 } = api.metrics.getChartData.useQuery({ days: 90 });
+  const { data: referralStats, isLoading: referralLoading } = api.metrics.getWebSignupReferralStats.useQuery(
+    { days: period },
+    { refetchInterval: 60_000 },
+  );
 
   const s = stats;
 
@@ -345,6 +350,22 @@ export default function DashboardClient() {
           {/* Calendar */}
           <MiniCalendar data={chart90 ?? []} />
         </div>
+
+        {referralLoading ? (
+          <div className="glass-card rounded-2xl p-8 animate-pulse text-center text-xs text-slate-500">
+            Загрузка статистики регистраций…
+          </div>
+        ) : (
+          <ReferralSignupCharts
+            bySource={referralStats?.bySourceInPeriod ?? []}
+            daily={referralStats?.dailySignupBySource ?? []}
+            totalLabel={
+              referralStats != null
+                ? `Всего ${referralStats.totalSignupsInPeriod} за ${period} дн.`
+                : undefined
+            }
+          />
+        )}
 
         {/* Recent activity */}
         <div className="glass-card rounded-2xl p-4">

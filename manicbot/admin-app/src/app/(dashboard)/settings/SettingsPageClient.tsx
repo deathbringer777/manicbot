@@ -36,22 +36,22 @@ function WebUsersPanel() {
     <section className="glass-card rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-4">
         <User className="w-4 h-4 text-sky-400" />
-        <h2 className="text-sm font-bold text-white">Web Users</h2>
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Web Users</h2>
       </div>
       {webUsersList.isLoading ? (
-        <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-10 rounded-xl bg-slate-700/40 animate-pulse" />)}</div>
+        <div className="space-y-2">{[0,1,2].map(i => <div key={i} className="h-10 rounded-xl bg-slate-200 dark:bg-slate-700/40 animate-pulse" />)}</div>
       ) : (
         <div className="space-y-2">
           {(webUsersList.data ?? []).map((u) => (
-            <div key={u.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl bg-slate-900/50 border border-border/30">
+            <div key={u.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl bg-white dark:bg-slate-900/50 border border-border/30">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-white truncate">{u.email}</p>
+                <p className="text-xs font-medium text-slate-900 dark:text-white truncate">{u.email}</p>
                 <p className="text-[10px] text-slate-500">{u.role} · {u.tenantId ?? <span className="text-amber-400">no tenant</span>}</p>
               </div>
               <select
                 value={u.tenantId ?? ""}
                 onChange={(e) => setTenant.mutate({ userId: u.id, tenantId: e.target.value || null })}
-                className="text-xs rounded-xl bg-slate-800 border border-slate-700 px-2 py-1.5 text-slate-300 focus:outline-none focus:border-brand-500 shrink-0"
+                className="text-xs rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-slate-600 dark:text-slate-300 focus:outline-none focus:border-brand-500 shrink-0"
               >
                 <option value="">— no tenant —</option>
                 {(tenantsList.data ?? []).map((t: any) => (
@@ -77,7 +77,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
       type="button"
       onClick={() => onChange(!value)}
       className={`w-12 h-6 rounded-full relative transition-colors duration-200 shrink-0 ${
-        value ? "bg-brand-600" : "bg-slate-700"
+        value ? "bg-brand-600" : "bg-slate-200 dark:bg-slate-700"
       }`}
     >
       <span
@@ -126,7 +126,7 @@ function TabButton({
       className={`px-4 py-2.5 text-sm font-semibold transition-colors rounded-t-lg ${
         active
           ? "text-brand-400 border-b-2 border-brand-400"
-          : "text-slate-400 hover:text-slate-200"
+          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
       }`}
     >
       {label}
@@ -260,7 +260,7 @@ export default function SettingsPageClient() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">{t("settings.title", lang)}</h1>
-            <p className="text-xs text-slate-400 mt-1">{t("settings.tabs.account", lang)} &amp; {t("settings.tabs.platform", lang)}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t("settings.tabs.account", lang)} &amp; {t("settings.tabs.platform", lang)}</p>
           </div>
           {activeTab === "platform" && role === "system_admin" && (
             <button
@@ -287,14 +287,14 @@ export default function SettingsPageClient() {
           <section className="glass-card rounded-2xl p-4 space-y-3 mb-6">
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-              <h2 className="text-sm font-bold text-white">{t("roleSwitch.title", lang)}</h2>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("roleSwitch.title", lang)}</h2>
             </div>
             <RoleSwitcherInline placement="settings" />
           </section>
         )}
 
         {/* Tab bar */}
-        <div className="flex gap-1 border-b border-slate-800 mb-6">
+        <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800 mb-6">
           <TabButton
             label={t("settings.tabs.account", lang)}
             active={activeTab === "account"}
@@ -321,29 +321,29 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <User className="w-4 h-4 text-brand-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">{t("settings.account", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.account", lang)}</h2>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.email", lang)}
                   </label>
                   <input
                     type="text"
                     readOnly
                     value={t("settings.emailNA", lang)}
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none cursor-default select-none"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none cursor-default select-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.role", lang)}
                   </label>
                   <input
                     type="text"
                     readOnly
                     value={role ?? "—"}
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-400 outline-none cursor-default select-none"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
                   />
                 </div>
               </div>
@@ -353,11 +353,11 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">{t("settings.changeEmail", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changeEmail", lang)}</h2>
               </div>
               <form onSubmit={handleChangeEmail} className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.newEmail", lang)}
                   </label>
                   <input
@@ -365,7 +365,7 @@ export default function SettingsPageClient() {
                     value={emailForm.newEmail}
                     onChange={(e) => setEmailForm({ newEmail: e.target.value })}
                     placeholder="new@example.com"
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                     required
                   />
                 </div>
@@ -396,11 +396,11 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="w-4 h-4 text-amber-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">{t("settings.changePassword", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changePassword", lang)}</h2>
               </div>
               <form onSubmit={handleChangePassword} className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.currentPassword", lang)}
                   </label>
                   <input
@@ -410,12 +410,12 @@ export default function SettingsPageClient() {
                     onChange={(e) =>
                       setPwForm((prev) => ({ ...prev, currentPassword: e.target.value }))
                     }
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.newPassword", lang)}
                   </label>
                   <input
@@ -425,12 +425,12 @@ export default function SettingsPageClient() {
                     onChange={(e) =>
                       setPwForm((prev) => ({ ...prev, newPassword: e.target.value }))
                     }
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.confirmPassword", lang)}
                   </label>
                   <input
@@ -441,10 +441,10 @@ export default function SettingsPageClient() {
                       setPwForm((prev) => ({ ...prev, confirmPassword: e.target.value }));
                       if (pwError === t("settings.passwordMismatch", lang)) setPwError(null);
                     }}
-                    className={`w-full bg-slate-900/70 border rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white ${
+                    className={`w-full bg-slate-50 dark:bg-slate-900/70 border rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white ${
                       pwError === t("settings.passwordMismatch", lang)
                         ? "border-red-500/60"
-                        : "border-slate-700/50"
+                        : "border-slate-200 dark:border-slate-700/50"
                     }`}
                     required
                   />
@@ -477,22 +477,22 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">{t("settings.helpCenter", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.helpCenter", lang)}</h2>
               </div>
-              <p className="text-xs text-slate-400">{t("settings.helpCenterDesc", lang)}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.helpCenterDesc", lang)}</p>
               <Link
                 href="/help"
-                className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-slate-600/60 bg-slate-900/50 px-4 py-2.5 text-sm font-medium text-slate-200 hover:border-brand-500/40 hover:text-white transition-colors"
+                className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-slate-200 dark:border-slate-600/60 bg-white dark:bg-slate-900/50 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-brand-500/40 hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 {t("settings.helpCenter", lang)}
               </Link>
               {showTourReplay && (
                 <>
-                  <div className="flex items-center gap-2 pt-2 border-t border-white/[0.06]">
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
                     <Map className="w-4 h-4 text-violet-400 shrink-0" />
-                    <h3 className="text-sm font-bold text-white">{t("settings.tourReplay", lang)}</h3>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.tourReplay", lang)}</h3>
                   </div>
-                  <p className="text-xs text-slate-400">{t("settings.tourReplayDesc", lang)}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.tourReplayDesc", lang)}</p>
                   <button
                     type="button"
                     onClick={() => window.dispatchEvent(new CustomEvent(TOUR_REPLAY_EVENT))}
@@ -513,16 +513,16 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Power className="w-4 h-4 text-rose-400" />
-                <h2 className="text-sm font-bold text-white">{t("settings.modes", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.modes", lang)}</h2>
               </div>
               <div className="space-y-2">
                 {toggleDefs.map(({ key, label, sub }) => (
                   <div
                     key={key}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-900/50 border border-border/30"
+                    className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900/50 border border-border/30"
                   >
                     <div className="min-w-0 mr-3">
-                      <p className="text-sm font-medium text-white">{label}</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
                       <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>
                     </div>
                     <Toggle value={form?.[key] ?? false} onChange={(v) => set(key, v)} />
@@ -535,33 +535,33 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Bot className="w-4 h-4 text-brand-400" />
-                <h2 className="text-sm font-bold text-white">{t("settings.general", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.general", lang)}</h2>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.botUsername", lang)}
                   </label>
                   <input
                     type="text"
                     value={form?.botUsername ?? ""}
                     onChange={(e) => set("botUsername", e.target.value)}
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.supportContact", lang)}
                   </label>
                   <input
                     type="text"
                     value={form?.supportUsername ?? ""}
                     onChange={(e) => set("supportUsername", e.target.value)}
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.timezone", lang)}
                   </label>
                   <input
@@ -569,7 +569,7 @@ export default function SettingsPageClient() {
                     value={form?.timezone ?? ""}
                     onChange={(e) => set("timezone", e.target.value)}
                     placeholder="Europe/Warsaw"
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -579,11 +579,11 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-4 h-4 text-purple-400" />
-                <h2 className="text-sm font-bold text-white">{t("salon.appointments", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                     {t("settings.maxApts", lang)}
                   </label>
                   <input
@@ -592,12 +592,12 @@ export default function SettingsPageClient() {
                     max={50}
                     value={form?.maxAppointmentsPerUser ?? 10}
                     onChange={(e) => set("maxAppointmentsPerUser", parseInt(e.target.value) || 10)}
-                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                       {t("settings.workFrom", lang)}
                     </label>
                     <input
@@ -606,11 +606,11 @@ export default function SettingsPageClient() {
                       max={23}
                       value={form?.workingHoursFrom ?? 9}
                       onChange={(e) => set("workingHoursFrom", parseInt(e.target.value))}
-                      className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                      className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                       {t("settings.workTo", lang)}
                     </label>
                     <input
@@ -619,7 +619,7 @@ export default function SettingsPageClient() {
                       max={24}
                       value={form?.workingHoursTo ?? 21}
                       onChange={(e) => set("workingHoursTo", parseInt(e.target.value))}
-                      className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                      className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
                     />
                   </div>
                 </div>
@@ -630,13 +630,13 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="w-4 h-4 text-amber-400" />
-                <h2 className="text-sm font-bold text-white">System Prompt</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">System Prompt</h2>
               </div>
               <textarea
                 rows={5}
                 value={form?.systemPrompt ?? ""}
                 onChange={(e) => set("systemPrompt", e.target.value)}
-                className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white resize-y"
+                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white resize-y"
               />
             </section>
 
@@ -646,7 +646,7 @@ export default function SettingsPageClient() {
             {/* Danger zone */}
             <section className="glass-card rounded-2xl p-4 border border-red-500/20">
               <h2 className="text-sm font-bold text-red-400 mb-1">Danger Zone</h2>
-              <p className="text-[10px] text-slate-400 mb-3">{t("settings.dangerZoneDesc", lang)}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-3">{t("settings.dangerZoneDesc", lang)}</p>
               <button
                 onClick={() => {
                   set("maintenanceMode", true);
@@ -666,7 +666,7 @@ export default function SettingsPageClient() {
             <section className="glass-card rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Globe className="w-4 h-4 text-sky-400 shrink-0" />
-                <h2 className="text-sm font-bold text-white">{t("settings.language", lang)}</h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.language", lang)}</h2>
               </div>
               <LangPickerInline placement="settings" />
             </section>

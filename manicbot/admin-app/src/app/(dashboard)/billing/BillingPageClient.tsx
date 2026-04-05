@@ -6,14 +6,14 @@ import { Download, TrendingUp, CheckCircle, Clock } from "lucide-react";
 import { formatPlnWhole } from "~/lib/money";
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  trialing: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  grace_period: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-  inactive: "text-slate-400 bg-slate-700/20 border-slate-600/20",
+  active: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20",
+  trialing: "text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20",
+  grace_period: "text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-500/10 dark:border-orange-500/20",
+  inactive: "text-slate-500 bg-slate-100 border-slate-300 dark:text-slate-400 dark:bg-slate-700/20 dark:border-slate-600/20",
 };
 
 const PLAN_COLORS: Record<string, string> = {
-  start: "text-slate-300 bg-slate-700/40",
+  start: "text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/40",
   pro: "text-brand-400 bg-brand-500/10",
   studio: "text-purple-400 bg-purple-500/10",
 };
@@ -49,11 +49,11 @@ export default function BillingPageClient() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Billing</h1>
-            <p className="text-xs text-slate-400 mt-1">Подписки и финансы</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Подписки и финансы</p>
           </div>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white px-3 py-2 text-xs font-medium rounded-xl transition-all"
+            className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:bg-slate-200 dark:active:bg-slate-600 text-slate-900 dark:text-white px-3 py-2 text-xs font-medium rounded-xl transition-all"
           >
             <Download className="w-3.5 h-3.5" />
             CSV
@@ -72,19 +72,19 @@ export default function BillingPageClient() {
             <div className="glass-card rounded-2xl p-4 col-span-2 flex items-center gap-4">
               <TrendingUp className="w-6 h-6 text-emerald-400 shrink-0" />
               <div>
-                <p className="text-xs text-slate-400">MRR (расчётный, PLN)</p>
-                <p className="text-3xl font-extrabold text-white">{formatPlnWhole(m?.mrr ?? 0)}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">MRR (расчётный, PLN)</p>
+                <p className="text-3xl font-extrabold text-slate-900 dark:text-white">{formatPlnWhole(m?.mrr ?? 0)}</p>
               </div>
             </div>
             <div className="glass-card rounded-2xl p-4 text-center">
               <CheckCircle className="w-5 h-5 text-brand-400 mx-auto mb-1.5" />
-              <p className="text-2xl font-bold text-white">{m?.activeSubscribers ?? 0}</p>
-              <p className="text-[10px] text-slate-400">Активных</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{m?.activeSubscribers ?? 0}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Активных</p>
             </div>
             <div className="glass-card rounded-2xl p-4 text-center">
               <Clock className="w-5 h-5 text-amber-400 mx-auto mb-1.5" />
-              <p className="text-2xl font-bold text-white">{m?.trialing ?? 0}</p>
-              <p className="text-[10px] text-slate-400">На триале</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{m?.trialing ?? 0}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">На триале</p>
             </div>
           </div>
         )}
@@ -92,11 +92,11 @@ export default function BillingPageClient() {
         {/* Plan breakdown */}
         {m?.planBreakdown && Object.keys(m.planBreakdown).length > 0 && (
           <div className="glass-card rounded-2xl p-4">
-            <p className="text-xs font-semibold text-slate-400 mb-3">Планы (активные)</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-3">Планы (активные)</p>
             <div className="flex gap-3">
               {Object.entries(m.planBreakdown).map(([plan, count]) => (
-                <div key={plan} className="flex-1 text-center bg-slate-800/50 rounded-xl p-3">
-                  <p className="text-lg font-bold text-white">{count}</p>
+                <div key={plan} className="flex-1 text-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl p-3">
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{count}</p>
                   <p className={`text-[10px] font-bold uppercase mt-0.5 ${PLAN_COLORS[plan] ?? ""}`}>
                     {plan}
                   </p>
@@ -108,14 +108,14 @@ export default function BillingPageClient() {
 
         {/* Tenants list */}
         <div className="space-y-2.5">
-          <p className="text-xs font-semibold text-slate-400">Все тенанты</p>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Все тенанты</p>
           {tenants.map((t) => (
             <div key={t.id} className="glass-card rounded-2xl p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{t.name}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{t.name}</p>
                   {t.email && (
-                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">{t.email}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{t.email}</p>
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
@@ -138,7 +138,7 @@ export default function BillingPageClient() {
 
               <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-border/30">
                 <span className="text-[10px] font-mono text-slate-600 truncate flex-1">{t.id}</span>
-                <span className="text-sm font-bold text-white shrink-0 ml-2">
+                <span className="text-sm font-bold text-slate-900 dark:text-white shrink-0 ml-2">
                   {t.monthlyRevenue > 0 ? `${formatPlnWhole(t.monthlyRevenue)}/мес` : "—"}
                 </span>
               </div>

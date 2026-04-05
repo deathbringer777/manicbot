@@ -325,11 +325,11 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const [collapsed, setCollapsed] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  // Light/dark theme — default dark
+  // Light/dark theme — default light
   const [isDark, setIsDark] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const stored = localStorage.getItem("manicbot_web_theme");
-    return stored !== "light";
+    return stored === "dark";
   });
   // Sync with document.documentElement so CSS variables (:root:not(.dark)) respond to theme toggle
   useEffect(() => {

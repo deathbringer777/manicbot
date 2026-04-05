@@ -96,13 +96,13 @@ export function ConversationsPage() {
               value={convSearch}
               onChange={(e) => setConvSearch(e.target.value)}
               placeholder="Search channel user id…"
-              className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
+              className="flex-1 min-w-0 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
             />
           </div>
           <select
             value={godTenantFilter}
             onChange={(e) => setGodTenantFilter(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500/40"
+            className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500/40"
           >
             <option value="">All salons</option>
             {(tenants.data ?? []).map((t: { id: string; name: string | null }) => (
@@ -115,7 +115,7 @@ export function ConversationsPage() {
       )}
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+        <div className="flex gap-1 bg-slate-50 dark:bg-white/5 rounded-xl p-1">
           {(["all", "telegram", "whatsapp", "instagram"] as ChannelFilter[]).map((ch) => (
             <button
               key={ch}
@@ -131,7 +131,7 @@ export function ConversationsPage() {
           ))}
         </div>
 
-        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+        <div className="flex gap-1 bg-slate-50 dark:bg-white/5 rounded-xl p-1">
           {(["open", "closed", "all"] as StatusFilter[]).map((s) => (
             <button
               key={s}
@@ -178,7 +178,7 @@ export function ConversationsPage() {
                 key={conv.id}
                 onClick={() => setSelected(isSelected ? null : conv.id)}
                 className={`glass-card rounded-xl p-3 cursor-pointer transition-all ${
-                  isSelected ? "border border-brand-500/40 bg-brand-500/5" : "hover:bg-white/5"
+                  isSelected ? "border border-brand-500/40 bg-brand-500/5" : "hover:bg-slate-50 dark:hover:bg-white/5"
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -187,7 +187,7 @@ export function ConversationsPage() {
                   </span>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{conv.channelUserId}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{conv.channelUserId}</p>
                     <p className="text-xs text-slate-500">
                       {isGod && <span className="font-mono text-slate-600 mr-2">{conv.tenantId}</span>}
                       {timeAgo(conv.lastMessageAt)}
@@ -202,7 +202,7 @@ export function ConversationsPage() {
                 </div>
 
                 {isSelected && (isGod ? conv.tenantId : tenantId) && (
-                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-white/5 flex items-center gap-2">
                     <p className="text-xs text-slate-500 flex-1">
                       ID: <span className="font-mono text-slate-400">{conv.id}</span>
                     </p>
@@ -216,7 +216,7 @@ export function ConversationsPage() {
                             status: "closed",
                           });
                         }}
-                        className="text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg px-2.5 py-1 transition-colors"
+                        className="text-xs text-slate-400 hover:text-white border border-slate-200 dark:border-white/10 rounded-lg px-2.5 py-1 transition-colors"
                       >
                         Close
                       </button>

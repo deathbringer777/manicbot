@@ -25,7 +25,7 @@ function getTypeStyle(type: string): string {
   if (type.startsWith("webhook")) return "bg-blue-500/15 text-blue-300 border-blue-500/20";
   if (type.startsWith("stripe")) return "bg-cyan-500/15 text-cyan-300 border-cyan-500/20";
   if (type.startsWith("channel")) return "bg-amber-500/15 text-amber-300 border-amber-500/20";
-  return "bg-slate-700/50 text-slate-300 border-slate-600/30";
+  return "bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600/30";
 }
 
 function LevelBadge({ level }: { level: EventLevel }) {
@@ -42,7 +42,7 @@ function LevelBadge({ level }: { level: EventLevel }) {
       </span>
     );
   return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded-md border border-slate-700/50 shrink-0">
+    <span className="flex items-center gap-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/50 shrink-0">
       <Info className="w-2.5 h-2.5" /> INFO
     </span>
   );
@@ -68,7 +68,7 @@ function EventRow({ event }: { event: AdminEvent }) {
 
   return (
     <div
-      className={`border-b border-slate-800/50 last:border-0 transition-colors ${rowAccent(event.level)} ${hasData ? "cursor-pointer hover:bg-white/[0.02]" : ""}`}
+      className={`border-b border-slate-200 dark:border-slate-800/50 last:border-0 transition-colors ${rowAccent(event.level)} ${hasData ? "cursor-pointer hover:bg-white/[0.02]" : ""}`}
       onClick={() => hasData && setExpanded((v) => !v)}
     >
       <div className="flex items-start gap-2 py-2.5 px-3">
@@ -83,7 +83,7 @@ function EventRow({ event }: { event: AdminEvent }) {
           {event.type}
         </span>
         {/* message */}
-        <span className={`text-xs flex-1 min-w-0 truncate ${event.level === "error" ? "text-red-200" : event.level === "warn" ? "text-amber-200" : "text-slate-300"}`}>
+        <span className={`text-xs flex-1 min-w-0 truncate ${event.level === "error" ? "text-red-200" : event.level === "warn" ? "text-amber-200" : "text-slate-600 dark:text-slate-300"}`}>
           {event.message}
         </span>
         {/* tenantId if present */}
@@ -95,7 +95,7 @@ function EventRow({ event }: { event: AdminEvent }) {
       </div>
       {expanded && event.data && (
         <div className="px-3 pb-3">
-          <pre className="text-[10px] text-slate-400 bg-slate-900/80 rounded-xl p-3 overflow-x-auto border border-slate-800/50 scrollbar-none">
+          <pre className="text-[10px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900/80 rounded-xl p-3 overflow-x-auto border border-slate-200 dark:border-slate-800/50 scrollbar-none">
             {JSON.stringify(event.data, null, 2)}
           </pre>
         </div>
@@ -107,10 +107,10 @@ function EventRow({ event }: { event: AdminEvent }) {
 const TYPE_PRESETS = ["booking", "webhook", "stripe", "auth", "error", "channel"];
 
 const LEVEL_FILTERS = [
-  { value: "" as const, label: "Все", cls: "text-slate-500 border-slate-700/50 bg-slate-800/50 hover:border-slate-600" },
+  { value: "" as const, label: "Все", cls: "text-slate-500 border-slate-200 dark:border-slate-700/50 bg-slate-100 dark:bg-slate-800/50 hover:border-slate-600" },
   { value: "error" as const, label: "Ошибки", cls: "text-red-400 border-red-500/40 bg-red-500/10 hover:bg-red-500/20" },
   { value: "warn" as const, label: "Предупрежд.", cls: "text-amber-400 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20" },
-  { value: "info" as const, label: "Инфо", cls: "text-slate-400 border-slate-600/50 bg-slate-800/50 hover:bg-slate-700/50" },
+  { value: "info" as const, label: "Инфо", cls: "text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600/50 bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700/50" },
 ] as const;
 
 export default function EventsPageClient() {
@@ -169,17 +169,17 @@ export default function EventsPageClient() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Event Log</h1>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Поток событий платформы · обновляется каждые 10с
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => void refetch()}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors"
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               title="Обновить"
             >
-              <RefreshCw className={`w-4 h-4 text-slate-400 ${isFetching ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-4 h-4 text-slate-500 dark:text-slate-400 ${isFetching ? "animate-spin" : ""}`} />
             </button>
             {clearPending ? (
               <div className="flex items-center gap-1.5">
@@ -193,15 +193,15 @@ export default function EventsPageClient() {
                 </button>
                 <button
                   onClick={() => setClearPending(false)}
-                  className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors"
+                  className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <X className="w-3.5 h-3.5 text-slate-400" />
+                  <X className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => setClearPending(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-red-900/30 text-slate-400 hover:text-red-400 text-xs font-medium transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-red-900/30 text-slate-500 dark:text-slate-400 hover:text-red-400 text-xs font-medium transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Очистить
               </button>
@@ -254,8 +254,8 @@ export default function EventsPageClient() {
                     : value === "warn"
                     ? "text-amber-300 border-amber-500/50 bg-amber-500/15"
                     : value === "info"
-                    ? "text-slate-300 border-slate-500/50 bg-slate-700/50"
-                    : "text-white border-slate-500 bg-slate-700"
+                    ? "text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-500/50 bg-slate-100 dark:bg-slate-700/50"
+                    : "text-slate-900 dark:text-white border-slate-200 dark:border-slate-500 bg-slate-100 dark:bg-slate-700"
                   : cls
               }`}
             >
@@ -275,7 +275,7 @@ export default function EventsPageClient() {
                 className={`text-[11px] px-2.5 py-1 rounded-lg border font-mono transition-colors ${
                   typeFilter === preset
                     ? getTypeStyle(preset) + " font-semibold"
-                    : "bg-slate-800/50 text-slate-500 border-slate-700/50 hover:border-slate-600"
+                    : "bg-slate-100 dark:bg-slate-800/50 text-slate-500 border-slate-200 dark:border-slate-700/50 hover:border-slate-600"
                 }`}
               >
                 {preset}
@@ -292,7 +292,7 @@ export default function EventsPageClient() {
                 value={textSearch}
                 onChange={(e) => setTextSearch(e.target.value)}
                 placeholder="Поиск в логах..."
-                className="pl-7 pr-3 py-1.5 w-36 sm:w-48 bg-slate-900/70 border border-slate-700/50 rounded-xl text-xs outline-none focus:border-brand-500/60 text-white placeholder-slate-600"
+                className="pl-7 pr-3 py-1.5 w-36 sm:w-48 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white placeholder-slate-600"
               />
             </div>
             <input
@@ -300,7 +300,7 @@ export default function EventsPageClient() {
               value={tenantFilter}
               onChange={(e) => setTenantFilter(e.target.value)}
               placeholder="tenantId..."
-              className="w-28 sm:w-36 bg-slate-900/70 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-white placeholder-slate-600"
+              className="w-28 sm:w-36 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white placeholder-slate-600"
             />
           </div>
 
@@ -312,10 +312,10 @@ export default function EventsPageClient() {
                 setLevelFilter("");
                 setTextSearch("");
               }}
-              className="p-1.5 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition-colors"
+              className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               title="Сбросить фильтры"
             >
-              <X className="w-3 h-3 text-slate-400" />
+              <X className="w-3 h-3 text-slate-500 dark:text-slate-400" />
             </button>
           )}
         </div>
@@ -323,13 +323,13 @@ export default function EventsPageClient() {
         {/* Event list */}
         <div className="glass-card rounded-2xl overflow-hidden">
           {isLoading ? (
-            <div className="divide-y divide-slate-800/50">
+            <div className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 py-3 px-3 animate-pulse">
-                  <div className="w-7 h-2.5 rounded-full bg-slate-800 shrink-0" />
-                  <div className="w-10 h-4 rounded-md bg-slate-800 shrink-0" />
-                  <div className="w-20 h-4 rounded-md bg-slate-800/70 shrink-0" />
-                  <div className="flex-1 h-2.5 rounded-full bg-slate-800/50" />
+                  <div className="w-7 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" />
+                  <div className="w-10 h-4 rounded-md bg-slate-100 dark:bg-slate-800 shrink-0" />
+                  <div className="w-20 h-4 rounded-md bg-slate-100 dark:bg-slate-800/70 shrink-0" />
+                  <div className="flex-1 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800/50" />
                 </div>
               ))}
             </div>
@@ -344,7 +344,7 @@ export default function EventsPageClient() {
             </div>
           ) : (
             <div>
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 bg-slate-900/30">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-800/50 bg-white dark:bg-slate-900/30">
                 <span className="text-[10px] text-slate-600 font-medium">
                   {events.length} событи{events.length === 1 ? "е" : "й"}
                   {allEvents.length !== events.length && (

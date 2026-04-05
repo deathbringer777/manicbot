@@ -21,10 +21,10 @@ import {
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  trialing: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  grace_period: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-  inactive: "text-slate-400 bg-slate-700/20 border-slate-600/20",
+  active: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20",
+  trialing: "text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20",
+  grace_period: "text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-400 dark:bg-orange-500/10 dark:border-orange-500/20",
+  inactive: "text-slate-500 bg-slate-100 border-slate-300 dark:text-slate-400 dark:bg-slate-700/20 dark:border-slate-600/20",
 };
 
 type TenantRole = { tenantId: string; chatId: number; role: string };
@@ -58,7 +58,7 @@ function ConfirmButton({
         >
           Да, точно
         </button>
-        <button onClick={() => setStep(0)} className="px-2.5 py-1.5 rounded-xl bg-slate-700/60 text-slate-400 text-xs">
+        <button onClick={() => setStep(0)} className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 text-xs">
           Нет
         </button>
       </div>
@@ -134,7 +134,7 @@ export default function TenantsPageClient() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Tenants</h1>
-            <p className="text-sm text-slate-400 mt-1">{tenants.length} салонов</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{tenants.length} салонов</p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
@@ -163,7 +163,7 @@ export default function TenantsPageClient() {
                       {t.name.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-bold text-white truncate">{t.name}</h3>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{t.name}</h3>
                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                         <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold uppercase ${STATUS_COLORS[t.billingStatus ?? "inactive"] ?? STATUS_COLORS.inactive}`}>
                           {t.billingStatus ?? "inactive"}
@@ -189,22 +189,22 @@ export default function TenantsPageClient() {
                         </button>
                       )}
                       <button onClick={() => setExpanded(expanded === t.id ? null : t.id)}
-                        className="p-2 rounded-xl bg-slate-800 active:bg-slate-700 text-slate-300">
+                        className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-slate-600 dark:text-slate-300">
                         {expanded === t.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/30">
-                    <span className="flex items-center gap-1 text-[11px] text-slate-400"><Users className="w-3 h-3" />{t.userCount}</span>
-                    <span className="flex items-center gap-1 text-[11px] text-slate-400"><CalendarDays className="w-3 h-3" />{t.appointmentCount} записей</span>
-                    {t.bot && <span className="flex items-center gap-1 text-[11px] text-slate-400 truncate"><Bot className="w-3 h-3 shrink-0" />@{t.bot.botUsername}</span>}
+                    <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><Users className="w-3 h-3" />{t.userCount}</span>
+                    <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"><CalendarDays className="w-3 h-3" />{t.appointmentCount} записей</span>
+                    {t.bot && <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate"><Bot className="w-3 h-3 shrink-0" />@{t.bot.botUsername}</span>}
                   </div>
                 </div>
 
                 {/* Expanded detail */}
                 {expanded === t.id && (
-                  <div className="border-t border-border/50 bg-slate-900/40 space-y-4 p-4">
+                  <div className="border-t border-border/50 bg-slate-50 dark:bg-slate-900/40 space-y-4 p-4">
                     {/* Stats */}
                     <div className="grid grid-cols-2 gap-2">
                       {[
@@ -213,18 +213,18 @@ export default function TenantsPageClient() {
                         { label: "Пользователи", value: detail?.userCount ?? "…" },
                         { label: "Записи", value: detail?.appointmentCount ?? "…" },
                       ].map(({ label, value }) => (
-                        <div key={label} className="bg-slate-800/50 rounded-xl p-3 text-center">
-                          <p className="text-[10px] text-slate-400">{label}</p>
-                          <p className="text-lg font-bold text-white">{value}</p>
+                        <div key={label} className="bg-slate-100/50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{label}</p>
+                          <p className="text-lg font-bold text-slate-900 dark:text-white">{value}</p>
                         </div>
                       ))}
                     </div>
 
                     {/* Tenant info */}
                     <div className="space-y-1 text-xs">
-                      {detail?.billingEmail && <p className="text-slate-400"><span className="text-slate-500">Email: </span>{detail.billingEmail}</p>}
-                      {detail?.stripeCustomerId && <p className="text-slate-400 font-mono text-[10px]"><span className="text-slate-500">Stripe: </span>{detail.stripeCustomerId}</p>}
-                      {detail?.trialEndsAt && <p className="text-slate-400"><span className="text-slate-500">Триал до: </span>{new Date(detail.trialEndsAt * 1000).toLocaleDateString("ru-RU")}</p>}
+                      {detail?.billingEmail && <p className="text-slate-500 dark:text-slate-400"><span className="text-slate-500">Email: </span>{detail.billingEmail}</p>}
+                      {detail?.stripeCustomerId && <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px]"><span className="text-slate-500">Stripe: </span>{detail.stripeCustomerId}</p>}
+                      {detail?.trialEndsAt && <p className="text-slate-500 dark:text-slate-400"><span className="text-slate-500">Триал до: </span>{new Date(detail.trialEndsAt * 1000).toLocaleDateString("ru-RU")}</p>}
                       <p className="text-slate-600 font-mono text-[9px]">{t.id}</p>
                     </div>
 
@@ -255,7 +255,7 @@ export default function TenantsPageClient() {
                         </button>
                         <button
                           onClick={() => { setBotModal(t.id); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-600/30 bg-slate-800/50 text-slate-300 text-xs font-medium active:bg-slate-700/50"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600/30 bg-slate-100/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 text-xs font-medium active:bg-slate-100 dark:active:bg-slate-700/50"
                         >
                           <Bot className="w-3.5 h-3.5" />
                           Привязать бота
@@ -269,9 +269,9 @@ export default function TenantsPageClient() {
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Роли в тенанте</p>
                         <div className="space-y-1.5">
                           {tenantRoles.map((r) => (
-                            <div key={`${r.tenantId}:${r.chatId}`} className="flex items-center justify-between bg-slate-800/40 rounded-xl px-3 py-2">
+                            <div key={`${r.tenantId}:${r.chatId}`} className="flex items-center justify-between bg-slate-100 dark:bg-slate-800/40 rounded-xl px-3 py-2">
                               <div>
-                                <span className="text-xs font-mono text-slate-300">#{r.chatId}</span>
+                                <span className="text-xs font-mono text-slate-600 dark:text-slate-300">#{r.chatId}</span>
                                 <span className="ml-2 text-[10px] text-brand-400 font-bold uppercase">{ROLE_LABELS[r.role] ?? r.role}</span>
                               </div>
                               <button
@@ -293,7 +293,7 @@ export default function TenantsPageClient() {
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Услуги</p>
                         <div className="flex flex-wrap gap-1.5">
                           {detail.services.map((s) => (
-                            <span key={s.svcId} className={`px-2 py-0.5 rounded text-[10px] ${s.active ? "bg-slate-700 text-slate-300" : "bg-slate-800/50 text-slate-600 line-through"}`}>
+                            <span key={s.svcId} className={`px-2 py-0.5 rounded text-[10px] ${s.active ? "bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300" : "bg-slate-100/50 dark:bg-slate-800/50 text-slate-600 line-through"}`}>
                               {s.emoji} {s.svcId} · {s.price}\u00a0zł
                             </span>
                           ))}
@@ -320,33 +320,33 @@ export default function TenantsPageClient() {
       {/* ── Create Tenant Modal ── */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
-          <div className="bg-slate-900 border border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto mb-5" />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-bold text-white">Новый тенант</h3>
-              <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl bg-slate-800 text-slate-400"><X className="w-4 h-4" /></button>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Новый тенант</h3>
+              <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Название салона</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Название салона</label>
                 <input
                   type="text"
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
                   placeholder="Например: Nails Studio"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-brand-500/60"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Тарифный план</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Тарифный план</label>
                 <div className="flex gap-2">
                   {(["start", "pro", "studio"] as const).map((p) => (
                     <button
                       key={p}
                       onClick={() => setCreatePlan(p)}
                       className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase border transition-colors ${
-                        createPlan === p ? "bg-brand-500/20 text-brand-400 border-brand-500/30" : "bg-slate-800 text-slate-400 border-slate-700/30"
+                        createPlan === p ? "bg-brand-500/20 text-brand-400 border-brand-500/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700/30"
                       }`}
                     >
                       {p}
@@ -374,28 +374,28 @@ export default function TenantsPageClient() {
       {/* ── Grant Tenant Role Modal ── */}
       {roleModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setRoleModal(null)}>
-          <div className="bg-slate-900 border border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto mb-5" />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-white">Выдать роль в тенанте</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Выдать роль в тенанте</h3>
                 <p className="text-xs text-slate-500 mt-0.5 font-mono">{roleModal}</p>
               </div>
-              <button onClick={() => setRoleModal(null)} className="p-2 rounded-xl bg-slate-800 text-slate-400"><X className="w-4 h-4" /></button>
+              <button onClick={() => setRoleModal(null)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Telegram Chat ID</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Telegram Chat ID</label>
                 <input
                   type="number"
                   value={roleChatId}
                   onChange={(e) => setRoleChatId(e.target.value)}
                   placeholder="321706035"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-brand-500/60 font-mono"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60 font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Роль</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Роль</label>
                 <div className="flex gap-2">
                   {([
                     { key: "master", label: "Мастер" },
@@ -406,7 +406,7 @@ export default function TenantsPageClient() {
                       key={key}
                       onClick={() => setRoleType(key)}
                       className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition-colors ${
-                        roleType === key ? "bg-brand-500/20 text-brand-400 border-brand-500/30" : "bg-slate-800 text-slate-400 border-slate-700/30"
+                        roleType === key ? "bg-brand-500/20 text-brand-400 border-brand-500/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700/30"
                       }`}
                     >
                       {label}
@@ -429,34 +429,34 @@ export default function TenantsPageClient() {
       {/* ── Link Bot Modal ── */}
       {botModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setBotModal(null)}>
-          <div className="bg-slate-900 border border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto mb-5" />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-white">Привязать бота</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Привязать бота</h3>
                 <p className="text-xs text-slate-500 mt-0.5 font-mono">{botModal}</p>
               </div>
-              <button onClick={() => setBotModal(null)} className="p-2 rounded-xl bg-slate-800 text-slate-400"><X className="w-4 h-4" /></button>
+              <button onClick={() => setBotModal(null)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Bot ID (числовой, из токена)</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Bot ID (числовой, из токена)</label>
                 <input
                   type="text"
                   value={botId}
                   onChange={(e) => setBotId(e.target.value)}
                   placeholder="8752028834"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-brand-500/60 font-mono"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60 font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Bot Username (без @)</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Bot Username (без @)</label>
                 <input
                   type="text"
                   value={botUsername}
                   onChange={(e) => setBotUsername(e.target.value)}
                   placeholder="manic_preview_bot"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-brand-500/60"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60"
                 />
               </div>
               <button

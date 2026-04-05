@@ -11,6 +11,8 @@ describe('isAdminAppPath', () => {
     ['/dashboard/foo'],
     ['/login'],
     ['/register'],
+    ['/help'],
+    ['/help/'],
     ['/tg'],
     ['/_next/static/chunks/foo.js'],
     ['/api/trpc/x.y'],

@@ -299,7 +299,13 @@ export const ua: Translations = {
 
   footer: {
     tagline: "ManicBot — запис у Telegram.",
-    links: ["Конфіденційність", "Умови", "Правила", "Підтримка"],
+    links: [
+      { href: "/help", label: "Довідка" },
+      { href: "/privacy", label: "Конфіденційність" },
+      { href: "/terms", label: "Умови" },
+      { href: "/rules", label: "Правила" },
+      { href: "/support", label: "Підтримка" },
+    ],
     copy: "© 2026 ManicBot. Всі права захищені.",
   },
 };

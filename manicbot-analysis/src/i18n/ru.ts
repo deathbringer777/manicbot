@@ -299,7 +299,13 @@ export const ru: Translations = {
 
   footer: {
     tagline: "ManicBot — запись в Telegram.",
-    links: ["Конфиденциальность", "Условия", "Правила", "Поддержка"],
+    links: [
+      { href: "/help", label: "Помощь" },
+      { href: "/privacy", label: "Конфиденциальность" },
+      { href: "/terms", label: "Условия" },
+      { href: "/rules", label: "Правила" },
+      { href: "/support", label: "Поддержка" },
+    ],
     copy: "© 2026 ManicBot. Все права защищены.",
   },
 };

@@ -299,7 +299,13 @@ export const pl: Translations = {
 
   footer: {
     tagline: "ManicBot — rezerwacje w Telegramie.",
-    links: ["Prywatność", "Regulamin", "Zasady", "Wsparcie"],
+    links: [
+      { href: "/help", label: "Pomoc" },
+      { href: "/privacy", label: "Prywatność" },
+      { href: "/terms", label: "Regulamin" },
+      { href: "/rules", label: "Zasady" },
+      { href: "/support", label: "Wsparcie" },
+    ],
     copy: "© 2026 ManicBot. Wszelkie prawa zastrzeżone.",
   },
 };

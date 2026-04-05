@@ -297,7 +297,13 @@ export const en = {
 
   footer: {
     tagline: "ManicBot — booking in Telegram.",
-    links: ["Privacy", "Terms", "Rules", "Support"],
+    links: [
+      { href: "/help", label: "Help center" },
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
+      { href: "/rules", label: "Rules" },
+      { href: "/support", label: "Support" },
+    ] as const,
     copy: "© 2026 ManicBot. All rights reserved.",
   },
 } as const;

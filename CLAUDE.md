@@ -300,13 +300,13 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 
 ## Billing Plans
 
-| Plan | Masters | Features |
-|------|---------|---------|
-| `start` | 1 | Basic booking |
-| `pro` | 5 | AI chat, Google Calendar |
-| `studio` | Unlimited | All features |
+| Plan | Price | Masters | Features |
+|------|-------|---------|---------|
+| `start` | 45 zł/mo | 1 | Basic booking |
+| `pro` | 60 zł/mo | 5 | AI assistant, support agents, Google Calendar |
+| `studio` | 90 zł/mo | Unlimited | All features, white label |
 
-Status flow: `trialing` → `active` → `grace` (3-day grace on payment fail) → `expired`
+Status flow: `trialing` → `active` → `grace` (7-day grace on payment fail) → `expired`
 
 ---
 

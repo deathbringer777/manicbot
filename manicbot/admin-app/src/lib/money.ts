@@ -1,8 +1,8 @@
 /** Plan prices for MRR / billing overview — amounts are in PLN (Stripe products must match). */
 export const PLAN_PRICES_PLN: Record<string, number> = {
-  start: 29,
-  pro: 79,
-  studio: 149,
+  start: 45,
+  pro: 60,
+  studio: 90,
 };
 
 /** Whole złoty, Polish grouping — used across admin UI. */

@@ -128,7 +128,16 @@ export const publicSalonRouter = createTRPCRouter({
             emoji: s.emoji,
             name: names.ru ?? names.en ?? names.pl ?? s.svcId,
             names,
-            description: s.description,
+            description: (() => {
+              if (!s.description) return null;
+              try {
+                const parsed = JSON.parse(s.description);
+                if (typeof parsed === 'string') return parsed;
+                return parsed.ru ?? parsed.en ?? parsed.ua ?? parsed.pl ?? null;
+              } catch {
+                return s.description;
+              }
+            })(),
             duration: s.duration,
             price: s.price,
             photos: svcPhotos,

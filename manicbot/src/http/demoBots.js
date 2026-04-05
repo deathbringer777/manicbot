@@ -1,5 +1,5 @@
 import { nowSec, msToSec } from '../utils/time.js';
-import { getTenantIdByBotId, putTenant, putBot } from '../tenant/storage.js';
+import { getTenantIdByBotId, getTenant, putTenant, putBot } from '../tenant/storage.js';
 import { envCtx } from './envCtx.js';
 
 function getDemoBots(env) {
@@ -34,16 +34,16 @@ export async function ensureDemoBotsProvisioned(env) {
     _demoProvisioned = true;
     return;
   }
-  let allOk = true;
+  // Check if any bot is unregistered OR any tenant is missing photos (needs sync)
+  let needsProvision = false;
   for (const b of DEMO_BOTS) {
     const bid = b.botToken.split(':')[0];
     const tid = await getTenantIdByBotId(ec, bid);
-    if (!tid) {
-      allOk = false;
-      break;
-    }
+    if (!tid) { needsProvision = true; break; }
+    const tenant = await getTenant(ec, tid);
+    if (!tenant?.photos?.length) { needsProvision = true; break; }
   }
-  if (allOk) {
+  if (!needsProvision) {
     _demoProvisioned = true;
     return;
   }

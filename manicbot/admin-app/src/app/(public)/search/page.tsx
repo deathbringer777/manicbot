@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
-import { MapPin, Locate, X, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { MapPin, Locate, X, ChevronRight, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { api } from "~/trpc/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -75,6 +75,76 @@ function SkeletonCard() {
         <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800" />
         <div className="h-3 w-full rounded bg-slate-100 dark:bg-slate-800" />
       </div>
+    </div>
+  );
+}
+
+function CityDropdown({
+  value,
+  cities,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  cities: string[];
+  placeholder: string;
+  onChange: (city: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative sm:w-48">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full items-center gap-2 rounded-xl border py-3 pl-3 pr-3 text-sm transition outline-none ${
+          value
+            ? "border-violet-400 bg-white text-slate-800 ring-2 ring-violet-500/20 dark:border-violet-500/60 dark:bg-slate-900 dark:text-white dark:ring-violet-500/20"
+            : "border-slate-200/80 bg-white text-slate-400 hover:border-slate-300 dark:border-slate-700/60 dark:bg-slate-900 dark:text-slate-500 dark:hover:border-slate-600"
+        }`}
+      >
+        <MapPin className={`h-4 w-4 shrink-0 ${value ? "text-violet-500 dark:text-violet-400" : "text-slate-400 dark:text-slate-500"}`} />
+        <span className={`flex-1 truncate text-left ${value ? "text-slate-800 dark:text-white" : ""}`}>
+          {value || placeholder}
+        </span>
+        {value ? (
+          <X
+            className="h-3.5 w-3.5 shrink-0 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-white"
+            onClick={(e) => { e.stopPropagation(); onChange(""); setOpen(false); }}
+          />
+        ) : (
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform dark:text-slate-500 ${open ? "rotate-180" : ""}`} />
+        )}
+      </button>
+
+      {open && cities.length > 0 && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[10rem] overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xl shadow-slate-900/10 dark:border-white/10 dark:bg-slate-900 dark:shadow-black/40">
+          {cities.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => { onChange(c); setOpen(false); }}
+              className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-sm transition hover:bg-slate-50 dark:hover:bg-white/[0.06] ${
+                c === value
+                  ? "bg-violet-50 font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+                  : "text-slate-700 dark:text-slate-300"
+              }`}
+            >
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -168,20 +238,12 @@ function SearchPageContent() {
 
       {/* City + geo + filters row */}
       <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative sm:w-48">
-          <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-          <input
-            type="text"
-            placeholder={t("search.city", lang)}
-            value={city}
-            list="cities-list"
-            onChange={(e) => { setCity(e.target.value); setPage(1); }}
-            className="w-full rounded-xl border border-slate-200/80 bg-white py-3 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 ring-0 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500 dark:ring-slate-800 dark:focus:ring-2 dark:focus:ring-brand-500"
-          />
-          <datalist id="cities-list">
-            {(citiesQuery.data ?? []).map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </div>
+        <CityDropdown
+          value={city}
+          cities={citiesQuery.data ?? []}
+          placeholder={t("search.city", lang)}
+          onChange={(c) => { setCity(c); setPage(1); }}
+        />
 
         <button
           onClick={locate}

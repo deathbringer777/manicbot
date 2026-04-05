@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://manicbot.com/blog/sitemap.xml

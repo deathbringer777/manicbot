@@ -14,7 +14,6 @@ import { useLang } from "~/components/LangContext";
 import { t, LANGS } from "~/lib/i18n";
 import { api } from "~/trpc/react";
 import { useInWebShell } from "~/components/layout/WebShell";
-import { PublicFooter } from "~/components/public/PublicFooter";
 import type { AppRole } from "~/server/api/routers/auth";
 
 export interface NavItem {
@@ -394,9 +393,6 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
             <div className="absolute -bottom-32 -left-32 h-64 w-64 rounded-full bg-purple-500/8 blur-[100px]" />
           </div>
           <div className="relative z-10 mx-auto max-w-7xl w-full">{children}</div>
-          <div className="relative z-10 pb-8 md:pb-0">
-            <PublicFooter />
-          </div>
         </main>
 
         {/* ── Mobile Bottom Nav (fixed, equal-width tabs) ── */}

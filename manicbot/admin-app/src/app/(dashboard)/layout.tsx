@@ -3,7 +3,7 @@
 export const runtime = "edge";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { api } from "~/trpc/react";
 import { RoleContext } from "~/components/RoleContext";
 import { WebShell } from "~/components/layout/WebShell";
@@ -18,6 +18,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [previewRole, setPreviewRoleState] = useState<AppRole>(null);
   const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
 
@@ -69,12 +70,15 @@ export default function DashboardLayout({
     setPreviewRole,
   };
 
-  // Non-admin roles get their dedicated dashboard inside WebShell
+  // Non-admin roles get their dedicated dashboard inside WebShell.
+  // /settings is always rendered as {children} so SettingsPageClient mounts for all roles.
+  const isSettingsPage = pathname === "/settings";
+
   if (effectiveRole === "tenant_owner") {
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          <SalonDashboard tenantId={effectiveTenantId!} />
+          {isSettingsPage ? children : <SalonDashboard tenantId={effectiveTenantId!} />}
         </WebShell>
       </RoleContext.Provider>
     );
@@ -84,7 +88,7 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          <MasterDashboard tenantId={effectiveTenantId!} masterId={null!} />
+          {isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId!} masterId={null!} />}
         </WebShell>
       </RoleContext.Provider>
     );
@@ -94,7 +98,7 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          <SupportDashboard />
+          {isSettingsPage ? children : <SupportDashboard />}
         </WebShell>
       </RoleContext.Provider>
     );

@@ -238,7 +238,6 @@ function buildSalonNav(lang: string): NavItem[] {
     { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
     { href: "/dashboard?tab=billing", icon: Wallet, label: tNav("Billing", lang) },
     { href: "/dashboard?tab=channels", icon: MessageSquare, label: tNav("Channels", lang) },
-    { href: "/dashboard?tab=settings", icon: Settings, label: tNav("Settings", lang) },
   ];
 }
 
@@ -371,12 +370,12 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
   return (
     <WebShellContext.Provider value={true}>
-      <div className={`${isDark ? "dark" : ""} flex h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-950`}>
+      <div className={`${isDark ? "dark" : ""} flex h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-900`}>
 
         {/* ═══ Desktop Sidebar ═══ */}
         <aside
           data-tour="web-sidebar"
-          className={`hidden lg:flex flex-col border-r border-slate-200 dark:border-white/[0.06] bg-white/90 dark:bg-[rgba(10,13,28,0.65)] backdrop-blur-2xl transition-all duration-300 ease-out shrink-0 ${
+          className={`hidden lg:flex flex-col border-r border-slate-200 dark:border-white/[0.06] bg-white/90 dark:bg-slate-900/70 backdrop-blur-2xl transition-all duration-300 ease-out shrink-0 ${
             collapsed ? "w-[72px]" : "w-64"
           }`}
         >
@@ -420,7 +419,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                       item={item}
                       active={isActive(item)}
                       collapsed={collapsed}
-                      dataTour={item.href === "/settings" ? "web-settings" : undefined}
                     />
                   ))}
                 </div>
@@ -469,7 +467,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
         {sidebarOpen && (
           <div className="lg:hidden fixed inset-0 z-50 flex">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-            <aside className="relative w-72 max-w-[85vw] bg-white dark:bg-[rgba(10,13,28,0.98)] border-r border-slate-200 dark:border-white/[0.06] flex flex-col">
+            <aside className="relative w-72 max-w-[85vw] bg-white dark:bg-slate-900/98 border-r border-slate-200 dark:border-white/[0.06] flex flex-col">
               {/* Header — clickable logo */}
               <div className="flex items-center justify-between h-16 px-5 border-b border-slate-200 dark:border-white/[0.06]">
                 <Link href="/dashboard" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 min-w-0 flex-1">
@@ -502,7 +500,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                           item={item}
                           active={isActive(item)}
                           onClick={() => setSidebarOpen(false)}
-                          dataTour={item.href === "/settings" ? "web-settings" : undefined}
                         />
                       ))}
                     </div>
@@ -548,7 +545,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           {/* Topbar */}
           <header
             data-tour="web-header"
-            className="h-16 flex items-center gap-3 px-4 lg:px-6 border-b border-slate-200 dark:border-white/[0.06] bg-white/95 dark:bg-slate-950/80 backdrop-blur-xl shrink-0 z-30"
+            className="h-16 flex items-center gap-3 px-4 lg:px-6 border-b border-slate-200 dark:border-white/[0.06] bg-white/95 dark:bg-slate-900/80 backdrop-blur-xl shrink-0 z-30"
           >
             <button
               onClick={() => setSidebarOpen(true)}
@@ -614,7 +611,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           {/* ═══ Mobile Bottom Nav ═══ */}
           <nav
             data-tour="web-mobile-nav"
-            className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[rgba(2,6,23,0.92)] backdrop-blur-xl border-t border-slate-200 dark:border-white/[0.06]"
+            className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/92 backdrop-blur-xl border-t border-slate-200 dark:border-white/[0.06]"
           >
             <div className="flex items-center justify-around px-1 py-1.5">
               {mobileNav.map((item) => {

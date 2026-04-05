@@ -20,32 +20,32 @@
 @layer base {
   /* Dark mode (default for dashboard) */
   :root {
-    --background: #020617; /* slate-950 */
+    --background: #0f172a; /* slate-900 */
     --foreground: #f8fafc; /* slate-50 */
 
-    --card: #0f172a; /* slate-900 */
+    --card: #1e293b; /* slate-800 */
     --card-foreground: #f8fafc;
 
-    --popover: #0f172a;
+    --popover: #1e293b;
     --popover-foreground: #f8fafc;
 
     --primary: #7c3aed; /* brand-500 */
     --primary-foreground: #ffffff;
 
-    --secondary: #1e293b; /* slate-800 */
+    --secondary: #334155; /* slate-700 */
     --secondary-foreground: #f8fafc;
 
-    --muted: #1e293b;
+    --muted: #334155;
     --muted-foreground: #94a3b8; /* slate-400 */
 
-    --accent: #1e293b;
+    --accent: #334155;
     --accent-foreground: #f8fafc;
 
     --destructive: #ef4444; /* red-500 */
     --destructive-foreground: #ffffff;
 
-    --border: #1e293b; /* slate-800 */
-    --input: #1e293b;
+    --border: #334155; /* slate-700 */
+    --input: #334155;
     --ring: #7c3aed;
 
     --radius: 0.75rem;
@@ -116,14 +116,14 @@
   /* Dark mode overrides (when .dark is on <html> or any ancestor) */
   :root.dark .glass,
   .dark .glass {
-    background: rgba(15, 23, 42, 0.6);
-    border-color: rgba(248, 250, 252, 0.05);
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(248, 250, 252, 0.08);
   }
   :root.dark .glass-card,
   .dark .glass-card {
-    background: linear-gradient(145deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8));
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    background: linear-gradient(145deg, rgba(51,65,85,0.45), rgba(30,41,59,0.7));
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
   }
 
   /* Smooth page transitions */

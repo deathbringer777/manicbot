@@ -58,7 +58,7 @@ function TenantBadge({ id }: { id: string }) {
   // Shorten long tenant IDs for display
   const label = id.length > 12 ? id.slice(0, 10) + "…" : id;
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 text-[9px] font-mono">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700/60 text-slate-600 dark:text-slate-400 text-[9px] font-mono">
       <Building2 className="w-2.5 h-2.5 shrink-0" />
       {label}
     </span>
@@ -88,14 +88,14 @@ function UserCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-sm font-semibold text-white">{user.name}</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{user.name}</p>
             <RoleBadge role={user.role} />
           </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             {user.username && (
-              <span className="text-[11px] text-slate-400">{user.username}</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">{user.username}</span>
             )}
-            <span className="text-[10px] font-mono text-slate-600">#{user.id}</span>
+            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-600">#{user.id}</span>
             {user.phone && (
               <span className="text-[10px] text-slate-500">{user.phone}</span>
             )}
@@ -123,7 +123,7 @@ function UserCard({
             <TenantBadge key={t} id={t} />
           ))}
           {user.tenants.length > 1 && (
-            <span className="text-[9px] text-slate-600 self-center ml-1">
+            <span className="text-[9px] text-slate-500 dark:text-slate-600 self-center ml-1">
               {user.tenants.length} salon{user.tenants.length > 1 ? "s" : ""}
             </span>
           )}
@@ -132,12 +132,12 @@ function UserCard({
 
       {/* Bottom: date + action buttons */}
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/30">
-        <span className="text-[10px] text-slate-600 flex-1">{user.joinedAt}</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-600 flex-1">{user.joinedAt}</span>
 
         <button
           onClick={onRole}
           disabled={isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 active:bg-slate-700 rounded-xl text-slate-300 text-xs font-medium transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-xl text-slate-700 dark:text-slate-300 text-xs font-medium transition-colors disabled:opacity-50"
         >
           <ShieldAlert className="w-3.5 h-3.5" />
           Роль
@@ -227,7 +227,7 @@ export default function UsersPageClient() {
       <div className="space-y-4">
         <header>
           <h1 className="text-2xl font-extrabold tracking-tight">Users</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {total} уникальных пользователей · отсортировано по имени
           </p>
         </header>
@@ -240,7 +240,7 @@ export default function UsersPageClient() {
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Имя, @username, ID или телефон..."
-            className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/30 text-white placeholder:text-slate-500"
+            className="w-full bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/60 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/30 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
         </div>
 
@@ -259,7 +259,7 @@ export default function UsersPageClient() {
               className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
                 filter === key
                   ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
-                  : "bg-slate-800/60 text-slate-400 border border-transparent active:bg-slate-800"
+                  : "bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-transparent active:bg-slate-200 dark:active:bg-slate-800"
               }`}
             >
               {label}
@@ -268,11 +268,11 @@ export default function UsersPageClient() {
         </div>
 
         {/* Hint about grouping */}
-        <div className="flex items-start gap-2 bg-slate-800/40 rounded-xl p-3 border border-slate-700/30">
+        <div className="flex items-start gap-2 bg-slate-100 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-200 dark:border-slate-700/30">
           <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
           <p className="text-[11px] text-slate-500 leading-relaxed">
             Пользователи сгруппированы по Telegram ID. Значки{" "}
-            <span className="font-mono bg-slate-700/60 px-1 rounded text-[9px]">salon</span>{" "}
+            <span className="font-mono bg-slate-200 dark:bg-slate-700/60 px-1 rounded text-[9px]">salon</span>{" "}
             показывают в каких салонах зарегистрирован пользователь.
           </p>
         </div>
@@ -306,14 +306,14 @@ export default function UsersPageClient() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-1">
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               Стр. {currentPage}/{totalPages} · {total} пользователей
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setOffset(Math.max(0, offset - LIMIT))}
                 disabled={offset === 0}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 text-sm disabled:opacity-30 active:bg-slate-700"
+                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
               >
                 <ChevronLeft className="w-4 h-4" />
                 Назад
@@ -321,7 +321,7 @@ export default function UsersPageClient() {
               <button
                 onClick={() => setOffset(offset + LIMIT)}
                 disabled={offset + LIMIT >= total}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 text-sm disabled:opacity-30 active:bg-slate-700"
+                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
               >
                 Вперёд
                 <ChevronRight className="w-4 h-4" />

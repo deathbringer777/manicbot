@@ -77,11 +77,11 @@ function StatCard({
       <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${topBar}`} />
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <p className="text-xs text-slate-400 truncate">{title}</p>
-          <p className="text-2xl font-extrabold text-white mt-1 tracking-tight">
+          <p className="text-xs text-slate-600 dark:text-slate-400 truncate">{title}</p>
+          <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1 tracking-tight">
             {typeof value === "number" ? value.toLocaleString() : value}
           </p>
-          {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+          {sub && <p className="text-[10px] text-slate-500 dark:text-slate-500 mt-0.5">{sub}</p>}
         </div>
         <div className={`shrink-0 ml-2 w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
           <Icon className={`w-5 h-5 ${iconColor}`} />
@@ -97,13 +97,13 @@ function StatCardSkeleton() {
   return (
     <div className="glass-card rounded-2xl p-4 relative overflow-hidden animate-pulse">
       {/* top bar placeholder */}
-      <div className="absolute inset-x-0 top-0 h-[2px] bg-slate-700/60" />
+      <div className="absolute inset-x-0 top-0 h-[2px] bg-slate-200 dark:bg-slate-700/60" />
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <div className="h-3 w-20 bg-slate-700/60 rounded mb-2" />
-          <div className="h-7 w-14 bg-slate-700/60 rounded" />
+          <div className="h-3 w-20 bg-slate-200 dark:bg-slate-700/60 rounded mb-2" />
+          <div className="h-7 w-14 bg-slate-200 dark:bg-slate-700/60 rounded" />
         </div>
-        <div className="shrink-0 ml-2 w-10 h-10 rounded-xl bg-slate-700/60" />
+        <div className="shrink-0 ml-2 w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-700/60" />
       </div>
     </div>
   );
@@ -157,24 +157,24 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-brand-400" />
-          <h2 className="text-sm font-bold text-white capitalize">{monthLabel}</h2>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{monthLabel}</h2>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setViewDate(new Date(year, month - 1))}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
+            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => setViewDate(new Date())}
-            className="px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
+            className="px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
           >
             сейчас
           </button>
           <button
             onClick={() => setViewDate(new Date(year, month + 1))}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
+            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -206,8 +206,8 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
                 isToday(day)
                   ? "bg-brand-500 text-white font-bold shadow-md shadow-brand-500/30"
                   : count > 0
-                  ? "hover:bg-brand-500/20 text-slate-200"
-                  : "hover:bg-white/[0.05] text-slate-500"
+                  ? "hover:bg-brand-500/20 text-slate-700 dark:text-slate-200"
+                  : "hover:bg-slate-100 dark:hover:bg-white/[0.05] text-slate-500 dark:text-slate-500"
               }`}
               style={
                 !isToday(day) && count > 0
@@ -268,7 +268,7 @@ export default function DashboardClient() {
       <div className="space-y-5">
         <header>
           <h1 className="text-2xl font-extrabold tracking-tight">Dashboard</h1>
-          <p className="text-xs text-slate-400 mt-1">Метрики платформы в реальном времени</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Метрики платформы в реальном времени</p>
         </header>
 
         {/* Stat cards */}
@@ -327,7 +327,7 @@ export default function DashboardClient() {
           {/* Chart */}
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-white">Записи по дням</h2>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Записи по дням</h2>
               <div className="flex gap-1">
                 {PERIODS.map((p) => (
                   <button
@@ -336,7 +336,7 @@ export default function DashboardClient() {
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                       period === p.days
                         ? "bg-brand-500/20 text-brand-400"
-                        : "text-slate-400 hover:bg-slate-800 active:bg-slate-700"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700"
                     }`}
                   >
                     {p.label}
@@ -369,21 +369,21 @@ export default function DashboardClient() {
 
         {/* Recent activity */}
         <div className="glass-card rounded-2xl p-4">
-          <h2 className="text-sm font-bold text-white mb-3">Последняя активность</h2>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Последняя активность</h2>
           <div className="space-y-3">
             {(s?.recentActivity ?? []).map((a, i) => (
               <div
                 key={a.id + i}
-                className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0 rounded-lg transition-colors hover:bg-white/[0.03]"
+                className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]"
               >
                 <div className="h-8 w-8 shrink-0 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-400 text-xs font-bold">
                   {a.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-white truncate">{a.name}</p>
+                  <p className="text-xs font-medium text-slate-900 dark:text-white truncate">{a.name}</p>
                   <p className="text-[10px] text-slate-500 truncate">{a.action}</p>
                 </div>
-                <span className="text-[10px] text-slate-600 shrink-0 tabular-nums">{a.time}</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-600 shrink-0 tabular-nums">{a.time}</span>
               </div>
             ))}
             {!isLoading && (s?.recentActivity ?? []).length === 0 && (

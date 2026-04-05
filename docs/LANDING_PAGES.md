@@ -1,3 +1,5 @@
+> **DEPRECATED (2026-04-05):** Директория `manicbot-landing/` архивирована и перемещена из проекта. Единственный активный лендинг — `manicbot-analysis/`. Для rollback используйте архив на Desktop (`manicbot-archive/old-landing/`).
+
 # Лендинг manicbot.com (Cloudflare Pages)
 
 ## Что в проде по умолчанию

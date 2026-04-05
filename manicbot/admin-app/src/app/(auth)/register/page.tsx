@@ -26,6 +26,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<"tenant_owner" | "master">("tenant_owner");
   const [referralSource, setReferralSource] = useState("");
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,10 @@ export default function RegisterPage() {
   const registerMutation = api.webUsers.register.useMutation();
 
   async function handleGoogleSignIn() {
+    if (!tosAccepted) {
+      setError(copy.register.tosRequired);
+      return;
+    }
     setGoogleLoading(true);
     try {
       const csrf = await fetch("/api/auth/csrf").then((r) => r.json());
@@ -90,6 +95,10 @@ export default function RegisterPage() {
       setError(copy.register.passwordTooShort);
       return;
     }
+    if (!tosAccepted) {
+      setError(copy.register.tosRequired);
+      return;
+    }
 
     startTransition(async () => {
       try {
@@ -99,6 +108,7 @@ export default function RegisterPage() {
           role,
           name: name.trim() || undefined,
           referralSource: referralSource || undefined,
+          tosAccepted: true as const,
         });
 
         if (registration.verificationRequired) {
@@ -145,6 +155,26 @@ export default function RegisterPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        <label className="flex items-start gap-3 cursor-pointer group rounded-2xl border border-cyan-200/40 bg-cyan-50/50 px-4 py-3 transition hover:bg-cyan-50 dark:border-cyan-400/20 dark:bg-cyan-500/5 dark:hover:bg-cyan-500/10">
+          <input
+            type="checkbox"
+            checked={tosAccepted}
+            onChange={(e) => setTosAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 dark:border-white/20 dark:bg-white/5 accent-cyan-600"
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-300">
+            {copy.register.tosLabel}{" "}
+            <a
+              href="/rules"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-cyan-700 underline decoration-cyan-400/40 hover:text-cyan-500 dark:text-cyan-300 dark:hover:text-cyan-200"
+            >
+              {copy.register.tosLinkText}
+            </a>
+          </span>
+        </label>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.login.email}</label>

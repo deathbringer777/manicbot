@@ -73,6 +73,9 @@ export const authCopy: Record<
       verifyReady: string;
       showPassword: string;
       hidePassword: string;
+      tosLabel: string;
+      tosLinkText: string;
+      tosRequired: string;
     };
   }
 > = {
@@ -147,6 +150,9 @@ export const authCopy: Record<
       verifyReady: "Аккаунт создан. Можно сразу входить в панель.",
       showPassword: "Показать пароль",
       hidePassword: "Скрыть пароль",
+      tosLabel: "Регистрируясь, вы принимаете",
+      tosLinkText: "ПРАВИЛА ПОЛЬЗОВАНИЯ",
+      tosRequired: "Необходимо принять правила пользования",
     },
   },
   ua: {
@@ -220,6 +226,9 @@ export const authCopy: Record<
       verifyReady: "Акаунт створено. Можна одразу входити в панель.",
       showPassword: "Показати пароль",
       hidePassword: "Сховати пароль",
+      tosLabel: "Реєструючись, ви приймаєте",
+      tosLinkText: "ПРАВИЛА КОРИСТУВАННЯ",
+      tosRequired: "Необхідно прийняти правила користування",
     },
   },
   en: {
@@ -293,6 +302,9 @@ export const authCopy: Record<
       verifyReady: "Account created. You can sign in right away.",
       showPassword: "Show password",
       hidePassword: "Hide password",
+      tosLabel: "By registering, you agree to the",
+      tosLinkText: "TERMS OF USE",
+      tosRequired: "You must accept the Terms of Use",
     },
   },
   pl: {
@@ -366,6 +378,9 @@ export const authCopy: Record<
       verifyReady: "Konto zostało utworzone. Możesz od razu się zalogować.",
       showPassword: "Pokaż hasło",
       hidePassword: "Ukryj hasło",
+      tosLabel: "Rejestrując się, akceptujesz",
+      tosLinkText: "REGULAMIN",
+      tosRequired: "Musisz zaakceptować regulamin",
     },
   },
 };

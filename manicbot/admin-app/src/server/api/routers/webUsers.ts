@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { webUsers } from "~/server/db/schema";
+import { webUsers, auditLog } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 
@@ -37,6 +37,7 @@ export const webUsersRouter = createTRPCRouter({
         role: z.enum(["tenant_owner", "master"]),
         name: z.string().max(200).optional(),
         referralSource: z.string().max(100).optional(),
+        tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -79,6 +80,7 @@ export const webUsersRouter = createTRPCRouter({
           emailVerified: hasEmailVerificationDelivery ? 0 : 1,
           verificationToken: hasEmailVerificationDelivery ? verificationToken : null,
           verificationTokenExpiresAt: hasEmailVerificationDelivery ? tokenExpiresAt : null,
+          tosAcceptedAt: now,
           tenantId: null,
           createdAt: now,
           updatedAt: now,
@@ -90,6 +92,16 @@ export const webUsersRouter = createTRPCRouter({
         }
         throw err;
       }
+      try {
+        await ctx.db.insert(auditLog).values({
+          tenantId: null,
+          actor: email,
+          action: "tos_accepted",
+          detail: JSON.stringify({ channel: "web", userId: id, email }),
+          ip,
+          createdAt: now,
+        });
+      } catch { /* non-critical */ }
       return {
         id,
         email,

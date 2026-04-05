@@ -305,7 +305,7 @@ manicbot/
 │   │   └── metaWebhooksHttp.js
 │   ├── config.js              # Константы, CB, STEP, DEFAULT_SVC, buildCtx
 │   ├── telegram.js            # send(), api() → Telegram Bot API
-│   ├── ai.js                  # Промпт, теги, runWorkersAI, executeAIAction
+│   ├── ai.js                  # Промпт, теги, runWorkersAI, executeAIAction, sanitizeUserInput, validateActionParams
 │   ├── patterns.js            # Паттерны фраз (отмена, прайс, консультант)
 │   ├── notifications.js       # Уведомления мастеру/админу, confirmAllPending
 │   │
@@ -355,7 +355,7 @@ manicbot/
 │   │   ├── message.js         # onMsg: команды, шаги, ИИ, grant_master, add_support
 │   │   ├── callback.js        # onCb: inline-кнопки (запись, админка, тикеты)
 │   │   ├── inbound.js         # handleInbound: WA/IG → псевдо Telegram → onMsg/onCb
-│   │   └── cron.js            # handleCron: напоминания
+│   │   └── cron.js            # handleCron: напоминания, Google Calendar sync с exponential backoff
 │   │
 │   ├── channels/              # whatsapp, instagram, telegram bridge, meta-verify, ui-renderer
 │   │
@@ -429,7 +429,7 @@ admin-app/                     # Telegram Mini App (Cloudflare Pages)
 | BOT_TOKEN  | Токен бота (legacy / fallback для getCtx) |
 | WEBHOOK_SECRET | Секрет вебхука (legacy) |
 | ADMIN_KEY  | Ключ для /sysadmin, /admin, ?key= в /setup, /admin/migrate, /admin/seed |
-| BOT_ENCRYPTION_KEY | Опционально: шифрование токенов ботов в KV |
+| BOT_ENCRYPTION_KEY | Рекомендуется (startup warning если не установлен): шифрование токенов ботов в KV/D1 |
 | WORKERS_AI_API_TOKEN | Workers AI REST (ИИ-чат) |
 | CLOUDFLARE_ACCOUNT_ID | Workers AI REST |
 | STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET | Биллинг |

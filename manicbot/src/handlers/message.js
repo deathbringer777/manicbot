@@ -23,6 +23,7 @@ import { getTenant, putTenant, listTenantIds, getBotIdsByTenantId, getBot, getBo
 import { showPlatformAdminPanel, showPlatformSupportList, showPlatformTechSupportList } from '../ui/sysadmin.js';
 import { timingSafeEqual, randomId } from '../utils/security.js';
 import { confirmAllPendingApts, notifyStaffAptCancelled } from '../notifications.js';
+import { audit } from '../utils/audit.js';
 import { deleteAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
@@ -1342,14 +1343,22 @@ export async function finishPhone(ctx, cid, phone, st) {
   const cl = phone.replace(/[^\d+]/g, '').slice(0, 20);
   if (cl.length < 9) return send(ctx, cid, t(lg, 'reg_phone_err'));
   const safeName = escHtml(st.name || '');
+  const regTs = nowSec();
   await saveUser(ctx, cid, {
     chatId: cid,
     name: st.name,
     phone: cl,
     tgUsername: st.tgUser || null,
     tgLang: st.tgLang || null,
-    registeredAt: nowSec(),
+    registeredAt: regTs,
+    tosAcceptedAt: st.tosAcceptedAt || regTs,
   });
+  try {
+    await audit(ctx, 'tos_accepted', {
+      actor: String(cid),
+      detail: { channel: 'telegram', chatId: cid, name: st.name },
+    });
+  } catch { /* non-critical */ }
   await clearState(ctx, cid);
   await send(ctx, cid, fill(t(lg, 'reg_done'), { n: safeName, p: escHtml(cl) }), { reply_markup: { remove_keyboard: true } });
   await send(ctx, cid, t(lg, 'now_choose'), svcKb(ctx, lg));

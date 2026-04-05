@@ -10,8 +10,9 @@ import {
   platformTickets,
   masters,
   localTickets,
+  auditLog,
 } from "~/server/db/schema";
-import { sql } from "drizzle-orm";
+import { sql, eq, desc } from "drizzle-orm";
 
 const TABLE_LIST = [
   { name: "tenants", table: tenants },
@@ -54,5 +55,15 @@ export const systemRouter = createTRPCRouter({
 
     const totalRows = counts.reduce((s, c) => s + (c.rows > 0 ? c.rows : 0), 0);
     return { tables: counts, totalRows };
+  }),
+
+  getConsentLog: adminProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "tos_accepted"))
+      .orderBy(desc(auditLog.createdAt))
+      .limit(200);
+    return rows;
   }),
 });

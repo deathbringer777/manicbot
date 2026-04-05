@@ -1,6 +1,6 @@
 export default {
-  reg_confirm_name: '📝 Для запису потрібна реєстрація.\n\nТвоє ім\'я в Telegram: <b>{n}</b>\n\nВсе вірно?',
-  reg_yes: '✅ Так, вірно',
+  reg_confirm_name: '📝 Для запису потрібна реєстрація.\n\nТвоє ім\'я в Telegram: <b>{n}</b>\n\nПродовжуючи, ти приймаєш <a href="https://manicbot.com/rules">Правила користування</a>.\n\nВсе вірно?',
+  reg_yes: '✅ Приймаю та продовжую',
   reg_change: '✏️ Змінити ім\'я',
   reg_enter_name: '✏️ Введи своє ім\'я:',
   reg_name_err: '❌ Введи коректне ім\'я (2-50 символів):',

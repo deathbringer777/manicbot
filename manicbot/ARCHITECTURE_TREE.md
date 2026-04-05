@@ -7,7 +7,7 @@
 ## Project Layout
 
 ```
-44444444/
+Manicbot_com/
 ├── manicbot/                      # Cloudflare Worker (bot + API)
 │   ├── src/                       # Source code
 │   ├── test/                      # 53 test files (~900 tests)
@@ -17,7 +17,7 @@
 ├── manicbot/admin-app/            # Next.js Admin Mini-App (Cloudflare Pages)
 │   ├── src/                       # Source code
 │   └── package.json
-├── manicbot-landing/              # Landing page
+├── manicbot-landing/              # Landing page (ARCHIVED — moved to Desktop, see manicbot-analysis/)
 ├── manicbot-analysis/             # Analysis app
 ├── _archive/                      # Archived documents
 ├── docs/                          # Project docs
@@ -31,7 +31,7 @@
 
 ```
 src/
-├── worker.js                  Entry point: HTTP routing + scheduled cron
+├── worker.js                  Entry point: HTTP routing + scheduled cron + validateSecurityConfig()
 │
 ├── http/                      Route handlers (matched before context resolution)
 │   ├── resolveCtx.js          getCtx() — D1 tenant resolution or legacy fallback
@@ -49,7 +49,7 @@ src/
 ├── handlers/                  Telegram/channel message handlers
 │   ├── message.js             onMsg() — text message routing (1285 lines)
 │   ├── callback.js            onCb() — inline button callbacks (1378 lines)
-│   ├── cron.js                Scheduled tasks: reminders, billing, calendar sync
+│   ├── cron.js                Scheduled tasks: reminders, billing, calendar sync (exponential backoff)
 │   └── inbound.js             Unified InboundMessage dispatcher (all channels)
 │
 ├── services/                  Business logic
@@ -315,7 +315,7 @@ ManicBot Worker
 | `bots` | global | Bot registrations (bot_id, tenant_id, webhook_secret) |
 | `platform_roles` | global | system_admin / support / technical_support |
 | `tenant_roles` | tenant | tenant_owner / master per tenant |
-| `appointments` | tenant | All bookings |
+| `appointments` | tenant | All bookings + sync columns: `sync_retries`, `sync_retry_after`, `sync_last_error` |
 | `masters` | tenant | Master (nail tech) profiles |
 | `services` | tenant | Service catalog |
 | `users` | tenant | Client registrations |

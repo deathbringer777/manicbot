@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
   tg_lang TEXT,
   phone TEXT,
   registered_at INTEGER,
+  tos_accepted_at INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_username ON users(tenant_id, tg_username);
@@ -333,6 +334,7 @@ CREATE TABLE IF NOT EXISTS web_users (
   email_verified INTEGER NOT NULL DEFAULT 0,
   verification_token TEXT,
   verification_token_expires_at INTEGER,
+  tos_accepted_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

@@ -1,6 +1,6 @@
 export default {
-  reg_confirm_name: '📝 Registration required.\n\nYour Telegram name: <b>{n}</b>\n\nIs this correct?',
-  reg_yes: '✅ Yes, correct',
+  reg_confirm_name: '📝 Registration required.\n\nYour Telegram name: <b>{n}</b>\n\nBy proceeding, you agree to the <a href="https://manicbot.com/rules">Terms of Use</a>.\n\nIs this correct?',
+  reg_yes: '✅ Agree & Continue',
   reg_change: '✏️ Change name',
   reg_enter_name: '✏️ Enter your name:',
   reg_name_err: '❌ Enter a valid name (2-50 characters):',

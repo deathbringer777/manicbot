@@ -50,6 +50,7 @@ export const users = sqliteTable("users", {
   tgLang: text("tg_lang"),
   phone: text("phone"),
   registeredAt: integer("registered_at"),
+  tosAcceptedAt: integer("tos_accepted_at"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
   index("idx_user_phone").on(t.tenantId, t.phone),
@@ -318,6 +319,7 @@ export const webUsers = sqliteTable("web_users", {
   emailVerified: integer("email_verified").notNull().default(0),
   verificationToken: text("verification_token"),
   verificationTokenExpiresAt: integer("verification_token_expires_at"),
+  tosAcceptedAt: integer("tos_accepted_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [

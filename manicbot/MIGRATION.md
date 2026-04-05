@@ -76,5 +76,19 @@ https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=КЛЮЧ_ИЗ_DEV_V
 
 В ответе: `{"ok":true,"copied":N,"message":"..."}` или `{"ok":true,"skipped":true}` если миграция уже делалась.
 
-После миграции обнови webhook бота:  
+После миграции обнови webhook бота:
 https://manicbot.vdovin-kyrylo.workers.dev/setup?key=ТВОЙ_ADMIN_KEY — в ответе будет нужный URL.
+
+---
+
+### 0010_google_sync_backoff.sql
+
+Добавляет колонки для exponential backoff при синхронизации с Google Calendar:
+
+```sql
+ALTER TABLE appointments ADD COLUMN sync_retries INTEGER DEFAULT 0;
+ALTER TABLE appointments ADD COLUMN sync_retry_after INTEGER DEFAULT NULL;
+ALTER TABLE appointments ADD COLUMN sync_last_error TEXT DEFAULT NULL;
+```
+
+Применить: `npm run migrate` или `GET /admin/migrate?key=ADMIN_KEY`

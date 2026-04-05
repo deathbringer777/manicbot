@@ -130,6 +130,22 @@ wrangler deploy
 
 ---
 
+### AI Input Sanitization (2026-04-05)
+
+`sanitizeUserInput()` в `ai.js` нейтрализует action-теги в пользовательском вводе перед LLM:
+- `[CANCEL_ALL]` -> `(CANCEL_ALL)` — предотвращает prompt injection
+- `validateActionParams()` отклоняет malformed даты/время в AI тегах
+- Security note в системном промпте инструктирует AI игнорировать квадратные скобки
+
+### Startup Security Validation (2026-04-05)
+
+`validateSecurityConfig()` в `worker.js` проверяет при старте:
+- Наличие `BOT_ENCRYPTION_KEY` (warning если отсутствует)
+- Наличие `META_APP_SECRET` при настроенных Meta каналах
+- Длину `ADMIN_KEY` (warning если < 32 символов)
+
+---
+
 ## 7. Краткий итог
 
 - **Активный код:** `src/worker.js` и модули в `src/`. Корневой `worker.js` не используется при деплое.

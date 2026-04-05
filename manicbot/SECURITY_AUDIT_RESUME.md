@@ -170,3 +170,33 @@
 
 - **Добавлено:** `console.warn` в `resolveTenantFromWhatsApp/Instagram` при количестве строк > 50 — сигнал добавить индекс `channel_external_id`.
 - **Файл:** `src/channels/resolver.js`.
+
+---
+
+## Исправления 2026-04-05
+
+### 17. AI Prompt Injection Sanitization
+
+**Файл:** `src/ai.js`
+
+- Добавлена функция `sanitizeUserInput()` — нейтрализует action-теги (`[TAG]` -> `(TAG)`) в пользовательском вводе перед отправкой в LLM
+- Добавлена функция `validateActionParams()` — валидирует формат дат (YYYY-MM-DD) и времени (HH:MM) в тегах, извлечённых из AI ответа
+- Добавлена security note в системный промпт AI: инструкция игнорировать текст в квадратных скобках от пользователя
+- `validateActionParams` интегрирован в `handlers/message.js` — malformed теги логируются и пропускаются
+
+### 18. BOT_ENCRYPTION_KEY Enforcement
+
+**Файлы:** `src/worker.js`, `src/channels/resolver.js`, `src/services/google-calendar-oauth.js`
+
+- `validateSecurityConfig(env)` в worker.js — при старте логирует `[SECURITY]` warnings если BOT_ENCRYPTION_KEY не установлен, META_APP_SECRET отсутствует при настроенных Meta каналах, ADMIN_KEY слишком короткий
+- `getChannelConfig()` в resolver.js — если BOT_ENCRYPTION_KEY **установлен** но decrypt не удался, возвращает `null` (не plaintext fallback). Plaintext fallback разрешён только при отсутствии ключа
+- `getTokenEncryptionKey()` — логирует warning при fallback на ADMIN_KEY
+
+### 19. Google Calendar Sync Exponential Backoff
+
+**Файлы:** `src/handlers/cron.js`, `migrations/0010_google_sync_backoff.sql`
+
+- `MAX_SYNC_PER_CRON = 10` — ограничение sync-операций за один cron run
+- Exponential backoff: `15мин * 2^retries`, максимум 24 часа
+- После 5 неудачных попыток — permanent failure (лог, без повторов)
+- Новые колонки в `appointments`: `sync_retries`, `sync_retry_after`, `sync_last_error`

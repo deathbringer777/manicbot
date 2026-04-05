@@ -56,6 +56,8 @@ Any change under `manicbot/migrations/` must stay in sync with:
 
 Run `npm run check-schema` in `manicbot/` in CI to verify table names and columns match.
 
+Recent migrations: `0010_google_sync_backoff.sql` (adds `sync_retries`, `sync_retry_after`, `sync_last_error` to `appointments`).
+
 ---
 
 ## Worker Architecture (`manicbot/src/`)
@@ -89,11 +91,11 @@ HTTP request → src/worker.js
 
 | File | Purpose |
 |------|---------|
-| `src/worker.js` | Entry point; delegates HTTP to `src/http/*.js` |
+| `src/worker.js` | Entry point; delegates HTTP to `src/http/*.js`; `validateSecurityConfig()` startup checks |
 | `src/http/` | Isolated route handlers (see table above) |
 | `src/handlers/message.js` | Text message routing, AI chat trigger |
 | `src/handlers/callback.js` | Inline button callbacks |
-| `src/ai.js` | LLM integration (Cloudflare Workers AI, 3-model fallback) |
+| `src/ai.js` | LLM integration (Cloudflare Workers AI, 3-model fallback) + AI input sanitization (`sanitizeUserInput`, `validateActionParams`) |
 | `src/roles/roles.js` | Role CRUD (D1) + helper functions |
 | `src/services/users.js` | isAdmin, isCreator, getRole, master CRUD |
 | `src/services/appointments.js` | Booking CRUD, slot logic |
@@ -110,6 +112,7 @@ HTTP request → src/worker.js
 - **Two paths**: REST API (`WORKERS_AI_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`) with fallback to `ctx.AI` binding
 - **Timeout**: `AbortSignal.timeout(8000)` on each REST fetch; `Promise.race` on each binding call
 - **Max tokens**: 280 output, 6000 char prompt, 8 message history (1h TTL)
+- **Input sanitization**: `sanitizeUserInput()` strips action-tag patterns (`[TAG:param]` -> `(TAG:param)`) from user text before AI processing. `validateActionParams()` rejects malformed dates/times in AI-extracted tags.
 - **Action tags**: AI embeds `[TAG:param]` in responses; bot parses and executes whitelisted actions
 
 ---
@@ -218,7 +221,7 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 **Meta channels** (WhatsApp / Instagram via [`metaWebhooksHttp.js`](manicbot/src/http/metaWebhooksHttp.js)):
 - `META_APP_SECRET` — must match the Meta app; required for signed POST webhooks (otherwise 403).
 - `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` — webhook verification; same values on Pages for Mini App hints.
-- `BOT_ENCRYPTION_KEY` — decrypts `channel_configs.token_encrypted` for outbound Graph calls.
+- `BOT_ENCRYPTION_KEY` — recommended (startup `[SECURITY]` warning if missing); decrypts `channel_configs.token_encrypted` for outbound Graph calls. When set, plaintext fallback is disabled for channel tokens.
 - Optional: `INSTAGRAM_IGNORE_SENDER_IDS`, `INSTAGRAM_AI_TRIGGER` — see [META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md).
 
 **Outbound Instagram** uses `graph.facebook.com` + Page ID + Page access token ([`channels/instagram.js`](manicbot/src/channels/instagram.js)); **`entry.id`** is matched to `page_id` / `instagram_business_id` / `ig_account_id` in D1 ([`channels/resolver.js`](manicbot/src/channels/resolver.js)).
@@ -278,7 +281,7 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 | `bots` | Bot registrations (bot_id, tenant_id, webhook_secret) |
 | `tenant_roles` | tenant_owner / master assignments per tenant |
 | `platform_roles` | system_admin / support / technical_support (platform-wide) |
-| `appointments` | All bookings (tenant-scoped) |
+| `appointments` | All bookings (tenant-scoped); sync columns: `sync_retries`, `sync_retry_after`, `sync_last_error` |
 | `masters` | Master profiles (tenant-scoped) |
 | `services` | Service catalog (tenant-scoped) |
 | `users` | Client registrations (tenant-scoped) |

@@ -1,6 +1,6 @@
 export default {
-  reg_confirm_name: '📝 Wymagana rejestracja.\n\nTwoje imię w Telegram: <b>{n}</b>\n\nCzy to poprawne?',
-  reg_yes: '✅ Tak, poprawne',
+  reg_confirm_name: '📝 Wymagana rejestracja.\n\nTwoje imię w Telegram: <b>{n}</b>\n\nKontynuując, akceptujesz <a href="https://manicbot.com/rules">Regulamin</a>.\n\nCzy to poprawne?',
+  reg_yes: '✅ Akceptuję i kontynuuję',
   reg_change: '✏️ Zmień imię',
   reg_enter_name: '✏️ Podaj swoje imię:',
   reg_name_err: '❌ Podaj poprawne imię (2-50 znaków):',

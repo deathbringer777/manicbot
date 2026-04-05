@@ -1113,6 +1113,7 @@ export async function onCb(ctx, cb) {
     if (st.step !== STEP.REG_CONFIRM) return;
     st.step = STEP.REG_PHONE;
     st.name = st.tgName;
+    st.tosAcceptedAt = Math.floor(Date.now() / 1000);
     await setState(ctx, cid, st);
     return send(ctx, cid, fill(t(lg, 'reg_phone'), { n: escHtml(st.tgName) }), {
       reply_markup: { keyboard: [[{ text: t(lg, 'reg_phone_btn'), request_contact: true }]], resize_keyboard: true, one_time_keyboard: true },

@@ -15,12 +15,12 @@
       "Bash(gh run:*)",
       "Bash(for dir:*)",
       "Bash(do echo:*)",
-      "Read(//Users/vdovin/Desktop/44444444/src/**)",
+      "Read(//Users/vdovin/Desktop/Manicbot_com/src/**)",
       "Bash(done)",
       "Bash(grep -E \"from [''''\"\"][^''''\"\"]*[''''\"\"];?$\")",
       "Bash(for lang:*)",
-      "Read(//Users/vdovin/Desktop/44444444/src/i18n/**)",
-      "Bash(find /Users/vdovin/Desktop/44444444/manicbot-analysis/src -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\))",
+      "Read(//Users/vdovin/Desktop/Manicbot_com/src/i18n/**)",
+      "Bash(find /Users/vdovin/Desktop/Manicbot_com/manicbot-analysis/src -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\))",
       "Bash(npm run:*)",
       "Bash(export HOME=/Users/vdovin)",
       "Bash(source /Users/vdovin/.nvm/nvm.sh)",
@@ -31,7 +31,11 @@
       "Bash(ls -d manicbot/src/i18n/*/)",
       "Bash(find manicbot/src -name \"*.js\" -exec wc -l {} +)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''prod:'''', len\\(d.get\\(''''dependencies'''',{}\\)\\)\\); print\\(''''dev:'''', len\\(d.get\\(''''devDependencies'''',{}\\)\\)\\); [print\\(f''''  {k}: {v}''''\\) for k,v in {**d.get\\(''''dependencies'''',{}\\), **d.get\\(''''devDependencies'''',{}\\)}.items\\(\\)]\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''prod:'''', len\\(d.get\\(''''dependencies'''',{}\\)\\)\\); print\\(''''dev:'''', len\\(d.get\\(''''devDependencies'''',{}\\)\\)\\); [print\\(f''''  {k}: {v}''''\\) for k,v in d.get\\(''''dependencies'''',{}\\).items\\(\\)]\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''prod:'''', len\\(d.get\\(''''dependencies'''',{}\\)\\)\\); print\\(''''dev:'''', len\\(d.get\\(''''devDependencies'''',{}\\)\\)\\); [print\\(f''''  {k}: {v}''''\\) for k,v in d.get\\(''''dependencies'''',{}\\).items\\(\\)]\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/terms)",
+      "Bash(curl -s http://localhost:3001/terms)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/random-garbage-page)",
+      "Bash(git checkout:*)"
     ]
   }
 }

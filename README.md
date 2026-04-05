@@ -46,7 +46,7 @@ manicbot/
 │   ├── http/                  # Обработчики маршрутов (Stripe, admin, Google, webhooks TG/Meta, лендинг)
 │   ├── config.js              # Константы: CB, STEP, DEFAULT_SVC, buildCtx
 │   ├── telegram.js            # send(), api() — Telegram Bot API
-│   ├── ai.js                  # Промпт, теги [BOOK:…], runWorkersAI, executeAIAction
+│   ├── ai.js                  # Промпт, теги [BOOK:…], runWorkersAI, executeAIAction, sanitizeUserInput, validateActionParams
 │   ├── i18n.js                # Строки RU / UA / EN / PL
 │   ├── patterns.js            # Паттерны фраз (отмена, прайс, консультант)
 │   ├── notifications.js       # Уведомления мастеру/админу
@@ -229,7 +229,7 @@ cd manicbot/admin-app && npm run typecheck && npm test
 | `STRIPE_PRICE_PRO_MONTHLY` | Stripe Price ID тарифа Pro |
 | `STRIPE_PRICE_STUDIO_MONTHLY` | Stripe Price ID тарифа Studio |
 | `APP_BASE_URL` | Публичный URL воркера (`https://manicbot.com`) |
-| `BOT_ENCRYPTION_KEY` | Опционально: шифрование токенов ботов в D1/KV |
+| `BOT_ENCRYPTION_KEY` | Рекомендуется (startup warning если не установлен): шифрование токенов ботов в D1/KV |
 | `REQUIRE_WEBHOOK_BOT_ID` | Опционально: `"1"` — запретить legacy `POST /webhook` без `botId`, если привязан D1 |
 | `META_APP_SECRET`, `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` | Для Meta webhooks (см. `wrangler` / dashboard) |
 
@@ -243,6 +243,7 @@ cd manicbot/admin-app && npm run typecheck && npm test
 - [`CLOUDFLARE_SETUP.md`](manicbot/CLOUDFLARE_SETUP.md) — настройка Cloudflare
 - [`STRIPE_SETUP.md`](manicbot/STRIPE_SETUP.md) — настройка биллинга
 - [`MIGRATION.md`](manicbot/MIGRATION.md) — миграция с legacy на мультитенант
+- [`SECURITY_AUDIT_RESUME.md`](manicbot/SECURITY_AUDIT_RESUME.md) — аудит безопасности и исправления
 - [`SEED_TEST_DATA.md`](manicbot/SEED_TEST_DATA.md) — тестовые данные
 
 ---

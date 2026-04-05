@@ -4,19 +4,19 @@
     {
       "name": "admin-app",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/44444444/manicbot/admin-app && npm run dev"],
+      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/Manicbot_com/manicbot/admin-app && npm run dev"],
       "port": 3000
     },
     {
       "name": "landing",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/44444444/manicbot-analysis && npm run dev -- --port 3001"],
+      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/Manicbot_com/manicbot-analysis && npm run dev -- --port 3001"],
       "port": 3001
     },
     {
       "name": "manicbot-landing",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/44444444/manicbot-landing && npm run dev -- --port 3002"],
+      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/Manicbot_com/manicbot-landing && npm run dev -- --port 3002"],
       "port": 3002
     }
   ]

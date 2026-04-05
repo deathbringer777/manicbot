@@ -345,7 +345,7 @@ export async function getUser(ctx, cid) {
   if (!ctx?.db || !ctx?.tenantId) return kvGet(ctx, `u:${cid}`);
   const row = await dbGet(ctx, 'SELECT * FROM users WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
   if (!row) return null;
-  return { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at };
+  return { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at, tosAcceptedAt: row.tos_accepted_at };
 }
 
 export async function saveUser(ctx, cid, d) {
@@ -354,9 +354,9 @@ export async function saveUser(ctx, cid, d) {
     return;
   }
   await dbRun(ctx,
-    `INSERT OR REPLACE INTO users (tenant_id, chat_id, name, tg_username, tg_lang, phone, registered_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ctx.tenantId, cid, d.name || null, d.tgUsername || null, d.tgLang || null, d.phone || null, d.registeredAt || null,
+    `INSERT OR REPLACE INTO users (tenant_id, chat_id, name, tg_username, tg_lang, phone, registered_at, tos_accepted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ctx.tenantId, cid, d.name || null, d.tgUsername || null, d.tgLang || null, d.phone || null, d.registeredAt || null, d.tosAcceptedAt || null,
   );
 }
 

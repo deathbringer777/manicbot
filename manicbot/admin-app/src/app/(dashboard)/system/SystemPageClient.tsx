@@ -2,7 +2,7 @@
 
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
-import { Activity, Database, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { Activity, Database, ShieldCheck, AlertTriangle, RefreshCw, ScrollText } from "lucide-react";
 
 export default function SystemPageClient() {
   const {
@@ -17,6 +17,7 @@ export default function SystemPageClient() {
     refetch: refetchTables,
     isFetching: tFetching,
   } = api.system.getTableStats.useQuery(undefined, { refetchInterval: 60_000 });
+  const { data: consentLog, isLoading: cLoading } = api.system.getConsentLog.useQuery(undefined, { refetchInterval: 60_000 });
 
   const isOk = health?.status === "ok";
   const isFetching = hFetching || tFetching;
@@ -149,6 +150,68 @@ export default function SystemPageClient() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* ToS Consent Log */}
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-border/50 flex items-center gap-2">
+            <ScrollText className="w-4 h-4 text-cyan-400" />
+            <h2 className="text-sm font-bold text-white">ToS Consent Log</h2>
+            {consentLog && (
+              <span className="ml-auto text-[10px] text-slate-500">{consentLog.length} records</span>
+            )}
+          </div>
+          {cLoading ? (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-8 animate-pulse bg-slate-800/30 rounded-lg" />
+              ))}
+            </div>
+          ) : !consentLog?.length ? (
+            <div className="p-4 text-xs text-slate-500 text-center">No consent records yet</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/30">
+                    <th className="px-4 py-2 text-left font-medium text-slate-500">Time</th>
+                    <th className="px-4 py-2 text-left font-medium text-slate-500">Actor</th>
+                    <th className="px-4 py-2 text-left font-medium text-slate-500">Channel</th>
+                    <th className="px-4 py-2 text-left font-medium text-slate-500">IP</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {consentLog.map((row) => {
+                    let channel = "—";
+                    try {
+                      const d = JSON.parse(row.detail ?? "{}");
+                      channel = d.channel ?? "—";
+                    } catch { /* ignore */ }
+                    return (
+                      <tr key={row.id} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-2 text-slate-300 font-mono">
+                          {row.createdAt ? new Date(row.createdAt * 1000).toLocaleString() : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-slate-300">{row.actor ?? "—"}</td>
+                        <td className="px-4 py-2">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            channel === "web"
+                              ? "bg-cyan-500/10 text-cyan-400"
+                              : channel === "telegram"
+                                ? "bg-blue-500/10 text-blue-400"
+                                : "bg-slate-500/10 text-slate-400"
+                          }`}>
+                            {channel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-slate-500 font-mono">{row.ip ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </Shell>

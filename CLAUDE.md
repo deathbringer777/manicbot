@@ -56,7 +56,13 @@ Any change under `manicbot/migrations/` must stay in sync with:
 
 Run `npm run check-schema` in `manicbot/` in CI to verify table names and columns match.
 
-Recent migrations: `0010_google_sync_backoff.sql` (adds `sync_retries`, `sync_retry_after`, `sync_last_error` to `appointments`).
+Recent migrations:
+- `0010_google_sync_backoff.sql` — `sync_retries`, `sync_retry_after`, `sync_last_error` on `appointments`
+- `0011_tos_consent.sql` — `tos_accepted_at` on `web_users`
+- `0012_web_users_password_reset.sql` — `password_reset_token`, `password_reset_expires_at` on `web_users`
+- `0012a_login_attempts.sql` — `login_attempts`, `locked_until` on `web_users`
+- `0013_web_users_email_change.sql` — `new_email`, `email_change_token`, `email_change_token_expires_at`, `last_login_ip`, `last_login_at` on `web_users`
+- `0014_web_users_lang.sql` — `lang` on `web_users`
 
 ---
 
@@ -155,12 +161,15 @@ Telegram Mini App opens
 | Router | File | Auth |
 |--------|------|------|
 | `auth` | `routers/auth.ts` | public (validates initData in ctx) |
+| `webUsers` | `routers/webUsers.ts` | mixed: public (register, verify, reset) / protected (changePassword, requestEmailChange) / admin (create, list) |
+| `publicSalon` | `routers/publicSalon.ts` | public (salon directory: getProfile, search, getCities, autocomplete) |
 | `salon` | `routers/salon.ts` | `tenant_owner` for tenantId (`assertTenantOwner`) |
 | `master` | `routers/masterRouter.ts` | `master` or `tenant_owner` for tenantId |
 | `support` | `routers/support.ts` | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`) |
 | `channels` | `routers/channels.ts` | protected + `assertTenantOwner` |
 | `googleCalendar` | `routers/googleCalendar.ts` | protected + `assertTenantOwner` |
 | `conversations` | `routers/conversations.ts` | protected + `assertTenantOwner` |
+| `events` | `routers/events.ts` | adminProcedure (getRecent, clear — proxies to Worker) |
 | `metrics` | `routers/metrics.ts` | adminProcedure |
 | `users` | `routers/users.ts` | adminProcedure |
 | `tenants` | `routers/tenants.ts` | adminProcedure |
@@ -182,6 +191,41 @@ Telegram Mini App opens
 | `dashboards/SalonDashboard.tsx` | Salon owner: Overview, Appointments, Masters, Services, Clients, Billing, Settings |
 | `dashboards/MasterDashboard.tsx` | Master: Today, Schedule, Clients, Earnings, Profile |
 | `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close |
+
+### Web User Authentication (`server/auth/`, `server/email/`)
+
+Email/password auth for the web admin panel (separate from Telegram Mini App HMAC auth).
+
+```
+Browser → (auth)/register → webUsers.register
+  → hashPassword (PBKDF2-SHA256, 100k iterations, 16-byte salt)
+  → sendVerificationEmail (Resend) → 24h token
+  → (auth)/verify-email?token=xxx → webUsers.verifyEmail
+  → sendWelcomeEmail (fire-and-forget)
+
+Password reset:
+  → (auth)/forgot-password → webUsers.requestPasswordReset → 1h token
+  → (auth)/reset-password?token=xxx → webUsers.resetPassword
+```
+
+**Key modules:**
+
+| Module | Purpose |
+|--------|---------|
+| `server/auth/password.ts` | PBKDF2-SHA256 hashing (Web Crypto API, edge-compatible) |
+| `server/auth/authBaseUrl.ts` | Resolves public URL for email links (AUTH_URL / NEXTAUTH_URL / VERCEL_URL) |
+| `server/email/emailService.ts` | 5 email types: verification, password_reset, welcome, email_change, login_alert |
+| `server/email/templates.ts` | Branded HTML templates with i18n (ru/ua/en/pl) |
+| `server/email/resend.ts` | Resend HTTP transport (`RESEND_API_KEY`, `RESEND_FROM`) |
+
+**Auth pages** (`app/(auth)/`): `register`, `login`, `forgot-password`, `reset-password`, `verify-email`, `confirm-email-change`
+
+**Security:**
+- Rate limiting: 5 attempts / 10 min per IP (in-memory, resets per isolate)
+- Brute-force: 5 failed logins → 15-min lockout (`login_attempts`, `locked_until` columns)
+- Login alerts: email on new IP (`last_login_ip`, `last_login_at`)
+- Password min length: 12 characters
+- Constant-time password comparison
 
 ---
 
@@ -269,6 +313,9 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 **Pages env vars required** (set in Cloudflare Pages dashboard):
 - `TELEGRAM_BOT_TOKEN`
 - `ADMIN_CHAT_ID` — same value as worker secret
+- `RESEND_API_KEY` — Resend API key for transactional emails
+- `RESEND_FROM` — sender address (e.g. `ManicBot <noreply@manicbot.com>`)
+- `AUTH_URL` — public URL for email links (e.g. `https://admin.manicbot.com`)
 - `DATABASE_URL` (optional, for local dev with LibSQL)
 
 ---
@@ -295,6 +342,7 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 | `message_windows` | Last user message time (WA/IG 24h policy) |
 | `google_integrations` | Tenant/master Google OAuth integrations + sync status |
 | `google_busy_blocks` | Cached external busy windows loaded from Google Calendar |
+| `web_users` | Web panel accounts (email/password auth, verification tokens, brute-force tracking) |
 
 ---
 

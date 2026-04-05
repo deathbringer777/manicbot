@@ -315,6 +315,7 @@ export const webUsers = sqliteTable("web_users", {
   /** Role: tenant_owner | system_admin | support | technical_support | master */
   role: text("role").notNull().default("tenant_owner"),
   name: text("name"),
+  lang: text("lang").default("en"),
   referralSource: text("referral_source"),
   emailVerified: integer("email_verified").notNull().default(0),
   verificationToken: text("verification_token"),

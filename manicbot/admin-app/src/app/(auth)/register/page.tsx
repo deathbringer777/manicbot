@@ -133,6 +133,7 @@ export default function RegisterPage() {
           password,
           role,
           name: name.trim() || undefined,
+          lang,
           referralSource: referralSource || undefined,
           tosAccepted: true as const,
           googlePrefillToken:

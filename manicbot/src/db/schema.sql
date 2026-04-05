@@ -330,6 +330,7 @@ CREATE TABLE IF NOT EXISTS web_users (
   tenant_id TEXT,
   role TEXT NOT NULL DEFAULT 'tenant_owner',
   name TEXT,
+  lang TEXT DEFAULT 'en',
   referral_source TEXT,
   email_verified INTEGER NOT NULL DEFAULT 0,
   verification_token TEXT,

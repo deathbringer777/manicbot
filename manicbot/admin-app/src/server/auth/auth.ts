@@ -136,7 +136,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Non-blocking: alert if login from new IP
         if (user.lastLoginIp && user.lastLoginIp !== ip && isResendConfigured()) {
-          sendLoginAlert(user.email, ip).catch(() => {});
+          sendLoginAlert(user.email, ip, (user.lang ?? "en") as import("~/lib/i18n").Lang).catch(() => {});
         }
 
         return {

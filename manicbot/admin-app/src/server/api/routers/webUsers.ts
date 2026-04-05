@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
 import { webUsers, auditLog } from "~/server/db/schema";
+import type { Lang } from "~/lib/i18n";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
@@ -77,6 +78,7 @@ export const webUsersRouter = createTRPCRouter({
         password: z.string().min(12, "Минимум 12 символов"),
         role: z.enum(["tenant_owner", "master"]),
         name: z.string().max(200).optional(),
+        lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
         referralSource: z.string().max(100).optional(),
         tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
         googlePrefillToken: z.string().min(1).max(8000).optional(),
@@ -134,6 +136,7 @@ export const webUsersRouter = createTRPCRouter({
           passwordHash,
           role: input.role,
           name: input.name ?? null,
+          lang: input.lang,
           referralSource: input.referralSource ?? null,
           emailVerified: skipEmailVerification ? 1 : 0,
           verificationToken: skipEmailVerification ? null : verificationToken,
@@ -168,7 +171,7 @@ export const webUsersRouter = createTRPCRouter({
       } catch { /* non-critical */ }
 
       if (!skipEmailVerification) {
-        const sent = await sendVerificationEmail(email, verificationToken);
+        const sent = await sendVerificationEmail(email, verificationToken, input.lang);
         if (!sent.ok) {
           await ctx.db.delete(webUsers).where(eq(webUsers.id, id));
           throw new TRPCError({
@@ -214,7 +217,7 @@ export const webUsersRouter = createTRPCRouter({
         .where(eq(webUsers.id, user.id));
 
       // Non-blocking welcome email
-      sendWelcomeEmail(user.email, user.name ?? null).catch(() => {});
+      sendWelcomeEmail(user.email, user.name ?? null, (user.lang ?? "en") as Lang).catch(() => {});
 
       return { success: true };
     }),
@@ -240,7 +243,7 @@ export const webUsersRouter = createTRPCRouter({
       }
 
       const rows = await ctx.db
-        .select({ id: webUsers.id })
+        .select({ id: webUsers.id, lang: webUsers.lang })
         .from(webUsers)
         .where(eq(webUsers.email, email))
         .limit(1);
@@ -258,7 +261,7 @@ export const webUsersRouter = createTRPCRouter({
           })
           .where(eq(webUsers.id, rows[0]!.id));
 
-        const sent = await sendPasswordResetEmail(email, resetToken);
+        const sent = await sendPasswordResetEmail(email, resetToken, (rows[0]!.lang ?? "en") as Lang);
         if (!sent.ok) {
           await ctx.db
             .update(webUsers)
@@ -396,6 +399,12 @@ export const webUsersRouter = createTRPCRouter({
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + 3600; // 1 hour
 
+      const [me] = await ctx.db
+        .select({ lang: webUsers.lang })
+        .from(webUsers)
+        .where(eq(webUsers.email, ctx.webUser.email))
+        .limit(1);
+
       await ctx.db
         .update(webUsers)
         .set({
@@ -406,7 +415,7 @@ export const webUsersRouter = createTRPCRouter({
         })
         .where(eq(webUsers.email, ctx.webUser.email));
 
-      const sent = await sendEmailChangeVerification(newEmail, token, newEmail);
+      const sent = await sendEmailChangeVerification(newEmail, token, newEmail, (me?.lang ?? "en") as Lang);
       if (!sent.ok) {
         await ctx.db
           .update(webUsers)

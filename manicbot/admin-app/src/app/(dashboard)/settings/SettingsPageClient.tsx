@@ -19,6 +19,7 @@ import {
   User,
   HelpCircle,
   Map,
+  Mail,
 } from "lucide-react";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 
@@ -161,6 +162,30 @@ export default function SettingsPageClient() {
     });
   };
 
+  // Change email form
+  const [emailForm, setEmailForm] = useState({ newEmail: "" });
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState(false);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const changeEmailMut = (api as any).webUsers.requestEmailChange.useMutation({
+    onSuccess: () => {
+      setEmailSuccess(true);
+      setEmailError(null);
+      setEmailForm({ newEmail: "" });
+      setTimeout(() => setEmailSuccess(false), 5000);
+    },
+    onError: (err: { message?: string }) => {
+      setEmailError(err.message ?? t("settings.emailChangeError", lang));
+    },
+  }) as { mutate: (args: { newEmail: string }) => void; isPending: boolean };
+
+  const handleChangeEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailError(null);
+    changeEmailMut.mutate({ newEmail: emailForm.newEmail });
+  };
+
   // Loading skeleton (only relevant for Platform tab data)
   if (isLoading && activeTab === "platform") {
     return (
@@ -276,6 +301,49 @@ export default function SettingsPageClient() {
                   />
                 </div>
               </div>
+            </section>
+
+            {/* Change email */}
+            <section className="glass-card rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
+                <h2 className="text-sm font-bold text-white">{t("settings.changeEmail", lang)}</h2>
+              </div>
+              <form onSubmit={handleChangeEmail} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">
+                    {t("settings.newEmail", lang)}
+                  </label>
+                  <input
+                    type="email"
+                    value={emailForm.newEmail}
+                    onChange={(e) => setEmailForm({ newEmail: e.target.value })}
+                    placeholder="new@example.com"
+                    className="w-full bg-slate-900/70 border border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-white"
+                    required
+                  />
+                </div>
+
+                {emailError && (
+                  <p className="text-xs text-red-400">{emailError}</p>
+                )}
+
+                {emailSuccess && (
+                  <p className="text-xs text-emerald-400 flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {t("settings.emailChangeSent", lang)}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={changeEmailMut.isPending}
+                  className="w-full flex items-center justify-center gap-1.5 bg-cyan-600 active:bg-cyan-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-70 mt-1"
+                >
+                  <Mail className="w-4 h-4" />
+                  {changeEmailMut.isPending ? t("settings.saving", lang) : t("settings.changeEmailBtn", lang)}
+                </button>
+              </form>
             </section>
 
             {/* Change password */}

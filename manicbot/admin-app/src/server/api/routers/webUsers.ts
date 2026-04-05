@@ -6,7 +6,13 @@ import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
-import { isResendConfigured, sendResendEmail } from "~/server/email/resend";
+import { isResendConfigured } from "~/server/email/resend";
+import {
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+  sendEmailChangeVerification,
+} from "~/server/email/emailService";
 
 /*
  * Simple in-memory rate limiter for registration.
@@ -162,13 +168,7 @@ export const webUsersRouter = createTRPCRouter({
       } catch { /* non-critical */ }
 
       if (!skipEmailVerification) {
-        const base = authPublicBaseUrl();
-        const verifyUrl = `${base}/verify-email?token=${encodeURIComponent(verificationToken)}`;
-        const sent = await sendResendEmail({
-          to: email,
-          subject: "Confirm your ManicBot account",
-          html: `<p>Thanks for registering. <a href="${verifyUrl}">Confirm your email</a> to sign in.</p><p>If you did not register, ignore this message.</p>`,
-        });
+        const sent = await sendVerificationEmail(email, verificationToken);
         if (!sent.ok) {
           await ctx.db.delete(webUsers).where(eq(webUsers.id, id));
           throw new TRPCError({
@@ -212,6 +212,10 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({ emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
         .where(eq(webUsers.id, user.id));
+
+      // Non-blocking welcome email
+      sendWelcomeEmail(user.email, user.name ?? null).catch(() => {});
+
       return { success: true };
     }),
 
@@ -254,12 +258,7 @@ export const webUsersRouter = createTRPCRouter({
           })
           .where(eq(webUsers.id, rows[0]!.id));
 
-        const resetUrl = `${base}/reset-password?token=${encodeURIComponent(resetToken)}`;
-        const sent = await sendResendEmail({
-          to: email,
-          subject: "Reset your ManicBot password",
-          html: `<p>You asked to reset your password. <a href="${resetUrl}">Set a new password</a> (link expires in one hour).</p><p>If you did not request this, ignore this email.</p>`,
-        });
+        const sent = await sendPasswordResetEmail(email, resetToken);
         if (!sent.ok) {
           await ctx.db
             .update(webUsers)
@@ -367,6 +366,102 @@ export const webUsersRouter = createTRPCRouter({
     }).from(webUsers);
     return rows;
   }),
+
+  /** Request email change — sends verification to NEW email. */
+  requestEmailChange: protectedProcedure
+    .input(z.object({ newEmail: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
+      }
+      if (!isResendConfigured() || !authPublicBaseUrl()) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Email service not configured" });
+      }
+
+      const newEmail = input.newEmail.toLowerCase().trim();
+      if (newEmail === ctx.webUser.email) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "New email is the same as current" });
+      }
+
+      const existing = await ctx.db
+        .select({ id: webUsers.id })
+        .from(webUsers)
+        .where(eq(webUsers.email, newEmail))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
+      }
+
+      const token = crypto.randomUUID();
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = now + 3600; // 1 hour
+
+      await ctx.db
+        .update(webUsers)
+        .set({
+          newEmail,
+          emailChangeToken: token,
+          emailChangeTokenExpiresAt: expiresAt,
+          updatedAt: now,
+        })
+        .where(eq(webUsers.email, ctx.webUser.email));
+
+      const sent = await sendEmailChangeVerification(newEmail, token, newEmail);
+      if (!sent.ok) {
+        await ctx.db
+          .update(webUsers)
+          .set({ newEmail: null, emailChangeToken: null, emailChangeTokenExpiresAt: null, updatedAt: now })
+          .where(eq(webUsers.email, ctx.webUser.email));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Could not send verification email: ${sent.error}`,
+        });
+      }
+
+      return { ok: true as const };
+    }),
+
+  /** Confirm email change with token (public — user clicks link from email). */
+  confirmEmailChange: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db
+        .select()
+        .from(webUsers)
+        .where(eq(webUsers.emailChangeToken, input.token))
+        .limit(1);
+      if (!rows.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired link" });
+      }
+      const user = rows[0]!;
+      const now = Math.floor(Date.now() / 1000);
+      if (!user.emailChangeTokenExpiresAt || now > user.emailChangeTokenExpiresAt || !user.newEmail) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired link" });
+      }
+
+      // Check the new email hasn't been taken since the request
+      const taken = await ctx.db
+        .select({ id: webUsers.id })
+        .from(webUsers)
+        .where(eq(webUsers.email, user.newEmail))
+        .limit(1);
+      if (taken.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
+      }
+
+      await ctx.db
+        .update(webUsers)
+        .set({
+          email: user.newEmail,
+          newEmail: null,
+          emailChangeToken: null,
+          emailChangeTokenExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(eq(webUsers.id, user.id));
+
+      return { success: true as const };
+    }),
 
   changePassword: protectedProcedure
     .input(

@@ -4,7 +4,7 @@
  */
 
 const ALGO = "pbkdf2";
-const ITERATIONS = 310_000;
+const ITERATIONS = 100_000;
 const KEY_LEN_BITS = 256;
 
 function hexEncode(buf: ArrayBuffer): string {

@@ -8,6 +8,8 @@ import { webUsers, auditLog } from "~/server/db/schema";
 import { verifyPassword } from "./password";
 import { signGooglePrefillToken } from "./googlePrefillToken";
 import { authPublicBaseUrl } from "./authBaseUrl";
+import { isResendConfigured } from "~/server/email/resend";
+import { sendLoginAlert } from "~/server/email/emailService";
 
 export { authPublicBaseUrl };
 
@@ -124,13 +126,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Reject unverified email (admin-created users are auto-verified)
         if (!user.emailVerified) return null;
 
-        // Success — reset lockout counter
+        // Success — reset lockout counter + track IP for login alerts
         try {
           await db
             .update(webUsers)
-            .set({ loginAttempts: 0, lockedUntil: null, updatedAt: now })
+            .set({ loginAttempts: 0, lockedUntil: null, lastLoginIp: ip, lastLoginAt: now, updatedAt: now })
             .where(eq(webUsers.id, user.id));
         } catch { /* non-critical */ }
+
+        // Non-blocking: alert if login from new IP
+        if (user.lastLoginIp && user.lastLoginIp !== ip && isResendConfigured()) {
+          sendLoginAlert(user.email, ip).catch(() => {});
+        }
 
         return {
           id: user.id,

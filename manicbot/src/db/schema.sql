@@ -336,9 +336,14 @@ CREATE TABLE IF NOT EXISTS web_users (
   verification_token_expires_at INTEGER,
   password_reset_token TEXT,
   password_reset_expires_at INTEGER,
+  new_email TEXT,
+  email_change_token TEXT,
+  email_change_token_expires_at INTEGER,
   tos_accepted_at INTEGER,
   login_attempts INTEGER NOT NULL DEFAULT 0,
   locked_until INTEGER DEFAULT NULL,
+  last_login_ip TEXT,
+  last_login_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

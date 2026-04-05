@@ -125,6 +125,18 @@ export const authCopy: Record<
       googlePrefillHint: string;
       googlePrefillExpired: string;
     };
+    confirmEmailChange: {
+      kicker: string;
+      title: string;
+      description: string;
+      panelTitle: string;
+      panelDescription: string;
+      verifying: string;
+      success: string;
+      error: string;
+      missingToken: string;
+      goLogin: string;
+    };
   }
 > = {
   ru: {
@@ -252,6 +264,18 @@ export const authCopy: Record<
       googlePrefillExpired:
         "Ссылка из Google устарела или недействительна. Зарегистрируйтесь вручную или снова нажмите «Войти через Google».",
     },
+    confirmEmailChange: {
+      kicker: "Смена email",
+      title: "Подтвердите новый адрес электронной почты",
+      description: "Нажмите кнопку для завершения смены email.",
+      panelTitle: "Подтверждение",
+      panelDescription: "Проверяем ваш токен…",
+      verifying: "Проверяем…",
+      success: "Email успешно изменён. Войдите с новым адресом.",
+      error: "Ссылка недействительна или истёк срок действия.",
+      missingToken: "Ссылка повреждена. Попробуйте запросить смену email заново.",
+      goLogin: "Войти",
+    },
   },
   ua: {
     shared: {
@@ -378,6 +402,18 @@ export const authCopy: Record<
       googlePrefillExpired:
         "Посилання з Google застаріло або недійсне. Зареєструйтесь вручну або знову натисніть «Увійти через Google».",
     },
+    confirmEmailChange: {
+      kicker: "Зміна email",
+      title: "Підтвердіть нову адресу електронної пошти",
+      description: "Натисніть кнопку для завершення зміни email.",
+      panelTitle: "Підтвердження",
+      panelDescription: "Перевіряємо ваш токен…",
+      verifying: "Перевіряємо…",
+      success: "Email успішно змінено. Увійдіть з новою адресою.",
+      error: "Посилання недійсне або закінчився термін дії.",
+      missingToken: "Посилання пошкоджене. Спробуйте запросити зміну email знову.",
+      goLogin: "Увійти",
+    },
   },
   en: {
     shared: {
@@ -502,7 +538,19 @@ export const authCopy: Record<
       googlePrefillHint:
         "Your Google account is verified. Set a password and role — after registration you will sign in right away.",
       googlePrefillExpired:
-        "The Google link expired or is invalid. Register manually or try “Continue with Google” again.",
+        "The Google link expired or is invalid. Register manually or try \u201cContinue with Google\u201d again.",
+    },
+    confirmEmailChange: {
+      kicker: "Email change",
+      title: "Confirm your new email address",
+      description: "Click the button to complete the email change.",
+      panelTitle: "Confirmation",
+      panelDescription: "Verifying your token…",
+      verifying: "Verifying…",
+      success: "Email changed successfully. Sign in with your new address.",
+      error: "This link is invalid or has expired.",
+      missingToken: "The link is broken. Try requesting an email change again.",
+      goLogin: "Sign in",
     },
   },
   pl: {
@@ -628,7 +676,19 @@ export const authCopy: Record<
       googlePrefillHint:
         "Konto Google jest potwierdzone. Ustaw hasło i rolę — po rejestracji od razu zalogujesz się do panelu.",
       googlePrefillExpired:
-        "Link z Google wygasł lub jest nieprawidłowy. Zarejestruj się ręcznie lub ponownie użyj „Zaloguj się przez Google”.",
+        "Link z Google wygasl lub jest nieprawidlowy. Zarejestruj sie recznie lub ponownie uzyj \u201eZaloguj sie przez Google\u201d.",
+    },
+    confirmEmailChange: {
+      kicker: "Zmiana emaila",
+      title: "Potwierdź nowy adres email",
+      description: "Kliknij przycisk, aby zakończyć zmianę emaila.",
+      panelTitle: "Potwierdzenie",
+      panelDescription: "Weryfikujemy Twój token…",
+      verifying: "Weryfikacja…",
+      success: "Email zostal zmieniony. Zaloguj sie nowym adresem.",
+      error: "Ten link jest nieprawidlowy lub wygasl.",
+      missingToken: "Link jest uszkodzony. Sprobuj ponownie zmienic email.",
+      goLogin: "Zaloguj sie",
     },
   },
 };

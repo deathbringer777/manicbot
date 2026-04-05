@@ -55,7 +55,7 @@ export function TelegramPhoneDemo() {
         bubbleIn: "#ffffff",
         bubbleOut: "#effdde",
         keyboard: "#e4e6eb",
-        keyBtn: "#ffffff",
+        keyBtn: "#ebebee",
         text: "#1a1a1a",
         textMuted: "#6b7280",
         accent: "#2481cc",
@@ -291,14 +291,14 @@ export function TelegramPhoneDemo() {
                     <button
                       type="button"
                       className="flex-1 py-1.5 rounded-md text-[11px] font-medium"
-                      style={{ background: tg.keyBtn, color: "#86efac" }}
+                      style={{ background: tg.keyBtn, color: theme === "light" ? "#22c55e" : "#86efac", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
                     >
                       {p.btnOk}
                     </button>
                     <button
                       type="button"
                       className="flex-1 py-1.5 rounded-md text-[11px] font-medium"
-                      style={{ background: tg.keyBtn, color: "#fca5a5" }}
+                      style={{ background: tg.keyBtn, color: theme === "light" ? "#ef4444" : "#fca5a5", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
                     >
                       {p.btnNo}
                     </button>

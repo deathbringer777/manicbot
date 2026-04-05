@@ -119,10 +119,12 @@ export function TelegramPhoneDemo() {
 
         {/* Screen bezel */}
         <div
-          className="relative overflow-hidden rounded-[2.35rem]"
+          className="relative overflow-hidden rounded-[2.35rem] isolate"
           style={{
             background: tg.bg,
             boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.4)",
+            transform: "translateZ(0)",
+            willChange: "transform",
           }}
         >
           {/* Dynamic Island */}
@@ -185,7 +187,7 @@ export function TelegramPhoneDemo() {
           {/* Chat area */}
           <div
             className="relative h-[420px] overflow-hidden flex flex-col"
-            style={{ background: tg.bg }}
+            style={{ background: tg.bg, transform: "translateZ(0)" }}
           >
             <div className="flex-1 overflow-y-auto px-2.5 pt-3 pb-2 space-y-2 scrollbar-none">
               {/* Welcome bubble */}
@@ -245,15 +247,15 @@ export function TelegramPhoneDemo() {
                     style={{ background: tg.bubbleOut }}
                   >
                     <span
-                      className="w-1.5 h-1.5 rounded-full bg-white/50"
+                      className={`w-1.5 h-1.5 rounded-full ${theme === "light" ? "bg-black/40" : "bg-white/50"}`}
                       style={{ animation: "typing-dot 1s ease-in-out infinite", animationDelay: "0ms" }}
                     />
                     <span
-                      className="w-1.5 h-1.5 rounded-full bg-white/50"
+                      className={`w-1.5 h-1.5 rounded-full ${theme === "light" ? "bg-black/40" : "bg-white/50"}`}
                       style={{ animation: "typing-dot 1s ease-in-out infinite", animationDelay: "0.15s" }}
                     />
                     <span
-                      className="w-1.5 h-1.5 rounded-full bg-white/50"
+                      className={`w-1.5 h-1.5 rounded-full ${theme === "light" ? "bg-black/40" : "bg-white/50"}`}
                       style={{ animation: "typing-dot 1s ease-in-out infinite", animationDelay: "0.3s" }}
                     />
                   </div>
@@ -265,7 +267,7 @@ export function TelegramPhoneDemo() {
                 <div className="flex justify-end pt-1" key={`u-${cycle}`}>
                   <div
                     className="max-w-[88%] rounded-xl rounded-br-sm px-3 py-2 text-[12px] leading-snug animate-chat-bubble-in"
-                    style={{ background: tg.bubbleOut, color: "#fff" }}
+                    style={{ background: tg.bubbleOut, color: theme === "light" ? "#1a1a1a" : "#fff" }}
                   >
                     {p.userMessage}
                   </div>
@@ -307,7 +309,7 @@ export function TelegramPhoneDemo() {
 
             {/* Input bar (static) */}
             <div
-              className="px-2 py-2 flex items-center gap-2 border-t"
+              className="px-3 py-2 flex items-center gap-2 border-t"
               style={{ borderColor: "rgba(255,255,255,0.06)", background: tg.keyboard }}
             >
               <div

@@ -319,7 +319,11 @@ export const webUsers = sqliteTable("web_users", {
   emailVerified: integer("email_verified").notNull().default(0),
   verificationToken: text("verification_token"),
   verificationTokenExpiresAt: integer("verification_token_expires_at"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiresAt: integer("password_reset_expires_at"),
   tosAcceptedAt: integer("tos_accepted_at"),
+  loginAttempts: integer("login_attempts").notNull().default(0),
+  lockedUntil: integer("locked_until"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [

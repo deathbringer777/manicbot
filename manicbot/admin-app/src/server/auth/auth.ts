@@ -4,12 +4,23 @@ import Google from "next-auth/providers/google";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getDb } from "~/server/db";
-import { webUsers } from "~/server/db/schema";
+import { webUsers, auditLog } from "~/server/db/schema";
 import { verifyPassword } from "./password";
 import { signGooglePrefillToken } from "./googlePrefillToken";
 import { authPublicBaseUrl } from "./authBaseUrl";
 
 export { authPublicBaseUrl };
+
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_SECONDS = 15 * 60; // 15 minutes
+
+function getClientIp(headers: Headers | null | undefined): string {
+  return (
+    headers?.get("cf-connecting-ip") ??
+    headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown"
+  );
+}
 
 declare module "next-auth" {
   interface Session {
@@ -37,7 +48,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = z
           .object({
             email: z.string().email(),
@@ -46,24 +57,80 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .safeParse(credentials);
         if (!parsed.success) return null;
 
+        const email = parsed.data.email.toLowerCase().trim();
         const db = getDb();
+        const ip = getClientIp(request?.headers);
+        const now = Math.floor(Date.now() / 1000);
+
         const rows = await db
           .select()
           .from(webUsers)
-          .where(eq(webUsers.email, parsed.data.email.toLowerCase().trim()))
+          .where(eq(webUsers.email, email))
           .limit(1);
 
         const user = rows[0];
-        if (!user?.passwordHash) return null;
 
-        const valid = await verifyPassword(
-          parsed.data.password,
-          user.passwordHash,
-        );
-        if (!valid) return null;
+        // Unknown email — log attempt, return null (same response as wrong password)
+        if (!user?.passwordHash) {
+          try {
+            await db.insert(auditLog).values({
+              tenantId: null,
+              actor: email,
+              action: "login_failed",
+              detail: JSON.stringify({ reason: "user_not_found" }),
+              ip,
+              createdAt: now,
+            });
+          } catch { /* non-critical */ }
+          return null;
+        }
+
+        // Lockout check
+        if (user.lockedUntil && now < user.lockedUntil) {
+          const minutesLeft = Math.ceil((user.lockedUntil - now) / 60);
+          throw new Error(
+            `Too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`,
+          );
+        }
+
+        const valid = await verifyPassword(parsed.data.password, user.passwordHash);
+
+        if (!valid) {
+          const newAttempts = (user.loginAttempts ?? 0) + 1;
+          const shouldLock = newAttempts >= LOGIN_MAX_ATTEMPTS;
+          try {
+            await db
+              .update(webUsers)
+              .set({
+                loginAttempts: newAttempts,
+                lockedUntil: shouldLock ? now + LOGIN_LOCKOUT_SECONDS : null,
+                updatedAt: now,
+              })
+              .where(eq(webUsers.id, user.id));
+          } catch { /* non-critical — login is still rejected below */ }
+          try {
+            await db.insert(auditLog).values({
+              tenantId: user.tenantId ?? null,
+              actor: email,
+              action: "login_failed",
+              detail: JSON.stringify({ reason: "bad_password", attempts: newAttempts, locked: shouldLock }),
+              ip,
+              createdAt: now,
+            });
+          } catch { /* non-critical */ }
+          return null;
+        }
 
         // Reject unverified email (admin-created users are auto-verified)
         if (!user.emailVerified) return null;
+
+        // Success — reset lockout counter
+        try {
+          await db
+            .update(webUsers)
+            .set({ loginAttempts: 0, lockedUntil: null, updatedAt: now })
+            .where(eq(webUsers.id, user.id));
+        } catch { /* non-critical */ }
 
         return {
           id: user.id,
@@ -80,7 +147,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         })]
       : []),
   ],
-  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 }, // 7 days
+  session: { strategy: "jwt", maxAge: 8 * 60 * 60 }, // 8 hours
   callbacks: {
     async signIn({ user, account, profile }) {
       // Google OAuth: existing web_users → session; new → signed redirect to complete registration
@@ -125,10 +192,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return base ? `${base}${path}` : path;
           }
         } catch (err) {
-          console.error("[auth] Google signIn DB error:", err);
-          // Still allow login on DB error, with default role
-          user.tenantId = null;
-          user.webRole = "client";
+          console.error("[auth] Google signIn DB error — rejecting login:", err);
+          return false;
         }
       }
       return true;

@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS masters (
   calendar_enabled INTEGER NOT NULL DEFAULT 0,
   bio TEXT,
   photo TEXT,
+  portfolio TEXT,
   PRIMARY KEY (tenant_id, chat_id)
 );
 
@@ -149,6 +150,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   city TEXT,
   public_active INTEGER NOT NULL DEFAULT 0,
   search_text TEXT,
+  logo TEXT,
+  cover_photo TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

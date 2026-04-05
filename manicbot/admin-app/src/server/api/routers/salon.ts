@@ -99,6 +99,9 @@ export const salonRouter = createTRPCRouter({
       lat: tenantRow[0]?.lat ?? null,
       lng: tenantRow[0]?.lng ?? null,
       publicActive: tenantRow[0]?.publicActive ?? 0,
+      photos: tenantRow[0]?.photos ? (() => { try { return JSON.parse(tenantRow[0]!.photos!); } catch { return []; } })() : [],
+      logo: tenantRow[0]?.logo ?? null,
+      coverPhoto: tenantRow[0]?.coverPhoto ?? null,
     };
   }),
 
@@ -230,6 +233,8 @@ export const salonRouter = createTRPCRouter({
       lng: z.number().min(-180).max(180).optional(),
       publicActive: z.number().min(0).max(1).optional(),
       photos: z.array(z.string()).optional(),
+      logo: z.string().url().optional().or(z.literal("")),
+      coverPhoto: z.string().url().optional().or(z.literal("")),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -262,6 +267,8 @@ export const salonRouter = createTRPCRouter({
       if (input.lng !== undefined) tenantUpdate.lng = input.lng;
       if (input.publicActive !== undefined) tenantUpdate.publicActive = input.publicActive;
       if (input.photos !== undefined) tenantUpdate.photos = JSON.stringify(input.photos);
+      if (input.logo !== undefined) tenantUpdate.logo = input.logo || null;
+      if (input.coverPhoto !== undefined) tenantUpdate.coverPhoto = input.coverPhoto || null;
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 
       // 2. Upsert tenant_config rows for each provided field

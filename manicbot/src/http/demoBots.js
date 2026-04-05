@@ -53,11 +53,49 @@ export async function ensureDemoBotsProvisioned(env) {
   const TRIAL_SEC = msToSec(7 * 24 * 3600 * 1000);
   const now = nowSec();
 
+  // Curated Pexels photo URLs per demo tenant (light pink / dark luxury / clean minimal / colorful)
+  const DEMO_PHOTOS = {
+    t_salon1: {
+      logo: 'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?auto=compress&cs=tinysrgb&w=200',
+      coverPhoto: 'https://images.pexels.com/photos/3997390/pexels-photo-3997390.jpeg?auto=compress&cs=tinysrgb&w=800',
+      photos: [
+        'https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/3997380/pexels-photo-3997380.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/4046316/pexels-photo-4046316.jpeg?auto=compress&cs=tinysrgb&w=400',
+      ],
+    },
+    t_salon2: {
+      logo: 'https://images.pexels.com/photos/7290075/pexels-photo-7290075.jpeg?auto=compress&cs=tinysrgb&w=200',
+      coverPhoto: 'https://images.pexels.com/photos/7290075/pexels-photo-7290075.jpeg?auto=compress&cs=tinysrgb&w=800',
+      photos: [
+        'https://images.pexels.com/photos/7290075/pexels-photo-7290075.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/3997381/pexels-photo-3997381.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/4046317/pexels-photo-4046317.jpeg?auto=compress&cs=tinysrgb&w=400',
+      ],
+    },
+    t_master1: {
+      coverPhoto: 'https://images.pexels.com/photos/3997384/pexels-photo-3997384.jpeg?auto=compress&cs=tinysrgb&w=800',
+      photos: [
+        'https://images.pexels.com/photos/3997384/pexels-photo-3997384.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/3997386/pexels-photo-3997386.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/3997388/pexels-photo-3997388.jpeg?auto=compress&cs=tinysrgb&w=400',
+      ],
+    },
+    t_master2: {
+      coverPhoto: 'https://images.pexels.com/photos/4046315/pexels-photo-4046315.jpeg?auto=compress&cs=tinysrgb&w=800',
+      photos: [
+        'https://images.pexels.com/photos/4046315/pexels-photo-4046315.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/4046318/pexels-photo-4046318.jpeg?auto=compress&cs=tinysrgb&w=400',
+        'https://images.pexels.com/photos/4046319/pexels-photo-4046319.jpeg?auto=compress&cs=tinysrgb&w=400',
+      ],
+    },
+  };
+
   const TENANTS = {
-    t_salon1: { name: 'Crystal Nails', salon: { name: 'Crystal Nails', address: 'ul. Nowy Świat 15, Warszawa', phone: '+48 22 100 10 01', timezone: 'Europe/Warsaw', workHours: { from: 9, to: 20 }, currency: 'PLN' } },
-    t_salon2: { name: 'Velvet Touch', salon: { name: 'Velvet Touch', address: 'ul. Mokotowska 42, Warszawa', phone: '+48 22 200 20 02', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 21 }, currency: 'PLN' } },
-    t_master1: { name: 'Мастер Алина', salon: { name: 'Мастер Алина', address: 'ul. Złota 59, Warszawa', phone: '+48 22 300 30 03', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 19 }, currency: 'PLN' } },
-    t_master2: { name: 'Мастер Виктория', salon: { name: 'Мастер Виктория', address: 'ul. Puławska 12, Warszawa', phone: '+48 22 400 40 04', timezone: 'Europe/Warsaw', workHours: { from: 11, to: 20 }, currency: 'PLN' } },
+    t_salon1: { name: 'Crystal Nails', salon: { name: 'Crystal Nails', address: 'ul. Nowy Świat 15, Warszawa', phone: '+48 22 100 10 01', timezone: 'Europe/Warsaw', workHours: { from: 9, to: 20 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_salon1 },
+    t_salon2: { name: 'Velvet Touch', salon: { name: 'Velvet Touch', address: 'ul. Mokotowska 42, Warszawa', phone: '+48 22 200 20 02', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 21 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_salon2 },
+    t_master1: { name: 'Мастер Алина', salon: { name: 'Мастер Алина', address: 'ul. Złota 59, Warszawa', phone: '+48 22 300 30 03', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 19 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_master1 },
+    t_master2: { name: 'Мастер Виктория', salon: { name: 'Мастер Виктория', address: 'ul. Puławska 12, Warszawa', phone: '+48 22 400 40 04', timezone: 'Europe/Warsaw', workHours: { from: 11, to: 20 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_master2 },
   };
 
   for (const b of DEMO_BOTS) {

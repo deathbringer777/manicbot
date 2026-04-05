@@ -28,6 +28,8 @@ export const tenants = sqliteTable("tenants", {
   city: text("city"),
   publicActive: integer("public_active").notNull().default(0),
   searchText: text("search_text"),
+  logo: text("logo"),
+  coverPhoto: text("cover_photo"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -71,6 +73,7 @@ export const masters = sqliteTable("masters", {
   calendarEnabled: integer("calendar_enabled").notNull().default(0),
   bio: text("bio"),
   photo: text("photo"),
+  portfolio: text("portfolio"),
 }, (t) => [index("idx_master_tenant").on(t.tenantId)]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {

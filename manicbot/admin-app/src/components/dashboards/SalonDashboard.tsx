@@ -133,6 +133,8 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
   const [phone, setPhone] = useState(profile?.salon?.phone ?? "");
   const [hoursFrom, setHoursFrom] = useState(String(profile?.salon?.workHours?.from ?? "9"));
   const [hoursTo, setHoursTo] = useState(String(profile?.salon?.workHours?.to ?? "20"));
+  const [logo, setLogo] = useState(profile?.logo ?? "");
+  const [coverPhoto, setCoverPhoto] = useState(profile?.coverPhoto ?? "");
 
   const update = api.salon.updateSalonProfile.useMutation({
     onSuccess: () => { utils.salon.getSalonProfile.invalidate(); setEditing(false); },
@@ -179,6 +181,22 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               </div>
             </div>
           )}
+          {(profile?.logo || profile?.coverPhoto) && (
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 flex gap-3">
+              {profile.logo && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Логотип</p>
+                  <img src={profile.logo} alt="logo" className="h-14 w-14 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
+              {profile.coverPhoto && (
+                <div className="flex-1">
+                  <p className="text-xs text-slate-500 mb-1">Заглавное фото</p>
+                  <img src={profile.coverPhoto} alt="cover" className="h-14 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -197,6 +215,20 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
           <Input label={t("salon.workHoursFrom", lang)} value={hoursFrom} onChange={setHoursFrom} type="number" />
           <Input label={t("salon.workHoursTo", lang)} value={hoursTo} onChange={setHoursTo} type="number" />
         </div>
+        <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Логотип (URL)</label>
+            {logo && <img src={logo} alt="" className="h-12 w-12 rounded-lg object-cover mb-2 border border-slate-200 dark:border-slate-700" />}
+            <input value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="https://example.com/logo.jpg"
+              className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Заглавное фото (URL)</label>
+            {coverPhoto && <img src={coverPhoto} alt="" className="h-20 w-full rounded-lg object-cover mb-2 border border-slate-200 dark:border-slate-700" />}
+            <input value={coverPhoto} onChange={(e) => setCoverPhoto(e.target.value)} placeholder="https://example.com/cover.jpg"
+              className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+          </div>
+        </div>
         <Btn onClick={() => update.mutate({
           tenantId,
           name: salonName,
@@ -204,6 +236,8 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
           phone,
           workHoursFrom: parseInt(hoursFrom, 10) || 9,
           workHoursTo: parseInt(hoursTo, 10) || 20,
+          logo: logo || "",
+          coverPhoto: coverPhoto || "",
         })} disabled={update.isPending} className="w-full justify-center py-2.5">
           {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("common.save", lang)}
@@ -239,7 +273,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       setLat(data.lat != null ? String(data.lat) : "");
       setLng(data.lng != null ? String(data.lng) : "");
       setIsPublic(!!data.publicActive);
-      try { setPhotos(data.salon?.photos ? JSON.parse(data.salon.photos) : (data.photos ?? [])); } catch { setPhotos([]); }
+      setPhotos(Array.isArray(data.photos) ? data.photos : []);
     }
   }, [data, editing]);
 
@@ -344,9 +378,15 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           ) : null)}
+          {(data?.logo || data?.coverPhoto) && (
+            <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
+              {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+              {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+            </div>
+          )}
           {photos.length > 0 && (
             <div>
-              <p className="text-xs text-slate-500 mb-2">Фотографии ({photos.length})</p>
+              <p className="text-xs text-slate-500 mb-2">Галерея ({photos.length})</p>
               <div className="flex flex-wrap gap-2">
                 {photos.map((url, i) => (
                   <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
@@ -426,19 +466,30 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 
             {/* Photos */}
             <div className="border-t border-slate-200 dark:border-white/5 pt-3">
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Фотографии салона</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Галерея салона ({photos.length})</label>
               {photos.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="space-y-2 mb-3">
                   {photos.map((url, i) => (
-                    <div key={i} className="relative group">
-                      <img src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
-                      <button
-                        type="button"
-                        onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                        className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-[10px]"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
+                    <div key={i} className="flex items-center gap-2 group">
+                      <img src={url} alt="" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
+                      <span className="flex-1 text-xs text-slate-500 truncate">{url}</span>
+                      <div className="flex gap-1 shrink-0">
+                        <button type="button" disabled={i === 0}
+                          onClick={() => setPhotos((prev) => { const a = [...prev]; const t = a[i-1]!; a[i-1] = a[i]!; a[i] = t; return a; })}
+                          className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-300 dark:hover:bg-slate-600">
+                          ↑
+                        </button>
+                        <button type="button" disabled={i === photos.length - 1}
+                          onClick={() => setPhotos((prev) => { const a = [...prev]; const t = a[i+1]!; a[i+1] = a[i]!; a[i] = t; return a; })}
+                          className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-300 dark:hover:bg-slate-600">
+                          ↓
+                        </button>
+                        <button type="button"
+                          onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
+                          className="h-6 w-6 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/20">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

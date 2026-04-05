@@ -116,6 +116,8 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
   const [bioEdit, setBioEdit] = useState(false);
   const [bio, setBio] = useState("");
   const [photo, setPhoto] = useState("");
+  const [portfolio, setPortfolio] = useState<string[]>([]);
+  const [newPortfolioUrl, setNewPortfolioUrl] = useState("");
   const updateProfile = api.master.updateProfile.useMutation({
     onSuccess: () => { utils.master.getMyProfile.invalidate(); setBioEdit(false); },
   });
@@ -274,7 +276,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.profile", lang)}</h2>
             {profile.data && !bioEdit && (
-              <button onClick={() => { setBio((profile.data as any).bio ?? ""); setPhoto((profile.data as any).photo ?? ""); setBioEdit(true); }}
+              <button onClick={() => { setBio((profile.data as any).bio ?? ""); setPhoto((profile.data as any).photo ?? ""); setPortfolio(Array.isArray((profile.data as any).portfolio) ? (profile.data as any).portfolio : []); setBioEdit(true); }}
                 className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
                 <Pencil className="h-3.5 w-3.5" />Редактировать
               </button>
@@ -308,25 +310,64 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
               {bioEdit && (
                 <div className="space-y-3 border-t border-slate-200 dark:border-white/5 pt-3">
                   <div>
-                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Фото (URL)</label>
-                    <input value={photo} onChange={(e) => setPhoto(e.target.value)}
-                      placeholder="https://example.com/photo.jpg"
-                      className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-                  </div>
-                  <div>
                     <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Описание (bio)</label>
                     <textarea value={bio} onChange={(e) => setBio(e.target.value)}
                       rows={3} maxLength={500} placeholder="Мастер маникюра с 5-летним опытом..."
                       className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
                     <p className="text-right text-[10px] text-slate-600">{bio.length}/500</p>
                   </div>
+                  <div>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Портфолио ({portfolio.length})</label>
+                    {portfolio.length > 0 && (
+                      <div className="space-y-2 mb-2">
+                        {portfolio.map((url, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <img src={url} alt="" className="h-10 w-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
+                            <span className="flex-1 text-xs text-slate-500 truncate">{url}</span>
+                            <div className="flex gap-1 shrink-0">
+                              <button type="button" disabled={i === 0}
+                                onClick={() => setPortfolio((prev) => { const a = [...prev]; const t = a[i-1]!; a[i-1] = a[i]!; a[i] = t; return a; })}
+                                className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30">↑</button>
+                              <button type="button" disabled={i === portfolio.length - 1}
+                                onClick={() => setPortfolio((prev) => { const a = [...prev]; const t = a[i+1]!; a[i+1] = a[i]!; a[i] = t; return a; })}
+                                className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30">↓</button>
+                              <button type="button"
+                                onClick={() => setPortfolio((prev) => prev.filter((_, j) => j !== i))}
+                                className="h-6 w-6 flex items-center justify-center rounded bg-red-500/10 text-red-400">✕</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input value={newPortfolioUrl} onChange={(e) => setNewPortfolioUrl(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const u = newPortfolioUrl.trim(); if (u) { setPortfolio((p) => [...p, u]); setNewPortfolioUrl(""); } } }}
+                        placeholder="https://example.com/work.jpg"
+                        className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                      <button type="button"
+                        onClick={() => { const u = newPortfolioUrl.trim(); if (u) { setPortfolio((p) => [...p, u]); setNewPortfolioUrl(""); } }}
+                        className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600">
+                        + Добавить
+                      </button>
+                    </div>
+                  </div>
                   <button
-                    onClick={() => updateProfile.mutate({ tenantId, masterId, bio: bio || undefined, photo: photo || undefined })}
+                    onClick={() => updateProfile.mutate({ tenantId, masterId, bio: bio || undefined, portfolio })}
                     disabled={updateProfile.isPending}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500/20 border border-brand-500/30 px-4 py-2.5 text-sm font-medium text-brand-400 hover:bg-brand-500/30 transition disabled:opacity-50">
                     {updateProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Сохранить профиль
                   </button>
+                </div>
+              )}
+              {!bioEdit && (profile.data as any).portfolio?.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-white/5 pt-3">
+                  <p className="text-xs text-slate-500 mb-2">Портфолио ({(profile.data as any).portfolio.length})</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(profile.data as any).portfolio.map((url: string, i: number) => (
+                      <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -63,6 +63,7 @@ Recent migrations:
 - `0012a_login_attempts.sql` — `login_attempts`, `locked_until` on `web_users`
 - `0013_web_users_email_change.sql` — `new_email`, `email_change_token`, `email_change_token_expires_at`, `last_login_ip`, `last_login_at` on `web_users`
 - `0014_web_users_lang.sql` — `lang` on `web_users`
+- `0015_salon_logo_master_portfolio.sql` — `logo`, `cover_photo` on `tenants`; `portfolio` on `masters`
 
 ---
 

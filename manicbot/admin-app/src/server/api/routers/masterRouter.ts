@@ -120,7 +120,11 @@ export const masterRouter = createTRPCRouter({
       const row = await ctx.db.select().from(masters)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)))
         .limit(1);
-      return row[0] ?? null;
+      if (!row[0]) return null;
+      const m = row[0];
+      let portfolio: string[] = [];
+      try { portfolio = m.portfolio ? JSON.parse(m.portfolio) : []; } catch { /* ignore */ }
+      return { ...m, portfolio };
     }),
 
   updateProfile: publicProcedure
@@ -129,12 +133,19 @@ export const masterRouter = createTRPCRouter({
       masterId: z.number(),
       bio: z.string().max(500).optional(),
       photo: z.string().url().optional().or(z.literal("")),
+      portfolio: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
       const setObj: Record<string, unknown> = {};
       if (input.bio !== undefined) setObj.bio = input.bio || null;
-      if (input.photo !== undefined) setObj.photo = input.photo || null;
+      if (input.portfolio !== undefined) {
+        setObj.portfolio = JSON.stringify(input.portfolio);
+        // Keep masters.photo in sync with first portfolio entry for backward compat
+        setObj.photo = input.portfolio[0] ?? null;
+      } else if (input.photo !== undefined) {
+        setObj.photo = input.photo || null;
+      }
       if (Object.keys(setObj).length === 0) return { success: true };
       await ctx.db.update(masters)
         .set(setObj)

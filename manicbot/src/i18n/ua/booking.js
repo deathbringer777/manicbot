@@ -74,4 +74,19 @@ export default {
   rem_24: ['⏰ <b>Нагадування!</b>','','Завтра у тебе запис:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','До зустрічі! 💅'],
   rem_2:  ['⏰ <b>Нагадування!</b>','','Через 2 години:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','Вже скоро! 💖'],
   staff_apt_cancelled_client: '❌ <b>Запис скасовано клієнтом</b>',
+
+  // Reviews
+  review_request: '💬 <b>Дякуємо за візит!</b>\n\nЯк вам обслуговування? Поставте оцінку:',
+  review_thanks: '✅ Дякуємо за оцінку! ({rating}⭐)\n\nБажаєте залишити коментар?',
+  review_add_comment: '✏️ Так, написати',
+  review_skip_comment: '⏭ Пропустити',
+  review_enter_text: '✏️ Напишіть ваш відгук:',
+  review_text_saved: '✅ Відгук збережено!\n\nБажаєте додати фото? (до 3 шт.)',
+  review_add_photo: '📸 Додати фото',
+  review_done: '⏭ Готово',
+  review_send_photo: '📸 Надішліть фото (ще {n}):',
+  review_photo_saved: '✅ Фото додано! ({count}/3)',
+  review_complete: '🎉 <b>Дякуємо за відгук!</b>\n\n{rating}⭐\n{text}',
+  review_complete_no_text: '🎉 <b>Дякуємо за відгук!</b>\n\n{rating}⭐',
+  review_already: 'Ви вже залишали відгук для цього запису.',
 };

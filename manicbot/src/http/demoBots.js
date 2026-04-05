@@ -92,10 +92,30 @@ export async function ensureDemoBotsProvisioned(env) {
   };
 
   const TENANTS = {
-    t_salon1: { name: 'Crystal Nails', salon: { name: 'Crystal Nails', address: 'ul. Nowy Świat 15, Warszawa', phone: '+48 22 100 10 01', timezone: 'Europe/Warsaw', workHours: { from: 9, to: 20 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_salon1 },
-    t_salon2: { name: 'Velvet Touch', salon: { name: 'Velvet Touch', address: 'ul. Mokotowska 42, Warszawa', phone: '+48 22 200 20 02', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 21 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_salon2 },
-    t_master1: { name: 'Мастер Алина', salon: { name: 'Мастер Алина', address: 'ul. Złota 59, Warszawa', phone: '+48 22 300 30 03', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 19 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_master1 },
-    t_master2: { name: 'Мастер Виктория', salon: { name: 'Мастер Виктория', address: 'ul. Puławska 12, Warszawa', phone: '+48 22 400 40 04', timezone: 'Europe/Warsaw', workHours: { from: 11, to: 20 }, currency: 'PLN' }, ...DEMO_PHOTOS.t_master2 },
+    t_salon1: {
+      name: 'Crystal Nails', slug: 'crystal-nails', city: 'Warszawa', publicActive: true,
+      description: 'Студия маникюра Crystal Nails — нежный дизайн, гель-лак и наращивание в центре Варшавы.',
+      salon: { name: 'Crystal Nails', address: 'ul. Nowy Świat 15, Warszawa', phone: '+48 22 100 10 01', timezone: 'Europe/Warsaw', workHours: { from: 9, to: 20 }, currency: 'PLN' },
+      ...DEMO_PHOTOS.t_salon1,
+    },
+    t_salon2: {
+      name: 'Velvet Touch', slug: 'velvet-touch', city: 'Warszawa', publicActive: true,
+      description: 'Velvet Touch — премиальный маникюр и педикюр. Индивидуальный подход и люксовые материалы.',
+      salon: { name: 'Velvet Touch', address: 'ul. Mokotowska 42, Warszawa', phone: '+48 22 200 20 02', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 21 }, currency: 'PLN' },
+      ...DEMO_PHOTOS.t_salon2,
+    },
+    t_master1: {
+      name: 'Мастер Алина', slug: 'master-alina', city: 'Warszawa', publicActive: true,
+      description: 'Мастер Алина — классический и аппаратный маникюр, нежный дизайн.',
+      salon: { name: 'Мастер Алина', address: 'ul. Złota 59, Warszawa', phone: '+48 22 300 30 03', timezone: 'Europe/Warsaw', workHours: { from: 10, to: 19 }, currency: 'PLN' },
+      ...DEMO_PHOTOS.t_master1,
+    },
+    t_master2: {
+      name: 'Мастер Виктория', slug: 'master-victoria', city: 'Warszawa', publicActive: true,
+      description: 'Мастер Виктория — наращивание, коррекция и авторский дизайн ногтей.',
+      salon: { name: 'Мастер Виктория', address: 'ul. Puławska 12, Warszawa', phone: '+48 22 400 40 04', timezone: 'Europe/Warsaw', workHours: { from: 11, to: 20 }, currency: 'PLN' },
+      ...DEMO_PHOTOS.t_master2,
+    },
   };
 
   for (const b of DEMO_BOTS) {
@@ -108,6 +128,14 @@ export async function ensureDemoBotsProvisioned(env) {
       createdAt: now,
       updatedAt: now,
       salon: t.salon,
+      photos: t.photos,
+      logo: t.logo || null,
+      coverPhoto: t.coverPhoto || null,
+      slug: t.slug || null,
+      city: t.city || null,
+      description: t.description || null,
+      publicActive: t.publicActive || false,
+      searchText: (t.name + ' ' + (t.city || '') + ' ' + (t.description || '')).toLowerCase(),
       plan: 'pro',
       billingStatus: 'trialing',
       trialEndsAt: now + TRIAL_SEC,

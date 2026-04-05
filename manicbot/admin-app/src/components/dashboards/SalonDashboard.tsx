@@ -6,6 +6,7 @@ import {
   CreditCard, Settings, ChevronRight, AlertCircle,
   Loader2, Plus, Pencil, Trash2, Save, X,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
+  Star, MessageSquare, Reply,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -15,7 +16,7 @@ import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "settings" | "public_profile";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: () => void; tenantId: string }) {
@@ -522,6 +523,124 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 }
 
 // ─── Main Dashboard ──────────────────────────────────────────────
+// ─── Review Card (salon dashboard) ──────────────────────────────────────────
+
+function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState(rev.replyText ?? "");
+  const utils = api.useUtils();
+
+  const updateStatus = api.reviews.updateStatus.useMutation({
+    onSuccess: () => utils.reviews.getForSalon.invalidate(),
+  });
+  const addReply = api.reviews.addReply.useMutation({
+    onSuccess: () => { utils.reviews.getForSalon.invalidate(); setReplyOpen(false); },
+  });
+  const deleteReply = api.reviews.deleteReply.useMutation({
+    onSuccess: () => utils.reviews.getForSalon.invalidate(),
+  });
+
+  const STATUS_LABELS: Record<string, string> = { active: "Active", hidden: "Hidden", featured: "Featured" };
+  const STATUS_COLORS: Record<string, string> = {
+    active: "bg-emerald-500/20 text-emerald-500",
+    hidden: "bg-slate-500/20 text-slate-400",
+    featured: "bg-amber-500/20 text-amber-500",
+  };
+
+  return (
+    <div className="glass-card rounded-2xl p-4">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-400 text-xs font-bold shrink-0">
+          {(rev.userName ?? "?").charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-900 dark:text-white">{rev.userName ?? `User #${rev.chatId}`}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${STATUS_COLORS[rev.status] ?? ""}`}>
+              {STATUS_LABELS[rev.status] ?? rev.status}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 mt-0.5">
+            {[1,2,3,4,5].map(s => (
+              <Star key={s} className={`w-3 h-3 ${s <= rev.rating ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
+            ))}
+            <span className="text-[10px] text-slate-500 ml-1">
+              {new Date(rev.createdAt * 1000).toLocaleDateString()}
+            </span>
+          </div>
+          {rev.text && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 line-clamp-3">{rev.text}</p>}
+          {rev.photos?.length > 0 && (
+            <div className="flex gap-1 mt-2">
+              {rev.photos.map((p: string, i: number) => (
+                <div key={i} className="w-12 h-12 rounded-lg bg-slate-200 dark:bg-slate-700 text-[9px] text-slate-400 flex items-center justify-center">
+                  img
+                </div>
+              ))}
+            </div>
+          )}
+          {rev.replyText && (
+            <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/60 border-l-2 border-brand-400">
+              <p className="text-[10px] text-brand-400 font-medium mb-0.5">Salon reply</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{rev.replyText}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-200 dark:border-white/5">
+        <button
+          onClick={() => updateStatus.mutate({ tenantId, reviewId: rev.id, status: rev.status === "hidden" ? "active" : "hidden" })}
+          className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+        >
+          {rev.status === "hidden" ? <><Eye className="w-3 h-3 inline mr-1" />Show</> : <><EyeOff className="w-3 h-3 inline mr-1" />Hide</>}
+        </button>
+        <button
+          onClick={() => updateStatus.mutate({ tenantId, reviewId: rev.id, status: rev.status === "featured" ? "active" : "featured" })}
+          className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+        >
+          <Star className={`w-3 h-3 inline mr-1 ${rev.status === "featured" ? "fill-amber-400 text-amber-400" : ""}`} />
+          {rev.status === "featured" ? "Unfeature" : "Feature"}
+        </button>
+        {!rev.replyText ? (
+          <button
+            onClick={() => setReplyOpen(!replyOpen)}
+            className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+          >
+            <Reply className="w-3 h-3 inline mr-1" />Reply
+          </button>
+        ) : (
+          <button
+            onClick={() => deleteReply.mutate({ tenantId, reviewId: rev.id })}
+            className="text-[10px] px-2 py-1 rounded-lg bg-red-500/10 text-red-400"
+          >
+            <Trash2 className="w-3 h-3 inline mr-1" />Delete reply
+          </button>
+        )}
+      </div>
+
+      {/* Reply form */}
+      {replyOpen && (
+        <div className="mt-2 flex gap-2">
+          <input
+            value={replyText}
+            onChange={e => setReplyText(e.target.value)}
+            placeholder="Write your reply..."
+            className="flex-1 text-xs px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none focus:border-brand-500"
+          />
+          <button
+            onClick={() => addReply.mutate({ tenantId, reviewId: rev.id, text: replyText })}
+            disabled={!replyText.trim() || addReply.isPending}
+            className="px-3 py-2 rounded-lg bg-brand-500 text-white text-xs font-medium disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const [tab, setTab] = useState<Tab>("overview");
@@ -554,9 +673,14 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" });
+  const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
+  const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
 
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
-    onSuccess: () => utils.salon.getAppointments.invalidate(),
+    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+  });
+  const markNoShow = api.salon.markNoShow.useMutation({
+    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
   });
   const removeMaster = api.salon.removeMaster.useMutation({
     onSuccess: () => utils.salon.getMasters.invalidate(),
@@ -573,6 +697,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { key: "clients", label: t("salon.clients", lang) },
     { key: "billing", label: t("salon.billing", lang) },
     { key: "channels", label: "Channels" },
+    { key: "reviews", label: "Reviews" },
     { key: "public_profile", label: "🌐 Профиль" },
     { key: "settings", label: t("common.settings", lang) },
   ];
@@ -625,7 +750,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               </div>
               {todayApts.data.slice(0, 4).map((a: any) => (
                 <AptCard key={a.id} a={a} lang={lang}
-                  onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })} />
+                  onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+                  onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
               ))}
               {todayApts.data.length > 4 && (
                 <button onClick={() => setTab("appointments")}
@@ -654,7 +780,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           <div className="space-y-2">
             {apts.data?.map((a: any) => (
               <AptCard key={a.id} a={a} lang={lang}
-                onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })} />
+                onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+                onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
             ))}
             {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
           </div>
@@ -784,6 +911,59 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                   <span className="text-slate-900 dark:text-white text-sm">{new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString()}</span>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── REVIEWS ── */}
+      {tab === "reviews" && (
+        <div className="space-y-4">
+          {/* Stats */}
+          {reviewStats.data && (
+            <div className="glass-card rounded-2xl p-5">
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <p className="text-4xl font-extrabold text-slate-900 dark:text-white">{reviewStats.data.avg || "—"}</p>
+                  <div className="flex gap-0.5 mt-1 justify-center">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} className={`w-4 h-4 ${s <= Math.round(reviewStats.data!.avg) ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">{reviewStats.data.count} reviews</p>
+                </div>
+                <div className="flex-1 space-y-1">
+                  {[5,4,3,2,1].map(n => {
+                    const count = reviewStats.data!.distribution[n] ?? 0;
+                    const pct = reviewStats.data!.count > 0 ? (count / reviewStats.data!.count) * 100 : 0;
+                    return (
+                      <div key={n} className="flex items-center gap-2 text-xs">
+                        <span className="w-3 text-slate-500 dark:text-slate-400">{n}</span>
+                        <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
+                          <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="w-6 text-right text-slate-400">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Review list */}
+          {reviewList.isLoading ? (
+            <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-24 animate-pulse" />)}</div>
+          ) : (reviewList.data?.reviews ?? []).length === 0 ? (
+            <div className="glass-card rounded-2xl py-12 text-center">
+              <Star className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">No reviews yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {(reviewList.data?.reviews ?? []).map((rev: any) => (
+                <ReviewCard key={rev.id} rev={rev} tenantId={tenantId} />
+              ))}
             </div>
           )}
         </div>

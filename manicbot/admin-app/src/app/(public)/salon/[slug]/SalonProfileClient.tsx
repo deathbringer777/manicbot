@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   MapPin, Phone, Clock, Instagram, Send, Star, ChevronDown, ChevronUp,
-  ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon,
+  ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera,
 } from "lucide-react";
 
 type WorkHours = { from?: number; to?: number } | string | null;
@@ -64,12 +64,69 @@ function formatHours(wh: WorkHours): string {
   return "Уточните у салона";
 }
 
+function ServicePhotoCarousel({ photos }: { photos: string[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const idx = Math.round(el.scrollLeft / el.offsetWidth);
+    setActiveIdx(idx);
+  };
+
+  const scrollTo = (idx: number) => {
+    scrollRef.current?.scrollTo({ left: idx * (scrollRef.current?.offsetWidth ?? 0), behavior: "smooth" });
+  };
+
+  if (!photos.length) return null;
+  return (
+    <div className="mt-3">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex snap-x snap-mandatory gap-2 overflow-x-auto scrollbar-none"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {photos.map((url, i) => (
+          <div key={i} className="w-full shrink-0 snap-center sm:w-[calc(50%-4px)]">
+            <img
+              src={url}
+              alt={`Фото ${i + 1}`}
+              loading="lazy"
+              className="aspect-[4/3] w-full rounded-lg object-cover"
+            />
+          </div>
+        ))}
+      </div>
+      {photos.length > 1 && (
+        <div className="mt-2 flex justify-center gap-1.5">
+          {photos.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => scrollTo(i)}
+              className={`h-1.5 rounded-full transition-all ${i === activeIdx ? "w-4 bg-violet-500 dark:bg-brand-400" : "w-1.5 bg-slate-300 dark:bg-slate-600"}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: string | null }) {
   const [expanded, setExpanded] = useState(false);
   const bookUrl = botUsername ? `https://t.me/${botUsername}` : null;
+  const hasDetails = svc.description || svc.photos.length > 0;
+
   return (
-    <div className="group rounded-xl border border-slate-200/80 bg-white p-4 transition hover:border-violet-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-brand-500/40 dark:hover:bg-slate-900">
-      <div className="flex items-start justify-between gap-3">
+    <div
+      className={`group rounded-xl border bg-white p-4 transition ${expanded ? "border-violet-300 shadow-sm dark:border-brand-500/40" : "border-slate-200/80 hover:border-violet-300 hover:shadow-sm dark:border-slate-800 dark:hover:border-brand-500/40"} dark:bg-slate-900/60 dark:hover:bg-slate-900`}
+    >
+      <div
+        className={`flex items-start justify-between gap-3 ${hasDetails ? "cursor-pointer" : ""}`}
+        onClick={() => hasDetails && setExpanded((v) => !v)}
+      >
         <div className="flex-1">
           <div className="flex items-center gap-2">
             {svc.emoji && <span className="text-lg">{svc.emoji}</span>}
@@ -81,31 +138,42 @@ function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: stri
               {svc.duration} мин
             </span>
             <span className="font-semibold text-violet-600 dark:text-brand-400">{svc.price > 0 ? `${svc.price}\u00a0zł` : "По договорённости"}</span>
+            {!expanded && svc.photos.length > 0 && (
+              <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                <Camera className="h-3 w-3" />
+                {svc.photos.length}
+              </span>
+            )}
           </div>
-          {svc.description && (
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              className="mt-1.5 flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {bookUrl && (
+            <a
+              href={bookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 dark:bg-brand-500 dark:hover:bg-brand-600"
             >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {expanded ? "Скрыть" : "Подробнее"}
+              Записаться
+            </a>
+          )}
+          {hasDetails && (
+            <button className="text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
+              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
           )}
-          {expanded && svc.description && (
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{svc.description}</p>
-          )}
         </div>
-        {bookUrl && (
-          <a
-            href={bookUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 dark:bg-brand-500 dark:hover:bg-brand-600"
-          >
-            Записаться
-          </a>
-        )}
       </div>
+
+      {expanded && (
+        <div className="mt-3 space-y-3">
+          {svc.description && (
+            <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">{svc.description}</p>
+          )}
+          <ServicePhotoCarousel photos={svc.photos} />
+        </div>
+      )}
     </div>
   );
 }

@@ -113,6 +113,22 @@ export const masterRouter = createTRPCRouter({
       }));
     }),
 
+  markNoShow: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      noShowBy: z.enum(["client", "master"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      await ctx.db.update(appointments).set({
+        noShow: 1,
+        noShowBy: input.noShowBy,
+        status: "no_show",
+      }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      return { success: true };
+    }),
+
   getMyProfile: publicProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {

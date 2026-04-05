@@ -24,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "text-slate-400 bg-slate-700/30 border-slate-600/20",
   done: "text-brand-400 bg-brand-500/10 border-brand-500/20",
   counter_offer: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+  no_show: "text-orange-400 bg-orange-500/10 border-orange-500/20",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -33,6 +34,19 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменено",
   done: "Выполнено",
   counter_offer: "Встречное",
+  no_show: "Не пришёл",
+};
+
+const NO_SHOW_LABELS: Record<string, string> = {
+  client: "Клиент не пришёл",
+  master: "Мастер не пришёл",
+};
+
+const CANCELLED_BY_LABELS: Record<string, string> = {
+  client: "Клиент",
+  master: "Мастер",
+  admin: "Админ",
+  system: "Система",
 };
 
 const STATUS_FILTERS = [
@@ -41,6 +55,7 @@ const STATUS_FILTERS = [
   { key: "confirmed", label: "✓ Подтв." },
   { key: "done", label: "Готово" },
   { key: "cancelled", label: "Отмена" },
+  { key: "no_show", label: "Не пришёл" },
   { key: "rejected", label: "Отклон." },
 ];
 
@@ -77,6 +92,10 @@ type Appointment = {
   userPhone: string | null;
   userTg: string | null;
   cancelled: number;
+  cancelledBy: string | null;
+  cancelledAt: number | null;
+  noShow: number | null;
+  noShowBy: string | null;
   rejectComment: string | null;
   cancelReason: string | null;
   createdAt: number;
@@ -102,7 +121,12 @@ function AptCard({
   onReject: () => void;
   isPending: boolean;
 }) {
-  const statusKey = apt.cancelled ? "cancelled" : apt.status;
+  const statusKey = apt.noShow ? "no_show" : apt.cancelled ? "cancelled" : apt.status;
+  const statusLabel = statusKey === "no_show"
+    ? (NO_SHOW_LABELS[apt.noShowBy ?? ""] ?? "Не пришёл")
+    : statusKey === "cancelled" && apt.cancelledBy
+      ? `${STATUS_LABELS[statusKey]} (${CANCELLED_BY_LABELS[apt.cancelledBy] ?? apt.cancelledBy})`
+      : (STATUS_LABELS[statusKey] ?? statusKey);
   return (
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-start justify-between gap-2">
@@ -117,7 +141,7 @@ function AptCard({
         <span
           className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${STATUS_COLORS[statusKey] ?? ""}`}
         >
-          {STATUS_LABELS[statusKey] ?? statusKey}
+          {statusLabel}
         </span>
       </div>
 
@@ -300,7 +324,7 @@ function BigCalendar({
               {/* Appointment chips */}
               <div className="flex flex-col gap-0.5 w-full">
                 {visible.map((a) => {
-                  const sk = a.cancelled ? "cancelled" : a.status;
+                  const sk = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
                   const chipColor =
                     sk === "pending"
                       ? "bg-amber-500/20 text-amber-300"
@@ -308,6 +332,8 @@ function BigCalendar({
                       ? "bg-emerald-500/20 text-emerald-300"
                       : sk === "done"
                       ? "bg-brand-500/20 text-brand-300"
+                      : sk === "no_show"
+                      ? "bg-orange-500/20 text-orange-300"
                       : "bg-slate-700/40 text-slate-400";
                   return (
                     <div

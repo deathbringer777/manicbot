@@ -74,4 +74,19 @@ export default {
   rem_24: ['⏰ <b>Przypomnienie!</b>','','Jutro masz wizytę:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','Do zobaczenia! 💅'],
   rem_2:  ['⏰ <b>Przypomnienie!</b>','','Za 2 godziny:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','Już niedługo! 💖'],
   staff_apt_cancelled_client: '❌ <b>Rezerwacja anulowana przez klienta</b>',
+
+  // Reviews
+  review_request: '💬 <b>Dziękujemy za wizytę!</b>\n\nJak oceniasz obsługę? Oceń nas:',
+  review_thanks: '✅ Dziękujemy za ocenę! ({rating}⭐)\n\nChcesz zostawić komentarz?',
+  review_add_comment: '✏️ Tak, napisz',
+  review_skip_comment: '⏭ Pomiń',
+  review_enter_text: '✏️ Napisz swoją opinię:',
+  review_text_saved: '✅ Opinia zapisana!\n\nChcesz dodać zdjęcia? (do 3)',
+  review_add_photo: '📸 Dodaj zdjęcie',
+  review_done: '⏭ Gotowe',
+  review_send_photo: '📸 Wyślij zdjęcie (jeszcze {n}):',
+  review_photo_saved: '✅ Zdjęcie dodane! ({count}/3)',
+  review_complete: '🎉 <b>Dziękujemy za opinię!</b>\n\n{rating}⭐\n{text}',
+  review_complete_no_text: '🎉 <b>Dziękujemy za opinię!</b>\n\n{rating}⭐',
+  review_already: 'Już zostawiłeś opinię dla tej wizyty.',
 };

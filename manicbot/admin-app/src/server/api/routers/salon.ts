@@ -132,6 +132,43 @@ export const salonRouter = createTRPCRouter({
     });
   }),
 
+  markNoShow: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      noShowBy: z.enum(["client", "master"]),
+      comment: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db.update(appointments).set({
+        noShow: 1,
+        noShowBy: input.noShowBy,
+        status: "no_show",
+        cancelReason: input.comment ?? null,
+      }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      return { success: true };
+    }),
+
+  cancelAppointment: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      cancelledBy: z.enum(["client", "master", "admin"]),
+      comment: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db.update(appointments).set({
+        cancelled: 1,
+        cancelledBy: input.cancelledBy,
+        cancelledAt: Math.floor(Date.now() / 1000),
+        status: "cancelled",
+        cancelReason: input.comment ?? null,
+      }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      return { success: true };
+    }),
+
   checkSlugAvailable: publicProcedure
     .input(z.object({ slug: z.string(), tenantId: z.string() }))
     .query(async ({ ctx, input }) => {

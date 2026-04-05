@@ -80,4 +80,19 @@ export default {
   rem_24: ['⏰ <b>Напоминание!</b>','','Завтра у тебя запись:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','До встречи! 💅'],
   rem_2:  ['⏰ <b>Напоминание!</b>','','Через 2 часа:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','Уже скоро! 💖'],
   staff_apt_cancelled_client: '❌ <b>Запись отменена клиентом</b>',
+
+  // Reviews
+  review_request: '💬 <b>Спасибо за визит!</b>\n\nКак вам обслуживание? Поставьте оценку:',
+  review_thanks: '✅ Спасибо за оценку! ({rating}⭐)\n\nХотите оставить комментарий?',
+  review_add_comment: '✏️ Да, написать',
+  review_skip_comment: '⏭ Пропустить',
+  review_enter_text: '✏️ Напишите ваш отзыв:',
+  review_text_saved: '✅ Отзыв сохранён!\n\nХотите добавить фото? (до 3 шт.)',
+  review_add_photo: '📸 Добавить фото',
+  review_done: '⏭ Готово',
+  review_send_photo: '📸 Отправьте фото (до {n} ещё):',
+  review_photo_saved: '✅ Фото добавлено! ({count}/3)',
+  review_complete: '🎉 <b>Спасибо за отзыв!</b>\n\n{rating}⭐\n{text}',
+  review_complete_no_text: '🎉 <b>Спасибо за отзыв!</b>\n\n{rating}⭐',
+  review_already: 'Вы уже оставляли отзыв для этой записи.',
 };

@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS appointments (
   reject_comment TEXT,
   cancel_reason TEXT,
   cancelled INTEGER NOT NULL DEFAULT 0,
+  cancelled_by TEXT,
+  cancelled_at INTEGER,
+  no_show INTEGER DEFAULT 0,
+  no_show_by TEXT,
   rem_h24 INTEGER NOT NULL DEFAULT 0,
   rem_h2 INTEGER NOT NULL DEFAULT 0,
   google_event_id TEXT,
@@ -28,6 +32,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   sync_retries INTEGER DEFAULT 0,
   sync_retry_after INTEGER DEFAULT NULL,
   sync_last_error TEXT DEFAULT NULL,
+  review_requested INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);
@@ -353,6 +358,26 @@ CREATE TABLE IF NOT EXISTS web_users (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_web_user_email ON web_users(email);
 CREATE INDEX IF NOT EXISTS idx_web_user_tenant ON web_users(tenant_id);
+
+-- Reviews & ratings
+CREATE TABLE IF NOT EXISTS reviews (
+  id              TEXT PRIMARY KEY,
+  tenant_id       TEXT NOT NULL,
+  appointment_id  TEXT,
+  master_id       TEXT,
+  chat_id         INTEGER NOT NULL,
+  channel         TEXT DEFAULT 'telegram',
+  rating          INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+  text            TEXT,
+  photos          TEXT,
+  status          TEXT NOT NULL DEFAULT 'active',
+  reply_text      TEXT,
+  reply_at        INTEGER,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_tenant ON reviews(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_master ON reviews(tenant_id, master_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_apt ON reviews(appointment_id);
 
 -- Persistent audit log
 CREATE TABLE IF NOT EXISTS audit_log (

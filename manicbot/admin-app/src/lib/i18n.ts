@@ -24,6 +24,8 @@ const translations = {
   "status.pending":         { ru: "Ожидает",      ua: "Очікує",         en: "Pending",    pl: "Oczekuje" },
   "status.cancelled":       { ru: "Отменено",     ua: "Скасовано",      en: "Cancelled",  pl: "Anulowane" },
   "status.rejected":        { ru: "Отклонено",    ua: "Відхилено",      en: "Rejected",   pl: "Odrzucone" },
+  "status.no_show":         { ru: "Не пришёл",    ua: "Не з'явився",    en: "No show",    pl: "Nieobecny" },
+  "status.done":            { ru: "Выполнено",    ua: "Виконано",       en: "Done",       pl: "Wykonane" },
   "status.open":            { ru: "Открыт",       ua: "Відкрито",       en: "Open",       pl: "Otwarte" },
   "status.claimed":         { ru: "В работе",     ua: "В роботі",       en: "In progress",pl: "W toku" },
   "status.escalated":       { ru: "Эскалирован",  ua: "Ескальовано",    en: "Escalated",  pl: "Eskalowane" },

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, UserX, AlertTriangle } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 
 // ─── Status style maps ───────────────────────────────────────────
@@ -9,6 +9,8 @@ export const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-400 border border-amber-500/20",
   cancelled: "bg-red-500/15 text-red-400 border border-red-500/20",
   rejected: "bg-red-500/15 text-red-400 border border-red-500/20",
+  no_show: "bg-orange-500/15 text-orange-400 border border-orange-500/20",
+  done: "bg-brand-500/15 text-brand-400 border border-brand-500/20",
 };
 
 export const APT_BORDER: Record<string, string> = {
@@ -16,6 +18,20 @@ export const APT_BORDER: Record<string, string> = {
   pending:   "border-l-amber-400",
   cancelled: "border-l-red-500/40",
   rejected:  "border-l-red-500/40",
+  no_show:   "border-l-orange-500/40",
+  done:      "border-l-brand-500",
+};
+
+const NO_SHOW_LABELS: Record<string, string> = {
+  client: "Клиент не пришёл",
+  master: "Мастер не пришёл",
+};
+
+const CANCELLED_BY_LABELS: Record<string, string> = {
+  client: "Отменено клиентом",
+  master: "Отменено мастером",
+  admin: "Отменено администратором",
+  system: "Отменено системой",
 };
 
 // ─── StatCard ────────────────────────────────────────────────────
@@ -40,11 +56,14 @@ export function StatCard({ label, value, sub, icon: Icon, color }: {
 }
 
 // ─── AptCard ─────────────────────────────────────────────────────
-export function AptCard({ a, lang, onAction }: {
-  a: any; lang: Lang; onAction?: (id: any, status: "confirmed" | "cancelled" | "rejected") => void;
+export function AptCard({ a, lang, onAction, onNoShow }: {
+  a: any; lang: Lang;
+  onAction?: (id: any, status: "confirmed" | "cancelled" | "rejected") => void;
+  onNoShow?: (id: any, noShowBy: "client" | "master") => void;
 }) {
   const [hh, mm] = (a.time ?? "00:00").split(":");
-  const border = APT_BORDER[a.status] ?? "border-l-slate-700";
+  const statusKey = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
+  const border = APT_BORDER[statusKey] ?? "border-l-slate-700";
   const nameWords = (a.userName ?? "?").trim().split(/\s+/);
   const initials = nameWords.length >= 2
     ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
@@ -66,14 +85,24 @@ export function AptCard({ a, lang, onAction }: {
               <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
                 {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
               </p>
-              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[a.status] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>
-                {t(`status.${a.status}` as any, lang)}
+              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[statusKey] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>
+                {statusKey === "no_show"
+                  ? (NO_SHOW_LABELS[a.noShowBy] ?? "Не пришёл")
+                  : statusKey === "cancelled" && a.cancelledBy
+                    ? (CANCELLED_BY_LABELS[a.cancelledBy] ?? t(`status.${a.status}` as any, lang))
+                    : t(`status.${a.status}` as any, lang)}
               </span>
             </div>
           </div>
+          {/* Cancellation / no-show details */}
+          {a.cancelReason && (statusKey === "cancelled" || statusKey === "no_show") && (
+            <p className="text-[10px] text-slate-400 mt-1 truncate">
+              {a.cancelReason}
+            </p>
+          )}
         </div>
       </div>
-      {onAction && a.status === "pending" && (
+      {onAction && a.status === "pending" && !a.cancelled && !a.noShow && (
         <div className="flex border-t border-slate-200 dark:border-white/5">
           <button onClick={() => onAction(a.id, "confirmed")}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/10 transition-colors">
@@ -86,12 +115,30 @@ export function AptCard({ a, lang, onAction }: {
           </button>
         </div>
       )}
-      {onAction && a.status === "confirmed" && (
+      {a.status === "confirmed" && !a.cancelled && !a.noShow && (
         <div className="flex border-t border-slate-200 dark:border-white/5">
-          <button onClick={() => onAction(a.id, "cancelled")}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400/60 text-xs font-medium hover:bg-red-500/10 transition-colors">
-            <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
-          </button>
+          {onAction && (
+            <>
+              <button onClick={() => onAction(a.id, "cancelled")}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400/60 text-xs font-medium hover:bg-red-500/10 transition-colors">
+                <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
+              </button>
+              <div className="w-px bg-slate-200 dark:bg-white/5" />
+            </>
+          )}
+          {onNoShow && (
+            <>
+              <button onClick={() => onNoShow(a.id, "client")}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
+                <UserX className="h-3.5 w-3.5" /> Клиент не пришёл
+              </button>
+              <div className="w-px bg-slate-200 dark:bg-white/5" />
+              <button onClick={() => onNoShow(a.id, "master")}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
+                <AlertTriangle className="h-3.5 w-3.5" /> Мастер не пришёл
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

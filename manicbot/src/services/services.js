@@ -90,7 +90,7 @@ export async function saveServices(ctx, services) {
 
 // ── About photos & desc → tenant_config ─────────────────────────────────────
 
-async function getConfig(ctx, key) {
+export async function getConfig(ctx, key) {
   if (!ctx?.db || !ctx?.tenantId) return null;
   const row = await dbGet(ctx, 'SELECT value FROM tenant_config WHERE tenant_id = ? AND key = ?', ctx.tenantId, key);
   if (row?.value != null) {

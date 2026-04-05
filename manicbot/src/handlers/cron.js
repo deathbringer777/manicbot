@@ -4,13 +4,14 @@ import { svcName, fill, t, p2 } from '../utils/helpers.js';
 import { warsawNow, fmtDT } from '../utils/date.js';
 import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
-import { initServices } from '../services/services.js';
+import { initServices, getConfig } from '../services/services.js';
 import { checkBillingExpiry } from '../billing/lifecycle.js';
 import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { canUse } from '../billing/features.js';
 import { isWithinMessageWindow } from './inbound.js';
 import { sendTemplateMessage, canSendTemplate, trackTemplateUsage, buildReminderComponents } from '../channels/whatsapp-templates.js';
 import { getChannelConfig } from '../channels/resolver.js';
+import { markReviewRequested } from '../services/reviews.js';
 
 export async function handleCron(ctx) {
   try {
@@ -142,6 +143,44 @@ export async function handleCron(ctx) {
       } catch (e) {
         console.error(`Cron reminder error for apt ${row.id}:`, e.message);
       }
+    }
+
+    // Phase 1.5: post-appointment review requests
+    try {
+      const reviewsEnabled = await getConfig(ctx, 'reviews_enabled');
+      if (reviewsEnabled) {
+        const nowSec = Math.floor(now / 1000);
+        const oneDayAgoSec = nowSec - 24 * 3600;
+        // Find confirmed appointments that ended within the last 24h and haven't been requested yet
+        const doneApts = await dbAll(ctx,
+          `SELECT a.id, a.chat_id, a.svc_id, a.master_id, a.ts, s.duration
+           FROM appointments a
+           LEFT JOIN services s ON s.tenant_id = a.tenant_id AND s.svc_id = a.svc_id
+           WHERE a.tenant_id = ? AND a.status = 'confirmed' AND a.cancelled = 0
+             AND a.review_requested = 0
+             AND (a.ts / 1000 + COALESCE(s.duration, 60) * 60) < ?
+             AND (a.ts / 1000 + COALESCE(s.duration, 60) * 60) > ?
+           LIMIT 20`,
+          ctx.tenantId, nowSec, oneDayAgoSec,
+        );
+        for (const apt of doneApts) {
+          try {
+            const lg = langMap.get(apt.chat_id) || (await getLang(ctx, apt.chat_id)) || 'ru';
+            const stars = ['1', '2', '3', '4', '5'].map(n => ({
+              text: '⭐'.repeat(Number(n)),
+              callback_data: `rev:${apt.id}:${n}`,
+            }));
+            await send(ctx, apt.chat_id, t(lg, 'review_request'), {
+              reply_markup: { inline_keyboard: [stars] },
+            });
+            await markReviewRequested(ctx, apt.id);
+          } catch (e) {
+            console.error(`[cron] review request error for apt ${apt.id}:`, e.message);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[cron] review request phase failed:', e.message);
     }
 
     // Phase 2: retry calendar sync with exponential backoff (max 10 per cron run)

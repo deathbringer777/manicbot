@@ -20,6 +20,7 @@ import { showBillingMenu, showInactiveMessage } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
 import { getTenant } from '../tenant/storage.js';
 import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList, showPlatformLinks, showGrantRoleMenu, showPlatformTechSupportList } from '../ui/sysadmin.js';
+import { createReview, getReviewByApt, getReviewById, updateReviewText, addReviewPhoto } from '../services/reviews.js';
 import { addSupport, removeSupport, addTechnicalSupport, removeTechnicalSupport } from '../admin/provisioning.js';
 import { getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent, removeTenantSupportAgent } from '../roles/roles.js';
 import {
@@ -1131,6 +1132,77 @@ export async function onCb(ctx, cb) {
   if (d === CB.PRICES)   return showPrices(ctx, cid);
   if (d === CB.CONTACTS) return showContacts(ctx, cid);
   if (d === CB.REVIEWS)  return showReviews(ctx, cid);
+
+  // ── Review rating flow ──────────────────────────────────────────────────
+  if (d.startsWith('rev:')) {
+    const parts = d.split(':');
+    const aptId = parts[1];
+    const rating = safeParseInt(parts[2], 0);
+    if (!aptId || rating < 1 || rating > 5) return;
+    const existing = await getReviewByApt(ctx, aptId);
+    if (existing) return send(ctx, cid, t(lg, 'review_already'));
+    const apt = await getAptById(ctx, aptId);
+    if (!apt || String(apt.chat_id || apt.chatId) !== String(cid)) return;
+    const reviewId = await createReview(ctx, { aptId, chatId: cid, masterId: apt.master_id || apt.masterId, rating });
+    await answerCb(ctx, cb.id, `${rating}⭐`);
+    return send(ctx, cid, fill(t(lg, 'review_thanks'), { rating }), { reply_markup: { inline_keyboard: [
+      [{ text: t(lg, 'review_add_comment'), callback_data: `revc:${reviewId}` }],
+      [{ text: t(lg, 'review_skip_comment'), callback_data: `revd:${reviewId}` }],
+    ] } });
+  }
+
+  // Review: user wants to add comment
+  if (d.startsWith('revc:')) {
+    const reviewId = d.slice(5);
+    await setState(ctx, cid, { step: 'review_text', reviewId });
+    return send(ctx, cid, t(lg, 'review_enter_text'));
+  }
+
+  // Review: skip comment, ask for photo
+  if (d.startsWith('revd:')) {
+    const reviewId = d.slice(5);
+    const { getConfig } = await import('../services/services.js');
+    const photosEnabled = await getConfig(ctx, 'reviews_photos');
+    if (photosEnabled !== false) {
+      return send(ctx, cid, t(lg, 'review_text_saved'), { reply_markup: { inline_keyboard: [
+        [{ text: t(lg, 'review_add_photo'), callback_data: `revp:${reviewId}` }],
+        [{ text: t(lg, 'review_done'), callback_data: `revf:${reviewId}` }],
+      ] } });
+    }
+    const rev = await getReviewById(ctx, reviewId);
+    const msg = rev?.text
+      ? fill(t(lg, 'review_complete'), { rating: rev.rating, text: rev.text })
+      : fill(t(lg, 'review_complete_no_text'), { rating: rev.rating });
+    return send(ctx, cid, msg);
+  }
+
+  // Review: user wants to add photos
+  if (d.startsWith('revp:')) {
+    const reviewId = d.slice(5);
+    const rev = await getReviewById(ctx, reviewId);
+    const photos = rev?.photos ? JSON.parse(rev.photos) : [];
+    const remaining = 3 - photos.length;
+    if (remaining <= 0) {
+      const msg = rev?.text
+        ? fill(t(lg, 'review_complete'), { rating: rev.rating, text: rev.text })
+        : fill(t(lg, 'review_complete_no_text'), { rating: rev.rating });
+      return send(ctx, cid, msg);
+    }
+    await setState(ctx, cid, { step: 'review_photo', reviewId });
+    return send(ctx, cid, fill(t(lg, 'review_send_photo'), { n: remaining }));
+  }
+
+  // Review: finalize
+  if (d.startsWith('revf:')) {
+    const reviewId = d.slice(5);
+    const rev = await getReviewById(ctx, reviewId);
+    await clearState(ctx, cid);
+    const msg = rev?.text
+      ? fill(t(lg, 'review_complete'), { rating: rev.rating, text: rev.text })
+      : fill(t(lg, 'review_complete_no_text'), { rating: rev.rating });
+    return send(ctx, cid, msg);
+  }
+
   if (d === CB.ABOUT)    return showAbout(ctx, cid);
   if (d === CB.CATALOG)  return showCatalog(ctx, cid);
 

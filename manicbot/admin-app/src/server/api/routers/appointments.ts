@@ -47,6 +47,8 @@ export const appointmentsRouter = createTRPCRouter({
       if (input.tenantId) conditions.push(eq(appointments.tenantId, input.tenantId));
       if (input.status === "cancelled") {
         conditions.push(eq(appointments.cancelled, 1));
+      } else if (input.status === "no_show") {
+        conditions.push(eq(appointments.noShow, 1));
       } else if (input.status) {
         conditions.push(eq(appointments.status, input.status));
         conditions.push(eq(appointments.cancelled, 0));
@@ -78,7 +80,7 @@ export const appointmentsRouter = createTRPCRouter({
         ? [eq(appointments.tenantId, input.tenantId)]
         : [];
 
-      const [total, todayCount, pending, confirmed, cancelled, done] = await Promise.all([
+      const [total, todayCount, pending, confirmed, cancelled, done, noShow] = await Promise.all([
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(appointments)
@@ -103,6 +105,10 @@ export const appointmentsRouter = createTRPCRouter({
           .select({ count: sql<number>`count(*)` })
           .from(appointments)
           .where(and(...baseConditions, eq(appointments.status, "done"))),
+        ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(appointments)
+          .where(and(...baseConditions, eq(appointments.noShow, 1))),
       ]);
 
       return {
@@ -112,6 +118,7 @@ export const appointmentsRouter = createTRPCRouter({
         confirmed: confirmed[0]?.count ?? 0,
         cancelled: cancelled[0]?.count ?? 0,
         done: done[0]?.count ?? 0,
+        noShow: noShow[0]?.count ?? 0,
       };
     }),
 
@@ -119,7 +126,7 @@ export const appointmentsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        status: z.enum(["confirmed", "rejected", "cancelled", "done"]),
+        status: z.enum(["confirmed", "rejected", "cancelled", "done", "no_show"]),
         comment: z.string().optional(),
       })
     )
@@ -145,6 +152,8 @@ export const appointmentsRouter = createTRPCRouter({
       if (input.status === "cancelled") {
         updates.cancelReason = input.comment ?? "";
         updates.cancelled = 1;
+        updates.cancelledBy = "admin";
+        updates.cancelledAt = Math.floor(Date.now() / 1000);
       }
       // Get tenantId before update (needed for Worker notification)
       const aptRow = await ctx.db
@@ -162,6 +171,32 @@ export const appointmentsRouter = createTRPCRouter({
       if (tenantId && workerActionMap[input.status]) {
         notifyWorker(workerActionMap[input.status]!, input.id, tenantId, updates.confirmedBy ?? null).catch(() => {});
       }
+
+      return { success: true, updatedAt: Date.now() };
+    }),
+
+  markNoShow: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        noShowBy: z.enum(["client", "master"]),
+        comment: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const aptRow = await ctx.db
+        .select({ tenantId: appointments.tenantId })
+        .from(appointments)
+        .where(eq(appointments.id, input.id))
+        .limit(1);
+      if (!aptRow[0]) return { success: false };
+
+      await ctx.db.update(appointments).set({
+        noShow: 1,
+        noShowBy: input.noShowBy,
+        status: "no_show",
+        cancelReason: input.comment ?? null,
+      }).where(eq(appointments.id, input.id));
 
       return { success: true, updatedAt: Date.now() };
     }),

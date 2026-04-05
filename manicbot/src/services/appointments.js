@@ -255,6 +255,8 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
     a.cx = true;
     a.cancelled = true;
     a.status = 'cancelled';
+    a.cancelledBy = adminOverride ? 'admin' : 'client';
+    a.cancelledAt = Math.floor(Date.now() / 1000);
     await kvPut(ctx, `ap:${id}`, a);
 
     if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
@@ -277,9 +279,11 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
   const a = aptRowToDoc(row);
   if (!adminOverride && a.chatId !== ownerChatId) return null;
 
+  const cancelledBy = adminOverride ? 'admin' : 'client';
+  const cancelledAt = Math.floor(Date.now() / 1000);
   await dbRun(ctx,
-    "UPDATE appointments SET cancelled = 1, status = 'cancelled' WHERE id = ? AND tenant_id = ?",
-    id, ctx.tenantId,
+    "UPDATE appointments SET cancelled = 1, status = 'cancelled', cancelled_by = ?, cancelled_at = ? WHERE id = ? AND tenant_id = ?",
+    cancelledBy, cancelledAt, id, ctx.tenantId,
   );
 
   if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
@@ -290,6 +294,8 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
 
   a.cx = true;
   a.status = 'cancelled';
+  a.cancelledBy = cancelledBy;
+  a.cancelledAt = cancelledAt;
   return a;
 }
 

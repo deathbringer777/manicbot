@@ -1,30 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
-type Tab = "today" | "schedule" | "clients" | "earnings" | "profile";
+type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "profile";
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
   pending: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
   cancelled: "bg-red-500/20 text-red-400 border border-red-500/30",
+  no_show: "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+  done: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   confirmed: "Подтверждено",
   pending: "Ожидает",
   cancelled: "Отменено",
+  no_show: "Не пришёл",
+  done: "Выполнено",
+};
+
+const NO_SHOW_LABELS: Record<string, string> = {
+  client: "Клиент не пришёл",
+  master: "Мастер не пришёл",
+};
+
+const CANCELLED_BY_LABELS: Record<string, string> = {
+  client: "Отменено клиентом",
+  master: "Отменено мастером",
+  admin: "Отменено админом",
 };
 
 const APT_BORDER: Record<string, string> = {
   confirmed: "border-l-emerald-500",
   pending:   "border-l-amber-400",
   cancelled: "border-l-red-500/40",
+  no_show:   "border-l-orange-500/40",
+  done:      "border-l-brand-500",
 };
 
 type Period = "week" | "month" | "year";
@@ -45,13 +62,19 @@ function getPeriodDates(period: Period): { from: string; to: string } {
   return { from: from.toISOString().slice(0, 10), to };
 }
 
-function AptRow({ apt }: { apt: any }) {
+function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "client") => void }) {
   const [hh, mm] = (apt.time ?? "00:00").split(":");
   const nameWords = (apt.userName ?? "?").trim().split(/\s+/);
   const initials = nameWords.length >= 2
     ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
     : (apt.userName ?? "?").slice(0, 2).toUpperCase();
-  const border = APT_BORDER[apt.status] ?? "border-l-slate-700";
+  const statusKey = apt.noShow ? "no_show" : apt.cancelled ? "cancelled" : apt.status;
+  const border = APT_BORDER[statusKey] ?? "border-l-slate-700";
+  const statusLabel = statusKey === "no_show"
+    ? (NO_SHOW_LABELS[apt.noShowBy] ?? "Не пришёл")
+    : statusKey === "cancelled" && apt.cancelledBy
+      ? (CANCELLED_BY_LABELS[apt.cancelledBy] ?? STATUS_LABELS[apt.status] ?? apt.status)
+      : (STATUS_LABELS[apt.status] ?? apt.status);
 
   return (
     <div className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden`}>
@@ -62,16 +85,27 @@ function AptRow({ apt }: { apt: any }) {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{apt.userName ?? `#${apt.chatId}`}</p>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{apt.svcId}</p>
+          {apt.cancelReason && (statusKey === "cancelled" || statusKey === "no_show") && (
+            <p className="text-[10px] text-slate-400 mt-0.5 truncate">{apt.cancelReason}</p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
             {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
           </p>
-          <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[apt.status] ?? "bg-slate-700 text-slate-300"}`}>
-            {STATUS_LABELS[apt.status] ?? apt.status}
+          <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[statusKey] ?? "bg-slate-700 text-slate-300"}`}>
+            {statusLabel}
           </span>
         </div>
       </div>
+      {onNoShow && apt.status === "confirmed" && !apt.cancelled && !apt.noShow && (
+        <div className="flex border-t border-slate-200 dark:border-white/5">
+          <button onClick={() => onNoShow(apt.id, "client")}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
+            <UserX className="h-3.5 w-3.5" /> Клиент не пришёл
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -113,6 +147,14 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
     { tenantId, masterId },
     { enabled: tab === "profile" }
   );
+  const masterReviews = api.reviews.getForSalon.useQuery(
+    { tenantId, masterId: String(masterId) },
+    { enabled: tab === "reviews" }
+  );
+  const masterRevStats = api.reviews.getStats.useQuery(
+    { tenantId, masterId: String(masterId) },
+    { enabled: tab === "reviews" }
+  );
   const [bioEdit, setBioEdit] = useState(false);
   const [bio, setBio] = useState("");
   const [photo, setPhoto] = useState("");
@@ -121,12 +163,16 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
   const updateProfile = api.master.updateProfile.useMutation({
     onSuccess: () => { utils.master.getMyProfile.invalidate(); setBioEdit(false); },
   });
+  const markNoShowMut = api.master.markNoShow.useMutation({
+    onSuccess: () => { today.refetch(); schedule.refetch(); },
+  });
 
   const tabLabels: Record<Tab, string> = {
     today: t("master.today", lang),
     schedule: t("master.schedule", lang),
     clients: t("master.clients", lang),
     earnings: t("master.earnings", lang),
+    reviews: "Reviews",
     profile: t("master.profile", lang),
   };
 
@@ -134,7 +180,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
     <Shell navItems={masterNavItems} title={t("master.title", lang)} subtitle="ManicBot Master">
       {/* Tab bar */}
       <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
-        {(["today", "schedule", "clients", "earnings", "profile"] as Tab[]).map(t => (
+        {(["today", "schedule", "clients", "earnings", "reviews", "profile"] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -163,18 +209,8 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
           )}
           <div className="space-y-2">
             {today.data?.map((a: any) => (
-              <div key={a.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="flex items-center justify-center h-10 w-14 rounded-lg bg-brand-500/10 text-brand-400 text-sm font-bold shrink-0">
-                  {a.time}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 dark:text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{a.svcId}</p>
-                </div>
-                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-700 text-slate-300"}`}>
-                  {STATUS_LABELS[a.status] ?? a.status}
-                </span>
-              </div>
+              <AptRow key={a.id} apt={a}
+                onNoShow={(id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })} />
             ))}
           </div>
         </div>
@@ -194,16 +230,8 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
           {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
             {schedule.data?.map((a: any) => (
-              <div key={a.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="text-xs text-slate-500 dark:text-slate-400 w-20 shrink-0">{a.date} {a.time}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 dark:text-white text-sm truncate">{a.userName ?? `#${a.chatId}`}</p>
-                  <p className="text-[10px] text-slate-500">{a.svcId}</p>
-                </div>
-                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[a.status] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>
-                  {STATUS_LABELS[a.status] ?? a.status}
-                </span>
-              </div>
+              <AptRow key={a.id} apt={a}
+                onNoShow={(id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })} />
             ))}
             {schedule.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("master.noApts", lang)}</p>}
           </div>
@@ -265,6 +293,70 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                 </p>
                 <p className="text-sm text-slate-500 dark:text-slate-400">{earnings.data.count} {t("master.confirmedApts", lang)}</p>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* REVIEWS */}
+      {tab === "reviews" && (
+        <div className="space-y-4">
+          {masterRevStats.data && (
+            <div className="glass-card rounded-2xl p-5 flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-3xl font-extrabold text-slate-900 dark:text-white">{masterRevStats.data.avg || "—"}</p>
+                <div className="flex gap-0.5 mt-1 justify-center">
+                  {[1,2,3,4,5].map(s => (
+                    <Star key={s} className={`w-3.5 h-3.5 ${s <= Math.round(masterRevStats.data!.avg) ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">{masterRevStats.data.count} reviews</p>
+              </div>
+              <div className="flex-1 space-y-1">
+                {[5,4,3,2,1].map(n => {
+                  const count = masterRevStats.data!.distribution[n] ?? 0;
+                  const pct = masterRevStats.data!.count > 0 ? (count / masterRevStats.data!.count) * 100 : 0;
+                  return (
+                    <div key={n} className="flex items-center gap-2 text-[10px]">
+                      <span className="w-3 text-slate-500">{n}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
+                        <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-4 text-right text-slate-400">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {masterReviews.isLoading ? (
+            <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
+          ) : (masterReviews.data?.reviews ?? []).length === 0 ? (
+            <div className="glass-card rounded-2xl py-10 text-center">
+              <Star className="w-7 h-7 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">No reviews yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(masterReviews.data?.reviews ?? []).map((rev: any) => (
+                <div key={rev.id} className="glass-card rounded-2xl p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-0.5">
+                      {[1,2,3,4,5].map(s => (
+                        <Star key={s} className={`w-3 h-3 ${s <= rev.rating ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-slate-500">{new Date(rev.createdAt * 1000).toLocaleDateString()}</span>
+                  </div>
+                  {rev.text && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5">{rev.text}</p>}
+                  {rev.replyText && (
+                    <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/60 border-l-2 border-brand-400">
+                      <p className="text-[10px] text-brand-400 font-medium mb-0.5">Salon reply</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">{rev.replyText}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

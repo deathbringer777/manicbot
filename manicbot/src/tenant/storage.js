@@ -37,6 +37,13 @@ function tenantRowToDoc(row) {
     cancelAtPeriodEnd: row.cancel_at_period_end === 1,
     logo: row.logo || null,
     coverPhoto: row.cover_photo || null,
+    slug: row.slug || null,
+    description: row.description || null,
+    lat: row.lat ?? null,
+    lng: row.lng ?? null,
+    city: row.city || null,
+    publicActive: row.public_active === 1,
+    searchText: row.search_text || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -66,6 +73,13 @@ function docToTenantParams(data) {
     cancel_at_period_end: data.cancelAtPeriodEnd ? 1 : 0,
     logo: data.logo || null,
     cover_photo: data.coverPhoto || null,
+    slug: data.slug || null,
+    description: data.description || null,
+    lat: data.lat ?? null,
+    lng: data.lng ?? null,
+    city: data.city || null,
+    public_active: data.publicActive ? 1 : 0,
+    search_text: data.searchText || null,
     created_at: data.createdAt || nowSec(),
     updated_at: data.updatedAt || nowSec(),
   };
@@ -82,13 +96,14 @@ export async function putTenant(ctx, tenantId, data) {
   try {
     const p = docToTenantParams({ ...data, id: tenantId });
     await dbRun(ctx,
-      `INSERT OR REPLACE INTO tenants (id, name, active, salon, photos, about_photos, maps_url, instagram_url, plan, billing_status, subscription_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, current_period_end, next_payment_date, billing_email, cancel_at_period_end, logo, cover_photo, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO tenants (id, name, active, salon, photos, about_photos, maps_url, instagram_url, plan, billing_status, subscription_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, current_period_end, next_payment_date, billing_email, cancel_at_period_end, logo, cover_photo, slug, description, lat, lng, city, public_active, search_text, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       p.id, p.name, p.active, p.salon, p.photos, p.about_photos, p.maps_url, p.instagram_url,
       p.plan, p.billing_status, p.subscription_status, p.trial_ends_at, p.grace_ends_at,
       p.stripe_customer_id, p.stripe_subscription_id, p.stripe_price_id,
       p.current_period_end, p.next_payment_date, p.billing_email, p.cancel_at_period_end,
-      p.logo, p.cover_photo, p.created_at, p.updated_at,
+      p.logo, p.cover_photo, p.slug, p.description, p.lat, p.lng, p.city, p.public_active, p.search_text,
+      p.created_at, p.updated_at,
     );
     return true;
   } catch (e) {

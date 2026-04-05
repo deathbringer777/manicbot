@@ -108,6 +108,10 @@ export const appointments = sqliteTable("appointments", {
   rejectComment: text("reject_comment"),
   cancelReason: text("cancel_reason"),
   cancelled: integer("cancelled").notNull().default(0),
+  cancelledBy: text("cancelled_by"),
+  cancelledAt: integer("cancelled_at"),
+  noShow: integer("no_show").default(0),
+  noShowBy: text("no_show_by"),
   remH24: integer("rem_h24").notNull().default(0),
   remH2: integer("rem_h2").notNull().default(0),
   googleEventId: text("google_event_id"),
@@ -116,6 +120,7 @@ export const appointments = sqliteTable("appointments", {
   syncRetries: integer("sync_retries").default(0),
   syncRetryAfter: integer("sync_retry_after"),
   syncLastError: text("sync_last_error"),
+  reviewRequested: integer("review_requested").default(0),
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_apt_tenant_date").on(t.tenantId, t.date),
@@ -338,6 +343,28 @@ export const webUsers = sqliteTable("web_users", {
 }, (t) => [
   uniqueIndex("idx_web_user_email").on(t.email),
   index("idx_web_user_tenant").on(t.tenantId),
+]);
+
+// ─── Reviews & Ratings ──────────────────────────────────────────────────────
+
+export const reviews = sqliteTable("reviews", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  appointmentId: text("appointment_id"),
+  masterId: text("master_id"),
+  chatId: integer("chat_id").notNull(),
+  channel: text("channel").default("telegram"),
+  rating: integer("rating").notNull(),
+  text: text("text"),
+  photos: text("photos"),
+  status: text("status").notNull().default("active"),
+  replyText: text("reply_text"),
+  replyAt: integer("reply_at"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_reviews_tenant").on(t.tenantId),
+  index("idx_reviews_master").on(t.tenantId, t.masterId),
+  index("idx_reviews_apt").on(t.appointmentId),
 ]);
 
 // ─── Persistent Audit Log ───────────────────────────────────────────────────

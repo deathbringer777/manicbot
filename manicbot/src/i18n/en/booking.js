@@ -74,4 +74,19 @@ export default {
   rem_24: ['⏰ <b>Reminder!</b>','','Tomorrow you have an appointment:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','See you soon! 💅'],
   rem_2:  ['⏰ <b>Reminder!</b>','','In 2 hours:','','','{svc}','','📅 {dt}','','📍 {addr}','{maps}','','Almost time! 💖'],
   staff_apt_cancelled_client: '❌ <b>Appointment cancelled by client</b>',
+
+  // Reviews
+  review_request: '💬 <b>Thanks for visiting!</b>\n\nHow was your experience? Rate us:',
+  review_thanks: '✅ Thanks for your rating! ({rating}⭐)\n\nWould you like to leave a comment?',
+  review_add_comment: '✏️ Yes, write one',
+  review_skip_comment: '⏭ Skip',
+  review_enter_text: '✏️ Write your review:',
+  review_text_saved: '✅ Review saved!\n\nWant to add photos? (up to 3)',
+  review_add_photo: '📸 Add photo',
+  review_done: '⏭ Done',
+  review_send_photo: '📸 Send a photo ({n} remaining):',
+  review_photo_saved: '✅ Photo added! ({count}/3)',
+  review_complete: '🎉 <b>Thanks for your review!</b>\n\n{rating}⭐\n{text}',
+  review_complete_no_text: '🎉 <b>Thanks for your review!</b>\n\n{rating}⭐',
+  review_already: 'You have already reviewed this appointment.',
 };

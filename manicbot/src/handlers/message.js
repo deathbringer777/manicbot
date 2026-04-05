@@ -256,6 +256,40 @@ export async function onMsg(ctx, msg) {
 
   const menuLabels = [t(lg, 'm_book'), t(lg, 'm_cat'), t(lg, 'm_prices'), t(lg, 'm_my'), t(lg, 'back_m'), t(lg, 'm_rev'), t(lg, 'm_about'), t(lg, 'm_cont'), t(lg, 'm_lang'), t(lg, 'm_support'), t(lg, 'mst_panel'), t(lg, 'adm_management')];
 
+  // ── Review: text comment ────────────────────────────────────────────────
+  if (st.step === 'review_text' && txt) {
+    const { updateReviewText, getReviewById } = await import('../services/reviews.js');
+    const { getConfig } = await import('../services/services.js');
+    await updateReviewText(ctx, st.reviewId, txt.slice(0, 1000));
+    await clearState(ctx, cid);
+    const photosEnabled = await getConfig(ctx, 'reviews_photos');
+    if (photosEnabled !== false) {
+      return send(ctx, cid, t(lg, 'review_text_saved'), { reply_markup: { inline_keyboard: [
+        [{ text: t(lg, 'review_add_photo'), callback_data: `revp:${st.reviewId}` }],
+        [{ text: t(lg, 'review_done'), callback_data: `revf:${st.reviewId}` }],
+      ] } });
+    }
+    const rev = await getReviewById(ctx, st.reviewId);
+    return send(ctx, cid, fill(t(lg, 'review_complete'), { rating: rev.rating, text: rev.text }));
+  }
+
+  // ── Review: photo upload ───────────────────────────────────────────────
+  if (st.step === 'review_photo' && msg.photo?.length) {
+    const { addReviewPhoto, getReviewById } = await import('../services/reviews.js');
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    const added = await addReviewPhoto(ctx, st.reviewId, `telegram:file_id:${fileId}`);
+    const rev = await getReviewById(ctx, st.reviewId);
+    const photos = rev?.photos ? JSON.parse(rev.photos) : [];
+    const remaining = 3 - photos.length;
+    if (!added || remaining <= 0) {
+      await clearState(ctx, cid);
+      return send(ctx, cid, fill(rev?.text ? t(lg, 'review_complete') : t(lg, 'review_complete_no_text'), { rating: rev.rating, text: rev?.text || '' }));
+    }
+    return send(ctx, cid, fill(t(lg, 'review_photo_saved'), { count: photos.length }) + '\n' + fill(t(lg, 'review_send_photo'), { n: remaining }), {
+      reply_markup: { inline_keyboard: [[{ text: t(lg, 'review_done'), callback_data: `revf:${st.reviewId}` }]] },
+    });
+  }
+
   if (st.step === STEP.SUPPORT_MSG && txt) {
     const isCommand = txt.startsWith('/');
     const isMenuButton = menuLabels.includes(txt);

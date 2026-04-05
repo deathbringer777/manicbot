@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { tenants, services, masters, tenantConfig, bots } from "~/server/db/schema";
-import { eq, and, like, or, isNotNull, sql } from "drizzle-orm";
+import { tenants, services, masters, tenantConfig, bots, reviews } from "~/server/db/schema";
+import { eq, and, like, or, isNotNull, inArray, sql } from "drizzle-orm";
 import { hasCyrillic, cyrillicToLatin } from "~/lib/searchNormalize";
 
 /** Build a LIKE condition that covers both Cyrillic input and its Latin transliteration. */
@@ -103,6 +103,30 @@ export const publicSalonRouter = createTRPCRouter({
 
       const botUsername = botRows[0]?.botUsername ?? null;
 
+      // Rating (only if reviews_public is not explicitly false)
+      const reviewsCfg = configRows.find((c: any) => c.key === "reviews_public");
+      const reviewsPublic = !reviewsCfg || reviewsCfg.value !== "false";
+      let rating: { avg: number; count: number } | null = null;
+      if (reviewsPublic) {
+        const ratingRow = await ctx.db.select({
+          avg: sql<number>`ROUND(AVG(rating), 1)`,
+          count: sql<number>`count(*)`,
+        }).from(reviews).where(and(
+          eq(reviews.tenantId, input.slug),
+          inArray(reviews.status, ["active", "featured"]),
+        ));
+        // slug != tenantId, re-query with actual tenant id
+        const ratingRow2 = await ctx.db.select({
+          avg: sql<number>`ROUND(AVG(rating), 1)`,
+          count: sql<number>`count(*)`,
+        }).from(reviews).where(and(
+          eq(reviews.tenantId, tenant.id),
+          inArray(reviews.status, ["active", "featured"]),
+        ));
+        const r = ratingRow2[0];
+        if (r && r.count > 0) rating = { avg: r.avg, count: r.count };
+      }
+
       return {
         id: tenant.id,
         slug: tenant.slug,
@@ -118,6 +142,7 @@ export const publicSalonRouter = createTRPCRouter({
         mapsUrl: tenant.mapsUrl,
         instagramUrl: tenant.instagramUrl,
         botUsername,
+        rating,
         services: serviceRows.map((s: any) => {
           let names: Record<string, string> = {};
           try { names = s.names ? JSON.parse(s.names) : {}; } catch { /* ignore */ }

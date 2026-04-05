@@ -19,11 +19,20 @@ const L = {
   pl: { svc_classic: 'Manicure klasyczny', svc_gel: 'Żelowy lakier', svc_pedi: 'Pedicure', svc_ext: 'Przedłużanie', svc_design: 'Dizajn', svc_combo: 'Manicure + Pedicure' },
 };
 
+const DESC = {
+  classic: { ru: 'Классический маникюр с обработкой кутикулы, придание формы и покрытие лаком.', ua: 'Класичний манікюр з обробкою кутикули та покриттям лаком.', en: 'Classic manicure with cuticle care, shaping and polish.', pl: 'Manicure klasyczny z pielęgnacją skórek i lakierem.' },
+  gel: { ru: 'Стойкий гель-лак — держится до 3 недель. Широкая палитра цветов.', ua: 'Стійкий гель-лак — тримається до 3 тижнів. Широка палітра кольорів.', en: 'Long-lasting gel polish — up to 3 weeks. Wide color palette.', pl: 'Trwały żelowy lakier — do 3 tygodni. Szeroka paleta kolorów.' },
+  pedi: { ru: 'Педикюр с обработкой стоп, ногтей и покрытием. Расслабляющий уход.', ua: 'Педикюр з обробкою стоп та покриттям. Розслабляючий догляд.', en: 'Pedicure with foot care, nail shaping and polish. Relaxing treatment.', pl: 'Pedicure z pielęgnacją stóp i paznokci. Relaksujący zabieg.' },
+  ext: { ru: 'Наращивание гелем или акрилом. Любая длина и форма — миндаль, балерина, квадрат.', ua: 'Нарощування гелем або акрилом. Будь-яка довжина та форма.', en: 'Gel or acrylic extensions. Any length and shape — almond, ballerina, square.', pl: 'Przedłużanie żelem lub akrylem. Dowolna długość i kształt.' },
+  design: { ru: 'Дизайн ногтей: стразы, фольга, градиент, ручная роспись, стемпинг.', ua: 'Дизайн нігтів: стрази, фольга, градієнт, ручний розпис.', en: 'Nail art: rhinestones, foil, gradient, hand painting, stamping.', pl: 'Dizajn paznokci: cyrkonie, folia, gradient, malowanie ręczne.' },
+  combo: { ru: 'Маникюр + педикюр в одном визите. Экономьте время и деньги.', ua: 'Манікюр + педикюр за один візит. Економте час та гроші.', en: 'Manicure + pedicure in one visit. Save time and money.', pl: 'Manicure + pedicure w jednej wizycie. Oszczędź czas i pieniądze.' },
+};
+
 function buildSvc(spec, photosBySvc) {
   return spec.map((s, i) => ({
     id: s.id, e: s.e, dur: s.dur, price: s.price, active: true, order: i,
     names: { ru: L.ru['svc_' + s.id], ua: L.ua['svc_' + s.id], en: L.en['svc_' + s.id], pl: L.pl['svc_' + s.id] },
-    desc: { ru: null, ua: null, en: null, pl: null },
+    desc: DESC[s.id] || { ru: null, ua: null, en: null, pl: null },
     photos: photosBySvc[s.id] || [],
   }));
 }
@@ -148,12 +157,16 @@ export async function runSeed(ctx, env, masterUsername = 'dezbringer') {
   }
   log.push(`@${masterUsername} (${masterChatId}) set as master and owner for ${t1} and ${t2}`);
 
-  // Make demo salons publicly visible
+  // Make demo salons publicly visible — include gallery photos
   try {
-    await dbRun(ctx, `UPDATE tenants SET slug = 'nails-studio', city = 'Варшава', description = ?, public_active = 1 WHERE name = ?`,
-      SALON1.aboutDesc, SALON1.name);
-    await dbRun(ctx, `UPDATE tenants SET slug = 'luxe-manicure', city = 'Варшава', description = ?, public_active = 1 WHERE name = ?`,
-      SALON2.aboutDesc, SALON2.name);
+    const s1Photos = [...SALON1.aboutPhotos, ...Object.values(SALON1.photos).flat().slice(0, 4)];
+    const s2Photos = [...SALON2.aboutPhotos, ...Object.values(SALON2.photos).flat().slice(0, 4)];
+    const s1Search = ('nails studio варшава ' + SALON1.aboutDesc).toLowerCase();
+    const s2Search = ('luxe manicure варшава ' + SALON2.aboutDesc).toLowerCase();
+    await dbRun(ctx, `UPDATE tenants SET slug = 'nails-studio', city = 'Варшава', description = ?, public_active = 1, photos = ?, search_text = ? WHERE name = ?`,
+      SALON1.aboutDesc, JSON.stringify(s1Photos), s1Search, SALON1.name);
+    await dbRun(ctx, `UPDATE tenants SET slug = 'luxe-manicure', city = 'Варшава', description = ?, public_active = 1, photos = ?, search_text = ? WHERE name = ?`,
+      SALON2.aboutDesc, JSON.stringify(s2Photos), s2Search, SALON2.name);
   } catch(e) {
     console.warn('[seed] Could not set public profile fields:', e?.message);
   }

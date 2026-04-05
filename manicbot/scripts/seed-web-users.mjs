@@ -7,7 +7,7 @@
  *   (pipe output to wrangler d1 execute or save to .sql file)
  */
 
-const ITERATIONS = 100_000;
+const ITERATIONS = 310_000;
 const KEY_LEN_BITS = 256;
 
 function hexEncode(buf) {

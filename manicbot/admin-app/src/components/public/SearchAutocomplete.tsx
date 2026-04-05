@@ -78,14 +78,17 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (value.trim()) {
-      if (onSearch) {
-        onSearch(value.trim());
-      } else {
-        router.push(`/search?q=${encodeURIComponent(value.trim())}`);
-      }
+    if (!value.trim()) {
+      onSearch?.("");
       setOpen(false);
+      return;
     }
+    if (onSearch) {
+      onSearch(value.trim());
+    } else {
+      router.push(`/search?q=${encodeURIComponent(value.trim())}`);
+    }
+    setOpen(false);
   };
 
   // Close on outside click
@@ -135,7 +138,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
           {value && (
             <button
               type="button"
-              onClick={() => { setValue(""); setDebouncedQ(""); inputRef.current?.focus(); }}
+              onClick={() => { setValue(""); setDebouncedQ(""); inputRef.current?.focus(); onSearch?.(""); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-white transition"
             >
               <X className="h-4 w-4" />

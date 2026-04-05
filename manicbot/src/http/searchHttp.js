@@ -1,4 +1,5 @@
 import { envCtx } from './envCtx.js';
+import { hasCyrillic, cyrillicToLatin } from '../lib/searchNormalize.js';
 
 /**
  * Public search API — no auth required.
@@ -83,13 +84,20 @@ export async function trySearchApi(request, env, url) {
     });
   }
 
-  const likeQ = `%${q.toLowerCase()}%`;
+  const qLow = q.toLowerCase();
+  const qLatin = hasCyrillic(q) ? cyrillicToLatin(qLow) : qLow;
+  const likeQ = `%${qLow}%`;
+  const likeQLatin = `%${qLatin}%`;
 
   let rows = [];
   try {
-    const stmt = ec.db.prepare(
-      `SELECT slug, name, city, photos FROM tenants WHERE public_active = 1 AND search_text LIKE ? LIMIT 5`
-    ).bind(likeQ);
+    // For Cyrillic queries: also search the transliterated Latin form as a fallback
+    const sql = qLatin !== qLow
+      ? `SELECT slug, name, city, photos FROM tenants WHERE public_active = 1 AND (search_text LIKE ? OR search_text LIKE ?) LIMIT 5`
+      : `SELECT slug, name, city, photos FROM tenants WHERE public_active = 1 AND search_text LIKE ? LIMIT 5`;
+    const stmt = qLatin !== qLow
+      ? ec.db.prepare(sql).bind(likeQ, likeQLatin)
+      : ec.db.prepare(sql).bind(likeQ);
     const result = await stmt.all();
     rows = result.results || [];
   } catch (e) {
@@ -111,7 +119,6 @@ export async function trySearchApi(request, env, url) {
     { slug: 'ai-beauty-europe-poland', titles: { ru: 'ИИ-ассистент для nail-студий в Европе', en: 'AI assistant for nail studios in Europe', ua: 'ШІ-асистент для нейл-студій у Європі', pl: 'Asystent AI dla studiów paznokci w Europie' } },
     { slug: 'gel-polish-care-guide', titles: { ru: 'Уход за гель-лаком: советы от мастеров', en: 'Gel polish care guide from nail masters', ua: 'Догляд за гель-лаком: поради від майстрів', pl: 'Poradnik pielęgnacji żelowego lakieru' } },
   ];
-  const qLow = q.toLowerCase();
   const articles = BLOG_ARTICLES
     .filter((a) => Object.values(a.titles).some((title) => title.toLowerCase().includes(qLow)))
     .map((a) => ({ slug: a.slug, title: a.titles.ru || a.titles.en || a.slug }));

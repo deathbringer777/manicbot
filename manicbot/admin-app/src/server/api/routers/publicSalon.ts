@@ -2,6 +2,17 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { tenants, services, masters, tenantConfig, bots } from "~/server/db/schema";
 import { eq, and, like, or, isNotNull, sql } from "drizzle-orm";
+import { hasCyrillic, cyrillicToLatin } from "~/lib/searchNormalize";
+
+/** Build a LIKE condition that covers both Cyrillic input and its Latin transliteration. */
+function searchLike(col: Parameters<typeof like>[0], raw: string) {
+  const qLow = raw.toLowerCase();
+  const qLatin = hasCyrillic(raw) ? cyrillicToLatin(qLow) : qLow;
+  if (qLatin !== qLow) {
+    return or(like(col, `%${qLow}%`), like(col, `%${qLatin}%`))!;
+  }
+  return like(col, `%${qLow}%`);
+}
 
 /** Static blog article list used in autocomplete suggestions. */
 const BLOG_ARTICLES: Array<{ slug: string; titles: Record<string, string> }> = [
@@ -161,19 +172,17 @@ export const publicSalonRouter = createTRPCRouter({
       const conditions: any[] = [eq(tenants.publicActive, 1)];
 
       if (city) {
-        // search_text is stored lowercase; city column may be title-case
-        // Match against both for reliability
-        const cityLow = city.toLowerCase();
+        // Match city column (title-case) and search_text (lowercase + Cyrillic variants)
         conditions.push(
           or(
             like(tenants.city, `%${city}%`),
-            like(tenants.searchText, `%${cityLow}%`),
-          ),
+            searchLike(tenants.searchText, city),
+          )!,
         );
       }
       if (query) {
-        // search_text is stored lowercase — use lowercased query for Cyrillic case-insensitive match
-        conditions.push(like(tenants.searchText, `%${query.toLowerCase()}%`));
+        // search_text stores lowercase + Cyrillic variants; support Cyrillic→Latin fallback
+        conditions.push(searchLike(tenants.searchText, query));
       }
 
       const rows = await ctx.db
@@ -259,8 +268,6 @@ export const publicSalonRouter = createTRPCRouter({
       const q = input.q.trim();
       if (q.length < 2) return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
 
-      // search_text is stored lowercase — use lowercased query for Cyrillic case-insensitive match
-      const likeQ = `%${q.toLowerCase()}%`;
       const rows = await ctx.db
         .select({
           slug: tenants.slug,
@@ -272,7 +279,7 @@ export const publicSalonRouter = createTRPCRouter({
         .where(
           and(
             eq(tenants.publicActive, 1),
-            like(tenants.searchText, likeQ),
+            searchLike(tenants.searchText, q),
           ),
         )
         .limit(5);

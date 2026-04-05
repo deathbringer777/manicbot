@@ -148,7 +148,19 @@ function SearchPageContent() {
       <div className="mb-4">
         <SearchAutocomplete
           initialValue={query}
-          onSearch={(q) => { setQuery(q); setPage(1); }}
+          onSearch={(q) => {
+            if (!q.trim()) {
+              setQuery("");
+              setCity("");
+              setActiveChips([]);
+              setLat(undefined);
+              setLng(undefined);
+              setPage(1);
+            } else {
+              setQuery(q);
+              setPage(1);
+            }
+          }}
           placeholder={t("search.placeholder", lang)}
           autoFocus={false}
         />

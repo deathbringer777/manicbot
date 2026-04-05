@@ -6,6 +6,7 @@ import { getTenant, putTenant, putBot, listTenantIds, getBotIdsByTenantId, getBo
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
 import { audit } from '../utils/audit.js';
+import { buildSearchVariants, hasCyrillic } from '../lib/searchNormalize.js';
 
 /** Returns true if the ?key= query param matches env.ADMIN_KEY (timing-safe). */
 function isAdminKeyValid(url, env) {
@@ -472,18 +473,31 @@ export async function tryAdminKeyRoutes(request, env, url) {
         }
       }
 
-      // Build search text
+      // Build search text: include Latin original + de-accented + Cyrillic phonetic variants
+      // so users can search in both Cyrillic and Latin (e.g. "варшава" finds "Warszawa")
       const svcRows = await dbAll(ec, `SELECT names, active, hidden FROM services WHERE tenant_id = ?`, t.id);
-      const parts = [t.name, t.description, t.city].filter(Boolean);
+      const rawParts = [t.name, t.description, t.city].filter(Boolean);
+      const parts = [];
+      for (const p of rawParts) {
+        // City/name/description are Latin — generate all variants
+        parts.push(...buildSearchVariants(p));
+      }
       for (const svc of svcRows) {
         if (!svc.active || svc.hidden) continue;
         try {
           const names = JSON.parse(svc.names || '{}');
-          parts.push(...Object.values(names).filter(Boolean));
+          for (const name of Object.values(names).filter(Boolean)) {
+            if (hasCyrillic(name)) {
+              // Service names are often already in Cyrillic — just lowercase, no re-transliteration
+              parts.push(name.toLowerCase());
+            } else {
+              parts.push(...buildSearchVariants(name));
+            }
+          }
         } catch { /* ignore */ }
       }
-      // Store lowercase so LIKE queries work for Cyrillic (SQLite LIKE is ASCII-only)
-      const searchText = [...new Set(parts)].join(' ').toLowerCase();
+      // buildSearchVariants already returns lowercase strings
+      const searchText = [...new Set(parts)].join(' ');
 
       // Update tenant: set slug, search_text, public_active=1
       await dbRun(ec,

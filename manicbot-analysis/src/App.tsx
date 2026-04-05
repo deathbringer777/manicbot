@@ -13,7 +13,15 @@ import { CtaSection } from "@/components/CtaSection";
 import { Footer } from "@/components/Footer";
 import { SeoHead } from "@/components/SeoHead";
 import { LegalPage } from "@/pages/LegalPage";
+import { NotFoundPage } from "@/pages/NotFoundPage";
 import { getLegalPage } from "@/lib/routes";
+
+/** True when the URL is anything other than the homepage or a known legal page. */
+function isUnknownPath(): boolean {
+  if (typeof window === "undefined") return false;
+  const p = window.location.pathname;
+  return p !== "/" && !getLegalPage(p);
+}
 
 function Landing() {
   return (
@@ -91,11 +99,14 @@ function Landing() {
 export default function App() {
   const legalPage = getLegalPage();
 
+  let content: React.ReactNode;
+  if (legalPage) content = <LegalPage page={legalPage} />;
+  else if (isUnknownPath()) content = <NotFoundPage />;
+  else content = <Landing />;
+
   return (
     <ThemeProvider>
-      <LanguageProvider>
-        {legalPage ? <LegalPage page={legalPage} /> : <Landing />}
-      </LanguageProvider>
+      <LanguageProvider>{content}</LanguageProvider>
     </ThemeProvider>
   );
 }

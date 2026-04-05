@@ -4,10 +4,11 @@ import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from '../ut
  * @param {Request} request
  * @param {any} env
  * @param {URL} url
+ * @param {boolean} [force] Skip isLandingPath check (used for catch-all 404)
  * @returns {Promise<Response | null>}
  */
-export async function tryLanding(request, env, url) {
-  if (request.method !== 'GET' || !isLandingPath(url.pathname)) return null;
+export async function tryLanding(request, env, url, force) {
+  if (request.method !== 'GET' || (!force && !isLandingPath(url.pathname))) return null;
   if (url.pathname === '/blog') {
     return Response.redirect(new URL('/blog/', url).toString(), 308);
   }

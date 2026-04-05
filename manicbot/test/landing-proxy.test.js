@@ -43,6 +43,14 @@ describe('landing-pages-proxy', () => {
       expect(isLandingPath('/favicon.svg')).toBe(true);
     });
 
+    it('allows legal / info pages', () => {
+      expect(isLandingPath('/privacy')).toBe(true);
+      expect(isLandingPath('/terms')).toBe(true);
+      expect(isLandingPath('/cookies')).toBe(true);
+      expect(isLandingPath('/support')).toBe(true);
+      expect(isLandingPath('/rules')).toBe(true);
+    });
+
     it('denies API-ish paths', () => {
       expect(isLandingPath('/webhook/123')).toBe(false);
       expect(isLandingPath('/admin/migrate')).toBe(false);

@@ -232,6 +232,11 @@ export default {
     res = await tryTelegramWebhook(request, ctx, url);
     if (res) return res; // Telegram webhook — no browser headers needed
 
+    // Unknown GET paths → proxy to landing SPA (renders a 404 page)
+    if (request.method === 'GET') {
+      const landingRes = await tryLanding(request, env, url, /* force */ true);
+      if (landingRes) return addSecurityHeaders(landingRes);
+    }
     return addSecurityHeaders(new Response('Not Found', { status: 404 }));
   },
 

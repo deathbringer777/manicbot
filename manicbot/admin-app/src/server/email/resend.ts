@@ -1,16 +1,27 @@
 /**
  * Transactional email via Resend HTTP API (Edge-safe fetch).
  * https://resend.com/docs/api-reference/emails/send-email
+ *
+ * On Cloudflare Pages, runtime secrets may only be available through
+ * the validated `env` import (from ~/env) rather than raw `process.env`.
+ * We check both to support tests (which stub process.env) and production.
  */
+
+import { env } from "~/env";
 
 const RESEND_API = "https://api.resend.com/emails";
 
 export type SendEmailResult = { ok: true } | { ok: false; error: string };
 
+function getKey(): string | undefined {
+  return (env.RESEND_API_KEY ?? process.env.RESEND_API_KEY)?.trim() || undefined;
+}
+function getFrom(): string | undefined {
+  return (env.RESEND_FROM ?? process.env.RESEND_FROM)?.trim() || undefined;
+}
+
 export function isResendConfigured(): boolean {
-  return Boolean(
-    process.env.RESEND_API_KEY?.trim() && process.env.RESEND_FROM?.trim(),
-  );
+  return Boolean(getKey() && getFrom());
 }
 
 /**
@@ -21,8 +32,8 @@ export async function sendResendEmail(opts: {
   subject: string;
   html: string;
 }): Promise<SendEmailResult> {
-  const key = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.RESEND_FROM?.trim();
+  const key = getKey();
+  const from = getFrom();
   if (!key || !from) {
     console.error("[resend] RESEND_API_KEY or RESEND_FROM not set — email not sent");
     return { ok: false, error: "resend_not_configured" };

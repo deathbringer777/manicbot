@@ -16,6 +16,9 @@ export const env = createEnv({
     META_VERIFY_TOKEN_IG: z.string().optional(),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    /** Resend transactional email */
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM: z.string().optional(),
     /** Stripe billing */
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_PRICE_START_MONTHLY: z.string().optional(),
@@ -39,6 +42,8 @@ export const env = createEnv({
     META_VERIFY_TOKEN_IG: process.env.META_VERIFY_TOKEN_IG,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM: process.env.RESEND_FROM,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_PRICE_START_MONTHLY: process.env.STRIPE_PRICE_START_MONTHLY,
     STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY,

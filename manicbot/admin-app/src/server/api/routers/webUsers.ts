@@ -278,15 +278,24 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Invalid verification code" });
       }
       const user = rows[0]!;
+
+      // Already verified — no code check, just confirm to the UI
       if (user.emailVerified) {
         return { success: true, alreadyVerified: true };
       }
+
+      // Must have a pending verification token to proceed
+      if (!user.verificationToken) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No verification code pending. Request a new one." });
+      }
+
       const now = Math.floor(Date.now() / 1000);
       if (user.verificationTokenExpiresAt && now > user.verificationTokenExpiresAt) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Verification code expired. Request a new one." });
       }
+
       // Constant-time comparison
-      if (!user.verificationToken || user.verificationToken.length !== input.code.length) {
+      if (user.verificationToken.length !== input.code.length) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
       }
       let match = 0;
@@ -337,7 +346,16 @@ export const webUsersRouter = createTRPCRouter({
         .set({ verificationToken: newCode, verificationTokenExpiresAt: expiresAt, updatedAt: now })
         .where(eq(webUsers.id, user.id));
 
-      await sendVerificationCodeEmail(email, newCode, (user.lang ?? "en") as Lang);
+      const sent = await sendVerificationCodeEmail(email, newCode, (user.lang ?? "en") as Lang);
+      if (!sent.ok) {
+        console.error(`[webUsers] resendVerificationCode: email send failed for ${email}: ${sent.error}`);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: sent.error === "resend_not_configured"
+            ? "Email service not configured. Contact support."
+            : "Could not send verification email. Try again later.",
+        });
+      }
 
       return { ok: true };
     }),

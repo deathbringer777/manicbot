@@ -71,7 +71,12 @@ export function AccountSection() {
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   const verifyMut = (api as any).webUsers.verifyEmail.useMutation({
-    onSuccess: () => {
+    onSuccess: (data: { alreadyVerified?: boolean }) => {
+      if (data?.alreadyVerified) {
+        // Was already verified in DB — just refresh the UI state
+        utils.auth.getMyRole.invalidate();
+        return;
+      }
       setVerifySuccess(true);
       setVerifyError(null);
       setCode("");
@@ -202,23 +207,21 @@ export function AccountSection() {
               />
             </div>
             {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={code.length !== 6 || verifyMut.isPending}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all disabled:opacity-50"
-              >
-                {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.verify}
-              </button>
-              <button
-                type="button"
-                onClick={() => resendMut.mutate({ email: sessionEmail })}
-                disabled={resendMut.isPending || resendCooldown}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600/60 text-xs font-medium text-slate-600 dark:text-slate-400 hover:border-brand-500/40 transition-colors disabled:opacity-50"
-              >
-                {resendMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : resendCooldown ? vl.resendCooldown : vl.resend}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={code.length !== 6 || verifyMut.isPending}
+              className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+            >
+              {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.verify}
+            </button>
+            <button
+              type="button"
+              onClick={() => resendMut.mutate({ email: sessionEmail })}
+              disabled={resendMut.isPending || resendCooldown}
+              className="w-full flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-600/60 text-sm font-medium text-slate-600 dark:text-slate-400 px-4 py-2.5 rounded-xl hover:border-brand-500/40 transition-colors disabled:opacity-50"
+            >
+              {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : resendCooldown ? vl.resendCooldown : vl.resend}
+            </button>
           </form>
         )}
 

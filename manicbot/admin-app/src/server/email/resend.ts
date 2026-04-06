@@ -24,6 +24,7 @@ export async function sendResendEmail(opts: {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM?.trim();
   if (!key || !from) {
+    console.error("[resend] RESEND_API_KEY or RESEND_FROM not set — email not sent");
     return { ok: false, error: "resend_not_configured" };
   }
 
@@ -52,12 +53,14 @@ export async function sendResendEmail(opts: {
         typeof data?.message === "string"
           ? data.message
           : `resend_http_${res.status}`;
+      console.error(`[resend] send failed to=${opts.to} status=${res.status} error=${msg}`);
       return { ok: false, error: msg };
     }
 
     return { ok: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : "fetch_failed";
+    console.error(`[resend] fetch error to=${opts.to}: ${message}`);
     return { ok: false, error: message };
   }
 }

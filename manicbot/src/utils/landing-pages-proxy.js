@@ -25,7 +25,7 @@ export function resolveLandingOrigin(env) {
 }
 
 /** SPA legal/info routes — keep in sync with manicbot-analysis/src/lib/routes.ts */
-const LEGAL_PATHS = new Set(['/privacy', '/terms', '/cookies', '/support', '/rules']);
+const LEGAL_PATHS = new Set(['/privacy', '/terms', '/cookies', '/support']);
 
 /**
  * @param {string} pathname URL pathname (no query)

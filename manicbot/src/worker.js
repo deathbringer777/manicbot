@@ -188,22 +188,23 @@ export default {
     if (res) return res; // Webhook — no browser headers needed
 
     const isAdminPath = url.pathname.startsWith('/admin/');
+    const needsFallback = url.pathname !== '/' && !isAdminPath;
+    function tryFallbackCtx() {
+      const skipLegacy = disallowLegacyWebhook(env, request, url);
+      if (env.BOT_TOKEN && env.WEBHOOK_SECRET && !skipLegacy) return buildLegacyCtx(env);
+      if (!skipLegacy) return buildCtx(env);
+      return null;
+    }
     let ctx;
     try {
       ctx = await getCtx(env, url, request);
-      if (!ctx && url.pathname !== '/' && !isAdminPath) {
-        const skipLegacy = disallowLegacyWebhook(env, request, url);
-        if (env.BOT_TOKEN && env.WEBHOOK_SECRET && !skipLegacy) ctx = buildLegacyCtx(env);
-        else if (!skipLegacy) ctx = buildCtx(env);
-      }
+      if (!ctx && needsFallback) ctx = tryFallbackCtx();
     } catch (e) {
       logWorkerError('context resolution failed', request, url, e);
       void logEvent(envCtx(env), 'error.handler', { level: 'error', message: e?.message ?? 'Unknown error', stack: e?.stack?.slice(0, 300) });
-      if (url.pathname !== '/' && !isAdminPath) {
+      if (needsFallback) {
         try {
-          const skipLegacy = disallowLegacyWebhook(env, request, url);
-          if (env.BOT_TOKEN && env.WEBHOOK_SECRET && !skipLegacy) ctx = buildLegacyCtx(env);
-          else if (!skipLegacy) ctx = buildCtx(env);
+          ctx = tryFallbackCtx();
         } catch (fallbackError) {
           logWorkerError('fallback context build failed', request, url, fallbackError);
           void logEvent(envCtx(env), 'error.handler', { level: 'error', message: fallbackError?.message ?? 'Unknown error', stack: fallbackError?.stack?.slice(0, 300) });

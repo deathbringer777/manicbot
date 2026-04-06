@@ -5,10 +5,7 @@ import { showInactiveMessage } from '../ui/billing.js';
 import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
-
-function ticketFwdAckKey(cid) {
-  return `ticket_fwd_ack:${cid}`;
-}
+import { ticketFwdAckKey } from '../utils/kv-keys.js';
 import { send, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';

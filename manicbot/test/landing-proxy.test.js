@@ -48,7 +48,10 @@ describe('landing-pages-proxy', () => {
       expect(isLandingPath('/terms')).toBe(true);
       expect(isLandingPath('/cookies')).toBe(true);
       expect(isLandingPath('/support')).toBe(true);
-      expect(isLandingPath('/rules')).toBe(true);
+    });
+
+    it('/rules is handled by admin-app, not landing', () => {
+      expect(isLandingPath('/rules')).toBe(false);
     });
 
     it('denies API-ish paths', () => {

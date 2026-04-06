@@ -255,8 +255,8 @@ describe("sendVerificationCodeEmail", () => {
     );
     const result = await sendVerificationCodeEmail("user@example.com", "123456", "en");
     expect(result).toEqual({ ok: true });
-    const call = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    const body = JSON.parse(call[1].body as string);
+    const call = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const body = JSON.parse(call[1]!.body as string);
     expect(body.subject).toContain("ManicBot");
     // Digits are rendered in individual table cells
     for (const digit of "123456") {
@@ -272,7 +272,7 @@ describe("sendVerificationCodeEmail", () => {
     );
     const result = await sendVerificationCodeEmail("user@example.com", "654321", "ru");
     expect(result).toEqual({ ok: true });
-    const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
+    const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1]!.body as string);
     expect(body.subject).toMatch(/ManicBot/);
     for (const digit of "654321") {
       expect(body.html).toContain(`>${digit}<`);

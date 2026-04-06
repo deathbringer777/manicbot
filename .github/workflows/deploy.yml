@@ -87,13 +87,12 @@ jobs:
           command: deploy --config wrangler.toml
 
   # ─── Landing: build + deploy to Cloudflare Pages ────────────
-  # Push main → новый сайт (manicbot-analysis). Ручной запуск → можно выбрать manicbot-landing (откат).
+  # DISABLED: manicbot-analysis source is no longer in this repo.
+  # Landing is deployed separately or via wrangler pages deploy from local.
   deploy-landing:
     runs-on: ubuntu-latest
     name: Landing — Deploy Pages
-    if: |
-      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
-      (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch')
+    if: false  # disabled — landing source not in repo
     steps:
       - uses: actions/checkout@v4
 

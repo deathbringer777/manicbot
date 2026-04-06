@@ -8,6 +8,7 @@ export const PUBLIC_FOOTER_BY_LANG: Record<
   ru: {
     links: [
       { href: "/help", label: "Помощь" },
+      { href: "/blog", label: "Блог" },
       { href: "/privacy", label: "Конфиденциальность" },
       { href: "/terms", label: "Условия" },
       { href: "/rules", label: "Правила" },
@@ -18,6 +19,7 @@ export const PUBLIC_FOOTER_BY_LANG: Record<
   ua: {
     links: [
       { href: "/help", label: "Довідка" },
+      { href: "/blog", label: "Блог" },
       { href: "/privacy", label: "Конфіденційність" },
       { href: "/terms", label: "Умови" },
       { href: "/rules", label: "Правила" },
@@ -28,6 +30,7 @@ export const PUBLIC_FOOTER_BY_LANG: Record<
   en: {
     links: [
       { href: "/help", label: "Help center" },
+      { href: "/blog", label: "Blog" },
       { href: "/privacy", label: "Privacy" },
       { href: "/terms", label: "Terms" },
       { href: "/rules", label: "Rules" },
@@ -38,6 +41,7 @@ export const PUBLIC_FOOTER_BY_LANG: Record<
   pl: {
     links: [
       { href: "/help", label: "Pomoc" },
+      { href: "/blog", label: "Blog" },
       { href: "/privacy", label: "Prywatność" },
       { href: "/terms", label: "Regulamin" },
       { href: "/rules", label: "Zasady" },

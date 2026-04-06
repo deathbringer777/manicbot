@@ -44,8 +44,10 @@ export async function sendResendEmail(opts: {
     });
 
     const data = (await res.json().catch(() => ({}))) as {
+      id?: string;
       message?: string;
       name?: string;
+      statusCode?: number;
     };
 
     if (!res.ok) {
@@ -53,10 +55,11 @@ export async function sendResendEmail(opts: {
         typeof data?.message === "string"
           ? data.message
           : `resend_http_${res.status}`;
-      console.error(`[resend] send failed to=${opts.to} status=${res.status} error=${msg}`);
+      console.error(`[resend] send failed to=${opts.to} status=${res.status} error=${msg} body=${JSON.stringify(data)}`);
       return { ok: false, error: msg };
     }
 
+    console.log(`[resend] sent to=${opts.to} id=${data.id ?? "?"} from=${from}`);
     return { ok: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : "fetch_failed";

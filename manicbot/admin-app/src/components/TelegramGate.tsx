@@ -18,6 +18,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<number | null>(null);
   const [previewRole, setPreviewRoleState] = useState<AppRole>(null);
   const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
+  const [previewMasterId, setPreviewMasterIdState] = useState<number | null>(null);
   const { lang } = useLang();
 
   useEffect(() => {
@@ -41,6 +42,11 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
   function setPreviewRole(r: AppRole, tenantId?: string | null) {
     setPreviewRoleState(r);
     setPreviewTenantId(tenantId ?? null);
+    setPreviewMasterIdState(null); // always clear master when role/tenant changes
+  }
+
+  function setPreviewMaster(masterId: number | null) {
+    setPreviewMasterIdState(masterId);
   }
 
   // — No Telegram context: check web session (next-auth cookie)
@@ -109,9 +115,12 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     tenantId,
     userId,
     createdAt: null,
+    emailVerified: true,
     previewRole,
     previewTenantId,
     setPreviewRole,
+    previewMasterId,
+    setPreviewMaster,
   };
 
   return (
@@ -119,9 +128,24 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
       {effectiveRole === "system_admin" ? (
         <>{children}</>
       ) : effectiveRole === "tenant_owner" ? (
-        <SalonDashboard tenantId={effectiveTenantId!} />
+        previewMasterId !== null ? (
+          // tenant_owner (or system_admin previewing as owner) is viewing a specific master's dashboard
+          <MasterDashboard
+            tenantId={effectiveTenantId!}
+            masterId={previewMasterId}
+            isDelegating={true}
+          />
+        ) : (
+          <SalonDashboard tenantId={effectiveTenantId!} />
+        )
       ) : effectiveRole === "master" ? (
-        <MasterDashboard tenantId={effectiveTenantId!} masterId={userId!} />
+        // system_admin previewing as master: previewMasterId is the selected master's chatId
+        // Real master user: userId is their own chatId
+        <MasterDashboard
+          tenantId={effectiveTenantId!}
+          masterId={previewMasterId ?? userId!}
+          isDelegating={false}
+        />
       ) : effectiveRole === "support" || effectiveRole === "technical_support" ? (
         <SupportDashboard />
       ) : (

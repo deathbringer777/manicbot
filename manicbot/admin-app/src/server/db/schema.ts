@@ -74,6 +74,7 @@ export const masters = sqliteTable("masters", {
   bio: text("bio"),
   photo: text("photo"),
   portfolio: text("portfolio"),
+  allowDelegation: integer("allow_delegation").notNull().default(0),
 }, (t) => [index("idx_master_tenant").on(t.tenantId)]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {

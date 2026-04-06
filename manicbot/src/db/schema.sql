@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS masters (
   bio TEXT,
   photo TEXT,
   portfolio TEXT,
+  allow_delegation INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, chat_id)
 );
 

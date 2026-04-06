@@ -28,6 +28,49 @@ async function assertMaster(ctx: any, tenantId: string) {
 }
 
 export const masterRouter = createTRPCRouter({
+  getMastersForOwner: publicProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      return ctx.db
+        .select({
+          chatId: masters.chatId,
+          name: masters.name,
+          allowDelegation: masters.allowDelegation,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)));
+    }),
+
+  updateDelegation: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number(),
+      allowDelegation: z.number().min(0).max(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Only the master themselves can change this setting (not the owner, not the admin)
+      if (!ctx.user && ctx.webUser) {
+        if (ctx.webUser.webRole !== "master" || ctx.webUser.tenantId !== input.tenantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only the master can change delegation setting" });
+        }
+      } else if (ctx.user) {
+        if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin cannot change master delegation setting" });
+        }
+        if (ctx.user.id !== input.masterId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only the master can change delegation setting" });
+        }
+      } else {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+      await ctx.db.update(masters)
+        .set({ allowDelegation: input.allowDelegation })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
+      return { success: true };
+    }),
+
+
   getMySchedule: publicProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {

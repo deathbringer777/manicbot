@@ -118,6 +118,21 @@ const translations = {
   "roleSwitch.pickTenant":  { ru: "Выберите салон", ua: "Оберіть салон", en: "Pick a salon", pl: "Wybierz salon" },
   "roleSwitch.preview":     { ru: "Превью:",      ua: "Перегляд:",      en: "Preview:",   pl: "Podgląd:" },
   "roleSwitch.exit":        { ru: "Выйти из превью", ua: "Вийти з перегляду", en: "Exit preview", pl: "Wyjdź z podglądu" },
+  "roleSwitch.pickMaster":  { ru: "Выберите мастера", ua: "Оберіть майстра", en: "Pick a master", pl: "Wybierz mistrza" },
+
+  // ── Master switcher (sidebar) ───────────────────────────────────────────────
+  "masterSwitch.title":    { ru: "Просмотр мастера",    ua: "Перегляд майстра",       en: "View as master",  pl: "Podgląd mistrza" },
+  "masterSwitch.viewAs":   { ru: "Смотреть как мастер", ua: "Переглянути як майстер", en: "View as master",  pl: "Widok jako mistrz" },
+  "masterSwitch.exit":     { ru: "Выйти из просмотра",  ua: "Вийти з перегляду",      en: "Exit master view", pl: "Wyjdź z widoku" },
+  "masterSwitch.none":     { ru: "Мастеров нет",        ua: "Майстрів немає",          en: "No masters",      pl: "Brak mistrzów" },
+
+  // ── Delegation ──────────────────────────────────────────────────────────────
+  "delegation.viewOnly":          { ru: "Только просмотр",       ua: "Тільки перегляд",        en: "View only",             pl: "Tylko podgląd" },
+  "delegation.managementEnabled": { ru: "Управление разрешено",  ua: "Управління дозволено",   en: "Management enabled",    pl: "Zarządzanie włączone" },
+  "delegation.toggleLabel":       { ru: "Разрешить управление",  ua: "Дозволити управління",   en: "Allow owner to manage", pl: "Zezwól właścicielowi" },
+  "delegation.toggleDesc":        { ru: "Владелец сможет редактировать ваш профиль и отмечать неявки", ua: "Власник зможе редагувати ваш профіль та відмічати неявки", en: "Owner can edit your profile and mark no-shows", pl: "Właściciel może edytować profil i oznaczać nieobecności" },
+  "delegation.enabled":           { ru: "Управление включено",   ua: "Управління увімкнено",   en: "Management enabled",    pl: "Zarządzanie włączone" },
+  "delegation.disabled":          { ru: "Только просмотр",       ua: "Тільки перегляд",        en: "View only",             pl: "Tylko podgląd" },
 
   // ── Settings modal ─────────────────────────────────────────────────────────
   "settings.title":         { ru: "Настройки",    ua: "Налаштування",   en: "Settings",   pl: "Ustawienia" },

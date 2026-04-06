@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
@@ -110,7 +110,15 @@ function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "c
   );
 }
 
-export function MasterDashboard({ tenantId, masterId }: { tenantId: string; masterId: number }) {
+export function MasterDashboard({
+  tenantId,
+  masterId,
+  isDelegating = false,
+}: {
+  tenantId: string;
+  masterId: number;
+  isDelegating?: boolean;
+}) {
   const { lang } = useLang();
   const utils = api.useUtils();
   const [tab, setTab] = useState<Tab>("today");
@@ -145,7 +153,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
   );
   const profile = api.master.getMyProfile.useQuery(
     { tenantId, masterId },
-    { enabled: tab === "profile" }
+    { enabled: tab === "profile" || isDelegating }
   );
   const masterReviews = api.reviews.getForSalon.useQuery(
     { tenantId, masterId: String(masterId) },
@@ -163,9 +171,17 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
   const updateProfile = api.master.updateProfile.useMutation({
     onSuccess: () => { utils.master.getMyProfile.invalidate(); setBioEdit(false); },
   });
+  const updateDelegation = api.master.updateDelegation.useMutation({
+    onSuccess: () => { utils.master.getMyProfile.invalidate(); },
+  });
   const markNoShowMut = api.master.markNoShow.useMutation({
     onSuccess: () => { today.refetch(); schedule.refetch(); },
   });
+
+  // Derived from profile (fetched eagerly when isDelegating)
+  const allowDelegation = Boolean((profile.data as any)?.allowDelegation);
+  // When delegating: only pass onNoShow if master granted management permission
+  const canMutate = !isDelegating || allowDelegation;
 
   const tabLabels: Record<Tab, string> = {
     today: t("master.today", lang),
@@ -178,19 +194,40 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
 
   return (
     <Shell navItems={masterNavItems} title={t("master.title", lang)} subtitle="ManicBot Master">
+      {/* Delegation banner — shown when owner or admin is viewing as this master */}
+      {isDelegating && (
+        <div className={`mb-4 flex items-center gap-3 rounded-2xl px-4 py-3 ${
+          allowDelegation
+            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+            : "bg-amber-500/10 border border-amber-500/20 text-amber-300"
+        }`}>
+          <Eye className="h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm leading-tight">
+              {(profile.data as any)?.name ?? "Master"}
+            </p>
+            <p className="text-[11px] opacity-70 mt-0.5">
+              {allowDelegation
+                ? t("delegation.managementEnabled", lang)
+                : t("delegation.viewOnly", lang)}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Tab bar */}
       <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
-        {(["today", "schedule", "clients", "earnings", "reviews", "profile"] as Tab[]).map(t => (
+        {(["today", "schedule", "clients", "earnings", "reviews", "profile"] as Tab[]).map(tb => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb}
+            onClick={() => setTab(tb)}
             className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-              tab === t
+              tab === tb
                 ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                 : "text-slate-500 hover:text-slate-300"
             }`}
           >
-            {tabLabels[t]}
+            {tabLabels[tb]}
           </button>
         ))}
       </div>
@@ -210,7 +247,11 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
           <div className="space-y-2">
             {today.data?.map((a: any) => (
               <AptRow key={a.id} apt={a}
-                onNoShow={(id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })} />
+                onNoShow={canMutate
+                  ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
+                  : undefined
+                }
+              />
             ))}
           </div>
         </div>
@@ -231,7 +272,11 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
           <div className="space-y-2">
             {schedule.data?.map((a: any) => (
               <AptRow key={a.id} apt={a}
-                onNoShow={(id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })} />
+                onNoShow={canMutate
+                  ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
+                  : undefined
+                }
+              />
             ))}
             {schedule.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("master.noApts", lang)}</p>}
           </div>
@@ -367,7 +412,7 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.profile", lang)}</h2>
-            {profile.data && !bioEdit && (
+            {profile.data && !bioEdit && canMutate && (
               <button onClick={() => { setBio((profile.data as any).bio ?? ""); setPhoto((profile.data as any).photo ?? ""); setPortfolio(Array.isArray((profile.data as any).portfolio) ? (profile.data as any).portfolio : []); setBioEdit(true); }}
                 className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
                 <Pencil className="h-3.5 w-3.5" />Редактировать
@@ -418,10 +463,10 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
                             <span className="flex-1 text-xs text-slate-500 truncate">{url}</span>
                             <div className="flex gap-1 shrink-0">
                               <button type="button" disabled={i === 0}
-                                onClick={() => setPortfolio((prev) => { const a = [...prev]; const t = a[i-1]!; a[i-1] = a[i]!; a[i] = t; return a; })}
+                                onClick={() => setPortfolio((prev) => { const a = [...prev]; const tmp = a[i-1]!; a[i-1] = a[i]!; a[i] = tmp; return a; })}
                                 className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30">↑</button>
                               <button type="button" disabled={i === portfolio.length - 1}
-                                onClick={() => setPortfolio((prev) => { const a = [...prev]; const t = a[i+1]!; a[i+1] = a[i]!; a[i] = t; return a; })}
+                                onClick={() => setPortfolio((prev) => { const a = [...prev]; const tmp = a[i+1]!; a[i+1] = a[i]!; a[i] = tmp; return a; })}
                                 className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30">↓</button>
                               <button type="button"
                                 onClick={() => setPortfolio((prev) => prev.filter((_, j) => j !== i))}
@@ -464,6 +509,45 @@ export function MasterDashboard({ tenantId, masterId }: { tenantId: string; mast
               )}
             </div>
           )}
+
+          {/* Delegation toggle — only shown to the master themselves (not when owner is viewing) */}
+          {!isDelegating && profile.data && (
+            <div className="glass-card rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    {t("delegation.toggleLabel", lang)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {t("delegation.toggleDesc", lang)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateDelegation.mutate({
+                    tenantId,
+                    masterId,
+                    allowDelegation: allowDelegation ? 0 : 1,
+                  })}
+                  disabled={updateDelegation.isPending}
+                  className={`relative flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
+                    allowDelegation ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+                  }`}
+                >
+                  <span className={`absolute h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    allowDelegation ? "translate-x-6" : "translate-x-1"
+                  }`} />
+                </button>
+              </div>
+              <p className={`text-xs flex items-center gap-1.5 ${allowDelegation ? "text-emerald-500" : "text-slate-500"}`}>
+                {allowDelegation
+                  ? <><Unlock className="h-3.5 w-3.5" /> {t("delegation.enabled", lang)}</>
+                  : <><Lock className="h-3.5 w-3.5" /> {t("delegation.disabled", lang)}</>
+                }
+              </p>
+            </div>
+          )}
+
           {!profile.isLoading && !profile.data && (
             <p className="text-slate-500 text-sm text-center py-8">{t("master.noProfile", lang)}</p>
           )}

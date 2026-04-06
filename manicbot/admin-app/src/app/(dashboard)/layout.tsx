@@ -11,6 +11,8 @@ import { SalonDashboard } from "~/components/dashboards/SalonDashboard";
 import { MasterDashboard } from "~/components/dashboards/MasterDashboard";
 import { SupportDashboard } from "~/components/dashboards/SupportDashboard";
 import { NoTenantOnboarding } from "~/components/onboarding/NoTenantOnboarding";
+import { EmailVerificationGate } from "~/components/EmailVerificationGate";
+import { EmailVerificationPopup } from "~/components/EmailVerificationPopup";
 import type { AppRole } from "~/server/api/routers/auth";
 
 export default function DashboardLayout({
@@ -22,6 +24,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [previewRole, setPreviewRoleState] = useState<AppRole>(null);
   const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
+  const [previewMasterId, setPreviewMasterIdState] = useState<number | null>(null);
 
   // Check for Telegram WebApp — redirect to /tg if present
   useEffect(() => {
@@ -44,6 +47,11 @@ export default function DashboardLayout({
   function setPreviewRole(r: AppRole, tenantId?: string | null) {
     setPreviewRoleState(r);
     setPreviewTenantId(tenantId ?? null);
+    setPreviewMasterIdState(null);
+  }
+
+  function setPreviewMaster(masterId: number | null) {
+    setPreviewMasterIdState(masterId);
   }
 
   // Loading
@@ -58,7 +66,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId, createdAt } = roleQuery.data;
+  const { role, tenantId, createdAt, emailVerified } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -67,22 +75,49 @@ export default function DashboardLayout({
     tenantId,
     userId: null, // web users don't have Telegram userId
     createdAt: createdAt ?? null,
+    emailVerified: emailVerified ?? true,
     previewRole,
     previewTenantId,
     setPreviewRole,
+    previewMasterId,
+    setPreviewMaster,
   };
 
   // Non-admin roles get their dedicated dashboard inside WebShell.
   // /settings is always rendered as {children} so SettingsPageClient mounts for all roles.
   const isSettingsPage = pathname === "/settings";
 
+  // Gate: block dashboard content if email is not verified (except /settings)
+  function wrapWithEmailGate(content: React.ReactNode) {
+    if (!emailVerified && !isSettingsPage) {
+      return (
+        <>
+          <EmailVerificationPopup />
+          <EmailVerificationGate />
+        </>
+      );
+    }
+    return (
+      <>
+        {!emailVerified && <EmailVerificationPopup />}
+        {content}
+      </>
+    );
+  }
+
   if (effectiveRole === "tenant_owner") {
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {!effectiveTenantId
-            ? <NoTenantOnboarding role="tenant_owner" />
-            : isSettingsPage ? children : <SalonDashboard tenantId={effectiveTenantId} />}
+          {wrapWithEmailGate(
+            !effectiveTenantId
+              ? <NoTenantOnboarding role="tenant_owner" />
+              : isSettingsPage
+                ? children
+                : previewMasterId !== null
+                  ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
+                  : <SalonDashboard tenantId={effectiveTenantId} />
+          )}
         </WebShell>
       </RoleContext.Provider>
     );
@@ -92,9 +127,11 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {!effectiveTenantId
-            ? <NoTenantOnboarding role="master" />
-            : isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId} masterId={null!} />}
+          {wrapWithEmailGate(
+            !effectiveTenantId
+              ? <NoTenantOnboarding role="master" />
+              : isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId} masterId={null!} />
+          )}
         </WebShell>
       </RoleContext.Provider>
     );
@@ -104,7 +141,7 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {isSettingsPage ? children : <SupportDashboard />}
+          {wrapWithEmailGate(isSettingsPage ? children : <SupportDashboard />)}
         </WebShell>
       </RoleContext.Provider>
     );
@@ -113,7 +150,7 @@ export default function DashboardLayout({
   // system_admin → full page routing with WebShell
   return (
     <RoleContext.Provider value={ctxValue}>
-      <WebShell>{children}</WebShell>
+      <WebShell>{wrapWithEmailGate(children)}</WebShell>
     </RoleContext.Provider>
   );
 }

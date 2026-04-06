@@ -7,6 +7,7 @@ import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
   X, Scissors, HeadphonesIcon, Globe, MessageSquare,
+  Lock, Unlock,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -61,14 +62,20 @@ const ROLE_OPTIONS: { role: AppRole; icon: React.ElementType; color: string; bg:
 ];
 
 export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "toolbar" | "settings" }) {
-  const { role, previewRole, setPreviewRole } = useRole();
+  const { role, previewRole, setPreviewRole, setPreviewMaster } = useRole();
   const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const [pendingRole, setPendingRole] = useState<AppRole>(null);
   const [selectedTenantId, setSelectedTenantId] = useState("");
+  const [step, setStep] = useState<"role" | "tenant" | "master">("role");
+  const [selectedMasterId, setSelectedMasterId] = useState<number | null>(null);
   const tenants = api.tenants.getAll.useQuery(undefined, {
     enabled: role === "system_admin" && open && (pendingRole === "tenant_owner" || pendingRole === "master"),
   });
+  const mastersForPick = api.master.getMastersForOwner.useQuery(
+    { tenantId: selectedTenantId },
+    { enabled: role === "system_admin" && step === "master" && !!selectedTenantId },
+  );
 
   if (role !== "system_admin") return null;
 
@@ -87,15 +94,32 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
   };
 
   function handleSelectRole(r: AppRole) {
-    if (r === "system_admin") { setPreviewRole(null); setOpen(false); return; }
+    setStep("role");
+    if (r === "system_admin") { setPreviewRole(null); setPreviewMaster(null); setOpen(false); return; }
     if (r === "support" || r === "technical_support") { setPreviewRole(r); setOpen(false); return; }
-    setPendingRole(r); setSelectedTenantId("");
+    setPendingRole(r); setSelectedTenantId(""); setStep("tenant");
   }
 
   function confirmTenantPreview() {
     if (!selectedTenantId || !pendingRole) return;
+    if (pendingRole === "master") {
+      setStep("master");
+      setSelectedMasterId(null);
+      return;
+    }
     setPreviewRole(pendingRole, selectedTenantId);
-    setPendingRole(null); setOpen(false);
+    setPendingRole(null); setOpen(false); setStep("role");
+  }
+
+  function confirmMasterPreview() {
+    if (!selectedMasterId) return;
+    setPreviewRole("master", selectedTenantId);
+    setPreviewMaster(selectedMasterId);
+    setPendingRole(null); setOpen(false); setStep("role"); setSelectedMasterId(null);
+  }
+
+  function resetPicker() {
+    setPendingRole(null); setStep("role"); setSelectedTenantId(""); setSelectedMasterId(null);
   }
 
   const dropdownContent = (
@@ -103,7 +127,53 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
       <p className="px-2 pb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
         {t("roleSwitch.title", lang)}
       </p>
-      {pendingRole ? (
+      {step === "master" ? (
+        <div className="space-y-2 p-2">
+          <p className="text-xs text-slate-400">{t("roleSwitch.pickMaster", lang)}</p>
+          {mastersForPick.isLoading ? (
+            <div className="h-8 animate-pulse rounded-xl bg-slate-800" />
+          ) : !mastersForPick.data?.length ? (
+            <p className="text-xs text-slate-500 px-1">{t("masterSwitch.none", lang)}</p>
+          ) : (
+            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+              {mastersForPick.data.map((m: any) => (
+                <button
+                  key={m.chatId}
+                  onClick={() => setSelectedMasterId(m.chatId)}
+                  className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
+                    selectedMasterId === m.chatId ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-[10px] font-bold text-emerald-400 shrink-0">
+                    {(m.name ?? "M").charAt(0).toUpperCase()}
+                  </div>
+                  <span className="flex-1 text-xs font-medium truncate">{m.name ?? `#${m.chatId}`}</span>
+                  {m.allowDelegation ? (
+                    <Unlock className="h-3 w-3 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Lock className="h-3 w-3 text-slate-600 shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStep("tenant")}
+              className="flex-1 rounded-xl bg-slate-800 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:text-white"
+            >
+              {t("common.back", lang)}
+            </button>
+            <button
+              onClick={confirmMasterPreview}
+              disabled={!selectedMasterId}
+              className="flex-1 rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs text-brand-400 transition-colors disabled:opacity-30"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : step === "tenant" ? (
         <div className="space-y-2 p-2">
           <p className="text-xs text-slate-400">{t("roleSwitch.pickTenant", lang)}</p>
           {tenants.isLoading ? (
@@ -122,7 +192,7 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
           )}
           <div className="flex gap-2">
             <button
-              onClick={() => setPendingRole(null)}
+              onClick={resetPicker}
               className="flex-1 rounded-xl bg-slate-800 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:text-white"
             >
               {t("common.back", lang)}
@@ -160,7 +230,7 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
     <div className={`relative ${inSettings ? "w-full overflow-visible" : ""}`}>
       <button
         type="button"
-        onClick={() => { setOpen(o => !o); setPendingRole(null); }}
+        onClick={() => { setOpen(o => !o); resetPicker(); }}
         className={`flex items-center gap-1.5 rounded-xl text-xs font-medium transition-all ${
           inSettings ? "w-full justify-between px-3 py-3" : "px-2.5 py-1.5"
         } ${
@@ -210,6 +280,110 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
             </div>
           </>
         )
+      )}
+    </div>
+  );
+}
+
+// ─── Master Switcher (sidebar — shown when effective role is tenant_owner) ────
+export function MasterSwitcherInline() {
+  const { role, previewRole, previewTenantId, previewMasterId, setPreviewMaster, tenantId } = useRole();
+  const { lang } = useLang();
+  const [open, setOpen] = useState(false);
+
+  // Mirror TelegramGate effective role logic
+  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+
+  // Only render when acting as tenant_owner
+  if (effectiveRole !== "tenant_owner" || !effectiveTenantId) return null;
+
+  const mastersQuery = api.master.getMastersForOwner.useQuery(
+    { tenantId: effectiveTenantId },
+    { enabled: open },
+  );
+
+  const isViewingMaster = previewMasterId !== null;
+  const activeMasterName = isViewingMaster
+    ? (mastersQuery.data?.find((m: any) => m.chatId === previewMasterId)?.name ?? `#${previewMasterId}`)
+    : null;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`flex w-full items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
+          isViewingMaster
+            ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-300"
+            : "bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+        }`}
+      >
+        <Scissors className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+        <span className="flex-1 text-left truncate">
+          {isViewingMaster ? activeMasterName : t("masterSwitch.viewAs", lang)}
+        </span>
+        {isViewingMaster && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={e => { e.stopPropagation(); setPreviewMaster(null); setOpen(false); }}
+            onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); setPreviewMaster(null); setOpen(false); } }}
+            className="shrink-0 flex h-5 w-5 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white cursor-pointer"
+          >
+            <X className="h-3 w-3" />
+          </span>
+        )}
+        <ChevronDown className={`h-3 w-3 text-slate-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl shadow-black/60 backdrop-blur-xl">
+            <p className="px-2 pb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+              {t("masterSwitch.title", lang)}
+            </p>
+            {mastersQuery.isLoading ? (
+              <div className="h-8 animate-pulse rounded-xl bg-slate-800 mx-1" />
+            ) : !mastersQuery.data?.length ? (
+              <p className="px-3 py-2 text-xs text-slate-500">{t("masterSwitch.none", lang)}</p>
+            ) : (
+              mastersQuery.data.map((m: any) => (
+                <button
+                  key={m.chatId}
+                  onClick={() => { setPreviewMaster(m.chatId); setOpen(false); }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+                    previewMasterId === m.chatId
+                      ? "bg-white/10 text-white"
+                      : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-[11px] font-bold text-emerald-400 shrink-0">
+                    {(m.name ?? "M").charAt(0).toUpperCase()}
+                  </div>
+                  <span className="flex-1 text-xs font-medium truncate">{m.name ?? `#${m.chatId}`}</span>
+                  {m.allowDelegation ? (
+                    <Unlock className="h-3 w-3 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Lock className="h-3 w-3 text-slate-600 shrink-0" />
+                  )}
+                  {previewMasterId === m.chatId && (
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  )}
+                </button>
+              ))
+            )}
+            {isViewingMaster && (
+              <button
+                onClick={() => { setPreviewMaster(null); setOpen(false); }}
+                className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/15"
+              >
+                <X className="h-3.5 w-3.5" /> {t("masterSwitch.exit", lang)}
+              </button>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -360,6 +534,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
         {/* Bottom section */}
         <div className="mt-3 border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
           {showRoleSwitcherInChrome && <RoleSwitcherInline />}
+          <MasterSwitcherInline />
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
               {admin.name.charAt(0).toUpperCase()}
@@ -382,6 +557,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
           </div>
           <h1 className="text-sm font-bold text-slate-900 dark:text-white flex-1 truncate">{displayTitle}</h1>
           {showRoleSwitcherInChrome && <RoleSwitcherInline />}
+          <MasterSwitcherInline />
           {showLangInChrome && <LangPickerInline />}
         </header>
 

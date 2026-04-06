@@ -249,8 +249,8 @@ function ChatBubble({ from, text }: { from: string; text: string }) {
       <div
         className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs ${
           isUser
-            ? "bg-brand-500/20 text-brand-200 rounded-br-md"
-            : "bg-slate-700/60 text-slate-200 rounded-bl-md"
+            ? "bg-brand-500/15 text-brand-600 dark:bg-brand-500/20 dark:text-brand-200 rounded-br-md"
+            : "bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200 rounded-bl-md"
         }`}
       >
         {text}
@@ -303,13 +303,13 @@ export function MetaGuide({ channel }: { channel: ChannelType }) {
                 <div className="h-6 w-6 rounded-full bg-brand-500/20 flex items-center justify-center text-[10px] font-bold text-brand-400">
                   {i + 1}
                 </div>
-                {i < steps.length - 1 && <div className="w-px flex-1 bg-slate-700/40 mt-1" />}
+                {i < steps.length - 1 && <div className="w-px flex-1 bg-slate-300 dark:bg-slate-700/40 mt-1" />}
               </div>
               <div className="flex-1 min-w-0 pb-3">
                 <p className="text-xs font-semibold text-slate-900 dark:text-white mb-0.5">{step.title}</p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">{step.description}</p>
                 {step.chat && (
-                  <div className="bg-slate-900/50 rounded-xl p-2.5 space-y-1.5 border border-slate-800/50">
+                  <div className="bg-slate-100 dark:bg-slate-900/50 rounded-xl p-2.5 space-y-1.5 border border-slate-200 dark:border-slate-800/50">
                     {step.chat.map((msg, j) => (
                       <ChatBubble key={j} from={msg.from} text={msg.text} />
                     ))}

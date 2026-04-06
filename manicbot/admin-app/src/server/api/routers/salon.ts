@@ -530,7 +530,47 @@ export const salonRouter = createTRPCRouter({
         price: 45,
         currency: "PLN",
         masters: 1,
-        features: { ai: false, calendar: false, support: false, channels: ["telegram"] },
+        popular: false,
+        subtitle: {
+          ru: "Для частного мастера",
+          ua: "Для приватного майстра",
+          en: "For solo professionals",
+          pl: "Dla prywatnego mistrza",
+        },
+        featureList: {
+          ru: [
+            "1 мастер",
+            "Запись через Telegram, Instagram и WhatsApp",
+            "Синхронизация с Google Calendar",
+            "Напоминания клиентам перед визитом",
+            "4 языка интерфейса",
+            "Панель управления на любом устройстве",
+          ],
+          ua: [
+            "1 майстер",
+            "Запис через Telegram, Instagram та WhatsApp",
+            "Синхронізація з Google Calendar",
+            "Нагадування клієнтам перед візитом",
+            "4 мови інтерфейсу",
+            "Панель керування на будь-якому пристрої",
+          ],
+          en: [
+            "1 specialist",
+            "Booking via Telegram, Instagram & WhatsApp",
+            "Google Calendar sync",
+            "Client reminders before appointments",
+            "4 interface languages",
+            "Dashboard on any device",
+          ],
+          pl: [
+            "1 mistrz",
+            "Rezerwacja przez Telegram, Instagram i WhatsApp",
+            "Synchronizacja z Google Calendar",
+            "Przypomnienia dla klientów przed wizytą",
+            "4 języki interfejsu",
+            "Panel na każdym urządzeniu",
+          ],
+        },
       },
       {
         id: "pro",
@@ -538,21 +578,101 @@ export const salonRouter = createTRPCRouter({
         price: 60,
         currency: "PLN",
         masters: 5,
-        features: { ai: true, calendar: true, support: true, channels: ["telegram", "whatsapp", "instagram"] },
+        popular: true,
+        subtitle: {
+          ru: "Для салона с командой",
+          ua: "Для салону з командою",
+          en: "For salons with a team",
+          pl: "Dla salonu z zespołem",
+        },
+        featureList: {
+          ru: [
+            "До 5 мастеров",
+            "Все каналы: Telegram, Instagram, WhatsApp",
+            "ИИ-помощник по записи",
+            "Запись на естественном языке",
+            "Умные напоминания и уведомления",
+            "Приоритетная поддержка",
+          ],
+          ua: [
+            "До 5 майстрів",
+            "Усі канали: Telegram, Instagram, WhatsApp",
+            "ІІ-помічник із запису",
+            "Запис природною мовою",
+            "Розумні нагадування та сповіщення",
+            "Пріоритетна підтримка",
+          ],
+          en: [
+            "Up to 5 specialists",
+            "All channels: Telegram, Instagram, WhatsApp",
+            "AI booking assistant",
+            "Natural language booking",
+            "Smart reminders & notifications",
+            "Priority support",
+          ],
+          pl: [
+            "Do 5 mistrzów",
+            "Wszystkie kanały: Telegram, Instagram, WhatsApp",
+            "Asystent AI do rezerwacji",
+            "Rezerwacja w języku naturalnym",
+            "Inteligentne przypomnienia i powiadomienia",
+            "Priorytetowe wsparcie",
+          ],
+        },
       },
       {
-        id: "studio",
-        name: "Studio",
+        id: "max",
+        name: "MAX",
         price: 90,
         currency: "PLN",
         masters: -1, // unlimited
-        features: { ai: true, calendar: true, support: true, channels: ["telegram", "whatsapp", "instagram"] },
+        popular: false,
+        subtitle: {
+          ru: "Для сети салонов или крупной команды",
+          ua: "Для мережі салонів або великої команди",
+          en: "For salon chains or large teams",
+          pl: "Dla sieci salonów lub dużego zespołu",
+        },
+        featureList: {
+          ru: [
+            "Неограниченно мастеров",
+            "Все функции Pro",
+            "Кастомное имя и фото бота",
+            "Управление несколькими локациями",
+            "Персональная настройка и онбординг",
+            "Выделенный менеджер поддержки",
+          ],
+          ua: [
+            "Необмежено майстрів",
+            "Усі функції Pro",
+            "Кастомне ім'я та фото бота",
+            "Керування кількома локаціями",
+            "Персональне налаштування та онбординг",
+            "Виділений менеджер підтримки",
+          ],
+          en: [
+            "Unlimited specialists",
+            "All Pro features",
+            "Custom bot name & photo",
+            "Multi-location management",
+            "Personal setup & onboarding",
+            "Dedicated support manager",
+          ],
+          pl: [
+            "Nieograniczona liczba mistrzów",
+            "Wszystkie funkcje Pro",
+            "Niestandardowa nazwa i zdjęcie bota",
+            "Zarządzanie wieloma lokalizacjami",
+            "Personalna konfiguracja i onboarding",
+            "Dedykowany menedżer wsparcia",
+          ],
+        },
       },
     ];
   }),
 
   createCheckoutSession: publicProcedure
-    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "studio"]) }))
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]) }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
@@ -564,7 +684,7 @@ export const salonRouter = createTRPCRouter({
       const priceMap: Record<string, string | undefined> = {
         start: env.STRIPE_PRICE_START_MONTHLY,
         pro: env.STRIPE_PRICE_PRO_MONTHLY,
-        studio: env.STRIPE_PRICE_STUDIO_MONTHLY,
+        max: env.STRIPE_PRICE_MAX_MONTHLY,
       };
       const priceId = priceMap[input.plan];
       if (!priceId) {

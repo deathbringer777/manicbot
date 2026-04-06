@@ -6,7 +6,7 @@
 |--------|------------|---------|---------|------------------|-----------|-------------|
 | Start  | 45 zł/мес  | 1       | ✗       | ✗                | ✗         | ✗           |
 | Pro    | 60 zł/мес  | 5       | ✓       | ✓                | ✓         | ✗           |
-| Studio | 90 zł/мес  | ∞       | ✓       | ✓                | ✓         | ✓           |
+| MAX    | 90 zł/мес  | ∞       | ✓       | ✓                | ✓         | ✓           |
 
 Лимиты по планам задаются в `src/billing/config.js` (константа `PLAN_LIMITS`).
 
@@ -63,7 +63,7 @@
 | `STRIPE_WEBHOOK_SECRET`       | `whsec_...` (из Stripe Dashboard)          |
 | `STRIPE_PRICE_START_MONTHLY`  | `price_...` для плана Start                |
 | `STRIPE_PRICE_PRO_MONTHLY`    | `price_...` для плана Pro                  |
-| `STRIPE_PRICE_STUDIO_MONTHLY` | `price_...` для плана Studio               |
+| `STRIPE_PRICE_MAX_MONTHLY`    | `price_...` для плана MAX                  |
 | `APP_BASE_URL`                | `https://manicbot.com` (redirect после оплаты) |
 
 Быстрая настройка: `cd manicbot && ./scripts/setup-stripe-secrets.sh`

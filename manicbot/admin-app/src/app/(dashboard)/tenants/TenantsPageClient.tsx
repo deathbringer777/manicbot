@@ -80,7 +80,7 @@ export default function TenantsPageClient() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
-  const [createPlan, setCreatePlan] = useState<"start" | "pro" | "studio">("pro");
+  const [createPlan, setCreatePlan] = useState<"start" | "pro" | "max">("pro");
   const [roleModal, setRoleModal] = useState<string | null>(null); // tenantId
   const [roleChatId, setRoleChatId] = useState("");
   const [roleType, setRoleType] = useState<"tenant_owner" | "master" | "admin">("master");
@@ -341,7 +341,7 @@ export default function TenantsPageClient() {
               <div>
                 <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Тарифный план</label>
                 <div className="flex gap-2">
-                  {(["start", "pro", "studio"] as const).map((p) => (
+                  {(["start", "pro", "max"] as const).map((p) => (
                     <button
                       key={p}
                       onClick={() => setCreatePlan(p)}

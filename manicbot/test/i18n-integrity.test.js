@@ -120,7 +120,7 @@ describe('i18n — section completeness', () => {
   });
 
   it('billing keys exist in all languages', () => {
-    const billingKeys = ['billing_menu', 'billing_plan_start', 'billing_plan_pro', 'billing_plan_studio',
+    const billingKeys = ['billing_menu', 'billing_plan_start', 'billing_plan_pro', 'billing_plan_max',
       'feature_ai_unavailable', 'feature_masters_limit', 'billing_inactive_msg'];
     for (const lang of LANGS) {
       for (const key of billingKeys) {

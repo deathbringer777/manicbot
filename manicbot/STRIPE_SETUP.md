@@ -31,7 +31,7 @@ npx wrangler secret put APP_BASE_URL           # URL воркера, напр. h
 ```bash
 npx wrangler secret put STRIPE_PRICE_START_MONTHLY   # price_xxx из Stripe
 npx wrangler secret put STRIPE_PRICE_PRO_MONTHLY
-npx wrangler secret put STRIPE_PRICE_STUDIO_MONTHLY
+npx wrangler secret put STRIPE_PRICE_MAX_MONTHLY
 ```
 
 ## 2. Webhook в Stripe Dashboard
@@ -55,7 +55,7 @@ npx wrangler secret put STRIPE_PRICE_STUDIO_MONTHLY
 
 - `STRIPE_PRICE_START_MONTHLY`
 - `STRIPE_PRICE_PRO_MONTHLY`
-- `STRIPE_PRICE_STUDIO_MONTHLY`
+- `STRIPE_PRICE_MAX_MONTHLY`
 
 ## 4. APP_BASE_URL
 

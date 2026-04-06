@@ -13,65 +13,55 @@ const LABELS: Record<Lang, {
   upgrade: string;
   manageSub: string;
   perMonth: string;
-  masters: string;
-  unlimited: string;
-  features: Record<string, string>;
+  popular: string;
   trialBanner: string;
   daysLeft: string;
   notConfigured: string;
 }> = {
   ru: {
     currentPlan: "Текущий тариф",
-    subscribe: "Подписаться",
+    subscribe: "Попробовать",
     current: "Текущий",
     upgrade: "Перейти",
     manageSub: "Управление подпиской",
     perMonth: "/мес",
-    masters: "мастеров",
-    unlimited: "Без лимита",
-    features: { ai: "AI ассистент", calendar: "Google Календарь", support: "Агенты поддержки", channels: "Каналы" },
+    popular: "Популярный",
     trialBanner: "Пробный период",
     daysLeft: "дней осталось",
     notConfigured: "Биллинг будет доступен в ближайшее время.",
   },
   ua: {
     currentPlan: "Поточний тариф",
-    subscribe: "Підписатися",
+    subscribe: "Спробувати",
     current: "Поточний",
     upgrade: "Перейти",
     manageSub: "Керування підпискою",
     perMonth: "/міс",
-    masters: "майстрів",
-    unlimited: "Без ліміту",
-    features: { ai: "AI асистент", calendar: "Google Календар", support: "Агенти підтримки", channels: "Канали" },
+    popular: "Популярний",
     trialBanner: "Пробний період",
     daysLeft: "днів залишилось",
     notConfigured: "Білінг буде доступний найближчим часом.",
   },
   en: {
     currentPlan: "Current plan",
-    subscribe: "Subscribe",
+    subscribe: "Try it",
     current: "Current",
     upgrade: "Upgrade",
     manageSub: "Manage subscription",
     perMonth: "/mo",
-    masters: "masters",
-    unlimited: "Unlimited",
-    features: { ai: "AI assistant", calendar: "Google Calendar", support: "Support agents", channels: "Channels" },
+    popular: "Popular",
     trialBanner: "Trial period",
     daysLeft: "days left",
     notConfigured: "Billing will be available soon.",
   },
   pl: {
     currentPlan: "Obecny plan",
-    subscribe: "Subskrybuj",
+    subscribe: "Wypróbuj",
     current: "Obecny",
     upgrade: "Zmień",
     manageSub: "Zarządzanie subskrypcją",
     perMonth: "/mies",
-    masters: "mistrzów",
-    unlimited: "Bez limitu",
-    features: { ai: "Asystent AI", calendar: "Google Kalendarz", support: "Agenci wsparcia", channels: "Kanały" },
+    popular: "Popularny",
     trialBanner: "Okres próbny",
     daysLeft: "dni pozostało",
     notConfigured: "Płatności będą dostępne wkrótce.",
@@ -156,42 +146,49 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
           {plans.data.map((plan) => {
             const isCurrent = plan.id === currentPlan;
             const isUpgrade = !isCurrent && (
-              (currentPlan === "start" && (plan.id === "pro" || plan.id === "studio")) ||
-              (currentPlan === "pro" && plan.id === "studio")
+              (currentPlan === "start" && (plan.id === "pro" || plan.id === "max")) ||
+              (currentPlan === "pro" && plan.id === "max")
             );
+            const features = (plan.featureList as Record<string, string[]>)?.[lang]
+              ?? (plan.featureList as Record<string, string[]>)?.en
+              ?? [];
+            const subtitle = (plan.subtitle as Record<string, string>)?.[lang]
+              ?? (plan.subtitle as Record<string, string>)?.en
+              ?? "";
 
             return (
               <div
                 key={plan.id}
-                className={`glass-card rounded-2xl p-4 space-y-3 transition-all ${
-                  isCurrent ? "ring-2 ring-brand-500/40" : ""
-                }`}
+                className={`glass-card rounded-2xl p-4 space-y-3 transition-all relative ${
+                  plan.popular ? "ring-2 ring-brand-500/40" : ""
+                } ${isCurrent ? "ring-2 ring-brand-500/40" : ""}`}
               >
+                {plan.popular && !isCurrent && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="px-3 py-1 rounded-full bg-gradient-to-r from-brand-500 to-purple-500 text-[10px] font-bold text-white uppercase tracking-wide">
+                      {l.popular}
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">{plan.name}</h3>
-                  <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+                  {subtitle && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>
+                  )}
+                  <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
                     {plan.price}
-                    <span className="text-xs font-normal text-slate-500"> {plan.currency}{l.perMonth}</span>
+                    <span className="text-xs font-normal text-slate-500"> zł{l.perMonth}</span>
                   </p>
                 </div>
 
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {plan.masters === -1 ? l.unlimited : `${plan.masters} ${l.masters}`}
-                </div>
-
                 <ul className="space-y-1.5">
-                  {Object.entries(plan.features).map(([key, value]) => {
-                    if (key === "channels") return null;
-                    const enabled = value as boolean;
-                    return (
-                      <li key={key} className="flex items-center gap-2 text-xs">
-                        <Check className={`h-3 w-3 shrink-0 ${enabled ? "text-emerald-400" : "text-slate-600"}`} />
-                        <span className={enabled ? "text-slate-700 dark:text-slate-300" : "text-slate-500 line-through"}>
-                          {l.features[key] ?? key}
-                        </span>
-                      </li>
-                    );
-                  })}
+                  {features.map((feature, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs">
+                      <Check className="h-3 w-3 shrink-0 text-emerald-400 mt-0.5" />
+                      <span className="text-slate-700 dark:text-slate-300">{feature}</span>
+                    </li>
+                  ))}
                 </ul>
 
                 {isCurrent ? (
@@ -200,9 +197,13 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
                   </div>
                 ) : (
                   <button
-                    onClick={() => checkoutMut.mutate({ tenantId, plan: plan.id as "start" | "pro" | "studio" })}
+                    onClick={() => checkoutMut.mutate({ tenantId, plan: plan.id as "start" | "pro" | "max" })}
                     disabled={checkoutMut.isPending}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-500 transition-colors disabled:opacity-50"
+                    className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
+                      plan.popular
+                        ? "bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:from-brand-500 hover:to-purple-500"
+                        : "bg-brand-600 text-white hover:bg-brand-500"
+                    }`}
                   >
                     {checkoutMut.isPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

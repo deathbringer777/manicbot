@@ -25,9 +25,9 @@ describe('PLAN_LIMITS channel configuration', () => {
     expect(PLAN_LIMITS.pro.wa_templates_monthly).toBe(500);
   });
 
-  it('studio plan includes all channels with high template limit', () => {
-    expect(PLAN_LIMITS.studio.channels).toContain('instagram');
-    expect(PLAN_LIMITS.studio.wa_templates_monthly).toBe(5000);
+  it('max plan includes all channels with high template limit', () => {
+    expect(PLAN_LIMITS.max.channels).toContain('instagram');
+    expect(PLAN_LIMITS.max.wa_templates_monthly).toBe(5000);
   });
 });
 
@@ -46,8 +46,8 @@ describe('canUse — whatsapp / instagram feature gating', () => {
     expect(canUse(ctx, 'instagram')).toBe(true);
   });
 
-  it('studio plan allows whatsapp and instagram', () => {
-    const ctx = { tenant: { billingStatus: 'active', plan: 'studio' } };
+  it('max plan allows whatsapp and instagram', () => {
+    const ctx = { tenant: { billingStatus: 'active', plan: 'max' } };
     expect(canUse(ctx, 'whatsapp')).toBe(true);
     expect(canUse(ctx, 'instagram')).toBe(true);
   });

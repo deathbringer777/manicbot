@@ -11,7 +11,7 @@ import { getStripeConfig, PLANS } from '../billing/config.js';
 import { CB } from '../config.js';
 
 function planLabel(lg, plan) {
-  const key = { start: 'billing_plan_start', pro: 'billing_plan_pro', studio: 'billing_plan_studio' }[plan];
+  const key = { start: 'billing_plan_start', pro: 'billing_plan_pro', max: 'billing_plan_max' }[plan];
   return key ? t(lg, key) : plan;
 }
 
@@ -35,8 +35,8 @@ function fmtDate(ts) {
 
 function planButtonRows(lg, stripeCfg) {
   const rows = [];
-  const plans = [PLANS.START, PLANS.PRO, PLANS.STUDIO].filter(p => stripeCfg.priceIds?.[p]);
-  const defaultLabels = { start: 'Start', pro: 'Pro ⭐', studio: 'Studio' };
+  const plans = [PLANS.START, PLANS.PRO, PLANS.MAX].filter(p => stripeCfg.priceIds?.[p]);
+  const defaultLabels = { start: 'Start', pro: 'Pro ⭐', max: 'MAX' };
   for (const plan of plans) {
     rows.push([{ text: `💳 ${defaultLabels[plan] || planLabel(lg, plan)}`, callback_data: CB.BILLING_SUBSCRIBE + plan }]);
   }

@@ -29,7 +29,7 @@ export const provisioningRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(1).max(100),
-        plan: z.enum(["start", "pro", "studio"]).default("pro"),
+        plan: z.enum(["start", "pro", "max"]).default("pro"),
       })
     )
     .mutation(async ({ ctx, input }) => {

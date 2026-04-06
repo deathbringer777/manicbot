@@ -20,7 +20,7 @@ export const env = createEnv({
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_PRICE_START_MONTHLY: z.string().optional(),
     STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
-    STRIPE_PRICE_STUDIO_MONTHLY: z.string().optional(),
+    STRIPE_PRICE_MAX_MONTHLY: z.string().optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -42,7 +42,7 @@ export const env = createEnv({
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_PRICE_START_MONTHLY: process.env.STRIPE_PRICE_START_MONTHLY,
     STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY,
-    STRIPE_PRICE_STUDIO_MONTHLY: process.env.STRIPE_PRICE_STUDIO_MONTHLY,
+    STRIPE_PRICE_MAX_MONTHLY: process.env.STRIPE_PRICE_MAX_MONTHLY,
     NODE_ENV: process.env.NODE_ENV,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

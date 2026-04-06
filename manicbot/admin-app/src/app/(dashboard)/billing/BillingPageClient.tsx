@@ -15,7 +15,7 @@ const STATUS_COLORS: Record<string, string> = {
 const PLAN_COLORS: Record<string, string> = {
   start: "text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/40",
   pro: "text-brand-400 bg-brand-500/10",
-  studio: "text-purple-400 bg-purple-500/10",
+  max: "text-purple-400 bg-purple-500/10",
 };
 
 function downloadCSV(data: string, filename: string) {

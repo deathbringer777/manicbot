@@ -5,7 +5,7 @@
 export const PLANS = {
   START: 'start',
   PRO: 'pro',
-  STUDIO: 'studio',
+  MAX: 'max',
 };
 
 export const BILLING_STATUS = {
@@ -23,7 +23,7 @@ export const BILLING_STATUS = {
 export const PLAN_LIMITS = {
   start:  { masters: 1,        ai: false, support: false, calendar: false, whiteLabel: false, channels: ['telegram'],                             wa_templates_monthly: 0    },
   pro:    { masters: 5,        ai: true,  support: true,  calendar: true,  whiteLabel: false, channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 500  },
-  studio: { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true,  channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 5000 },
+  max:    { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true,  channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 5000 },
 };
 
 export const TRIAL_DURATION_MS = 7 * 24 * 3600 * 1000;  // 7 дней
@@ -48,7 +48,7 @@ export function getStripeConfig(env) {
   const priceIds = {
     [PLANS.START]: env.STRIPE_PRICE_START_MONTHLY || null,
     [PLANS.PRO]: env.STRIPE_PRICE_PRO_MONTHLY || null,
-    [PLANS.STUDIO]: env.STRIPE_PRICE_STUDIO_MONTHLY || null,
+    [PLANS.MAX]: env.STRIPE_PRICE_MAX_MONTHLY || null,
   };
 
   return {

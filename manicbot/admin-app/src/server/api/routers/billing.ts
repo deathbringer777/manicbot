@@ -58,7 +58,7 @@ export const billingRouter = createTRPCRouter({
     .input(
       z.object({
         tenantId: z.string(),
-        plan: z.enum(["start", "pro", "studio"]),
+        plan: z.enum(["start", "pro", "max"]),
       })
     )
     .mutation(async ({ ctx, input }) => {

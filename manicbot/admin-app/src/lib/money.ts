@@ -2,7 +2,7 @@
 export const PLAN_PRICES_PLN: Record<string, number> = {
   start: 45,
   pro: 60,
-  studio: 90,
+  max: 90,
 };
 
 /** Whole złoty, Polish grouping — used across admin UI. */

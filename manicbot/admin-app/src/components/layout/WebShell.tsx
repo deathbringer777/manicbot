@@ -289,13 +289,15 @@ function getPageTitle(pathname: string, role: string | null, lang: string): stri
   return match?.label ?? tNav("Dashboard", lang);
 }
 
-function NavLink({ item, active, collapsed, onClick, dataTour }: {
+function NavLink({ item, active, collapsed, onClick, dataTour, showBadge }: {
   item: NavItem;
   active: boolean;
   collapsed?: boolean;
   onClick?: () => void;
   /** Product tour anchor (e.g. settings link). */
   dataTour?: string;
+  /** Show a red dot badge (e.g. for unverified email). */
+  showBadge?: boolean;
 }) {
   return (
     <Link
@@ -309,9 +311,14 @@ function NavLink({ item, active, collapsed, onClick, dataTour }: {
       } ${collapsed ? "justify-center px-0 border-l-0" : ""}`}
       title={collapsed ? item.label : undefined}
     >
-      <item.icon className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-        active ? "text-brand-500 dark:text-brand-400" : "group-hover:text-slate-600 dark:group-hover:text-slate-300"
-      }`} />
+      <span className="relative shrink-0">
+        <item.icon className={`h-[18px] w-[18px] transition-colors ${
+          active ? "text-brand-500 dark:text-brand-400" : "group-hover:text-slate-600 dark:group-hover:text-slate-300"
+        }`} />
+        {showBadge && (
+          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
+        )}
+      </span>
       {!collapsed && <span className="text-[13px]">{item.label}</span>}
     </Link>
   );
@@ -320,7 +327,7 @@ function NavLink({ item, active, collapsed, onClick, dataTour }: {
 export function WebShell({ children, userEmail }: { children: React.ReactNode; userEmail?: string }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { role, previewRole, createdAt } = useRole();
+  const { role, previewRole, createdAt, emailVerified } = useRole();
   const { lang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -443,6 +450,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
                   active={pathname.startsWith("/settings")}
                   dataTour="web-settings"
+                  showBadge={!emailVerified}
                 />
                 <button
                   onClick={() => setShowLogoutDialog(true)}
@@ -459,6 +467,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   active={pathname.startsWith("/settings")}
                   collapsed
                   dataTour="web-settings"
+                  showBadge={!emailVerified}
                 />
                 <button
                   onClick={() => setShowLogoutDialog(true)}
@@ -523,6 +532,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   active={pathname.startsWith("/settings")}
                   onClick={() => setSidebarOpen(false)}
                   dataTour="web-settings"
+                  showBadge={!emailVerified}
                 />
                 <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.03]">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">

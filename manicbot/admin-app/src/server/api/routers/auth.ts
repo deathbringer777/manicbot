@@ -17,28 +17,31 @@ export const authRouter = createTRPCRouter({
     if (!ctx.user && ctx.webUser) {
       const role = ctx.webUser.webRole as AppRole;
       const tenantId = ctx.webUser.tenantId ?? null;
-      // Fetch createdAt for tour button visibility (show first 2 days)
+      const email = ctx.webUser.email ?? null;
+      // Fetch createdAt + emailVerified for UI
       let createdAt: number | null = null;
+      let emailVerified = true;
       try {
         const rows = await ctx.db
-          .select({ createdAt: webUsers.createdAt })
+          .select({ createdAt: webUsers.createdAt, emailVerified: webUsers.emailVerified })
           .from(webUsers)
           .where(eq(webUsers.id, ctx.webUser.id))
           .limit(1);
         createdAt = rows[0]?.createdAt ?? null;
+        emailVerified = !!(rows[0]?.emailVerified);
       } catch { /* non-critical */ }
-      return { role, tenantId, createdAt };
+      return { role, tenantId, createdAt, emailVerified, email };
     }
 
     if (!ctx.user) {
-      return { role: null as AppRole, tenantId: null, createdAt: null as number | null };
+      return { role: null as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
     }
 
     const userId = ctx.user.id;
 
     // Creator fallback (ADMIN_CHAT_ID secret)
     if (env.ADMIN_CHAT_ID && String(userId) === env.ADMIN_CHAT_ID) {
-      return { role: "system_admin" as AppRole, tenantId: null, createdAt: null as number | null };
+      return { role: "system_admin" as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
     }
 
     // Check platform roles
@@ -52,11 +55,11 @@ export const authRouter = createTRPCRouter({
       const role = platformRow[0]!.role as AppRole;
       if (role === "system_admin") {
         if (env.ADMIN_CHAT_ID && String(userId) === env.ADMIN_CHAT_ID) {
-          return { role: "system_admin" as AppRole, tenantId: null, createdAt: null as number | null };
+          return { role: "system_admin" as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
         }
         // Ignore illegitimate DB rows for non-creator.
       } else if (role === "support" || role === "technical_support") {
-        return { role, tenantId: null, createdAt: null as number | null };
+        return { role, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
       }
     }
 
@@ -71,10 +74,10 @@ export const authRouter = createTRPCRouter({
       const role = tenantRow[0]!.role as AppRole;
       const tenantId = tenantRow[0]!.tenantId;
       if (role === "tenant_owner" || role === "master") {
-        return { role, tenantId, createdAt: null as number | null };
+        return { role, tenantId, createdAt: null as number | null, emailVerified: true, email: null as string | null };
       }
     }
 
-    return { role: null as AppRole, tenantId: null, createdAt: null as number | null };
+    return { role: null as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
   }),
 });

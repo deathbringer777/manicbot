@@ -149,9 +149,9 @@ describe('Admin calendar button in settings panel', () => {
     }
   });
 
-  it('canUse returns true for studio plan with calendar (if applicable)', async () => {
+  it('canUse returns true for max plan with calendar (if applicable)', async () => {
     const { PLAN_LIMITS } = await import('../src/billing/config.js');
-    const plan = 'studio';
+    const plan = 'max';
     if (PLAN_LIMITS[plan]?.calendar) {
       const ctx = makeTenantCtx({ plan, billingStatus: 'active' });
       expect(canUse(ctx, 'calendar')).toBe(true);
@@ -159,12 +159,12 @@ describe('Admin calendar button in settings panel', () => {
   });
 
   it('canUse returns false when status is grace_period (even for pro plan)', () => {
-    const ctx = makeTenantCtx({ plan: 'studio', billingStatus: 'grace_period' });
+    const ctx = makeTenantCtx({ plan: 'max', billingStatus: 'grace_period' });
     expect(canUse(ctx, 'calendar')).toBe(false);
   });
 
   it('canUse returns false when billing is inactive', () => {
-    const ctx = makeTenantCtx({ plan: 'studio', billingStatus: 'inactive' });
+    const ctx = makeTenantCtx({ plan: 'max', billingStatus: 'inactive' });
     expect(canUse(ctx, 'calendar')).toBe(false);
   });
 
@@ -274,7 +274,7 @@ describe('Billing plan buttons — hide for active subscribers', () => {
 describe('masterKb calendar button — already correctly gated', () => {
   it('inactive billing: calendar button hidden in masterKb', async () => {
     const { CB } = await import('../src/config.js');
-    const ctx = makeTenantCtx({ plan: 'studio', billingStatus: 'inactive' });
+    const ctx = makeTenantCtx({ plan: 'max', billingStatus: 'inactive' });
     const kb = masterKb('ru', ctx);
     const cbs = flatCbs(kb);
     expect(cbs).not.toContain(CB.MST_CALENDAR);
@@ -282,7 +282,7 @@ describe('masterKb calendar button — already correctly gated', () => {
 
   it('grace_period: calendar button hidden in masterKb', async () => {
     const { CB } = await import('../src/config.js');
-    const ctx = makeTenantCtx({ plan: 'studio', billingStatus: 'grace_period' });
+    const ctx = makeTenantCtx({ plan: 'max', billingStatus: 'grace_period' });
     const kb = masterKb('ru', ctx);
     const cbs = flatCbs(kb);
     expect(cbs).not.toContain(CB.MST_CALENDAR);

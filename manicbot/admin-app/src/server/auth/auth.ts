@@ -31,16 +31,18 @@ declare module "next-auth" {
       email: string;
       tenantId: string | null;
       webRole: string;
+      isEmailVerified: boolean;
     };
   }
   interface User {
     tenantId?: string | null;
     webRole?: string;
+    isEmailVerified?: boolean;
   }
 }
 
 /** Local type helper for JWT token with custom fields (next-auth v5 beta doesn't export JWT for augmentation). */
-type ExtendedJWT = { tenantId?: string | null; webRole?: string };
+type ExtendedJWT = { tenantId?: string | null; webRole?: string; emailVerified?: boolean };
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -123,9 +125,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        // Reject unverified email (admin-created users are auto-verified)
-        if (!user.emailVerified) return null;
-
+        // Allow unverified email users to log in — gated in dashboard layout
         // Success — reset lockout counter + track IP for login alerts
         try {
           await db
@@ -144,6 +144,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           tenantId: user.tenantId ?? null,
           webRole: user.role,
+          isEmailVerified: !!user.emailVerified,
         };
       },
     }),
@@ -175,6 +176,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             user.tenantId = webUser.tenantId ?? null;
             user.webRole = webUser.role;
             user.id = webUser.id;
+            user.isEmailVerified = true;
           } else {
             const secret = process.env.AUTH_SECRET;
             if (!secret) {
@@ -210,19 +212,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         t.tenantId = user.tenantId ?? null;
         t.webRole = user.webRole ?? "tenant_owner";
-      } else if (t.sub && !t.tenantId) {
-        // Re-check DB for tenant assignment (handles post-registration tenant creation)
-        try {
-          const db = getDb();
-          const rows = await db
-            .select({ tenantId: webUsers.tenantId })
-            .from(webUsers)
-            .where(eq(webUsers.id, t.sub))
-            .limit(1);
-          if (rows[0]?.tenantId) {
-            t.tenantId = rows[0].tenantId;
-          }
-        } catch { /* non-critical — next request will retry */ }
+        t.emailVerified = user.isEmailVerified ?? true;
+      } else {
+        // Re-check DB for tenant assignment + emailVerified refresh
+        if (t.sub && (!t.tenantId || t.emailVerified === false)) {
+          try {
+            const db = getDb();
+            const rows = await db
+              .select({ tenantId: webUsers.tenantId, emailVerified: webUsers.emailVerified })
+              .from(webUsers)
+              .where(eq(webUsers.id, t.sub))
+              .limit(1);
+            if (rows[0]) {
+              if (rows[0].tenantId) t.tenantId = rows[0].tenantId;
+              if (rows[0].emailVerified) t.emailVerified = true;
+            }
+          } catch { /* non-critical — next request will retry */ }
+        }
       }
       return token;
     },
@@ -230,6 +236,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       const t = token as typeof token & ExtendedJWT;
       session.user.tenantId = t.tenantId ?? null;
       session.user.webRole = t.webRole ?? "tenant_owner";
+      session.user.isEmailVerified = t.emailVerified ?? true;
       return session;
     },
   },

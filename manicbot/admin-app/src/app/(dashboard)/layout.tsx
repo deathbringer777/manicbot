@@ -58,7 +58,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId } = roleQuery.data;
+  const { role, tenantId, createdAt } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -66,6 +66,7 @@ export default function DashboardLayout({
     role,
     tenantId,
     userId: null, // web users don't have Telegram userId
+    createdAt: createdAt ?? null,
     previewRole,
     previewTenantId,
     setPreviewRole,

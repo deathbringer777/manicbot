@@ -9,12 +9,13 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   LogOut, Menu, X, Zap, ChevronLeft, ChevronRight,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
-  HeadphonesIcon, Scissors, Sun, Moon,
+  HeadphonesIcon, Scissors, Sun, Moon, Compass,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding";
+import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { PublicFooter } from "~/components/public/PublicFooter";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
@@ -319,7 +320,7 @@ function NavLink({ item, active, collapsed, onClick, dataTour }: {
 export function WebShell({ children, userEmail }: { children: React.ReactNode; userEmail?: string }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { role, previewRole } = useRole();
+  const { role, previewRole, createdAt } = useRole();
   const { lang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -364,6 +365,14 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const mobileNav = flatNav.length <= 5
     ? flatNav
     : [...flatNav.slice(0, 4), flatNav.find(n => n.href.includes("settings")) ?? flatNav[flatNav.length - 1]!];
+
+  // Tour button: show for first 2 days after registration for non-admin roles
+  const showTourButton = (() => {
+    if (effectiveRole === "system_admin") return false;
+    if (!createdAt) return false;
+    const twoDays = 2 * 24 * 3600;
+    return (Math.floor(Date.now() / 1000) - createdAt) < twoDays;
+  })();
 
   // User avatar initial
   const avatarLetter = (userEmail ?? "G").charAt(0).toUpperCase();
@@ -567,6 +576,18 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
             {/* Right: theme toggle + user pill */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Tour replay button (first 2 days) */}
+              {showTourButton && (
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent(TOUR_REPLAY_EVENT))}
+                  className="relative h-8 w-8 flex items-center justify-center rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 hover:text-violet-300 transition-colors"
+                  title={lang === "ru" ? "Тур по интерфейсу" : lang === "ua" ? "Тур по інтерфейсу" : lang === "pl" ? "Przewodnik" : "Interface tour"}
+                >
+                  <Compass className="h-4 w-4" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-violet-400 animate-pulse" />
+                </button>
+              )}
+
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
@@ -599,12 +620,14 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-brand-500/[0.05] blur-[120px]" />
               <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-purple-500/[0.05] blur-[120px]" />
             </div>
-            <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full">
-              {children}
-            </div>
-            {/* Same legal/footer links as auth + public pages; pb clears fixed mobile tab bar */}
-            <div className="relative z-10 pb-24 lg:pb-6">
-              <PublicFooter />
+            <div className="min-h-full flex flex-col">
+              <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
+                {children}
+              </div>
+              {/* Same legal/footer links as auth + public pages; pb clears fixed mobile tab bar */}
+              <div className="relative z-10 pb-24 lg:pb-6">
+                <PublicFooter />
+              </div>
             </div>
           </main>
 

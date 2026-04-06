@@ -9,6 +9,7 @@ import type { Lang } from "~/lib/i18n";
 
 const emailCopy: Record<Lang, {
   verification: { subject: string; heading: string; body: string; cta: string; ignore: string };
+  verificationCode: { subject: string; heading: string; body: string; expires: string; ignore: string };
   passwordReset: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
   welcome: { subject: string; heading: string; body: string; cta: string };
   emailChange: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
@@ -21,6 +22,13 @@ const emailCopy: Record<Lang, {
       heading: "Подтвердите email",
       body: "Спасибо за регистрацию! Нажмите кнопку ниже, чтобы подтвердить ваш email и начать работу.",
       cta: "Подтвердить email",
+      ignore: "Если вы не регистрировались, просто проигнорируйте это письмо.",
+    },
+    verificationCode: {
+      subject: "Ваш код подтверждения — ManicBot",
+      heading: "Код подтверждения",
+      body: "Введите этот код в ManicBot, чтобы подтвердить ваш email:",
+      expires: "Код действителен 15 минут.",
       ignore: "Если вы не регистрировались, просто проигнорируйте это письмо.",
     },
     passwordReset: {
@@ -63,6 +71,13 @@ const emailCopy: Record<Lang, {
       cta: "Підтвердити email",
       ignore: "Якщо ви не реєструвалися, просто проігноруйте цей лист.",
     },
+    verificationCode: {
+      subject: "Ваш код підтвердження — ManicBot",
+      heading: "Код підтвердження",
+      body: "Введіть цей код у ManicBot, щоб підтвердити ваш email:",
+      expires: "Код дійсний 15 хвилин.",
+      ignore: "Якщо ви не реєструвалися, просто проігноруйте цей лист.",
+    },
     passwordReset: {
       subject: "Скидання пароля — ManicBot",
       heading: "Скидання пароля",
@@ -103,6 +118,13 @@ const emailCopy: Record<Lang, {
       cta: "Confirm email",
       ignore: "If you didn't sign up, just ignore this email.",
     },
+    verificationCode: {
+      subject: "Your verification code — ManicBot",
+      heading: "Verification code",
+      body: "Enter this code in ManicBot to verify your email:",
+      expires: "This code expires in 15 minutes.",
+      ignore: "If you didn't sign up, just ignore this email.",
+    },
     passwordReset: {
       subject: "Reset your password — ManicBot",
       heading: "Reset your password",
@@ -141,6 +163,13 @@ const emailCopy: Record<Lang, {
       heading: "Potwierdź email",
       body: "Dziękujemy za rejestrację! Kliknij przycisk poniżej, aby potwierdzić email i zacząć.",
       cta: "Potwierdź email",
+      ignore: "Jeśli nie rejestrowałeś się, zignoruj tę wiadomość.",
+    },
+    verificationCode: {
+      subject: "Twój kod weryfikacyjny — ManicBot",
+      heading: "Kod weryfikacyjny",
+      body: "Wpisz ten kod w ManicBot, aby potwierdzić swój email:",
+      expires: "Kod ważny 15 minut.",
       ignore: "Jeśli nie rejestrowałeś się, zignoruj tę wiadomość.",
     },
     passwordReset: {
@@ -226,6 +255,19 @@ function muted(text: string): string {
 }
 
 // ─── Template functions ─────────────────────────────────────────────────────
+
+export function verificationCodeEmailHtml(code: string, lang: Lang): string {
+  const c = getEmailCopy(lang).verificationCode;
+  const digits = code.split("").map(d =>
+    `<td style="width:48px;height:56px;text-align:center;font-size:28px;font-weight:700;color:#ffffff;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-family:monospace;letter-spacing:2px;">${d}</td>`
+  ).join('<td style="width:8px;"></td>');
+  const codeBlock = `<table style="margin:24px auto;" cellpadding="0" cellspacing="0"><tr>${digits}</tr></table>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + codeBlock + muted(c.expires) + muted(c.ignore),
+    getEmailCopy(lang).footer,
+  );
+}
 
 export function verificationEmailHtml(verifyUrl: string, lang: Lang): string {
   const c = getEmailCopy(lang).verification;

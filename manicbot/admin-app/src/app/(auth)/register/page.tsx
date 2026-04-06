@@ -141,7 +141,8 @@ export default function RegisterPage() {
         });
 
         if (registration.verificationRequired) {
-          setSuccessMessage(copy.register.verifyNotice);
+          try { sessionStorage.setItem("_vepwd", password); } catch { /* ignore */ }
+          router.push(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
           return;
         }
 

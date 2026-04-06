@@ -8,6 +8,7 @@ import { sendResendEmail, type SendEmailResult } from "./resend";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 import {
   verificationEmailHtml,
+  verificationCodeEmailHtml,
   passwordResetEmailHtml,
   welcomeEmailHtml,
   emailChangeEmailHtml,
@@ -19,7 +20,21 @@ function baseUrl(): string {
   return authPublicBaseUrl() || "";
 }
 
-/** Registration: email verification link. */
+/** Registration: 6-digit verification code. */
+export async function sendVerificationCodeEmail(
+  to: string,
+  code: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const copy = getEmailCopy(lang);
+  return sendResendEmail({
+    to,
+    subject: copy.verificationCode.subject,
+    html: verificationCodeEmailHtml(code, lang),
+  });
+}
+
+/** Registration: email verification link (legacy). */
 export async function sendVerificationEmail(
   to: string,
   token: string,

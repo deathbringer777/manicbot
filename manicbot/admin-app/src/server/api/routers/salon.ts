@@ -2,8 +2,10 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
-  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles,
+  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs,
 } from "~/server/db/schema";
+import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
+import { getOrCreateCustomer, createCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
 import { eq, and, desc, sql, ne, like, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
@@ -119,6 +121,7 @@ export const salonRouter = createTRPCRouter({
       currentPeriodEnd: t.currentPeriodEnd,
       nextPaymentDate: t.nextPaymentDate,
       cancelAtPeriodEnd: t.cancelAtPeriodEnd,
+      stripeCustomerId: t.stripeCustomerId ?? null,
     };
   }),
 
@@ -414,5 +417,290 @@ export const salonRouter = createTRPCRouter({
         and(eq(tenantRoles.tenantId, input.tenantId), eq(tenantRoles.chatId, input.chatId), eq(tenantRoles.role, "master"))
       );
       return { success: true };
+    }),
+
+  // ── Bot Connection ─────────────────────────────────────────────
+
+  getBotStatus: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    const rows = await ctx.db
+      .select()
+      .from(bots)
+      .where(eq(bots.tenantId, input.tenantId))
+      .limit(1);
+    if (!rows.length) return null;
+    const bot = rows[0]!;
+    return {
+      botId: bot.botId,
+      botUsername: bot.botUsername,
+      active: !!bot.active,
+    };
+  }),
+
+  connectBot: publicProcedure
+    .input(z.object({ tenantId: z.string(), token: z.string().min(10).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Check no existing bot
+      const existing = await ctx.db
+        .select({ botId: bots.botId })
+        .from(bots)
+        .where(eq(bots.tenantId, input.tenantId))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Bot already connected. Disconnect first." });
+      }
+
+      // Validate token with Telegram
+      let botInfo;
+      try {
+        botInfo = await telegramGetMe(input.token);
+      } catch (err: any) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: err.message?.includes("401")
+            ? "Invalid bot token. Check the token from BotFather."
+            : `Could not validate token: ${err.message}`,
+        });
+      }
+
+      const botId = String(botInfo.id);
+      const webhookSecret = crypto.randomUUID();
+      const now = Math.floor(Date.now() / 1000);
+
+      // Check bot not used by another tenant
+      const otherTenant = await ctx.db
+        .select({ tenantId: bots.tenantId })
+        .from(bots)
+        .where(eq(bots.botId, botId))
+        .limit(1);
+      if (otherTenant.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "This bot is already connected to another salon." });
+      }
+
+      // Set webhook
+      const webhookUrl = `https://manicbot.com/webhook/${botId}`;
+      try {
+        await telegramSetWebhook(input.token, webhookUrl, webhookSecret);
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to set webhook: ${err.message}` });
+      }
+
+      // Register bot in D1
+      await ctx.db.insert(bots).values({
+        botId,
+        tenantId: input.tenantId,
+        botUsername: botInfo.username ?? null,
+        webhookSecret,
+        active: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      return {
+        botId,
+        botUsername: botInfo.username ?? null,
+        firstName: botInfo.first_name,
+      };
+    }),
+
+  disconnectBot: publicProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    const rows = await ctx.db
+      .select()
+      .from(bots)
+      .where(eq(bots.tenantId, input.tenantId))
+      .limit(1);
+    if (!rows.length) return { success: true };
+
+    // Remove from D1 (KV token cleanup is Worker-side)
+    await ctx.db.delete(bots).where(eq(bots.botId, rows[0]!.botId));
+
+    return { success: true };
+  }),
+
+  // ── Stripe Billing ─────────────────────────────────────────────
+
+  getPlans: publicProcedure.query(() => {
+    return [
+      {
+        id: "start",
+        name: "Start",
+        price: 45,
+        currency: "PLN",
+        masters: 1,
+        features: { ai: false, calendar: false, support: false, channels: ["telegram"] },
+      },
+      {
+        id: "pro",
+        name: "Pro",
+        price: 60,
+        currency: "PLN",
+        masters: 5,
+        features: { ai: true, calendar: true, support: true, channels: ["telegram", "whatsapp", "instagram"] },
+      },
+      {
+        id: "studio",
+        name: "Studio",
+        price: 90,
+        currency: "PLN",
+        masters: -1, // unlimited
+        features: { ai: true, calendar: true, support: true, channels: ["telegram", "whatsapp", "instagram"] },
+      },
+    ];
+  }),
+
+  createCheckoutSession: publicProcedure
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "studio"]) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      }
+
+      const priceMap: Record<string, string | undefined> = {
+        start: env.STRIPE_PRICE_START_MONTHLY,
+        pro: env.STRIPE_PRICE_PRO_MONTHLY,
+        studio: env.STRIPE_PRICE_STUDIO_MONTHLY,
+      };
+      const priceId = priceMap[input.plan];
+      if (!priceId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Price not configured for plan: ${input.plan}` });
+      }
+
+      // Get tenant info for customer name
+      const [tenant] = await ctx.db
+        .select({ name: tenants.name, stripeCustomerId: tenants.stripeCustomerId, billingEmail: tenants.billingEmail })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      if (!tenant) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
+
+      // Get or create Stripe customer
+      let customerId = tenant.stripeCustomerId;
+      if (!customerId) {
+        customerId = await getOrCreateCustomer(stripeKey, {
+          tenantId: input.tenantId,
+          name: tenant.name,
+          email: tenant.billingEmail ?? ctx.webUser?.email ?? undefined,
+        });
+        // Save customer ID to tenant
+        await ctx.db
+          .update(tenants)
+          .set({ stripeCustomerId: customerId, updatedAt: Math.floor(Date.now() / 1000) })
+          .where(eq(tenants.id, input.tenantId));
+      }
+
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : (process.env.AUTH_URL ?? "https://admin.manicbot.com");
+      const url = await createCheckoutSession(stripeKey, {
+        customerId,
+        priceId,
+        successUrl: `${baseUrl}/settings?section=billing&checkout=success`,
+        cancelUrl: `${baseUrl}/settings?section=billing`,
+        tenantId: input.tenantId,
+      });
+
+      return { url };
+    }),
+
+  createBillingPortalSession: publicProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+
+    const stripeKey = env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+    }
+
+    const [tenant] = await ctx.db
+      .select({ stripeCustomerId: tenants.stripeCustomerId })
+      .from(tenants)
+      .where(eq(tenants.id, input.tenantId))
+      .limit(1);
+
+    if (!tenant?.stripeCustomerId) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "No active subscription. Subscribe first." });
+    }
+
+    const baseUrl = process.env.AUTH_URL ?? "https://admin.manicbot.com";
+    const url = await createBillingPortalSession(stripeKey, {
+      customerId: tenant.stripeCustomerId,
+      returnUrl: `${baseUrl}/settings?section=billing`,
+    });
+
+    return { url };
+  }),
+
+  // ── Meta Channels (Instagram / WhatsApp) ───────────────────────
+
+  /** List connected Meta channels for a tenant. */
+  getChannels: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    const rows = await ctx.db
+      .select({
+        id: channelConfigs.id,
+        channelType: channelConfigs.channelType,
+        active: channelConfigs.active,
+        config: channelConfigs.config,
+        createdAt: channelConfigs.createdAt,
+      })
+      .from(channelConfigs)
+      .where(eq(channelConfigs.tenantId, input.tenantId));
+    return rows;
+  }),
+
+  /** Connect Instagram via Worker /admin/ig-channel. Requires WORKER_PUBLIC_URL + ADMIN_KEY env vars. */
+  connectInstagram: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      token: z.string().min(10),
+      pageId: z.string().min(1),
+      igAccountId: z.string().optional(),
+      instagramBusinessId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const workerUrl = env.WORKER_PUBLIC_URL;
+      const adminKey = env.ADMIN_KEY;
+      if (!workerUrl || !adminKey) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Server not configured for Instagram connection. Set WORKER_PUBLIC_URL and ADMIN_KEY." });
+      }
+
+      const res = await fetch(`${workerUrl}/admin/ig-channel?key=${encodeURIComponent(adminKey)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: input.token,
+          pageId: input.pageId,
+          tenantId: input.tenantId,
+          igAccountId: input.igAccountId,
+          instagramBusinessId: input.instagramBusinessId,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      const data = await res.json() as { ok?: boolean; error?: string; graphMe?: { id: string; name: string }; channelConfigId?: string };
+      if (!res.ok || !data.ok) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: data.error ?? "Failed to connect Instagram" });
+      }
+
+      return { ok: true as const, channelConfigId: data.channelConfigId, graphMe: data.graphMe };
+    }),
+
+  /** Disconnect a Meta channel (instagram or whatsapp) by deleting its config. */
+  disconnectChannel: publicProcedure
+    .input(z.object({ tenantId: z.string(), channelType: z.enum(["instagram", "whatsapp"]) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db
+        .delete(channelConfigs)
+        .where(and(
+          eq(channelConfigs.tenantId, input.tenantId),
+          eq(channelConfigs.channelType, input.channelType),
+        ));
+      return { ok: true as const };
     }),
 });

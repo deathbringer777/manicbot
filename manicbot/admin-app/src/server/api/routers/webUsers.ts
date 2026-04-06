@@ -10,6 +10,7 @@ import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
 import {
   sendVerificationEmail,
+  sendVerificationCodeEmail,
   sendPasswordResetEmail,
   sendWelcomeEmail,
   sendEmailChangeVerification,
@@ -35,6 +36,39 @@ function checkRegisterRateLimit(ip: string): boolean {
   if (entry.count >= RL_MAX) return false;
   entry.count++;
   return true;
+}
+
+const resendRl = new Map<string, { count: number; resetAt: number }>();
+const RESEND_RL_MAX = 3;
+
+function checkResendRateLimit(email: string): boolean {
+  const now = Date.now();
+  const entry = resendRl.get(email);
+  if (!entry || now > entry.resetAt) {
+    resendRl.set(email, { count: 1, resetAt: now + RL_WINDOW });
+    return true;
+  }
+  if (entry.count >= RESEND_RL_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+const verifyRl = new Map<string, { count: number; resetAt: number }>();
+
+function checkVerifyRateLimit(email: string): boolean {
+  const now = Date.now();
+  const entry = verifyRl.get(email);
+  if (!entry || now > entry.resetAt) {
+    verifyRl.set(email, { count: 1, resetAt: now + RL_WINDOW });
+    return true;
+  }
+  if (entry.count >= RL_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+function generateVerificationCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 const resetRl = new Map<string, { count: number; resetAt: number }>();
@@ -134,9 +168,9 @@ export const webUsersRouter = createTRPCRouter({
       }
       const id = crypto.randomUUID();
       const passwordHash = await hashPassword(input.password);
-      const verificationToken = crypto.randomUUID();
+      const verificationCode = generateVerificationCode();
       const now = Math.floor(Date.now() / 1000);
-      const tokenExpiresAt = now + 24 * 3600; // 24 hours
+      const codeExpiresAt = now + 15 * 60; // 15 minutes
       const skipEmailVerification = googleVerified || !isResendConfigured();
 
       // Auto-create tenant for salon owners
@@ -168,8 +202,8 @@ export const webUsersRouter = createTRPCRouter({
           lang: input.lang,
           referralSource: input.referralSource ?? null,
           emailVerified: skipEmailVerification ? 1 : 0,
-          verificationToken: skipEmailVerification ? null : verificationToken,
-          verificationTokenExpiresAt: skipEmailVerification ? null : tokenExpiresAt,
+          verificationToken: skipEmailVerification ? null : verificationCode,
+          verificationTokenExpiresAt: skipEmailVerification ? null : codeExpiresAt,
           tosAcceptedAt: now,
           tenantId: assignedTenantId,
           createdAt: now,
@@ -205,7 +239,7 @@ export const webUsersRouter = createTRPCRouter({
       } catch { /* non-critical */ }
 
       if (!skipEmailVerification) {
-        const sent = await sendVerificationEmail(email, verificationToken, input.lang);
+        const sent = await sendVerificationCodeEmail(email, verificationCode, input.lang);
         if (!sent.ok) {
           await ctx.db.delete(webUsers).where(eq(webUsers.id, id));
           throw new TRPCError({
@@ -225,17 +259,23 @@ export const webUsersRouter = createTRPCRouter({
       };
     }),
 
-  /** Verify email address with token. */
+  /** Verify email address with 6-digit code. */
   verifyEmail: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
+    .input(z.object({ email: z.string().email(), code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase().trim();
+
+      if (!checkVerifyRateLimit(email)) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many verification attempts. Try again later." });
+      }
+
       const rows = await ctx.db
         .select()
         .from(webUsers)
-        .where(eq(webUsers.verificationToken, input.token))
+        .where(eq(webUsers.email, email))
         .limit(1);
       if (!rows.length) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Invalid verification token" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invalid verification code" });
       }
       const user = rows[0]!;
       if (user.emailVerified) {
@@ -243,8 +283,20 @@ export const webUsersRouter = createTRPCRouter({
       }
       const now = Math.floor(Date.now() / 1000);
       if (user.verificationTokenExpiresAt && now > user.verificationTokenExpiresAt) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Verification token expired" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Verification code expired. Request a new one." });
       }
+      // Constant-time comparison
+      if (!user.verificationToken || user.verificationToken.length !== input.code.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
+      }
+      let match = 0;
+      for (let i = 0; i < input.code.length; i++) {
+        match |= input.code.charCodeAt(i) ^ user.verificationToken.charCodeAt(i);
+      }
+      if (match !== 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
+      }
+
       await ctx.db
         .update(webUsers)
         .set({ emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
@@ -254,6 +306,40 @@ export const webUsersRouter = createTRPCRouter({
       sendWelcomeEmail(user.email, user.name ?? null, (user.lang ?? "en") as Lang).catch(() => {});
 
       return { success: true };
+    }),
+
+  /** Resend verification code. */
+  resendVerificationCode: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase().trim();
+
+      if (!checkResendRateLimit(email)) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many resend attempts. Try again later." });
+      }
+
+      const rows = await ctx.db
+        .select()
+        .from(webUsers)
+        .where(eq(webUsers.email, email))
+        .limit(1);
+      // Silent success even if user not found (prevent enumeration)
+      if (!rows.length || rows[0]!.emailVerified) {
+        return { ok: true };
+      }
+      const user = rows[0]!;
+      const newCode = generateVerificationCode();
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = now + 15 * 60;
+
+      await ctx.db
+        .update(webUsers)
+        .set({ verificationToken: newCode, verificationTokenExpiresAt: expiresAt, updatedAt: now })
+        .where(eq(webUsers.id, user.id));
+
+      await sendVerificationCodeEmail(email, newCode, (user.lang ?? "en") as Lang);
+
+      return { ok: true };
     }),
 
   /** Request password reset email (public). Same response whether or not the email exists. */

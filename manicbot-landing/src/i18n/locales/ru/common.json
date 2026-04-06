@@ -188,7 +188,8 @@
     "tagline": "Омниканальный бот для записи в бьюти-сфере",
     "links": {
       "telegram": "Telegram",
-      "email": "Email"
+      "email": "Email",
+      "blog": "Блог"
     }
   }
 }

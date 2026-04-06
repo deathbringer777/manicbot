@@ -12,6 +12,7 @@ import { isWithinMessageWindow } from './inbound.js';
 import { sendTemplateMessage, canSendTemplate, trackTemplateUsage, buildReminderComponents } from '../channels/whatsapp-templates.js';
 import { getChannelConfig } from '../channels/resolver.js';
 import { markReviewRequested } from '../services/reviews.js';
+import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manager.js';
 
 export async function handleCron(ctx) {
   try {
@@ -22,6 +23,26 @@ export async function handleCron(ctx) {
     await checkBillingExpiry(ctx, now);
 
     if (!ctx?.db || !ctx?.tenantId) return;
+
+    // Phase 0: IG token health check — log if missing/expired, refresh if expiring
+    try {
+      const igConfig = await getChannelConfig(ctx, ctx.tenantId, 'instagram', ctx.BOT_ENCRYPTION_KEY || null);
+      if (igConfig) {
+        if (!igConfig.token) {
+          console.error('[cron][ig] tenant', ctx.tenantId, '— token missing or failed to decrypt. Bot cannot send IG messages. Update via POST /admin/ig-token');
+        } else if (isTokenExpiring(igConfig, 10)) {
+          console.warn('[cron][ig] token expiring soon for tenant', ctx.tenantId, '— attempting refresh');
+          const refreshResult = await refreshInstagramToken(ctx, igConfig.id, ctx.BOT_ENCRYPTION_KEY || null);
+          if (refreshResult.ok) {
+            console.log('[cron][ig] token refreshed for tenant', ctx.tenantId);
+          } else {
+            console.error('[cron][ig] token refresh failed for tenant', ctx.tenantId, ':', refreshResult.error, '— update manually via POST /admin/ig-token');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[cron][ig] token health check error:', e.message);
+    }
 
     try {
       await renewExpiringGoogleWatches(ctx);

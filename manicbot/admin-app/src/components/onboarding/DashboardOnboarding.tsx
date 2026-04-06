@@ -33,6 +33,7 @@ export function DashboardOnboarding() {
       if (steps.length === 0) return;
       const labels = tourButtonLabels(lang);
       runningRef.current = true;
+      document.body.classList.add("driver-tour-active");
       const d = driver({
         showProgress: true,
         progressText: "{{current}} / {{total}}",
@@ -43,6 +44,7 @@ export function DashboardOnboarding() {
         popoverClass: "driverjs-manicbot",
         steps,
         onDestroyed: () => {
+          document.body.classList.remove("driver-tour-active");
           runningRef.current = false;
           if (markComplete && isTourRole(effectiveRole)) {
             try {

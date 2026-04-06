@@ -18,6 +18,11 @@ export type TenantAccessCtx = {
  * Supports both Telegram user (ctx.user) and web session (ctx.webUser).
  */
 export async function assertTenantOwner(ctx: TenantAccessCtx, tenantId: string): Promise<void> {
+  // Reject null/empty tenantId — prevents null===null bypass
+  if (!tenantId) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Tenant ID is required" });
+  }
+
   // Web session path
   if (!ctx.user && ctx.webUser) {
     if (ctx.webUser.webRole === "system_admin") return;

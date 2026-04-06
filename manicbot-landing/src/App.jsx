@@ -427,11 +427,12 @@ export default function App() {
 
       <footer className="footer">
         <div className="footer-inner">
-          <p className="footer-copy">{t('footer.copy')} · {t('footer.tagline')}</p>
           <div className="footer-links">
             <a href="https://t.me/manic_preview_bot" target="_blank" rel="noopener noreferrer">{t('footer.links.telegram')}</a>
             <a href="mailto:hello@manicbot.com">{t('footer.links.email')}</a>
+            <a href="/blog/">{t('footer.links.blog')}</a>
           </div>
+          <p className="footer-copy">{t('footer.copy')} · {t('footer.tagline')}</p>
         </div>
       </footer>
     </div>

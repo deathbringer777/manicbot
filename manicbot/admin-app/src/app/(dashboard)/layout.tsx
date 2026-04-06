@@ -10,6 +10,7 @@ import { WebShell } from "~/components/layout/WebShell";
 import { SalonDashboard } from "~/components/dashboards/SalonDashboard";
 import { MasterDashboard } from "~/components/dashboards/MasterDashboard";
 import { SupportDashboard } from "~/components/dashboards/SupportDashboard";
+import { NoTenantOnboarding } from "~/components/onboarding/NoTenantOnboarding";
 import type { AppRole } from "~/server/api/routers/auth";
 
 export default function DashboardLayout({
@@ -78,7 +79,9 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {isSettingsPage ? children : <SalonDashboard tenantId={effectiveTenantId!} />}
+          {!effectiveTenantId
+            ? <NoTenantOnboarding role="tenant_owner" />
+            : isSettingsPage ? children : <SalonDashboard tenantId={effectiveTenantId} />}
         </WebShell>
       </RoleContext.Provider>
     );
@@ -88,7 +91,9 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId!} masterId={null!} />}
+          {!effectiveTenantId
+            ? <NoTenantOnboarding role="master" />
+            : isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId} masterId={null!} />}
         </WebShell>
       </RoleContext.Provider>
     );

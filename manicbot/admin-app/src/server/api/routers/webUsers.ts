@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { webUsers, auditLog } from "~/server/db/schema";
+import { webUsers, auditLog, tenants } from "~/server/db/schema";
 import type { Lang } from "~/lib/i18n";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
@@ -49,6 +49,15 @@ function checkPasswordResetRateLimit(ip: string): boolean {
   if (entry.count >= RL_MAX) return false;
   entry.count++;
   return true;
+}
+
+function randomId(len = 6): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return Array.from(arr)
+    .map((b) => chars[b % chars.length])
+    .join("");
 }
 
 function clientIp(ctx: { headers?: Headers | null }): string {
@@ -129,6 +138,26 @@ export const webUsersRouter = createTRPCRouter({
       const now = Math.floor(Date.now() / 1000);
       const tokenExpiresAt = now + 24 * 3600; // 24 hours
       const skipEmailVerification = googleVerified || !isResendConfigured();
+
+      // Auto-create tenant for salon owners
+      let assignedTenantId: string | null = null;
+      if (input.role === "tenant_owner") {
+        const tid = "t_" + randomId(6);
+        const trialEndsAt = now + 7 * 24 * 3600; // 7 days
+        await ctx.db.insert(tenants).values({
+          id: tid,
+          name: (input.name ?? email.split("@")[0] ?? "My Salon").trim(),
+          active: 1,
+          plan: "start",
+          billingStatus: "trialing",
+          trialEndsAt,
+          cancelAtPeriodEnd: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+        assignedTenantId = tid;
+      }
+
       try {
         await ctx.db.insert(webUsers).values({
           id,
@@ -142,11 +171,15 @@ export const webUsersRouter = createTRPCRouter({
           verificationToken: skipEmailVerification ? null : verificationToken,
           verificationTokenExpiresAt: skipEmailVerification ? null : tokenExpiresAt,
           tosAcceptedAt: now,
-          tenantId: null,
+          tenantId: assignedTenantId,
           createdAt: now,
           updatedAt: now,
         });
       } catch (err: unknown) {
+        // Clean up orphaned tenant if webUsers insert fails
+        if (assignedTenantId) {
+          try { await ctx.db.delete(tenants).where(eq(tenants.id, assignedTenantId)); } catch { /* best-effort */ }
+        }
         // Handle race condition: another request inserted the same email between our check and insert
         if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
           throw new TRPCError({ code: "CONFLICT", message: "Registration failed. Please try again or use a different email." });
@@ -155,7 +188,7 @@ export const webUsersRouter = createTRPCRouter({
       }
       try {
         await ctx.db.insert(auditLog).values({
-          tenantId: null,
+          tenantId: assignedTenantId,
           actor: email,
           action: "tos_accepted",
           detail: JSON.stringify({
@@ -164,6 +197,7 @@ export const webUsersRouter = createTRPCRouter({
             email,
             referralSource: input.referralSource ?? null,
             role: input.role,
+            tenantId: assignedTenantId,
           }),
           ip,
           createdAt: now,
@@ -512,6 +546,46 @@ export const webUsersRouter = createTRPCRouter({
         .where(eq(webUsers.email, ctx.webUser.email));
 
       return { success: true };
+    }),
+
+  /** Safety-net: create tenant for logged-in tenant_owner with no salon yet. */
+  createMyTenant: protectedProcedure
+    .input(z.object({ name: z.string().min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
+      }
+      if (ctx.webUser.webRole !== "tenant_owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only salon owners can create a salon" });
+      }
+      // Prevent double-creation — re-read from DB
+      const [me] = await ctx.db
+        .select({ tenantId: webUsers.tenantId })
+        .from(webUsers)
+        .where(eq(webUsers.id, ctx.webUser.id))
+        .limit(1);
+      if (me?.tenantId) {
+        throw new TRPCError({ code: "CONFLICT", message: "You already have a salon" });
+      }
+      const tid = "t_" + randomId(6);
+      const now = Math.floor(Date.now() / 1000);
+      const trialEndsAt = now + 7 * 24 * 3600;
+      await ctx.db.insert(tenants).values({
+        id: tid,
+        name: input.name.trim(),
+        active: 1,
+        plan: "start",
+        billingStatus: "trialing",
+        trialEndsAt,
+        cancelAtPeriodEnd: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db
+        .update(webUsers)
+        .set({ tenantId: tid, updatedAt: now })
+        .where(eq(webUsers.id, ctx.webUser.id));
+      return { tenantId: tid };
     }),
 
   /** Assign or clear tenantId for a web user (God Mode only). */

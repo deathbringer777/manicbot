@@ -260,6 +260,16 @@ const translations = {
   "search.showAllFor":      { ru: "Показать все результаты для", ua: "Показати всі результати для", en: "Show all results for", pl: "Pokaż wszystkie wyniki dla" },
   "search.found":           { ru: "Найдено", ua: "Знайдено", en: "Found", pl: "Znaleziono" },
   "search.popularCities":   { ru: "Популярные города", ua: "Популярні міста", en: "Popular cities", pl: "Popularne miasta" },
+
+  // ── No-tenant onboarding ──────────────────────────────────────────────────
+  "onboarding.ownerSetup":      { ru: "Создайте свой салон", ua: "Створіть свій салон", en: "Create your salon", pl: "Utwórz swój salon" },
+  "onboarding.ownerDesc":       { ru: "Введите название, чтобы начать работу", ua: "Введіть назву, щоб почати роботу", en: "Enter a name to get started", pl: "Wpisz nazwę, aby rozpocząć" },
+  "onboarding.salonNameLabel":  { ru: "Название салона", ua: "Назва салону", en: "Salon name", pl: "Nazwa salonu" },
+  "onboarding.salonNameHint":   { ru: "Можно изменить позже в настройках", ua: "Можна змінити пізніше в налаштуваннях", en: "You can change this later in settings", pl: "Możesz to zmienić później w ustawieniach" },
+  "onboarding.createSalon":     { ru: "Создать салон", ua: "Створити салон", en: "Create salon", pl: "Utwórz salon" },
+  "onboarding.masterWaiting":   { ru: "Ожидайте приглашения", ua: "Очікуйте запрошення", en: "Waiting for invitation", pl: "Oczekiwanie na zaproszenie" },
+  "onboarding.masterDesc":      { ru: "Владелец салона должен добавить вас в команду через свой кабинет.", ua: "Власник салону має додати вас до команди через свій кабінет.", en: "Your salon owner needs to add you to their team from their dashboard.", pl: "Właściciel salonu musi dodać Cię do zespołu ze swojego panelu." },
+  "onboarding.contactOwner":    { ru: "Свяжитесь с владельцем салона", ua: "Зверніться до власника салону", en: "Contact your salon owner", pl: "Skontaktuj się z właścicielem salonu" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

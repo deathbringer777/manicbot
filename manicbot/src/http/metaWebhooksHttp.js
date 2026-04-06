@@ -71,6 +71,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               const adapter = new WhatsAppAdapter({ tenantId: resolved.tenantId, channelConfig });
               const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
               if (!ctx) continue;
+              adapter._ctx = ctx; // give adapter access to db for 24h window check
               await initServices(ctx);
               const inbound = adapter.normalize(entry);
               if (inbound) await handleInbound(ctx, inbound);
@@ -133,7 +134,8 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               channelConfig.token = env.INSTAGRAM_ACCESS_TOKEN;
             }
             if (!channelConfig.token) {
-              console.warn('[ig] no token for tenant — set via POST /admin/ig-token');
+              console.error('[ig] no token for tenant', resolved.tenantId, '— set via POST /admin/ig-token');
+              continue;
             }
             const adapter = new InstagramAdapter({
               tenantId: resolved.tenantId,
@@ -145,6 +147,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               console.warn('[ig] buildChannelCtx returned null');
               continue;
             }
+            adapter._ctx = ctx; // give adapter access to db for 24h window check
             await initServices(ctx);
             for (const m of entry?.messaging ?? []) {
               const inbound = adapter.normalizeMessaging(m, entry);

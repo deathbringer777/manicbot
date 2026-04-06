@@ -205,11 +205,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return true;
     },
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       const t = token as typeof token & ExtendedJWT;
       if (user) {
         t.tenantId = user.tenantId ?? null;
         t.webRole = user.webRole ?? "tenant_owner";
+      } else if (t.sub && !t.tenantId) {
+        // Re-check DB for tenant assignment (handles post-registration tenant creation)
+        try {
+          const db = getDb();
+          const rows = await db
+            .select({ tenantId: webUsers.tenantId })
+            .from(webUsers)
+            .where(eq(webUsers.id, t.sub))
+            .limit(1);
+          if (rows[0]?.tenantId) {
+            t.tenantId = rows[0].tenantId;
+          }
+        } catch { /* non-critical — next request will retry */ }
       }
       return token;
     },

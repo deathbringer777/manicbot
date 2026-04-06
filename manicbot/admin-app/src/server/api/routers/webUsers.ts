@@ -311,6 +311,17 @@ export const webUsersRouter = createTRPCRouter({
         .set({ emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
         .where(eq(webUsers.id, user.id));
 
+      try {
+        await ctx.db.insert(auditLog).values({
+          tenantId: user.tenantId ?? null,
+          actor: email,
+          action: "email_verified",
+          detail: JSON.stringify({ userId: user.id, email, channel: "web" }),
+          ip: null,
+          createdAt: now,
+        });
+      } catch { /* non-critical */ }
+
       // Non-blocking welcome email
       sendWelcomeEmail(user.email, user.name ?? null, (user.lang ?? "en") as Lang).catch(() => {});
 
@@ -348,6 +359,13 @@ export const webUsersRouter = createTRPCRouter({
 
       const sent = await sendVerificationCodeEmail(email, newCode, (user.lang ?? "en") as Lang);
       if (!sent.ok) {
+        // Roll back token so the user can retry cleanly (no phantom code in DB)
+        try {
+          await ctx.db
+            .update(webUsers)
+            .set({ verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
+            .where(eq(webUsers.id, user.id));
+        } catch { /* non-critical */ }
         console.error(`[webUsers] resendVerificationCode: email send failed for ${email}: ${sent.error}`);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",

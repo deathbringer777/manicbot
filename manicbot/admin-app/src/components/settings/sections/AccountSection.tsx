@@ -12,7 +12,9 @@ import type { Lang } from "~/lib/i18n";
 const VERIFY_L: Record<Lang, {
   verified: string;
   notVerified: string;
+  promptSend: string;
   enterCode: string;
+  sendCode: string;
   verify: string;
   resend: string;
   resendCooldown: string;
@@ -21,7 +23,9 @@ const VERIFY_L: Record<Lang, {
   ru: {
     verified: "Email подтверждён",
     notVerified: "Email не подтверждён",
+    promptSend: "Нажмите «Отправить код» — мы пришлём его на ваш email",
     enterCode: "Введите 6-значный код из письма",
+    sendCode: "Отправить код",
     verify: "Подтвердить",
     resend: "Отправить код повторно",
     resendCooldown: "Код отправлен",
@@ -30,7 +34,9 @@ const VERIFY_L: Record<Lang, {
   ua: {
     verified: "Email підтверджено",
     notVerified: "Email не підтверджено",
+    promptSend: "Натисніть «Надіслати код» — ми надішлемо його на ваш email",
     enterCode: "Введіть 6-значний код з листа",
+    sendCode: "Надіслати код",
     verify: "Підтвердити",
     resend: "Надіслати код повторно",
     resendCooldown: "Код надіслано",
@@ -39,7 +45,9 @@ const VERIFY_L: Record<Lang, {
   en: {
     verified: "Email verified",
     notVerified: "Email not verified",
+    promptSend: "Click «Send code» — we'll email it to you",
     enterCode: "Enter the 6-digit code from your email",
+    sendCode: "Send code",
     verify: "Verify",
     resend: "Resend code",
     resendCooldown: "Code sent",
@@ -48,7 +56,9 @@ const VERIFY_L: Record<Lang, {
   pl: {
     verified: "Email potwierdzony",
     notVerified: "Email nie potwierdzony",
+    promptSend: "Kliknij «Wyślij kod» — wyślemy go na Twój email",
     enterCode: "Wpisz 6-cyfrowy kod z emaila",
+    sendCode: "Wyślij kod",
     verify: "Potwierdź",
     resend: "Wyślij kod ponownie",
     resendCooldown: "Kod wysłany",
@@ -67,6 +77,7 @@ export function AccountSection() {
   const [code, setCode] = useState("");
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifySuccess, setVerifySuccess] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,11 +100,12 @@ export function AccountSection() {
 
   const resendMut = (api as any).webUsers.resendVerificationCode.useMutation({
     onSuccess: () => {
+      setCodeSent(true);
       setResendCooldown(true);
       setTimeout(() => setResendCooldown(false), 60000);
     },
     onError: (err: { message?: string }) => {
-      setVerifyError(err.message ?? "Failed to resend code");
+      setVerifyError(err.message ?? "Failed to send code");
     },
   }) as { mutate: (args: { email: string }) => void; isPending: boolean };
 
@@ -183,46 +195,61 @@ export function AccountSection() {
               {emailVerified ? vl.verified : vl.notVerified}
             </p>
             {!emailVerified && !verifySuccess && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{vl.enterCode}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{codeSent ? vl.enterCode : vl.promptSend}</p>
             )}
           </div>
         </div>
 
         {!emailVerified && !verifySuccess && (
-          <form onSubmit={handleVerifyCode} className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <input
-                ref={codeInputRef}
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={code}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-                  setCode(v);
-                  if (verifyError) setVerifyError(null);
-                }}
-                placeholder="000000"
-                className="flex-1 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-              />
-            </div>
-            {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
-            <button
-              type="submit"
-              disabled={code.length !== 6 || verifyMut.isPending}
-              className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
-            >
-              {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.verify}
-            </button>
-            <button
-              type="button"
-              onClick={() => resendMut.mutate({ email: sessionEmail })}
-              disabled={resendMut.isPending || resendCooldown}
-              className="w-full flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-600/60 text-sm font-medium text-slate-600 dark:text-slate-400 px-4 py-2.5 rounded-xl hover:border-brand-500/40 transition-colors disabled:opacity-50"
-            >
-              {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : resendCooldown ? vl.resendCooldown : vl.resend}
-            </button>
-          </form>
+          <div className="mt-4 space-y-3">
+            {!codeSent ? (
+              <>
+                {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
+                <button
+                  type="button"
+                  onClick={() => { setVerifyError(null); resendMut.mutate({ email: sessionEmail }); }}
+                  disabled={resendMut.isPending}
+                  className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+                >
+                  {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.sendCode}
+                </button>
+              </>
+            ) : (
+              <form onSubmit={handleVerifyCode} className="space-y-3">
+                <input
+                  ref={codeInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setCode(v);
+                    if (verifyError) setVerifyError(null);
+                  }}
+                  placeholder="000000"
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+                {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
+                <button
+                  type="submit"
+                  disabled={code.length !== 6 || verifyMut.isPending}
+                  className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+                >
+                  {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.verify}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setVerifyError(null); resendMut.mutate({ email: sessionEmail }); }}
+                  disabled={resendMut.isPending || resendCooldown}
+                  className="w-full flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-600/60 text-sm font-medium text-slate-600 dark:text-slate-400 px-4 py-2.5 rounded-xl hover:border-brand-500/40 transition-colors disabled:opacity-50"
+                >
+                  {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : resendCooldown ? vl.resendCooldown : vl.resend}
+                </button>
+              </form>
+            )}
+          </div>
         )}
 
         {verifySuccess && (

@@ -234,6 +234,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     session({ session, token }) {
       const t = token as typeof token & ExtendedJWT;
+      session.user.id = token.sub ?? "";
       session.user.tenantId = t.tenantId ?? null;
       session.user.webRole = t.webRole ?? "tenant_owner";
       session.user.isEmailVerified = t.emailVerified ?? true;

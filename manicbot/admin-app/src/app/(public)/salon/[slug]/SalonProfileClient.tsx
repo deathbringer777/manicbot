@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   MapPin, Phone, Clock, Instagram, Send, Star, ChevronDown, ChevronUp,
   ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera,
@@ -64,9 +64,33 @@ function formatHours(wh: WorkHours): string {
   return "Уточните у салона";
 }
 
-function ServicePhotoCarousel({ photos }: { photos: string[] }) {
+function ServicePhotoCarousel({ photos, onValidCountChange }: { photos: string[]; onValidCountChange?: (count: number) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [brokenSet, setBrokenSet] = useState<Set<number>>(new Set());
+
+  const validEntries = photos
+    .map((url, i) => ({ url, i }))
+    .filter(({ i }) => !brokenSet.has(i));
+
+  useEffect(() => {
+    onValidCountChange?.(validEntries.length);
+  }, [validEntries.length, onValidCountChange]);
+
+  useEffect(() => {
+    if (activeIdx >= validEntries.length && validEntries.length > 0) {
+      setActiveIdx(validEntries.length - 1);
+    }
+  }, [validEntries.length, activeIdx]);
+
+  const handleImageError = useCallback((originalIdx: number, e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.style.display = "none";
+    setBrokenSet((prev) => {
+      const next = new Set(prev);
+      next.add(originalIdx);
+      return next;
+    });
+  }, []);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -79,7 +103,7 @@ function ServicePhotoCarousel({ photos }: { photos: string[] }) {
     scrollRef.current?.scrollTo({ left: idx * (scrollRef.current?.offsetWidth ?? 0), behavior: "smooth" });
   };
 
-  if (!photos.length) return null;
+  if (!validEntries.length) return null;
   return (
     <div className="mt-3">
       <div
@@ -88,24 +112,25 @@ function ServicePhotoCarousel({ photos }: { photos: string[] }) {
         className="flex snap-x snap-mandatory gap-2 overflow-x-auto scrollbar-none"
         style={{ scrollbarWidth: "none" }}
       >
-        {photos.map((url, i) => (
+        {validEntries.map(({ url, i }) => (
           <div key={i} className="w-full shrink-0 snap-center sm:w-[calc(50%-4px)]">
             <img
               src={url}
-              alt={`Фото ${i + 1}`}
+              alt={`Фото ${validEntries.findIndex((v) => v.i === i) + 1}`}
               loading="lazy"
               className="aspect-[4/3] w-full rounded-lg object-cover"
+              onError={(e) => handleImageError(i, e)}
             />
           </div>
         ))}
       </div>
-      {photos.length > 1 && (
+      {validEntries.length > 1 && (
         <div className="mt-2 flex justify-center gap-1.5">
-          {photos.map((_, i) => (
+          {validEntries.map((_, vi) => (
             <button
-              key={i}
-              onClick={() => scrollTo(i)}
-              className={`h-1.5 rounded-full transition-all ${i === activeIdx ? "w-4 bg-violet-500 dark:bg-brand-400" : "w-1.5 bg-slate-300 dark:bg-slate-600"}`}
+              key={vi}
+              onClick={() => scrollTo(vi)}
+              className={`h-1.5 rounded-full transition-all ${vi === activeIdx ? "w-4 bg-violet-500 dark:bg-brand-400" : "w-1.5 bg-slate-300 dark:bg-slate-600"}`}
             />
           ))}
         </div>
@@ -116,6 +141,7 @@ function ServicePhotoCarousel({ photos }: { photos: string[] }) {
 
 function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: string | null }) {
   const [expanded, setExpanded] = useState(false);
+  const [validPhotoCount, setValidPhotoCount] = useState(svc.photos.length);
   const bookUrl = botUsername ? `https://t.me/${botUsername}` : null;
   const hasDetails = svc.description || svc.photos.length > 0;
 
@@ -138,10 +164,10 @@ function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: stri
               {svc.duration} мин
             </span>
             <span className="font-semibold text-violet-600 dark:text-brand-400">{svc.price > 0 ? `${svc.price}\u00a0zł` : "По договорённости"}</span>
-            {!expanded && svc.photos.length > 0 && (
+            {!expanded && validPhotoCount > 0 && (
               <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                 <Camera className="h-3 w-3" />
-                {svc.photos.length}
+                {validPhotoCount}
               </span>
             )}
           </div>
@@ -171,7 +197,7 @@ function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: stri
           {svc.description && (
             <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">{svc.description}</p>
           )}
-          <ServicePhotoCarousel photos={svc.photos} />
+          <ServicePhotoCarousel photos={svc.photos} onValidCountChange={setValidPhotoCount} />
         </div>
       )}
     </div>

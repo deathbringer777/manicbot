@@ -188,6 +188,18 @@ export async function sendPhoto(ctx, chatId, url, caption, extra = {}) {
   }
 }
 
+/** Like sendPhoto but returns null on failure instead of falling back to text. */
+export async function trySendPhoto(ctx, chatId, url, caption, extra = {}) {
+  if (isTelegram(ctx)) {
+    const res = await tgApi(ctx, 'sendPhoto', { chat_id: chatId, photo: url, caption, parse_mode: 'HTML', ...extra });
+    return res.ok ? res : null;
+  }
+  try {
+    const res = await ctx.channel.sendPhoto(String(chatId), url, caption, extra);
+    return (res && res.ok !== false) ? res : null;
+  } catch { return null; }
+}
+
 export async function editPhoto(ctx, chatId, msgId, url, caption, extra = {}) {
   if (isTelegram(ctx)) {
     try {

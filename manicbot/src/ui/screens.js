@@ -1,4 +1,4 @@
-import { send, sendPhoto, editPhoto, api } from '../telegram.js';
+import { send, sendPhoto, trySendPhoto, editPhoto, api } from '../telegram.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc } from '../utils/helpers.js';
 import { fmtDT, fmtDate } from '../utils/date.js';
 import { CB, SALON, ADDRESS, PHONE, HOURS_STR, MAPS_URL } from '../config.js';
@@ -129,23 +129,37 @@ export async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
       [{ text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
     ] } });
   }
-  const safeIdx = Math.max(0, Math.min(idx, photos.length - 1));
   const s = ctx.svc.find(x => x.id === svcId);
   if (!s) return;
-  const baseCap = fill(t(lg, 'cat_cap'), {
-    e: s.e, svc: t(lg, 'svc_' + svcId),
-    p: String(s.price), c: t(lg, 'cur'), d: String(s.dur), min: t(lg, 'min'),
-    i: String(safeIdx + 1), total: String(photos.length),
-  });
-  const rawDesc = (s.desc?.[lg] || s.desc?.ru || '').trim();
-  const cap = rawDesc ? `${baseCap}\n\n📝 ${escHtml(rawDesc)}` : baseCap;
-  const kb = catPhotoKb(lg, svcId, safeIdx, photos.length);
 
-  if (msgId) {
-    const res = await editPhoto(ctx, cid, msgId, photos[safeIdx], cap, kb);
+  let currentIdx = Math.max(0, Math.min(idx, photos.length - 1));
+
+  for (let attempts = 0; attempts < photos.length; attempts++) {
+    const baseCap = fill(t(lg, 'cat_cap'), {
+      e: s.e, svc: t(lg, 'svc_' + svcId),
+      p: String(s.price), c: t(lg, 'cur'), d: String(s.dur), min: t(lg, 'min'),
+      i: String(currentIdx + 1), total: String(photos.length),
+    });
+    const rawDesc = (s.desc?.[lg] || s.desc?.ru || '').trim();
+    const cap = rawDesc ? `${baseCap}\n\n📝 ${escHtml(rawDesc)}` : baseCap;
+    const kb = catPhotoKb(lg, svcId, currentIdx, photos.length);
+
+    if (msgId) {
+      const res = await editPhoto(ctx, cid, msgId, photos[currentIdx], cap, kb);
+      if (res) return;
+    }
+    const res = await trySendPhoto(ctx, cid, photos[currentIdx], cap, kb);
     if (res) return;
+
+    // Photo broken — advance to next, can't edit anymore
+    currentIdx = (currentIdx + 1) % photos.length;
+    msgId = null;
   }
-  await sendPhoto(ctx, cid, photos[safeIdx], cap, kb);
+
+  // All photos broken — text fallback
+  await send(ctx, cid, `${svcName(ctx, lg, svcId)}\n\n${t(lg, 'cat_empty')}`, { reply_markup: { inline_keyboard: [
+    [{ text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
+  ] } });
 }
 
 export async function showMyApts(ctx, cid) {

@@ -9,9 +9,6 @@ import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from '../ut
  */
 export async function tryLanding(request, env, url, force) {
   if (request.method !== 'GET' || (!force && !isLandingPath(url.pathname))) return null;
-  if (url.pathname === '/blog') {
-    return Response.redirect(new URL('/blog/', url).toString(), 308);
-  }
   const landingOrigin = resolveLandingOrigin(env);
   const landingUrl = buildLandingFetchUrl(url.pathname, landingOrigin);
   const res = await fetch(landingUrl, { headers: request.headers });

@@ -30,10 +30,10 @@ describe('landing-pages-proxy', () => {
       expect(isLandingPath('/assets/index-abc.js')).toBe(true);
     });
 
-    it('allows blog tree', () => {
-      expect(isLandingPath('/blog')).toBe(true);
-      expect(isLandingPath('/blog/')).toBe(true);
-      expect(isLandingPath('/blog/ru/manicbot-telegram-booking.html')).toBe(true);
+    it('blog tree is handled by admin-app, not landing', () => {
+      expect(isLandingPath('/blog')).toBe(false);
+      expect(isLandingPath('/blog/')).toBe(false);
+      expect(isLandingPath('/blog/ru/manicbot-telegram-booking.html')).toBe(false);
     });
 
     it('allows root static extensions', () => {
@@ -63,9 +63,9 @@ describe('landing-pages-proxy', () => {
       expect(buildLandingFetchUrl('/', 'https://x.pages.dev')).toBe('https://x.pages.dev/');
     });
 
-    it('preserves blog path', () => {
-      expect(buildLandingFetchUrl('/blog/ru/a.html', 'https://x.pages.dev')).toBe(
-        'https://x.pages.dev/blog/ru/a.html'
+    it('preserves arbitrary path', () => {
+      expect(buildLandingFetchUrl('/privacy', 'https://x.pages.dev')).toBe(
+        'https://x.pages.dev/privacy'
       );
     });
   });

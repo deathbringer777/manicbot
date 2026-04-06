@@ -215,7 +215,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         t.emailVerified = user.isEmailVerified ?? true;
       } else {
         // Re-check DB for tenant assignment + emailVerified refresh
-        if (t.sub && (!t.tenantId || t.emailVerified === false)) {
+        if (t.sub && (!t.tenantId || t.emailVerified !== true)) {
           try {
             const db = getDb();
             const rows = await db

@@ -10,6 +10,7 @@ export function isAdminAppPath(pathname) {
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
   if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
   if (pathname === '/help' || pathname.startsWith('/help/')) return true;
+  if (pathname === '/blog' || pathname.startsWith('/blog/')) return true;
   if (pathname.startsWith('/_next/')) return true;
   if (pathname.startsWith('/api/trpc/')) return true;
   if (pathname.startsWith('/api/auth/')) return true;

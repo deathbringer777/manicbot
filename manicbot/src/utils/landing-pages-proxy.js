@@ -34,7 +34,6 @@ const LEGAL_PATHS = new Set(['/privacy', '/terms', '/cookies', '/support', '/rul
 export function isLandingPath(pathname) {
   if (pathname === '/' || pathname.startsWith('/assets/')) return true;
   if (pathname === '/favicon.svg' || pathname === '/favicon.ico') return true;
-  if (pathname === '/blog' || pathname === '/blog/' || pathname.startsWith('/blog/')) return true;
   if (LEGAL_PATHS.has(pathname)) return true;
   if (/^\/[^/]+\.(?:png|svg|ico|txt|xml|webmanifest)$/i.test(pathname)) return true;
   return false;

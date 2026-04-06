@@ -55,6 +55,14 @@ export function PublicHeader() {
         {/* Spacer */}
         <div className="flex-1" />
 
+        {/* Blog link */}
+        <Link
+          href="/blog"
+          className="hidden sm:inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-white/60 dark:hover:text-white"
+        >
+          {lang === "ru" || lang === "ua" ? "Блог" : "Blog"}
+        </Link>
+
         {/* Right controls */}
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <LangDropdown lang={lang} setLang={setLang} />

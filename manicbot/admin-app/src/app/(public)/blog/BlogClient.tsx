@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calendar, ChevronRight, Tag } from "lucide-react";
+import Link from "next/link";
+import { Calendar, Tag } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import type { Lang } from "~/lib/i18n";
 import {
@@ -13,23 +14,14 @@ import {
 
 const UI: Record<
   Lang,
-  {
-    kicker: string;
-    title: string;
-    subtitle: string;
-    all: string;
-    readMore: string;
-    collapse: string;
-    noResults: string;
-  }
+  { kicker: string; title: string; subtitle: string; all: string; readMore: string; noResults: string }
 > = {
   ru: {
     kicker: "Блог",
     title: "Полезное для салонов",
     subtitle: "Советы, обновления и тренды nail-индустрии",
     all: "Все",
-    readMore: "Читать",
-    collapse: "Свернуть",
+    readMore: "Читать →",
     noResults: "Статей в этой категории пока нет.",
   },
   ua: {
@@ -37,8 +29,7 @@ const UI: Record<
     title: "Корисне для салонів",
     subtitle: "Поради, оновлення та тренди nail-індустрії",
     all: "Усі",
-    readMore: "Читати",
-    collapse: "Згорнути",
+    readMore: "Читати →",
     noResults: "Статей у цій категорії поки немає.",
   },
   en: {
@@ -46,8 +37,7 @@ const UI: Record<
     title: "Useful for salons",
     subtitle: "Tips, updates and nail industry trends",
     all: "All",
-    readMore: "Read",
-    collapse: "Collapse",
+    readMore: "Read →",
     noResults: "No articles in this category yet.",
   },
   pl: {
@@ -55,9 +45,34 @@ const UI: Record<
     title: "Przydatne dla salonów",
     subtitle: "Porady, aktualizacje i trendy branży nail",
     all: "Wszystkie",
-    readMore: "Czytaj",
-    collapse: "Zwiń",
+    readMore: "Czytaj →",
     noResults: "Brak artykułów w tej kategorii.",
+  },
+};
+
+export const CATEGORY_STYLE: Record<
+  BlogCategory,
+  { gradient: string; emoji: string; badge: string }
+> = {
+  tips: {
+    gradient: "from-violet-500 via-purple-600 to-violet-700",
+    emoji: "💅",
+    badge: "bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  },
+  product: {
+    gradient: "from-cyan-500 via-blue-500 to-cyan-700",
+    emoji: "🤖",
+    badge: "bg-cyan-50 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300",
+  },
+  business: {
+    gradient: "from-amber-400 via-orange-500 to-amber-600",
+    emoji: "📊",
+    badge: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  },
+  trends: {
+    gradient: "from-pink-500 via-rose-400 to-fuchsia-600",
+    emoji: "✨",
+    badge: "bg-pink-50 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
   },
 };
 
@@ -71,7 +86,6 @@ export function BlogClient() {
   const { lang } = useLang();
   const copy = UI[lang] ?? UI.en;
   const [filter, setFilter] = useState<BlogCategory | null>(null);
-  const [openSlug, setOpenSlug] = useState<string | null>(null);
 
   const articles = useMemo(() => {
     const sorted = [...BLOG_ARTICLES].sort((a, b) => b.date.localeCompare(a.date));
@@ -80,7 +94,7 @@ export function BlogClient() {
   }, [filter]);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 pb-20 animate-fade-in">
+    <div className="mx-auto max-w-5xl px-4 py-10 pb-20 animate-fade-in">
       {/* Header */}
       <div className="text-center mb-10">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400 mb-2">
@@ -123,70 +137,60 @@ export function BlogClient() {
         ))}
       </div>
 
-      {/* Articles */}
+      {/* Articles grid */}
       {articles.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400 py-12 text-center rounded-2xl border border-dashed border-slate-200 dark:border-white/10">
           {copy.noResults}
         </p>
       ) : (
-        <div className="space-y-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {articles.map((article) => {
-            const isOpen = openSlug === article.slug;
+            const style = CATEGORY_STYLE[article.categoryKey];
             return (
-              <article
+              <Link
                 key={article.slug}
-                id={`blog-${article.slug}`}
-                className="rounded-2xl border border-slate-200/90 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-white/[0.08] dark:bg-slate-900/50 overflow-hidden"
+                href={`/blog/${article.slug}`}
+                className="group rounded-2xl border border-slate-200/90 bg-white shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 dark:border-white/[0.08] dark:bg-slate-900/50 overflow-hidden flex flex-col"
               >
-                <button
-                  type="button"
-                  onClick={() => setOpenSlug(isOpen ? null : article.slug)}
-                  className="w-full px-5 py-5 text-left"
+                {/* Cover */}
+                <div
+                  className={`relative aspect-[16/9] bg-gradient-to-br ${style.gradient} flex items-center justify-center overflow-hidden`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-                          <Tag className="h-3 w-3" />
-                          {BLOG_CATEGORY_LABELS[article.categoryKey][lang]}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(article.date, lang)}
-                        </span>
-                      </div>
-                      <h2 className="text-lg font-bold text-slate-900 dark:text-white leading-snug">
-                        {article.titles[lang]}
-                      </h2>
-                      <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                        {article.excerpts[lang]}
-                      </p>
-                    </div>
-                    <ChevronRight
-                      className={`mt-1 h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 ${
-                        isOpen ? "rotate-90" : ""
-                      }`}
-                    />
+                  <div className="absolute inset-0 opacity-20">
+                    <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
+                    <div className="absolute -bottom-4 -left-4 h-24 w-24 rounded-full bg-black/20 blur-2xl" />
                   </div>
-                </button>
+                  <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:40px_40px]" />
+                  <span className="relative text-5xl select-none drop-shadow-lg">{style.emoji}</span>
+                </div>
 
-                {isOpen && (
-                  <div className="border-t border-slate-100 px-5 pb-5 pt-4 dark:border-white/[0.06] animate-fade-in">
-                    <div className="prose prose-sm prose-slate max-w-none dark:prose-invert">
-                      <div className="whitespace-pre-line text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {article.bodies[lang]}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setOpenSlug(null)}
-                      className="mt-4 text-sm font-medium text-violet-600 hover:text-violet-500 dark:text-violet-400 transition-colors"
+                {/* Content */}
+                <div className="flex flex-col flex-1 p-5">
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${style.badge}`}
                     >
-                      {copy.collapse}
-                    </button>
+                      <Tag className="h-3 w-3" />
+                      {BLOG_CATEGORY_LABELS[article.categoryKey][lang]}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
+                      <Calendar className="h-3 w-3" />
+                      {formatDate(article.date, lang)}
+                    </span>
                   </div>
-                )}
-              </article>
+
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white leading-snug line-clamp-2 mb-1.5">
+                    {article.titles[lang]}
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3 flex-1">
+                    {article.excerpts[lang]}
+                  </p>
+
+                  <div className="mt-4 text-sm font-medium text-violet-600 dark:text-violet-400 group-hover:text-violet-500 transition-colors">
+                    {copy.readMore}
+                  </div>
+                </div>
+              </Link>
             );
           })}
         </div>

@@ -2,22 +2,24 @@
  * Transactional email via Resend HTTP API (Edge-safe fetch).
  * https://resend.com/docs/api-reference/emails/send-email
  *
- * On Cloudflare Pages, runtime secrets may only be available through
- * the validated `env` import (from ~/env) rather than raw `process.env`.
- * We check both to support tests (which stub process.env) and production.
+ * On Cloudflare Pages (via @cloudflare/next-on-pages), runtime secrets set in
+ * the Pages dashboard are only exposed through getRequestContext().env at
+ * request time — process.env is empty on the Edge Runtime. getRuntimeEnv()
+ * reads the Cloudflare request context first and falls back to process.env
+ * for tests / Node / build time.
  */
 
-import { env } from "~/env";
+import { getRuntimeEnv } from "~/server/runtimeEnv";
 
 const RESEND_API = "https://api.resend.com/emails";
 
 export type SendEmailResult = { ok: true } | { ok: false; error: string };
 
 function getKey(): string | undefined {
-  return (env.RESEND_API_KEY ?? process.env.RESEND_API_KEY)?.trim() || undefined;
+  return getRuntimeEnv("RESEND_API_KEY")?.trim() || undefined;
 }
 function getFrom(): string | undefined {
-  return (env.RESEND_FROM ?? process.env.RESEND_FROM)?.trim() || undefined;
+  return getRuntimeEnv("RESEND_FROM")?.trim() || undefined;
 }
 
 export function isResendConfigured(): boolean {

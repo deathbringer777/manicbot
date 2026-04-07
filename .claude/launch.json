@@ -10,7 +10,7 @@
     {
       "name": "landing",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/Manicbot_com/manicbot-analysis && npm run dev -- --port 3001"],
+      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/ManicBot_Archive/manicbot-analysis && BLOG_INTEGRATED=0 npm run dev -- --port 3001"],
       "port": 3001
     },
   ]

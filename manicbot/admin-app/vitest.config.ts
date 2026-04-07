@@ -16,6 +16,10 @@ export default defineConfig({
       // Stub next-auth in test env (avoids importing next/server in Node.js)
       { find: /^next-auth\/providers\/credentials$/, replacement: path.resolve(__dirname, "src/__mocks__/next-auth-providers-credentials.ts") },
       { find: /^next-auth$/, replacement: path.resolve(__dirname, "src/__mocks__/next-auth.ts") },
+      // Stub @cloudflare/next-on-pages — real module imports `server-only`
+      // which throws outside RSC. runtimeEnv.ts treats a throw as "not in
+      // Cloudflare request scope" and falls back to process.env.
+      { find: /^@cloudflare\/next-on-pages$/, replacement: path.resolve(__dirname, "src/__mocks__/cloudflare-next-on-pages.ts") },
     ],
   },
 });

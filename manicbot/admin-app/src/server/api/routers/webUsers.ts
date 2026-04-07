@@ -171,7 +171,9 @@ export const webUsersRouter = createTRPCRouter({
       const verificationCode = generateVerificationCode();
       const now = Math.floor(Date.now() / 1000);
       const codeExpiresAt = now + 15 * 60; // 15 minutes
-      const skipEmailVerification = googleVerified || !isResendConfigured();
+      // Always require email verification when Resend is configured,
+      // even for Google OAuth — user must confirm they receive our emails.
+      const skipEmailVerification = !isResendConfigured();
 
       // Auto-create tenant for salon owners
       let assignedTenantId: string | null = null;
@@ -477,7 +479,7 @@ export const webUsersRouter = createTRPCRouter({
       return { success: true as const };
     }),
 
-  /** Create a web user (God Mode only). Auto-verified. */
+  /** Create a web user (God Mode only). Sends verification email. */
   create: adminProcedure
     .input(
       z.object({
@@ -500,17 +502,28 @@ export const webUsersRouter = createTRPCRouter({
       const id = crypto.randomUUID();
       const passwordHash = await hashPassword(input.password);
       const now = Math.floor(Date.now() / 1000);
+      const shouldVerify = isResendConfigured();
+      const verificationCode = shouldVerify ? generateVerificationCode() : null;
+      const codeExpiresAt = shouldVerify ? now + 15 * 60 : null;
       await ctx.db.insert(webUsers).values({
         id,
         email,
         passwordHash,
         role: input.role,
-        emailVerified: 1, // Admin-created users are auto-verified
+        emailVerified: shouldVerify ? 0 : 1,
+        verificationToken: verificationCode,
+        verificationTokenExpiresAt: codeExpiresAt,
         tenantId: input.tenantId ?? null,
         createdAt: now,
         updatedAt: now,
       });
-      return { id, email };
+      if (shouldVerify && verificationCode) {
+        const sent = await sendVerificationCodeEmail(email, verificationCode, "en");
+        if (!sent.ok) {
+          console.error("[webUsers] create: verification email failed", sent.error);
+        }
+      }
+      return { id, email, verificationRequired: shouldVerify };
     }),
 
   /** List all web users (God Mode only). */

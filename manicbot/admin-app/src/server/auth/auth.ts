@@ -169,14 +169,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .limit(1);
           if (rows.length) {
             const webUser = rows[0]!;
-            // Google OAuth auto-verifies email
-            if (!webUser.emailVerified) {
-              await db.update(webUsers).set({ emailVerified: 1 }).where(eq(webUsers.id, webUser.id));
-            }
             user.tenantId = webUser.tenantId ?? null;
             user.webRole = webUser.role;
             user.id = webUser.id;
-            user.isEmailVerified = true;
+            user.isEmailVerified = !!webUser.emailVerified;
           } else {
             const secret = process.env.AUTH_SECRET;
             if (!secret) {

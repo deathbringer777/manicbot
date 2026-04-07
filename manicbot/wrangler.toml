@@ -56,14 +56,17 @@ database_name = "manicbot-db"
 database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 
 # ─── R2 object storage for salon branding assets ─────────────────────────────
-# Create the bucket once:
+# TEMPORARILY DISABLED — R2 service needs to be enabled on the Cloudflare
+# account first (Dashboard → R2 → Enable). Once enabled, create the buckets:
 #   wrangler r2 bucket create manicbot-assets
 #   wrangler r2 bucket create manicbot-assets-preview
-# Served publicly via GET /cdn/<key> on this worker with long-cache headers.
-[[r2_buckets]]
-binding = "ASSETS"
-bucket_name = "manicbot-assets"
-preview_bucket_name = "manicbot-assets-preview"
+# Then uncomment the binding below and redeploy. The upload/cdn routes
+# gracefully return 500 "R2 not bound" while the binding is commented out;
+# everything else (chat widget, analytics, branding columns) works without it.
+# [[r2_buckets]]
+# binding = "ASSETS"
+# bucket_name = "manicbot-assets"
+# preview_bucket_name = "manicbot-assets-preview"
 
 # ─── Required secret for signed upload tokens ────────────────────────────────
 #   wrangler secret put UPLOAD_TOKEN_SECRET

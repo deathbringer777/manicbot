@@ -55,5 +55,20 @@ binding = "DB"
 database_name = "manicbot-db"
 database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 
+# ─── R2 object storage for salon branding assets ─────────────────────────────
+# Create the bucket once:
+#   wrangler r2 bucket create manicbot-assets
+#   wrangler r2 bucket create manicbot-assets-preview
+# Served publicly via GET /cdn/<key> on this worker with long-cache headers.
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "manicbot-assets"
+preview_bucket_name = "manicbot-assets-preview"
+
+# ─── Required secret for signed upload tokens ────────────────────────────────
+#   wrangler secret put UPLOAD_TOKEN_SECRET
+# Same value must be set on the admin-app Pages project (Pages env var) so that
+# minted tokens verify on the Worker.
+
 [ai]
 binding = "AI"

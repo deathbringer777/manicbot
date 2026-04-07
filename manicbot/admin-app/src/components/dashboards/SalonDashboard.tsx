@@ -15,6 +15,7 @@ import { t, type Lang } from "~/lib/i18n";
 import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
+import { AssetUploadField } from "~/components/salon/AssetUploadField";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile";
 
@@ -130,12 +131,18 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
   const utils = api.useUtils();
   const [editing, setEditing] = useState(false);
   const [salonName, setSalonName] = useState(profile?.name ?? "");
+  const [displayName, setDisplayName] = useState(profile?.displayName ?? "");
   const [address, setAddress] = useState(profile?.salon?.address ?? "");
   const [phone, setPhone] = useState(profile?.salon?.phone ?? "");
   const [hoursFrom, setHoursFrom] = useState(String(profile?.salon?.workHours?.from ?? "9"));
   const [hoursTo, setHoursTo] = useState(String(profile?.salon?.workHours?.to ?? "20"));
   const [logo, setLogo] = useState(profile?.logo ?? "");
+  const [logoR2Key, setLogoR2Key] = useState(profile?.logoR2Key ?? "");
   const [coverPhoto, setCoverPhoto] = useState(profile?.coverPhoto ?? "");
+  const [coverR2Key, setCoverR2Key] = useState(profile?.coverR2Key ?? "");
+  const [brandPrimary, setBrandPrimary] = useState<string>(
+    (profile?.brandPalette && typeof profile.brandPalette === "object" && profile.brandPalette.primary) || "#EC4899",
+  );
 
   const update = api.salon.updateSalonProfile.useMutation({
     onSuccess: () => { utils.salon.getSalonProfile.invalidate(); setEditing(false); },
@@ -155,6 +162,15 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               <p className="text-sm text-slate-900 dark:text-white font-medium">{profile?.name || "—"}</p>
             </div>
           </div>
+          {profile?.displayName && (
+            <div className="flex items-center gap-3">
+              <Settings className="h-4 w-4 text-slate-500 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">Отображаемое имя</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.displayName}</p>
+              </div>
+            </div>
+          )}
           {profile?.salon?.address && (
             <div className="flex items-center gap-3">
               <Settings className="h-4 w-4 text-slate-500 shrink-0" />
@@ -182,18 +198,30 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               </div>
             </div>
           )}
-          {(profile?.logo || profile?.coverPhoto) && (
-            <div className="border-t border-slate-200 dark:border-white/5 pt-3 flex gap-3">
+          {(profile?.logo || profile?.coverPhoto || profile?.brandPalette?.primary) && (
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 flex gap-3 items-start">
               {profile.logo && (
                 <div>
                   <p className="text-xs text-slate-500 mb-1">Логотип</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={profile.logo} alt="logo" className="h-14 w-14 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
                 </div>
               )}
               {profile.coverPhoto && (
                 <div className="flex-1">
                   <p className="text-xs text-slate-500 mb-1">Заглавное фото</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={profile.coverPhoto} alt="cover" className="h-14 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
+              {profile.brandPalette?.primary && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Цвет бренда</p>
+                  <div
+                    className="h-14 w-14 rounded-lg border border-slate-200 dark:border-slate-700"
+                    style={{ background: profile.brandPalette.primary }}
+                    title={profile.brandPalette.primary}
+                  />
                 </div>
               )}
             </div>
@@ -210,6 +238,12 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
       } />
       <div className="glass-card rounded-2xl p-4 space-y-3">
         <Input label={t("salon.name", lang)} value={salonName} onChange={setSalonName} />
+        <Input
+          label="Отображаемое имя (опционально)"
+          value={displayName}
+          onChange={setDisplayName}
+          placeholder="Оставьте пустым, чтобы использовать основное имя"
+        />
         <Input label={t("salon.address", lang)} value={address} onChange={setAddress} />
         <Input label={t("salon.phone", lang)} value={phone} onChange={setPhone} />
         <div className="grid grid-cols-2 gap-3">
@@ -217,29 +251,66 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
           <Input label={t("salon.workHoursTo", lang)} value={hoursTo} onChange={setHoursTo} type="number" />
         </div>
         <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+          <AssetUploadField
+            label="Логотип"
+            tenantId={tenantId}
+            kind="logo"
+            value={logo}
+            onChange={({ url, key }) => {
+              setLogo(url);
+              setLogoR2Key(key);
+            }}
+            preview="square"
+            hint="PNG/JPEG/WebP, до 2 MB. Оптимально 512×512."
+          />
+          <AssetUploadField
+            label="Заглавное фото"
+            tenantId={tenantId}
+            kind="cover"
+            value={coverPhoto}
+            onChange={({ url, key }) => {
+              setCoverPhoto(url);
+              setCoverR2Key(key);
+            }}
+            preview="cover"
+            hint="PNG/JPEG/WebP, до 2 MB. Оптимально 1600×500."
+          />
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Логотип (URL)</label>
-            {logo && <img src={logo} alt="" className="h-12 w-12 rounded-lg object-cover mb-2 border border-slate-200 dark:border-slate-700" />}
-            <input value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="https://example.com/logo.jpg"
-              className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Заглавное фото (URL)</label>
-            {coverPhoto && <img src={coverPhoto} alt="" className="h-20 w-full rounded-lg object-cover mb-2 border border-slate-200 dark:border-slate-700" />}
-            <input value={coverPhoto} onChange={(e) => setCoverPhoto(e.target.value)} placeholder="https://example.com/cover.jpg"
-              className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Цвет бренда</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={brandPrimary}
+                onChange={(e) => setBrandPrimary(e.target.value)}
+                className="h-10 w-16 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent cursor-pointer"
+                aria-label="Brand primary color"
+              />
+              <input
+                value={brandPrimary}
+                onChange={(e) => setBrandPrimary(e.target.value)}
+                placeholder="#EC4899"
+                className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 font-mono uppercase"
+              />
+            </div>
           </div>
         </div>
-        <Btn onClick={() => update.mutate({
-          tenantId,
-          name: salonName,
-          address,
-          phone,
-          workHoursFrom: parseInt(hoursFrom, 10) || 9,
-          workHoursTo: parseInt(hoursTo, 10) || 20,
-          logo: logo || "",
-          coverPhoto: coverPhoto || "",
-        })} disabled={update.isPending} className="w-full justify-center py-2.5">
+        <Btn onClick={() => {
+          const isValidHex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(brandPrimary);
+          update.mutate({
+            tenantId,
+            name: salonName,
+            displayName: displayName || "",
+            address,
+            phone,
+            workHoursFrom: parseInt(hoursFrom, 10) || 9,
+            workHoursTo: parseInt(hoursTo, 10) || 20,
+            logo: logo || "",
+            coverPhoto: coverPhoto || "",
+            logoR2Key: logoR2Key || "",
+            coverR2Key: coverR2Key || "",
+            brandPalette: isValidHex ? { primary: brandPrimary } : null,
+          });
+        }} disabled={update.isPending} className="w-full justify-center py-2.5">
           {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("common.save", lang)}
         </Btn>

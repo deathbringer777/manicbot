@@ -6,6 +6,7 @@ import {
 } from "~/server/db/schema";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
 import { getOrCreateCustomer, createCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
+import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
 import { eq, and, desc, sql, ne, like, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
@@ -91,6 +92,10 @@ export const salonRouter = createTRPCRouter({
     const cfg = Object.fromEntries(configRows.map((r: any) => [r.key, r.value]));
     let salon = {};
     try { salon = tenantRow[0]?.salon ? JSON.parse(tenantRow[0].salon) : {}; } catch { /* ignore malformed JSON */ }
+    let brandPalette: Record<string, string> | null = null;
+    try {
+      brandPalette = tenantRow[0]?.brandPalette ? JSON.parse(tenantRow[0].brandPalette) : null;
+    } catch { /* ignore malformed JSON */ }
     return {
       name: tenantRow[0]?.name ?? "",
       salon,
@@ -104,6 +109,10 @@ export const salonRouter = createTRPCRouter({
       photos: tenantRow[0]?.photos ? (() => { try { return JSON.parse(tenantRow[0]!.photos!); } catch { return []; } })() : [],
       logo: tenantRow[0]?.logo ?? null,
       coverPhoto: tenantRow[0]?.coverPhoto ?? null,
+      displayName: tenantRow[0]?.displayName ?? null,
+      logoR2Key: tenantRow[0]?.logoR2Key ?? null,
+      coverR2Key: tenantRow[0]?.coverR2Key ?? null,
+      brandPalette,
     };
   }),
 
@@ -275,6 +284,18 @@ export const salonRouter = createTRPCRouter({
       photos: z.array(z.string()).optional(),
       logo: z.string().url().optional().or(z.literal("")),
       coverPhoto: z.string().url().optional().or(z.literal("")),
+      // Branding v2
+      displayName: z.string().min(1).max(120).optional().or(z.literal("")),
+      logoR2Key: z.string().max(256).optional().or(z.literal("")),
+      coverR2Key: z.string().max(256).optional().or(z.literal("")),
+      brandPalette: z
+        .object({
+          primary: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
+          bg: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
+          text: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
+        })
+        .nullable()
+        .optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -309,6 +330,12 @@ export const salonRouter = createTRPCRouter({
       if (input.photos !== undefined) tenantUpdate.photos = JSON.stringify(input.photos);
       if (input.logo !== undefined) tenantUpdate.logo = input.logo || null;
       if (input.coverPhoto !== undefined) tenantUpdate.coverPhoto = input.coverPhoto || null;
+      if (input.displayName !== undefined) tenantUpdate.displayName = input.displayName || null;
+      if (input.logoR2Key !== undefined) tenantUpdate.logoR2Key = input.logoR2Key || null;
+      if (input.coverR2Key !== undefined) tenantUpdate.coverR2Key = input.coverR2Key || null;
+      if (input.brandPalette !== undefined) {
+        tenantUpdate.brandPalette = input.brandPalette ? JSON.stringify(input.brandPalette) : null;
+      }
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 
       // 2. Upsert tenant_config rows for each provided field
@@ -332,6 +359,45 @@ export const salonRouter = createTRPCRouter({
       }
 
       return { success: true };
+    }),
+
+  /**
+   * Mint a short-lived HMAC-signed upload token for the Worker's /upload/asset
+   * endpoint. The client uses this to upload a salon branding asset (logo,
+   * cover photo, gallery photo, master portfolio) directly to R2 via the Worker.
+   *
+   * Requires: tenant owner for `tenantId`, UPLOAD_TOKEN_SECRET env var on Pages,
+   * WORKER_PUBLIC_URL env var on Pages.
+   */
+  mintUploadToken: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      kind: z.enum(["logo", "cover", "photo", "portfolio"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!env.UPLOAD_TOKEN_SECRET) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "UPLOAD_TOKEN_SECRET not configured on admin-app",
+        });
+      }
+      if (!env.WORKER_PUBLIC_URL) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "WORKER_PUBLIC_URL not configured on admin-app",
+        });
+      }
+      const token = await signUploadToken({
+        tid: input.tenantId,
+        kind: input.kind as UploadKind,
+        secret: env.UPLOAD_TOKEN_SECRET,
+      });
+      const base = env.WORKER_PUBLIC_URL.replace(/\/$/, "");
+      return {
+        token,
+        uploadUrl: `${base}/upload/asset?t=${encodeURIComponent(token)}&kind=${encodeURIComponent(input.kind)}`,
+      };
     }),
 
   updateAppointmentStatus: publicProcedure

@@ -30,6 +30,10 @@ export const tenants = sqliteTable("tenants", {
   searchText: text("search_text"),
   logo: text("logo"),
   coverPhoto: text("cover_photo"),
+  displayName: text("display_name"),
+  logoR2Key: text("logo_r2_key"),
+  coverR2Key: text("cover_r2_key"),
+  brandPalette: text("brand_palette"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

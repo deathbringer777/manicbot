@@ -158,6 +158,10 @@ CREATE TABLE IF NOT EXISTS tenants (
   search_text TEXT,
   logo TEXT,
   cover_photo TEXT,
+  display_name TEXT,
+  logo_r2_key TEXT,
+  cover_r2_key TEXT,
+  brand_palette TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

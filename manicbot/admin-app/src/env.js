@@ -11,6 +11,8 @@ export const env = createEnv({
     WORKER_PUBLIC_URL: z.string().optional(),
     /** Worker ADMIN_KEY — for calling internal Worker APIs (appointment-action, etc.) */
     ADMIN_KEY: z.string().optional(),
+    /** Shared secret used to sign short-lived upload tokens (must match Worker UPLOAD_TOKEN_SECRET) */
+    UPLOAD_TOKEN_SECRET: z.string().optional(),
     /** Должны совпадать с секретами Worker META_VERIFY_TOKEN_WA / META_VERIFY_TOKEN_IG */
     META_VERIFY_TOKEN_WA: z.string().optional(),
     META_VERIFY_TOKEN_IG: z.string().optional(),
@@ -38,6 +40,7 @@ export const env = createEnv({
     AUTH_SECRET: process.env.AUTH_SECRET,
     WORKER_PUBLIC_URL: process.env.WORKER_PUBLIC_URL,
     ADMIN_KEY: process.env.ADMIN_KEY,
+    UPLOAD_TOKEN_SECRET: process.env.UPLOAD_TOKEN_SECRET,
     META_VERIFY_TOKEN_WA: process.env.META_VERIFY_TOKEN_WA,
     META_VERIFY_TOKEN_IG: process.env.META_VERIFY_TOKEN_IG,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,

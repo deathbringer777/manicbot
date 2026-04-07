@@ -18,6 +18,7 @@ import { tryCalendar } from './http/calendarHttp.js';
 import { tryTelegramWebhook } from './http/telegramWebhookHttp.js';
 import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
 import { trySearchApi } from './http/searchHttp.js';
+import { tryUpload } from './http/uploadHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { logEvent } from './utils/events.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
@@ -143,6 +144,10 @@ export default {
     if (res) return res; // Stripe webhook — no browser headers needed
 
     res = await tryAdminKeyRoutes(request, env, url);
+    if (res) return addSecurityHeaders(res);
+
+    // Upload + CDN routes (POST /upload/asset, GET /cdn/*) — before landing proxy.
+    res = await tryUpload(request, env, url);
     if (res) return addSecurityHeaders(res);
 
     res = await tryGoogle(request, env, url);

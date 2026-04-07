@@ -20,6 +20,7 @@ import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
 import { trySearchApi } from './http/searchHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { logEvent } from './utils/events.js';
+import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
 
 async function proxyToAdminApp(request, env, url) {
   const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
@@ -44,39 +45,6 @@ async function proxyToAdminApp(request, env, url) {
     status: resp.status,
     statusText: resp.statusText,
     headers,
-  });
-}
-
-async function generateSitemap(env, origin) {
-  const base = origin || 'https://manicbot.com';
-  const staticPages = [
-    { loc: '/', priority: '1.0', changefreq: 'weekly' },
-    { loc: '/search', priority: '0.8', changefreq: 'daily' },
-    { loc: '/login', priority: '0.3', changefreq: 'monthly' },
-    { loc: '/blog/', priority: '0.7', changefreq: 'weekly' },
-  ];
-  let salonUrls = [];
-  if (env.DB) {
-    try {
-      const result = await env.DB.prepare('SELECT slug FROM tenants WHERE public_active = 1 AND slug IS NOT NULL').all();
-      salonUrls = (result.results || []).map(r => ({
-        loc: `/salon/${r.slug}`,
-        priority: '0.6',
-        changefreq: 'weekly',
-      }));
-    } catch { /* ignore */ }
-  }
-  const allPages = [...staticPages, ...salonUrls];
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${allPages.map(p => `  <url>
-    <loc>${base}${p.loc}</loc>
-    <changefreq>${p.changefreq}</changefreq>
-    <priority>${p.priority}</priority>
-  </url>`).join('\n')}
-</urlset>`;
-  return new Response(xml, {
-    headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=3600' },
   });
 }
 
@@ -133,17 +101,14 @@ export default {
     validateSecurityConfig(env);
     const url = new URL(request.url);
 
-    // robots.txt
+    // robots.txt — served BEFORE landing proxy so Workers own it
     if (url.pathname === '/robots.txt' && request.method === 'GET') {
-      return new Response(
-        'User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nDisallow: /webhook\nSitemap: ' + url.origin + '/sitemap.xml\n',
-        { headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' } },
-      );
+      return addSecurityHeaders(generateRobotsResponse(url.origin));
     }
 
-    // Sitemap
+    // sitemap.xml — dynamic (static entries + DB-driven salons)
     if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
-      return addSecurityHeaders(await generateSitemap(env, url.origin));
+      return addSecurityHeaders(await generateSitemapResponse(env, url.origin));
     }
 
     // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath)

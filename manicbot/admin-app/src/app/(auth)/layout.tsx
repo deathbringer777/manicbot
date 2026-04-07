@@ -1,6 +1,11 @@
 export const runtime = "edge";
 
+import type { Metadata } from "next";
 import { PublicFooter } from "~/components/public/PublicFooter";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function AuthLayout({
   children,

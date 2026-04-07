@@ -127,10 +127,19 @@ export const publicSalonRouter = createTRPCRouter({
         if (r && r.count > 0) rating = { avg: r.avg, count: r.count };
       }
 
+      let brandPalette: Record<string, string> | null = null;
+      try {
+        brandPalette = tenant.brandPalette ? JSON.parse(tenant.brandPalette) : null;
+      } catch { /* ignore */ }
+
       return {
         id: tenant.id,
         slug: tenant.slug,
         name: tenant.name,
+        displayName: tenant.displayName ?? null,
+        logo: tenant.logo ?? null,
+        coverPhoto: tenant.coverPhoto ?? null,
+        brandPalette,
         description: tenant.description,
         city: tenant.city,
         lat: tenant.lat,

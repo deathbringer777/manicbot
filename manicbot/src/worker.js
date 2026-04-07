@@ -19,6 +19,7 @@ import { tryTelegramWebhook } from './http/telegramWebhookHttp.js';
 import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
 import { trySearchApi } from './http/searchHttp.js';
 import { tryUpload } from './http/uploadHttp.js';
+import { tryChatWeb } from './http/chatWebHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { logEvent } from './utils/events.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
@@ -156,6 +157,11 @@ export default {
     // Meta WA/IG before getCtx: paths /webhook/wa and /webhook/ig are not Telegram bot ids.
     res = await tryMetaWebhooks(request, env, url, executionCtx);
     if (res) return res; // Webhook — no browser headers needed
+
+    // Web chat widget routes (/chat/init, /chat/send, /chat/poll).
+    // These need env.DB + env.MANICBOT; they build their own ctx internally.
+    res = await tryChatWeb(request, env, url);
+    if (res) return res; // Structured JSON response with own CORS headers
 
     const isAdminPath = url.pathname.startsWith('/admin/');
     const needsFallback = url.pathname !== '/' && !isAdminPath;

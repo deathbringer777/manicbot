@@ -114,6 +114,41 @@ export async function resolveTenantFromInstagram(ctx, igPageId) {
 }
 
 /**
+ * Resolve tenant from a salon public slug (used by the web chat widget).
+ * Unlike WA/IG this does NOT require a row in `channel_configs` — the web
+ * channel is a first-party transport and needs no external credentials.
+ * Returns a *synthetic* channelConfig so `buildChannelCtx` works unchanged.
+ *
+ * Only salons with `public_active = 1` are reachable via the web widget so
+ * unpublished drafts stay private.
+ *
+ * @param {{ db: D1Database }} ctx
+ * @param {string} slug
+ * @returns {Promise<{tenantId: string, channelConfig: object}|null>}
+ */
+export async function resolveTenantFromSlug(ctx, slug) {
+  if (!ctx?.db || !slug || typeof slug !== 'string') return null;
+  const rows = await dbAll(
+    ctx,
+    'SELECT id, name, display_name, logo, cover_photo, brand_palette, slug, public_active FROM tenants WHERE slug = ? AND public_active = 1 LIMIT 1',
+    slug,
+  );
+  if (!rows.length) return null;
+  const tenant = rows[0];
+  // Synthetic channel config: no row in channel_configs, token=null.
+  // Mirrors the shape that `buildChannelCtx` / WebAdapter expect.
+  const channelConfig = {
+    id: `web:${tenant.id}`,
+    tenant_id: tenant.id,
+    channel_type: 'web',
+    config: { slug },
+    token: null,
+    active: 1,
+  };
+  return { tenantId: tenant.id, channelConfig };
+}
+
+/**
  * Fetch a channel config for a specific tenant + channel type.
  * Returns the config row with the token decrypted into `token`.
  *

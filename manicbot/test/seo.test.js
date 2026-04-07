@@ -6,6 +6,7 @@ import {
   renderRobotsTxt,
   generateSitemapResponse,
   generateRobotsResponse,
+  coerceLastmodDate,
 } from '../src/utils/seo.js';
 
 describe('seo', () => {
@@ -145,6 +146,46 @@ describe('seo', () => {
     });
   });
 
+  describe('coerceLastmodDate', () => {
+    it('returns null for null/undefined/empty', () => {
+      expect(coerceLastmodDate(null)).toBeNull();
+      expect(coerceLastmodDate(undefined)).toBeNull();
+      expect(coerceLastmodDate('')).toBeNull();
+    });
+
+    it('passes through ISO YYYY-MM-DD dates', () => {
+      expect(coerceLastmodDate('2026-04-07')).toBe('2026-04-07');
+    });
+
+    it('truncates ISO datetime to YYYY-MM-DD', () => {
+      expect(coerceLastmodDate('2026-04-07T12:34:56Z')).toBe('2026-04-07');
+      expect(coerceLastmodDate('2026-04-07T00:00:00.000Z')).toBe('2026-04-07');
+    });
+
+    it('converts SQLite epoch seconds (INTEGER) to YYYY-MM-DD', () => {
+      // 1774796426 = 2026-03-29T14:20:26Z
+      expect(coerceLastmodDate(1774796426)).toBe('2026-03-29');
+      // 0 = 1970-01-01
+      expect(coerceLastmodDate(0)).toBe('1970-01-01');
+    });
+
+    it('converts epoch milliseconds (large numbers) to YYYY-MM-DD', () => {
+      // 1774796426000 = same moment as above, but in ms
+      expect(coerceLastmodDate(1774796426000)).toBe('2026-03-29');
+    });
+
+    it('converts numeric strings as epoch', () => {
+      expect(coerceLastmodDate('1774796426')).toBe('2026-03-29');
+    });
+
+    it('returns null for garbage input', () => {
+      expect(coerceLastmodDate('not-a-date')).toBeNull();
+      expect(coerceLastmodDate({})).toBeNull();
+      expect(coerceLastmodDate([])).toBeNull();
+      expect(coerceLastmodDate(NaN)).toBeNull();
+    });
+  });
+
   describe('generateSitemapResponse', () => {
     it('returns XML content-type with 1h cache', async () => {
       const res = await generateSitemapResponse({}, 'https://manicbot.com');
@@ -153,13 +194,15 @@ describe('seo', () => {
       expect(res.headers.get('cache-control')).toContain('max-age=3600');
     });
 
-    it('includes DB salon slugs when DB binding is present', async () => {
+    it('includes DB salon slugs with ISO-formatted lastmod (from epoch int)', async () => {
       const mockDb = {
         prepare: () => ({
           all: async () => ({
             results: [
-              { slug: 'salon-alpha', updated_at: '2026-03-20T12:00:00Z' },
-              { slug: 'salon-beta',  updated_at: null },
+              // updated_at stored as INTEGER epoch seconds (schema.sql tenants.updated_at)
+              { slug: 'salon-alpha', updated_at: 1774796426 }, // 2026-03-29
+              { slug: 'salon-beta',  updated_at: null },        // falls back to today
+              { slug: 'salon-gamma', updated_at: '2026-03-20T12:00:00Z' }, // ISO string
             ],
           }),
         }),
@@ -168,7 +211,14 @@ describe('seo', () => {
       const body = await res.text();
       expect(body).toContain('/salon/salon-alpha');
       expect(body).toContain('/salon/salon-beta');
+      expect(body).toContain('/salon/salon-gamma');
+      expect(body).toContain('2026-03-29');
       expect(body).toContain('2026-03-20');
+      // Every lastmod must be YYYY-MM-DD — no raw epoch integers leaking through
+      const lastmodMatches = [...body.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)];
+      for (const [, val] of lastmodMatches) {
+        expect(val).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
     });
 
     it('survives DB errors and still returns static sitemap', async () => {

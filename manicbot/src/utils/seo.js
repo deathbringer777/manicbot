@@ -73,6 +73,36 @@ function todayIso() {
 }
 
 /**
+ * Coerce a DB `updated_at` column to a W3C-DATETIME-compatible YYYY-MM-DD string.
+ * Tenants store updated_at as INTEGER epoch seconds (see schema.sql).
+ * Accepts: number (epoch seconds/ms), numeric string, ISO string.
+ * Returns: YYYY-MM-DD, or null if the input can't be parsed.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function coerceLastmodDate(value) {
+  if (value == null || value === '') return null;
+  // ISO strings that already start with YYYY-MM-DD
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    // Pure ISO date (YYYY-MM-DD) or ISO datetime — extract date prefix
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+    // Numeric string — treat as epoch
+    if (/^\d+$/.test(trimmed)) return coerceLastmodDate(Number(trimmed));
+    return null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // SQLite strftime('%s') gives epoch *seconds*. JS Date wants milliseconds.
+    // Anything below year 2900 in seconds (~3e10) → treat as seconds.
+    const ms = value < 1e12 ? value * 1000 : value;
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+/**
  * Build the list of sitemap entries (excluding DB-driven salon slugs).
  * Pure function — no env, no I/O. Easy to unit test.
  * @param {string} [today]
@@ -131,7 +161,7 @@ export async function generateSitemapResponse(env, origin) {
           loc: `/salon/${row.slug}`,
           priority: '0.7',
           changefreq: 'weekly',
-          lastmod: (row.updated_at && String(row.updated_at).slice(0, 10)) || today,
+          lastmod: coerceLastmodDate(row.updated_at) || today,
         });
       }
     } catch (err) {

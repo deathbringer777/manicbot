@@ -178,6 +178,10 @@ export async function tryChatWeb(request, env, url) {
     const callbackData = sanitizeUserText(body?.callbackData, 256);
     const userName = sanitizeUserText(body?.userName, 64);
     const userLang = sanitizeUserText(body?.userLang, 8);
+    // Opaque parent message id (the bubble id of the message whose button was
+    // tapped). Forwarded so the bot's `editPhoto` can morph that bubble in
+    // place instead of spawning a new one for every navigation arrow.
+    const messageId = sanitizeUserText(body?.messageId, 64);
 
     if (!slug) return jsonError('slug required', 400);
     if (!sessionId || sessionId.length < 16 || sessionId.length > 128) return jsonError('sessionId required', 400);
@@ -198,6 +202,7 @@ export async function tryChatWeb(request, env, url) {
       chatId,
       text,
       callbackData,
+      messageId,
       userName,
       userLang,
     });

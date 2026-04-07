@@ -121,6 +121,9 @@ export class WebAdapter {
         tenantId: this._ctx?.tenantId ?? null,
         text: typeof payload.text === 'string' ? payload.text : null,
         callbackData: typeof payload.callbackData === 'string' ? payload.callbackData : null,
+        // Opaque parent message id (the bubble id from `_buildPublicMessage`)
+        // forwarded so the bot can edit that bubble in place via `editPhoto`.
+        callbackMessageId: typeof payload.messageId === 'string' ? payload.messageId.slice(0, 64) : null,
         userName: typeof payload.userName === 'string' ? payload.userName.slice(0, 64) : null,
         userLang: typeof payload.userLang === 'string' ? payload.userLang.slice(0, 8) : null,
         rawEvent: payload,
@@ -194,10 +197,39 @@ export class WebAdapter {
 
   /**
    * Send a photo (URL or data-URL) as a dedicated photo message.
+   * Accepts the same Telegram-style `extra` object as the bridge passes
+   * (`{ reply_markup: { inline_keyboard: [...] } }`) and forwards the buttons
+   * to `send()` so the photo bubble carries inline navigation (◀️ 1/3 ▶️).
    * SECURITY: delegates to `send()` which enforces the active-recipient guard.
    */
-  async sendPhoto(userId, url, caption) {
-    return this.send(userId, { text: caption ?? '', photo: url });
+  async sendPhoto(userId, url, caption, extra = {}) {
+    const buttons = extra?.reply_markup?.inline_keyboard ?? null;
+    return this.send(userId, { text: caption ?? '', photo: url, buttons, parseMode: 'HTML' });
+  }
+
+  /**
+   * Edit a photo message in place (replaces the existing bubble client-side
+   * by emitting a new outbox entry with `editMessageId` set to `msgId`).
+   * Used by `telegram.js:editPhoto` for the web channel so navigation arrows
+   * morph the same bubble instead of spamming new ones.
+   * SECURITY: same active-recipient guard as `send()`.
+   */
+  async editPhoto(userId, msgId, url, caption, extra = {}) {
+    if (!this.isActiveRecipient(userId)) {
+      console.warn('[web] SECURITY: refused editPhoto to non-active recipient', { recipient: String(userId), active: this.activeChatId });
+      return { ok: false, error: 'not_active_recipient' };
+    }
+    const buttons = extra?.reply_markup?.inline_keyboard ?? null;
+    const normalized = this._buildPublicMessage({
+      text: caption ?? '',
+      photo: url,
+      buttons,
+      parseMode: 'HTML',
+      editMessageId: String(msgId),
+    });
+    this._outbox.push(normalized);
+    await this._pushToKv(userId, normalized);
+    return { ok: true, id: normalized.id };
   }
 
   /**

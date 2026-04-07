@@ -271,7 +271,17 @@ export async function editPhoto(ctx, chatId, msgId, url, caption, extra = {}) {
     } catch (_) { /* fallback below */ }
     return null;
   }
-  // WA/IG: no edit support, send new photo
+  // Web channel: edit the bubble in place via the adapter so navigation
+  // arrows (◀️ 1/3 ▶️) morph the existing photo bubble instead of creating
+  // a new one each click. Falls through to the WA/IG path if no msgId.
+  if (ctx.channel?.type === 'web' && msgId) {
+    try {
+      return await ctx.channel.editPhoto(String(chatId), msgId, url, caption, extra);
+    } catch (_) {
+      return null;
+    }
+  }
+  // WA/IG (and web without msgId): no edit support, send new photo
   try {
     return await logMetaAdapterResult(
       ctx.channel.sendPhoto(String(chatId), url, caption, extra),

@@ -217,7 +217,7 @@ export function ChatClient({
 
   const sendRaw = useCallback(
     async (
-      payload: { text?: string; callbackData?: string },
+      payload: { text?: string; callbackData?: string; messageId?: string },
       sid: string,
       optimisticList?: ChatMessage[],
     ) => {
@@ -267,9 +267,11 @@ export function ChatClient({
   );
 
   const handleButtonClick = useCallback(
-    async (callbackData: string) => {
+    async (callbackData: string, messageId: string) => {
       if (!sessionId) return;
-      await sendRaw({ callbackData }, sessionId);
+      // messageId carries the parent bubble id so the bot's editPhoto can
+      // morph the existing photo bubble in place (catalog navigation arrows).
+      await sendRaw({ callbackData, messageId }, sessionId);
     },
     [sessionId, sendRaw],
   );

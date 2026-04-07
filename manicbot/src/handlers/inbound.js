@@ -174,7 +174,17 @@ function _inboundToCb(inbound) {
           const n = parseInt(raw, 10);
           return Number.isFinite(n) ? n : String(raw ?? '');
         })();
-  const msgId = inbound.callbackMessageId ? parseInt(inbound.callbackMessageId, 10) : 0;
+  // msgId is opaque to the bot (only used as a handle for edit operations).
+  // Telegram message ids are numeric strings — `parseInt` survives them; web
+  // channel uses random hex bubble ids that must NOT be coerced. Try numeric
+  // first and fall back to the original string.
+  let msgId = 0;
+  if (inbound.callbackMessageId) {
+    const n = parseInt(inbound.callbackMessageId, 10);
+    msgId = Number.isFinite(n) && String(n) === String(inbound.callbackMessageId)
+      ? n
+      : inbound.callbackMessageId;
+  }
   return {
     id: `${inbound.channel}_${inbound.channelUserId}_${Date.now()}`,
     from: {

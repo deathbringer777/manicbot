@@ -15,7 +15,7 @@ export function MessageBubble({
 }: {
   msg: ChatMessage;
   salon: ChatSalon;
-  onButtonClick: (callbackData: string) => void;
+  onButtonClick: (callbackData: string, messageId: string) => void;
 }) {
   const palette = salon.brandPalette?.primary ?? "#EC4899";
   const isUser = msg.role === "user";
@@ -98,7 +98,7 @@ export function MessageBubble({
                     <button
                       key={btnIdx}
                       type="button"
-                      onClick={() => btn.callback_data && onButtonClick(btn.callback_data)}
+                      onClick={() => btn.callback_data && onButtonClick(btn.callback_data, msg.id)}
                       disabled={!btn.callback_data}
                       className="text-xs px-3 py-1.5 rounded-full border transition disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{

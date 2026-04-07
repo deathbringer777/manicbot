@@ -260,6 +260,33 @@ describe('WebAdapter.sendPhoto / sendDocument', () => {
     expect(adapter._outbox[0].text).toBe('caption');
   });
 
+  it('sendPhoto forwards reply_markup buttons (catalog ◀️ 1/3 ▶️ navigation)', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    await adapter.sendPhoto(-1, 'https://example.com/a.png', 'caption', {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '◀️', callback_data: 'cat:svc1:0' },
+            { text: '2 / 3', callback_data: 'noop' },
+            { text: '▶️', callback_data: 'cat:svc1:2' },
+          ],
+          [{ text: 'Book', callback_data: 'svc:svc1' }],
+        ],
+      },
+    });
+    const msg = adapter._outbox[0];
+    expect(msg.photo).toBe('https://example.com/a.png');
+    expect(msg.buttons).toEqual([
+      [
+        { text: '◀️', callback_data: 'cat:svc1:0', url: null },
+        { text: '2 / 3', callback_data: 'noop', url: null },
+        { text: '▶️', callback_data: 'cat:svc1:2', url: null },
+      ],
+      [{ text: 'Book', callback_data: 'svc:svc1', url: null }],
+    ]);
+  });
+
   it('sendDocument with URL content renders an anchor', async () => {
     const adapter = new WebAdapter(makeCtx());
     adapter.setActiveChat(-1);
@@ -274,6 +301,68 @@ describe('WebAdapter.sendPhoto / sendDocument', () => {
     const result = await adapter.sendPhoto(998877665544, 'https://example.com/a.png', 'caption');
     expect(result.ok).toBe(false);
     expect(adapter._outbox).toHaveLength(0);
+  });
+});
+
+describe('WebAdapter.editPhoto', () => {
+  it('emits a photo message with editMessageId set (in-place navigation)', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    await adapter.editPhoto(-1, 'prev-bubble-id', 'https://example.com/b.png', 'caption 2', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '▶️', callback_data: 'cat:svc1:3' }]],
+      },
+    });
+    const msg = adapter._outbox[0];
+    expect(msg.editMessageId).toBe('prev-bubble-id');
+    expect(msg.photo).toBe('https://example.com/b.png');
+    expect(msg.text).toBe('caption 2');
+    expect(msg.buttons).toEqual([
+      [{ text: '▶️', callback_data: 'cat:svc1:3', url: null }],
+    ]);
+  });
+
+  it('SECURITY: editPhoto refuses non-active recipient', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    const result = await adapter.editPhoto(998877665544, 'mid', 'https://x.png', 'cap');
+    expect(result.ok).toBe(false);
+    expect(adapter._outbox).toHaveLength(0);
+  });
+});
+
+describe('WebAdapter.normalize messageId forwarding', () => {
+  it('forwards payload.messageId as callbackMessageId', () => {
+    const adapter = new WebAdapter(makeCtx());
+    const inbound = adapter.normalize({
+      sessionId: 'sess-1',
+      chatId: -12345,
+      callbackData: 'cat:svc1:2',
+      messageId: 'bubble-abc123',
+    });
+    expect(inbound.callbackMessageId).toBe('bubble-abc123');
+    expect(inbound.callbackData).toBe('cat:svc1:2');
+  });
+
+  it('caps messageId to 64 chars', () => {
+    const adapter = new WebAdapter(makeCtx());
+    const inbound = adapter.normalize({
+      sessionId: 'sess-1',
+      chatId: -12345,
+      callbackData: 'x',
+      messageId: 'a'.repeat(200),
+    });
+    expect(inbound.callbackMessageId.length).toBe(64);
+  });
+
+  it('leaves callbackMessageId null when payload omits messageId', () => {
+    const adapter = new WebAdapter(makeCtx());
+    const inbound = adapter.normalize({
+      sessionId: 'sess-1',
+      chatId: -12345,
+      callbackData: 'x',
+    });
+    expect(inbound.callbackMessageId).toBeNull();
   });
 });
 

@@ -57,9 +57,34 @@ export const users = sqliteTable("users", {
   phone: text("phone"),
   registeredAt: integer("registered_at"),
   tosAcceptedAt: integer("tos_accepted_at"),
+  firstSource: text("first_source"),
+  firstCampaign: text("first_campaign"),
+  firstMedium: text("first_medium"),
+  firstTouchAt: integer("first_touch_at"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
   index("idx_user_phone").on(t.tenantId, t.phone),
+]);
+
+export const userOrigins = sqliteTable("user_origins", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  chatId: integer("chat_id").notNull(),
+  channel: text("channel").notNull(),
+  source: text("source"),
+  medium: text("medium"),
+  campaign: text("campaign"),
+  content: text("content"),
+  landingUrl: text("landing_url"),
+  referer: text("referer"),
+  rawPayload: text("raw_payload"),
+  capturedAt: integer("captured_at").notNull(),
+  isFirstTouch: integer("is_first_touch").notNull().default(0),
+}, (t) => [
+  index("idx_uo_tenant_chat").on(t.tenantId, t.chatId),
+  index("idx_uo_tenant_source").on(t.tenantId, t.source, t.capturedAt),
+  index("idx_uo_tenant_campaign").on(t.tenantId, t.campaign, t.capturedAt),
+  index("idx_uo_tenant_first").on(t.tenantId, t.isFirstTouch, t.capturedAt),
 ]);
 
 export const masters = sqliteTable("masters", {

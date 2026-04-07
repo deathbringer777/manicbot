@@ -49,10 +49,34 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   registered_at INTEGER,
   tos_accepted_at INTEGER,
+  first_source TEXT,
+  first_campaign TEXT,
+  first_medium TEXT,
+  first_touch_at INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_username ON users(tenant_id, tg_username);
 CREATE INDEX IF NOT EXISTS idx_user_phone ON users(tenant_id, phone);
+
+CREATE TABLE IF NOT EXISTS user_origins (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id       TEXT NOT NULL,
+  chat_id         INTEGER NOT NULL,
+  channel         TEXT NOT NULL,
+  source          TEXT,
+  medium          TEXT,
+  campaign        TEXT,
+  content         TEXT,
+  landing_url     TEXT,
+  referer         TEXT,
+  raw_payload     TEXT,
+  captured_at     INTEGER NOT NULL,
+  is_first_touch  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_uo_tenant_chat ON user_origins(tenant_id, chat_id);
+CREATE INDEX IF NOT EXISTS idx_uo_tenant_source ON user_origins(tenant_id, source, captured_at);
+CREATE INDEX IF NOT EXISTS idx_uo_tenant_campaign ON user_origins(tenant_id, campaign, captured_at);
+CREATE INDEX IF NOT EXISTS idx_uo_tenant_first ON user_origins(tenant_id, is_first_touch, captured_at);
 
 CREATE TABLE IF NOT EXISTS masters (
   tenant_id TEXT NOT NULL,

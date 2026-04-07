@@ -13,6 +13,8 @@ import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt,
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
+import { decodeStartPayload, recordOrigin } from '../services/origins.js';
+import { logEvent } from '../utils/events.js';
 import { createTicket, appendTicketMessage } from '../support/tickets.js';
 import { setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
 import { addSupport, removeSupport, createTenant, registerBot, setSystemAdmin, addTechnicalSupport } from '../admin/provisioning.js';
@@ -620,8 +622,42 @@ export async function onMsg(ctx, msg) {
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
   }
 
-  if (txt === '/start') {
+  const startMatch = txt && /^\/start(?:\s+(\S+))?$/.exec(txt);
+  if (startMatch) {
+    const startPayload = startMatch[1] || null;
     await upsertUserFromTelegram(ctx, cid, msg.from);
+
+    // Record acquisition origin if this is a deep-link /start. The channel is
+    // derived from the inbound metadata if present (omnichannel path) and
+    // defaults to 'telegram' for native TG updates. Decode failures are logged
+    // via the events ring buffer but never block the flow.
+    if (startPayload && ctx.tenantId) {
+      const decoded = decodeStartPayload(startPayload);
+      if (decoded) {
+        const channel = msg?._inbound?.channel || 'telegram';
+        try {
+          await recordOrigin(ctx, {
+            chatId: cid,
+            channel,
+            source: decoded.source,
+            medium: decoded.medium,
+            campaign: decoded.campaign,
+            content: decoded.content,
+            rawPayload: startPayload.slice(0, 256),
+          });
+        } catch (e) {
+          console.error('[origins] recordOrigin failed:', e?.message);
+        }
+      } else {
+        void logEvent(ctx, 'origin.invalid_payload', {
+          tenantId: ctx.tenantId,
+          level: 'warn',
+          message: `invalid /start payload from chat=${cid}`,
+          data: { payload: startPayload.slice(0, 64) },
+        });
+      }
+    }
+
     await clearChatHistory(ctx, cid);
     let hasLang = await getLang(ctx, cid);
     if (!hasLang) {

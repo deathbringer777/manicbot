@@ -16,8 +16,9 @@ import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
+import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: () => void; tenantId: string }) {
@@ -743,9 +744,10 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" });
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" });
   const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
+  const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" });
 
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
     onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
@@ -766,6 +768,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { key: "services", label: t("salon.services", lang) },
     { key: "masters", label: t("salon.masters", lang) },
     { key: "clients", label: t("salon.clients", lang) },
+    { key: "analytics", label: "📊 Аналитика" },
     { key: "billing", label: t("salon.billing", lang) },
     { key: "channels", label: "Channels" },
     { key: "reviews", label: "Reviews" },
@@ -1038,6 +1041,15 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── ANALYTICS ── */}
+      {tab === "analytics" && (
+        <AnalyticsTab
+          tenantId={tenantId}
+          botUsername={botStatus.data?.botUsername ?? null}
+          slug={profile.data?.slug ?? null}
+        />
       )}
 
       {/* ── CHANNELS ── */}

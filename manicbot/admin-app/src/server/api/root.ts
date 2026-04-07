@@ -19,6 +19,7 @@ import { publicSalonRouter } from "~/server/api/routers/publicSalon";
 import { eventsRouter } from "~/server/api/routers/events";
 import { webUsersRouter } from "~/server/api/routers/webUsers";
 import { reviewsRouter } from "~/server/api/routers/reviews";
+import { analyticsRouter } from "~/server/api/routers/analytics";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -41,6 +42,7 @@ export const appRouter = createTRPCRouter({
   events: eventsRouter,
   webUsers: webUsersRouter,
   reviews: reviewsRouter,
+  analytics: analyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   MapPin, Phone, Clock, Instagram, Send, Star, ChevronDown, ChevronUp,
-  ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera,
+  ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera, MessageCircle,
 } from "lucide-react";
 
 type WorkHours = { from?: number; to?: number } | string | null;
@@ -251,6 +251,7 @@ function MasterCard({ master, services }: { master: MasterItem; services: Servic
 export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
   const [photoIdx, setPhotoIdx] = useState(0);
   const bookUrl = profile.botUsername ? `https://t.me/${profile.botUsername}` : null;
+  const chatUrl = profile.slug ? `/salon/${profile.slug}/chat` : null;
 
   const coverPhoto = profile.photos[photoIdx] ?? null;
 
@@ -320,6 +321,15 @@ export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
               >
                 <Send className="h-4 w-4" />
                 Записаться в Telegram
+              </a>
+            )}
+            {chatUrl && (
+              <a
+                href={chatUrl}
+                className="inline-flex items-center gap-2 rounded-xl border border-violet-600 bg-white px-5 py-2.5 font-semibold text-violet-600 transition hover:bg-violet-50 dark:border-brand-500 dark:bg-transparent dark:text-brand-400 dark:hover:bg-brand-500/10"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Открыть чат
               </a>
             )}
             <div className="flex gap-2">
@@ -457,20 +467,33 @@ export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
             )}
 
             {/* Booking CTA sidebar */}
-            {bookUrl && (
+            {(bookUrl || chatUrl) && (
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-center dark:border-brand-500/30 dark:bg-brand-500/10">
                 <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-                  Запись через Telegram — быстро и без звонков
+                  Быстрая запись — без звонков
                 </p>
-                <a
-                  href={bookUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 dark:bg-brand-500 dark:hover:bg-brand-600"
-                >
-                  <Send className="h-4 w-4" />
-                  Записаться
-                </a>
+                <div className="flex flex-col items-stretch gap-2">
+                  {bookUrl && (
+                    <a
+                      href={bookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 dark:bg-brand-500 dark:hover:bg-brand-600"
+                    >
+                      <Send className="h-4 w-4" />
+                      Записаться в Telegram
+                    </a>
+                  )}
+                  {chatUrl && (
+                    <a
+                      href={chatUrl}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-600 bg-white px-5 py-2.5 text-sm font-semibold text-violet-600 transition hover:bg-violet-100 dark:border-brand-500 dark:bg-transparent dark:text-brand-400 dark:hover:bg-brand-500/20"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Открыть чат на сайте
+                    </a>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -32,6 +32,36 @@ import { runWorkersAI, parseAIActions, executeAIAction, validateActionParams } f
 import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage, isBookingConfirmDeclineText, parseServiceMention } from '../patterns.js';
 // timingSafeEqual imported above from security.js
 
+// ─── SECURITY: privileged commands forbidden on the web channel ──────────────
+// Web sessions are public — anyone with the link can open one — so they must
+// never be able to invoke admin/master/system commands, even if a stale role
+// row matches their hashed chat_id. The role lockdown in `getRole` /
+// `resolveRole` covers the runtime check; this set drops the commands at
+// the entry point so they don't even reach the role-aware handlers.
+const BLOCKED_WEB_COMMANDS = new Set([
+  '/admin',
+  '/sysadmin',
+  '/panel',
+  '/master',
+  '/client',
+  '/resetwebhooks',
+  '/migrate',
+  '/seed',
+  '/provision',
+  '/setup',
+  '/debug',
+  '/dump',
+  '/export',
+]);
+const BLOCKED_WEB_COMMAND_PREFIXES = [
+  '/grant_',
+  '/add_',
+  '/remove_',
+  '/sysadm_',
+  '/admin_',
+  '/become_',
+];
+
 async function showHelp(ctx, cid, lg, realRole) {
   let text;
   if (realRole === 'system_admin') {
@@ -221,6 +251,23 @@ export async function onMsg(ctx, msg) {
   if (ctx.channel?.type) {
     console.log('[onMsg] channel message accepted:', { channel: ctx.channel.type, cid: String(cid).slice(0, 20), tenantId: ctx.tenantId });
   }
+
+  // ─── SECURITY: web channel is hard-locked to the client role ──────────────
+  // Reject any privileged command before it reaches the role-aware handlers.
+  // Even if a stale tenant_roles row matched the hashed session id, the role
+  // resolver in users.js / roles.js refuses to escalate it; this guard adds
+  // a second line of defence at the entry point so the commands cannot leak
+  // existence of the admin key system, role grants, or panel routes.
+  if (ctx.channel?.type === 'web') {
+    const rawCmd = (msg.text || '').trim().split(/\s+/, 1)[0] || '';
+    if (BLOCKED_WEB_COMMANDS.has(rawCmd) || BLOCKED_WEB_COMMAND_PREFIXES.some((p) => rawCmd.startsWith(p))) {
+      console.warn('[web] SECURITY: blocked privileged command from web session', {
+        cmd: rawCmd, cid: String(cid).slice(0, 20), tenantId: ctx.tenantId,
+      });
+      return; // silent drop — don't reveal the command exists
+    }
+  }
+
   if (!await checkRateLimit(ctx, cid)) {
     const lg = (await getLang(ctx, cid)) || 'ru';
     await send(ctx, cid, t(lg, 'rate_limit'));

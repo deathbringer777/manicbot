@@ -25,7 +25,26 @@ export function isCreator(ctx, cid) {
   return String(ctx.adminChatId) === String(cid);
 }
 
+/**
+ * SECURITY: returns true if `cid` is the active web session's chat_id and the
+ * ctx is locked to the client role. Used by `isAdmin`, `isPlatformAdmin`,
+ * `getRole`, and `resolveRole` (in roles.js) to refuse any privilege
+ * escalation for web-channel users — even if their hashed chat_id collides
+ * with a real admin row in tenant_roles / platform_roles.
+ *
+ * The marker `_lockToClientRole = true` + `_webSessionChatId = chatId` is set
+ * by chatWebHttp.js immediately after `buildChannelCtx`.
+ */
+export function isWebSessionLocked(ctx, cid) {
+  if (!ctx?._lockToClientRole) return false;
+  if (ctx._webSessionChatId == null) return false;
+  if (cid == null) return false;
+  return Number(cid) === Number(ctx._webSessionChatId);
+}
+
 export async function isAdmin(ctx, cid) {
+  // SECURITY: web-channel sessions are NEVER admins, even with a stale role row.
+  if (isWebSessionLocked(ctx, cid)) return false;
   if (isCreator(ctx, cid)) return true;
   if (ctx.db) {
     if (ctx.tenantId) {
@@ -42,6 +61,8 @@ export async function isAdmin(ctx, cid) {
 }
 
 export async function isPlatformAdmin(ctx, cid) {
+  // SECURITY: web-channel sessions are NEVER platform admins.
+  if (isWebSessionLocked(ctx, cid)) return false;
   if (isCreator(ctx, cid)) return true;
   if (!ctx.db) return false;
   const platformRole = await getPlatformRole(ctx, cid);
@@ -298,6 +319,10 @@ export async function resolveMasterInput(ctx, msg, txt) {
 }
 
 export async function getRole(ctx, cid) {
+  // SECURITY: web-channel sessions are ALWAYS clients. Force the lowest
+  // privilege regardless of any tenant_roles / platform_roles row that might
+  // happen to share this hashed chat_id.
+  if (isWebSessionLocked(ctx, cid)) return 'client';
   if (isCreator(ctx, cid)) return 'system_admin';
   if (ctx.db && ctx.tenantId) {
     const role = await resolveRole(ctx, cid);

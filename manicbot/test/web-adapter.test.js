@@ -129,13 +129,15 @@ describe('WebAdapter.normalize', () => {
 describe('WebAdapter.send', () => {
   let adapter;
   let ctx;
+  const ACTIVE = -12345;
   beforeEach(() => {
     ctx = makeCtx();
     adapter = new WebAdapter(ctx);
+    adapter.setActiveChat(ACTIVE);
   });
 
   it('appends a message to the in-memory outbox', async () => {
-    await adapter.send(-12345, { text: 'Hello from bot' });
+    await adapter.send(ACTIVE, { text: 'Hello from bot' });
     expect(adapter._outbox).toHaveLength(1);
     expect(adapter._outbox[0].text).toBe('Hello from bot');
     expect(adapter._outbox[0].id).toBeTypeOf('string');
@@ -143,7 +145,7 @@ describe('WebAdapter.send', () => {
   });
 
   it('flattens telegram-style button rows', async () => {
-    await adapter.send(-12345, {
+    await adapter.send(ACTIVE, {
       text: 'pick',
       buttons: [
         [{ text: 'A', callback_data: 'a' }, { text: 'B', callback_data: 'b' }],
@@ -164,15 +166,15 @@ describe('WebAdapter.send', () => {
 
   it('unwraps the renderButtons metadata shape', async () => {
     const wrapped = adapter.renderButtons([[{ text: 'X', callback_data: 'x' }]]);
-    await adapter.send(-12345, { text: 'hey', buttons: wrapped });
+    await adapter.send(ACTIVE, { text: 'hey', buttons: wrapped });
     expect(adapter._outbox[0].buttons).toEqual([
       [{ text: 'X', callback_data: 'x', url: null }],
     ]);
   });
 
   it('also writes to KV outbox for out-of-band polling', async () => {
-    await adapter.send(-12345, { text: 'persist me' });
-    const key = 'web:outbox:t_demo:-12345';
+    await adapter.send(ACTIVE, { text: 'persist me' });
+    const key = `web:outbox:t_demo:${ACTIVE}`;
     const raw = await ctx.kv.get(key, 'json');
     expect(Array.isArray(raw)).toBe(true);
     expect(raw).toHaveLength(1);
@@ -180,6 +182,7 @@ describe('WebAdapter.send', () => {
   });
 
   it('caps KV outbox at 100 entries', async () => {
+    adapter.setActiveChat(-42);
     for (let i = 0; i < 150; i++) {
       await adapter.send(-42, { text: `msg-${i}` });
     }
@@ -188,20 +191,56 @@ describe('WebAdapter.send', () => {
     expect(raw[0].text).toBe('msg-50');
     expect(raw[99].text).toBe('msg-149');
   });
+
+  // ─── SECURITY ────────────────────────────────────────────────────────────
+  it('SECURITY: refuses send to a non-active recipient (staff leak guard)', async () => {
+    const STAFF_TG_CHAT = 998877665544; // a real Telegram positive chat id
+    const result = await adapter.send(STAFF_TG_CHAT, { text: '🆕 Новая заявка!' });
+    expect(result).toEqual({ ok: false, error: 'not_active_recipient' });
+    expect(adapter._outbox).toHaveLength(0);
+    // KV outbox for the staff chat must NOT have been written either
+    const raw = await ctx.kv.get(`web:outbox:t_demo:${STAFF_TG_CHAT}`, 'json');
+    expect(raw).toBeNull();
+  });
+
+  it('SECURITY: refuses send when no active chat is set', async () => {
+    const fresh = new WebAdapter(makeCtx());
+    const result = await fresh.send(-12345, { text: 'should be dropped' });
+    expect(result.ok).toBe(false);
+    expect(fresh._outbox).toHaveLength(0);
+  });
+
+  it('SECURITY: isActiveRecipient correctly distinguishes session vs staff', () => {
+    expect(adapter.isActiveRecipient(ACTIVE)).toBe(true);
+    expect(adapter.isActiveRecipient(String(ACTIVE))).toBe(true);
+    expect(adapter.isActiveRecipient(998877665544)).toBe(false);
+    expect(adapter.isActiveRecipient(0)).toBe(false);
+    expect(adapter.isActiveRecipient(null)).toBe(false);
+  });
 });
 
 describe('WebAdapter.edit', () => {
   it('emits a message with editMessageId set', async () => {
     const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
     await adapter.edit(-1, 'prev-id', { text: 'updated text' });
     expect(adapter._outbox[0].editMessageId).toBe('prev-id');
     expect(adapter._outbox[0].text).toBe('updated text');
+  });
+
+  it('SECURITY: refuses edit to non-active recipient', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    const result = await adapter.edit(998877665544, 'some-id', { text: 'staff only' });
+    expect(result.ok).toBe(false);
+    expect(adapter._outbox).toHaveLength(0);
   });
 });
 
 describe('WebAdapter.drainOutbox', () => {
   it('returns and clears the outbox atomically', async () => {
     const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
     await adapter.send(-1, { text: 'a' });
     await adapter.send(-1, { text: 'b' });
     const drained = adapter.drainOutbox();
@@ -215,6 +254,7 @@ describe('WebAdapter.drainOutbox', () => {
 describe('WebAdapter.sendPhoto / sendDocument', () => {
   it('sendPhoto includes photo field', async () => {
     const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
     await adapter.sendPhoto(-1, 'https://example.com/a.png', 'caption');
     expect(adapter._outbox[0].photo).toBe('https://example.com/a.png');
     expect(adapter._outbox[0].text).toBe('caption');
@@ -222,9 +262,18 @@ describe('WebAdapter.sendPhoto / sendDocument', () => {
 
   it('sendDocument with URL content renders an anchor', async () => {
     const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
     await adapter.sendDocument(-1, 'https://example.com/file.pdf', 'file.pdf', 'Download');
     expect(adapter._outbox[0].text).toContain('<a');
     expect(adapter._outbox[0].text).toContain('https://example.com/file.pdf');
+  });
+
+  it('SECURITY: sendPhoto refuses non-active recipient', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    const result = await adapter.sendPhoto(998877665544, 'https://example.com/a.png', 'caption');
+    expect(result.ok).toBe(false);
+    expect(adapter._outbox).toHaveLength(0);
   });
 });
 
@@ -237,6 +286,7 @@ describe('readOutbox', () => {
   it('reads and clears by default', async () => {
     const ctx = makeCtx();
     const adapter = new WebAdapter(ctx);
+    adapter.setActiveChat(-42);
     await adapter.send(-42, { text: 'first' });
     await adapter.send(-42, { text: 'second' });
     const msgs = await readOutbox(ctx, -42);
@@ -248,6 +298,7 @@ describe('readOutbox', () => {
   it('filters by sinceTs', async () => {
     const ctx = makeCtx();
     const adapter = new WebAdapter(ctx);
+    adapter.setActiveChat(-42);
     await adapter.send(-42, { text: 'old' });
     // Wait a tick so ts differs
     await new Promise((r) => setTimeout(r, 1100));
@@ -262,6 +313,7 @@ describe('readOutbox', () => {
   it('respects clear: false', async () => {
     const ctx = makeCtx();
     const adapter = new WebAdapter(ctx);
+    adapter.setActiveChat(-42);
     await adapter.send(-42, { text: 'keep' });
     await readOutbox(ctx, -42, { clear: false });
     const again = await readOutbox(ctx, -42);

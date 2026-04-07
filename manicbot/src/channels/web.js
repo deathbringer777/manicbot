@@ -57,6 +57,36 @@ export class WebAdapter {
      * @type {Array<object>}
      */
     this._outbox = [];
+    /**
+     * SECURITY: the chat_id of the active web session. Only `send()` calls
+     * targeting THIS chat_id are allowed to write to the outbox; everything
+     * else (staff notifications, cross-user messages) is rejected at the
+     * adapter level so it can be rerouted via Telegram by `telegram.js:send`.
+     * Set by chatWebHttp.js after `buildChannelCtx`.
+     * @type {number|null}
+     */
+    this.activeChatId = null;
+  }
+
+  /**
+   * Set the active session chat_id for this adapter instance. Called by
+   * `chatWebHttp.js` once per request after the adapter is constructed.
+   * @param {number} chatId
+   */
+  setActiveChat(chatId) {
+    this.activeChatId = typeof chatId === 'number' ? chatId : Number(chatId);
+  }
+
+  /**
+   * SECURITY guard — true only if the recipient matches the active session.
+   * Used by both `WebAdapter.send` and `telegram.js:send` to decide whether
+   * a message belongs in the web outbox or must be rerouted via Telegram.
+   * @param {number|string} userId
+   * @returns {boolean}
+   */
+  isActiveRecipient(userId) {
+    if (this.activeChatId == null) return false;
+    return Number(userId) === this.activeChatId;
   }
 
   // ── normalize ──────────────────────────────────────────────────────────────
@@ -109,11 +139,25 @@ export class WebAdapter {
    * No external API call — the HTTP handler reads this._outbox and returns
    * the messages inline, and /chat/poll reads the KV copy for async pushes.
    *
+   * SECURITY: only the active session's chat_id is accepted. Messages
+   * addressed to staff (salon owner / master) MUST be rerouted via Telegram
+   * by the caller — `telegram.js:send` checks `isActiveRecipient` and falls
+   * back to the Telegram API for non-active chat_ids before reaching us.
+   * If somebody bypasses that path, this is the second line of defence:
+   * we refuse the write entirely instead of leaking into the client's chat.
+   *
    * @param {number|string} userId - Web chatId (number or numeric string)
    * @param {import('./types.js').OutboundMessage} outbound
-   * @returns {Promise<{ok: boolean, id: string}>}
+   * @returns {Promise<{ok: boolean, id?: string, error?: string}>}
    */
   async send(userId, outbound) {
+    if (!this.isActiveRecipient(userId)) {
+      console.warn(
+        '[web] SECURITY: refused send to non-active recipient',
+        { recipient: String(userId), active: this.activeChatId, tenantId: this._ctx?.tenantId },
+      );
+      return { ok: false, error: 'not_active_recipient' };
+    }
     const normalized = this._buildPublicMessage(outbound);
     this._outbox.push(normalized);
     await this._pushToKv(userId, normalized);
@@ -125,8 +169,14 @@ export class WebAdapter {
    * replaces the matching message in place when it receives an entry with the
    * same id. We emit a new outbox entry with `editMessageId` set so pollers
    * can reconcile.
+   *
+   * SECURITY: same active-recipient guard as `send()`.
    */
   async edit(userId, msgId, outbound) {
+    if (!this.isActiveRecipient(userId)) {
+      console.warn('[web] SECURITY: refused edit to non-active recipient', { recipient: String(userId), active: this.activeChatId });
+      return { ok: false, error: 'not_active_recipient' };
+    }
     const normalized = this._buildPublicMessage({ ...outbound, editMessageId: String(msgId) });
     this._outbox.push(normalized);
     await this._pushToKv(userId, normalized);
@@ -142,13 +192,17 @@ export class WebAdapter {
     return null;
   }
 
-  /** Send a photo (URL or data-URL) as a dedicated photo message. */
+  /**
+   * Send a photo (URL or data-URL) as a dedicated photo message.
+   * SECURITY: delegates to `send()` which enforces the active-recipient guard.
+   */
   async sendPhoto(userId, url, caption) {
     return this.send(userId, { text: caption ?? '', photo: url });
   }
 
   /**
    * Send a document — the web widget renders it as a downloadable link card.
+   * SECURITY: delegates to `send()` which enforces the active-recipient guard.
    */
   async sendDocument(userId, content, filename, caption) {
     if (typeof content === 'string' && /^https?:\/\//.test(content)) {

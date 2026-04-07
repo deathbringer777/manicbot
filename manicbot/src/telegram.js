@@ -25,6 +25,24 @@ function isTelegram(ctx) {
 }
 
 /**
+ * SECURITY: detect outbound calls on the web channel that target a chat_id
+ * other than the active session. These are staff notifications (salon owner /
+ * master / system admin) addressed to real Telegram users — they MUST be
+ * routed via Telegram, never written to the web outbox where the client would
+ * see them. Returns true if `chatId` belongs to someone other than the
+ * active web session.
+ *
+ * @param {object} ctx
+ * @param {number|string} chatId
+ * @returns {boolean}
+ */
+function isWebOutOfSession(ctx, chatId) {
+  if (!ctx?.channel || ctx.channel.type !== 'web') return false;
+  if (typeof ctx.channel.isActiveRecipient !== 'function') return false;
+  return !ctx.channel.isActiveRecipient(chatId);
+}
+
+/**
  * Extract and normalize buttons from Telegram-format extra object for WA/IG.
  * Applies calendar adaptation and 20-char truncation for non-Telegram channels.
  * @param {object} extra - Telegram-style { reply_markup: { inline_keyboard: [...] } }
@@ -121,6 +139,18 @@ export function send(ctx, chatId, text, extra = {}) {
     return tgApi(ctx, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...extra });
   }
 
+  // SECURITY: web channel — staff notifications (anyone other than the active
+  // session) are rerouted via Telegram so they never leak into the client's
+  // chat outbox. If the tenant has no Telegram bot the message is dropped
+  // (warned) rather than misdelivered.
+  if (isWebOutOfSession(ctx, chatId)) {
+    if (ctx.TG) {
+      return tgApi(ctx, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...extra });
+    }
+    console.warn('[web] dropping out-of-session send (no TG fallback)', { chatId, tenantId: ctx.tenantId });
+    return Promise.resolve({ ok: false, error: 'no_tg_fallback' });
+  }
+
   // ── WA / IG bridge ──
   // Handle request_contact keyboard → replace with text prompt
   if (hasRequestContact(extra)) {
@@ -155,6 +185,13 @@ export function edit(ctx, chatId, msgId, text, extra = {}) {
   if (isTelegram(ctx)) {
     return tgApi(ctx, 'editMessageText', { chat_id: chatId, message_id: msgId, text, parse_mode: 'HTML', ...extra });
   }
+  // SECURITY: web — out-of-session edits go via Telegram (or are dropped).
+  if (isWebOutOfSession(ctx, chatId)) {
+    if (ctx.TG) {
+      return tgApi(ctx, 'editMessageText', { chat_id: chatId, message_id: msgId, text, parse_mode: 'HTML', ...extra });
+    }
+    return Promise.resolve({ ok: false, error: 'no_tg_fallback' });
+  }
   const buttons = extractAndTruncateButtons(extra, ctx.channel.type);
   return logMetaAdapterResult(
     ctx.channel.edit(String(chatId), msgId, { text, buttons, parseMode: 'HTML' }),
@@ -170,11 +207,31 @@ export function answerCb(ctx, cbId, text = '') {
   return ctx.channel.answerCallback(cbId, text);
 }
 
+/**
+ * SECURITY: standalone helper exported for handlers that need to know if a
+ * given recipient is the active web-channel session. Returns true for any
+ * non-web channel (so existing handlers keep working) and only filters when
+ * the active channel is web AND the recipient is not the session owner.
+ */
+export function canSendInline(ctx, chatId) {
+  if (!ctx?.channel || ctx.channel.type !== 'web') return true;
+  return !isWebOutOfSession(ctx, chatId);
+}
+
 export async function sendPhoto(ctx, chatId, url, caption, extra = {}) {
   if (isTelegram(ctx)) {
     const res = await tgApi(ctx, 'sendPhoto', { chat_id: chatId, photo: url, caption, parse_mode: 'HTML', ...extra });
     if (res.ok) return res;
     return send(ctx, chatId, `🖼 ${caption}`, extra);
+  }
+  // SECURITY: web — out-of-session photos go via Telegram.
+  if (isWebOutOfSession(ctx, chatId)) {
+    if (ctx.TG) {
+      const res = await tgApi(ctx, 'sendPhoto', { chat_id: chatId, photo: url, caption, parse_mode: 'HTML', ...extra });
+      if (res.ok) return res;
+      return send(ctx, chatId, `🖼 ${caption}`, extra);
+    }
+    return { ok: false, error: 'no_tg_fallback' };
   }
   try {
     return await logMetaAdapterResult(
@@ -241,6 +298,20 @@ export async function sendIcs(ctx, chatId, content, fname, caption) {
       console.error('sendIcs error:', e.message);
       return null;
     }
+  }
+  // SECURITY: web — out-of-session ICS uploads go via Telegram (best-effort).
+  if (isWebOutOfSession(ctx, chatId)) {
+    if (ctx.TG) {
+      try {
+        const fd = new FormData();
+        fd.append('chat_id', String(chatId));
+        fd.append('document', new Blob([content], { type: 'text/calendar' }), fname);
+        fd.append('caption', caption);
+        fd.append('parse_mode', 'HTML');
+        return await fetch(`${ctx.TG}/sendDocument`, { method: 'POST', body: fd });
+      } catch { return null; }
+    }
+    return null;
   }
   // WA/IG: try sendDocument, fallback to text
   try {

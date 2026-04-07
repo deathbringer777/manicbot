@@ -81,7 +81,7 @@ async function loadSalonBranding(ctx, slug) {
 }
 
 /** Build a tenant context for the web channel for a given slug. */
-async function buildWebCtxForSlug(env, slug) {
+async function buildWebCtxForSlug(env, slug, sessionChatId) {
   const ec = envCtx(env);
   const resolved = await resolveTenantFromSlug(ec, slug);
   if (!resolved) return null;
@@ -90,8 +90,36 @@ async function buildWebCtxForSlug(env, slug) {
   if (!ctx) return null;
   // Allow the adapter to reach back into ctx for KV writes (mirrors WA pattern).
   adapter._ctx = ctx;
+  // SECURITY: tag the adapter + ctx with the active session's chat_id so that
+  //  - WebAdapter.send refuses any non-active recipient
+  //  - telegram.js:send reroutes staff notifications via Telegram instead of
+  //    leaking them into the client's outbox
+  //  - users.js role helpers (isAdmin / isPlatformAdmin / getRole) and
+  //    roles.js resolveRole hard-lock this chat_id to the client role even if
+  //    a stale tenant_roles row matched its hash.
+  if (typeof sessionChatId === 'number' && Number.isFinite(sessionChatId)) {
+    adapter.setActiveChat(sessionChatId);
+    ctx._webSessionChatId = sessionChatId;
+    ctx._lockToClientRole = true;
+  }
   await initServices(ctx);
   return { ctx, adapter };
+}
+
+/**
+ * SECURITY: strip control characters that could break logging / db inserts /
+ * downstream renderers. Allow tab and newline. Cap to a hard length so a
+ * single POST cannot blow up bot state.
+ * @param {unknown} value
+ * @param {number} maxLen
+ * @returns {string|null}
+ */
+function sanitizeUserText(value, maxLen) {
+  if (typeof value !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+  const trimmed = cleaned.replace(/\s+$/g, '').slice(0, maxLen);
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -145,22 +173,24 @@ export async function tryChatWeb(request, env, url) {
     const body = await readJson(request);
     const slug = typeof body?.slug === 'string' ? body.slug.trim() : '';
     const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : '';
-    const text = typeof body?.text === 'string' ? body.text.slice(0, 4000) : null;
-    const callbackData = typeof body?.callbackData === 'string' ? body.callbackData.slice(0, 256) : null;
-    const userName = typeof body?.userName === 'string' ? body.userName.slice(0, 64) : null;
-    const userLang = typeof body?.userLang === 'string' ? body.userLang.slice(0, 8) : null;
+    // SECURITY: cap + strip control chars on every user-supplied field.
+    const text = sanitizeUserText(body?.text, 4000);
+    const callbackData = sanitizeUserText(body?.callbackData, 256);
+    const userName = sanitizeUserText(body?.userName, 64);
+    const userLang = sanitizeUserText(body?.userLang, 8);
 
     if (!slug) return jsonError('slug required', 400);
-    if (!sessionId || sessionId.length < 16) return jsonError('sessionId required', 400);
+    if (!sessionId || sessionId.length < 16 || sessionId.length > 128) return jsonError('sessionId required', 400);
+    if (!/^[a-f0-9]+$/i.test(sessionId)) return jsonError('sessionId malformed', 400);
     if (!text && !callbackData) return jsonError('text or callbackData required', 400);
 
     if (!env.DB) return jsonError('DB not bound', 500);
 
-    const built = await buildWebCtxForSlug(env, slug);
+    const chatId = await chatIdFromSession(sessionId);
+
+    const built = await buildWebCtxForSlug(env, slug, chatId);
     if (!built) return jsonError('Salon not found or not published', 404);
     const { ctx, adapter } = built;
-
-    const chatId = await chatIdFromSession(sessionId);
 
     // Normalize inbound payload into the standard InboundMessage shape.
     const inbound = adapter.normalize({
@@ -198,14 +228,15 @@ export async function tryChatWeb(request, env, url) {
     const sessionId = url.searchParams.get('sessionId') || '';
     const sinceTs = parseInt(url.searchParams.get('since') || '0', 10) || 0;
     if (!slug) return jsonError('slug required', 400);
-    if (!sessionId || sessionId.length < 16) return jsonError('sessionId required', 400);
+    if (!sessionId || sessionId.length < 16 || sessionId.length > 128) return jsonError('sessionId required', 400);
+    if (!/^[a-f0-9]+$/i.test(sessionId)) return jsonError('sessionId malformed', 400);
     if (!env.DB) return jsonError('DB not bound', 500);
 
-    const built = await buildWebCtxForSlug(env, slug);
+    const chatId = await chatIdFromSession(sessionId);
+    const built = await buildWebCtxForSlug(env, slug, chatId);
     if (!built) return jsonError('Salon not found or not published', 404);
     const { ctx } = built;
 
-    const chatId = await chatIdFromSession(sessionId);
     const messages = await readOutbox(ctx, chatId, { sinceTs, clear: true });
     return jsonResponse({ ok: true, messages });
   }

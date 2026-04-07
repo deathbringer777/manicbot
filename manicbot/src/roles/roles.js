@@ -72,6 +72,12 @@ export async function setTenantRole(ctx, chatId, role) {
 
 export async function resolveRole(ctx, chatId) {
   if (chatId == null) return ROLES.CLIENT;
+  // SECURITY: web-channel sessions are ALWAYS clients. Defense in depth —
+  // even if `getRole` callers go directly to `resolveRole`, the active web
+  // session can never escalate via a colliding tenant_roles row.
+  if (ctx?._lockToClientRole && ctx._webSessionChatId != null && Number(chatId) === Number(ctx._webSessionChatId)) {
+    return ROLES.CLIENT;
+  }
   const platformRole = await getPlatformRole(ctx, chatId);
   if (platformRole === ROLES.SYSTEM_ADMIN) {
     const creator = ctx?.adminChatId != null && String(chatId) === String(ctx.adminChatId);

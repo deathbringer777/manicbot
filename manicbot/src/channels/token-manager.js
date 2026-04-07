@@ -108,8 +108,17 @@ export async function refreshInstagramToken(ctx, channelConfigId, encKey) {
  */
 export async function createChannelConfig(ctx, tenantId, channelType, config, plainToken, encKey, webhookVerifyToken = null) {
   if (!ctx?.db) return null;
+  // Refuse to store tokens without an encryption key — prevents plaintext secrets at rest.
+  if (!encKey || String(encKey).length < 32) {
+    console.error('[createChannelConfig] encryption key missing or too short — refusing to store token for tenant:', tenantId);
+    return null;
+  }
+  const encrypted = await encryptToken(plainToken, encKey);
+  if (!encrypted) {
+    console.error('[createChannelConfig] encryption failed for tenant:', tenantId);
+    return null;
+  }
   const id = randomId(12);
-  const encrypted = encKey ? await encryptToken(plainToken, encKey) : plainToken;
   const now = nowSec();
 
   await dbRun(ctx,

@@ -84,17 +84,42 @@ function addSecurityHeaders(resp) {
 }
 
 let _securityValidated = false;
+/**
+ * Validate security configuration at startup. Throws on hard failures to
+ * fail-fast rather than silently running with insecure defaults.
+ *
+ * Enforcement rules:
+ *   - ADMIN_KEY: if set, must be ≥ 32 chars (throw). If unset, admin
+ *     endpoints are disabled by isAdminKeyValid (no throw).
+ *   - BOT_ENCRYPTION_KEY: if set, must be ≥ 32 chars (throw). If unset,
+ *     warn only — downstream code (token encryption, calendar signing,
+ *     Google OAuth) already fails closed individually.
+ *   - META_APP_SECRET: if Meta channels are configured (META_VERIFY_TOKEN_*),
+ *     must be set AND ≥ 32 chars (throw).
+ */
 function validateSecurityConfig(env) {
   if (_securityValidated) return;
   _securityValidated = true;
+
+  if (env.ADMIN_KEY && String(env.ADMIN_KEY).length < 32) {
+    throw new Error('[SECURITY] ADMIN_KEY must be at least 32 characters — refusing to start');
+  }
+
+  if (env.BOT_ENCRYPTION_KEY && String(env.BOT_ENCRYPTION_KEY).length < 32) {
+    throw new Error('[SECURITY] BOT_ENCRYPTION_KEY must be at least 32 characters — refusing to start');
+  }
   if (!env.BOT_ENCRYPTION_KEY) {
-    console.warn('[SECURITY] BOT_ENCRYPTION_KEY not set — tokens stored in plaintext in D1');
+    console.warn('[SECURITY] BOT_ENCRYPTION_KEY not set — bot/channel tokens will be stored in plaintext and calendar links disabled');
   }
-  if (!env.META_APP_SECRET && (env.META_VERIFY_TOKEN_WA || env.META_VERIFY_TOKEN_IG)) {
-    console.warn('[SECURITY] META_APP_SECRET not set but Meta channels configured — webhooks unverified');
-  }
-  if (env.ADMIN_KEY && env.ADMIN_KEY.length < 32) {
-    console.warn('[SECURITY] ADMIN_KEY shorter than 32 chars — consider using a stronger key');
+
+  const metaConfigured = !!(env.META_VERIFY_TOKEN_WA || env.META_VERIFY_TOKEN_IG);
+  if (metaConfigured) {
+    if (!env.META_APP_SECRET) {
+      throw new Error('[SECURITY] META_APP_SECRET is required when META_VERIFY_TOKEN_WA/IG is set — refusing to start');
+    }
+    if (String(env.META_APP_SECRET).length < 32) {
+      throw new Error('[SECURITY] META_APP_SECRET must be at least 32 characters — refusing to start');
+    }
   }
 }
 

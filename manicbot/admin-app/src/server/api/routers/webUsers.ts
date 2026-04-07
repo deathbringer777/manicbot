@@ -5,6 +5,7 @@ import { webUsers, auditLog, tenants } from "~/server/db/schema";
 import type { Lang } from "~/lib/i18n";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
+import { generateToken, hashToken, timingSafeEqualHex } from "~/server/auth/tokens";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
@@ -67,8 +68,16 @@ function checkVerifyRateLimit(email: string): boolean {
   return true;
 }
 
+/**
+ * Generate a 6-digit email verification code using crypto.getRandomValues
+ * (NOT Math.random — CSPRNG required so codes are not predictable).
+ */
 function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  // 6-digit range: 100000..999999 (900k codes)
+  const code = (buf[0]! % 900000) + 100000;
+  return code.toString();
 }
 
 const resetRl = new Map<string, { count: number; resetAt: number }>();
@@ -169,6 +178,8 @@ export const webUsersRouter = createTRPCRouter({
       const id = crypto.randomUUID();
       const passwordHash = await hashPassword(input.password);
       const verificationCode = generateVerificationCode();
+      // Store hashed code in DB; email contains the plaintext code
+      const verificationCodeHash = await hashToken(verificationCode);
       const now = Math.floor(Date.now() / 1000);
       const codeExpiresAt = now + 15 * 60; // 15 minutes
       // Always require email verification when Resend is configured,
@@ -204,7 +215,7 @@ export const webUsersRouter = createTRPCRouter({
           lang: input.lang,
           referralSource: input.referralSource ?? null,
           emailVerified: skipEmailVerification ? 1 : 0,
-          verificationToken: skipEmailVerification ? null : verificationCode,
+          verificationToken: skipEmailVerification ? null : verificationCodeHash,
           verificationTokenExpiresAt: skipEmailVerification ? null : codeExpiresAt,
           tosAcceptedAt: now,
           tenantId: assignedTenantId,
@@ -296,15 +307,9 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Verification code expired. Request a new one." });
       }
 
-      // Constant-time comparison
-      if (user.verificationToken.length !== input.code.length) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
-      }
-      let match = 0;
-      for (let i = 0; i < input.code.length; i++) {
-        match |= input.code.charCodeAt(i) ^ user.verificationToken.charCodeAt(i);
-      }
-      if (match !== 0) {
+      // Verification token is stored as a SHA-256 hash; hash the user input and compare.
+      const inputHash = await hashToken(input.code);
+      if (!timingSafeEqualHex(inputHash, user.verificationToken)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
       }
 
@@ -351,12 +356,13 @@ export const webUsersRouter = createTRPCRouter({
       }
       const user = rows[0]!;
       const newCode = generateVerificationCode();
+      const newCodeHash = await hashToken(newCode);
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + 15 * 60;
 
       await ctx.db
         .update(webUsers)
-        .set({ verificationToken: newCode, verificationTokenExpiresAt: expiresAt, updatedAt: now })
+        .set({ verificationToken: newCodeHash, verificationTokenExpiresAt: expiresAt, updatedAt: now })
         .where(eq(webUsers.id, user.id));
 
       const sent = await sendVerificationCodeEmail(email, newCode, (user.lang ?? "en") as Lang);
@@ -407,13 +413,16 @@ export const webUsersRouter = createTRPCRouter({
         .limit(1);
 
       if (rows.length && canSend) {
-        const resetToken = crypto.randomUUID();
+        // Store a SHA-256 hash of the token in DB; send the plain token via email.
+        // If the DB leaks, attacker cannot derive the original reset link.
+        const resetToken = generateToken();
+        const resetTokenHash = await hashToken(resetToken);
         const now = Math.floor(Date.now() / 1000);
         const expiresAt = now + 3600; // 1 hour
         await ctx.db
           .update(webUsers)
           .set({
-            passwordResetToken: resetToken,
+            passwordResetToken: resetTokenHash,
             passwordResetExpiresAt: expiresAt,
             updatedAt: now,
           })
@@ -445,10 +454,12 @@ export const webUsersRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Lookup by hash of the supplied token (tokens are hashed at rest).
+      const tokenHash = await hashToken(input.token);
       const rows = await ctx.db
         .select()
         .from(webUsers)
-        .where(eq(webUsers.passwordResetToken, input.token))
+        .where(eq(webUsers.passwordResetToken, tokenHash))
         .limit(1);
       if (!rows.length) {
         throw new TRPCError({
@@ -504,6 +515,7 @@ export const webUsersRouter = createTRPCRouter({
       const now = Math.floor(Date.now() / 1000);
       const shouldVerify = isResendConfigured();
       const verificationCode = shouldVerify ? generateVerificationCode() : null;
+      const verificationCodeHash = verificationCode ? await hashToken(verificationCode) : null;
       const codeExpiresAt = shouldVerify ? now + 15 * 60 : null;
       await ctx.db.insert(webUsers).values({
         id,
@@ -511,7 +523,7 @@ export const webUsersRouter = createTRPCRouter({
         passwordHash,
         role: input.role,
         emailVerified: shouldVerify ? 0 : 1,
-        verificationToken: verificationCode,
+        verificationToken: verificationCodeHash,
         verificationTokenExpiresAt: codeExpiresAt,
         tenantId: input.tenantId ?? null,
         createdAt: now,
@@ -564,7 +576,9 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
       }
 
-      const token = crypto.randomUUID();
+      // Store hash in DB, send plain token via email (see tokens.ts rationale).
+      const token = generateToken();
+      const tokenHash = await hashToken(token);
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + 3600; // 1 hour
 
@@ -578,7 +592,7 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({
           newEmail,
-          emailChangeToken: token,
+          emailChangeToken: tokenHash,
           emailChangeTokenExpiresAt: expiresAt,
           updatedAt: now,
         })
@@ -603,10 +617,11 @@ export const webUsersRouter = createTRPCRouter({
   confirmEmailChange: publicProcedure
     .input(z.object({ token: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
+      const tokenHash = await hashToken(input.token);
       const rows = await ctx.db
         .select()
         .from(webUsers)
-        .where(eq(webUsers.emailChangeToken, input.token))
+        .where(eq(webUsers.emailChangeToken, tokenHash))
         .limit(1);
       if (!rows.length) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired link" });

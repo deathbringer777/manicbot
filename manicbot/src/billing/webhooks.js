@@ -12,6 +12,8 @@ import { nowSec, msToSec } from '../utils/time.js';
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
+// Stripe recommends ±5 minute tolerance for webhook timestamp validation (replay prevention).
+const STRIPE_TIMESTAMP_TOLERANCE_SEC = 300;
 
 /** Constant-time compare for lowercase hex (Stripe v1); no Node-only APIs. */
 function timingSafeEqualLowerHex(expectedLowerHex, receivedRawHex) {
@@ -35,6 +37,15 @@ export async function verifyStripeSignature(payload, signature, secret) {
   const t = parts.t;
   const v1 = parts.v1;
   if (!t || !v1) return false;
+  // Replay prevention: reject events with timestamp older than tolerance window.
+  // `t` is the unix seconds when Stripe signed the webhook.
+  const tNum = Number.parseInt(t, 10);
+  if (!Number.isFinite(tNum)) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const ageSec = nowSec - tNum;
+  if (ageSec > STRIPE_TIMESTAMP_TOLERANCE_SEC || ageSec < -STRIPE_TIMESTAMP_TOLERANCE_SEC) {
+    return false;
+  }
   const signedPayload = t + '.' + (typeof payload === 'string' ? payload : JSON.stringify(payload));
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(

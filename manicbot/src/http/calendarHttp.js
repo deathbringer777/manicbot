@@ -3,11 +3,14 @@ import { getLang } from '../services/chat.js';
 import { makeICS } from '../utils/ics.js';
 import { initServices } from '../services/services.js';
 
-const ICS_LINK_MAX_AGE_SEC = 7 * 24 * 3600; // 7 days
+const ICS_LINK_MAX_AGE_SEC = 48 * 3600; // 48 hours (reduced from 7 days)
+const ICS_HMAC_MIN_KEY_LEN = 32;
 
 async function verifyCalendarSig(aptId, sig, secret, ts) {
-  if (!sig || !secret) return false;
-  // If timestamp provided, reject links older than 7 days
+  // Refuse to validate without a strong key — prevents HMAC over empty/short secret
+  // which would allow forging valid signatures for any appointment ID.
+  if (!sig || !secret || secret.length < ICS_HMAC_MIN_KEY_LEN) return false;
+  // If timestamp provided, reject links older than max age
   if (ts) {
     const age = Date.now() / 1000 - Number(ts);
     if (!Number.isFinite(age) || age > ICS_LINK_MAX_AGE_SEC || age < -300) return false;
@@ -42,7 +45,14 @@ export async function tryCalendar(request, ctx, url) {
 
   const sig = url.searchParams.get('sig') || '';
   const ts = url.searchParams.get('ts') || null;
-  const secret = ctx.BOT_ENCRYPTION_KEY || ctx.ADMIN_KEY || '';
+  // Use BOT_ENCRYPTION_KEY exclusively — do NOT fall back to ADMIN_KEY.
+  // ADMIN_KEY is an authentication secret for admin endpoints, not a crypto key.
+  // Key separation (NIST SP 800-57) prevents key-reuse attacks.
+  const secret = ctx.BOT_ENCRYPTION_KEY || '';
+  if (!secret || secret.length < ICS_HMAC_MIN_KEY_LEN) {
+    console.error('[calendar] BOT_ENCRYPTION_KEY missing or too short — calendar links disabled');
+    return new Response('Calendar links not configured', { status: 503 });
+  }
   if (!await verifyCalendarSig(aptId, sig, secret, ts)) {
     return new Response('Forbidden', { status: 403 });
   }

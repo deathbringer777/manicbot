@@ -31,6 +31,12 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
   }
 
   if (request.method === 'POST' && url.pathname === '/webhook/wa') {
+    // Fail-fast if META_APP_SECRET is not configured — otherwise any POST passes unverified
+    // (verifyMetaSignature would return false without a secret, but we want explicit observability).
+    if (!env.META_APP_SECRET) {
+      console.error('[meta-wa] META_APP_SECRET not configured — rejecting webhook');
+      return new Response('Meta webhook not configured', { status: 503 });
+    }
     const sig = request.headers.get('X-Hub-Signature-256') || '';
     let rawBytes;
     let body;
@@ -40,7 +46,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
     } catch {
       return new Response('OK');
     }
-    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET || '');
+    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET);
     if (!valid) return new Response('Forbidden', { status: 403 });
 
     const ec = envCtx(env);
@@ -91,6 +97,11 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
   }
 
   if (request.method === 'POST' && url.pathname === '/webhook/ig') {
+    // Fail-fast if META_APP_SECRET is not configured (see wa handler above).
+    if (!env.META_APP_SECRET) {
+      console.error('[meta-ig] META_APP_SECRET not configured — rejecting webhook');
+      return new Response('Meta webhook not configured', { status: 503 });
+    }
     const sig = request.headers.get('X-Hub-Signature-256') || '';
     let rawBytes;
     let body;
@@ -100,7 +111,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
     } catch {
       return new Response('OK');
     }
-    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET || '');
+    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET);
     if (!valid) return new Response('Forbidden', { status: 403 });
 
     const ec = envCtx(env);

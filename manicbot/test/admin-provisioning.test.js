@@ -12,6 +12,7 @@ function makeCtx(tenantId = null) {
 
 describe('admin provisioning (D1)', () => {
   let ctx;
+  const ENC_KEY = 'test-encryption-key-32-bytes-long-1234';
 
   beforeEach(() => {
     ctx = makeCtx();
@@ -28,27 +29,29 @@ describe('admin provisioning (D1)', () => {
     expect(tenant.plan).toBe('pro');
   });
 
-  it('registerBot → bot in D1 + token in KV', async () => {
-    const result = await registerBot(ctx, '123:abc_token', null, 'wh_secret');
+  it('registerBot → bot in D1 + token (encrypted) in KV', async () => {
+    const result = await registerBot(ctx, '123:abc_token', null, 'wh_secret', ENC_KEY);
     expect(result.ok).toBe(true);
     expect(result.botId).toBe('123');
     const tid = await getTenantIdByBotId(ctx, '123');
     expect(tid).toBeNull();
     const storedToken = await ctx.kv.get('bottoken:123', 'text');
-    expect(storedToken).toBe('123:abc_token');
+    // Token must be stored encrypted, not as plaintext
+    expect(storedToken).not.toBe('123:abc_token');
+    expect(storedToken).toBeTruthy();
   });
 
   it('registerBot with tenantId → bot bound to tenant', async () => {
     await putTenant(ctx, 't1', { id: 't1', name: 'S1', createdAt: Date.now(), updatedAt: Date.now() });
-    const result = await registerBot(ctx, '456:xyz', 't1', 'wh');
+    const result = await registerBot(ctx, '456:xyz', 't1', 'wh', ENC_KEY);
     expect(result.ok).toBe(true);
     expect(await getTenantIdByBotId(ctx, '456')).toBe('t1');
   });
 
   it('registerBot rejects if tenant already has a bot', async () => {
     await putTenant(ctx, 't2', { id: 't2', name: 'S2', createdAt: Date.now(), updatedAt: Date.now() });
-    await registerBot(ctx, '100:a', 't2', 'wh1');
-    const result = await registerBot(ctx, '200:b', 't2', 'wh2');
+    await registerBot(ctx, '100:a', 't2', 'wh1', ENC_KEY);
+    const result = await registerBot(ctx, '200:b', 't2', 'wh2', ENC_KEY);
     expect(result.ok).toBe(false);
     expect(result.error).toBe('tenant_has_bot');
   });

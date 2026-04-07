@@ -1,10 +1,18 @@
 /**
  * Edge-compatible password hashing using PBKDF2 (Web Crypto API).
  * Works in Cloudflare Workers / Next.js edge runtime.
+ *
+ * Hash format (v2): `pbkdf2:{iterations}:{saltHex}:{hashHex}`
+ * Legacy format  (v1): `pbkdf2:{saltHex}:{hashHex}` — parsed with implicit 100k iterations.
+ *
+ * OWASP 2023 Password Storage Cheat Sheet recommends 600,000 iterations for
+ * PBKDF2-SHA256. New hashes use that; v1 hashes are still accepted on verify
+ * and should be rotated on successful login (see `needsRehash`).
  */
 
 const ALGO = "pbkdf2";
-const ITERATIONS = 100_000;
+const DEFAULT_ITERATIONS = 600_000;
+const LEGACY_ITERATIONS = 100_000;
 const KEY_LEN_BITS = 256;
 
 function hexEncode(buf: ArrayBuffer): string {
@@ -21,7 +29,7 @@ function hexDecode(hex: string): Uint8Array {
   return bytes;
 }
 
-async function deriveKey(password: string, salt: Uint8Array): Promise<string> {
+async function deriveKey(password: string, salt: Uint8Array, iterations: number): Promise<string> {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -31,18 +39,38 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<string> {
     ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: salt.buffer as ArrayBuffer, iterations: ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt.buffer as ArrayBuffer, iterations, hash: "SHA-256" },
     keyMaterial,
     KEY_LEN_BITS,
   );
   return hexEncode(bits);
 }
 
-/** Hash a plaintext password. Returns a storable `pbkdf2:{saltHex}:{hashHex}` string. */
+/** Hash a plaintext password. Returns a storable `pbkdf2:{iterations}:{saltHex}:{hashHex}` string. */
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await deriveKey(password, salt);
-  return `${ALGO}:${hexEncode(salt.buffer)}:${hash}`;
+  const hash = await deriveKey(password, salt, DEFAULT_ITERATIONS);
+  return `${ALGO}:${DEFAULT_ITERATIONS}:${hexEncode(salt.buffer)}:${hash}`;
+}
+
+/**
+ * Parse a stored PBKDF2 hash (v1 or v2 format).
+ * Returns null for unknown formats.
+ */
+function parseStored(stored: string): { iterations: number; saltHex: string; hash: string } | null {
+  const parts = stored.split(":");
+  if (parts[0] !== ALGO) return null;
+  // v2: pbkdf2:iter:salt:hash
+  if (parts.length === 4) {
+    const iter = parseInt(parts[1]!, 10);
+    if (!Number.isFinite(iter) || iter < 10_000) return null;
+    return { iterations: iter, saltHex: parts[2]!, hash: parts[3]! };
+  }
+  // v1 (legacy): pbkdf2:salt:hash — assume 100k iterations
+  if (parts.length === 3) {
+    return { iterations: LEGACY_ITERATIONS, saltHex: parts[1]!, hash: parts[2]! };
+  }
+  return null;
 }
 
 /** Verify a plaintext password against a stored hash. Constant-time comparison. */
@@ -50,16 +78,25 @@ export async function verifyPassword(
   password: string,
   stored: string,
 ): Promise<boolean> {
-  const parts = stored.split(":");
-  if (parts.length !== 3 || parts[0] !== ALGO) return false;
-  const [, saltHex, storedHash] = parts as [string, string, string];
-  const salt = hexDecode(saltHex);
-  const computed = await deriveKey(password, salt);
+  const parsed = parseStored(stored);
+  if (!parsed) return false;
+  const salt = hexDecode(parsed.saltHex);
+  const computed = await deriveKey(password, salt, parsed.iterations);
   // Constant-time comparison
-  if (computed.length !== storedHash.length) return false;
+  if (computed.length !== parsed.hash.length) return false;
   let diff = 0;
   for (let i = 0; i < computed.length; i++) {
-    diff |= computed.charCodeAt(i) ^ storedHash.charCodeAt(i);
+    diff |= computed.charCodeAt(i) ^ parsed.hash.charCodeAt(i);
   }
   return diff === 0;
+}
+
+/**
+ * Returns true if the stored hash uses outdated parameters (legacy iterations
+ * or v1 format) and should be re-hashed on next successful login.
+ */
+export function needsRehash(stored: string): boolean {
+  const parsed = parseStored(stored);
+  if (!parsed) return true;
+  return parsed.iterations < DEFAULT_ITERATIONS;
 }

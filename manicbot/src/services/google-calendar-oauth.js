@@ -34,13 +34,31 @@ function hasOAuthConfig(ctx) {
   return !!(ctx?.GOOGLE_OAUTH_CLIENT_ID && ctx?.GOOGLE_OAUTH_CLIENT_SECRET && getRedirectUri(ctx));
 }
 
+const GOOGLE_TOKEN_ENC_MIN_LEN = 32;
+
+/**
+ * Returns the key used to encrypt/decrypt Google OAuth refresh tokens.
+ *
+ * Key separation (NIST SP 800-57): ADMIN_KEY is for authentication of admin
+ * endpoints, NOT for crypto. Do not reuse it as an encryption key.
+ *
+ * Order of preference:
+ *   1. GOOGLE_TOKEN_ENCRYPTION_KEY (dedicated key — recommended)
+ *   2. BOT_ENCRYPTION_KEY (shared with bot token encryption — acceptable)
+ *
+ * If neither is set, returns null — callers must handle this by disabling
+ * Google Calendar integration rather than falling back to weak crypto.
+ */
 function getTokenEncryptionKey(ctx) {
-  if (ctx?.GOOGLE_TOKEN_ENCRYPTION_KEY) return ctx.GOOGLE_TOKEN_ENCRYPTION_KEY;
-  if (ctx?.BOT_ENCRYPTION_KEY) return ctx.BOT_ENCRYPTION_KEY;
-  const fallback = String(ctx?.ADMIN_KEY || '');
-  if (!fallback) return null;
-  console.warn('[SECURITY] Using ADMIN_KEY as Google token encryption key — set BOT_ENCRYPTION_KEY for proper key separation');
-  return `${fallback}${fallback}${fallback}${fallback}`;
+  const key = ctx?.GOOGLE_TOKEN_ENCRYPTION_KEY || ctx?.BOT_ENCRYPTION_KEY || null;
+  if (!key || String(key).length < GOOGLE_TOKEN_ENC_MIN_LEN) {
+    console.error(
+      '[google-oauth] encryption key missing or too short — Google Calendar integration disabled. ' +
+      'Set GOOGLE_TOKEN_ENCRYPTION_KEY (or BOT_ENCRYPTION_KEY) to at least 32 chars.'
+    );
+    return null;
+  }
+  return key;
 }
 
 function nowTs() {

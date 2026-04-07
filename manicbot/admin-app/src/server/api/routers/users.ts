@@ -126,16 +126,23 @@ export const usersRouter = createTRPCRouter({
       return { users: result, total };
     }),
 
-  // Ban user globally (from all their tenants)
+  // Ban user. If tenantId is provided, bans only in that tenant;
+  // otherwise bans globally (all tenants the user belongs to).
   banUser: adminProcedure
-    .input(z.object({ chatId: z.number() }))
+    .input(z.object({ chatId: z.number(), tenantId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      // Get all tenants this user belongs to
+      if (input.tenantId) {
+        await ctx.db
+          .insert(blockedUsers)
+          .values({ tenantId: input.tenantId, chatId: input.chatId })
+          .onConflictDoNothing();
+        return { success: true, tenantsAffected: 1 };
+      }
+      // Global ban — add to every tenant the user belongs to
       const userRows = await ctx.db
         .select({ tenantId: users.tenantId })
         .from(users)
         .where(eq(users.chatId, input.chatId));
-
       for (const row of userRows) {
         await ctx.db
           .insert(blockedUsers)
@@ -145,14 +152,22 @@ export const usersRouter = createTRPCRouter({
       return { success: true, tenantsAffected: userRows.length };
     }),
 
-  // Unban user globally (from all their tenants)
+  // Unban user. If tenantId is provided, unbans only in that tenant;
+  // otherwise unbans globally (all tenants). Symmetric with banUser above.
   unbanUser: adminProcedure
-    .input(z.object({ chatId: z.number() }))
+    .input(z.object({ chatId: z.number(), tenantId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db
+      if (input.tenantId) {
+        await ctx.db
+          .delete(blockedUsers)
+          .where(and(eq(blockedUsers.chatId, input.chatId), eq(blockedUsers.tenantId, input.tenantId)));
+        return { success: true, tenantsAffected: 1 };
+      }
+      const result = await ctx.db
         .delete(blockedUsers)
         .where(eq(blockedUsers.chatId, input.chatId));
-      return { success: true };
+      // D1/Drizzle may not return a count directly; return success flag
+      return { success: true, tenantsAffected: result ? undefined : 0 };
     }),
 
   setRole: adminProcedure

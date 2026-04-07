@@ -140,9 +140,15 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
     if (data.botToken && kv) {
       if (encryptionKey) {
         const encrypted = await encryptToken(data.botToken, encryptionKey);
+        if (!encrypted) {
+          console.error('[putBot] encryption failed — refusing to store plaintext bot token');
+          return false;
+        }
         await kv.put(BOT_TOKEN_PREFIX + botId, encrypted);
       } else {
-        await kv.put(BOT_TOKEN_PREFIX + botId, data.botToken);
+        // No encryption key configured — refuse to store tokens in plaintext.
+        console.error('[putBot] BOT_ENCRYPTION_KEY not set — refusing to store plaintext bot token for', botId);
+        return false;
       }
     }
     await dbRun(ctx,

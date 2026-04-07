@@ -30,18 +30,23 @@ export function makeICS(ctx, apt, lang) {
   ].join('\r\n');
 }
 
+const CAL_HMAC_MIN_KEY_LEN = 32;
+
 /**
  * Generate a signed calendar download URL for an appointment.
  * The URL includes HMAC-SHA256 signature and timestamp for replay protection.
  *
- * @param {object} ctx - Worker context (needs APP_BASE_URL, BOT_ENCRYPTION_KEY or ADMIN_KEY)
+ * Key separation: uses BOT_ENCRYPTION_KEY only — never ADMIN_KEY (which is for
+ * authentication of admin endpoints, not crypto).
+ *
+ * @param {object} ctx - Worker context (needs APP_BASE_URL, BOT_ENCRYPTION_KEY ≥32 chars)
  * @param {string} aptId - Appointment ID
  * @returns {Promise<string|null>} Full URL or null if missing config
  */
 export async function makeCalendarUrl(ctx, aptId) {
   const baseUrl = (ctx?.APP_BASE_URL || '').replace(/\/$/, '');
-  const secret = ctx?.BOT_ENCRYPTION_KEY || ctx?.ADMIN_KEY || '';
-  if (!baseUrl || !secret) return null;
+  const secret = ctx?.BOT_ENCRYPTION_KEY || '';
+  if (!baseUrl || !secret || secret.length < CAL_HMAC_MIN_KEY_LEN) return null;
 
   const ts = String(Math.floor(Date.now() / 1000));
   const payload = `${aptId}:${ts}`;

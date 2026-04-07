@@ -148,12 +148,16 @@ export async function tryAdminKeyRoutes(request, env, url) {
   if (request.method === 'POST' && url.pathname === '/admin/ig-token') {
     if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    // Refuse to store tokens without an encryption key
+    if (!env.BOT_ENCRYPTION_KEY || String(env.BOT_ENCRYPTION_KEY).length < 32) {
+      return Response.json({ error: 'BOT_ENCRYPTION_KEY not configured (≥ 32 chars required)' }, { status: 503 });
+    }
     try {
       const { token, tenantId } = await request.json();
       if (!token || !tenantId) return Response.json({ error: 'token and tenantId required' }, { status: 400 });
 
       // Validate token against Graph API
-      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${token}`);
+      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${encodeURIComponent(token)}`);
       const meData = await meRes.json().catch(() => ({}));
       if (!meRes.ok) {
         return Response.json({ error: 'Token validation failed', graphError: meData.error?.message, graphCode: meData.error?.code }, { status: 400 });
@@ -161,19 +165,15 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
       const ec = envCtx(env);
       const { dbRun } = await import('../utils/db.js');
-      // Encrypt token if BOT_ENCRYPTION_KEY is set; otherwise store plaintext (legacy fallback)
-      let tokenToStore = token;
-      if (env.BOT_ENCRYPTION_KEY) {
-        const { encryptToken } = await import('../utils/security.js');
-        const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY);
-        if (encrypted) tokenToStore = encrypted;
-        else console.error('[admin] Failed to encrypt IG token for tenant:', tenantId);
-      } else {
-        console.warn('[admin] BOT_ENCRYPTION_KEY not set — storing IG token as plaintext for tenant:', tenantId);
+      const { encryptToken } = await import('../utils/security.js');
+      const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY);
+      if (!encrypted) {
+        console.error('[admin/ig-token] Failed to encrypt IG token for tenant:', tenantId);
+        return Response.json({ error: 'Token encryption failed' }, { status: 500 });
       }
       await dbRun(ec,
         `UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE tenant_id = ? AND channel_type = 'instagram'`,
-        tokenToStore, Math.floor(Date.now() / 1000), tenantId,
+        encrypted, Math.floor(Date.now() / 1000), tenantId,
       );
 
       void logEvent(ec, 'admin.ig_token', { tenantId, level: 'info', message: 'IG token updated' });
@@ -185,7 +185,8 @@ export async function tryAdminKeyRoutes(request, env, url) {
         tenantId,
       });
     } catch (e) {
-      return Response.json({ error: e.message }, { status: 400 });
+      console.error('[admin/ig-token]', e?.message, e?.stack);
+      return Response.json({ error: 'Request failed', code: 'IG_TOKEN_ERROR' }, { status: 400 });
     }
   }
 
@@ -193,6 +194,10 @@ export async function tryAdminKeyRoutes(request, env, url) {
   if (request.method === 'POST' && url.pathname === '/admin/ig-channel') {
     if (!isAdminKeyValid(url, env)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    // Refuse to store tokens without an encryption key
+    if (!env.BOT_ENCRYPTION_KEY || String(env.BOT_ENCRYPTION_KEY).length < 32) {
+      return Response.json({ error: 'BOT_ENCRYPTION_KEY not configured (≥ 32 chars required)' }, { status: 503 });
+    }
     try {
       const { token, pageId, tenantId, tenantName, igAccountId, instagramBusinessId } = await request.json();
       if (!token || !pageId) return Response.json({ error: 'token and pageId required' }, { status: 400 });
@@ -222,7 +227,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       }
 
       // Validate token against Graph API
-      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${token}`);
+      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?access_token=${encodeURIComponent(token)}`);
       const meData = await meRes.json().catch(() => ({}));
       if (!meRes.ok) {
         return Response.json({ error: 'Token validation failed', graphError: meData.error?.message }, { status: 400 });
@@ -234,7 +239,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       if (instagramBusinessId) config.instagram_business_id = String(instagramBusinessId);
 
       const { createChannelConfig } = await import('../channels/token-manager.js');
-      const channelConfigId = await createChannelConfig(ec, resolvedTenantId, 'instagram', config, token, env.BOT_ENCRYPTION_KEY || null);
+      const channelConfigId = await createChannelConfig(ec, resolvedTenantId, 'instagram', config, token, env.BOT_ENCRYPTION_KEY);
 
       return Response.json({
         ok: true,
@@ -243,7 +248,8 @@ export async function tryAdminKeyRoutes(request, env, url) {
         graphMe: { id: meData.id, name: meData.name },
       });
     } catch (e) {
-      return Response.json({ error: e.message }, { status: 400 });
+      console.error('[admin/ig-channel]', e?.message, e?.stack);
+      return Response.json({ error: 'Request failed', code: 'IG_CHANNEL_ERROR' }, { status: 400 });
     }
   }
 
@@ -328,7 +334,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       return Response.json({ ok: true, action, appointmentId, notified, calendarSynced });
     } catch (e) {
       console.error('[appointment-action]', e?.message, e?.stack);
-      return Response.json({ error: e.message }, { status: 500 });
+      return Response.json({ error: 'Action failed', code: 'APPOINTMENT_ACTION_ERROR' }, { status: 500 });
     }
   }
 
@@ -358,11 +364,15 @@ export async function tryAdminKeyRoutes(request, env, url) {
             });
             const data = await r.json();
             results.push({ botId, tenantId, ok: data.ok, url: whUrl, hasSecret: !!webhookSecret });
-          } catch (e) { results.push({ botId, tenantId, error: e.message }); }
+          } catch (e) {
+            console.error('[reset-webhooks] setWebhook failed', botId, e?.message);
+            results.push({ botId, tenantId, error: 'setWebhook failed' });
+          }
         }
       }
     } catch (e) {
-      return Response.json({ error: e.message }, { status: 500 });
+      console.error('[reset-webhooks]', e?.message, e?.stack);
+      return Response.json({ error: 'Reset failed', code: 'RESET_WEBHOOKS_ERROR' }, { status: 500 });
     }
     return Response.json({ ok: true, count: results.length, results });
   }
@@ -381,12 +391,13 @@ export async function tryAdminKeyRoutes(request, env, url) {
     if (password.length < 8) return Response.json({ error: 'password must be at least 8 characters' }, { status: 400 });
 
     // Hash password with PBKDF2 (Web Crypto — same algorithm as admin-app/src/server/auth/password.ts)
+    // Iterations raised to 600k per OWASP 2023 recommendation.
     const enc = new TextEncoder();
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMaterial, 256);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' }, keyMaterial, 256);
     const hexEncode = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const passwordHash = `pbkdf2:${hexEncode(salt.buffer)}:${hexEncode(bits)}`;
+    const passwordHash = `pbkdf2:600000:${hexEncode(salt.buffer)}:${hexEncode(bits)}`;
 
     const normalizedEmail = email.toLowerCase().trim();
     const now = Math.floor(Date.now() / 1000);
@@ -404,7 +415,8 @@ export async function tryAdminKeyRoutes(request, env, url) {
            updated_at = excluded.updated_at`
       ).bind(id, normalizedEmail, passwordHash, tenantId, role, now, now).run();
     } catch (e) {
-      return Response.json({ error: e.message }, { status: 500 });
+      console.error('[admin/web-user]', e?.message, e?.stack);
+      return Response.json({ error: 'Web user upsert failed', code: 'WEB_USER_ERROR' }, { status: 500 });
     }
 
     void logEvent(ec, 'admin.web_user', { tenantId, level: 'info', message: `Web user created: ${normalizedEmail} (${role})` });

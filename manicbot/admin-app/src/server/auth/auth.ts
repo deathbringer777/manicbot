@@ -5,7 +5,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getDb } from "~/server/db";
 import { webUsers, auditLog } from "~/server/db/schema";
-import { verifyPassword } from "./password";
+import { verifyPassword, hashPassword, needsRehash } from "./password";
 import { signGooglePrefillToken } from "./googlePrefillToken";
 import { authPublicBaseUrl } from "./authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
@@ -126,11 +126,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         // Allow unverified email users to log in — gated in dashboard layout
-        // Success — reset lockout counter + track IP for login alerts
+        // Success — reset lockout counter + track IP for login alerts.
+        // If the stored hash uses legacy iterations, transparently upgrade to current params.
+        let newPasswordHash: string | null = null;
+        if (needsRehash(user.passwordHash)) {
+          try {
+            newPasswordHash = await hashPassword(parsed.data.password);
+          } catch { /* non-critical — continue with old hash */ }
+        }
         try {
           await db
             .update(webUsers)
-            .set({ loginAttempts: 0, lockedUntil: null, lastLoginIp: ip, lastLoginAt: now, updatedAt: now })
+            .set({
+              loginAttempts: 0,
+              lockedUntil: null,
+              lastLoginIp: ip,
+              lastLoginAt: now,
+              updatedAt: now,
+              ...(newPasswordHash ? { passwordHash: newPasswordHash } : {}),
+            })
             .where(eq(webUsers.id, user.id));
         } catch { /* non-critical */ }
 

@@ -41,9 +41,10 @@ describe('tenant resolver (D1)', () => {
   });
 
   it('resolveTenantFromBotId returns context when tenant and bot exist', async () => {
+    const ENC_KEY = 'test-encryption-key-32-bytes-long-1234';
     await putTenant(ctx, 't1', { id: 't1', name: 'Salon 1', active: true, createdAt: Date.now(), updatedAt: Date.now() });
-    await putBot(ctx, '123', { botId: '123', tenantId: 't1', botToken: '123:secret', webhookSecret: 'wh1', active: true, createdAt: Date.now(), updatedAt: Date.now() });
-    const out = await resolveTenantFromBotId(ctx, '123', null);
+    await putBot(ctx, '123', { botId: '123', tenantId: 't1', botToken: '123:secret', webhookSecret: 'wh1', active: true, createdAt: Date.now(), updatedAt: Date.now() }, ENC_KEY);
+    const out = await resolveTenantFromBotId(ctx, '123', ENC_KEY);
     expect(out).not.toBeNull();
     expect(out.tenantId).toBe('t1');
     expect(out.tenant.name).toBe('Salon 1');
@@ -76,7 +77,8 @@ describe('tenant resolver (D1)', () => {
   });
 
   it('isMigrationDone returns true when bot exists in D1', async () => {
-    await putBot(ctx, '123', { botId: '123', tenantId: 'default', botToken: '123:x', webhookSecret: 'wh', createdAt: Date.now(), updatedAt: Date.now() });
+    const ENC_KEY = 'test-encryption-key-32-bytes-long-1234';
+    await putBot(ctx, '123', { botId: '123', tenantId: 'default', botToken: '123:x', webhookSecret: 'wh', createdAt: Date.now(), updatedAt: Date.now() }, ENC_KEY);
     expect(await isMigrationDone(ctx, '123')).toBe(true);
   });
 });

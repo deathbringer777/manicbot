@@ -427,7 +427,10 @@ export const salonRouter = createTRPCRouter({
         setObj.confirmedBy = ctx.user?.id ?? null;
       }
 
-      await ctx.db.update(appointments).set(setObj).where(eq(appointments.id, input.appointmentId));
+      // Defense-in-depth: include tenant_id in WHERE clause even though
+      // assertTenantOwner + ownership SELECT above already enforce this.
+      await ctx.db.update(appointments).set(setObj)
+        .where(and(eq(appointments.id, input.appointmentId), eq(appointments.tenantId, input.tenantId)));
 
       // Fire-and-forget: notify Worker to send Telegram message + sync calendar
       const workerUrl = env.WORKER_PUBLIC_URL;

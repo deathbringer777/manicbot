@@ -244,6 +244,17 @@ tr:hover td{background:#fdf2f8}
     await initServices(ctx);
     const file = url.pathname.split('/').pop();
 
+    // Escape CSV cell. Prevents:
+    //  - Formula injection: leading =, +, -, @, TAB, CR → prefix with single quote.
+    //  - Quote/newline breaking: double quotes doubled, newlines stripped.
+    // Output is always wrapped in double quotes.
+    const csvCell = (v) => {
+      let s = v == null ? '' : String(v).replace(/[\r\n]/g, ' ');
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      s = s.replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
     if (file === 'clients.csv') {
       const rows = ctx.tenantId ? await dbAll(ctx, 'SELECT * FROM users WHERE tenant_id = ?', ctx.tenantId) : [];
       const users = rows.map(r => ({
@@ -257,7 +268,14 @@ tr:hover td{background:#fdf2f8}
       let csv = 'Chat ID,Name,Phone,Username,Language,Registered\n';
       for (const u of users) {
         if (!u) continue;
-        csv += `${u.chatId},"${(u.name || '').replace(/[\r\n]/g, ' ').replace(/"/g, '""')}",${u.phone},${u.tgUsername || ''},${u.tgLang || ''},${u.registeredAt ? new Date(u.registeredAt).toISOString() : ''}\n`;
+        csv += [
+          csvCell(u.chatId),
+          csvCell(u.name),
+          csvCell(u.phone),
+          csvCell(u.tgUsername),
+          csvCell(u.tgLang),
+          csvCell(u.registeredAt ? new Date(u.registeredAt).toISOString() : ''),
+        ].join(',') + '\n';
       }
       return new Response(csv, {
         headers: {
@@ -283,7 +301,16 @@ tr:hover td{background:#fdf2f8}
                 : a.ts < Date.now()
                   ? 'Completed'
                   : 'Confirmed';
-        csv += `${a.id},"${(a.userName || '').replace(/[\r\n]/g, ' ').replace(/"/g, '""')}",${a.chatId},${a.svcId},${a.date},${a.time},${status},${new Date(a.createdAt).toISOString()}\n`;
+        csv += [
+          csvCell(a.id),
+          csvCell(a.userName),
+          csvCell(a.chatId),
+          csvCell(a.svcId),
+          csvCell(a.date),
+          csvCell(a.time),
+          csvCell(status),
+          csvCell(new Date(a.createdAt).toISOString()),
+        ].join(',') + '\n';
       }
       return new Response(csv, {
         headers: {

@@ -19,13 +19,18 @@ export async function tryTelegramWebhook(request, ctx, url) {
 
   const expected = ctx.WEBHOOK_SECRET;
   const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
-  if (expected != null && String(expected).length > 0) {
-    if (!timingSafeEqual(secret, expected)) {
-      return new Response('Unauthorized', { status: 403 });
-    }
-  } else {
-    // No secret configured — allow request but warn operator to set one
-    console.warn('[telegram-webhook] WEBHOOK_SECRET not set for this bot; webhook is unauthenticated. Set webhookSecret in D1 bots row and re-register webhook with secret_token.');
+  // Fail-closed: reject any webhook without a configured secret.
+  // Prevents unauthenticated POSTs from forging Telegram updates.
+  if (expected == null || String(expected).length < 16) {
+    console.error(
+      '[telegram-webhook] webhook secret missing or too short for bot',
+      ctx.botId || '(legacy)',
+      '— set webhookSecret in D1 bots row and re-register webhook with secret_token.'
+    );
+    return new Response('Webhook not configured', { status: 503 });
+  }
+  if (!timingSafeEqual(secret, String(expected))) {
+    return new Response('Unauthorized', { status: 403 });
   }
 
   if (!ctx.kv) {

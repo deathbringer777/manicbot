@@ -1470,10 +1470,32 @@ export async function finishPhone(ctx, cid, phone, st) {
   try {
     await audit(ctx, 'tos_accepted', {
       actor: String(cid),
-      detail: { channel: 'telegram', chatId: cid, name: st.name },
+      detail: { channel: ctx.channel?.type || 'telegram', chatId: cid, name: st.name },
     });
   } catch { /* non-critical */ }
+
+  // If the user was mid-booking when they got pulled into the registration
+  // gate (flow='book' with a service/date/time already chosen — common on
+  // web where the contact gate fires at CB.CONFIRM), drop them back into
+  // the booking flow with their selection preserved. Otherwise just show
+  // the service picker as before.
+  const hadBookingContext = st?.flow === 'book' && st?.svcId;
   await clearState(ctx, cid);
   await send(ctx, cid, fill(t(lg, 'reg_done'), { n: safeName, p: escHtml(cl) }), { reply_markup: { remove_keyboard: true } });
+
+  if (hadBookingContext) {
+    const { startBookingWithService } = await import('../ui/booking.js');
+    return startBookingWithService(
+      ctx, cid,
+      // Synthesize a minimal `from` so the helper can build a fallback name
+      // if needed; with isRegComplete now satisfied this branch is skipped.
+      { first_name: st.name, username: st.tgUser, language_code: st.tgLang },
+      st.svcId,
+      st.date || null,
+      st.time || null,
+      st.masterId || null,
+    );
+  }
+
   await send(ctx, cid, t(lg, 'now_choose'), svcKb(ctx, lg));
 }

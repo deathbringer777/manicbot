@@ -99,13 +99,49 @@ export async function getConfig(ctx, key) {
   return null;
 }
 
-async function setConfig(ctx, key, value) {
+export async function setConfig(ctx, key, value) {
   if (!ctx?.db || !ctx?.tenantId) return;
   const v = typeof value === 'string' ? value : JSON.stringify(value);
   await dbRun(ctx,
     'INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, ?, ?)',
     ctx.tenantId, key, v,
   );
+}
+
+// ── Per-channel auto-confirm settings ───────────────────────────────────────
+
+/**
+ * Per-channel auto-confirm. Web defaults to ON because the salon owner is
+ * not glued to the web widget — bookings from TikTok/Instagram bio links
+ * should land as confirmed without manual review. Telegram / WhatsApp /
+ * Instagram default to OFF (current behaviour) because masters are
+ * already in the loop on those channels.
+ *
+ * Stored in `tenant_config` under keys `auto_confirm_{channel}`.
+ *
+ * @param {string} channel - 'web' | 'telegram' | 'whatsapp' | 'instagram'
+ */
+const AUTO_CONFIRM_DEFAULTS = {
+  web: true,
+  telegram: false,
+  whatsapp: false,
+  instagram: false,
+};
+
+export async function getAutoConfirm(ctx, channel) {
+  const key = `auto_confirm_${channel || 'telegram'}`;
+  const stored = await getConfig(ctx, key);
+  if (stored == null) return AUTO_CONFIRM_DEFAULTS[channel] === true;
+  // Stored as JSON boolean or stringified boolean
+  if (typeof stored === 'boolean') return stored;
+  if (typeof stored === 'string') return stored === 'true' || stored === '1';
+  if (typeof stored === 'number') return stored !== 0;
+  return AUTO_CONFIRM_DEFAULTS[channel] === true;
+}
+
+export async function setAutoConfirm(ctx, channel, enabled) {
+  const key = `auto_confirm_${channel || 'telegram'}`;
+  await setConfig(ctx, key, enabled === true);
 }
 
 export async function loadAboutPhotos(ctx) {

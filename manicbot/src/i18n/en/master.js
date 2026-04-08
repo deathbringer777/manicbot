@@ -18,6 +18,7 @@ export default {
   apt_reply_sent: '✅ Message sent.',
 
   mst_new_apt_header: 'New request!',
+  mst_auto_confirmed_header: 'New booking (auto-confirmed)',
   mst_confirm_btn: '✅ Confirm',
   mst_reject_btn: '❌ Decline',
   mst_counter_btn: '💬 Another time',

@@ -60,6 +60,58 @@ export async function notifyAptStaff(ctx, apt, user) {
   await Promise.allSettled(promises);
 }
 
+/**
+ * Info-only notification when an appointment is auto-confirmed (per-channel
+ * setting). The master sees the same client/service/time card as the
+ * regular pending notification, but with no Accept/Reject/Counter buttons —
+ * the booking is already locked in. Used by the CB.CONFIRM auto-confirm
+ * branch in callback.js.
+ */
+export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
+  const adminId = await getAdminId(ctx);
+  const recipients = new Set();
+  if (apt.masterId) {
+    recipients.add(apt.masterId);
+  } else {
+    const masters = await listMasters(ctx);
+    for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+  }
+  if (adminId) recipients.add(adminId);
+  if (recipients.size === 0) {
+    console.warn('[notifyAptStaffAutoConfirmed] No recipients for apt', apt.id, '— tenant:', ctx.tenantId);
+  }
+  const promises = [];
+  for (const rcid of recipients) {
+    promises.push((async () => {
+      const lg = await getLang(ctx, rcid) || 'ru';
+      const s = ctx.svc.find(x => x.id === apt.svcId);
+      const usernameRaw = user?.tgUsername || apt.userTg || '';
+      const username = String(usernameRaw).replace(/^@+/, '');
+      const client = escHtml(user?.name || apt.userName);
+      const phone = escHtml(user?.phone || apt.userPhone);
+      const svc = svcName(ctx, lg, apt.svcId);
+      const dt = fmtDT(lg, apt.date, apt.time);
+      const priceLine = isCorrectionSvc(apt.svcId) ? t(lg, 'free_label') : '💵 ' + String(s?.price || '?') + ' ' + t(lg, 'cur');
+      const contactLines = ['👤 ' + client, '📱 ' + phone];
+      if (username) contactLines.push('🔗 @' + escHtml(username));
+      const reqTxt = [
+        '✅ <b>' + t(lg, 'mst_auto_confirmed_header') + '</b>',
+        '',
+        ...contactLines,
+        '',
+        '💅 ' + svc,
+        '',
+        '📅 ' + dt,
+        priceLine,
+      ].join('\n');
+      // No accept/reject — the booking is already confirmed. Master can
+      // still cancel from the appointments screen if something is wrong.
+      await send(ctx, rcid, reqTxt);
+    })().catch(e => console.error('notifyAptStaffAutoConfirmed send failed for', rcid, e.message)));
+  }
+  await Promise.allSettled(promises);
+}
+
 export async function sendAptConfirmedToClient(ctx, apt) {
   const lg = await getLang(ctx, apt.chatId) || 'ru';
   const s = ctx.svc.find(x => x.id === apt.svcId);

@@ -13,6 +13,9 @@ import { onCb } from './callback.js';
 import { dbRunSafe, dbAll } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { randomId } from '../utils/security.js';
+import { getLang, setLang } from '../services/chat.js';
+
+const VALID_INBOUND_LANGS = new Set(['ru', 'en', 'ua', 'pl']);
 
 /**
  * Handle a normalized InboundMessage from any channel.
@@ -52,6 +55,29 @@ export async function handleInbound(ctx, inbound) {
 
     // Await side-effects — fast KV/D1 writes, ensures message_window is persisted before send
     await Promise.all(sideEffects).catch(e => console.error('[inbound] side-effect batch error:', e.message));
+  }
+
+  // Persist the user's preferred language as soon as we know it. The web
+  // chat client passes the current LangContext value on every /chat/send,
+  // so when the visitor flips the language dropdown the next bot reply
+  // already comes back in the new language. Wrapped in try/catch so a
+  // KV/D1 hiccup never blocks message delivery.
+  try {
+    const incoming = typeof inbound.userLang === 'string' ? inbound.userLang.toLowerCase() : null;
+    if (incoming && VALID_INBOUND_LANGS.has(incoming)) {
+      const cid = inbound.channel === 'whatsapp' || inbound.channel === 'instagram'
+        ? String(inbound.channelUserId ?? '')
+        : (() => {
+            const n = parseInt(inbound.channelUserId, 10);
+            return Number.isFinite(n) ? n : String(inbound.channelUserId ?? '');
+          })();
+      const current = await getLang(ctx, cid);
+      if (current !== incoming) {
+        await setLang(ctx, cid, incoming);
+      }
+    }
+  } catch (e) {
+    console.error('[inbound] userLang persistence failed:', e?.message);
   }
 
   // 2. Route to the appropriate handler

@@ -320,6 +320,75 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
   );
 }
 
+// ─── Auto-confirm Settings ──────────────────────────────────────
+//
+// Per-channel toggle for "skip the master review step and confirm
+// instantly when a client books." Web defaults to ON (TikTok / IG bio
+// leads need an immediate response, masters aren't watching the widget
+// in real time); Telegram / WhatsApp / Instagram default to OFF because
+// the master IS in those threads. The defaults must mirror
+// `manicbot/src/services/services.js:AUTO_CONFIRM_DEFAULTS`.
+function AutoConfirmSettings({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const { data, isLoading } = api.salon.getAutoConfirmSettings.useQuery({ tenantId });
+  const set = api.salon.setAutoConfirm.useMutation({
+    onSuccess: () => { utils.salon.getAutoConfirmSettings.invalidate(); },
+  });
+
+  const channels: Array<{ key: "web" | "telegram" | "whatsapp" | "instagram"; label: string; hint: string }> = [
+    { key: "web",       label: "Веб-чат (manicbot.com / TikTok / соцсети)", hint: "Записи через виджет на странице салона. Рекомендуется ВКЛ — клиенты ждут мгновенного ответа." },
+    { key: "telegram",  label: "Telegram",                                   hint: "Записи через Telegram-бота. По умолчанию ВЫКЛ — мастер видит заявку и подтверждает вручную." },
+    { key: "whatsapp",  label: "WhatsApp",                                   hint: "Записи через WhatsApp Business. По умолчанию ВЫКЛ." },
+    { key: "instagram", label: "Instagram Direct",                           hint: "Записи через Instagram DM. По умолчанию ВЫКЛ." },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader title="Автоматическое подтверждение заявок" />
+      <div className="glass-card rounded-2xl p-4 space-y-3">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Если включено — заявки из выбранного канала сразу становятся подтверждёнными
+          без шага одобрения мастером. Мастер всё равно получает уведомление о записи.
+        </p>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
+          </div>
+        ) : (
+          channels.map((ch) => {
+            const enabled = data?.[ch.key] ?? (ch.key === "web");
+            return (
+              <div key={ch.key} className="flex items-start justify-between gap-3 py-2 border-t border-slate-200 dark:border-white/5 first:border-t-0 first:pt-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{ch.label}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ch.hint}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  disabled={set.isPending}
+                  onClick={() => set.mutate({ tenantId, channel: ch.key, enabled: !enabled })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors mt-0.5 ${
+                    enabled ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
+                  } ${set.isPending ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      enabled ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Public Profile Editor ───────────────────────────────────────
 function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const utils = api.useUtils();
@@ -1068,6 +1137,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
           ) : (
             <SalonSettingsEditor tenantId={tenantId} profile={profile.data} />
           )}
+          <AutoConfirmSettings tenantId={tenantId} />
           <SalonCalendarSection tenantId={tenantId} />
         </>
       )}

@@ -362,6 +362,63 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /**
+   * Read per-channel auto-confirm settings for a tenant. Defaults: web=ON,
+   * telegram/whatsapp/instagram=OFF. Stored in `tenant_config` under keys
+   * `auto_confirm_{channel}` so no schema migration is needed.
+   *
+   * Source-of-truth defaults live in the Worker
+   * (`manicbot/src/services/services.js:getAutoConfirm`); the values
+   * returned here must match.
+   */
+  getAutoConfirmSettings: publicProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db.select().from(tenantConfig)
+        .where(eq(tenantConfig.tenantId, input.tenantId));
+      const cfg = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+      const parse = (key: string, fallback: boolean): boolean => {
+        const v = cfg[key];
+        if (v == null) return fallback;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") {
+          const s = v.trim().toLowerCase();
+          return s === "true" || s === "1";
+        }
+        return fallback;
+      };
+      return {
+        web: parse("auto_confirm_web", true),
+        telegram: parse("auto_confirm_telegram", false),
+        whatsapp: parse("auto_confirm_whatsapp", false),
+        instagram: parse("auto_confirm_instagram", false),
+      };
+    }),
+
+  /**
+   * Toggle auto-confirm for one channel. The client sends a single
+   * (channel, enabled) pair so the UI can render four independent
+   * switches that don't fight over a shared object. Stored as the
+   * JSON literal `true` / `false` so the Worker's `getAutoConfirm`
+   * helper can parse it back.
+   */
+  setAutoConfirm: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      channel: z.enum(["web", "telegram", "whatsapp", "instagram"]),
+      enabled: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const key = `auto_confirm_${input.channel}`;
+      const value = JSON.stringify(input.enabled);
+      await ctx.db.insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key, value })
+        .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      return { success: true };
+    }),
+
+  /**
    * Mint a short-lived HMAC-signed upload token for the Worker's /upload/asset
    * endpoint. The client uses this to upload a salon branding asset (logo,
    * cover photo, gallery photo, master portfolio) directly to R2 via the Worker.

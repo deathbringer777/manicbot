@@ -4,7 +4,7 @@ import { fmtDT, fmtDate, resolveDateHint, resolveTimeHint, findClosestSlot } fro
 import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
 import { setState } from '../services/state.js';
-import { getUser, listMasters } from '../services/users.js';
+import { getUser, isRegComplete, listMasters } from '../services/users.js';
 import { getApts, getSlots } from '../services/appointments.js';
 import { svcKb, calKb, timeKb } from './keyboards.js';
 import { showMyApts } from './screens.js';
@@ -12,7 +12,19 @@ import { showMyApts } from './screens.js';
 export async function startBooking(ctx, cid, from) {
   const lg = await getLang(ctx, cid) || 'ru';
   const user = await getUser(ctx, cid);
-  if (!user) {
+  if (!isRegComplete(user)) {
+    // Web channel: there's no genuine Telegram name to confirm, so skip
+    // REG_CONFIRM and prompt for a typed name directly. This is also
+    // safer for embeds (TikTok etc.) where we can't assume we know the
+    // visitor at all.
+    if (ctx.channel?.type === 'web') {
+      await setState(ctx, cid, {
+        step: STEP.REG_NAME, flow: 'book',
+        tgUser: from?.username || null,
+        tgLang: from?.language_code || null,
+      });
+      return send(ctx, cid, t(lg, 'reg_enter_name'));
+    }
     const tgName = [from?.first_name, from?.last_name].filter(Boolean).join(' ') || '?';
     await setState(ctx, cid, {
       step: 'rc', flow: 'book', tgName,
@@ -33,7 +45,7 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
   const lg = await getLang(ctx, cid) || 'ru';
   if (!ctx.svcIds?.has(svcId)) return startBooking(ctx, cid, from);
   const user = await getUser(ctx, cid);
-  if (!user) return startBooking(ctx, cid, from);
+  if (!isRegComplete(user)) return startBooking(ctx, cid, from);
   const s = ctx.svc.find(x => x.id === svcId);
   if (!s) return startBooking(ctx, cid, from);
 

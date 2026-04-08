@@ -5,6 +5,7 @@ import { Loader2, WifiOff } from "lucide-react";
 import { ChatHeader } from "~/components/chat/ChatHeader";
 import { MessageBubble } from "~/components/chat/MessageBubble";
 import { Composer } from "~/components/chat/Composer";
+import { useLang } from "~/components/LangContext";
 import type {
   ChatMessage,
   ChatMessageFromBot,
@@ -74,6 +75,9 @@ export function ChatClient({
   slug: string;
   initialSalon: ChatSalon;
 }) {
+  const { lang } = useLang();
+  const langRef = useRef(lang);
+  const lastSentLangRef = useRef<string | null>(null);
   const [salon, setSalon] = useState<ChatSalon>(initialSalon);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -81,6 +85,12 @@ export function ChatClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastTsRef = useRef<number>(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep a ref so callbacks always read the latest lang without forcing
+  // a re-bind of every event handler.
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
 
   // Auto-scroll to newest message
   useEffect(() => {
@@ -224,11 +234,13 @@ export function ChatClient({
       setStatus("sending");
       setErrorMsg(null);
       try {
+        const userLang = langRef.current;
         const res = await fetch("/chat/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slug, sessionId: sid, ...payload }),
+          body: JSON.stringify({ slug, sessionId: sid, userLang, ...payload }),
         });
+        lastSentLangRef.current = userLang;
         const data = (await res.json()) as
           | { ok: true; messages: Omit<ChatMessageFromBot, "role">[] }
           | { ok: false; error: string };
@@ -250,6 +262,18 @@ export function ChatClient({
     },
     [slug],
   );
+
+  // When the user flips the language dropdown mid-conversation, fire a
+  // silent /start so the bot's main menu re-renders in the new language.
+  // Past messages stay in their original language (they're frozen in
+  // localStorage), but the next bot reply onwards is in the new lang.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (lastSentLangRef.current == null) return; // first render — handled by init
+    if (lastSentLangRef.current === lang) return;
+    lastSentLangRef.current = lang;
+    void sendRaw({ text: "/start" }, sessionId);
+  }, [lang, sessionId, sendRaw]);
 
   const handleSend = useCallback(
     async (text: string) => {

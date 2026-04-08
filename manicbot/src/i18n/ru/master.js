@@ -21,6 +21,7 @@ export default {
 
   // New appointment notification (to master)
   mst_new_apt_header: 'Новая заявка!',
+  mst_auto_confirmed_header: 'Новая запись (авто-подтверждена)',
   mst_confirm_btn: '✅ Подтвердить',
   mst_reject_btn: '❌ Отклонить',
   mst_counter_btn: '💬 Другое время',

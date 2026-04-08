@@ -6,12 +6,12 @@ import { kvGet, kvPut } from '../utils/kv.js';
 import { send, edit, answerCb, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang } from '../services/chat.js';
-import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMaster, saveMaster, deleteMaster, blockUser, unblockUser, listMasters, isPlatformAdmin, getRole } from '../services/users.js';
-import { saveServices, loadAboutPhotos, saveAboutPhotos } from '../services/services.js';
+import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMaster, saveMaster, deleteMaster, blockUser, unblockUser, listMasters, isPlatformAdmin, getRole, isRegComplete } from '../services/users.js';
+import { saveServices, loadAboutPhotos, saveAboutPhotos, getAutoConfirm } from '../services/services.js';
 import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, resetHumanRequestCount, buildTicketInternalNote } from '../services/tickets.js';
 import { claimTicket, closeTicket } from '../support/tickets.js';
-import { notifyAptStaff, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
+import { notifyAptStaff, notifyAptStaffAutoConfirmed, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminSettings, showTenantSupportList, showMetaChannelsGuide } from '../ui/admin.js';
@@ -1224,7 +1224,7 @@ export async function onCb(ctx, cb) {
     if (!ctx.svcIds.has(sid)) return;
     const s = ctx.svc.find(x => x.id === sid);
     const user = await getUser(ctx, cid);
-    if (!user) {
+    if (!isRegComplete(user)) {
       return startBooking(ctx, cid, cb.from);
     }
     const st0 = await getState(ctx, cid);
@@ -1329,6 +1329,36 @@ export async function onCb(ctx, cb) {
       return send(ctx, cid, t(lg, 'book_err'), mainKb(lg));
     }
 
+    // Secondary contact gate: even if startBookingWithService didn't catch
+    // an incomplete user (race / direct callback / legacy state), refuse to
+    // create an appointment without a real name + phone. Re-route to the
+    // registration flow preserving the booking selection.
+    const preCheckUser = await getUser(ctx, cid);
+    if (!isRegComplete(preCheckUser)) {
+      const isWeb = ctx.channel?.type === 'web';
+      await setState(ctx, cid, {
+        step: isWeb ? STEP.REG_NAME : STEP.REG_CONFIRM,
+        flow: 'book',
+        svcId: st.svcId,
+        date: st.date,
+        time: st.time,
+        masterId: st.masterId || null,
+        tgName: isWeb ? null : ([cb.from?.first_name, cb.from?.last_name].filter(Boolean).join(' ') || '?'),
+        tgUser: cb.from?.username || null,
+        tgLang: cb.from?.language_code || null,
+      });
+      if (isWeb) {
+        return send(ctx, cid, t(lg, 'reg_enter_name'));
+      }
+      const tgName = [cb.from?.first_name, cb.from?.last_name].filter(Boolean).join(' ') || '?';
+      return send(ctx, cid, fill(t(lg, 'reg_confirm_name'), { n: escHtml(tgName) }), {
+        reply_markup: { inline_keyboard: [
+          [{ text: t(lg, 'reg_yes'), callback_data: CB.REG_YES }],
+          [{ text: t(lg, 'reg_change'), callback_data: CB.REG_CHANGE }],
+        ] },
+      });
+    }
+
     const lockKey = `lock:slot:${st.date}:${st.time}`;
     const lockTaken = await kvGet(ctx, lockKey);
     if (lockTaken) {
@@ -1365,6 +1395,30 @@ export async function onCb(ctx, cb) {
 
     if (!apt) {
       return send(ctx, cid, fill(t(lg, 'book_limit'), { n: String(MAX_APTS) }), mainKb(lg));
+    }
+
+    // Per-channel auto-confirm: web defaults ON, others default OFF.
+    // When ON we promote the appointment straight to `confirmed` and tell
+    // the client. The master still receives an info-only notification so
+    // they're aware (without Accept/Reject buttons since there's nothing
+    // to decide).
+    const channelType = ctx.channel?.type || 'telegram';
+    const autoConfirm = await getAutoConfirm(ctx, channelType);
+    if (autoConfirm) {
+      await updateApt(ctx, apt.id, { status: 'confirmed', confirmedBy: 'auto' });
+      apt.status = 'confirmed';
+      apt.confirmedBy = 'auto';
+      await sendAptConfirmedToClient(ctx, apt);
+      await notifyAptStaffAutoConfirmed(ctx, apt, user);
+      // Best-effort calendar sync — same pattern as the master-confirm path.
+      if (canUse(ctx, 'calendar')) {
+        try {
+          await syncAppointmentCalendar(ctx, apt);
+        } catch (e) {
+          console.error('[auto-confirm] calendar sync failed:', e?.message);
+        }
+      }
+      return;
     }
 
     await send(ctx, cid, fill(t(lg, 'apt_pending'), {

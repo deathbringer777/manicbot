@@ -385,15 +385,46 @@ export async function saveUser(ctx, cid, d) {
   );
 }
 
+/**
+ * Returns true iff the user has completed the minimum registration for
+ * booking: a real name (not the 'User'/'?' placeholders we used to write)
+ * AND a phone number. Used by the booking flow to decide whether to gate
+ * a user through REG_NAME → REG_PHONE before showing the confirmation
+ * card. On web the /start handler no longer auto-populates name, but
+ * historical rows may still carry 'User' — this helper also treats those
+ * as incomplete.
+ * @param {object|null} user
+ * @returns {boolean}
+ */
+export function isRegComplete(user) {
+  if (!user) return false;
+  const name = typeof user.name === 'string' ? user.name.trim() : '';
+  const phone = typeof user.phone === 'string' ? user.phone.trim() : '';
+  if (!name || !phone) return false;
+  if (name === '?' || name === '—' || name === '-') return false;
+  // 'User' was the old fallback we wrote for synthetic web inbound payloads;
+  // treat it as incomplete so legacy sessions are re-registered properly.
+  if (name === 'User') return false;
+  return true;
+}
+
 export async function upsertUserFromTelegram(ctx, cid, from) {
   if (!cid || !from) return;
-  const name = [from.first_name, from.last_name].filter(Boolean).join(' ').trim().slice(0, 100) || 'User';
+  // Compose the real name only from the parts actually provided. Do NOT
+  // fall back to the literal string 'User' — that value is meaningless,
+  // indistinguishable from a real registration, and defeats the
+  // `isRegComplete` gate (web sessions used to end up with name='User'
+  // even though the visitor never typed anything).
+  const composed = [from.first_name, from.last_name].filter(Boolean).join(' ').trim().slice(0, 100);
+  const name = composed || null;
   const tgUsername = from.username ? String(from.username).trim().slice(0, 32) : null;
 
   const existing = await getUser(ctx, cid);
+  // Preserve any existing values; only fill gaps with the new data. Never
+  // overwrite a real name with null, and never downgrade 'Анна' to 'User'.
   const payload = {
     chatId: cid,
-    name: existing?.name || name,
+    name: existing?.name || name || null,
     tgUsername: tgUsername || existing?.tgUsername || null,
     tgLang: existing?.tgLang || null,
     phone: existing?.phone || null,

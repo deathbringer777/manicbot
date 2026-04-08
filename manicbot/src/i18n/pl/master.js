@@ -18,6 +18,7 @@ export default {
   apt_reply_sent: '✅ Wiadomość wysłana.',
 
   mst_new_apt_header: 'Nowe zgłoszenie!',
+  mst_auto_confirmed_header: 'Nowa rezerwacja (auto-potwierdzona)',
   mst_confirm_btn: '✅ Potwierdź',
   mst_reject_btn: '❌ Odrzuć',
   mst_counter_btn: '💬 Inny termin',

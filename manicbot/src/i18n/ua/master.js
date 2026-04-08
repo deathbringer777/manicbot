@@ -18,6 +18,7 @@ export default {
   apt_reply_sent: '✅ Повідомлення надіслано.',
 
   mst_new_apt_header: 'Нова заявка!',
+  mst_auto_confirmed_header: 'Новий запис (автопідтверджено)',
   mst_confirm_btn: '✅ Підтвердити',
   mst_reject_btn: '❌ Відхилити',
   mst_counter_btn: '💬 Інший час',

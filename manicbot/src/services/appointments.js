@@ -77,11 +77,11 @@ function localDateTimeParts(ts) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
   }).formatToParts(new Date(ts))) parts[type] = value;
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
-    minutes: parseInt(parts.hour, 10) * 60 + parseInt(parts.minute, 10),
+    minutes: (parseInt(parts.hour, 10) % 24) * 60 + parseInt(parts.minute, 10),
   };
 }
 

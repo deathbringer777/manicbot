@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { isValidDate, isValidTime, warsawNow, todayStr, getDayOfWeek, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, findClosestSlot, p2 } from '../src/utils/date.js';
 
 describe('isValidDate', () => {
@@ -38,6 +38,8 @@ describe('isValidTime', () => {
 });
 
 describe('warsawNow', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('returns valid time components', () => {
     const now = warsawNow();
     expect(now.year).toBeGreaterThanOrEqual(2024);
@@ -49,6 +51,42 @@ describe('warsawNow', () => {
     expect(now.hour).toBeLessThanOrEqual(23);
     expect(now.minute).toBeGreaterThanOrEqual(0);
     expect(now.minute).toBeLessThanOrEqual(59);
+  });
+
+  // Regression: en-CA + hour12:false formerly leaked the h24 cycle, so at
+  // Warsaw 00:00 the formatter emitted "24" and downstream slot filtering
+  // (appointments.js getSlots) erased every today-slot for ~1 hour/day.
+  it('returns hour=0 at Warsaw midnight (summer, UTC+2)', () => {
+    vi.useFakeTimers();
+    // 2026-07-15T22:00:00Z == 2026-07-16 00:00 Warsaw (CEST, UTC+2)
+    vi.setSystemTime(new Date('2026-07-15T22:00:00Z'));
+    const now = warsawNow();
+    expect(now.hour).toBe(0);
+    expect(now.day).toBe(16);
+    expect(now.month).toBe(7);
+    expect(now.year).toBe(2026);
+  });
+
+  it('returns hour=0 at Warsaw midnight (winter, UTC+1)', () => {
+    vi.useFakeTimers();
+    // 2026-01-15T23:00:00Z == 2026-01-16 00:00 Warsaw (CET, UTC+1)
+    vi.setSystemTime(new Date('2026-01-15T23:00:00Z'));
+    const now = warsawNow();
+    expect(now.hour).toBe(0);
+    expect(now.day).toBe(16);
+    expect(now.month).toBe(1);
+    expect(now.year).toBe(2026);
+  });
+
+  it('returns hour ∈ [0, 23] at every UTC hour of a summer day', () => {
+    vi.useFakeTimers();
+    for (let h = 0; h < 24; h++) {
+      const utc = new Date(Date.UTC(2026, 6, 15, h, 0, 0)); // July 15
+      vi.setSystemTime(utc);
+      const now = warsawNow();
+      expect(now.hour).toBeGreaterThanOrEqual(0);
+      expect(now.hour).toBeLessThanOrEqual(23);
+    }
   });
 });
 

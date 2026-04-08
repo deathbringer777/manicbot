@@ -21,11 +21,11 @@ export function warsawNow() {
   for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
     timeZone: TIMEZONE,
     year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(new Date())) p[type] = value;
   return {
     year: parseInt(p.year), month: parseInt(p.month), day: parseInt(p.day),
-    hour: parseInt(p.hour), minute: parseInt(p.minute),
+    hour: parseInt(p.hour) % 24, minute: parseInt(p.minute),
   };
 }
 
@@ -35,9 +35,9 @@ export function warsawToUTC(year, month, day, hour, minute) {
     const p = {};
     for (const { type, value } of new Intl.DateTimeFormat('en-CA', {
       timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     }).formatToParts(utc)) p[type] = value;
-    if (parseInt(p.hour) === hour && parseInt(p.day) === day && parseInt(p.month) === month)
+    if (parseInt(p.hour) % 24 === hour && parseInt(p.day) === day && parseInt(p.month) === month)
       return utc;
   }
   return new Date(Date.UTC(year, month - 1, day, hour - 1, minute));

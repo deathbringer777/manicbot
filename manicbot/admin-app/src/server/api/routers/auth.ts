@@ -1,6 +1,6 @@
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { platformRoles, tenantRoles, webUsers } from "~/server/db/schema";
-import { eq } from "drizzle-orm";
+import { platformRoles, tenantRoles, webUsers, masters, tenants } from "~/server/db/schema";
+import { eq, and } from "drizzle-orm";
 import { env } from "~/env";
 
 export type AppRole =
@@ -11,8 +11,28 @@ export type AppRole =
   | "master"
   | null;
 
+type RoleResult = {
+  role: AppRole;
+  tenantId: string | null;
+  masterId: number | null;
+  isPersonalTenant: boolean;
+  createdAt: number | null;
+  emailVerified: boolean;
+  email: string | null;
+};
+
+const EMPTY: RoleResult = {
+  role: null,
+  tenantId: null,
+  masterId: null,
+  isPersonalTenant: false,
+  createdAt: null,
+  emailVerified: true,
+  email: null,
+};
+
 export const authRouter = createTRPCRouter({
-  getMyRole: publicProcedure.query(async ({ ctx }) => {
+  getMyRole: publicProcedure.query(async ({ ctx }): Promise<RoleResult> => {
     // Web session path (email/password login)
     if (!ctx.user && ctx.webUser) {
       const role = ctx.webUser.webRole as AppRole;
@@ -30,18 +50,37 @@ export const authRouter = createTRPCRouter({
         createdAt = rows[0]?.createdAt ?? null;
         emailVerified = !!(rows[0]?.emailVerified);
       } catch { /* non-critical */ }
-      return { role, tenantId, createdAt, emailVerified, email };
+
+      // For web masters: look up their masterId and check if personal tenant
+      let masterId: number | null = null;
+      let isPersonalTenant = false;
+      if (role === "master" && tenantId) {
+        try {
+          const [masterRow] = await ctx.db
+            .select({ chatId: masters.chatId })
+            .from(masters)
+            .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
+            .limit(1);
+          if (masterRow) masterId = masterRow.chatId;
+          const [tenantRow] = await ctx.db
+            .select({ isPersonal: tenants.isPersonal })
+            .from(tenants)
+            .where(eq(tenants.id, tenantId))
+            .limit(1);
+          if (tenantRow?.isPersonal) isPersonalTenant = true;
+        } catch { /* non-critical */ }
+      }
+
+      return { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified, email };
     }
 
-    if (!ctx.user) {
-      return { role: null as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
-    }
+    if (!ctx.user) return EMPTY;
 
     const userId = ctx.user.id;
 
     // Creator fallback (ADMIN_CHAT_ID secret)
     if (env.ADMIN_CHAT_ID && String(userId) === env.ADMIN_CHAT_ID) {
-      return { role: "system_admin" as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
+      return { ...EMPTY, role: "system_admin" };
     }
 
     // Check platform roles
@@ -55,11 +94,11 @@ export const authRouter = createTRPCRouter({
       const role = platformRow[0]!.role as AppRole;
       if (role === "system_admin") {
         if (env.ADMIN_CHAT_ID && String(userId) === env.ADMIN_CHAT_ID) {
-          return { role: "system_admin" as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
+          return { ...EMPTY, role: "system_admin" };
         }
         // Ignore illegitimate DB rows for non-creator.
       } else if (role === "support" || role === "technical_support") {
-        return { role, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
+        return { ...EMPTY, role };
       }
     }
 
@@ -74,10 +113,10 @@ export const authRouter = createTRPCRouter({
       const role = tenantRow[0]!.role as AppRole;
       const tenantId = tenantRow[0]!.tenantId;
       if (role === "tenant_owner" || role === "master") {
-        return { role, tenantId, createdAt: null as number | null, emailVerified: true, email: null as string | null };
+        return { ...EMPTY, role, tenantId, masterId: role === "master" ? userId : null };
       }
     }
 
-    return { role: null as AppRole, tenantId: null, createdAt: null as number | null, emailVerified: true, email: null as string | null };
+    return EMPTY;
   }),
 });

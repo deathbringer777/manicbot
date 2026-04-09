@@ -104,7 +104,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const { role, tenantId } = roleQuery.data;
+  const { role, tenantId, masterId: authMasterId, isPersonalTenant } = roleQuery.data;
 
   // Effective role — creator can preview as any role
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
@@ -140,11 +140,12 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
         )
       ) : effectiveRole === "master" ? (
         // system_admin previewing as master: previewMasterId is the selected master's chatId
-        // Real master user: userId is their own chatId
+        // Real master user: userId is their own chatId, or authMasterId for web-only masters
         <MasterDashboard
           tenantId={effectiveTenantId!}
-          masterId={previewMasterId ?? userId!}
+          masterId={previewMasterId ?? userId ?? authMasterId!}
           isDelegating={false}
+          isPersonal={isPersonalTenant}
         />
       ) : effectiveRole === "support" || effectiveRole === "technical_support" ? (
         <SupportDashboard />

@@ -34,6 +34,7 @@ export const tenants = sqliteTable("tenants", {
   logoR2Key: text("logo_r2_key"),
   coverR2Key: text("cover_r2_key"),
   brandPalette: text("brand_palette"),
+  isPersonal: integer("is_personal").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

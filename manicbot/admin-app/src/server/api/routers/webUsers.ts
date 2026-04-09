@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { webUsers, auditLog, tenants } from "~/server/db/schema";
+import { webUsers, auditLog, tenants, masters } from "~/server/db/schema";
 import type { Lang } from "~/lib/i18n";
 import { eq } from "drizzle-orm";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
@@ -186,11 +186,12 @@ export const webUsersRouter = createTRPCRouter({
       // even for Google OAuth — user must confirm they receive our emails.
       const skipEmailVerification = !isResendConfigured();
 
-      // Auto-create tenant for salon owners
+      // Auto-create tenant for salon owners AND independent masters
       let assignedTenantId: string | null = null;
-      if (input.role === "tenant_owner") {
+      if (input.role === "tenant_owner" || input.role === "master") {
         const tid = "t_" + randomId(6);
         const trialEndsAt = now + 7 * 24 * 3600; // 7 days
+        const isPersonal = input.role === "master" ? 1 : 0;
         await ctx.db.insert(tenants).values({
           id: tid,
           name: (input.name ?? email.split("@")[0] ?? "My Salon").trim(),
@@ -199,10 +200,25 @@ export const webUsersRouter = createTRPCRouter({
           billingStatus: "trialing",
           trialEndsAt,
           cancelAtPeriodEnd: 0,
+          isPersonal,
           createdAt: now,
           updatedAt: now,
         });
         assignedTenantId = tid;
+
+        // Independent master: also create a master record in the new tenant.
+        // Generate a synthetic chatId (web-only masters have no Telegram ID).
+        // Range 10B+ avoids collision with real Telegram user IDs.
+        if (input.role === "master") {
+          const syntheticChatId = 10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
+          await ctx.db.insert(masters).values({
+            tenantId: tid,
+            chatId: syntheticChatId,
+            name: (input.name ?? email.split("@")[0] ?? "Master").trim(),
+            active: 1,
+            addedAt: now,
+          });
+        }
       }
 
       try {
@@ -223,8 +239,9 @@ export const webUsersRouter = createTRPCRouter({
           updatedAt: now,
         });
       } catch (err: unknown) {
-        // Clean up orphaned tenant if webUsers insert fails
+        // Clean up orphaned tenant + master if webUsers insert fails
         if (assignedTenantId) {
+          try { await ctx.db.delete(masters).where(eq(masters.tenantId, assignedTenantId)); } catch { /* best-effort */ }
           try { await ctx.db.delete(tenants).where(eq(tenants.id, assignedTenantId)); } catch { /* best-effort */ }
         }
         // Handle race condition: another request inserted the same email between our check and insert
@@ -698,15 +715,16 @@ export const webUsersRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  /** Safety-net: create tenant for logged-in tenant_owner with no salon yet. */
+  /** Safety-net: create tenant for logged-in tenant_owner or independent master with no tenant yet. */
   createMyTenant: protectedProcedure
     .input(z.object({ name: z.string().min(1).max(100) }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
       }
-      if (ctx.webUser.webRole !== "tenant_owner") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only salon owners can create a salon" });
+      const webRole = ctx.webUser.webRole;
+      if (webRole !== "tenant_owner" && webRole !== "master") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only salon owners or masters can create a workspace" });
       }
       // Prevent double-creation — re-read from DB
       const [me] = await ctx.db
@@ -715,11 +733,12 @@ export const webUsersRouter = createTRPCRouter({
         .where(eq(webUsers.id, ctx.webUser.id))
         .limit(1);
       if (me?.tenantId) {
-        throw new TRPCError({ code: "CONFLICT", message: "You already have a salon" });
+        throw new TRPCError({ code: "CONFLICT", message: "You already have a workspace" });
       }
       const tid = "t_" + randomId(6);
       const now = Math.floor(Date.now() / 1000);
       const trialEndsAt = now + 7 * 24 * 3600;
+      const isPersonal = webRole === "master" ? 1 : 0;
       await ctx.db.insert(tenants).values({
         id: tid,
         name: input.name.trim(),
@@ -728,9 +747,21 @@ export const webUsersRouter = createTRPCRouter({
         billingStatus: "trialing",
         trialEndsAt,
         cancelAtPeriodEnd: 0,
+        isPersonal,
         createdAt: now,
         updatedAt: now,
       });
+      // Independent master: also create a master record
+      if (webRole === "master") {
+        const syntheticChatId = 10_000_000_000 + (parseInt(ctx.webUser.id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
+        await ctx.db.insert(masters).values({
+          tenantId: tid,
+          chatId: syntheticChatId,
+          name: input.name.trim(),
+          active: 1,
+          addedAt: now,
+        });
+      }
       await ctx.db
         .update(webUsers)
         .set({ tenantId: tid, updatedAt: now })

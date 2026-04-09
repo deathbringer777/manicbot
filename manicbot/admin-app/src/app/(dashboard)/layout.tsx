@@ -66,7 +66,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId, createdAt, emailVerified } = roleQuery.data;
+  const { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -130,7 +130,7 @@ export default function DashboardLayout({
           {wrapWithEmailGate(
             !effectiveTenantId
               ? <NoTenantOnboarding role="master" />
-              : isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId} masterId={null!} />
+              : isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
           )}
         </WebShell>
       </RoleContext.Provider>

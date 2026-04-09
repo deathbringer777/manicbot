@@ -293,6 +293,27 @@ const translations = {
   "onboarding.masterWaiting":   { ru: "Ожидайте приглашения", ua: "Очікуйте запрошення", en: "Waiting for invitation", pl: "Oczekiwanie na zaproszenie" },
   "onboarding.masterDesc":      { ru: "Владелец салона должен добавить вас в команду через свой кабинет.", ua: "Власник салону має додати вас до команди через свій кабінет.", en: "Your salon owner needs to add you to their team from their dashboard.", pl: "Właściciel salonu musi dodać Cię do zespołu ze swojego panelu." },
   "onboarding.contactOwner":    { ru: "Свяжитесь с владельцем салона", ua: "Зверніться до власника салону", en: "Contact your salon owner", pl: "Skontaktuj się z właścicielem salonu" },
+  "onboarding.masterSetup":         { ru: "Создайте кабинет мастера", ua: "Створіть кабінет майстра", en: "Create your workspace", pl: "Utwórz swój gabinet" },
+  "onboarding.masterSetupDesc":     { ru: "Введите ваше имя, чтобы начать работу", ua: "Введіть ваше ім'я, щоб почати роботу", en: "Enter your name to get started", pl: "Wpisz swoje imię, aby rozpocząć" },
+  "onboarding.masterNameLabel":     { ru: "Ваше имя", ua: "Ваше ім'я", en: "Your name", pl: "Twoje imię" },
+  "onboarding.masterNamePlaceholder": { ru: "Анна Мастер", ua: "Анна Майстер", en: "Anna Master", pl: "Anna Mistrz" },
+  "onboarding.masterNameHint":      { ru: "Можно изменить позже в профиле", ua: "Можна змінити пізніше в профілі", en: "You can change this later in your profile", pl: "Możesz to zmienić później w profilu" },
+  "onboarding.createWorkspace":     { ru: "Создать кабинет", ua: "Створити кабінет", en: "Create workspace", pl: "Utwórz gabinet" },
+
+  // ── Independent master services ──────────────────────────────────────────────
+  "master.services":        { ru: "Услуги",        ua: "Послуги",        en: "Services",    pl: "Usługi" },
+  "master.noServices":      { ru: "Добавьте услуги, чтобы клиенты могли записаться", ua: "Додайте послуги, щоб клієнти могли записатися", en: "Add services so clients can book", pl: "Dodaj usługi, aby klienci mogli się zapisać" },
+  "master.addService":      { ru: "Добавить услугу", ua: "Додати послугу", en: "Add service", pl: "Dodaj usługę" },
+  "master.svcName":         { ru: "Название",       ua: "Назва",          en: "Name",        pl: "Nazwa" },
+  "master.svcPrice":        { ru: "Цена (zł)",      ua: "Ціна (zł)",      en: "Price (zł)",  pl: "Cena (zł)" },
+  "master.svcDuration":     { ru: "Длительность (мин)", ua: "Тривалість (хв)", en: "Duration (min)", pl: "Czas trwania (min)" },
+  "master.svcEmoji":        { ru: "Эмодзи",         ua: "Емодзі",         en: "Emoji",       pl: "Emoji" },
+  "master.svcDescription":  { ru: "Описание",       ua: "Опис",           en: "Description", pl: "Opis" },
+  "master.settings":        { ru: "Настройки",      ua: "Налаштування",   en: "Settings",    pl: "Ustawienia" },
+  "master.workHours":       { ru: "Рабочие часы",   ua: "Робочі години",  en: "Work hours",  pl: "Godziny pracy" },
+  "master.vacation":        { ru: "Отпуск",         ua: "Відпустка",      en: "Vacation",    pl: "Urlop" },
+  "master.vacationOn":      { ru: "Вы в отпуске — запись приостановлена", ua: "Ви у відпустці — запис призупинено", en: "On vacation — bookings paused", pl: "Na urlopie — rezerwacje wstrzymane" },
+  "master.vacationOff":     { ru: "Рабочий режим",  ua: "Робочий режим",  en: "Working mode", pl: "Tryb pracy" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

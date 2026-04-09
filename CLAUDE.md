@@ -25,6 +25,16 @@ Multi-tenant Telegram bot platform for nail salon booking. Two deployable units:
 **Important:** `ADMIN_CHAT_ID` (Cloudflare secret) is always God Mode regardless of DB state.
 **No "admin_salon" concept** — salon admin = `tenant_owner`.
 
+### Independent (Personal) Masters
+
+Masters can work independently without belonging to a salon. When a master registers via the web (`role = "master"`), the system auto-creates a **personal tenant** (`tenants.is_personal = 1`) and a master record with a synthetic `chatId` (range 10B+, avoids Telegram ID collision).
+
+- **Auth**: `auth.getMyRole` returns `{ role: "master", tenantId, masterId, isPersonalTenant: true }`
+- **Access**: `assertTenantOwner()` grants owner-level access to masters on their personal tenant — they can manage services, settings, etc.
+- **Dashboard**: `MasterDashboard` receives `isPersonal` prop and shows extra tabs (Services, vacation toggle)
+- **Service CRUD**: `masterRouter.createService / updateService / deleteService` — guarded by `assertPersonalMaster()` (requires personal tenant)
+- **Fallback**: Legacy masters without a tenant see `MasterSetup` onboarding (creates personal tenant on demand via `webUsers.createMyTenant`)
+
 ---
 
 ## Storage
@@ -64,6 +74,7 @@ Recent migrations:
 - `0013_web_users_email_change.sql` — `new_email`, `email_change_token`, `email_change_token_expires_at`, `last_login_ip`, `last_login_at` on `web_users`
 - `0014_web_users_lang.sql` — `lang` on `web_users`
 - `0015_salon_logo_master_portfolio.sql` — `logo`, `cover_photo` on `tenants`; `portfolio` on `masters`
+- `0023_personal_tenants.sql` — `is_personal` on `tenants` (independent masters)
 
 ---
 

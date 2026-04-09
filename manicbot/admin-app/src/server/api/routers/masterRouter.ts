@@ -1,10 +1,22 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { appointments, masters, users, services, tenantRoles } from "~/server/db/schema";
+import { appointments, masters, users, services, tenantRoles, tenants } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { timingSafeEqualStr } from "~/server/auth/telegram";
+
+/** Assert caller is master on a personal (independent) tenant — allows service/config management */
+async function assertPersonalMaster(ctx: any, tenantId: string) {
+  await assertMaster(ctx, tenantId);
+  const [t] = await ctx.db.select({ isPersonal: tenants.isPersonal }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  // System admins always pass
+  if (!ctx.user && ctx.webUser?.webRole === "system_admin") return;
+  if (ctx.user && env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) return;
+  if (!t?.isPersonal) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Service management is only available for independent masters" });
+  }
+}
 
 async function assertMaster(ctx: any, tenantId: string) {
   // Web session path
@@ -208,6 +220,100 @@ export const masterRouter = createTRPCRouter({
       if (Object.keys(setObj).length === 0) return { success: true };
       await ctx.db.update(masters)
         .set(setObj)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
+      return { success: true };
+    }),
+
+  // ── Service management for independent (personal tenant) masters ──
+
+  getMyServices: publicProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      return ctx.db.select().from(services)
+        .where(eq(services.tenantId, input.tenantId))
+        .orderBy(services.sortOrder);
+    }),
+
+  createService: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      emoji: z.string().optional(),
+      duration: z.number(),
+      price: z.number(),
+      names: z.string(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertPersonalMaster(ctx, input.tenantId);
+      const svcId = `svc_${Date.now()}`;
+      await ctx.db.insert(services).values({
+        tenantId: input.tenantId,
+        svcId,
+        emoji: input.emoji ?? null,
+        duration: input.duration,
+        price: input.price,
+        names: input.names,
+        description: input.description ?? null,
+        active: 1,
+        hidden: 0,
+        sortOrder: 0,
+      });
+      return { svcId };
+    }),
+
+  updateService: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      svcId: z.string(),
+      price: z.number().optional(),
+      duration: z.number().optional(),
+      emoji: z.string().optional(),
+      names: z.string().optional(),
+      active: z.number().min(0).max(1).optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertPersonalMaster(ctx, input.tenantId);
+      const { tenantId, svcId, ...updates } = input;
+      const setObj: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(updates)) {
+        if (v !== undefined) setObj[k] = v;
+      }
+      if (Object.keys(setObj).length === 0) return { success: true };
+      await ctx.db.update(services).set(setObj).where(
+        and(eq(services.tenantId, tenantId), eq(services.svcId, svcId))
+      );
+      return { success: true };
+    }),
+
+  deleteService: publicProcedure
+    .input(z.object({ tenantId: z.string(), svcId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertPersonalMaster(ctx, input.tenantId);
+      await ctx.db.update(services).set({ active: 0, hidden: 1 }).where(
+        and(eq(services.tenantId, input.tenantId), eq(services.svcId, input.svcId))
+      );
+      return { success: true };
+    }),
+
+  /** Update work hours for independent master */
+  updateWorkHours: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number(),
+      workHours: z.string().optional(),
+      workDays: z.string().optional(),
+      onVacation: z.number().min(0).max(1).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      const setObj: Record<string, unknown> = {};
+      if (input.workHours !== undefined) setObj.workHours = input.workHours;
+      if (input.workDays !== undefined) setObj.workDays = input.workDays;
+      if (input.onVacation !== undefined) setObj.onVacation = input.onVacation;
+      if (Object.keys(setObj).length === 0) return { success: true };
+      await ctx.db.update(masters).set(setObj)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
       return { success: true };
     }),

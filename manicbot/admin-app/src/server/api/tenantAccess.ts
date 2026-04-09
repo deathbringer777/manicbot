@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { eq, and } from "drizzle-orm";
-import { tenantRoles } from "~/server/db/schema";
+import { tenantRoles, tenants } from "~/server/db/schema";
 import { env } from "~/env";
 import { timingSafeEqualStr } from "~/server/auth/telegram";
 
@@ -15,6 +15,7 @@ export type TenantAccessCtx = {
 
 /**
  * Verify caller is tenant_owner for tenantId, or system admin (preview / platform).
+ * Independent masters (web role "master" on a personal tenant) also pass this check.
  * Supports both Telegram user (ctx.user) and web session (ctx.webUser).
  */
 export async function assertTenantOwner(ctx: TenantAccessCtx, tenantId: string): Promise<void> {
@@ -27,6 +28,11 @@ export async function assertTenantOwner(ctx: TenantAccessCtx, tenantId: string):
   if (!ctx.user && ctx.webUser) {
     if (ctx.webUser.webRole === "system_admin") return;
     if (ctx.webUser.webRole === "tenant_owner" && ctx.webUser.tenantId === tenantId) return;
+    // Independent master on their own personal tenant gets owner-level access
+    if (ctx.webUser.webRole === "master" && ctx.webUser.tenantId === tenantId) {
+      const [t] = await ctx.db.select({ isPersonal: tenants.isPersonal }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+      if (t?.isPersonal) return;
+    }
     throw new TRPCError({ code: "FORBIDDEN", message: "Salon owner access required" });
   }
 

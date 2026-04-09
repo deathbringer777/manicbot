@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
-type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "profile";
+type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "services" | "profile";
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
@@ -114,10 +114,12 @@ export function MasterDashboard({
   tenantId,
   masterId,
   isDelegating = false,
+  isPersonal = false,
 }: {
   tenantId: string;
   masterId: number;
   isDelegating?: boolean;
+  isPersonal?: boolean;
 }) {
   const { lang } = useLang();
   const utils = api.useUtils();
@@ -131,6 +133,7 @@ export function MasterDashboard({
     { href: "#schedule", icon: Clock, label: t("master.schedule", lang) },
     { href: "#clients", icon: Users, label: t("master.clients", lang) },
     { href: "#earnings", icon: TrendingUp, label: t("master.earnings", lang) },
+    ...(isPersonal ? [{ href: "#services", icon: Scissors, label: t("master.services", lang) }] : []),
     { href: "#profile", icon: User, label: t("master.profile", lang) },
   ];
 
@@ -163,6 +166,26 @@ export function MasterDashboard({
     { tenantId, masterId: String(masterId) },
     { enabled: tab === "reviews" }
   );
+  // Services queries (independent masters only)
+  const svcList = api.master.getMyServices.useQuery(
+    { tenantId },
+    { enabled: isPersonal && tab === "services" }
+  );
+  const [svcForm, setSvcForm] = useState<{ names: string; price: string; duration: string; emoji: string; description: string } | null>(null);
+  const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
+  const createSvc = api.master.createService.useMutation({
+    onSuccess: () => { utils.master.getMyServices.invalidate(); setSvcForm(null); },
+  });
+  const updateSvc = api.master.updateService.useMutation({
+    onSuccess: () => { utils.master.getMyServices.invalidate(); setEditingSvcId(null); setSvcForm(null); },
+  });
+  const deleteSvc = api.master.deleteService.useMutation({
+    onSuccess: () => { utils.master.getMyServices.invalidate(); },
+  });
+  const updateWorkHoursMut = api.master.updateWorkHours.useMutation({
+    onSuccess: () => { utils.master.getMyProfile.invalidate(); },
+  });
+
   const [bioEdit, setBioEdit] = useState(false);
   const [bio, setBio] = useState("");
   const [photo, setPhoto] = useState("");
@@ -189,8 +212,15 @@ export function MasterDashboard({
     clients: t("master.clients", lang),
     earnings: t("master.earnings", lang),
     reviews: "Reviews",
+    services: t("master.services", lang),
     profile: t("master.profile", lang),
   };
+
+  const visibleTabs: Tab[] = [
+    "today", "schedule", "clients", "earnings", "reviews",
+    ...(isPersonal ? ["services" as Tab] : []),
+    "profile",
+  ];
 
   return (
     <Shell navItems={masterNavItems} title={t("master.title", lang)} subtitle="ManicBot Master">
@@ -217,7 +247,7 @@ export function MasterDashboard({
 
       {/* Tab bar */}
       <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
-        {(["today", "schedule", "clients", "earnings", "reviews", "profile"] as Tab[]).map(tb => (
+        {visibleTabs.map(tb => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
@@ -407,6 +437,126 @@ export function MasterDashboard({
         </div>
       )}
 
+      {/* SERVICES (independent masters only) */}
+      {tab === "services" && isPersonal && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.services", lang)}</h2>
+            {!svcForm && (
+              <button
+                onClick={() => setSvcForm({ names: "", price: "", duration: "60", emoji: "", description: "" })}
+                className="flex items-center gap-1.5 rounded-xl bg-brand-500/20 border border-brand-500/30 px-3 py-1.5 text-xs font-medium text-brand-400 hover:bg-brand-500/30 transition"
+              >
+                <Plus className="h-3.5 w-3.5" />{t("master.addService", lang)}
+              </button>
+            )}
+          </div>
+
+          {/* Add/Edit form */}
+          {svcForm && (
+            <div className="glass-card rounded-2xl p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcName", lang)}</label>
+                  <input value={svcForm.names} onChange={e => setSvcForm({ ...svcForm, names: e.target.value })}
+                    placeholder="Маникюр классический"
+                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcPrice", lang)}</label>
+                  <input type="number" value={svcForm.price} onChange={e => setSvcForm({ ...svcForm, price: e.target.value })}
+                    placeholder="150"
+                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcDuration", lang)}</label>
+                  <input type="number" value={svcForm.duration} onChange={e => setSvcForm({ ...svcForm, duration: e.target.value })}
+                    placeholder="60"
+                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcEmoji", lang)}</label>
+                  <input value={svcForm.emoji} onChange={e => setSvcForm({ ...svcForm, emoji: e.target.value })}
+                    placeholder="💅"
+                    maxLength={4}
+                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcDescription", lang)}</label>
+                  <input value={svcForm.description} onChange={e => setSvcForm({ ...svcForm, description: e.target.value })}
+                    placeholder=""
+                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const price = parseFloat(svcForm.price);
+                    const duration = parseInt(svcForm.duration);
+                    if (!svcForm.names.trim() || isNaN(price) || isNaN(duration)) return;
+                    if (editingSvcId) {
+                      updateSvc.mutate({ tenantId, svcId: editingSvcId, names: svcForm.names, price, duration, emoji: svcForm.emoji || undefined, description: svcForm.description || undefined });
+                    } else {
+                      createSvc.mutate({ tenantId, names: svcForm.names, price, duration, emoji: svcForm.emoji || undefined, description: svcForm.description || undefined });
+                    }
+                  }}
+                  disabled={createSvc.isPending || updateSvc.isPending || !svcForm.names.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-500/20 border border-brand-500/30 px-4 py-2 text-sm font-medium text-brand-400 hover:bg-brand-500/30 transition disabled:opacity-50"
+                >
+                  {(createSvc.isPending || updateSvc.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {editingSvcId ? t("common.save", lang) : t("master.addService", lang)}
+                </button>
+                <button
+                  onClick={() => { setSvcForm(null); setEditingSvcId(null); }}
+                  className="rounded-xl bg-slate-100 dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+          {svcList.data?.length === 0 && !svcForm && (
+            <div className="glass-card rounded-2xl p-8 text-center">
+              <Scissors className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm">{t("master.noServices", lang)}</p>
+            </div>
+          )}
+          <div className="space-y-2">
+            {svcList.data?.filter((s: any) => s.active).map((svc: any) => (
+              <div key={svc.svcId} className="glass-card rounded-xl p-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center text-lg shrink-0">
+                  {svc.emoji || "✂️"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-slate-900 dark:text-white text-sm truncate">{svc.names || svc.svcId}</p>
+                  <p className="text-[11px] text-slate-500">{svc.duration} min · {svc.price} zł</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={() => {
+                      setSvcForm({ names: svc.names ?? "", price: String(svc.price), duration: String(svc.duration), emoji: svc.emoji ?? "", description: svc.description ?? "" });
+                      setEditingSvcId(svc.svcId);
+                    }}
+                    className="h-7 w-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteSvc.mutate({ tenantId, svcId: svc.svcId })}
+                    disabled={deleteSvc.isPending}
+                    className="h-7 w-7 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* PROFILE */}
       {tab === "profile" && (
         <div className="space-y-4">
@@ -510,8 +660,40 @@ export function MasterDashboard({
             </div>
           )}
 
-          {/* Delegation toggle — only shown to the master themselves (not when owner is viewing) */}
-          {!isDelegating && profile.data && (
+          {/* Vacation toggle — independent masters only */}
+          {isPersonal && !isDelegating && profile.data && (
+            <div className="glass-card rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    {t("master.vacation", lang)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {(profile.data as any).onVacation ? t("master.vacationOn", lang) : t("master.vacationOff", lang)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateWorkHoursMut.mutate({
+                    tenantId,
+                    masterId,
+                    onVacation: (profile.data as any).onVacation ? 0 : 1,
+                  })}
+                  disabled={updateWorkHoursMut.isPending}
+                  className={`relative flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
+                    (profile.data as any).onVacation ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-600"
+                  }`}
+                >
+                  <span className={`absolute h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    (profile.data as any).onVacation ? "translate-x-6" : "translate-x-1"
+                  }`} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Delegation toggle — only for salon-employed masters (not personal, not when owner is viewing) */}
+          {!isPersonal && !isDelegating && profile.data && (
             <div className="glass-card rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex-1">

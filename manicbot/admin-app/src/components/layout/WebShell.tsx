@@ -10,6 +10,7 @@ import {
   LogOut, Menu, X, Zap, ChevronLeft, ChevronRight,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Sun, Moon, Compass,
+  Star, BarChart3, Globe,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -62,6 +63,9 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Schedule": "Расписание",
     "Earnings": "Доходы",
     "Profile": "Профиль",
+    "Reviews": "Отзывы",
+    "Analytics": "Аналитика",
+    "PublicProfile": "Публичный профиль",
     // Support
     "Tickets": "Тикеты",
     // Role info
@@ -103,6 +107,9 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Schedule": "Розклад",
     "Earnings": "Доходи",
     "Profile": "Профіль",
+    "Reviews": "Відгуки",
+    "Analytics": "Аналітика",
+    "PublicProfile": "Публічний профіль",
     "Tickets": "Тікети",
     "Admin Panel": "Панель адміністратора",
     "God Mode": "Адмін",
@@ -141,6 +148,9 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Schedule": "Harmonogram",
     "Earnings": "Zarobki",
     "Profile": "Profil",
+    "Reviews": "Opinie",
+    "Analytics": "Analityka",
+    "PublicProfile": "Profil publiczny",
     "Tickets": "Zgłoszenia",
     "Admin Panel": "Panel administratora",
     "God Mode": "Admin",
@@ -179,6 +189,9 @@ const NAV_LABELS: Record<string, Record<string, string>> = {
     "Schedule": "Schedule",
     "Earnings": "Earnings",
     "Profile": "Profile",
+    "Reviews": "Reviews",
+    "Analytics": "Analytics",
+    "PublicProfile": "Public Profile",
     "Tickets": "Tickets",
     "Admin Panel": "Admin Panel",
     "God Mode": "Admin",
@@ -239,15 +252,20 @@ function buildSalonNav(lang: string): NavItem[] {
     { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
     { href: "/dashboard?tab=billing", icon: Wallet, label: tNav("Billing", lang) },
     { href: "/dashboard?tab=channels", icon: MessageSquare, label: tNav("Channels", lang) },
+    { href: "/dashboard?tab=analytics", icon: BarChart3, label: tNav("Analytics", lang) },
+    { href: "/dashboard?tab=reviews", icon: Star, label: tNav("Reviews", lang) },
+    { href: "/dashboard?tab=public_profile", icon: Globe, label: tNav("PublicProfile", lang) },
   ];
 }
 
-function buildMasterNav(lang: string): NavItem[] {
+function buildMasterNav(lang: string, isPersonal?: boolean): NavItem[] {
   return [
     { href: "/dashboard", icon: Home, label: tNav("Today", lang) },
     { href: "/dashboard?tab=schedule", icon: CalendarCheck, label: tNav("Schedule", lang) },
     { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
     { href: "/dashboard?tab=earnings", icon: Wallet, label: tNav("Earnings", lang) },
+    { href: "/dashboard?tab=reviews", icon: Star, label: tNav("Reviews", lang) },
+    ...(isPersonal ? [{ href: "/dashboard?tab=services", icon: Scissors, label: tNav("Services", lang) }] : []),
     { href: "/dashboard?tab=profile", icon: UserRound, label: tNav("Profile", lang) },
   ];
 }
@@ -256,17 +274,17 @@ function buildSupportNav(lang: string): NavItem[] {
   return [{ href: "/dashboard", icon: HeadphonesIcon, label: tNav("Tickets", lang) }];
 }
 
-function getNavGroups(role: string | null, lang: string): NavGroup[] {
+function getNavGroups(role: string | null, lang: string, isPersonal?: boolean): NavGroup[] {
   if (role === "system_admin") return buildGodGroups(lang);
   const flat = role === "tenant_owner" ? buildSalonNav(lang)
-    : role === "master" ? buildMasterNav(lang)
+    : role === "master" ? buildMasterNav(lang, isPersonal)
     : role === "support" || role === "technical_support" ? buildSupportNav(lang)
     : [{ href: "/dashboard", icon: Home, label: tNav("Dashboard", lang) }];
   return [{ label: "", items: flat }];
 }
 
-function getFlatNav(role: string | null, lang: string): NavItem[] {
-  return getNavGroups(role, lang).flatMap(g => g.items);
+function getFlatNav(role: string | null, lang: string, isPersonal?: boolean): NavItem[] {
+  return getNavGroups(role, lang, isPersonal).flatMap(g => g.items);
 }
 
 function getRoleInfo(role: string | null, lang: string): { title: string; subtitle: string; badge?: string } {
@@ -328,7 +346,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { role, previewRole, createdAt, emailVerified } = useRole();
+  const { role, previewRole, createdAt, emailVerified, isPersonalTenant } = useRole();
   const { lang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -353,8 +371,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const navGroups = getNavGroups(effectiveRole, lang);
-  const flatNav = getFlatNav(effectiveRole, lang);
+  const navGroups = getNavGroups(effectiveRole, lang, isPersonalTenant);
+  const flatNav = getFlatNav(effectiveRole, lang, isPersonalTenant);
   const roleInfo = getRoleInfo(effectiveRole, lang);
   const pageTitle = getPageTitle(pathname, effectiveRole, lang);
 

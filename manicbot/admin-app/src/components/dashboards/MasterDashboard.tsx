@@ -259,8 +259,8 @@ export function MasterDashboard({
         </div>
       )}
 
-      {/* Tab bar */}
-      <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
+      {/* Tab bar — hidden in WebShell (sidebar handles navigation) */}
+      {!inWeb && <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
         {visibleTabs.map(tb => (
           <button
             key={tb}
@@ -274,14 +274,39 @@ export function MasterDashboard({
             {tabLabels[tb]}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* TODAY */}
       {tab === "today" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">{t("common.today", lang)}</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("common.today", lang)}</h2>
           {today.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {today.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+
+          {/* Summary stats */}
+          {!today.isLoading && today.data && (() => {
+            const apts = today.data as any[];
+            const total = apts.length;
+            const confirmed = apts.filter((a: any) => a.status === "confirmed").length;
+            const pending = apts.filter((a: any) => a.status === "pending").length;
+            return (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="glass-card rounded-2xl p-4">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("master.totalToday", lang)}</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{total}</p>
+                </div>
+                <div className="glass-card rounded-2xl p-4">
+                  <p className="text-[11px] text-emerald-400">{t("master.confirmed", lang)}</p>
+                  <p className="text-2xl font-bold text-emerald-400 mt-1">{confirmed}</p>
+                </div>
+                <div className="glass-card rounded-2xl p-4">
+                  <p className="text-[11px] text-amber-400">{t("master.pending", lang)}</p>
+                  <p className="text-2xl font-bold text-amber-400 mt-1">{pending}</p>
+                </div>
+              </div>
+            );
+          })()}
+
           {today.data?.length === 0 && (
             <div className="glass-card rounded-2xl p-8 text-center">
               <CalendarDays className="h-12 w-12 text-slate-600 mx-auto mb-3" />

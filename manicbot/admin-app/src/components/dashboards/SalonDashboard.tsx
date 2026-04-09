@@ -858,8 +858,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
 
   return (
     <Shell navItems={salonNavItems} title={t("salon.title", lang)} subtitle="ManicBot Salon">
-      {/* Tab pills */}
-      <div data-tour="salon-tabs" className="flex overflow-x-auto scrollbar-none gap-1.5 mb-5 -mx-1 px-1">
+      {/* Tab pills — hidden in WebShell (sidebar handles navigation) */}
+      {!inWeb && <div data-tour="salon-tabs" className="flex overflow-x-auto scrollbar-none gap-1.5 mb-5 -mx-1 px-1">
         {tabs.map(tb => (
           <button key={tb.key} onClick={() => setTab(tb.key)}
             className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
@@ -870,7 +870,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
             {tb.label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (

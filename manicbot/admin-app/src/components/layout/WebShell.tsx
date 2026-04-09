@@ -382,7 +382,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   })();
 
   // User avatar initial
-  const avatarLetter = (userEmail ?? "G").charAt(0).toUpperCase();
 
   return (
     <WebShellContext.Provider value={true}>
@@ -442,42 +441,15 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             ))}
           </nav>
 
-          {/* Bottom: Settings + Logout — always visible */}
+          {/* Bottom: Settings only — logout moved to top-right header */}
           <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
-            {!collapsed ? (
-              <div className="space-y-0.5">
-                <NavLink
-                  item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
-                  active={pathname.startsWith("/settings")}
-                  dataTour="web-settings"
-                  showBadge={!emailVerified}
-                />
-                <button
-                  onClick={() => setShowLogoutDialog(true)}
-                  className="group flex items-center gap-3 rounded-xl px-3 py-2.5 w-full text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 transition-all duration-150 border-l-2 border-transparent"
-                >
-                  <LogOut className="h-[18px] w-[18px] shrink-0" />
-                  <span className="text-[13px]">{tNav("Logout", lang)}</span>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <NavLink
-                  item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
-                  active={pathname.startsWith("/settings")}
-                  collapsed
-                  dataTour="web-settings"
-                  showBadge={!emailVerified}
-                />
-                <button
-                  onClick={() => setShowLogoutDialog(true)}
-                  className="flex items-center justify-center p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all w-full"
-                  title={tNav("Logout", lang)}
-                >
-                  <LogOut className="h-[17px] w-[17px]" />
-                </button>
-              </div>
-            )}
+            <NavLink
+              item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
+              active={pathname.startsWith("/settings")}
+              collapsed={collapsed}
+              dataTour="web-settings"
+              showBadge={!emailVerified}
+            />
           </div>
         </aside>
 
@@ -525,8 +497,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 ))}
               </nav>
 
-              {/* Mobile drawer bottom: settings + user info */}
-              <div className="border-t border-slate-200 dark:border-white/[0.06] p-3 space-y-1">
+              {/* Mobile drawer bottom: settings only — logout in header */}
+              <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
                 <NavLink
                   item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
                   active={pathname.startsWith("/settings")}
@@ -534,26 +506,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   dataTour="web-settings"
                   showBadge={!emailVerified}
                 />
-                <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.03]">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                    {avatarLetter}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    {roleInfo.badge && (
-                      <span className="inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-brand-500/20 text-brand-600 dark:text-brand-300 mb-0.5">
-                        {roleInfo.badge}
-                      </span>
-                    )}
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{userEmail ?? "admin"}</p>
-                  </div>
-                  <button
-                    onClick={() => { setSidebarOpen(false); setShowLogoutDialog(true); }}
-                    className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all shrink-0"
-                    title={tNav("Logout", lang)}
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
             </aside>
           </div>
@@ -607,22 +559,15 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
 
-              {/* User pill + logout */}
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-2.5 py-1.5">
-                <div className="h-6 w-6 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-                  {avatarLetter}
-                </div>
-                <span className="hidden sm:block text-xs text-slate-600 dark:text-slate-300 max-w-[120px] truncate">
-                  {userEmail ?? "admin"}
-                </span>
-                <button
-                  onClick={() => setShowLogoutDialog(true)}
-                  className="p-1 rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all shrink-0"
-                  title={tNav("Logout", lang)}
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              {/* Logout button */}
+              <button
+                onClick={() => setShowLogoutDialog(true)}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-full border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-500/30 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all text-xs font-medium"
+                title={tNav("Logout", lang)}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:block">{tNav("Logout", lang)}</span>
+              </button>
             </div>
           </header>
 

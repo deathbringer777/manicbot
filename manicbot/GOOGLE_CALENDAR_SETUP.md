@@ -60,21 +60,21 @@ Connection still begins in Telegram because the Worker must create the OAuth ses
 
 ---
 
-## Backoff и Rate Limiting
+## Backoff and Rate Limiting
 
-Google Calendar sync в cron реализует exponential backoff для защиты от исчерпания API-квоты:
+Google Calendar sync in cron implements exponential backoff to protect against API quota exhaustion:
 
-- **MAX_SYNC_PER_CRON = 10** — максимум 10 sync-операций за один cron run (каждые 15 мин)
-- **Exponential backoff**: `15мин * 2^retries` (30мин, 60мин, 2ч, 4ч...), максимум 24 часа
-- **Permanent failure**: после 5 неудачных попыток запись помечается как permanently failed
-- Записи с `sync_retry_after > now` пропускаются до наступления времени retry
+- **MAX_SYNC_PER_CRON = 10** — maximum 10 sync operations per cron run (every 15 min)
+- **Exponential backoff**: `15min * 2^retries` (30min, 60min, 2h, 4h...), maximum 24 hours
+- **Permanent failure**: after 5 failed attempts, the appointment is marked as permanently failed
+- Appointments with `sync_retry_after > now` are skipped until the retry time arrives
 
-### Колонки D1 (миграция 0010)
+### D1 Columns (migration 0010)
 
-| Колонка | Тип | Описание |
+| Column | Type | Description |
 |---------|-----|----------|
-| `sync_retries` | INTEGER DEFAULT 0 | Счётчик неудачных попыток |
-| `sync_retry_after` | INTEGER NULL | Timestamp следующей попытки (ms) |
-| `sync_last_error` | TEXT NULL | Последняя ошибка (до 200 символов) |
+| `sync_retries` | INTEGER DEFAULT 0 | Failed attempt counter |
+| `sync_retry_after` | INTEGER NULL | Timestamp of next retry (ms) |
+| `sync_last_error` | TEXT NULL | Last error (up to 200 characters) |
 
-При успешной синхронизации все три колонки сбрасываются в 0/NULL.
+On successful sync, all three columns are reset to 0/NULL.

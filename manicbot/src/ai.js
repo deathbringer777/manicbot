@@ -14,10 +14,18 @@ import { setState } from './services/state.js';
 /**
  * Sanitize user input before sending to AI — neutralize action-tag patterns
  * so that prompt-injection attempts like "[CANCEL_ALL]" are rendered harmless.
+ *
+ * Hardening:
+ *  - NFKC normalization collapses unicode lookalikes (fullwidth ［ ］ → [ ])
+ *    so attackers cannot bypass via homoglyph brackets.
+ *  - Case-insensitive match: also strips lowercase `[book:...]` / `[cancel_all]`
+ *    because the AI action parser (AI_ACTION_RE) accepts `[A-Za-z_]+` and
+ *    uppercases tags — lowercase injections would otherwise reach the executor.
  */
 export function sanitizeUserInput(text) {
   if (!text) return '';
-  return text.replace(/\[([A-Z_]+)(:[^\]]+)?\]/g, '($1$2)');
+  const normalized = String(text).normalize('NFKC');
+  return normalized.replace(/\[([A-Za-z_]+)(:[^\]]+)?\]/g, '($1$2)');
 }
 
 /**

@@ -1,42 +1,42 @@
 # ManicBot Admin Mini App
 
-Telegram **WebApp** (Mini App) для ролей платформы и салона: God Mode, поддержка, владелец салона, мастер. Отдельный деплой на **Cloudflare Pages** (проект `admin-app`).
+Telegram **WebApp** (Mini App) for platform and salon roles: God Mode, support, salon owner, master. Separate deployment to **Cloudflare Pages** (project `admin-app`).
 
-## Стек
+## Stack
 
 - Next.js 15 (App Router), React 19
 - tRPC 11 + TanStack Query, SuperJSON
-- Drizzle ORM → та же D1, что у Worker (`manicbot-db`)
+- Drizzle ORM → same D1 as Worker (`manicbot-db`)
 - Tailwind CSS 4
-- Вход: заголовок `x-telegram-init-data`, проверка HMAC в `src/server/auth/telegram.ts`
-- Матрица ролей God Mode: `src/server/api/platformRoles.ts` + `adminProcedure` в `src/server/api/trpc.ts`
+- Auth: `x-telegram-init-data` header, HMAC verification in `src/server/auth/telegram.ts`
+- God Mode role matrix: `src/server/api/platformRoles.ts` + `adminProcedure` in `src/server/api/trpc.ts`
 
-## Команды
+## Commands
 
 ```bash
 npm ci --legacy-peer-deps
-npm run dev              # локально: next dev --turbo
+npm run dev              # local: next dev --turbo
 npm run typecheck        # tsc --noEmit
 npm test                 # vitest
-npm run build            # обычный Next build
-npx next-on-pages        # сборка для Cloudflare Pages (как в CI)
+npm run build            # standard Next build
+npx next-on-pages        # build for Cloudflare Pages (as in CI)
 ```
 
-## Переменные окружения
+## Environment Variables
 
-Задаются в Cloudflare Pages (и при локальной разработке — `.env` / `.dev.vars`, не коммитить):
+Set in Cloudflare Pages (and for local development — `.env` / `.dev.vars`, do not commit):
 
-| Переменная | Назначение |
+| Variable | Purpose |
 |------------|------------|
-| `TELEGRAM_BOT_TOKEN` | Токен бота для проверки подписи WebApp initData |
-| `ADMIN_CHAT_ID` | Telegram user id создателя — всегда `system_admin` |
-| `DATABASE_URL` | Опционально: LibSQL remote для локальной разработки |
-| `WORKER_PUBLIC_URL` | Публичный URL Worker (вебхуки Meta в UI Channels), без `/` в конце |
-| `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` | Verify token для Meta; должны совпадать с секретами Worker |
+| `TELEGRAM_BOT_TOKEN` | Bot token for WebApp initData signature verification |
+| `ADMIN_CHAT_ID` | Telegram user id of the creator — always `system_admin` |
+| `DATABASE_URL` | Optional: LibSQL remote for local development |
+| `WORKER_PUBLIC_URL` | Public Worker URL (Meta webhook hints in Channels UI), no trailing `/` |
+| `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` | Verify token for Meta; must match Worker secrets |
 
-Остальные секреты/биндинги — по `@t3-oss/env-nextjs` в `src/env.js`.
+Other secrets/bindings — via `@t3-oss/env-nextjs` in `src/env.js`.
 
-**Секреты через Wrangler (проект Pages `admin-app`):**
+**Secrets via Wrangler (Pages project `admin-app`):**
 
 ```bash
 npx wrangler pages secret put WORKER_PUBLIC_URL --project-name=admin-app
@@ -44,19 +44,19 @@ npx wrangler pages secret put META_VERIFY_TOKEN_WA --project-name=admin-app
 npx wrangler pages secret put META_VERIFY_TOKEN_IG --project-name=admin-app
 ```
 
-(значения вводятся интерактивно; должны совпадать с `wrangler secret put` у Worker.)
+(values entered interactively; must match `wrangler secret put` on the Worker.)
 
-### Два package-lock.json
+### Two package-lock.json files
 
-В репозитории есть `manicbot/package-lock.json` (Worker) и `manicbot/admin-app/package-lock.json` (Mini App). Так сделано намеренно: **GitHub Actions** кэширует зависимости отдельно по `cache-dependency-path` для каждого job. Next.js при сборке может предупреждать о «multiple lockfiles» — на корректность CI это не влияет; унифицировать lockfile в один корневой монорепо-манифест можно отдельной задачей.
+The repository has `manicbot/package-lock.json` (Worker) and `manicbot/admin-app/package-lock.json` (Mini App). This is intentional: **GitHub Actions** caches dependencies separately via `cache-dependency-path` for each job. Next.js may warn about "multiple lockfiles" at build time — this doesn't affect CI correctness; consolidating into a single root monorepo manifest is a separate task.
 
-## Связь с Worker
+## Connection to Worker
 
-- Worker проксирует ссылки на приложение через `ADMIN_APP_URL` в `wrangler.toml`.
-- Каналы и диалоги: роутеры `channels`, `conversations` (tRPC) с `assertTenantOwner` по `tenantId`.
+- Worker proxies links to the app via `ADMIN_APP_URL` in `wrangler.toml`.
+- Channels and conversations: `channels`, `conversations` routers (tRPC) with `assertTenantOwner` by `tenantId`.
 
-Подробная архитектура: репозиторий **`CLAUDE.md`** (раздел Admin Mini-App).
+Detailed architecture: **`CLAUDE.md`** in the repository (Admin Mini-App section).
 
-## Деплой
+## Deploy
 
-Push в `main` → GitHub Actions: job `test` (включая `typecheck` + `npm test` для этого пакета) → job `deploy-admin-app` → `pages deploy` в проект `admin-app`.
+Push to `main` → GitHub Actions: `test` job (including `typecheck` + `npm test` for this package) → `deploy-admin-app` job → `pages deploy` to project `admin-app`.

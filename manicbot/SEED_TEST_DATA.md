@@ -1,79 +1,79 @@
-# Seed тестовых данных: 2 салона + мастера
+# Seed Test Data: 2 Salons + Masters
 
-Один раз запускаешь сид — создаются/обновляются 2 тенанта с разными услугами, ценами и фото; при указании username мастер добавляется в оба салона.
+Run the seed once — it creates/updates 2 tenants with different services, prices, and photos; if a username is provided, the master is added to both salons.
 
-## Запуск сида
+## Running the seed
 
-Открой в браузере (подставь свой `ADMIN_KEY` и домен воркера):
-
-```
-https://ТВОЙ_ВОРКЕР.workers.dev/admin/seed?key=ТВОЙ_ADMIN_KEY&master=dezbringer
-```
-
-Или только сид без привязки мастера (мастера потом добавишь вручную):
+Open in browser (substitute your `ADMIN_KEY` and worker domain):
 
 ```
-https://ТВОЙ_ВОРКЕР.workers.dev/admin/seed?key=ТВОЙ_ADMIN_KEY
+https://YOUR_WORKER.workers.dev/admin/seed?key=YOUR_ADMIN_KEY&master=dezbringer
 ```
 
-Параметр `master` по умолчанию: `dezbringer`. Можно указать другой username без `@`.
-
-## Что делает сид
-
-1. **Тенанты**  
-   Если тенантов меньше 2 — создаёт до двух (Nails Studio, Luxe Manicure). Если уже есть 2 — использует первые два и обновляет им имена.
-
-2. **Салон 1 — Nails Studio**  
-   - Услуги: классический маникюр 80 zł, гель-лак 140, педикюр 120, наращивание 250, дизайн 50, комбо 220.  
-   - Свои фото услуг и блок «О нас».
-
-3. **Салон 2 — Luxe Manicure**  
-   - Услуги: те же позиции, но цены выше (100, 180, 150, 300, 70, 280 zł).  
-   - Другие фото и другой текст «О нас».
-
-4. **Мастер**  
-   Если передан `master=dezbringer` (или другой username) и у одного из тенантов есть зарегистрированный бот, сид вызывает Telegram API `getChat(@username)`, получает `chat_id` и:
-   - назначает этого пользователя **мастером** в обоих салонах;
-   - назначает его **владельцем** (tenant_owner) в обоих салонах;
-   - записывает `cfg:admin` в каждом тенанте.
-
-Если не удалось разрешить username (бот не найден или пользователь не писал боту), в ответе будет `masterAssigned: false` и подсказка добавить мастера вручную.
-
-## Команды после сида (если мастер не подтянулся автоматически)
-
-В **боте салона 1** (Nails Studio) напиши:
+Or seed only without assigning a master (add masters manually later):
 
 ```
-/grant_master @dezbringer
+https://YOUR_WORKER.workers.dev/admin/seed?key=YOUR_ADMIN_KEY
 ```
 
-В **боте салона 2** (Luxe Manicure) — то же:
+Default `master` parameter: `dezbringer`. You can specify a different username without `@`.
+
+## What the seed does
+
+1. **Tenants**
+   If there are fewer than 2 tenants — creates up to two (Nails Studio, Luxe Manicure). If 2 already exist — uses the first two and updates their names.
+
+2. **Salon 1 — Nails Studio**
+   - Services: classic manicure 80 zł, gel polish 140, pedicure 120, extensions 250, design 50, combo 220.
+   - Unique service photos and "About us" block.
+
+3. **Salon 2 — Luxe Manicure**
+   - Services: same items, but higher prices (100, 180, 150, 300, 70, 280 zł).
+   - Different photos and different "About us" text.
+
+4. **Master**
+   If `master=dezbringer` (or another username) is passed and one of the tenants has a registered bot, the seed calls the Telegram API `getChat(@username)`, gets the `chat_id`, and:
+   - assigns this user as **master** in both salons;
+   - assigns them as **owner** (tenant_owner) in both salons;
+   - writes `cfg:admin` in each tenant.
+
+If unable to resolve the username (bot not found or user hasn't messaged the bot), the response will have `masterAssigned: false` with a hint to add the master manually.
+
+## Commands after seed (if master wasn't assigned automatically)
+
+In **salon 1 bot** (Nails Studio) send:
 
 ```
 /grant_master @dezbringer
 ```
 
-(Команду даёт владелец салона или system_admin.)
+In **salon 2 bot** (Luxe Manicure) — the same:
 
-Чтобы назначить **владельца салона** из системного админ-бота (если знаешь `chat_id` и `tenantId`):
+```
+/grant_master @dezbringer
+```
+
+(Command is issued by the salon owner or system_admin.)
+
+To assign a **salon owner** from the system admin bot (if you know the `chat_id` and `tenantId`):
 
 ```
 /grant_owner CHAT_ID TENANT_ID
 ```
 
-Пример:
+Example:
 
 ```
 /grant_owner 123456789 t_abc123
 ```
 
-## Ответ сида (JSON)
+## Seed Response (JSON)
 
-- `ok: true` — сид выполнен.
-- `log` — массив строк с шагами.
-- `tenants` — массив из двух tenantId.
-- `masterAssigned: true/false` — удалось ли добавить мастера по username.
-- `masterChatId` — если мастер добавлен.
-- `commands` — подсказки команд на случай ручного назначения.
+- `ok: true` — seed completed.
+- `log` — array of step strings.
+- `tenants` — array of two tenantIds.
+- `masterAssigned: true/false` — whether the master was added by username.
+- `masterChatId` — if master was added.
+- `commands` — command hints for manual assignment.
 
-После сида в каждом салоне будут свои прайсы, фото и «О нас»; при успешном `masterAssigned` @dezbringer будет мастером и владельцем в обоих.
+After the seed, each salon will have its own prices, photos, and "About us"; with a successful `masterAssigned`, @dezbringer will be master and owner in both.

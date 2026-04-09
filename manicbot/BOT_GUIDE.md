@@ -1,192 +1,192 @@
-# ManicBot 💅 — инструкция по использованию
+# ManicBot — User Guide
 
-Telegram-бот для записи на маникюр и управление салоном. Языки: русский, украинский, английский, польский.
+Telegram bot for nail salon booking and salon management. Languages: Russian, Ukrainian, English, Polish.
 
 ---
 
-## Команды бота (меню)
+## Bot Commands (menu)
 
-| Команда | Описание |
+| Command | Description |
 |--------|----------|
-| `/start` | Главное меню |
-| `/book` | Записаться на услугу |
-| `/my` | Мои записи |
-| `/prices` | Прайс-лист |
-| `/catalog` | Каталог работ (фото) |
-| `/contacts` | Контакты и адрес |
-| `/lang` | Сменить язык (RU / UA / EN / PL) |
-| `/help` | Справка по командам |
+| `/start` | Main menu |
+| `/book` | Book a service |
+| `/my` | My appointments |
+| `/prices` | Price list |
+| `/catalog` | Work catalog (photos) |
+| `/contacts` | Contacts and address |
+| `/lang` | Change language (RU / UA / EN / PL) |
+| `/help` | Command help |
 
-Те же действия доступны с кнопок под сообщениями.
-
----
-
-## Как записаться
-
-1. Нажми **Записаться** или введи `/book`.
-2. Если ты ещё не в базе — подтверди имя и введи телефон (можно кнопкой «Отправить номер»).
-3. Выбери **услугу** (классический маникюр, гель-лак, педикюр и т.д.).
-4. Выбери **дату** в календаре, затем **время**.
-5. Подтверди запись кнопкой **Подтвердить**.
-
-После подтверждения придёт сообщение с датой, временем, адресом и ссылкой для добавления в календарь (Google Calendar / Apple). За 24 часа и за 2 часа бот пришлёт напоминание.
+The same actions are available via buttons under messages.
 
 ---
 
-## Мои записи
+## How to Book
 
-- **`/my`** или кнопка **Мои записи** — список предстоящих записей.
-- Для каждой записи можно нажать **Отменить** и при желании добавить комментарий для мастера.
-- Есть кнопка **Отменить все записи** (с подтверждением).
+1. Press **Book** or type `/book`.
+2. If you're not in the database yet — confirm your name and enter your phone number (or use the "Send number" button).
+3. Choose a **service** (classic manicure, gel polish, pedicure, etc.).
+4. Choose a **date** in the calendar, then a **time**.
+5. Confirm the booking with the **Confirm** button.
 
----
-
-## Поддержка и консультант
-
-- В главном меню есть кнопка **🆘 Поддержка**.
-- Нажми её, затем напиши сообщение одним текстом — создаётся тикет, мастер или поддержка ответят в этом же чате.
-- В чате с ботом можно писать текстом — если бот не понимает, предложит кнопку **Подключить консультанта**.
+After confirmation, you'll receive a message with the date, time, address, and a link to add to your calendar (Google Calendar / Apple). The bot will send reminders 24 hours and 2 hours before.
 
 ---
 
-## Админ (владелец салона)
+## My Appointments
 
-### Регистрация админа в боте
+- **`/my`** or the **My Appointments** button — list of upcoming appointments.
+- For each appointment, you can press **Cancel** and optionally add a comment for the master.
+- There is a **Cancel all appointments** button (with confirmation).
 
-В Telegram отправь боту:
+---
+
+## Support and Consultant
+
+- The main menu has a **🆘 Support** button.
+- Press it, then type your message — a ticket is created, and the master or support will reply in the same chat.
+- You can type freely in the chat — if the bot doesn't understand, it will suggest the **Connect a consultant** button.
+
+---
+
+## Admin (Salon Owner)
+
+### Registering as admin in the bot
+
+In Telegram, send the bot:
 
 ```
-/admin ВАШ_ADMIN_KEY
+/admin YOUR_ADMIN_KEY
 ```
 
-`ADMIN_KEY` — секрет из настроек воркера в Cloudflare (Variables and Secrets → ADMIN_KEY). После ввода ключа твой chat_id становится админом.
+`ADMIN_KEY` — the secret from the worker settings in Cloudflare (Variables and Secrets → ADMIN_KEY). After entering the key, your chat_id becomes admin.
 
-### Что может админ
+### What the admin can do
 
-- **Панель управления** — записи на сегодня/завтра, мастера, клиенты, услуги, «О нас», биллинг.
-- **Подтверждение/отклонение записей** — входящие записи можно принять, отклонить или предложить другое время.
-- **Мастера** — добавить/удалить мастеров, включить/выключить отпуск.
-- **Услуги** — названия, цены, длительность, фото, описание.
-- **О нас** — фото, описание, Instagram.
-- **Биллинг** — подписка Stripe (если настроена), портал оплаты.
-- **Клиенты** — список с контактами.
-- **Экспорт** — CSV клиентов и записей через веб-админку.
+- **Management panel** — today's/tomorrow's appointments, masters, clients, services, "About us", billing.
+- **Confirm/reject appointments** — incoming appointments can be accepted, rejected, or rescheduled.
+- **Masters** — add/remove masters, enable/disable vacation mode.
+- **Services** — names, prices, duration, photos, description.
+- **About us** — photos, description, Instagram.
+- **Billing** — Stripe subscription (if configured), payment portal.
+- **Clients** — list with contacts.
+- **Export** — CSV of clients and appointments via web admin panel.
 
-### Веб-админка
+### Web Admin Panel
 
-- **Админ-панель (клиенты, записи, экспорт):**  
-  https://manicbot.vdovin-kyrylo.workers.dev/admin  
-  Логин: `admin`, пароль: твой `ADMIN_KEY`.
+- **Admin panel (clients, appointments, export):**
+  https://manicbot.vdovin-kyrylo.workers.dev/admin
+  Login: `admin`, password: your `ADMIN_KEY`.
 
-- **Биллинг по тенантам:**  
-  https://manicbot.vdovin-kyrylo.workers.dev/admin/billing  
-  (тот же Basic Auth).
+- **Billing by tenants:**
+  https://manicbot.vdovin-kyrylo.workers.dev/admin/billing
+  (same Basic Auth).
 
 ---
 
-## Мастер
+## Master
 
-### Как стать мастером
+### How to become a master
 
-Админ добавляет мастера в панели: **Управление** → **Мастера** → **Добавить мастера** (указывается Telegram user id или пересылается сообщение от мастера).
+Admin adds the master in the panel: **Management** → **Masters** → **Add master** (enter Telegram user id or forward a message from the master).
 
-### Команды для мастера
+### Commands for master
 
-| Команда | Описание |
+| Command | Description |
 |--------|----------|
-| `/master` | Панель мастера |
-| `/panel` | То же (если ты мастер или админ) |
+| `/master` | Master panel |
+| `/panel` | Same (if you're a master or admin) |
 
-### Что может мастер
+### What the master can do
 
-- Записи на сегодня и завтра.
-- Подтверждать, отклонять записи или предлагать другое время.
-- Отвечать в тикетах поддержки (кнопка **Взять тикет** в уведомлении о новом обращении).
-- Закрывать диалог с клиентом кнопкой **Закрыть тикет**.
+- View today's and tomorrow's appointments.
+- Confirm, reject appointments, or suggest a different time.
+- Reply in support tickets (the **Claim ticket** button in the new request notification).
+- Close the conversation with a client using the **Close ticket** button.
 
 ---
 
-## Поддержка (support)
+## Support
 
-**Роль поддержки может назначать только админ.**
+**The support role can only be assigned by an admin.**
 
-### Как добавить агента поддержки (только для админа)
+### How to add a support agent (admin only)
 
-В Telegram отправь боту **от имени админа**:
+In Telegram, send the bot **as admin**:
 
 ```
 /add_support @username
 ```
 
-или по числовому ID пользователя:
+or by numeric user ID:
 
 ```
 /add_support 123456789
 ```
 
-Можно также переслать сообщение от нужного пользователя или отправить контакт. Пример: чтобы назначить поддержку пользователю @dezbringer, отправь:
+You can also forward a message from the user or send a contact. Example: to assign support to user @dezbringer, send:
 
 ```
 /add_support @dezbringer
 ```
 
-После этого этот пользователь будет получать уведомления о новых тикетах (кнопка **Взять тикет**) и сможет вести диалог с клиентом.
+After this, the user will receive notifications about new tickets (the **Claim ticket** button) and can conduct a dialogue with the client.
 
-### Добавить себя в поддержку (если ты уже админ)
+### Add yourself to support (if you're already admin)
 
-Если ты уже зарегистрирован как админ и хочешь также получать тикеты:
+If you're already registered as admin and also want to receive tickets:
 
 ```
-/support_register ВАШ_ADMIN_KEY
+/support_register YOUR_ADMIN_KEY
 ```
 
-(Команда сработает только если отправитель уже является админом.)
+(The command only works if the sender is already an admin.)
 
-### Снять с роли поддержки
+### Remove from support role
 
-Только админ может снять агента с роли поддержки:
+Only admin can remove an agent from the support role:
 
 ```
 /remove_support @username
 ```
-или
+or
 ```
 /remove_support 123456789
 ```
 
 ---
 
-## Клиентский режим
+## Client Mode
 
-Если ты зарегистрирован как админ или мастер, но хочешь пользоваться ботом как клиент:
+If you're registered as admin or master but want to use the bot as a regular client:
 
 ```
 /client
 ```
 
-Откроется обычное главное меню записи.
+The regular booking main menu will open.
 
 ---
 
-## Настройка webhook и миграция (для разработчика)
+## Webhook Setup and Migration (for developers)
 
-- **Setup (webhook + команды):**  
-  https://manicbot.vdovin-kyrylo.workers.dev/setup?key=ВАШ_ADMIN_KEY
+- **Setup (webhook + commands):**
+  https://manicbot.vdovin-kyrylo.workers.dev/setup?key=YOUR_ADMIN_KEY
 
-- **Миграция (один раз после деплоя):**  
-  https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=ВАШ_ADMIN_KEY  
-  Или из терминала: `ADMIN_KEY=... npm run migrate` (см. MIGRATION.md).
+- **Migration (once after deploy):**
+  https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=YOUR_ADMIN_KEY
+  Or from terminal: `ADMIN_KEY=... npm run migrate` (see MIGRATION.md).
 
 ---
 
-## Полезные ссылки
+## Useful Links
 
-| Страница | URL |
+| Page | URL |
 |---------|-----|
-| Главная воркера | https://manicbot.vdovin-kyrylo.workers.dev/ |
-| Админ (Basic Auth) | https://manicbot.vdovin-kyrylo.workers.dev/admin |
-| Биллинг | https://manicbot.vdovin-kyrylo.workers.dev/admin/billing |
+| Worker home | https://manicbot.vdovin-kyrylo.workers.dev/ |
+| Admin (Basic Auth) | https://manicbot.vdovin-kyrylo.workers.dev/admin |
+| Billing | https://manicbot.vdovin-kyrylo.workers.dev/admin/billing |
 | Setup | https://manicbot.vdovin-kyrylo.workers.dev/setup?key=ADMIN_KEY |
-| Успешная оплата Stripe | https://manicbot.vdovin-kyrylo.workers.dev/stripe/success |
+| Stripe success page | https://manicbot.vdovin-kyrylo.workers.dev/stripe/success |
 
-Подставь свой `ADMIN_KEY` в ссылки с `?key=...`.
+Replace `ADMIN_KEY` in links with `?key=...`.

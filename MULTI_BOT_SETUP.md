@@ -1,42 +1,42 @@
-# Мульти-бот: салоны + мастера
+# Multi-bot: Salons + Masters
 
-Актуальная схема: **D1** (`tenants`, `bots`) + webhook **`POST /webhook/{botId}`** (numeric bot id из токена). Демо-самопровижининг при секретах `BOT_TOKEN_SALON*` см. `src/http/demoBots.js`. Полная картина — **[CLAUDE.md](CLAUDE.md)**.
+Current scheme: **D1** (`tenants`, `bots`) + webhook **`POST /webhook/{botId}`** (numeric bot id from the token). Demo self-provisioning with `BOT_TOKEN_SALON*` secrets — see `src/http/demoBots.js`. Full picture — **[CLAUDE.md](CLAUDE.md)**.
 
-**Важно:** если токены светились в чате — в @BotFather нажми «Revoke current token» и в секреты вставь уже **новый** токен.
+**Important:** If tokens have been exposed in chat — in @BotFather press "Revoke current token" and put only the **new** token into secrets.
 
-## Секреты в Cloudflare (Wrangler)
+## Cloudflare Secrets (Wrangler)
 
-Токены **никогда** не хранить в коде. Только в Secrets.
+Tokens must **never** be stored in code. Secrets only.
 
 ```bash
-# Обязательные
+# Required
 wrangler secret put ADMIN_KEY
 wrangler secret put WEBHOOK_SECRET
 
-# Салоны
+# Salons
 wrangler secret put BOT_TOKEN_SALON1
 wrangler secret put BOT_TOKEN_SALON2
 
-# Мастера
+# Masters
 wrangler secret put BOT_TOKEN_MASTER1
 wrangler secret put BOT_TOKEN_MASTER2
 
-# Для админки и крона — любой один токен (например salon1)
+# For admin panel and cron — any one token (e.g. salon1)
 wrangler secret put BOT_TOKEN
 ```
 
-## Webhook для каждого бота
+## Webhook for each bot
 
-После деплоя для **каждого** бота вызови `setWebhook` на URL с **числовым** `botId` (первые цифры до `:` в токене), например:
+After deploy, call `setWebhook` for **each** bot to a URL with the **numeric** `botId` (the digits before `:` in the token), for example:
 
 `https://manicbot.com/webhook/123456789`
 
-Служебный эндпоинт **`GET /setup?key=ADMIN_KEY`** (см. `adminPanelHttp.js`) выставляет webhook для текущего контекста (`BOT_TOKEN` или бот из D1). Массовая выдача: **`POST /admin/provision?key=...`**.
+The service endpoint **`GET /setup?key=ADMIN_KEY`** (see `adminPanelHttp.js`) sets the webhook for the current context (`BOT_TOKEN` or bot from D1). Bulk provisioning: **`POST /admin/provision?key=...`**.
 
-## Данные
+## Data
 
-У каждого салона свой **`tenant_id`** в D1; KV-префикс для рантайма: **`t:{tenantId}:*`**. Записи и пользователи изолированы по `tenant_id` в SQL.
+Each salon has its own **`tenant_id`** in D1; KV prefix for runtime: **`t:{tenantId}:*`**. Appointments and users are isolated by `tenant_id` in SQL.
 
-## Крон (напоминания)
+## Cron (reminders)
 
-Сейчас напоминания крутятся только для одного тенанта — того, чей токен записан в **BOT_TOKEN**. Обычно ставят туда токен первого бота (salon1). Чтобы напоминания работали и для salon2, потом можно доработать cron по списку ботов.
+Reminders currently run for only one tenant — the one whose token is stored in **BOT_TOKEN**. Usually the first bot (salon1) token is set there. To have reminders work for salon2 as well, the cron can be extended later to iterate over the bot list.

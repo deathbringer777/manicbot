@@ -1,143 +1,143 @@
-# Проверка настройки Cloudflare для ManicBot
+# Cloudflare Setup Verification for ManicBot
 
-Если AI не отвечает в боте (всегда «Не понимаю») или не приходят уведомления о консультанте — проверь по шагам.
+If AI doesn't respond in the bot (always "I don't understand") or consultant notifications don't arrive — check through these steps.
 
-## 0. D1 База данных (обязательно при первом деплое)
+## 0. D1 Database (required on first deploy)
 
-ManicBot использует **Cloudflare D1** (SQL) для хранения тенантов, мастеров, записей и ролей.
+ManicBot uses **Cloudflare D1** (SQL) for storing tenants, masters, appointments, and roles.
 
-### Создать базу данных:
+### Create the database:
 ```bash
 cd manicbot
 npx wrangler d1 create manicbot-db
 ```
 
-Скопируй `database_id` из вывода в `wrangler.toml`:
+Copy the `database_id` from the output to `wrangler.toml`:
 ```toml
 [[d1_databases]]
 binding = "DB"
 database_name = "manicbot-db"
-database_id = "ТВОЙ-ID"
+database_id = "YOUR-ID"
 ```
 
-### Инициализировать схему:
+### Initialize the schema:
 ```bash
 npx wrangler d1 execute manicbot-db --remote --file src/db/schema.sql
 ```
 
-### Проверить:
+### Verify:
 ```bash
 npx wrangler d1 execute manicbot-db --remote --command "SELECT name FROM sqlite_master WHERE type='table';"
 ```
-Должно вернуть порядка **20+** таблиц (в т.ч. `channel_configs`, `conversations`, `message_windows` для омниканала). После изменений в `migrations/` и `schema.sql` синхронизируй Drizzle (`admin-app/src/server/db/schema.ts`) и прогоняй **`npm run check-schema`** в каталоге `manicbot/`.
+Should return around **20+** tables (including `channel_configs`, `conversations`, `message_windows` for omnichannel). After changes in `migrations/` and `schema.sql`, sync Drizzle (`admin-app/src/server/db/schema.ts`) and run **`npm run check-schema`** in the `manicbot/` directory.
 
-### Существующие данные (если была KV-только установка):
-Если у тебя уже работает бот с KV-хранилищем, выполни миграцию данных — см. **MIGRATION.md**.
+### Existing data (if you had a KV-only setup):
+If you already have a bot running with KV storage, run the data migration — see **MIGRATION.md**.
 
 ---
 
-## 1. Workers AI по API-токену (рекомендуется)
+## 1. Workers AI via API token (recommended)
 
-Если binding не срабатывает, подключи вызов через REST API по токену:
+If the binding doesn't work, connect via REST API by token:
 
-1. В дашборде: **Build → AI → Workers AI** — скопируй **Account ID** и нажми **Create a Workers AI API Token** (права Read + Edit).
-2. В проекте задай секреты воркеру:
+1. In the dashboard: **Build → AI → Workers AI** — copy the **Account ID** and click **Create a Workers AI API Token** (Read + Edit permissions).
+2. Set secrets for the worker in the project:
    ```bash
    cd manicbot
    wrangler secret put WORKERS_AI_API_TOKEN
-   # вставь токен когда попросит
+   # paste the token when prompted
    wrangler secret put CLOUDFLARE_ACCOUNT_ID
-   # вставь Account ID (например 07dbabce20f0e9f375a020b5314d5427)
+   # paste the Account ID (e.g. 07dbabce20f0e9f375a020b5314d5427)
    ```
-3. Задеплой: `npm run deploy`.
+3. Deploy: `npm run deploy`.
 
-Код сначала пробует REST по токену; если токен и Account ID заданы — binding не используется для AI.
+Code tries REST with token first; if token and Account ID are set — binding is not used for AI.
 
-## 2. Workers AI включён
+## 2. Workers AI is enabled
 
-- Зайди в **Cloudflare Dashboard** → **Build** → **AI** → **Workers AI**.
-- Страница должна открываться без ошибок. Если продукт не включён — включи его для аккаунта.
-- На бесплатном плане даётся лимит Neurons в день; при превышении запросы могут падать.
+- Go to **Cloudflare Dashboard** → **Build** → **AI** → **Workers AI**.
+- The page should open without errors. If the product is not enabled — enable it for the account.
+- On the free plan there's a daily Neurons limit; requests may fail if exceeded.
 
-## 3. Binding AI у воркера
+## 3. AI binding on the worker
 
-- **Workers & Pages** → выбери воркер **manicbot** → **Settings** → **Variables**.
-- В блоке **Bindings** должна быть привязка **AI** (тип Workers AI). Она добавляется из `wrangler.toml` при `wrangler deploy`.
-- Если binding нет — выполни ещё раз `npm run deploy` из папки `manicbot`.
+- **Workers & Pages** → select the **manicbot** worker → **Settings** → **Variables**.
+- In the **Bindings** section there should be an **AI** binding (type Workers AI). It's added from `wrangler.toml` on `wrangler deploy`.
+- If the binding is missing — run `npm run deploy` again from the `manicbot` folder.
 
-## 4. Модель
+## 4. Model
 
-В коде используются:
+The code uses:
 
-- основная: `@cf/openai/gpt-oss-120b`;
-- запасная: `@cf/meta/llama-3.1-8b-instruct`.
+- primary: `@cf/openai/gpt-oss-120b`;
+- fallback: `@cf/meta/llama-3.1-8b-instruct`.
 
-Если основная модель недоступна в твоём аккаунте/регионе, ответы пойдут через запасную.
+If the primary model is unavailable in your account/region, responses will go through the fallback.
 
-## 5. Уведомления «Подключить консультанта»
+## 5. "Connect a consultant" notifications
 
-Чтобы при нажатии кнопки «Подключить консультанта» кто-то получал уведомление:
+For someone to receive a notification when the "Connect a consultant" button is pressed:
 
-- В боте должен быть **зарегистрирован админ** (команда `/admin YOUR_ADMIN_KEY`) и/или добавлены **мастера** в админ-панели.
-- Опционально: в настройках воркера задай переменную **ADMIN_CHAT_ID** (числовой Telegram chat_id), тогда уведомления будут приходить и туда. Этот же пользователь считается **создателем платформы**: у него полный доступ к панели платформы (/panel — Салоны, Регистрация бота, Агенты поддержки), все кнопки работают без команды /sysadmin.
+- The bot must have a registered **admin** (command `/admin YOUR_ADMIN_KEY`) and/or **masters** added in the admin panel.
+- Optionally: set the **ADMIN_CHAT_ID** variable in worker settings (numeric Telegram chat_id), and notifications will also be sent there. This user is also considered the **platform creator**: they have full access to the platform panel (/panel — Salons, Bot Registration, Support Agents), all buttons work without the /sysadmin command.
 
-## 6. Логи при ошибках AI
+## 6. Logs on AI errors
 
-- **Workers & Pages** → **manicbot** → **Logs** (Real-time logs или Analytics).
-- В логах ищи строки `Workers AI error:` или `Workers AI run ... error:` — по ним можно понять, падает ли вызов модели и с какой ошибкой.
+- **Workers & Pages** → **manicbot** → **Logs** (Real-time logs or Analytics).
+- Search logs for lines `Workers AI error:` or `Workers AI run ... error:` — these indicate if the model call is failing and with what error.
 
-## 7. Stripe (подписки и оплата)
+## 7. Stripe (subscriptions and payments)
 
-Полная настройка: **STRIPE_SETUP.md**. Кратко: задай секреты (один запуск скрипта):
+Full setup: **STRIPE_SETUP.md**. Quick summary: set secrets (run the script once):
 
 ```bash
 cd manicbot && chmod +x scripts/setup-stripe-secrets.sh && ./scripts/setup-stripe-secrets.sh
 ```
 
-По запросу подставь: Stripe Secret key, Webhook signing secret, URL воркера (APP_BASE_URL). В Stripe Dashboard добавь webhook на `https://ТВОЙ_ВОРКЕР.workers.dev/stripe/webhook`.
+When prompted, provide: Stripe Secret key, Webhook signing secret, Worker URL (APP_BASE_URL). In Stripe Dashboard, add a webhook to `https://YOUR_WORKER.workers.dev/stripe/webhook`.
 
-## 8. Краткий чеклист
+## 8. Quick Checklist
 
-| Проверка | Где смотреть |
+| Check | Where to look |
 |----------|----------------|
-| D1 создана и схема залита | `wrangler d1 execute manicbot-db --remote --file src/db/schema.sql` |
-| Workers AI включён | Build → AI → Workers AI |
-| У воркера есть binding AI | Workers → manicbot → Settings → Variables → Bindings |
-| У воркера есть binding DB | Workers → manicbot → Settings → Variables → Bindings → D1 |
-| Деплой после изменений | `npm run deploy` в папке manicbot |
-| Админ/мастера для уведомлений | Бот: /admin, панель мастера |
-| Ошибки AI | Workers → manicbot → Logs |
-| Stripe (биллинг) | STRIPE_SETUP.md, scripts/setup-stripe-secrets.sh |
+| D1 created and schema loaded | `wrangler d1 execute manicbot-db --remote --file src/db/schema.sql` |
+| Workers AI enabled | Build → AI → Workers AI |
+| Worker has AI binding | Workers → manicbot → Settings → Variables → Bindings |
+| Worker has DB binding | Workers → manicbot → Settings → Variables → Bindings → D1 |
+| Deploy after changes | `npm run deploy` in the manicbot folder |
+| Admin/masters for notifications | Bot: /admin, master panel |
+| AI errors | Workers → manicbot → Logs |
+| Stripe (billing) | STRIPE_SETUP.md, scripts/setup-stripe-secrets.sh |
 
-## 9. Мультитенантность: деплой с одним рабочим тенантом
+## 9. Multi-tenancy: deploy with a single working tenant
 
-Точка входа — **src/worker.js** (в `wrangler.toml` указано `main = "src/worker.js"`). Корневой `worker.js` при деплое не используется.
+Entry point is **src/worker.js** (`wrangler.toml` specifies `main = "src/worker.js"`). The root `worker.js` is not used during deploy.
 
-После первого деплоя нужно один раз выполнить миграцию и перенастроить webhook:
+After the first deploy, you need to run the migration once and reconfigure the webhook:
 
-1. **Миграция** (создаёт тенант `default` и переносит данные с префикса бота на `t:default:`):
+1. **Migration** (creates the `default` tenant and migrates data from the bot prefix to `t:default:`):
    ```
-   GET https://ТВОЙ_ВОРКЕР.workers.dev/admin/migrate?key=ТВОЙ_ADMIN_KEY
+   GET https://YOUR_WORKER.workers.dev/admin/migrate?key=YOUR_ADMIN_KEY
    ```
-   В ответе должно быть `"ok": true` и `"copied": N` (или `"skipped": true`, если миграция уже была).
+   The response should have `"ok": true` and `"copied": N` (or `"skipped": true` if migration was already done).
 
-2. **Webhook для Telegram** после миграции должен указывать на путь с `botId`:
+2. **Telegram webhook** after migration must point to the path with `botId`:
    ```
-   https://ТВОЙ_ВОРКЕР.workers.dev/webhook/BOT_ID
+   https://YOUR_WORKER.workers.dev/webhook/BOT_ID
    ```
-   (BOT_ID — первая часть токена бота, до двоеточия.) Проще всего открыть:
+   (BOT_ID — the first part of the bot token, before the colon.) Easiest way — open:
    ```
-   https://ТВОЙ_ВОРКЕР.workers.dev/setup?key=ТВОЙ_ADMIN_KEY
+   https://YOUR_WORKER.workers.dev/setup?key=YOUR_ADMIN_KEY
    ```
-   В ответе будет нужный URL webhook — скопируй его и при необходимости обнови в настройках бота (BotFather / setWebhook).
+   The response will contain the required webhook URL — copy it and update in the bot settings (BotFather / setWebhook) if necessary.
 
-3. **Cron** уже настроен в wrangler (`*/15 * * * *`): напоминания и очистка выполняются по каждому тенанту.
+3. **Cron** is already configured in wrangler (`*/15 * * * *`): reminders and cleanup run per tenant.
 
-Подробный разбор кода и конфликтов — в **CODE_ANALYSIS.md**.
+Detailed code analysis and conflicts — in **CODE_ANALYSIS.md**.
 
 ---
 
-### Миграция 0010: Google Calendar Sync Backoff
+### Migration 0010: Google Calendar Sync Backoff
 
 ```sql
 ALTER TABLE appointments ADD COLUMN sync_retries INTEGER DEFAULT 0;
@@ -147,28 +147,28 @@ ALTER TABLE appointments ADD COLUMN sync_last_error TEXT DEFAULT NULL;
 
 ---
 
-## Mini App (Pages): Instagram / WhatsApp — подсказки в интерфейсе
+## Mini App (Pages): Instagram / WhatsApp — interface hints
 
-Чтобы во вкладке **Channels** отображались те же **Verify Token** и базовый URL вебхука, что использует Worker:
+For the **Channels** tab to show the same **Verify Token** and webhook base URL that the Worker uses:
 
-| Переменная (Cloudflare Pages → Settings → Variables) | Назначение |
-|------------------------------------------------------|------------|
-| `WORKER_PUBLIC_URL` | Публичный URL Worker, например `https://manicbot.com` (без `/` в конце) |
-| `META_VERIFY_TOKEN_WA` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_WA` |
-| `META_VERIFY_TOKEN_IG` | То же значение, что в `wrangler secret put META_VERIFY_TOKEN_IG` |
+| Variable (Cloudflare Pages → Settings → Variables) | Purpose |
+|------------------------------------------------------|----------|
+| `WORKER_PUBLIC_URL` | Public Worker URL, e.g. `https://manicbot.com` (no trailing `/`) |
+| `META_VERIFY_TOKEN_WA` | Same value as in `wrangler secret put META_VERIFY_TOKEN_WA` |
+| `META_VERIFY_TOKEN_IG` | Same value as in `wrangler secret put META_VERIFY_TOKEN_IG` |
 
-Только у **Worker** (не Pages):
+Worker-only (not Pages):
 
-| Секрет | Назначение |
-|--------|------------|
-| `META_APP_SECRET` | App Secret из Meta — подпись `X-Hub-Signature-256` на POST `/webhook/wa` и `/webhook/ig`. Без совпадения с приложением Meta ответ **403**, сообщения не обрабатываются (GET challenge может проходить). |
-| `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` | Строки верификации вебхука (дублируются в Pages для Mini App). |
-| `INSTAGRAM_IGNORE_SENDER_IDS` | Опционально: IGSID через запятую/пробел — не обрабатывать этих отправителей (служебные аккаунты). См. **META_CHANNELS_SETUP.md**. |
-| `INSTAGRAM_AI_TRIGGER` | Опционально: подстроки через запятую — если задано, свободный текст в Instagram без совпадения не уходит в LLM (см. **META_CHANNELS_SETUP.md**). Пусто = как Telegram. |
+| Secret | Purpose |
+|--------|----------|
+| `META_APP_SECRET` | App Secret from Meta — `X-Hub-Signature-256` signature on POST `/webhook/wa` and `/webhook/ig`. Without matching the Meta app, response is **403**, messages are not processed (GET challenge may still pass). |
+| `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` | Webhook verification strings (duplicated in Pages for Mini App). |
+| `INSTAGRAM_IGNORE_SENDER_IDS` | Optional: IGSIDs comma/space separated — don't process these senders (service accounts). See **META_CHANNELS_SETUP.md**. |
+| `INSTAGRAM_AI_TRIGGER` | Optional: comma-separated substrings — if set, free text in Instagram without a match is not sent to LLM (see **META_CHANNELS_SETUP.md**). Empty = same as Telegram. |
 
-Инструкция для клиентов салона: **META_CHANNELS_SETUP.md**.
+Client instructions: **META_CHANNELS_SETUP.md**.
 
-**CLI (альтернатива полям в UI Pages):** из каталога с установленным `wrangler` и авторизацией в аккаунт Cloudflare:
+**CLI (alternative to Pages UI fields):** from the directory with `wrangler` installed and authorized to the Cloudflare account:
 
 ```bash
 cd manicbot/admin-app
@@ -177,4 +177,4 @@ npx wrangler pages secret put META_VERIFY_TOKEN_WA --project-name=admin-app
 npx wrangler pages secret put META_VERIFY_TOKEN_IG --project-name=admin-app
 ```
 
-Подставь те же значения, что заданы у Worker (`wrangler secret put META_VERIFY_TOKEN_WA` и т.д.). После изменения секретов сделай новый деплой Pages (push в `main` или ручной `pages deploy`).
+Provide the same values set on the Worker (`wrangler secret put META_VERIFY_TOKEN_WA`, etc.). After changing secrets, do a new Pages deploy (push to `main` or manual `pages deploy`).

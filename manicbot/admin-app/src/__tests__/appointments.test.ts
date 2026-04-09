@@ -195,7 +195,7 @@ describe("appointmentsRouter", () => {
         expect.stringContaining("/admin/appointment-action"),
         expect.objectContaining({ method: "POST" }),
       );
-      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.action).toBe("confirm");
       expect(body.tenantId).toBe("t_demo");
     });
@@ -237,7 +237,7 @@ describe("appointmentsRouter", () => {
       await caller.updateStatus({ id: "apt_1", status: "cancelled" });
 
       expect(fetchMock).toHaveBeenCalled();
-      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.action).toBe("cancel");
     });
   });
@@ -268,7 +268,7 @@ describe("appointmentsRouter", () => {
 
       await caller.updateStatus({ id: "apt_1", status: "rejected" });
 
-      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.action).toBe("reject");
     });
   });

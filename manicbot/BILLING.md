@@ -1,100 +1,100 @@
-# ManicBot — Биллинг и подписки
+# ManicBot — Billing and Subscriptions
 
-## Планы
+## Plans
 
-| План   | Цена       | Мастера | ИИ-чат | Тикеты поддержки | Календарь | White Label |
+| Plan   | Price      | Masters | AI Chat | Support Tickets | Calendar | White Label |
 |--------|------------|---------|---------|------------------|-----------|-------------|
-| Start  | 45 zł/мес  | 1       | ✗       | ✗                | ✗         | ✗           |
-| Pro    | 60 zł/мес  | 5       | ✓       | ✓                | ✓         | ✗           |
-| MAX    | 90 zł/мес  | ∞       | ✓       | ✓                | ✓         | ✓           |
+| Start  | 45 zł/mo   | 1       | ✗       | ✗                | ✗         | ✗           |
+| Pro    | 60 zł/mo   | 5       | ✓       | ✓                | ✓         | ✗           |
+| MAX    | 90 zł/mo   | ∞       | ✓       | ✓                | ✓         | ✓           |
 
-Лимиты по планам задаются в `src/billing/config.js` (константа `PLAN_LIMITS`).
-
----
-
-## Состояния billing_status
-
-Поле `billing_status` в таблице D1 `tenants`:
-
-| Статус         | Описание                                  | Доступ к функциям             |
-|----------------|-------------------------------------------|-------------------------------|
-| `trialing`     | Пробный период (7 дней после регистрации) | Полный доступ по плану        |
-| `active`       | Активная подписка                         | Полный доступ по плану        |
-| `grace_period` | Платёж не прошёл, ожидание (7 дней)       | Только запись (`booking`)     |
-| `past_due`     | Stripe: просроченный платёж               | По плану (до перехода в grace)|
-| `inactive`     | Trial истёк или подписка не создана       | Всё заблокировано             |
-| `canceled`     | Явная отмена подписки                     | Всё заблокировано             |
-
-Проверка доступа к функциям: `canUse(ctx, feature)` в `src/billing/features.js`.
-Возможные значения feature: `booking`, `ai`, `calendar`, `tickets`, `white_label`.
+Plan limits are set in `src/billing/config.js` (constant `PLAN_LIMITS`).
 
 ---
 
-## Жизненный цикл
+## billing_status States
+
+The `billing_status` field in the D1 `tenants` table:
+
+| Status         | Description                                    | Feature Access                |
+|----------------|------------------------------------------------|-------------------------------|
+| `trialing`     | Trial period (7 days after registration)       | Full access per plan          |
+| `active`       | Active subscription                            | Full access per plan          |
+| `grace_period` | Payment failed, waiting (7 days)               | Booking only (`booking`)      |
+| `past_due`     | Stripe: overdue payment                        | Per plan (until grace)        |
+| `inactive`     | Trial expired or subscription not created      | Everything blocked            |
+| `canceled`     | Explicit subscription cancellation             | Everything blocked            |
+
+Feature access check: `canUse(ctx, feature)` in `src/billing/features.js`.
+Possible feature values: `booking`, `ai`, `calendar`, `tickets`, `white_label`.
+
+---
+
+## Lifecycle
 
 ```
-Регистрация → trialing (7 дней)
+Registration → trialing (7 days)
                 │
-                ├─ оплачена подписка (Stripe Checkout)
+                ├─ subscription paid (Stripe Checkout)
                 │         ↓
                 │       active ◄─────────────────────────────┐
                 │         │                                   │
                 │         │ payment_failed (Stripe webhook)   │ invoice.payment_succeeded
                 │         ↓                                   │
-                │   grace_period (7 дней: только booking)     │
+                │   grace_period (7 days: booking only)       │
                 │         │                                   │
-                │         │ grace истёк (cron */15 мин)       │
+                │         │ grace expired (cron */15 min)     │
                 │         ↓                                   │
-                └──────► inactive ◄── отмена подписки (canceled)
+                └──────► inactive ◄── subscription canceled
 ```
 
-**Cron-задача** (`handlers/cron.js`) каждые 15 минут:
-- Вызывает `checkBillingExpiry()` (`billing/lifecycle.js`)
-- Переводит `trialing` → `inactive` при истёкшем `trial_ends_at`
-- Переводит `grace_period` → `inactive` при истёкшем `grace_ends_at`
+**Cron task** (`handlers/cron.js`) every 15 minutes:
+- Calls `checkBillingExpiry()` (`billing/lifecycle.js`)
+- Transitions `trialing` → `inactive` when `trial_ends_at` has expired
+- Transitions `grace_period` → `inactive` when `grace_ends_at` has expired
 
 ---
 
-## Переменные окружения Stripe
+## Stripe Environment Variables
 
-| Секрет                        | Описание                                   |
-|-------------------------------|--------------------------------------------|
-| `STRIPE_SECRET_KEY`           | `sk_live_...` или `sk_test_...`            |
-| `STRIPE_WEBHOOK_SECRET`       | `whsec_...` (из Stripe Dashboard)          |
-| `STRIPE_PRICE_START_MONTHLY`  | `price_...` для плана Start                |
-| `STRIPE_PRICE_PRO_MONTHLY`    | `price_...` для плана Pro                  |
-| `STRIPE_PRICE_MAX_MONTHLY`    | `price_...` для плана MAX                  |
-| `APP_BASE_URL`                | `https://manicbot.com` (redirect после оплаты) |
+| Secret                        | Description                                     |
+|-------------------------------|-------------------------------------------------|
+| `STRIPE_SECRET_KEY`           | `sk_live_...` or `sk_test_...`                  |
+| `STRIPE_WEBHOOK_SECRET`       | `whsec_...` (from Stripe Dashboard)             |
+| `STRIPE_PRICE_START_MONTHLY`  | `price_...` for Start plan                      |
+| `STRIPE_PRICE_PRO_MONTHLY`    | `price_...` for Pro plan                        |
+| `STRIPE_PRICE_MAX_MONTHLY`    | `price_...` for MAX plan                        |
+| `APP_BASE_URL`                | `https://manicbot.com` (redirect after payment) |
 
-Быстрая настройка: `cd manicbot && ./scripts/setup-stripe-secrets.sh`
+Quick setup: `cd manicbot && ./scripts/setup-stripe-secrets.sh`
 
 ---
 
-## Stripe события → действия
+## Stripe Events → Actions
 
-| Событие Stripe                       | Действие в ManicBot                                      |
-|--------------------------------------|----------------------------------------------------------|
+| Stripe Event                         | Action in ManicBot                                            |
+|--------------------------------------|---------------------------------------------------------------|
 | `checkout.session.completed`         | `billing_status=active`, customer_id → D1 `stripe_customers` |
-| `customer.subscription.updated`      | Синхронизация плана, статуса, `current_period_end`       |
-| `customer.subscription.deleted`      | `billing_status=inactive`                                |
-| `invoice.payment_failed`             | `billing_status=grace_period`, `grace_ends_at=now+7дней` |
-| `invoice.payment_succeeded`          | `billing_status=active` (если был grace_period)          |
+| `customer.subscription.updated`      | Sync plan, status, `current_period_end`                       |
+| `customer.subscription.deleted`      | `billing_status=inactive`                                     |
+| `invoice.payment_failed`             | `billing_status=grace_period`, `grace_ends_at=now+7days`      |
+| `invoice.payment_succeeded`          | `billing_status=active` (if was grace_period)                 |
 
-Обработчик: `src/billing/webhooks.js` → `handleStripeWebhook()`.
-Запись биллинга в D1: `src/billing/storage.js` → `updateTenantBilling()`.
+Handler: `src/billing/webhooks.js` → `handleStripeWebhook()`.
+Billing record in D1: `src/billing/storage.js` → `updateTenantBilling()`.
 
 ---
 
-## Полезные функции
+## Utility Functions
 
-| Функция                      | Файл                         | Описание                              |
-|------------------------------|------------------------------|---------------------------------------|
-| `canUse(ctx, feature)`       | `billing/features.js`        | Разрешена ли функция для тенанта      |
-| `getMastersLimit(ctx)`       | `billing/features.js`        | Максимум мастеров по плану            |
-| `isTrialing(ctx)`            | `billing/features.js`        | Тенант на триале?                     |
-| `isGracePeriod(ctx)`         | `billing/features.js`        | Тенант в grace_period?                |
-| `isInactive(ctx)`            | `billing/features.js`        | Тенант заблокирован?                  |
-| `trialRemainingDays(ctx)`    | `billing/features.js`        | Дней до конца триала                  |
-| `graceRemainingDays(ctx)`    | `billing/features.js`        | Дней до конца grace_period            |
-| `checkBillingExpiry(ctx)`    | `billing/lifecycle.js`       | Проверка и переход статусов (cron)    |
-| `updateTenantBilling(ctx, …)`| `billing/storage.js`         | Обновление billing в D1               |
+| Function                      | File                         | Description                               |
+|------------------------------|------------------------------|-------------------------------------------|
+| `canUse(ctx, feature)`       | `billing/features.js`        | Whether feature is allowed for tenant     |
+| `getMastersLimit(ctx)`       | `billing/features.js`        | Max masters per plan                      |
+| `isTrialing(ctx)`            | `billing/features.js`        | Is tenant on trial?                       |
+| `isGracePeriod(ctx)`         | `billing/features.js`        | Is tenant in grace_period?                |
+| `isInactive(ctx)`            | `billing/features.js`        | Is tenant blocked?                        |
+| `trialRemainingDays(ctx)`    | `billing/features.js`        | Days until trial ends                     |
+| `graceRemainingDays(ctx)`    | `billing/features.js`        | Days until grace_period ends              |
+| `checkBillingExpiry(ctx)`    | `billing/lifecycle.js`       | Check and transition statuses (cron)      |
+| `updateTenantBilling(ctx, …)`| `billing/storage.js`         | Update billing in D1                      |

@@ -1,13 +1,13 @@
-# Что за миграция
+# What is the migration
 
-## Предварительное условие: D1
+## Prerequisite: D1
 
-Перед запуском любой миграции убедись, что D1 инициализирована:
+Before running any migration, make sure D1 is initialized:
 
-1. `npx wrangler d1 create manicbot-db` (или уже существует — проверь в `wrangler.toml`)
+1. `npx wrangler d1 create manicbot-db` (or check that it already exists in `wrangler.toml`)
 2. `npx wrangler d1 execute manicbot-db --remote --file src/db/schema.sql`
 
-**Если D1 уже содержит данные с timestamp в миллисекундах** (старые записи до исправления):
+**If D1 already contains data with timestamps in milliseconds** (old records before the fix):
 ```bash
 npx wrangler d1 execute manicbot-db --remote --command "
 UPDATE tenants SET created_at = created_at/1000 WHERE created_at > 9999999999;
@@ -20,70 +20,68 @@ UPDATE masters SET added_at = added_at/1000 WHERE added_at IS NOT NULL AND added
 
 ---
 
+**Migration** is a one-time step that transitions the bot from "one bot = one KV namespace chunk" mode to **multi-tenant** mode: a single worker can serve many bots/salons with isolated data per tenant.
 
+## What it does
 
-**Миграция** — это одноразовый шаг, который переводит бота из режима «один бот = один кусок KV» в режим **мультитенанта**: один и тот же воркер может обслуживать много ботов/салонов, данные изолированы по тенантам.
+1. **Creates the `default` tenant**
+   A `tenant:default` entry is written to KV (salon name, address, billing plan, etc.).
 
-## Что именно делается
+2. **Registers your bot**
+   The current bot (from the `BOT_TOKEN` secret) is added to the registry: `bot:{botId}`, `botmap:{botId} → default`. From this point, requests to `/webhook/{botId}` resolve the tenant by this bot.
 
-1. **Создаётся тенант `default`**  
-   В KV появляется запись `tenant:default` (название салона, адрес, план биллинга и т.д.).
+3. **Copies all data**
+   All keys with prefix **`b:{botId}:`** (users, appointments, state, languages, masters, etc.) are **copied** to keys with prefix **`t:default:`**. Old keys are not deleted — a second copy appears under the new prefix. The worker then reads/writes from `t:default:*`.
 
-2. **Регистрируется твой бот**  
-   Текущий бот (из секрета `BOT_TOKEN`) прописывается в реестр: `bot:{botId}`, `botmap:{botId} → default`. С этого момента запросы на `/webhook/{botId}` определяют тенант по этому боту.
+4. **Sets a flag**
+   `migration:v1:done` is written to KV to prevent re-running (idempotent: a repeated call returns "already done").
 
-3. **Переносятся все данные**  
-   Все ключи с префиксом **`b:{botId}:`** (пользователи, записи, состояние, языки, мастера и т.д.) **копируются** в ключи с префиксом **`t:default:`**. Старые ключи не удаляются — просто появляется вторая копия под новым префиксом. Дальше воркер читает/пишет уже из `t:default:*`.
+## Why it's needed
 
-4. **Ставится флаг**  
-   В KV пишется `migration:v1:done`, чтобы миграцию больше не запускать (она идемпотентна: повторный вызов просто вернёт «already done»).
+- **Before migration:** data lives in `b:123456789:lang:...`, `b:123456789:ap:...`, etc. One bot = one prefix.
+- **After migration:** same data in `t:default:lang:...`, `t:default:ap:...`. The worker, on a request to `/webhook/123456789`, finds tenant `default` and uses prefix `t:default:`. A second tenant (second salon/bot) can be added later — it will have its own `t:tenant2:` prefix and its own data.
 
-## Зачем это нужно
+In short: **migration doesn't change your data semantically**, it only introduces "tenants" and moves keys to a new prefix so that a single worker can serve multiple bots with isolation.
 
-- **До миграции:** данные лежат в `b:123456789:lang:...`, `b:123456789:ap:...` и т.д. Один бот = один префикс.
-- **После миграции:** те же данные в `t:default:lang:...`, `t:default:ap:...`. Воркер при запросе к `/webhook/123456789` находит тенант `default` и использует префикс `t:default:`. В будущем можно добавить второй тенант (второй салон/бота) — у него будет свой префикс `t:tenant2:` и свои данные.
+## How to run
 
-Итого: **миграция не меняет твои данные по смыслу**, она только вводит «тенанта» и перекладывает ключи в новый префикс, чтобы один воркер мог обслуживать несколько ботов с изоляцией.
+You need an **ADMIN_KEY** matching the worker secret in Cloudflare.
 
-## Как запустить
+### If the key is already in .dev.vars
 
-Нужен **ADMIN_KEY**, совпадающий с секретом воркера в Cloudflare.
+The generated key is written to **.dev.vars** (file is in .gitignore, not committed). For the worker to accept the migration, the **same** key must be in Cloudflare:
 
-### Если ключ уже есть в .dev.vars
-
-Сгенерированный ключ записан в **.dev.vars** (файл в .gitignore, не коммитится). Чтобы миграция принималась воркером, в Cloudflare должен быть **тот же** ключ:
-
-1. В Cloudflare: **Workers & Pages** → **manicbot** → **Settings** → **Variables and Secrets** → **ADMIN_KEY** → **Rotate** — вставь значение из `.dev.vars` (строка `ADMIN_KEY=...`).
-2. В терминале:
+1. In Cloudflare: **Workers & Pages** → **manicbot** → **Settings** → **Variables and Secrets** → **ADMIN_KEY** → **Rotate** — paste the value from `.dev.vars` (the `ADMIN_KEY=...` line).
+2. In terminal:
    ```bash
    cd manicbot
    npm run migrate
    ```
-   Скрипт сам подхватит `ADMIN_KEY` из `.dev.vars`.
+   The script will pick up `ADMIN_KEY` from `.dev.vars` automatically.
 
-### Если ключа в .dev.vars нет
+### If the key is not in .dev.vars
 
-- Либо скопируй `.dev.vars.example` в `.dev.vars` и подставь свой ключ.
-- Либо запусти с переменной: `ADMIN_KEY=твой_ключ npm run migrate`.
+- Either copy `.dev.vars.example` to `.dev.vars` and fill in your key.
+- Or run with the variable: `ADMIN_KEY=your_key npm run migrate`.
 
-### Из браузера
+### From the browser
 
-После того как ключ в Cloudflare совпадает с тем, что в `.dev.vars` (или с тем, что подставляешь в URL):
+After the key in Cloudflare matches the one in `.dev.vars` (or the one in the URL):
 
 ```
-https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=КЛЮЧ_ИЗ_DEV_VARS
+https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=KEY_FROM_DEV_VARS
 ```
 
-В ответе: `{"ok":true,"copied":N,"message":"..."}` или `{"ok":true,"skipped":true}` если миграция уже делалась.
+Response: `{"ok":true,"copied":N,"message":"..."}` or `{"ok":true,"skipped":true}` if migration was already done.
 
-После миграции обнови webhook бота:
-https://manicbot.vdovin-kyrylo.workers.dev/setup?key=ТВОЙ_ADMIN_KEY — в ответе будет нужный URL.
+After migration, update the bot webhook:
+https://manicbot.vdovin-kyrylo.workers.dev/setup?key=YOUR_ADMIN_KEY — the response will contain the required URL.
 
 ---
 
 ### 0010_google_sync_backoff.sql
 
-Добавляет колонки для exponential backoff при синхронизации с Google Calendar:
+Adds columns for exponential backoff when syncing with Google Calendar:
 
 ```sql
 ALTER TABLE appointments ADD COLUMN sync_retries INTEGER DEFAULT 0;
@@ -91,4 +89,4 @@ ALTER TABLE appointments ADD COLUMN sync_retry_after INTEGER DEFAULT NULL;
 ALTER TABLE appointments ADD COLUMN sync_last_error TEXT DEFAULT NULL;
 ```
 
-Применить: `npm run migrate` или `GET /admin/migrate?key=ADMIN_KEY`
+Apply: `npm run migrate` or `GET /admin/migrate?key=ADMIN_KEY`

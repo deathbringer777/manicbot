@@ -1,173 +1,173 @@
-# Instagram и WhatsApp (Meta) — инструкция для салона
+# Instagram and WhatsApp (Meta) — Salon Setup Guide
 
-Каналы **Instagram Direct** и **WhatsApp** доступны на тарифах **Pro** и **Studio**. Настройка делается в **Telegram Mini App** (вкладка **Channels**) и в **Meta for Developers**.
+**Instagram Direct** and **WhatsApp** channels are available on **Pro** and **Studio** plans. Setup is done in the **Telegram Mini App** (Channels tab) and in **Meta for Developers**.
 
-## Что понадобится
+## What you need
 
-- Бизнес-аккаунт **Meta Business** и доступ к **Facebook Page**, связанной с Instagram-профилем (для Instagram).
-- Для WhatsApp — номер, подключённый к **WhatsApp Business Platform** (Cloud API) через Meta.
-- Доступ к [developers.facebook.com](https://developers.facebook.com/apps) с правами на приложение.
+- A **Meta Business** account and access to the **Facebook Page** linked to the Instagram profile (for Instagram).
+- For WhatsApp — a number connected to the **WhatsApp Business Platform** (Cloud API) via Meta.
+- Access to [developers.facebook.com](https://developers.facebook.com/apps) with app permissions.
 
-## Шаг 1. Откройте Mini App салона
+## Step 1. Open the salon Mini App
 
-1. В **Telegram** откройте бота вашего салона.
-2. Нажмите **/start** (если вы владелец/админ, появится панель управления).
-3. Либо нажмите кнопку меню **«Салон»** (или кнопку **«Instagram / WhatsApp»** в панели админа).
-4. В Mini App откройте вкладку **Channels**.
+1. In **Telegram**, open your salon bot.
+2. Press **/start** (if you're the owner/admin, the management panel will appear).
+3. Or press the **"Salon"** menu button (or the **"Instagram / WhatsApp"** button in the admin panel).
+4. In the Mini App, open the **Channels** tab.
 
-Здесь отображаются:
+Here you'll see:
 
-- **Webhook URL** для WhatsApp и для Instagram (разные пути).
-- **Verify Token** — **должен совпадать** с тем, что задан на стороне платформы ManicBot (секреты Worker и переменные Pages). Если в интерфейсе показано предупреждение вместо токена — обратитесь к техподдержке платформы, чтобы выставили `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` и `WORKER_PUBLIC_URL` в Mini App.
+- **Webhook URL** for WhatsApp and for Instagram (different paths).
+- **Verify Token** — **must match** what's set on the ManicBot platform side (Worker secrets and Pages variables). If the interface shows a warning instead of a token — contact platform support to set `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` and `WORKER_PUBLIC_URL` in the Mini App.
 
-## Шаг 2. Meta for Developers — приложение и вебхуки
+## Step 2. Meta for Developers — app and webhooks
 
-1. Создайте или выберите **приложение** типа Business.
-2. Добавьте продукты:
-   - **WhatsApp** (Cloud API) — для WhatsApp;
-   - **Instagram** — для сообщений Instagram (Messaging API), по документации Meta для вашего сценария.
-3. В разделе **Webhooks**:
-   - укажите **Callback URL** из Mini App (отдельно для WA и для IG, если Meta требует два подключения);
-   - вставьте **Verify Token** **точно** как в Mini App;
-   - подпишитесь на нужные поля (сообщения, статусы и т.д. — по требованиям Meta).
+1. Create or select a **Business** type app.
+2. Add products:
+   - **WhatsApp** (Cloud API) — for WhatsApp;
+   - **Instagram** — for Instagram messages (Messaging API), per Meta documentation for your scenario.
+3. In the **Webhooks** section:
+   - provide the **Callback URL** from the Mini App (separate for WA and IG if Meta requires two connections);
+   - paste the **Verify Token** **exactly** as shown in the Mini App;
+   - subscribe to the needed fields (messages, statuses, etc. — per Meta requirements).
 
-После успешной верификации Meta будет слать события на Worker ManicBot.
+After successful verification, Meta will send events to the ManicBot Worker.
 
-**Маршрут Worker:** запросы на `POST /webhook/ig` и `POST /webhook/wa` обрабатываются **до** логики Telegram-`/webhook/{botId}`; сегменты `ig` и `wa` не считаются numeric bot id. Фоновая обработка сообщений привязана к `waitUntil` Cloudflare, чтобы ответ Meta «OK» не обрывал пайплайн.
+**Worker routing:** requests to `POST /webhook/ig` and `POST /webhook/wa` are handled **before** the Telegram `/webhook/{botId}` logic; `ig` and `wa` segments are not treated as numeric bot ids. Background message processing is bound to Cloudflare `waitUntil` so that Meta's "OK" response doesn't cut off the pipeline.
 
 ## HTML admin panel (`/admin`)
 
-Read-only канал-статус теперь виден и в HTML-панели Worker:
+Read-only channel status is now also visible in the Worker HTML panel:
 
 - **Telegram** — bot id + webhook URL
 - **WhatsApp** — active/inactive + `phone_number_id` + `/webhook/wa`
 - **Instagram** — active/inactive + `page_id` / `ig_account_id` + `/webhook/ig`
 
-Редактирование и сохранение токенов остаётся только в **Mini App → Channels**.
+Token editing and saving remains only in **Mini App → Channels**.
 
-## Шаг 3. Сохраните учётные данные в Mini App
+## Step 3. Save credentials in Mini App
 
 ### WhatsApp
 
-В Meta возьмите **Phone Number ID** (и при необходимости **WABA ID**). Создайте **долгоживущий access token** с нужными правами для отправки сообщений.
+In Meta, get the **Phone Number ID** (and if necessary the **WABA ID**). Create a **long-lived access token** with the permissions needed for sending messages.
 
-В Mini App → **Channels** → WhatsApp введите ID и токен, нажмите **Save & Connect**.
+In Mini App → **Channels** → WhatsApp, enter the ID and token, click **Save & Connect**.
 
 ### Instagram
 
-Нужны **Page ID** Facebook Page (связанной с Instagram) и **Page Access Token** с правами на сообщения. Исходящие сообщения бот шлёт через **graph.facebook.com** (Messenger Platform / Instagram), а не через `graph.instagram.com`.
+You need the **Page ID** of the Facebook Page (linked to Instagram) and a **Page Access Token** with messaging permissions. The bot sends outgoing messages via **graph.facebook.com** (Messenger Platform / Instagram), not `graph.instagram.com`.
 
-В Mini App → **Channels** → Instagram введите значения и сохраните.
+In Mini App → **Channels** → Instagram, enter the values and save.
 
-#### `entry.id` в вебхуке и поле в Mini App
+#### `entry.id` in webhook and the field in Mini App
 
-В payload Instagram webhook поле **`entry[0].id`** должно совпадать (после приведения к строке) с одним из сохранённых в конфиге идентификаторов:
+In the Instagram webhook payload, **`entry[0].id`** must match (after string coercion) one of the identifiers saved in the config:
 
-- **`page_id`** — ID Facebook Page (то, что обычно показывает Meta в настройках страницы).
-- При несовпадении с тем, что реально приходит в **Recent deliveries**, можно добавить в JSON конфига (через поддержку/миграцию) опциональные поля **`instagram_business_id`** или **`ig_account_id`** — Worker сопоставит webhook с любым из них.
+- **`page_id`** — Facebook Page ID (what Meta usually shows in page settings).
+- If it doesn't match what actually comes in **Recent deliveries**, you can add optional fields **`instagram_business_id`** or **`ig_account_id`** to the JSON config (via support/migration) — the Worker will match the webhook against any of them.
 
-Проверка: Meta → Webhooks → **Recent deliveries** для Instagram → развернуть тело и сравнить `entry[0].id` с тем, что сохранено в Channels.
+Verification: Meta → Webhooks → **Recent deliveries** for Instagram → expand the body and compare `entry[0].id` with what's saved in Channels.
 
-## Важные ограничения Meta
+## Important Meta Limitations
 
-- **Окно обмена сообщениями** (24 часа и правила шаблонов для WhatsApp) действует по правилам Meta — бот не может писать клиенту без ограничений вне этих рамок.
-> **Важно (2026-04-05):** Если `BOT_ENCRYPTION_KEY` установлен, plaintext fallback для Meta-токенов отключён. При неудачном дешифровании токен будет `null`. Убедитесь что все токены зашифрованы перед установкой ключа.
+- **Messaging window** (24 hours and WhatsApp template rules) applies per Meta's rules — the bot cannot message clients without restrictions outside these windows.
+> **Important (2026-04-05):** If `BOT_ENCRYPTION_KEY` is set, plaintext fallback for Meta tokens is disabled. If decryption fails, the token will be `null`. Make sure all tokens are encrypted before setting the key.
 
-- Токены и **App Secret** храните в секрете. Если секрет или токен попали в чат, лог или скриншот — считайте их скомпрометированными: в Meta сгенерируйте новый **App Secret** и выполните на Worker `wrangler secret put META_APP_SECRET`; для **Page Access Token** перевыпустите токен в Business Suite и обновите в Mini App → Channels. После смены секретов задеплойте Worker (`wrangler deploy`).
+- Keep tokens and **App Secret** confidential. If a secret or token appears in chat, logs, or a screenshot — treat them as compromised: in Meta generate a new **App Secret** and run `wrangler secret put META_APP_SECRET` on the Worker; for **Page Access Token** regenerate the token in Business Suite and update in Mini App → Channels. After changing secrets, redeploy the Worker (`wrangler deploy`).
 
-## Переменные окружения (для владельца платформы)
+## Environment Variables (for platform owner)
 
-Чтобы Mini App показывал те же **Verify Token**, что проверяет Worker:
+For the Mini App to show the same **Verify Token** that the Worker checks:
 
-| Где | Переменная |
-|-----|------------|
-| Cloudflare Worker (secrets) | `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG`, `META_APP_SECRET` (для подписи `X-Hub-Signature-256` на POST) |
-| Cloudflare Pages (Mini App) | Те же `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG`, плюс `WORKER_PUBLIC_URL` (публичный URL Worker без `/` в конце) |
+| Where | Variable |
+|-------|----------|
+| Cloudflare Worker (secrets) | `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG`, `META_APP_SECRET` (for `X-Hub-Signature-256` signature on POST) |
+| Cloudflare Pages (Mini App) | Same `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG`, plus `WORKER_PUBLIC_URL` (public Worker URL without trailing `/`) |
 
-Значения verify token на Worker и на Pages должны **совпадать**.
+Verify token values on Worker and Pages must **match**.
 
-### Служебный аккаунт (например @manicbot_com)
+### Service account (e.g. @manicbot_com)
 
-В вебхуке Instagram приходит только **числовой IGSID** отправителя, не @username.
+In Instagram webhooks only the **numeric IGSID** of the sender comes through, not the @username.
 
-- Сообщения **исходящие от страницы** (echo) Worker уже **не обрабатывает** (`is_echo` в payload).
-- Чтобы не гонять в **LLM** личные/служебные диалоги с фиксированного аккаунта, задайте секрет Worker:
+- Messages **sent from the page** (echo) are already **not processed** by the Worker (`is_echo` in payload).
+- To avoid sending personal/service messages from a fixed account to **LLM**, set the Worker secret:
   - `wrangler secret put INSTAGRAM_IGNORE_SENDER_IDS`
-  - значение: один или несколько IGSID через запятую или пробел, например `1784360123456789`.
+  - value: one or more IGSIDs comma or space separated, e.g. `1784360123456789`.
 
-**Как узнать IGSID для @manicbot_com:** отправьте тестовое DM боту и посмотрите поле `sender.id` в теле webhook в логах Meta (**Webhook fields** → **Test** / **Recent deliveries**) или запросите профиль через Instagram Graph API для связанного Business-аккаунта (нужны соответствующие права токена).
+**How to find the IGSID for @manicbot_com:** send a test DM to the bot and check the `sender.id` field in the webhook body in Meta logs (**Webhook fields** → **Test** / **Recent deliveries**) or request the profile via Instagram Graph API for the linked Business account (requires appropriate token permissions).
 
-### Опционально: триггерные слова для ответа ИИ в Instagram
+### Optional: AI trigger words for Instagram
 
-По умолчанию свободный текст из Direct уходит в тот же ИИ, что в Telegram. Чтобы **не** вызывать LLM на каждое сообщение, задайте секрет Worker:
+By default, free text from Direct goes to the same AI as in Telegram. To **not** invoke LLM on every message, set the Worker secret:
 
 - `wrangler secret put INSTAGRAM_AI_TRIGGER`
-- значение: подстроки через **запятую**; пробелы по краям каждого элемента обрезаются, пустые сегменты отбрасываются. Пример: `запись, вопрос, manic`
+- value: substrings comma-separated; leading/trailing spaces are trimmed per element, empty segments discarded. Example: `booking, question, manic`
 
-Сообщение попадёт в ИИ только если текст (без учёта регистра) **содержит** хотя бы одну из подстрок. Иначе пользователь получит короткую подсказку (ключ `ig_ai_trigger_hint` в переводах). Сценарии записи и шаг `REG_CONFIRM` не затрагиваются.
+A message will go to AI only if the text (case-insensitive) **contains** at least one substring. Otherwise the user gets a short hint (key `ig_ai_trigger_hint` in translations). Booking scenarios and the `REG_CONFIRM` step are unaffected.
 
-Если секрет **пустой** или не задан — ограничения нет (как раньше).
+If the secret is **empty** or not set — no restriction (same as before).
 
-## Дымовой чеклист (платформа + салон)
+## Smoke Checklist (platform + salon)
 
-**Автоматически в репозитории:** тест `buildMetaChannelHints` в admin-app (`npm test` в `manicbot/admin-app`) проверяет формирование URL вебхуков и обрезку токенов.
+**Automated in the repository:** the `buildMetaChannelHints` test in admin-app (`npm test` in `manicbot/admin-app`) verifies webhook URL formation and token truncation.
 
-**Вручную после выставления секретов:**
+**Manually after setting secrets:**
 
-1. **Pages / Worker:** в Cloudflare заданы одинаковые `META_VERIFY_TOKEN_*` и на Worker (secrets), и в проекте Pages `admin-app` (см. [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md)).
-2. **Mini App:** войти как владелец салона → вкладка **Channels** → видны строки **Verify Token** (не жёлтое предупреждение) и корректный домен в **Webhook URL**.
-3. **Meta:** в приложении разработчика нажать **Verify** для webhook — ответ должен быть успешным (Worker обрабатывает challenge).
-4. **Instagram:** в **Recent deliveries** для POST на URL вида `…/webhook/ig` статус **200** (не 403). Если 403 — проверить `META_APP_SECRET` и тело ответа Worker.
-5. **Telegram:** у владельца после `/start` есть меню **«Салон»** (или кнопка каналов в панели админа на Pro+) и ссылка открывает Mini App с `?tab=channels` при наличии каналов в тарифе.
+1. **Pages / Worker:** in Cloudflare, the same `META_VERIFY_TOKEN_*` is set both on Worker (secrets) and in the Pages project `admin-app` (see [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md)).
+2. **Mini App:** log in as salon owner → **Channels** tab → **Verify Token** lines are visible (not yellow warning) and the correct domain shows in **Webhook URL**.
+3. **Meta:** in the developer app click **Verify** for webhook — response should be successful (Worker handles the challenge).
+4. **Instagram:** in **Recent deliveries** for POST to `…/webhook/ig` status is **200** (not 403). If 403 — check `META_APP_SECRET` and Worker response body.
+5. **Telegram:** after `/start`, the owner has a **"Salon"** menu (or a channels button in the admin panel on Pro+) and the link opens the Mini App with `?tab=channels` when channels are available on the plan.
 
 ## Troubleshooting
 
-- **Meta verification проходит, но бот молчит:** проверьте, что на Worker заданы `META_APP_SECRET`, нужный `META_VERIFY_TOKEN_*`, и что задеплоен актуальный код. Для Telegram/D1 fallback теперь смотрите логи Worker по сообщениям `[worker] context resolution failed`.
-- **Mini App не показывает verify token:** это обычно Pages env. Выставьте `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` и `WORKER_PUBLIC_URL` в проекте `admin-app`.
-- **`/admin` не показывает IG/WA канал:** проверьте, что у тенанта есть строки в `channel_configs` и вы открываете `/admin` внутри tenant-aware контекста Worker, а не только platform billing page.
-- **Instagram webhook отдаёт 403:** сравните `META_APP_SECRET` с секретом приложения Meta и проверьте тело ответа Worker в Recent deliveries.
+- **Meta verification passes but bot is silent:** verify that `META_APP_SECRET`, the required `META_VERIFY_TOKEN_*`, and the latest code are deployed on the Worker. For Telegram/D1 fallback, check Worker logs for `[worker] context resolution failed`.
+- **Mini App doesn't show verify token:** this is usually a Pages env issue. Set `META_VERIFY_TOKEN_WA` / `META_VERIFY_TOKEN_IG` and `WORKER_PUBLIC_URL` in the `admin-app` project.
+- **`/admin` doesn't show IG/WA channel:** check that the tenant has rows in `channel_configs` and you're opening `/admin` within a tenant-aware Worker context, not just the platform billing page.
+- **Instagram webhook returns 403:** compare `META_APP_SECRET` with the Meta app secret and check the Worker response body in Recent deliveries.
 
-## Тестовый тенант для E2E (Instagram как чат с ботом)
+## Test Tenant for E2E (Instagram as bot chat)
 
-**Кто платит:** подписка и trial привязаны к **тенанту (салону)**. Пользователи, которые пишут в Instagram Direct, **ничего не оплачивают** — им выдаётся роль клиента, биллинг проверяется по салону ([`src/billing/features.js`](src/billing/features.js)).
+**Who pays:** subscription and trial are tied to the **tenant (salon)**. Users who write in Instagram Direct **pay nothing** — they get the client role, billing is checked per salon ([`src/billing/features.js`](src/billing/features.js)).
 
-### 1) Создать тенант + бот + владелец в D1
+### 1) Create tenant + bot + owner in D1
 
-Из каталога `manicbot/` (нужен `wrangler` и доступ к D1):
+From the `manicbot/` directory (requires `wrangler` and D1 access):
 
 ```bash
-# Посмотреть SQL без выполнения:
-npm run ig-e2e:tenant -- --owner=ВАШ_TELEGRAM_USER_ID --bot-id=ID_БОТА_ИЗ_ТОКЕНА --dry-run
+# Preview SQL without executing:
+npm run ig-e2e:tenant -- --owner=YOUR_TELEGRAM_USER_ID --bot-id=BOT_ID_FROM_TOKEN --dry-run
 
-# Записать в удалённую D1 (по умолчанию):
-npm run ig-e2e:tenant -- --owner=ВАШ_TELEGRAM_USER_ID --bot-id=ID_БОТА_ИЗ_ТОКЕНА
+# Write to remote D1 (default):
+npm run ig-e2e:tenant -- --owner=YOUR_TELEGRAM_USER_ID --bot-id=BOT_ID_FROM_TOKEN
 
-# Локальная D1 wrangler dev:
-npm run ig-e2e:tenant -- --owner=ВАШ_TELEGRAM_USER_ID --bot-id=ID_БОТА_ИЗ_ТОКЕНА --local
+# Local D1 for wrangler dev:
+npm run ig-e2e:tenant -- --owner=YOUR_TELEGRAM_USER_ID --bot-id=BOT_ID_FROM_TOKEN --local
 ```
 
-По умолчанию выполняется `wrangler d1 execute … --remote`; для локальной базы добавьте **`--local`**. Скрипт: [`scripts/create-ig-e2e-tenant.mjs`](scripts/create-ig-e2e-tenant.mjs).
+Default runs `wrangler d1 execute … --remote`; for local database add **`--local`**. Script: [`scripts/create-ig-e2e-tenant.mjs`](scripts/create-ig-e2e-tenant.mjs).
 
-- Создаётся тенант с **`plan = pro`**, **`billing_status = trialing`**, trial ~30 суток.
-- Строка **`bots`**: если бот уже есть — обновляется только **`tenant_id`** (секрет вебхука не затирается); если бота не было — вставляется новая строка (тогда токен нужно зарегистрировать обычным способом).
-- **`tenant_roles`**: ваш Telegram `chat_id` получает **`tenant_owner`** для доступа к Mini App → **Channels**.
+- Creates a tenant with **`plan = pro`**, **`billing_status = trialing`**, trial ~30 days.
+- **`bots`** row: if bot already exists — only **`tenant_id`** is updated (webhook secret is preserved); if bot didn't exist — a new row is inserted (then register the token the usual way).
+- **`tenant_roles`**: your Telegram `chat_id` gets **`tenant_owner`** for Mini App → **Channels** access.
 
-Альтернатива без скрипта: God Mode в Mini App → создание тенанта + привязка бота ([`admin-app/src/server/api/routers/provisioning.ts`](admin-app/src/server/api/routers/provisioning.ts)).
+Alternative without script: God Mode in Mini App → create tenant + attach bot ([`admin-app/src/server/api/routers/provisioning.ts`](admin-app/src/server/api/routers/provisioning.ts)).
 
-### 2) Подключить Instagram в Mini App
+### 2) Connect Instagram in Mini App
 
-Войти в Mini App **тем же Telegram-аккаунтом**, что указан в `--owner` → **Channels** → Instagram: **Page ID** и **Page Access Token**. Сверить **`entry[0].id`** из Meta → Webhooks → **Recent deliveries** с полем в конфиге (см. раздел выше про `page_id` / `instagram_business_id` / `ig_account_id`).
+Log into Mini App with **the same Telegram account** specified in `--owner` → **Channels** → Instagram: **Page ID** and **Page Access Token**. Compare **`entry[0].id`** from Meta → Webhooks → **Recent deliveries** with the field in the config (see section above on `page_id` / `instagram_business_id` / `ig_account_id`).
 
-### 3) Секреты Worker перед тестом
+### 3) Worker secrets before testing
 
-- **`META_APP_SECRET`** — совпадает с приложением Meta (иначе POST **403**).
-- **`INSTAGRAM_AI_TRIGGER`** — **не задавать** (пусто), чтобы отвечал на любой текст, в т.ч. «привет».
-- **`INSTAGRAM_IGNORE_SENDER_IDS`** — **не** включать IGSID тестового клиента, с которого пишете в Direct.
+- **`META_APP_SECRET`** — must match the Meta app (otherwise POST **403**).
+- **`INSTAGRAM_AI_TRIGGER`** — **do not set** (empty), so it responds to any text including "hello".
+- **`INSTAGRAM_IGNORE_SENDER_IDS`** — **do not** include the IGSID of the test client you're writing from.
 
-### 4) Ручной сценарий в Instagram
+### 4) Manual scenario in Instagram
 
-1. С личного аккаунта клиента написать в Direct странице, привязанной к этому тенанту.
-2. Убедиться в **Recent deliveries**: **200** на `POST …/webhook/ig`.
-3. Ожидать текстовый ответ; «кнопки» в IG — это **quick replies** (ограничения Meta), не полная копия Telegram UI.
+1. From a personal client account, write a DM to the page linked to this tenant.
+2. Verify in **Recent deliveries**: **200** on `POST …/webhook/ig`.
+3. Expect a text response; "buttons" in IG are **quick replies** (Meta limitations), not the full Telegram UI copy.
 
-При сбое смотреть логи Worker: `[ig] unresolved page_id`, `[ig] missing token`, `[ig] POST … failed`.
+On failure, check Worker logs for: `[ig] unresolved page_id`, `[ig] missing token`, `[ig] POST … failed`.

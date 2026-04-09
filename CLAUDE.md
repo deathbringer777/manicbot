@@ -259,7 +259,7 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 - `ADMIN_CHAT_ID` — creator's Telegram chat ID (God Mode)
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_START_MONTHLY`, `_PRO_MONTHLY`, `_STUDIO_MONTHLY`
+- `STRIPE_PRICE_START_MONTHLY`, `_PRO_MONTHLY`, `_MAX_MONTHLY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `WORKERS_AI_API_TOKEN`
 
@@ -353,7 +353,7 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 |------|-------|---------|---------|
 | `start` | 45 zł/mo | 1 | Basic booking |
 | `pro` | 60 zł/mo | 5 | AI assistant, support agents, Google Calendar |
-| `studio` | 90 zł/mo | Unlimited | All features, white label |
+| `max` | 90 zł/mo | Unlimited | All features, white label |
 
 Status flow: `trialing` → `active` → `grace` (7-day grace on payment fail) → `expired`
 

@@ -76,6 +76,7 @@ export default function DashboardLayout({
     userId: null, // web users don't have Telegram userId
     createdAt: createdAt ?? null,
     emailVerified: emailVerified ?? true,
+    isPersonalTenant: isPersonalTenant ?? false,
     previewRole,
     previewTenantId,
     setPreviewRole,

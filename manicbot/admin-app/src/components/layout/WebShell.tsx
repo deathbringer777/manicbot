@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   Home, Users, Settings, CreditCard, Activity,
@@ -327,6 +327,7 @@ function NavLink({ item, active, collapsed, onClick, dataTour, showBadge }: {
 export function WebShell({ children, userEmail }: { children: React.ReactNode; userEmail?: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { role, previewRole, createdAt, emailVerified } = useRole();
   const { lang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -364,8 +365,16 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const isActive = (item: NavItem) => {
-    if (item.href.includes("?")) return false;
-    return item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href);
+    const qIdx = item.href.indexOf("?");
+    if (qIdx !== -1) {
+      const itemParams = new URLSearchParams(item.href.slice(qIdx));
+      const itemTab = itemParams.get("tab");
+      return itemTab ? itemTab === searchParams.get("tab") : false;
+    }
+    if (item.href === "/dashboard" || item.href === "/") {
+      return (pathname === "/dashboard" || pathname === "/") && !searchParams.get("tab");
+    }
+    return pathname.startsWith(item.href);
   };
 
   // Mobile nav: max 5

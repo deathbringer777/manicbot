@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
+import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
@@ -123,7 +125,19 @@ export function MasterDashboard({
 }) {
   const { lang } = useLang();
   const utils = api.useUtils();
-  const [tab, setTab] = useState<Tab>("today");
+  const searchParams = useSearchParams();
+  const inWeb = useInWebShell();
+
+  const VALID_TABS: Tab[] = ["today", "schedule", "clients", "earnings", "reviews", "services", "profile"];
+  const urlTab = searchParams.get("tab");
+  const resolvedTab: Tab = urlTab && VALID_TABS.includes(urlTab as Tab) ? (urlTab as Tab) : "today";
+
+  const [tab, setTab] = useState<Tab>(resolvedTab);
+
+  // Sync tab when URL changes (sidebar click in WebShell)
+  useEffect(() => {
+    if (inWeb) setTab(resolvedTab);
+  }, [resolvedTab, inWeb]);
   const [period, setPeriod] = useState<Period>("month");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");

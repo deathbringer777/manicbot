@@ -80,13 +80,15 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   platform: Wrench,
 };
 
-function getSections(role: string | null, lang: Lang): SettingsSection[] {
+function getSections(role: string | null, lang: Lang, isPersonalTenant?: boolean): SettingsSection[] {
   const sections: string[] = [];
 
   if (role === "tenant_owner") {
     sections.push("account", "bot", "billing", "appearance", "help");
   } else if (role === "master") {
-    sections.push("account", "appearance", "help");
+    sections.push("account");
+    if (isPersonalTenant) sections.push("bot");
+    sections.push("appearance", "help");
   } else if (role === "support" || role === "technical_support") {
     sections.push("account", "appearance", "help");
   } else if (role === "system_admin") {
@@ -110,10 +112,10 @@ interface SettingsShellProps {
 }
 
 export function SettingsShell({ activeSection, onSectionChange, children }: SettingsShellProps) {
-  const { role, previewRole } = useRole();
+  const { role, previewRole, isPersonalTenant } = useRole();
   const { lang } = useLang();
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const sections = getSections(effectiveRole, lang);
+  const sections = getSections(effectiveRole, lang, isPersonalTenant);
   const [mobileListMode, setMobileListMode] = useState(!activeSection);
 
   const handleSectionClick = (id: string) => {

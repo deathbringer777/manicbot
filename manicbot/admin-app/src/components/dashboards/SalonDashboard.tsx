@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronRight, AlertCircle,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
+import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
@@ -784,13 +786,22 @@ function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
 
 export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
-  const [tab, setTab] = useState<Tab>("overview");
+  const searchParams = useSearchParams();
+  const inWeb = useInWebShell();
+
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics"];
+  const urlTab = searchParams.get("tab");
+  const resolvedSalonTab: Tab =
+    urlTab === "instagram" || urlTab === "whatsapp" ? "channels"
+    : urlTab && VALID_SALON_TABS.includes(urlTab as Tab) ? (urlTab as Tab)
+    : "overview";
+
+  const [tab, setTab] = useState<Tab>(resolvedSalonTab);
+
+  // Sync tab when URL changes (sidebar click in WebShell)
   useEffect(() => {
-    try {
-      const q = new URLSearchParams(window.location.search).get("tab");
-      if (q === "channels" || q === "instagram" || q === "whatsapp") setTab("channels");
-    } catch { /* ignore */ }
-  }, []);
+    if (inWeb) setTab(resolvedSalonTab);
+  }, [resolvedSalonTab, inWeb]);
   const [aptDate, setAptDate] = useState("");
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null }>({ open: false, svc: null });
   const [masterModal, setMasterModal] = useState(false);

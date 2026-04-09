@@ -9,10 +9,11 @@ import { useRole } from "~/components/RoleContext";
 type ChannelFilter = "all" | "telegram" | "whatsapp" | "instagram";
 type StatusFilter = "open" | "closed" | "all";
 
-const CHANNEL_BADGE: Record<string, { label: string; color: string }> = {
-  telegram: { label: "TG", color: "bg-sky-500/20 text-sky-400 border-sky-500/30" },
-  whatsapp: { label: "WA", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  instagram: { label: "IG", color: "bg-pink-500/20 text-pink-400 border-pink-500/30" },
+const CHANNEL_BADGE: Record<string, { label: string; color: string; icon: string }> = {
+  telegram: { label: "TG", color: "bg-sky-500/20 text-sky-400 border-sky-500/30", icon: "✈️" },
+  whatsapp: { label: "WA", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", icon: "💬" },
+  instagram: { label: "IG", color: "bg-pink-500/20 text-pink-400 border-pink-500/30", icon: "📷" },
+  web: { label: "WEB", color: "bg-violet-500/20 text-violet-400 border-violet-500/30", icon: "🌐" },
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -187,9 +188,18 @@ export function ConversationsPage() {
                   </span>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{conv.channelUserId}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                      {conv.displayName || conv.channelUserId}
+                    </p>
                     <p className="text-xs text-slate-500">
-                      {isGod && <span className="font-mono text-slate-600 mr-2">{conv.tenantId}</span>}
+                      {isGod && (
+                        <span className="text-slate-600 mr-2">
+                          {conv.tenantName || conv.tenantId}
+                        </span>
+                      )}
+                      {conv.displayName && (
+                        <span className="font-mono text-slate-600 mr-2">{conv.channelUserId}</span>
+                      )}
                       {timeAgo(conv.lastMessageAt)}
                     </p>
                   </div>

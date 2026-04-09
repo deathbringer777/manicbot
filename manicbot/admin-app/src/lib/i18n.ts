@@ -137,6 +137,9 @@ const translations = {
   // ── Settings modal ─────────────────────────────────────────────────────────
   "settings.title":         { ru: "Настройки",    ua: "Налаштування",   en: "Settings",   pl: "Ustawienia" },
   "settings.language":      { ru: "Язык интерфейса", ua: "Мова інтерфейсу", en: "Interface language", pl: "Język interfejsu" },
+  "settings.theme":         { ru: "Тема",            ua: "Тема",            en: "Theme",              pl: "Motyw" },
+  "settings.themeLight":    { ru: "Светлая",         ua: "Світла",          en: "Light",              pl: "Jasny" },
+  "settings.themeDark":     { ru: "Тёмная",          ua: "Темна",           en: "Dark",               pl: "Ciemny" },
   // Settings tabs
   "settings.tabs.account":      { ru: "Аккаунт",                  ua: "Обліковий запис",            en: "Account",                      pl: "Konto" },
   "settings.tabs.platform":     { ru: "Платформа",                ua: "Платформа",                  en: "Platform",                     pl: "Platforma" },
@@ -165,6 +168,11 @@ const translations = {
   "settings.helpCenterDesc":    { ru: "Поиск по инструкциям и ответам на частые вопросы.", ua: "Пошук за інструкціями та відповідями.", en: "Search guides and answers to common questions.", pl: "Wyszukaj instrukcje i odpowiedzi." },
   "settings.tourReplay":        { ru: "Показать тур интерфейса",   ua: "Показати тур інтерфейсу",   en: "Run interface tour",           pl: "Uruchom przewodnik po interfejsie" },
   "settings.tourReplayDesc":    { ru: "Коротко покажем основные области кабинета.", ua: "Коротко покажемо основні зони кабінету.", en: "A short walkthrough of the main areas.", pl: "Krótki przewodnik po panelu." },
+  "settings.writeSupport":      { ru: "Написать в поддержку",      ua: "Написати в підтримку",       en: "Write to Support",             pl: "Napisz do wsparcia" },
+  "settings.supportSubject":    { ru: "Тема",                       ua: "Тема",                        en: "Subject",                      pl: "Temat" },
+  "settings.supportMessage":    { ru: "Сообщение",                  ua: "Повідомлення",                en: "Message",                      pl: "Wiadomość" },
+  "settings.supportSend":       { ru: "Отправить",                  ua: "Надіслати",                   en: "Send",                         pl: "Wyślij" },
+  "settings.supportSuccess":    { ru: "Тикет создан",               ua: "Тікет створено",              en: "Ticket created",               pl: "Zgłoszenie utworzone" },
   // Platform section
   "settings.modes":             { ru: "Режимы",                    ua: "Режими",                     en: "Modes",                        pl: "Tryby" },
   "settings.general":           { ru: "Основные",                  ua: "Основні",                    en: "General",                      pl: "Ogólne" },

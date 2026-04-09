@@ -5,13 +5,13 @@
  * Hash format (v2): `pbkdf2:{iterations}:{saltHex}:{hashHex}`
  * Legacy format  (v1): `pbkdf2:{saltHex}:{hashHex}` — parsed with implicit 100k iterations.
  *
- * OWASP 2023 Password Storage Cheat Sheet recommends 600,000 iterations for
- * PBKDF2-SHA256. New hashes use that; v1 hashes are still accepted on verify
- * and should be rotated on successful login (see `needsRehash`).
+ * Cloudflare Workers / Pages edge runtime caps PBKDF2 iterations at 100,000.
+ * We use the maximum allowed value. Legacy v1 hashes (3-part format) are still
+ * accepted on verify and no longer trigger rehash since they already use 100k.
  */
 
 const ALGO = "pbkdf2";
-const DEFAULT_ITERATIONS = 600_000;
+const DEFAULT_ITERATIONS = 100_000;
 const LEGACY_ITERATIONS = 100_000;
 const KEY_LEN_BITS = 256;
 

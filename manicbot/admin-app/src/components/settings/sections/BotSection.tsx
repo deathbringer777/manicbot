@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Bot, CheckCircle, ExternalLink, Unplug, Loader2,
-  Instagram, MessageCircle,
+  Instagram, MessageCircle, Globe, Code2,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
@@ -14,7 +14,7 @@ import { MetaGuide } from "~/components/settings/MetaGuide";
 // ─── i18n ────────────────────────────────────────────────────────────────────
 
 const T: Record<Lang, {
-  tabs: { telegram: string; instagram: string; whatsapp: string };
+  tabs: { telegram: string; instagram: string; whatsapp: string; webchat: string };
   tg: {
     connected: string; notConnected: string; tokenLabel: string; tokenPlaceholder: string;
     connect: string; connecting: string; disconnect: string; disconnectConfirm: string;
@@ -33,10 +33,14 @@ const T: Record<Lang, {
     status: string; active: string; notConfigured: string;
     setupNote: string;
   };
+  wc: {
+    title: string; description: string; widgetUrl: string; embedCode: string;
+    copyBtn: string; copied: string; autoConfirm: string; autoConfirmHint: string;
+  };
   disconnectErr: string;
 }> = {
   ru: {
-    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp" },
+    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp", webchat: "Web Chat" },
     tg: {
       connected: "Бот подключён", notConnected: "Бот не подключён",
       tokenLabel: "Токен бота", tokenPlaceholder: "Вставьте токен из BotFather",
@@ -63,10 +67,16 @@ const T: Record<Lang, {
       notConfigured: "Webhook данные недоступны — проверьте WORKER_PUBLIC_URL и META_VERIFY_TOKEN_WA",
       setupNote: "После настройки вебхука в Meta Business Manager обратитесь в поддержку для активации канала.",
     },
+    wc: {
+      title: "Виджет для сайта", description: "Добавьте виджет записи на ваш сайт. Клиенты смогут записываться прямо с вашей страницы.",
+      widgetUrl: "URL чата", embedCode: "Код для вставки",
+      copyBtn: "Копировать", copied: "Скопировано",
+      autoConfirm: "Автоподтверждение записей", autoConfirmHint: "Автоматически подтверждать записи через веб-чат",
+    },
     disconnectErr: "Ошибка отключения",
   },
   ua: {
-    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp" },
+    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp", webchat: "Web Chat" },
     tg: {
       connected: "Бот підключений", notConnected: "Бот не підключений",
       tokenLabel: "Токен бота", tokenPlaceholder: "Вставте токен з BotFather",
@@ -93,10 +103,16 @@ const T: Record<Lang, {
       notConfigured: "Дані вебхуку недоступні — перевірте WORKER_PUBLIC_URL та META_VERIFY_TOKEN_WA",
       setupNote: "Після налаштування вебхуку в Meta Business Manager зверніться до підтримки для активації каналу.",
     },
+    wc: {
+      title: "Віджет для сайту", description: "Додайте віджет запису на ваш сайт. Клієнти зможуть записуватися прямо з вашої сторінки.",
+      widgetUrl: "URL чату", embedCode: "Код для вставки",
+      copyBtn: "Копіювати", copied: "Скопійовано",
+      autoConfirm: "Автопідтвердження записів", autoConfirmHint: "Автоматично підтверджувати записи через веб-чат",
+    },
     disconnectErr: "Помилка відключення",
   },
   en: {
-    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp" },
+    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp", webchat: "Web Chat" },
     tg: {
       connected: "Bot connected", notConnected: "Bot not connected",
       tokenLabel: "Bot token", tokenPlaceholder: "Paste token from BotFather",
@@ -123,10 +139,16 @@ const T: Record<Lang, {
       notConfigured: "Webhook info unavailable — check WORKER_PUBLIC_URL and META_VERIFY_TOKEN_WA",
       setupNote: "After configuring the webhook in Meta Business Manager, contact support to activate the channel.",
     },
+    wc: {
+      title: "Website widget", description: "Add a booking widget to your website. Clients can book appointments directly from your page.",
+      widgetUrl: "Chat URL", embedCode: "Embed code",
+      copyBtn: "Copy", copied: "Copied",
+      autoConfirm: "Auto-confirm appointments", autoConfirmHint: "Automatically confirm appointments made via web chat",
+    },
     disconnectErr: "Disconnect error",
   },
   pl: {
-    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp" },
+    tabs: { telegram: "Telegram", instagram: "Instagram", whatsapp: "WhatsApp", webchat: "Web Chat" },
     tg: {
       connected: "Bot podłączony", notConnected: "Bot nie jest podłączony",
       tokenLabel: "Token bota", tokenPlaceholder: "Wklej token z BotFather",
@@ -152,6 +174,12 @@ const T: Record<Lang, {
       disconnectCancel: "Anuluj", status: "Status", active: "Aktywny",
       notConfigured: "Dane webhook niedostępne — sprawdź WORKER_PUBLIC_URL i META_VERIFY_TOKEN_WA",
       setupNote: "Po skonfigurowaniu webhooka w Meta Business Manager skontaktuj się z pomocą techniczną.",
+    },
+    wc: {
+      title: "Widget na stronę", description: "Dodaj widget rezerwacji na swoją stronę. Klienci będą mogli rezerwować wizyty bezpośrednio z Twojej strony.",
+      widgetUrl: "URL czatu", embedCode: "Kod do osadzenia",
+      copyBtn: "Kopiuj", copied: "Skopiowano",
+      autoConfirm: "Automatyczne potwierdzanie", autoConfirmHint: "Automatycznie potwierdzaj wizyty z czatu internetowego",
     },
     disconnectErr: "Błąd odłączania",
   },
@@ -490,14 +518,111 @@ function WhatsAppTab({ tenantId }: { tenantId: string }) {
   );
 }
 
+// ─── Web Chat tab ────────────────────────────────────────────────────────────
+
+const WEB_CHAT_BASE = "https://manicbot.com";
+
+function WebChatTab({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const l = T[lang].wc;
+
+  const widgetUrl = `${WEB_CHAT_BASE}/web-chat/${tenantId}`;
+  const embedSnippet = `<script src="${WEB_CHAT_BASE}/web-chat/widget.js" data-tenant="${tenantId}"></script>`;
+
+  return (
+    <div className="space-y-4">
+      {/* Info */}
+      <section className="glass-card rounded-2xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-sky-500/15 flex items-center justify-center">
+            <Globe className="h-5 w-5 text-sky-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{l.title}</h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{l.description}</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Widget URL */}
+      <section className="glass-card rounded-2xl p-5 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Globe className="h-3.5 w-3.5 text-slate-400" />
+          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{l.widgetUrl}</span>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/40 rounded-xl px-3 py-2">
+          <code className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate">{widgetUrl}</code>
+          <CopyButton value={widgetUrl} label={l.copyBtn} copiedLabel={l.copied} />
+        </div>
+      </section>
+
+      {/* Embed code */}
+      <section className="glass-card rounded-2xl p-5 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Code2 className="h-3.5 w-3.5 text-slate-400" />
+          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{l.embedCode}</span>
+        </div>
+        <div className="flex items-start gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/40 rounded-xl px-3 py-2">
+          <code className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 break-all leading-relaxed">{embedSnippet}</code>
+          <CopyButton value={embedSnippet} label={l.copyBtn} copiedLabel={l.copied} />
+        </div>
+      </section>
+
+      {/* Auto-confirm toggle */}
+      <section className="glass-card rounded-2xl p-5 space-y-3">
+        <WebChatAutoConfirmToggle tenantId={tenantId} />
+      </section>
+    </div>
+  );
+}
+
+function WebChatAutoConfirmToggle({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const l = T[lang].wc;
+  const utils = api.useUtils();
+
+  const configQ = api.salon.getAutoConfirmSettings.useQuery({ tenantId });
+  const setMut = api.salon.setAutoConfirm.useMutation({
+    onSuccess: () => void utils.salon.getAutoConfirmSettings.invalidate({ tenantId }),
+  });
+
+  const current = configQ.data?.web ?? true;
+
+  return (
+    <label className="flex items-center justify-between cursor-pointer">
+      <div className="space-y-0.5">
+        <span className="text-xs font-medium text-slate-900 dark:text-white">{l.autoConfirm}</span>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400">{l.autoConfirmHint}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={current}
+        disabled={configQ.isLoading || setMut.isPending}
+        onClick={() => setMut.mutate({ tenantId, channel: "web", enabled: !current })}
+        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+          current ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-700"
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform duration-200 ease-in-out ${
+            current ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </label>
+  );
+}
+
 // ─── Main BotSection ──────────────────────────────────────────────────────────
 
-type Tab = "telegram" | "instagram" | "whatsapp";
+type Tab = "telegram" | "instagram" | "whatsapp" | "webchat";
 
 const TAB_ICONS: Record<Tab, React.ReactNode> = {
   telegram: <Bot className="h-4 w-4" />,
   instagram: <Instagram className="h-4 w-4" />,
   whatsapp: <MessageCircle className="h-4 w-4" />,
+  webchat: <Globe className="h-4 w-4" />,
 };
 
 export function BotSection({ tenantId }: { tenantId: string }) {
@@ -509,7 +634,7 @@ export function BotSection({ tenantId }: { tenantId: string }) {
     <div className="space-y-4">
       {/* Tab switcher */}
       <div className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-white/[0.06]">
-        {(["telegram", "instagram", "whatsapp"] as Tab[]).map((tab) => (
+        {(["telegram", "instagram", "whatsapp", "webchat"] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActive(tab)}
@@ -529,6 +654,7 @@ export function BotSection({ tenantId }: { tenantId: string }) {
       {active === "telegram" && <TelegramTab tenantId={tenantId} />}
       {active === "instagram" && <InstagramTab tenantId={tenantId} />}
       {active === "whatsapp" && <WhatsAppTab tenantId={tenantId} />}
+      {active === "webchat" && <WebChatTab tenantId={tenantId} />}
     </div>
   );
 }

@@ -6,8 +6,8 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
-import { conversations } from "~/server/db/schema";
-import { eq, and, desc, lt, like } from "drizzle-orm";
+import { conversations, tenants, users } from "~/server/db/schema";
+import { eq, and, desc, lt, like, sql } from "drizzle-orm";
 
 export const conversationsRouter = createTRPCRouter({
   /**
@@ -33,12 +33,47 @@ export const conversationsRouter = createTRPCRouter({
         conditions.push(like(conversations.channelUserId, pat));
       }
       const rows = await ctx.db
-        .select()
+        .select({
+          id: conversations.id,
+          tenantId: conversations.tenantId,
+          channelType: conversations.channelType,
+          channelUserId: conversations.channelUserId,
+          internalUserId: conversations.internalUserId,
+          status: conversations.status,
+          lastMessageAt: conversations.lastMessageAt,
+          createdAt: conversations.createdAt,
+          tenantName: tenants.name,
+        })
         .from(conversations)
+        .leftJoin(tenants, eq(conversations.tenantId, tenants.id))
         .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(conversations.lastMessageAt))
         .limit(input.limit);
-      return { items: rows };
+
+      // Resolve user names for conversations that have internalUserId
+      const userIds = rows
+        .filter((r) => r.internalUserId)
+        .map((r) => ({ tenantId: r.tenantId, chatId: r.internalUserId! }));
+      const userMap = new Map<string, string>();
+      if (userIds.length) {
+        const uniqueKeys = [...new Set(userIds.map((u) => `${u.tenantId}:${u.chatId}`))];
+        for (const key of uniqueKeys) {
+          const [tid, cid] = key.split(":");
+          const u = await ctx.db
+            .select({ name: users.name, tgUsername: users.tgUsername })
+            .from(users)
+            .where(and(eq(users.tenantId, tid!), eq(users.chatId, Number(cid))))
+            .limit(1);
+          if (u[0]) userMap.set(key, u[0].name || (u[0].tgUsername ? `@${u[0].tgUsername}` : ""));
+        }
+      }
+
+      const items = rows.map((r) => ({
+        ...r,
+        displayName: userMap.get(`${r.tenantId}:${r.internalUserId}`) || null,
+      }));
+
+      return { items };
     }),
 
   /**
@@ -69,8 +104,32 @@ export const conversationsRouter = createTRPCRouter({
         .orderBy(desc(conversations.lastMessageAt))
         .limit(input.limit);
 
+      // Resolve user names
+      const userIds = rows
+        .filter((r) => r.internalUserId)
+        .map((r) => ({ tenantId: r.tenantId, chatId: r.internalUserId! }));
+      const userMap = new Map<string, string>();
+      if (userIds.length) {
+        const uniqueKeys = [...new Set(userIds.map((u) => `${u.tenantId}:${u.chatId}`))];
+        for (const key of uniqueKeys) {
+          const [tid, cid] = key.split(":");
+          const u = await ctx.db
+            .select({ name: users.name, tgUsername: users.tgUsername })
+            .from(users)
+            .where(and(eq(users.tenantId, tid!), eq(users.chatId, Number(cid))))
+            .limit(1);
+          if (u[0]) userMap.set(key, u[0].name || (u[0].tgUsername ? `@${u[0].tgUsername}` : ""));
+        }
+      }
+
+      const items = rows.map((r) => ({
+        ...r,
+        displayName: userMap.get(`${r.tenantId}:${r.internalUserId}`) || null,
+        tenantName: null as string | null,
+      }));
+
       return {
-        items: rows,
+        items,
         nextCursor: rows.length === input.limit ? rows[rows.length - 1]?.lastMessageAt : undefined,
       };
     }),

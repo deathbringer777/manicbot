@@ -267,6 +267,19 @@ export function AccountSection() {
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.account", lang)}</h2>
         </div>
         <div className="space-y-3">
+          {sessionEmail && (
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                Email
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={sessionEmail}
+                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
               {t("settings.role", lang)}

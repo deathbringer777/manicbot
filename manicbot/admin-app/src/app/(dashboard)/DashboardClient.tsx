@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { OverviewChart } from "~/components/dashboard/OverviewChart";
@@ -62,6 +63,7 @@ function StatCard({
   iconBg,
   iconColor,
   topBar,
+  href,
 }: {
   title: string;
   value: string | number;
@@ -70,9 +72,10 @@ function StatCard({
   iconBg: string;
   iconColor: string;
   topBar: string;
+  href?: string;
 }) {
-  return (
-    <div className="glass-card rounded-2xl p-4 relative overflow-hidden">
+  const inner = (
+    <>
       {/* 2px gradient top bar */}
       <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${topBar}`} />
       <div className="flex items-start justify-between">
@@ -87,8 +90,11 @@ function StatCard({
           <Icon className={`w-5 h-5 ${iconColor}`} />
         </div>
       </div>
-    </div>
+    </>
   );
+  const cls = `glass-card rounded-2xl p-4 relative overflow-hidden${href ? " cursor-pointer hover:scale-[1.02] hover:shadow-lg transition-all" : ""}`;
+  if (href) return <Link href={href} className={cls}>{inner}</Link>;
+  return <div className={cls}>{inner}</div>;
 }
 
 // ─── StatCardSkeleton ─────────────────────────────────────────────
@@ -284,6 +290,7 @@ export default function DashboardClient() {
               title="Пользователи"
               value={s?.totalUsers ?? 0}
               icon={Users}
+              href="/users"
               {...STAT_COLORS.violet}
             />
             <StatCard
@@ -291,12 +298,14 @@ export default function DashboardClient() {
               value={s?.totalTenants ?? 0}
               sub={`${s?.trialingCount ?? 0} на триале`}
               icon={Building2}
+              href="/tenants"
               {...STAT_COLORS.cyan}
             />
             <StatCard
               title="Подписки"
               value={s?.activeSubscriptions ?? 0}
               icon={CreditCard}
+              href="/billing"
               {...STAT_COLORS.emerald}
             />
             <StatCard
@@ -304,12 +313,14 @@ export default function DashboardClient() {
               value={formatPlnWhole(s?.mrr ?? 0)}
               sub="расчётный, PLN"
               icon={TrendingUp}
+              href="/billing"
               {...STAT_COLORS.amber}
             />
             <StatCard
               title="Всего записей"
               value={s?.totalAppointments ?? 0}
               icon={CalendarDays}
+              href="/appointments"
               {...STAT_COLORS.pink}
             />
             <StatCard
@@ -317,6 +328,7 @@ export default function DashboardClient() {
               value={s?.todayAppointments ?? 0}
               sub="записей"
               icon={Clock}
+              href="/appointments"
               {...STAT_COLORS.blue}
             />
           </div>

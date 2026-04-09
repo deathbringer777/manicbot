@@ -11,7 +11,7 @@ import {
 
 export type Theme = "dark" | "light";
 
-const STORAGE_KEY = "manicbot-theme";
+const STORAGE_KEY = "manicbot_web_theme";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -32,6 +32,13 @@ function readStoredTheme(): Theme {
     if (urlParam === "light" || urlParam === "dark") return urlParam;
     const s = localStorage.getItem(STORAGE_KEY);
     if (s === "light" || s === "dark") return s;
+    // Migrate from old key
+    const old = localStorage.getItem("manicbot-theme");
+    if (old === "light" || old === "dark") {
+      localStorage.setItem(STORAGE_KEY, old);
+      localStorage.removeItem("manicbot-theme");
+      return old;
+    }
   } catch {
     /* ignore */
   }

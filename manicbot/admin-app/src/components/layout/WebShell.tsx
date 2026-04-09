@@ -607,7 +607,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
 
-              {/* User pill — display only */}
+              {/* User pill + logout */}
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-2.5 py-1.5">
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-brand-500 to-purple-700 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
                   {avatarLetter}
@@ -615,11 +615,13 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 <span className="hidden sm:block text-xs text-slate-600 dark:text-slate-300 max-w-[120px] truncate">
                   {userEmail ?? "admin"}
                 </span>
-                {roleInfo.badge && (
-                  <span className="hidden sm:inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-brand-500/15 text-brand-600 dark:text-brand-300">
-                    {roleInfo.badge}
-                  </span>
-                )}
+                <button
+                  onClick={() => setShowLogoutDialog(true)}
+                  className="p-1 rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all shrink-0"
+                  title={tNav("Logout", lang)}
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           </header>

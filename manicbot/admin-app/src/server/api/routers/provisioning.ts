@@ -9,6 +9,7 @@ import {
   supportAgents,
   tenantRoles,
   appointments,
+  users,
 } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -127,11 +128,34 @@ export const provisioningRouter = createTRPCRouter({
   listAgents: adminProcedure.query(async ({ ctx }) => {
     const agents = await ctx.db.select().from(supportAgents);
     const roles = await ctx.db.select().from(platformRoles);
+
+    // Resolve names from users table for all agent chat IDs
+    const allChatIds = [
+      ...agents.map((a) => a.chatId),
+      ...roles.filter((r) => r.role === "system_admin").map((r) => r.chatId),
+    ];
+    const uniqueIds = [...new Set(allChatIds)];
+    const nameMap = new Map<number, { name: string | null; username: string | null }>();
+    for (const cid of uniqueIds) {
+      const row = await ctx.db
+        .select({ name: users.name, tgUsername: users.tgUsername })
+        .from(users)
+        .where(eq(users.chatId, cid))
+        .limit(1);
+      if (row[0]) nameMap.set(cid, { name: row[0].name, username: row[0].tgUsername });
+    }
+
+    const resolveAgent = (chatId: number) => ({
+      chatId,
+      name: nameMap.get(chatId)?.name ?? null,
+      username: nameMap.get(chatId)?.username ?? null,
+    });
+
     return {
-      support: agents.filter((a) => a.type === "support").map((a) => a.chatId),
-      techSupport: agents.filter((a) => a.type === "technical_support").map((a) => a.chatId),
+      support: agents.filter((a) => a.type === "support").map((a) => resolveAgent(a.chatId)),
+      techSupport: agents.filter((a) => a.type === "technical_support").map((a) => resolveAgent(a.chatId)),
       /** Legacy rows only — system_admin is never assignable via API. */
-      platformAdmins: roles.filter((r) => r.role === "system_admin").map((r) => r.chatId),
+      platformAdmins: roles.filter((r) => r.role === "system_admin").map((r) => resolveAgent(r.chatId)),
     };
   }),
 

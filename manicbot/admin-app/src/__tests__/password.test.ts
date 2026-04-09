@@ -7,8 +7,8 @@ describe("password hashing (PBKDF2)", () => {
     const parts = hashed.split(":");
     expect(parts).toHaveLength(4);
     expect(parts[0]).toBe("pbkdf2");
-    // iterations: numeric, ≥ 600k per OWASP 2023
-    expect(parseInt(parts[1]!, 10)).toBeGreaterThanOrEqual(600_000);
+    // iterations: numeric, = 100k (CF edge max)
+    expect(parseInt(parts[1]!, 10)).toBe(100_000);
     // salt = 16 bytes = 32 hex chars
     expect(parts[2]).toHaveLength(32);
     // hash = 256 bits = 32 bytes = 64 hex chars
@@ -30,9 +30,9 @@ describe("password hashing (PBKDF2)", () => {
     expect(await verifyPassword("anything", "pbkdf2:abc:def")).toBe(false);
   });
 
-  it("needsRehash returns true for legacy v1 hashes", () => {
-    // v1 has 3 parts, implicit 100k < 600k
-    expect(needsRehash("pbkdf2:" + "a".repeat(32) + ":" + "b".repeat(64))).toBe(true);
+  it("needsRehash returns false for legacy v1 hashes (same 100k iterations)", () => {
+    // v1 has 3 parts, implicit 100k = DEFAULT_ITERATIONS
+    expect(needsRehash("pbkdf2:" + "a".repeat(32) + ":" + "b".repeat(64))).toBe(false);
   });
 
   it("needsRehash returns false for current v2 hashes", async () => {

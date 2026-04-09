@@ -16,7 +16,7 @@ import {
   Building2,
 } from "lucide-react";
 
-type Filter = "all" | "admins" | "banned";
+type Filter = "all" | "banned";
 type AssignablePlatformRole = "support" | "technical_support";
 
 type UserItem = {
@@ -249,7 +249,6 @@ export default function UsersPageClient() {
           {(
             [
               { key: "all", label: "Все" },
-              { key: "admins", label: "Admins" },
               { key: "banned", label: "Banned" },
             ] as { key: Filter; label: string }[]
           ).map(({ key, label }) => (

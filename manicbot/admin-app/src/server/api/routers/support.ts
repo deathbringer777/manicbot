@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { platformTickets, platformTicketMessages, platformRoles } from "~/server/db/schema";
+import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
+import { platformTickets, platformTicketMessages, platformRoles, tenantRoles } from "~/server/db/schema";
 import { eq, desc, or, like } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
@@ -153,5 +153,59 @@ export const supportRouter = createTRPCRouter({
         .set({ status: "escalated", updatedAt: Math.floor(Date.now() / 1000) })
         .where(eq(platformTickets.id, input.ticketId));
       return { ok: true };
+    }),
+
+  /** Create a support ticket — available to any authenticated user (tenant_owner, master, etc.) */
+  createTicket: protectedProcedure
+    .input(z.object({
+      subject: z.string().min(1).max(200),
+      message: z.string().min(1).max(5000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const now = Math.floor(Date.now() / 1000);
+      const ticketId = `pt_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+      // Resolve caller identity
+      let clientChatId = 0;
+      let clientName: string | null = null;
+      let tenantId: string | null = null;
+      let sender = "user:unknown";
+
+      if (ctx.user) {
+        clientChatId = ctx.user.id;
+        clientName = [ctx.user.first_name, ctx.user.last_name].filter(Boolean).join(" ") || null;
+        sender = `user:${ctx.user.id}`;
+        // Resolve tenantId from tenant_roles
+        const trRow = await ctx.db
+          .select({ tenantId: tenantRoles.tenantId })
+          .from(tenantRoles)
+          .where(eq(tenantRoles.chatId, ctx.user.id))
+          .limit(1);
+        if (trRow.length) tenantId = trRow[0]!.tenantId;
+      } else if (ctx.webUser) {
+        clientChatId = 0;
+        clientName = ctx.webUser.email;
+        sender = `user:web:${ctx.webUser.id}`;
+        tenantId = ctx.webUser.tenantId ?? null;
+      }
+
+      await ctx.db.insert(platformTickets).values({
+        id: ticketId,
+        tenantId,
+        clientChatId,
+        clientName,
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await ctx.db.insert(platformTicketMessages).values({
+        ticketId,
+        sender,
+        text: `[${input.subject}]\n\n${input.message}`,
+        createdAt: now,
+      });
+
+      return { ticketId };
     }),
 });

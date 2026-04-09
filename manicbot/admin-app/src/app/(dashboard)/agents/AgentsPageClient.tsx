@@ -41,7 +41,9 @@ export default function AgentsPageClient() {
     onSuccess: () => utils.provisioning.listAgents.invalidate(),
   });
 
-  function getListForType(type: AgentType): number[] {
+  type AgentInfo = { chatId: number; name: string | null; username: string | null };
+
+  function getListForType(type: AgentType): AgentInfo[] {
     if (!data) return [];
     if (type === "support") return data.support;
     if (type === "technical_support") return data.techSupport;
@@ -49,9 +51,9 @@ export default function AgentsPageClient() {
   }
 
   const totalCount = data
-    ? [...new Set([...data.support, ...data.techSupport])].length
+    ? [...new Set([...data.support.map((a) => a.chatId), ...data.techSupport.map((a) => a.chatId)])].length
     : 0;
-  const legacyAdminIds = data?.platformAdmins ?? [];
+  const legacyAdmins: AgentInfo[] = data?.platformAdmins ?? [];
 
   return (
     <Shell>
@@ -62,7 +64,7 @@ export default function AgentsPageClient() {
             <h1 className="text-2xl font-extrabold tracking-tight">Агенты</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {totalCount} агентов поддержки
-              {legacyAdminIds.length > 0 ? ` · ${legacyAdminIds.length} устаревших записей system_admin в БД` : ""}
+              {legacyAdmins.length > 0 ? ` · ${legacyAdmins.length} устаревших записей system_admin в БД` : ""}
             </p>
           </div>
           <button
@@ -113,19 +115,23 @@ export default function AgentsPageClient() {
                   {/* Agents list */}
                   {list.length > 0 ? (
                     <div className="divide-y divide-border/20">
-                      {list.map((chatId) => (
-                        <div key={chatId} className="flex items-center justify-between px-4 py-3">
+                      {list.map((agent) => (
+                        <div key={agent.chatId} className="flex items-center justify-between px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                              <Icon className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                              {agent.name ? agent.name.charAt(0).toUpperCase() : <Icon className="w-3.5 h-3.5" />}
                             </div>
                             <div>
-                              <p className="text-sm font-mono font-semibold text-slate-900 dark:text-white">#{chatId}</p>
-                              <p className="text-[10px] text-slate-500">Telegram User ID</p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                {agent.name || `#${agent.chatId}`}
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                {agent.username ? `@${agent.username} · ` : ""}#{agent.chatId}
+                              </p>
                             </div>
                           </div>
                           <button
-                            onClick={() => removeMut.mutate({ chatId })}
+                            onClick={() => removeMut.mutate({ chatId: agent.chatId })}
                             disabled={removeMut.isPending}
                             className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
                           >
@@ -154,7 +160,7 @@ export default function AgentsPageClient() {
               );
             })}
 
-            {legacyAdminIds.length > 0 && (
+            {legacyAdmins.length > 0 && (
               <div className="glass-card rounded-2xl overflow-hidden border border-amber-500/20">
                 <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30 bg-amber-500/5">
                   <Shield className="w-4 h-4 text-amber-400 shrink-0" />
@@ -166,12 +172,17 @@ export default function AgentsPageClient() {
                   </div>
                 </div>
                 <div className="divide-y divide-border/20">
-                  {legacyAdminIds.map((chatId) => (
-                    <div key={chatId} className="flex items-center justify-between px-4 py-3">
-                      <p className="text-sm font-mono font-semibold text-slate-900 dark:text-white">#{chatId}</p>
+                  {legacyAdmins.map((agent) => (
+                    <div key={agent.chatId} className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                          {agent.name || `#${agent.chatId}`}
+                        </p>
+                        {agent.username && <p className="text-[10px] text-slate-500">@{agent.username}</p>}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => removeMut.mutate({ chatId })}
+                        onClick={() => removeMut.mutate({ chatId: agent.chatId })}
                         disabled={removeMut.isPending}
                         className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
                       >

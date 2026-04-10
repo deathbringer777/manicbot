@@ -12,7 +12,7 @@ import type { AppRole } from "~/server/api/routers/auth";
 export interface NavItemDef {
   /** Stable identifier, e.g. "salon.appointments", "god.billing" */
   id: string;
-  /** URL path (will migrate from ?tab= to /salon/... later) */
+  /** URL path (will migrate from ?tab= to /my-salon/... later) */
   href: string;
   icon: LucideIcon;
   /** Key into NAV_LABELS for i18n */
@@ -57,16 +57,16 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.system",        href: "/system",             icon: Activity,        labelKey: "System",           roles: ["system_admin"], group: "platform" },
 
   // ── Salon (tenant_owner) ──
-  { id: "salon.overview",      href: "/salon",               icon: LayoutGrid,    labelKey: "Dashboard",     roles: ["tenant_owner"] },
-  { id: "salon.appointments",  href: "/salon/appointments",  icon: CalendarDays,  labelKey: "Appointments",  roles: ["tenant_owner"], hideable: true },
-  { id: "salon.services",      href: "/salon/services",      icon: Scissors,      labelKey: "Services",      roles: ["tenant_owner"], hideable: true },
-  { id: "salon.masters",       href: "/salon/masters",       icon: UserRound,     labelKey: "Masters",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.clients",       href: "/salon/clients",       icon: Users,         labelKey: "Clients",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.billing",       href: "/salon/billing",       icon: Wallet,        labelKey: "Billing",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.channels",      href: "/salon/channels",      icon: MessageSquare, labelKey: "Channels",      roles: ["tenant_owner"], hideable: true },
-  { id: "salon.analytics",     href: "/salon/analytics",     icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
-  { id: "salon.reviews",       href: "/salon/reviews",       icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.publicProfile", href: "/salon/public-profile",icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
+  { id: "salon.overview",      href: "/my-salon",               icon: LayoutGrid,    labelKey: "Dashboard",     roles: ["tenant_owner"] },
+  { id: "salon.appointments",  href: "/my-salon/appointments",  icon: CalendarDays,  labelKey: "Appointments",  roles: ["tenant_owner"], hideable: true },
+  { id: "salon.services",      href: "/my-salon/services",      icon: Scissors,      labelKey: "Services",      roles: ["tenant_owner"], hideable: true },
+  { id: "salon.masters",       href: "/my-salon/masters",       icon: UserRound,     labelKey: "Masters",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.clients",       href: "/my-salon/clients",       icon: Users,         labelKey: "Clients",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.billing",       href: "/my-salon/billing",       icon: Wallet,        labelKey: "Billing",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.channels",      href: "/my-salon/channels",      icon: MessageSquare, labelKey: "Channels",      roles: ["tenant_owner"], hideable: true },
+  { id: "salon.analytics",     href: "/my-salon/analytics",     icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
+  { id: "salon.reviews",       href: "/my-salon/reviews",       icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.publicProfile", href: "/my-salon/public-profile",icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
 
   // ── Master ──
   { id: "master.today",    href: "/master",              icon: Home,          labelKey: "Today",    roles: ["master"] },

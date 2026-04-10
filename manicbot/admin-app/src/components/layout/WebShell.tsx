@@ -122,7 +122,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
       return (pathname === "/dashboard" || pathname === "/") && !searchParams.get("tab");
     }
     // Segment roots (e.g. /salon, /master): exact match only (avoid /salon matching /salon/appointments)
-    if (item.href === "/salon" || item.href === "/master") {
+    if (item.href === "/my-salon" || item.href === "/master") {
       return pathname === item.href;
     }
     // Sub-routes: prefix match

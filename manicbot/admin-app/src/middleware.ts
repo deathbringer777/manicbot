@@ -2,23 +2,23 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Redirect legacy ?tab= URLs to new /salon/* and /master/* routes.
+ * Redirect legacy ?tab= URLs to new /my-salon/* and /master/* routes.
  * Only fires on /dashboard with a tab query param.
  */
 
 const SALON_TAB_REDIRECTS: Record<string, string> = {
-  appointments: "/salon/appointments",
-  services: "/salon/services",
-  masters: "/salon/masters",
-  clients: "/salon/clients",
-  billing: "/salon/billing",
-  channels: "/salon/channels",
-  analytics: "/salon/analytics",
-  reviews: "/salon/reviews",
-  public_profile: "/salon/public-profile",
+  appointments: "/my-salon/appointments",
+  services: "/my-salon/services",
+  masters: "/my-salon/masters",
+  clients: "/my-salon/clients",
+  billing: "/my-salon/billing",
+  channels: "/my-salon/channels",
+  analytics: "/my-salon/analytics",
+  reviews: "/my-salon/reviews",
+  public_profile: "/my-salon/public-profile",
   // Channel shortcuts
-  instagram: "/salon/channels",
-  whatsapp: "/salon/channels",
+  instagram: "/my-salon/channels",
+  whatsapp: "/my-salon/channels",
 };
 
 const MASTER_TAB_REDIRECTS: Record<string, string> = {

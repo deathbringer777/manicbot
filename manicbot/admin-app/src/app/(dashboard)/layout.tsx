@@ -114,7 +114,7 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "tenant_owner") {
-    const isSalonRoute = pathname.startsWith("/salon/") || pathname === "/salon";
+    const isSalonRoute = pathname.startsWith("/my-salon/") || pathname === "/my-salon";
     const isMasterRoute = pathname.startsWith("/master/") || pathname === "/master";
     return (
       <RoleContext.Provider value={ctxValue}>

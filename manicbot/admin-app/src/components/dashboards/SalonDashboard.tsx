@@ -21,6 +21,7 @@ import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
+import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics";
 
@@ -948,7 +949,7 @@ function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
   );
 }
 
-export function SalonDashboard({ tenantId }: { tenantId: string }) {
+export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; forceTab?: Tab }) {
   const { lang } = useLang();
   const searchParams = useSearchParams();
   const inWeb = useInWebShell();
@@ -962,12 +963,13 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     : urlTab && VALID_SALON_TABS.includes(urlTab as Tab) ? (urlTab as Tab)
     : fallbackTab;
 
-  const [tab, setTab] = useState<Tab>(resolvedSalonTab);
+  const [tab, setTab] = useState<Tab>(forceTab ?? resolvedSalonTab);
 
-  // Sync tab when URL changes (sidebar click in WebShell)
+  // Sync tab when URL changes (sidebar click in WebShell) or forceTab changes
   useEffect(() => {
+    if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
-  }, [resolvedSalonTab, inWeb]);
+  }, [resolvedSalonTab, inWeb, forceTab]);
   const [aptDate, setAptDate] = useState("");
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null }>({ open: false, svc: null });
   const [masterModal, setMasterModal] = useState(false);
@@ -1206,29 +1208,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       )}
 
       {/* ── CLIENTS ── */}
-      {tab === "clients" && (
-        <div className="space-y-3">
-          <SectionHeader title={t("salon.clients", lang)} />
-          {clients.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {clients.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
-          <div className="space-y-2">
-            {clients.data?.map((c: any) => (
-              <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-400 shrink-0">
-                  {(c.name ?? "?").charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 dark:text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
-                  <p className="text-[10px] text-slate-500">
-                    {c.tgUsername ? `@${c.tgUsername}` : ""} {c.phone ?? ""}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {clients.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noClients", lang)}</p>}
-          </div>
-        </div>
-      )}
+      {tab === "clients" && <ClientsTab tenantId={tenantId} />}
 
       {/* ── BILLING ── */}
       {tab === "billing" && (

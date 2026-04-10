@@ -49,6 +49,10 @@ export default function DashboardLayout({
     setPreviewRoleState(r);
     setPreviewTenantId(tenantId ?? null);
     setPreviewMasterIdState(null);
+    // When God activates a preview, redirect to /dashboard so content matches nav
+    if (r && r !== "system_admin") {
+      router.replace("/dashboard");
+    }
   }
 
   function setPreviewMaster(masterId: number | null) {
@@ -110,17 +114,21 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "tenant_owner") {
+    const isSalonRoute = pathname.startsWith("/salon/") || pathname === "/salon";
+    const isMasterRoute = pathname.startsWith("/master/") || pathname === "/master";
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : !effectiveTenantId
-                ? <NoTenantOnboarding role="tenant_owner" />
-                : previewMasterId !== null
-                  ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
-                  : <SalonDashboard tenantId={effectiveTenantId} />
+              : (isSalonRoute || isMasterRoute)
+                ? children
+                : !effectiveTenantId
+                  ? <NoTenantOnboarding role="tenant_owner" />
+                  : previewMasterId !== null
+                    ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
+                    : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
       </RoleContext.Provider>
@@ -128,15 +136,18 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "master") {
+    const isMasterRoute = pathname.startsWith("/master/") || pathname === "/master";
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : !effectiveTenantId
-                ? <NoTenantOnboarding role="master" />
-                : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
+              : isMasterRoute
+                ? children
+                : !effectiveTenantId
+                  ? <NoTenantOnboarding role="master" />
+                  : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
           )}
         </WebShell>
       </RoleContext.Provider>

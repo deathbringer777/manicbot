@@ -9,6 +9,7 @@ import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { TodayTab } from "~/components/master/tabs/TodayTab";
 
 type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "services" | "profile";
 
@@ -118,11 +119,13 @@ export function MasterDashboard({
   masterId,
   isDelegating = false,
   isPersonal = false,
+  forceTab,
 }: {
   tenantId: string;
   masterId: number;
   isDelegating?: boolean;
   isPersonal?: boolean;
+  forceTab?: Tab;
 }) {
   const { lang } = useLang();
   const utils = api.useUtils();
@@ -133,12 +136,13 @@ export function MasterDashboard({
   const urlTab = searchParams.get("tab");
   const resolvedTab: Tab = urlTab && VALID_TABS.includes(urlTab as Tab) ? (urlTab as Tab) : "today";
 
-  const [tab, setTab] = useState<Tab>(resolvedTab);
+  const [tab, setTab] = useState<Tab>(forceTab ?? resolvedTab);
 
-  // Sync tab when URL changes (sidebar click in WebShell)
+  // Sync tab when URL changes (sidebar click in WebShell) or forceTab changes
   useEffect(() => {
+    if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedTab);
-  }, [resolvedTab, inWeb]);
+  }, [resolvedTab, inWeb, forceTab]);
   const [period, setPeriod] = useState<Period>("month");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -282,54 +286,7 @@ export function MasterDashboard({
       </div>}
 
       {/* TODAY */}
-      {tab === "today" && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("common.today", lang)}</h2>
-          {today.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {today.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
-
-          {/* Summary stats */}
-          {!today.isLoading && today.data && (() => {
-            const apts = today.data as any[];
-            const total = apts.length;
-            const confirmed = apts.filter((a: any) => a.status === "confirmed").length;
-            const pending = apts.filter((a: any) => a.status === "pending").length;
-            return (
-              <div className="grid grid-cols-3 gap-3">
-                <div className="glass-card rounded-2xl p-4">
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("master.totalToday", lang)}</p>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{total}</p>
-                </div>
-                <div className="glass-card rounded-2xl p-4">
-                  <p className="text-[11px] text-emerald-400">{t("master.confirmed", lang)}</p>
-                  <p className="text-2xl font-bold text-emerald-400 mt-1">{confirmed}</p>
-                </div>
-                <div className="glass-card rounded-2xl p-4">
-                  <p className="text-[11px] text-amber-400">{t("master.pending", lang)}</p>
-                  <p className="text-2xl font-bold text-amber-400 mt-1">{pending}</p>
-                </div>
-              </div>
-            );
-          })()}
-
-          {today.data?.length === 0 && (
-            <div className="glass-card rounded-2xl p-8 text-center">
-              <CalendarDays className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">{t("master.noSchedule", lang)}</p>
-            </div>
-          )}
-          <div className="space-y-2">
-            {today.data?.map((a: any) => (
-              <AptRow key={a.id} apt={a}
-                onNoShow={canMutate
-                  ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
-                  : undefined
-                }
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {tab === "today" && <TodayTab tenantId={tenantId} masterId={masterId} canMutate={canMutate} />}
 
       {/* SCHEDULE */}
       {tab === "schedule" && (

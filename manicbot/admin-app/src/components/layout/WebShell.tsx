@@ -5,309 +5,30 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  Home, Users, Settings, CreditCard, Activity,
-  Building2, CalendarDays, UserCog, MessageSquare,
+  Settings,
   LogOut, Menu, X, Zap, ChevronLeft, ChevronRight,
-  ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
-  HeadphonesIcon, Scissors, Sun, Moon, Compass,
-  Star, BarChart3, Globe, ArrowLeftRight,
+  Sun, Moon, Compass,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { LangDropdown } from "~/components/public/LangDropdown";
-import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding";
+import type { NavItem, NavGroup } from "~/lib/nav/useNavItems";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { PublicFooter } from "~/components/public/PublicFooter";
+import { useNavItems, tNav, getRoleInfo } from "~/lib/nav/useNavItems";
+import { MasterSwitcherInline } from "~/components/layout/Shell";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
 export const useInWebShell = () => useContext(WebShellContext);
 
-interface NavItem {
-  href: string;
-  icon: LucideIcon;
-  label: string;
-}
+// Navigation config, labels, and role info are now in ~/lib/nav/*.
+// useNavItems() hook handles filtering by role, personalTenant, hiddenTabs.
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-/** Per-language label sets for nav items and groups. */
-const NAV_LABELS: Record<string, Record<string, string>> = {
-  ru: {
-    // God Mode groups
-    "Overview": "Обзор",
-    "Management": "Управление",
-    "Platform": "Платформа",
-    // God Mode items
-    "Dashboard": "Дашборд",
-    "Users": "Пользователи",
-    "Tenants": "Салоны",
-    "Appointments": "Записи",
-    "Inbox": "Омниканал",
-    "Platform tickets": "Тикеты платформы",
-    "Role Requests": "Заявки на роль",
-    "Agents": "Агенты",
-    "Billing": "Биллинг",
-    "Events": "События",
-    "System": "Система",
-    "Settings": "Настройки",
-    // Salon nav
-    "Services": "Услуги",
-    "Masters": "Мастера",
-    "Clients": "Клиенты",
-    "Channels": "Каналы",
-    // Master nav
-    "Today": "Сегодня",
-    "Schedule": "Расписание",
-    "Earnings": "Доходы",
-    "Profile": "Профиль",
-    "Reviews": "Отзывы",
-    "Analytics": "Аналитика",
-    "PublicProfile": "Публичный профиль",
-    // Support
-    "Tickets": "Тикеты",
-    // Role info
-    "Admin Panel": "Панель администратора",
-    "God Mode": "Админ",
-    "My Salon": "Мой салон",
-    "My Schedule": "Моё расписание",
-    "Master": "Мастер",
-    "Support": "Поддержка",
-    "Tech Support": "Тех. поддержка",
-    "Agent Hub": "Центр агентов",
-    "Logout": "Выйти",
-    "Collapse": "Свернуть",
-    // Logout dialog
-    "LogoutConfirmTitle": "Выйти из аккаунта?",
-    "LogoutConfirmDesc": "Вы уверены, что хотите выйти?",
-    "Cancel": "Отмена",
-  },
-  ua: {
-    "Overview": "Огляд",
-    "Management": "Управління",
-    "Platform": "Платформа",
-    "Dashboard": "Дашборд",
-    "Users": "Користувачі",
-    "Tenants": "Салони",
-    "Appointments": "Записи",
-    "Inbox": "Омніканал",
-    "Platform tickets": "Тикети платформи",
-    "Role Requests": "Заявки на роль",
-    "Agents": "Агенти",
-    "Billing": "Білінг",
-    "Events": "Події",
-    "System": "Система",
-    "Settings": "Налаштування",
-    "Services": "Послуги",
-    "Masters": "Майстри",
-    "Clients": "Клієнти",
-    "Channels": "Канали",
-    "Today": "Сьогодні",
-    "Schedule": "Розклад",
-    "Earnings": "Доходи",
-    "Profile": "Профіль",
-    "Reviews": "Відгуки",
-    "Analytics": "Аналітика",
-    "PublicProfile": "Публічний профіль",
-    "Tickets": "Тікети",
-    "Admin Panel": "Панель адміністратора",
-    "God Mode": "Адмін",
-    "My Salon": "Мій салон",
-    "My Schedule": "Мій розклад",
-    "Master": "Майстер",
-    "Support": "Підтримка",
-    "Tech Support": "Тех. підтримка",
-    "Agent Hub": "Центр агентів",
-    "Logout": "Вийти",
-    "Collapse": "Згорнути",
-    "LogoutConfirmTitle": "Вийти з акаунту?",
-    "LogoutConfirmDesc": "Ви впевнені, що хочете вийти?",
-    "Cancel": "Скасувати",
-  },
-  pl: {
-    "Overview": "Przegląd",
-    "Management": "Zarządzanie",
-    "Platform": "Platforma",
-    "Dashboard": "Panel",
-    "Users": "Użytkownicy",
-    "Tenants": "Salony",
-    "Appointments": "Wizyty",
-    "Inbox": "Omnichannel",
-    "Platform tickets": "Zgłoszenia platformy",
-    "Role Requests": "Wnioski o rolę",
-    "Agents": "Agenci",
-    "Billing": "Płatności",
-    "Events": "Zdarzenia",
-    "System": "System",
-    "Settings": "Ustawienia",
-    "Services": "Usługi",
-    "Masters": "Mistrzowie",
-    "Clients": "Klienci",
-    "Channels": "Kanały",
-    "Today": "Dziś",
-    "Schedule": "Harmonogram",
-    "Earnings": "Zarobki",
-    "Profile": "Profil",
-    "Reviews": "Opinie",
-    "Analytics": "Analityka",
-    "PublicProfile": "Profil publiczny",
-    "Tickets": "Zgłoszenia",
-    "Admin Panel": "Panel administratora",
-    "God Mode": "Admin",
-    "My Salon": "Mój salon",
-    "My Schedule": "Mój harmonogram",
-    "Master": "Mistrz",
-    "Support": "Wsparcie",
-    "Tech Support": "Wsparcie tech.",
-    "Agent Hub": "Centrum agentów",
-    "Logout": "Wyloguj",
-    "Collapse": "Zwiń",
-    "LogoutConfirmTitle": "Wylogować się?",
-    "LogoutConfirmDesc": "Czy na pewno chcesz się wylogować?",
-    "Cancel": "Anuluj",
-  },
-  en: {
-    "Overview": "Overview",
-    "Management": "Management",
-    "Platform": "Platform",
-    "Dashboard": "Dashboard",
-    "Users": "Users",
-    "Tenants": "Salons",
-    "Appointments": "Appointments",
-    "Inbox": "Omnichannel",
-    "Platform tickets": "Platform tickets",
-    "Role Requests": "Role Requests",
-    "Agents": "Agents",
-    "Billing": "Billing",
-    "Events": "Events",
-    "System": "System",
-    "Settings": "Settings",
-    "Services": "Services",
-    "Masters": "Masters",
-    "Clients": "Clients",
-    "Channels": "Channels",
-    "Today": "Today",
-    "Schedule": "Schedule",
-    "Earnings": "Earnings",
-    "Profile": "Profile",
-    "Reviews": "Reviews",
-    "Analytics": "Analytics",
-    "PublicProfile": "Public Profile",
-    "Tickets": "Tickets",
-    "Admin Panel": "Admin Panel",
-    "God Mode": "Admin",
-    "My Salon": "My Salon",
-    "My Schedule": "My Schedule",
-    "Master": "Master",
-    "Support": "Support",
-    "Tech Support": "Tech Support",
-    "Agent Hub": "Agent Hub",
-    "Logout": "Sign out",
-    "Collapse": "Collapse",
-    "LogoutConfirmTitle": "Sign out?",
-    "LogoutConfirmDesc": "Are you sure you want to sign out?",
-    "Cancel": "Cancel",
-  },
-};
-
-function tNav(key: string, lang: string): string {
-  return NAV_LABELS[lang]?.[key] ?? NAV_LABELS["ru"]?.[key] ?? key;
-}
-
-function buildGodGroups(lang: string): NavGroup[] {
-  return [
-    {
-      label: tNav("Overview", lang),
-      items: [
-        { href: "/dashboard", icon: Home, label: tNav("Dashboard", lang) },
-      ],
-    },
-    {
-      label: tNav("Management", lang),
-      items: [
-        { href: "/tenants", icon: Building2, label: tNav("Tenants", lang) },
-        { href: "/users", icon: Users, label: tNav("Users", lang) },
-        { href: "/appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
-        { href: "/conversations", icon: MessageSquare, label: tNav("Inbox", lang) },
-        { href: "/role-requests", icon: ArrowLeftRight, label: tNav("Role Requests", lang) },
-        { href: "/agents", icon: UserCog, label: tNav("Agents", lang) },
-      ],
-    },
-    {
-      label: tNav("Platform", lang),
-      items: [
-        { href: "/platform-support", icon: HeadphonesIcon, label: tNav("Platform tickets", lang) },
-        { href: "/billing", icon: CreditCard, label: tNav("Billing", lang) },
-        { href: "/events", icon: ScrollText, label: tNav("Events", lang) },
-        { href: "/system", icon: Activity, label: tNav("System", lang) },
-      ],
-    },
-  ];
-}
-
-function buildSalonNav(lang: string): NavItem[] {
-  return [
-    { href: "/dashboard", icon: LayoutGrid, label: tNav("Dashboard", lang) },
-    { href: "/dashboard?tab=appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
-    { href: "/dashboard?tab=services", icon: Scissors, label: tNav("Services", lang) },
-    { href: "/dashboard?tab=masters", icon: UserRound, label: tNav("Masters", lang) },
-    { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
-    { href: "/dashboard?tab=billing", icon: Wallet, label: tNav("Billing", lang) },
-    { href: "/dashboard?tab=channels", icon: MessageSquare, label: tNav("Channels", lang) },
-    { href: "/dashboard?tab=analytics", icon: BarChart3, label: tNav("Analytics", lang) },
-    { href: "/dashboard?tab=reviews", icon: Star, label: tNav("Reviews", lang) },
-    { href: "/dashboard?tab=public_profile", icon: Globe, label: tNav("PublicProfile", lang) },
-  ];
-}
-
-function buildMasterNav(lang: string, isPersonal?: boolean): NavItem[] {
-  return [
-    { href: "/dashboard", icon: Home, label: tNav("Today", lang) },
-    { href: "/dashboard?tab=schedule", icon: CalendarCheck, label: tNav("Schedule", lang) },
-    { href: "/dashboard?tab=clients", icon: Users, label: tNav("Clients", lang) },
-    { href: "/dashboard?tab=earnings", icon: Wallet, label: tNav("Earnings", lang) },
-    { href: "/dashboard?tab=reviews", icon: Star, label: tNav("Reviews", lang) },
-    ...(isPersonal ? [{ href: "/dashboard?tab=services", icon: Scissors, label: tNav("Services", lang) }] : []),
-    { href: "/dashboard?tab=profile", icon: UserRound, label: tNav("Profile", lang) },
-  ];
-}
-
-function buildSupportNav(lang: string): NavItem[] {
-  return [{ href: "/dashboard", icon: HeadphonesIcon, label: tNav("Tickets", lang) }];
-}
-
-function getNavGroups(role: string | null, lang: string, isPersonal?: boolean): NavGroup[] {
-  if (role === "system_admin") return buildGodGroups(lang);
-  const flat = role === "tenant_owner" ? buildSalonNav(lang)
-    : role === "master" ? buildMasterNav(lang, isPersonal)
-    : role === "support" || role === "technical_support" ? buildSupportNav(lang)
-    : [{ href: "/dashboard", icon: Home, label: tNav("Dashboard", lang) }];
-  return [{ label: "", items: flat }];
-}
-
-function getFlatNav(role: string | null, lang: string, isPersonal?: boolean): NavItem[] {
-  return getNavGroups(role, lang, isPersonal).flatMap(g => g.items);
-}
-
-function getRoleInfo(role: string | null, lang: string): { title: string; subtitle: string; badge?: string } {
-  switch (role) {
-    case "system_admin": return { title: "ManicBot", subtitle: tNav("Admin Panel", lang), badge: tNav("God Mode", lang) };
-    case "tenant_owner": return { title: tNav("My Salon", lang), subtitle: tNav("Dashboard", lang) };
-    case "master": return { title: tNav("My Schedule", lang), subtitle: tNav("Master", lang) };
-    case "support": return { title: tNav("Support", lang), subtitle: tNav("Agent Hub", lang) };
-    case "technical_support": return { title: tNav("Tech Support", lang), subtitle: tNav("Agent Hub", lang) };
-    default: return { title: "ManicBot", subtitle: tNav("Dashboard", lang) };
-  }
-}
-
-function getPageTitle(pathname: string, role: string | null, lang: string): string {
+function getPageTitle(pathname: string, flat: NavItem[], lang: string): string {
   if (pathname.startsWith("/settings")) return tNav("Settings", lang);
-  const flat = role === "system_admin" ? buildGodGroups(lang).flatMap(g => g.items) : getFlatNav(role, lang);
   const exact = flat.find(n => n.href === pathname);
   if (exact) return exact.label;
   const match = flat.find(n => n.href !== "/" && pathname.startsWith(n.href));
@@ -378,22 +99,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const { prefs: dashPrefs } = useDashboardPrefs();
-  const navGroups = getNavGroups(effectiveRole, lang, isPersonalTenant);
-  // Filter hidden tabs for salon owners
-  if (effectiveRole === "tenant_owner" && dashPrefs.hiddenTabs.length > 0) {
-    for (const group of navGroups) {
-      group.items = group.items.filter((item) => {
-        const qIdx = item.href.indexOf("?tab=");
-        if (qIdx === -1) return true; // Dashboard (overview) always visible
-        const tab = item.href.slice(qIdx + 5);
-        return !dashPrefs.hiddenTabs.includes(tab);
-      });
-    }
-  }
-  const flatNav = navGroups.flatMap((g) => g.items);
-  const roleInfo = getRoleInfo(effectiveRole, lang);
-  const pageTitle = getPageTitle(pathname, effectiveRole, lang);
+  const { groups: navGroups, flat: flatNav, settings: settingsItem } = useNavItems();
+  const roleInfo = getRoleInfo(effectiveRole, lang, tNav);
+  const pageTitle = getPageTitle(pathname, flatNav, lang);
 
   const handleLogout = async () => {
     setShowLogoutDialog(false);
@@ -402,15 +110,22 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const isActive = (item: NavItem) => {
+    // Legacy ?tab= links (if any remain)
     const qIdx = item.href.indexOf("?");
     if (qIdx !== -1) {
       const itemParams = new URLSearchParams(item.href.slice(qIdx));
       const itemTab = itemParams.get("tab");
       return itemTab ? itemTab === searchParams.get("tab") : false;
     }
+    // Dashboard / root — exact match, only when no ?tab= in URL
     if (item.href === "/dashboard" || item.href === "/") {
       return (pathname === "/dashboard" || pathname === "/") && !searchParams.get("tab");
     }
+    // Segment roots (e.g. /salon, /master): exact match only (avoid /salon matching /salon/appointments)
+    if (item.href === "/salon" || item.href === "/master") {
+      return pathname === item.href;
+    }
+    // Sub-routes: prefix match
     return pathname.startsWith(item.href);
   };
 
@@ -487,10 +202,11 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             ))}
           </nav>
 
-          {/* Bottom: Settings only — logout moved to top-right header */}
-          <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
+          {/* Bottom: Master switcher (owner only) + Settings */}
+          <div className="border-t border-slate-200 dark:border-white/[0.06] p-3 space-y-1">
+            {!collapsed && <MasterSwitcherInline />}
             <NavLink
-              item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
+              item={settingsItem}
               active={pathname.startsWith("/settings")}
               collapsed={collapsed}
               dataTour="web-settings"
@@ -546,7 +262,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               {/* Mobile drawer bottom: settings only — logout in header */}
               <div className="border-t border-slate-200 dark:border-white/[0.06] p-3">
                 <NavLink
-                  item={{ href: "/settings", icon: Settings, label: tNav("Settings", lang) }}
+                  item={settingsItem}
                   active={pathname.startsWith("/settings")}
                   onClick={() => setSidebarOpen(false)}
                   dataTour="web-settings"

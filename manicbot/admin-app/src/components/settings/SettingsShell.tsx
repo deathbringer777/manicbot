@@ -32,10 +32,10 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     pl: { label: "Płatności", desc: "Plan, subskrypcja, płatność" },
   },
   appearance: {
-    ru: { label: "Внешний вид", desc: "Тема, язык" },
-    ua: { label: "Зовнішній вигляд", desc: "Тема, мова" },
-    en: { label: "Appearance", desc: "Theme, language" },
-    pl: { label: "Wygląd", desc: "Motyw, język" },
+    ru: { label: "Внешний вид", desc: "Настройки дашборда" },
+    ua: { label: "Зовнішній вигляд", desc: "Налаштування дашборду" },
+    en: { label: "Appearance", desc: "Dashboard display settings" },
+    pl: { label: "Wygląd", desc: "Ustawienia panelu" },
   },
   help: {
     ru: { label: "Помощь", desc: "Тур, поддержка" },

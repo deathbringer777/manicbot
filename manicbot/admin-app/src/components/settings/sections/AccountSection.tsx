@@ -144,7 +144,7 @@ const ROLE_CHANGE_L: Record<Lang, {
 };
 
 export function AccountSection() {
-  const { role, previewRole, emailVerified } = useRole();
+  const { role, previewRole, emailVerified, hasPassword } = useRole();
   const { lang } = useLang();
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const vl = VERIFY_L[lang];
@@ -544,76 +544,212 @@ export function AccountSection() {
         </form>
       </section>
 
-      {/* Change password */}
-      <section className="glass-card rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Key className="w-4 h-4 text-amber-400 shrink-0" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changePassword", lang)}</h2>
-        </div>
-        <form onSubmit={handleChangePassword} className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-              {t("settings.currentPassword", lang)}
-            </label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={pwForm.currentPassword}
-              onChange={(e) => setPwForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
-              className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-              required
-            />
+      {/* Set or Change password */}
+      {!hasPassword ? (
+        <SetInitialPasswordSection />
+      ) : (
+        <section className="glass-card rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Key className="w-4 h-4 text-amber-400 shrink-0" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changePassword", lang)}</h2>
           </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-              {t("settings.newPassword", lang)}
-            </label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={pwForm.newPassword}
-              onChange={(e) => setPwForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-              className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-              {t("settings.confirmPassword", lang)}
-            </label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={pwForm.confirmPassword}
-              onChange={(e) => {
-                setPwForm((prev) => ({ ...prev, confirmPassword: e.target.value }));
-                if (pwError === t("settings.passwordMismatch", lang)) setPwError(null);
-              }}
-              className={`w-full bg-slate-50 dark:bg-slate-900/70 border rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white ${
-                pwError === t("settings.passwordMismatch", lang)
-                  ? "border-red-500/60"
-                  : "border-slate-200 dark:border-slate-700/50"
-              }`}
-              required
-            />
-          </div>
-          {pwError && <p className="text-xs text-red-400">{pwError}</p>}
-          {pwSuccess && (
-            <p className="text-xs text-emerald-400 flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5" />
-              {t("settings.passwordChangedOk", lang)}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={changePasswordMut.isPending}
-            className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-70 mt-1"
-          >
-            <Save className="w-4 h-4" />
-            {changePasswordMut.isPending ? t("settings.saving", lang) : t("settings.changePasswordBtn", lang)}
-          </button>
-        </form>
-      </section>
+          <form onSubmit={handleChangePassword} className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                {t("settings.currentPassword", lang)}
+              </label>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={pwForm.currentPassword}
+                onChange={(e) => setPwForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                {t("settings.newPassword", lang)}
+              </label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={pwForm.newPassword}
+                onChange={(e) => setPwForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                {t("settings.confirmPassword", lang)}
+              </label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={pwForm.confirmPassword}
+                onChange={(e) => {
+                  setPwForm((prev) => ({ ...prev, confirmPassword: e.target.value }));
+                  if (pwError === t("settings.passwordMismatch", lang)) setPwError(null);
+                }}
+                className={`w-full bg-slate-50 dark:bg-slate-900/70 border rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white ${
+                  pwError === t("settings.passwordMismatch", lang)
+                    ? "border-red-500/60"
+                    : "border-slate-200 dark:border-slate-700/50"
+                }`}
+                required
+              />
+            </div>
+            {pwError && <p className="text-xs text-red-400">{pwError}</p>}
+            {pwSuccess && (
+              <p className="text-xs text-emerald-400 flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                {t("settings.passwordChangedOk", lang)}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={changePasswordMut.isPending}
+              className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-70 mt-1"
+            >
+              <Save className="w-4 h-4" />
+              {changePasswordMut.isPending ? t("settings.saving", lang) : t("settings.changePasswordBtn", lang)}
+            </button>
+          </form>
+        </section>
+      )}
     </div>
+  );
+}
+
+// ─── SetInitialPasswordSection ────────────────────────────────────
+
+const SET_PW_L: Record<Lang, {
+  heading: string;
+  hint: string;
+  newPassword: string;
+  confirmPassword: string;
+  submit: string;
+  mismatch: string;
+  success: string;
+}> = {
+  ru: {
+    heading: "Установить пароль",
+    hint: "Вы зарегистрировались через Google. Установите пароль для входа по email.",
+    newPassword: "Новый пароль",
+    confirmPassword: "Повторите пароль",
+    submit: "Установить пароль",
+    mismatch: "Пароли не совпадают",
+    success: "Пароль установлен!",
+  },
+  ua: {
+    heading: "Встановити пароль",
+    hint: "Ви зареєструвалися через Google. Встановіть пароль для входу через email.",
+    newPassword: "Новий пароль",
+    confirmPassword: "Повторіть пароль",
+    submit: "Встановити пароль",
+    mismatch: "Паролі не збігаються",
+    success: "Пароль встановлено!",
+  },
+  en: {
+    heading: "Set Password",
+    hint: "You signed up with Google. Set a password to also log in with email.",
+    newPassword: "New password",
+    confirmPassword: "Confirm password",
+    submit: "Set password",
+    mismatch: "Passwords don't match",
+    success: "Password set!",
+  },
+  pl: {
+    heading: "Ustaw hasło",
+    hint: "Zarejestrowałeś się przez Google. Ustaw hasło, aby logować się emailem.",
+    newPassword: "Nowe hasło",
+    confirmPassword: "Potwierdź hasło",
+    submit: "Ustaw hasło",
+    mismatch: "Hasła nie pasują",
+    success: "Hasło ustawione!",
+  },
+};
+
+function SetInitialPasswordSection() {
+  const { lang } = useLang();
+  const sl = SET_PW_L[lang];
+  const utils = api.useUtils();
+  const [form, setForm] = useState({ newPassword: "", confirmPassword: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const setPasswordMut = (api as any).webUsers.setInitialPassword.useMutation({
+    onSuccess: () => {
+      setSuccess(true);
+      setError(null);
+      setForm({ newPassword: "", confirmPassword: "" });
+      utils.auth.getMyRole.invalidate();
+    },
+    onError: (err: { message?: string }) => {
+      setError(err.message ?? "Failed to set password");
+    },
+  }) as { mutate: (args: { newPassword: string }) => void; isPending: boolean };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (form.newPassword !== form.confirmPassword) {
+      setError(sl.mismatch);
+      return;
+    }
+    setPasswordMut.mutate({ newPassword: form.newPassword });
+  };
+
+  return (
+    <section className="glass-card rounded-2xl p-4 border border-amber-500/20">
+      <div className="flex items-center gap-2 mb-2">
+        <Key className="w-4 h-4 text-amber-400 shrink-0" />
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">{sl.heading}</h2>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{sl.hint}</p>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">{sl.newPassword}</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={form.newPassword}
+            onChange={(e) => setForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+            className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500/60 text-slate-900 dark:text-white"
+            required
+            minLength={12}
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">{sl.confirmPassword}</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={form.confirmPassword}
+            onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+            className={`w-full bg-slate-50 dark:bg-slate-900/70 border rounded-xl px-4 py-3 text-sm outline-none focus:border-amber-500/60 text-slate-900 dark:text-white ${
+              error === sl.mismatch ? "border-red-500/60" : "border-slate-200 dark:border-slate-700/50"
+            }`}
+            required
+          />
+        </div>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        {success && (
+          <p className="text-xs text-emerald-400 flex items-center gap-1">
+            <CheckCircle className="w-3.5 h-3.5" />
+            {sl.success}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={setPasswordMut.isPending}
+          className="w-full flex items-center justify-center gap-1.5 bg-amber-500 active:bg-amber-400 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-amber-500/20 disabled:opacity-70 mt-1"
+        >
+          <Key className="w-4 h-4" />
+          {setPasswordMut.isPending ? t("settings.saving", lang) : sl.submit}
+        </button>
+      </form>
+    </section>
   );
 }

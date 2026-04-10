@@ -9,6 +9,7 @@ interface RoleContextValue {
   userId: number | null;
   createdAt: number | null;
   emailVerified: boolean;
+  hasPassword: boolean;
   isPersonalTenant?: boolean;
   // Creator-only preview
   previewRole: AppRole;
@@ -25,6 +26,7 @@ export const RoleContext = createContext<RoleContextValue>({
   userId: null,
   createdAt: null,
   emailVerified: true,
+  hasPassword: true,
   isPersonalTenant: false,
   previewRole: null,
   previewTenantId: null,

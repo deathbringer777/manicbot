@@ -348,7 +348,7 @@ export const googleBusyBlocks = sqliteTable("google_busy_blocks", {
 export const webUsers = sqliteTable("web_users", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
-  passwordHash: text("password_hash").notNull(),
+  passwordHash: text("password_hash"),
   /** Tenant this web user belongs to (required for tenant_owner / master) */
   tenantId: text("tenant_id"),
   /** Role: tenant_owner | system_admin | support | technical_support | master */

@@ -365,7 +365,7 @@ CREATE INDEX IF NOT EXISTS idx_gcal_busy_lookup ON google_busy_blocks(integratio
 CREATE TABLE IF NOT EXISTS web_users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   tenant_id TEXT,
   role TEXT NOT NULL DEFAULT 'tenant_owner',
   name TEXT,

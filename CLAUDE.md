@@ -75,6 +75,8 @@ Recent migrations:
 - `0014_web_users_lang.sql` — `lang` on `web_users`
 - `0015_salon_logo_master_portfolio.sql` — `logo`, `cover_photo` on `tenants`; `portfolio` on `masters`
 - `0023_personal_tenants.sql` — `is_personal` on `tenants` (independent masters)
+- `0024_role_change_requests.sql` — role change request system
+- `0025_nullable_password_hash.sql` — `password_hash` nullable for Google OAuth registration
 
 ---
 
@@ -198,7 +200,7 @@ Telegram Mini App opens
 | Component | Purpose |
 |-----------|---------|
 | `TelegramGate.tsx` | Auth + role-based routing |
-| `RoleContext.tsx` | React context: `{ role, tenantId, userId }` |
+| `RoleContext.tsx` | React context: `{ role, tenantId, userId, hasPassword, emailVerified }` |
 | `layout/Shell.tsx` | Main layout (sidebar + mobile nav). Accepts `navItems`, `title`, `subtitle` props |
 | `dashboards/SalonDashboard.tsx` | Salon owner: Overview, Appointments, Masters, Services, Clients, Billing, Settings |
 | `dashboards/MasterDashboard.tsx` | Master: Today, Schedule, Clients, Earnings, Profile |
@@ -211,14 +213,29 @@ Email/password auth for the web admin panel (separate from Telegram Mini App HMA
 ```
 Browser → (auth)/register → webUsers.register
   → hashPassword (PBKDF2-SHA256, 100k iterations, 16-byte salt)
-  → sendVerificationEmail (Resend) → 24h token
-  → (auth)/verify-email?token=xxx → webUsers.verifyEmail
+  → sendVerificationCodeEmail (Resend) → 6-digit code (15min TTL)
+  → (auth)/verify-email?email=xxx → webUsers.verifyEmail (code input)
+  → auto-login via stored password (sessionStorage)
   → sendWelcomeEmail (fire-and-forget)
+
+Google OAuth registration (passwordless):
+  → Google OAuth → NextAuth signIn callback
+  → New user: signGooglePrefillToken → redirect /register?g=token
+  → Email pre-filled + locked, password fields hidden
+  → Register with NULL passwordHash → verify email → Google session
+  → Dashboard shows SetPasswordBanner → /settings → setInitialPassword
 
 Password reset:
   → (auth)/forgot-password → webUsers.requestPasswordReset → 1h token
   → (auth)/reset-password?token=xxx → webUsers.resetPassword
 ```
+
+**Google registration specifics:**
+- `password_hash` is nullable in `web_users` — Google users may have NULL
+- `auth.getMyRole` returns `hasPassword: boolean` — drives UI banners
+- `SetPasswordBanner` component shown in dashboard for users without password
+- `webUsers.setInitialPassword` — sets password for first time (no current password needed)
+- `AccountSection` shows "Set Password" vs "Change Password" based on `hasPassword`
 
 **Key modules:**
 
@@ -245,12 +262,12 @@ Password reset:
 
 ```bash
 cd manicbot/
-npm test                     # Worker Vitest (~826 tests)
+npm test                     # Worker Vitest (~1139 tests)
 npm run check-schema         # D1: table + column parity between schema.sql and Drizzle schema.ts
 
 cd admin-app/
 npm run typecheck
-npm test                     # Mini App Vitest (~20 tests)
+npm test                     # Mini App Vitest (~268 tests)
 ```
 
 GitHub Actions `test` job runs the same checks (Worker tests + `check-schema` + admin-app typecheck + tests) before Worker/Pages deploys.

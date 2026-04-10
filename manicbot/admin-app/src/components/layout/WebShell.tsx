@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { LangDropdown } from "~/components/public/LangDropdown";
+import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { PublicFooter } from "~/components/public/PublicFooter";
@@ -352,7 +354,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const router = useRouter();
   const searchParams = useSearchParams();
   const { role, previewRole, createdAt, emailVerified, isPersonalTenant } = useRole();
-  const { lang } = useLang();
+  const { lang, setLang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -376,8 +378,20 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const { prefs: dashPrefs } = useDashboardPrefs();
   const navGroups = getNavGroups(effectiveRole, lang, isPersonalTenant);
-  const flatNav = getFlatNav(effectiveRole, lang, isPersonalTenant);
+  // Filter hidden tabs for salon owners
+  if (effectiveRole === "tenant_owner" && dashPrefs.hiddenTabs.length > 0) {
+    for (const group of navGroups) {
+      group.items = group.items.filter((item) => {
+        const qIdx = item.href.indexOf("?tab=");
+        if (qIdx === -1) return true; // Dashboard (overview) always visible
+        const tab = item.href.slice(qIdx + 5);
+        return !dashPrefs.hiddenTabs.includes(tab);
+      });
+    }
+  }
+  const flatNav = navGroups.flatMap((g) => g.items);
   const roleInfo = getRoleInfo(effectiveRole, lang);
   const pageTitle = getPageTitle(pathname, effectiveRole, lang);
 
@@ -590,6 +604,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               >
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
+
+              {/* Language selector */}
+              <LangDropdown lang={lang} setLang={setLang} />
 
               {/* Logout button */}
               <button

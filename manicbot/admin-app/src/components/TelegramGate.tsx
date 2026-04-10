@@ -116,6 +116,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     userId,
     createdAt: null,
     emailVerified: true,
+    hasPassword: true,
     previewRole,
     previewTenantId,
     setPreviewRole,

@@ -127,7 +127,7 @@ export const webUsersRouter = createTRPCRouter({
     .input(
       z.object({
         email: z.string().email(),
-        password: z.string().min(12, "Минимум 12 символов"),
+        password: z.string().min(12, "Минимум 12 символов").optional(),
         role: z.enum(["tenant_owner", "master"]),
         name: z.string().max(200).optional(),
         lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
@@ -150,6 +150,11 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many registration attempts. Try again later." });
       }
       const email = input.email.toLowerCase().trim();
+
+      // Password is required unless registering via Google prefill
+      if (!input.password && !input.googlePrefillToken) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Password is required" });
+      }
 
       let googleVerified = false;
       if (input.googlePrefillToken) {
@@ -176,7 +181,7 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "CONFLICT", message: "Registration failed. Please try again or use a different email." });
       }
       const id = crypto.randomUUID();
-      const passwordHash = await hashPassword(input.password);
+      const passwordHash = input.password ? await hashPassword(input.password) : null;
       const verificationCode = generateVerificationCode();
       // Store hashed code in DB; email contains the plaintext code
       const verificationCodeHash = await hashToken(verificationCode);
@@ -700,6 +705,9 @@ export const webUsersRouter = createTRPCRouter({
       }
 
       const user = rows[0]!;
+      if (!user.passwordHash) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No password set. Use 'Set password' instead." });
+      }
       const valid = await verifyPassword(input.currentPassword, user.passwordHash);
       if (!valid) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Неверный текущий пароль" });
@@ -779,6 +787,34 @@ export const webUsersRouter = createTRPCRouter({
       const rows = await ctx.db.select({ id: webUsers.id }).from(webUsers).where(eq(webUsers.id, input.userId)).limit(1);
       if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Web user not found" });
       await ctx.db.update(webUsers).set({ tenantId: input.tenantId }).where(eq(webUsers.id, input.userId));
+      return { success: true };
+    }),
+
+  /** Set initial password for users who registered via Google without one. */
+  setInitialPassword: protectedProcedure
+    .input(z.object({ newPassword: z.string().min(12, "Минимум 12 символов") }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
+      }
+      const rows = await ctx.db
+        .select({ passwordHash: webUsers.passwordHash })
+        .from(webUsers)
+        .where(eq(webUsers.id, ctx.webUser.id))
+        .limit(1);
+      if (!rows.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      // Only allow setting initial password if none is set
+      if (rows[0]!.passwordHash) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Password already set. Use change password instead." });
+      }
+      const newHash = await hashPassword(input.newPassword);
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db
+        .update(webUsers)
+        .set({ passwordHash: newHash, updatedAt: now })
+        .where(eq(webUsers.id, ctx.webUser.id));
       return { success: true };
     }),
 });

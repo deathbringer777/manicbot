@@ -19,6 +19,7 @@ type RoleResult = {
   createdAt: number | null;
   emailVerified: boolean;
   email: string | null;
+  hasPassword: boolean;
 };
 
 const EMPTY: RoleResult = {
@@ -29,6 +30,7 @@ const EMPTY: RoleResult = {
   createdAt: null,
   emailVerified: true,
   email: null,
+  hasPassword: true,
 };
 
 export const authRouter = createTRPCRouter({
@@ -41,14 +43,16 @@ export const authRouter = createTRPCRouter({
       // Fetch createdAt + emailVerified for UI
       let createdAt: number | null = null;
       let emailVerified = true;
+      let hasPassword = true;
       try {
         const rows = await ctx.db
-          .select({ createdAt: webUsers.createdAt, emailVerified: webUsers.emailVerified })
+          .select({ createdAt: webUsers.createdAt, emailVerified: webUsers.emailVerified, passwordHash: webUsers.passwordHash })
           .from(webUsers)
           .where(eq(webUsers.id, ctx.webUser.id))
           .limit(1);
         createdAt = rows[0]?.createdAt ?? null;
         emailVerified = !!(rows[0]?.emailVerified);
+        hasPassword = !!(rows[0]?.passwordHash);
       } catch { /* non-critical */ }
 
       // For web masters: look up their masterId and check if personal tenant
@@ -71,7 +75,7 @@ export const authRouter = createTRPCRouter({
         } catch { /* non-critical */ }
       }
 
-      return { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified, email };
+      return { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified, email, hasPassword };
     }
 
     if (!ctx.user) return EMPTY;

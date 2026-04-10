@@ -118,15 +118,17 @@ export default function RegisterPage() {
     if (!emailVal.includes("@") || emailVal.indexOf("@") === emailVal.length - 1) {
       setError(copy.shared.emailInvalid); return;
     }
-    if (!password) { setError(copy.shared.passwordRequired); return; }
-
-    if (password !== confirmPassword) {
-      setError(copy.register.passwordsMismatch);
-      return;
-    }
-    if (password.length < 12) {
-      setError(copy.register.passwordTooShort);
-      return;
+    // Password is required unless Google prefill is active
+    if (!emailFromGoogleLocked) {
+      if (!password) { setError(copy.shared.passwordRequired); return; }
+      if (password !== confirmPassword) {
+        setError(copy.register.passwordsMismatch);
+        return;
+      }
+      if (password.length < 12) {
+        setError(copy.register.passwordTooShort);
+        return;
+      }
     }
     if (!tosAccepted) {
       setError(copy.register.tosRequired);
@@ -137,7 +139,7 @@ export default function RegisterPage() {
       try {
         const registration = await registerMutation.mutateAsync({
           email: email.trim().toLowerCase(),
-          password,
+          password: password || undefined,
           role,
           name: name.trim() || undefined,
           lang,
@@ -270,61 +272,65 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <div>
-            <div className="mb-2 min-h-[3rem]">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.password}</label>
-              <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{copy.register.passwordHint}</p>
-            </div>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                type={showPwd ? "text" : "password"}
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className={authFieldWithIconsClassName}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
-                aria-label={showPwd ? copy.register.hidePassword : copy.register.showPassword}
-              >
-                {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
+          {!emailFromGoogleLocked && (
+            <>
+              <div>
+                <div className="mb-2 min-h-[3rem]">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.password}</label>
+                  <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{copy.register.passwordHint}</p>
+                </div>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type={showPwd ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    className={authFieldWithIconsClassName}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd((v) => !v)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
+                    aria-label={showPwd ? copy.register.hidePassword : copy.register.showPassword}
+                  >
+                    {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
 
-          <div>
-            <div className="mb-2 min-h-[3rem]">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.confirmPassword}</label>
-              <p className="invisible mt-0.5 text-xs" aria-hidden>
-                {copy.register.passwordHint}
-              </p>
-            </div>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                type={showConfirm ? "text" : "password"}
-                autoComplete="new-password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className={authFieldWithIconsClassName}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirm((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
-                aria-label={showConfirm ? copy.register.hidePassword : copy.register.showPassword}
-              >
-                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
+              <div>
+                <div className="mb-2 min-h-[3rem]">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.confirmPassword}</label>
+                  <p className="invisible mt-0.5 text-xs" aria-hidden>
+                    {copy.register.passwordHint}
+                  </p>
+                </div>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    className={authFieldWithIconsClassName}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm((v) => !v)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
+                    aria-label={showConfirm ? copy.register.hidePassword : copy.register.showPassword}
+                  >
+                    {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="sm:col-span-2">
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.referral}</label>

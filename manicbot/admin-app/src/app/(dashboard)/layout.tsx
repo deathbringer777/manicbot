@@ -13,6 +13,7 @@ import { SupportDashboard } from "~/components/dashboards/SupportDashboard";
 import { NoTenantOnboarding } from "~/components/onboarding/NoTenantOnboarding";
 import { EmailVerificationGate } from "~/components/EmailVerificationGate";
 import { EmailVerificationPopup } from "~/components/EmailVerificationPopup";
+import { SetPasswordBanner } from "~/components/SetPasswordBanner";
 import type { AppRole } from "~/server/api/routers/auth";
 
 export default function DashboardLayout({
@@ -66,7 +67,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified } = roleQuery.data;
+  const { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -76,6 +77,7 @@ export default function DashboardLayout({
     userId: null, // web users don't have Telegram userId
     createdAt: createdAt ?? null,
     emailVerified: emailVerified ?? true,
+    hasPassword: hasPassword ?? true,
     isPersonalTenant: isPersonalTenant ?? false,
     previewRole,
     previewTenantId,
@@ -101,6 +103,7 @@ export default function DashboardLayout({
     return (
       <>
         {!emailVerified && <EmailVerificationPopup />}
+        <SetPasswordBanner />
         {content}
       </>
     );

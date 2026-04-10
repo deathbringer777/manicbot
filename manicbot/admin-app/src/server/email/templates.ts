@@ -37,7 +37,7 @@ const emailCopy: Record<Lang, {
       body: "Введите этот код в ManicBot, чтобы подтвердить ваш email:",
       expires: "Код действителен 15 минут.",
       ignore: "Если вы не регистрировались, просто проигнорируйте это письмо.",
-      copy: "Скопировать",
+      copy: "Нажмите на код, чтобы выделить",
       copied: "Скопировано ✓",
     },
     passwordReset: {
@@ -105,7 +105,7 @@ const emailCopy: Record<Lang, {
       body: "Введіть цей код у ManicBot, щоб підтвердити ваш email:",
       expires: "Код дійсний 15 хвилин.",
       ignore: "Якщо ви не реєструвалися, просто проігноруйте цей лист.",
-      copy: "Скопіювати",
+      copy: "Натисніть на код, щоб виділити",
       copied: "Скопійовано ✓",
     },
     passwordReset: {
@@ -173,7 +173,7 @@ const emailCopy: Record<Lang, {
       body: "Enter this code in ManicBot to verify your email:",
       expires: "This code expires in 15 minutes.",
       ignore: "If you didn't sign up, just ignore this email.",
-      copy: "Copy",
+      copy: "Click the code to select it",
       copied: "Copied ✓",
     },
     passwordReset: {
@@ -241,7 +241,7 @@ const emailCopy: Record<Lang, {
       body: "Wpisz ten kod w ManicBot, aby potwierdzić swój email:",
       expires: "Kod ważny 15 minut.",
       ignore: "Jeśli nie rejestrowałeś się, zignoruj tę wiadomość.",
-      copy: "Kopiuj",
+      copy: "Kliknij kod, aby go zaznaczyć",
       copied: "Skopiowano ✓",
     },
     passwordReset: {
@@ -349,22 +349,10 @@ function muted(text: string): string {
 
 export function verificationCodeEmailHtml(code: string, lang: Lang): string {
   const c = getEmailCopy(lang).verificationCode;
-  const digits = code.split("").map(d =>
-    `<td style="width:48px;height:56px;text-align:center;font-size:28px;font-weight:700;color:#ffffff;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-family:monospace;letter-spacing:2px;">${d}</td>`
-  ).join('<td style="width:8px;"></td>');
-  const escapedCode = code.replace(/'/g, "\\'");
-  const copyBtn = `<td style="padding-left:12px;vertical-align:middle;">
-    <a href="#"
-       onclick="var el=this;navigator.clipboard.writeText('${escapedCode}').then(function(){el.textContent='${c.copied}';el.style.background='#10b981';setTimeout(function(){el.textContent='${c.copy}';el.style.background='#374151';},2000)}).catch(function(){});return false;"
-       style="display:inline-block;padding:10px 16px;background:#374151;color:#e2e8f0;font-size:13px;font-weight:600;text-decoration:none;border-radius:10px;border:1px solid rgba(255,255,255,0.12);white-space:nowrap;cursor:pointer;"
-    >${c.copy}</a>
-  </td>`;
-  const codeBlock = `<table style="margin:24px auto;" cellpadding="0" cellspacing="0">
-    <tr>
-      <td><table cellpadding="0" cellspacing="0"><tr>${digits}</tr></table></td>
-      ${copyBtn}
-    </tr>
-  </table>`;
+  const codeBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${code}</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
+  </div>`;
   return baseLayout(
     c.heading,
     paragraph(c.body) + codeBlock + muted(c.expires) + muted(c.ignore),

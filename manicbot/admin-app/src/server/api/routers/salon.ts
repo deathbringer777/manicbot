@@ -105,6 +105,7 @@ export const salonRouter = createTRPCRouter({
       city: tenantRow[0]?.city ?? null,
       lat: tenantRow[0]?.lat ?? null,
       lng: tenantRow[0]?.lng ?? null,
+      mapsUrl: tenantRow[0]?.mapsUrl ?? null,
       publicActive: tenantRow[0]?.publicActive ?? 0,
       photos: tenantRow[0]?.photos ? (() => { try { return JSON.parse(tenantRow[0]!.photos!); } catch { return []; } })() : [],
       logo: tenantRow[0]?.logo ?? null,
@@ -280,6 +281,7 @@ export const salonRouter = createTRPCRouter({
       city: z.string().max(100).optional(),
       lat: z.number().min(-90).max(90).optional(),
       lng: z.number().min(-180).max(180).optional(),
+      mapsUrl: z.string().max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
       photos: z.array(z.string()).optional(),
       logo: z.string().url().optional().or(z.literal("")),
@@ -326,6 +328,7 @@ export const salonRouter = createTRPCRouter({
       if (input.city !== undefined) tenantUpdate.city = input.city || null;
       if (input.lat !== undefined) tenantUpdate.lat = input.lat;
       if (input.lng !== undefined) tenantUpdate.lng = input.lng;
+      if (input.mapsUrl !== undefined) tenantUpdate.mapsUrl = input.mapsUrl || null;
       if (input.publicActive !== undefined) tenantUpdate.publicActive = input.publicActive;
       if (input.photos !== undefined) tenantUpdate.photos = JSON.stringify(input.photos);
       if (input.logo !== undefined) tenantUpdate.logo = input.logo || null;

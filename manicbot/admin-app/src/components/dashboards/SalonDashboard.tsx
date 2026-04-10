@@ -392,6 +392,28 @@ function AutoConfirmSettings({ tenantId }: { tenantId: string }) {
 }
 
 // ─── Public Profile Editor ───────────────────────────────────────
+function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
+  const validate = (lat: number, lng: number) =>
+    isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+      ? { lat, lng } : null;
+  // @lat,lng pattern (e.g. /place/.../@55.7558,37.6173,17z/)
+  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (atMatch) return validate(parseFloat(atMatch[1]!), parseFloat(atMatch[2]!));
+  // ?q=lat,lng or ?ll=lat,lng
+  try {
+    const url = new URL(input);
+    for (const key of ["q", "ll", "query"]) {
+      const v = url.searchParams.get(key);
+      const m = v?.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+      if (m) return validate(parseFloat(m[1]!), parseFloat(m[2]!));
+    }
+  } catch { /* not a URL */ }
+  // Bare coordinate pair: "55.7558, 37.6173"
+  const bare = input.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
+  if (bare) return validate(parseFloat(bare[1]!), parseFloat(bare[2]!));
+  return null;
+}
+
 function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const utils = api.useUtils();
   const profile = api.salon.getSalonProfile.useQuery({ tenantId });
@@ -399,8 +421,8 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [city, setCity] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [parsedCoords, setParsedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isPublic, setIsPublic] = useState(false);
   const [slugError, setSlugError] = useState("");
   const [slugChecked, setSlugChecked] = useState<boolean | null>(null);
@@ -414,8 +436,16 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       setSlug(data.slug ?? "");
       setDescription(data.description ?? "");
       setCity(data.city ?? "");
-      setLat(data.lat != null ? String(data.lat) : "");
-      setLng(data.lng != null ? String(data.lng) : "");
+      if (data.mapsUrl) {
+        setMapsUrl(data.mapsUrl);
+        setParsedCoords(parseGoogleMapsUrl(data.mapsUrl));
+      } else if (data.lat != null && data.lng != null) {
+        setMapsUrl(`${data.lat}, ${data.lng}`);
+        setParsedCoords({ lat: data.lat, lng: data.lng });
+      } else {
+        setMapsUrl("");
+        setParsedCoords(null);
+      }
       setIsPublic(!!data.publicActive);
       setPhotos(Array.isArray(data.photos) ? data.photos : []);
     }
@@ -447,8 +477,9 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       slug: slug || undefined,
       description: description || undefined,
       city: city || undefined,
-      lat: lat ? parseFloat(lat) : undefined,
-      lng: lng ? parseFloat(lng) : undefined,
+      lat: parsedCoords?.lat,
+      lng: parsedCoords?.lng,
+      mapsUrl: mapsUrl.startsWith("http") ? mapsUrl : undefined,
       publicActive: isPublic ? 1 : 0,
       photos,
     });
@@ -590,23 +621,18 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                 className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Широта (lat)</label>
-                <input value={lat} onChange={(e) => setLat(e.target.value)} type="number" step="0.0001"
-                  placeholder="55.7558"
-                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Долгота (lng)</label>
-                <input value={lng} onChange={(e) => setLng(e.target.value)} type="number" step="0.0001"
-                  placeholder="37.6173"
-                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-              </div>
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Ссылка Google Maps</label>
+              <input value={mapsUrl} onChange={(e) => { setMapsUrl(e.target.value); setParsedCoords(parseGoogleMapsUrl(e.target.value)); }}
+                placeholder="https://maps.google.com/...  или  55.7558, 37.6173"
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              {mapsUrl && parsedCoords && (
+                <p className="text-xs text-emerald-500 mt-1">Координаты: {parsedCoords.lat}, {parsedCoords.lng}</p>
+              )}
+              {mapsUrl && !parsedCoords && (
+                <p className="text-xs text-amber-400 mt-1">Не удалось определить координаты. Вставьте ссылку Google Maps или координаты (55.7558, 37.6173)</p>
+              )}
             </div>
-            <p className="text-xs text-slate-500">
-              💡 Координаты можно взять из Google Maps — нажмите на точку на карте, они появятся внизу экрана
-            </p>
 
             {/* Photos */}
             <div className="border-t border-slate-200 dark:border-white/5 pt-3">

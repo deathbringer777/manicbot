@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description =
     profile.description ??
     `Онлайн-запись в ${profile.name}${cityPart}. Маникюр, педикюр, nail-арт. Запишитесь через Telegram за минуту.`;
-  return buildSeo({
+  const seo = buildSeo({
     title: `${profile.name}${cityPart}`,
     description,
     path: `/salon/${slug}`,
@@ -47,6 +47,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       "салон красоты",
     ],
   });
+  if (profile.publicActive !== 1) {
+    seo.robots = { index: false, follow: false };
+  }
+  return seo;
 }
 
 export default async function SalonProfilePage({ params }: Props) {
@@ -57,27 +61,29 @@ export default async function SalonProfilePage({ params }: Props) {
   if (!profile) notFound();
   return (
     <>
-      <JsonLd
-        data={[
-          beautySalonJsonLd({
-            name: profile.name,
-            slug: profile.slug ?? slug,
-            description: profile.description,
-            image: profile.photos?.[0] ?? null,
-            city: profile.city,
-            address: profile.address,
-            phone: profile.phone,
-            lat: profile.lat,
-            lng: profile.lng,
-            rating: profile.rating,
-          }),
-          breadcrumbJsonLd([
-            { name: "Главная", path: "/" },
-            { name: "Поиск", path: "/search" },
-            { name: profile.name, path: `/salon/${slug}` },
-          ]),
-        ]}
-      />
+      {profile.publicActive === 1 && (
+        <JsonLd
+          data={[
+            beautySalonJsonLd({
+              name: profile.name,
+              slug: profile.slug ?? slug,
+              description: profile.description,
+              image: profile.photos?.[0] ?? null,
+              city: profile.city,
+              address: profile.address,
+              phone: profile.phone,
+              lat: profile.lat,
+              lng: profile.lng,
+              rating: profile.rating,
+            }),
+            breadcrumbJsonLd([
+              { name: "Главная", path: "/" },
+              { name: "Поиск", path: "/search" },
+              { name: profile.name, path: `/salon/${slug}` },
+            ]),
+          ]}
+        />
+      )}
       <SalonProfileClient profile={profile} />
     </>
   );

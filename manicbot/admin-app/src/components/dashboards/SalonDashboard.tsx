@@ -14,6 +14,7 @@ import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
+import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
@@ -516,7 +517,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           <p className={`text-sm font-semibold ${isPublic ? "text-emerald-300" : "text-slate-500 dark:text-slate-400"}`}>
             {isPublic ? "Салон виден в каталоге" : "Салон скрыт из каталога"}
           </p>
-          {publicUrl && isPublic && (
+          {publicUrl && (
             <a href={publicUrl} target="_blank" rel="noopener noreferrer"
               className="mt-0.5 flex items-center gap-1 text-xs text-brand-400 hover:underline">
               <Globe className="h-3 w-3" />
@@ -814,13 +815,15 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const searchParams = useSearchParams();
   const inWeb = useInWebShell();
+  const { prefs: dashPrefs } = useDashboardPrefs();
 
   const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics"];
   const urlTab = searchParams.get("tab");
+  const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
     urlTab === "instagram" || urlTab === "whatsapp" ? "channels"
     : urlTab && VALID_SALON_TABS.includes(urlTab as Tab) ? (urlTab as Tab)
-    : "overview";
+    : fallbackTab;
 
   const [tab, setTab] = useState<Tab>(resolvedSalonTab);
 
@@ -907,42 +910,54 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
             <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>
           ) : overview.data && (
             <div className="grid grid-cols-2 gap-3">
-              <StatCard label={t("salon.todayApts", lang)} value={overview.data.todayAppointments} icon={CalendarDays} color="bg-brand-500/20 text-brand-400" />
-              <StatCard label={t("salon.activeMasters", lang)} value={overview.data.activeMasters} icon={Scissors} color="bg-purple-500/20 text-purple-400" />
-              <StatCard label={t("salon.openTickets", lang)} value={overview.data.openTickets} icon={AlertCircle} color="bg-amber-500/20 text-amber-400" />
-              <StatCard label={t("billing.plan", lang)} value={overview.data.plan?.toUpperCase() ?? "START"}
-                sub={t(`billing.${overview.data.billingStatus ?? "trialing"}` as any, lang)}
-                icon={CreditCard} color="bg-emerald-500/20 text-emerald-400" />
-            </div>
-          )}
-          {todayApts.isLoading && (
-            <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
-          )}
-          {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
-          {todayApts.data && todayApts.data.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.todayApts", lang)}</h3>
-                <button onClick={() => setTab("appointments")}
-                  className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
-                  {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
-                </button>
-              </div>
-              {todayApts.data.slice(0, 4).map((a: any) => (
-                <AptCard key={a.id} a={a} lang={lang}
-                  onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
-                  onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
-              ))}
-              {todayApts.data.length > 4 && (
-                <button onClick={() => setTab("appointments")}
-                  className="w-full text-xs text-slate-500 text-center py-2 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                  +{todayApts.data.length - 4} {t("salon.appointments", lang).toLowerCase()}
-                </button>
+              {!dashPrefs.hiddenStatCards.includes("todayAppointments") && (
+                <StatCard label={t("salon.todayApts", lang)} value={overview.data.todayAppointments} icon={CalendarDays} color="bg-brand-500/20 text-brand-400" />
+              )}
+              {!dashPrefs.hiddenStatCards.includes("activeMasters") && (
+                <StatCard label={t("salon.activeMasters", lang)} value={overview.data.activeMasters} icon={Scissors} color="bg-purple-500/20 text-purple-400" />
+              )}
+              {!dashPrefs.hiddenStatCards.includes("openTickets") && (
+                <StatCard label={t("salon.openTickets", lang)} value={overview.data.openTickets} icon={AlertCircle} color="bg-amber-500/20 text-amber-400" />
+              )}
+              {!dashPrefs.hiddenStatCards.includes("billingPlan") && (
+                <StatCard label={t("billing.plan", lang)} value={overview.data.plan?.toUpperCase() ?? "START"}
+                  sub={t(`billing.${overview.data.billingStatus ?? "trialing"}` as any, lang)}
+                  icon={CreditCard} color="bg-emerald-500/20 text-emerald-400" />
               )}
             </div>
           )}
-          {todayApts.data?.length === 0 && (
-            <p className="text-slate-500 text-sm text-center py-4">{t("salon.noApts", lang)}</p>
+          {dashPrefs.showTodayApts && (
+            <>
+              {todayApts.isLoading && (
+                <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
+              )}
+              {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+              {todayApts.data && todayApts.data.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.todayApts", lang)}</h3>
+                    <button onClick={() => setTab("appointments")}
+                      className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+                      {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {todayApts.data.slice(0, 4).map((a: any) => (
+                    <AptCard key={a.id} a={a} lang={lang}
+                      onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+                      onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
+                  ))}
+                  {todayApts.data.length > 4 && (
+                    <button onClick={() => setTab("appointments")}
+                      className="w-full text-xs text-slate-500 text-center py-2 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                      +{todayApts.data.length - 4} {t("salon.appointments", lang).toLowerCase()}
+                    </button>
+                  )}
+                </div>
+              )}
+              {todayApts.data?.length === 0 && (
+                <p className="text-slate-500 text-sm text-center py-4">{t("salon.noApts", lang)}</p>
+              )}
+            </>
           )}
         </div>
       )}

@@ -370,12 +370,10 @@ function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicAct
               {publicActive ? "Опубликован" : "Скрыт из каталога"}
             </p>
           </div>
-          {publicActive && (
-            <a href={publicUrl!} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
-              Открыть <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
+          <a href={publicUrl!} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
+            Открыть <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
 
         {/* URL */}

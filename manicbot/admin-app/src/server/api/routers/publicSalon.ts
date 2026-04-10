@@ -55,7 +55,7 @@ export const publicSalonRouter = createTRPCRouter({
       const tenantRows = await ctx.db
         .select()
         .from(tenants)
-        .where(and(eq(tenants.slug, input.slug), eq(tenants.publicActive, 1)))
+        .where(eq(tenants.slug, input.slug))
         .limit(1);
 
       const tenant = tenantRows[0];
@@ -135,6 +135,7 @@ export const publicSalonRouter = createTRPCRouter({
       return {
         id: tenant.id,
         slug: tenant.slug,
+        publicActive: tenant.publicActive ?? 0,
         name: tenant.name,
         displayName: tenant.displayName ?? null,
         logo: tenant.logo ?? null,

@@ -18,6 +18,16 @@
 }
 
 @layer base {
+  /* Hide native number input spinners */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type=number] {
+    -moz-appearance: textfield;
+  }
+
   /* Dark mode (default for dashboard) */
   :root {
     --background: #0f172a; /* slate-900 */

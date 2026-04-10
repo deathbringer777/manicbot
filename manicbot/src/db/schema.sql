@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS services (
   names TEXT,
   description TEXT,
   photos TEXT,
+  promo TEXT,
   PRIMARY KEY (tenant_id, svc_id)
 );
 

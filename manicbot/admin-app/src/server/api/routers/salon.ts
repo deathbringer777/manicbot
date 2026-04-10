@@ -207,6 +207,8 @@ export const salonRouter = createTRPCRouter({
       active: z.number().min(0).max(1).optional(),
       hidden: z.number().min(0).max(1).optional(),
       description: z.string().optional(),
+      photos: z.string().optional(),
+      promo: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -233,6 +235,8 @@ export const salonRouter = createTRPCRouter({
       price: z.number(),
       names: z.string(),
       description: z.string().optional(),
+      photos: z.string().optional(),
+      promo: z.string().optional(),
       active: z.number().min(0).max(1).default(1),
       hidden: z.number().min(0).max(1).default(0),
       sortOrder: z.number().default(0),
@@ -248,6 +252,8 @@ export const salonRouter = createTRPCRouter({
         price: input.price,
         names: input.names,
         description: input.description ?? null,
+        photos: input.photos ?? null,
+        promo: input.promo ?? null,
         active: input.active,
         hidden: input.hidden,
         sortOrder: input.sortOrder,
@@ -432,7 +438,7 @@ export const salonRouter = createTRPCRouter({
   mintUploadToken: publicProcedure
     .input(z.object({
       tenantId: z.string(),
-      kind: z.enum(["logo", "cover", "photo", "portfolio"]),
+      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

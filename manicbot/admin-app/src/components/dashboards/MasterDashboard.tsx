@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon } from "lucide-react";
+import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useInWebShell } from "~/components/layout/WebShell";
@@ -185,8 +186,12 @@ export function MasterDashboard({
     { tenantId },
     { enabled: isPersonal && tab === "services" }
   );
-  const [svcForm, setSvcForm] = useState<{ names: string; price: string; duration: string; emoji: string; description: string } | null>(null);
+  const [svcForm, setSvcForm] = useState<{ names: string; price: string; duration: string; emoji: string; description: string; promo: string; photos: string[] } | null>(null);
   const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
+  const [showSvcEmojiPicker, setShowSvcEmojiPicker] = useState(false);
+  const [svcUploading, setSvcUploading] = useState(false);
+  const svcFileRef = useRef<HTMLInputElement>(null);
+  const mintToken = api.salon.mintUploadToken.useMutation();
   const createSvc = api.master.createService.useMutation({
     onSuccess: () => { utils.master.getMyServices.invalidate(); setSvcForm(null); },
   });
@@ -483,8 +488,8 @@ export function MasterDashboard({
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.services", lang)}</h2>
             {!svcForm && (
               <button
-                onClick={() => setSvcForm({ names: "", price: "", duration: "60", emoji: "", description: "" })}
-                className="flex items-center gap-1.5 rounded-xl bg-brand-500/20 border border-brand-500/30 px-3 py-1.5 text-xs font-medium text-brand-400 hover:bg-brand-500/30 transition"
+                onClick={() => setSvcForm({ names: "", price: "", duration: "60", emoji: "💅", description: "", promo: "", photos: [] })}
+                className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 transition shadow-sm"
               >
                 <Plus className="h-3.5 w-3.5" />{t("master.addService", lang)}
               </button>
@@ -494,59 +499,147 @@ export function MasterDashboard({
           {/* Add/Edit form */}
           {svcForm && (
             <div className="glass-card rounded-2xl p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcName", lang)}</label>
+              {/* Emoji + Name */}
+              <div className="flex items-start gap-3">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSvcEmojiPicker(p => !p)}
+                    className="w-12 h-12 text-2xl rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/10 transition-colors focus:outline-none">
+                    {svcForm.emoji || "💅"}
+                  </button>
+                  {showSvcEmojiPicker && (
+                    <div className="absolute top-14 left-0 z-10 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl p-2">
+                      <div className="grid grid-cols-5 gap-1">
+                        {['💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧','🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫','🎨','🌷','🪸','🫐','🍒'].map(e => (
+                          <button key={e} onClick={() => { setSvcForm({ ...svcForm, emoji: e }); setShowSvcEmojiPicker(false); }}
+                            className={`text-xl h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors ${e === svcForm.emoji ? "bg-brand-500/15 ring-1 ring-brand-500/40" : ""}`}>
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{t("master.svcName", lang)}</label>
                   <input value={svcForm.names} onChange={e => setSvcForm({ ...svcForm, names: e.target.value })}
                     placeholder="Маникюр классический"
-                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcPrice", lang)}</label>
-                  <input type="number" value={svcForm.price} onChange={e => setSvcForm({ ...svcForm, price: e.target.value })}
-                    placeholder="150"
-                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcDuration", lang)}</label>
-                  <input type="number" value={svcForm.duration} onChange={e => setSvcForm({ ...svcForm, duration: e.target.value })}
-                    placeholder="60"
-                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcEmoji", lang)}</label>
-                  <input value={svcForm.emoji} onChange={e => setSvcForm({ ...svcForm, emoji: e.target.value })}
-                    placeholder="💅"
-                    maxLength={4}
-                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">{t("master.svcDescription", lang)}</label>
-                  <input value={svcForm.description} onChange={e => setSvcForm({ ...svcForm, description: e.target.value })}
-                    placeholder=""
-                    className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                    className="w-full rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
                 </div>
               </div>
-              <div className="flex gap-2">
+
+              {/* Price + Duration */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{t("master.svcPrice", lang)}</label>
+                  <input type="number" value={svcForm.price} onChange={e => setSvcForm({ ...svcForm, price: e.target.value })}
+                    placeholder="150"
+                    className="w-full rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{t("master.svcDuration", lang)}</label>
+                  <input type="number" value={svcForm.duration} onChange={e => setSvcForm({ ...svcForm, duration: e.target.value })}
+                    placeholder="60"
+                    className="w-full rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">Описание</label>
+                <textarea value={svcForm.description} onChange={e => setSvcForm({ ...svcForm, description: e.target.value })}
+                  rows={2} placeholder="Коротко о процедуре..."
+                  className="w-full resize-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
+              </div>
+
+              {/* Promo */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block">
+                  <Tag className="h-3 w-3" /> Промо стикер
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"].map(p => (
+                    <button key={p} onClick={() => setSvcForm({ ...svcForm, promo: svcForm.promo === p ? "" : p })}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        svcForm.promo === p
+                          ? "bg-red-500 text-white border-red-500"
+                          : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:border-red-400 hover:text-red-500"
+                      }`}>{p}</button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input value={svcForm.promo} onChange={e => setSvcForm({ ...svcForm, promo: e.target.value })} maxLength={12}
+                    placeholder="Свой текст (-5%, Акция…)"
+                    className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
+                  {svcForm.promo && (
+                    <span className="shrink-0 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">{svcForm.promo}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Photos */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 flex items-center gap-1.5 block">
+                  <Camera className="h-3 w-3" /> Фото услуги (до 5)
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {svcForm.photos.map((url, i) => (
+                    <div key={url} className="relative h-14 w-14 rounded-xl overflow-hidden group border border-slate-200 dark:border-white/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <button onClick={() => setSvcForm({ ...svcForm, photos: svcForm.photos.filter((_, idx) => idx !== i) })}
+                        className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <X className="h-3.5 w-3.5 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  {svcForm.photos.length < 5 && (
+                    <button onClick={() => svcFileRef.current?.click()} disabled={svcUploading}
+                      className="h-14 w-14 rounded-xl border-2 border-dashed border-slate-300 dark:border-white/15 flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:border-brand-500 hover:text-brand-400 transition-colors disabled:opacity-50">
+                      {svcUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                      {!svcUploading && <span className="text-[9px]">Добавить</span>}
+                    </button>
+                  )}
+                </div>
+                <input ref={svcFileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file || svcForm.photos.length >= 5) return;
+                    const err = validateUploadFile(file);
+                    if (err) { alert(err); return; }
+                    setSvcUploading(true);
+                    try {
+                      const compressed = await resizeImageClientSide(file, 1200, "image/webp", 0.82);
+                      const { uploadUrl } = await mintToken.mutateAsync({ tenantId, kind: "service_photo" });
+                      const result = await uploadAssetFile(uploadUrl, compressed);
+                      setSvcForm(f => f ? { ...f, photos: [...f.photos, result.url].slice(0, 5) } : f);
+                    } catch { alert("Ошибка загрузки фото"); }
+                    finally { setSvcUploading(false); e.target.value = ""; }
+                  }} />
+              </div>
+
+              <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => {
                     const price = parseFloat(svcForm.price);
                     const duration = parseInt(svcForm.duration);
                     if (!svcForm.names.trim() || isNaN(price) || isNaN(duration)) return;
+                    const photosJson = svcForm.photos.length > 0 ? JSON.stringify(svcForm.photos) : undefined;
+                    const promoVal = svcForm.promo.trim() || undefined;
                     if (editingSvcId) {
-                      updateSvc.mutate({ tenantId, svcId: editingSvcId, names: svcForm.names, price, duration, emoji: svcForm.emoji || undefined, description: svcForm.description || undefined });
+                      updateSvc.mutate({ tenantId, svcId: editingSvcId, names: svcForm.names, price, duration, emoji: svcForm.emoji || undefined, description: svcForm.description || undefined, photos: photosJson, promo: promoVal });
                     } else {
-                      createSvc.mutate({ tenantId, names: svcForm.names, price, duration, emoji: svcForm.emoji || undefined, description: svcForm.description || undefined });
+                      createSvc.mutate({ tenantId, names: svcForm.names, price, duration, emoji: svcForm.emoji || undefined, description: svcForm.description || undefined, photos: photosJson, promo: promoVal });
                     }
                   }}
-                  disabled={createSvc.isPending || updateSvc.isPending || !svcForm.names.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-500/20 border border-brand-500/30 px-4 py-2 text-sm font-medium text-brand-400 hover:bg-brand-500/30 transition disabled:opacity-50"
+                  disabled={createSvc.isPending || updateSvc.isPending || svcUploading || !svcForm.names.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition disabled:opacity-50 shadow-sm"
                 >
                   {(createSvc.isPending || updateSvc.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {editingSvcId ? t("common.save", lang) : t("master.addService", lang)}
                 </button>
                 <button
-                  onClick={() => { setSvcForm(null); setEditingSvcId(null); }}
+                  onClick={() => { setSvcForm(null); setEditingSvcId(null); setShowSvcEmojiPicker(false); }}
                   className="rounded-xl bg-slate-100 dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                 >
                   <X className="h-4 w-4" />
@@ -563,10 +656,24 @@ export function MasterDashboard({
             </div>
           )}
           <div className="space-y-2">
-            {svcList.data?.filter((s: any) => s.active).map((svc: any) => (
+            {svcList.data?.filter((s: any) => s.active).map((svc: any) => {
+              const svcPhotos: string[] = (() => { try { return JSON.parse(svc.photos ?? "[]"); } catch { return []; } })();
+              return (
               <div key={svc.svcId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center text-lg shrink-0">
-                  {svc.emoji || "✂️"}
+                <div className="relative shrink-0">
+                  {svcPhotos[0] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={svcPhotos[0]} alt="" className="w-10 h-10 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-xl">
+                      {svc.emoji || "✂️"}
+                    </div>
+                  )}
+                  {svc.promo && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow leading-none whitespace-nowrap">
+                      {svc.promo}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-slate-900 dark:text-white text-sm truncate">{svc.names || svc.svcId}</p>
@@ -575,7 +682,7 @@ export function MasterDashboard({
                 <div className="flex gap-1 shrink-0">
                   <button
                     onClick={() => {
-                      setSvcForm({ names: svc.names ?? "", price: String(svc.price), duration: String(svc.duration), emoji: svc.emoji ?? "", description: svc.description ?? "" });
+                      setSvcForm({ names: svc.names ?? "", price: String(svc.price), duration: String(svc.duration), emoji: svc.emoji ?? "💅", description: svc.description ?? "", promo: svc.promo ?? "", photos: svcPhotos });
                       setEditingSvcId(svc.svcId);
                     }}
                     className="h-7 w-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
@@ -591,7 +698,8 @@ export function MasterDashboard({
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

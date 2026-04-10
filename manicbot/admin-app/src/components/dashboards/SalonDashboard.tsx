@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronRight, AlertCircle,
   Loader2, Plus, Pencil, Trash2, Save, X,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
-  Star, MessageSquare, Reply,
+  Star, MessageSquare, Reply, Camera, Tag, ImageIcon,
 } from "lucide-react";
+import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useInWebShell } from "~/components/layout/WebShell";
@@ -24,6 +25,9 @@ import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
+const NAIL_EMOJIS = ['💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧','🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫','🎨','🌷','🪸','🫐','🍒'];
+const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
+
 function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: () => void; tenantId: string }) {
   const { lang } = useLang();
   const utils = api.useUtils();
@@ -37,7 +41,16 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
   const [duration, setDuration] = useState(String(svc?.duration ?? "60"));
   const [emoji, setEmoji] = useState(svc?.emoji ?? "💅");
   const [active, setActive] = useState(svc?.active !== 0);
+  const [description, setDescription] = useState(svc?.description ?? "");
+  const [promo, setPromo] = useState(svc?.promo ?? "");
+  const [photos, setPhotos] = useState<string[]>(() => {
+    try { return JSON.parse(svc?.photos ?? "[]"); } catch { return []; }
+  });
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const mintToken = api.salon.mintUploadToken.useMutation();
   const updateSvc = api.salon.updateService.useMutation({
     onSuccess: () => { utils.salon.getServices.invalidate(); onClose(); },
   });
@@ -46,40 +59,160 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
   });
 
   const isNew = !svc;
+  const isBusy = updateSvc.isPending || createSvc.isPending || uploading;
+
+  async function handlePhotoFile(file: File) {
+    if (photos.length >= 5) return;
+    const err = validateUploadFile(file);
+    if (err) { alert(err); return; }
+    setUploading(true);
+    try {
+      const compressed = await resizeImageClientSide(file, 1200, "image/webp", 0.82);
+      const { uploadUrl } = await mintToken.mutateAsync({ tenantId, kind: "service_photo" });
+      const result = await uploadAssetFile(uploadUrl, compressed);
+      setPhotos(prev => [...prev, result.url].slice(0, 5));
+    } catch {
+      alert("Ошибка загрузки фото");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function handleSave() {
     const namesJson = JSON.stringify({ ru: name, en: name, ua: name, pl: name });
     const activeNum = active ? 1 : 0;
     const priceNum = parseFloat(price) || 0;
     const durationNum = parseInt(duration, 10) || 60;
+    const photosJson = photos.length > 0 ? JSON.stringify(photos) : undefined;
+    const promoVal = promo.trim() || undefined;
     if (isNew) {
-      createSvc.mutate({ tenantId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum });
+      createSvc.mutate({ tenantId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum, description: description || undefined, photos: photosJson, promo: promoVal });
     } else {
-      updateSvc.mutate({ tenantId, svcId: svc.svcId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum });
+      updateSvc.mutate({ tenantId, svcId: svc.svcId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum, description: description || undefined, photos: photosJson, promo: promoVal });
     }
   }
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
-      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">{isNew ? t("action.create", lang) : t("action.edit", lang)}</h3>
-          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+    <div role="dialog" aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
+      <div
+        className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-t-3xl md:rounded-2xl shadow-2xl overflow-y-auto max-h-[92dvh]"
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 dark:border-white/5">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            {isNew ? t("action.create", lang) : t("action.edit", lang)}
+          </h3>
+          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex items-center gap-3">
-          <input value={emoji} onChange={e => setEmoji(e.target.value)} maxLength={4}
-            className="w-14 h-14 text-center text-3xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl focus:outline-none focus:ring-1 focus:ring-brand-500" />
-          <div className="flex-1">
-            <Input label={t("service.name", lang)} value={name} onChange={setName} placeholder="Маникюр" />
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Emoji + Name */}
+          <div className="flex items-start gap-3">
+            <div className="relative">
+              <button
+                onClick={() => setShowEmojiPicker(p => !p)}
+                className="w-14 h-14 text-3xl rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500">
+                {emoji}
+              </button>
+              {showEmojiPicker && (
+                <div className="absolute top-16 left-0 z-10 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl p-2">
+                  <div className="grid grid-cols-5 gap-1">
+                    {NAIL_EMOJIS.map(e => (
+                      <button key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
+                        className={`text-xl h-9 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors ${e === emoji ? "bg-brand-500/15 ring-1 ring-brand-500/40" : ""}`}>
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <Input label={t("service.name", lang)} value={name} onChange={setName} placeholder="Маникюр" />
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input label={t("service.price", lang)} value={price} onChange={setPrice} type="number" placeholder="500" />
-          <Input label={t("service.duration", lang)} value={duration} onChange={setDuration} type="number" placeholder="60" />
-        </div>
-        <div className="flex items-center gap-3">
+
+          {/* Price + Duration */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input label={t("service.price", lang)} value={price} onChange={setPrice} type="number" placeholder="500" />
+            <Input label={t("service.duration", lang)} value={duration} onChange={setDuration} type="number" placeholder="60" />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">Описание</label>
+            <textarea
+              value={description} onChange={e => setDescription(e.target.value)}
+              rows={2} placeholder="Коротко о процедуре..."
+              className="w-full resize-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
+          </div>
+
+          {/* Promo */}
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block">
+              <Tag className="h-3 w-3" /> Промо стикер
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {PROMO_PRESETS.map(p => (
+                <button key={p} onClick={() => setPromo((prev: string) => prev === p ? "" : p)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    promo === p
+                      ? "bg-red-500 text-white border-red-500"
+                      : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:border-red-400 hover:text-red-500"
+                  }`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={promo} onChange={e => setPromo(e.target.value)} maxLength={12}
+                placeholder="Свой текст (-5%, Акция…)"
+                className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
+              {promo && (
+                <span className="shrink-0 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+                  {promo}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Photos */}
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 flex items-center gap-1.5 block">
+              <Camera className="h-3 w-3" /> Фото услуги (до 5)
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {photos.map((url, i) => (
+                <div key={url} className="relative h-16 w-16 rounded-xl overflow-hidden group border border-slate-200 dark:border-white/10">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <X className="h-4 w-4 text-white" />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 5 && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="h-16 w-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-white/15 flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-brand-500 hover:text-brand-400 transition-colors disabled:opacity-50">
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                  {!uploading && <span className="text-[9px]">Добавить</span>}
+                </button>
+              )}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) { void handlePhotoFile(f); } e.target.value = ""; }} />
+          </div>
+
+          {/* Active toggle */}
           <button onClick={() => setActive(!active)}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
               active ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-white/10"
@@ -88,10 +221,14 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
             {active ? t("service.active", lang) : t("service.hidden", lang)}
           </button>
         </div>
-        <Btn onClick={handleSave} disabled={updateSvc.isPending || createSvc.isPending} className="w-full justify-center py-2.5">
-          {(updateSvc.isPending || createSvc.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {t("common.save", lang)}
-        </Btn>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          <Btn onClick={handleSave} disabled={isBusy} className="w-full justify-center py-2.5">
+            {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {t("common.save", lang)}
+          </Btn>
+        </div>
       </div>
     </div>
   );
@@ -996,10 +1133,23 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               let names: Record<string, string> = {};
               try { names = s.names ? JSON.parse(s.names) : {}; } catch { /* ignore */ }
               const name = names.ru ?? names.en ?? s.svcId;
+              const svcPhotos: string[] = (() => { try { return JSON.parse(s.photos ?? "[]"); } catch { return []; } })();
               return (
                 <div key={s.svcId} className="glass-card rounded-xl p-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl shrink-0">{s.emoji ?? "💅"}</span>
+                    <div className="relative shrink-0">
+                      {svcPhotos[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={svcPhotos[0]} alt="" className="w-10 h-10 rounded-xl object-cover" />
+                      ) : (
+                        <span className="text-2xl w-10 h-10 flex items-center justify-center">{s.emoji ?? "💅"}</span>
+                      )}
+                      {s.promo && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow leading-none whitespace-nowrap">
+                          {s.promo}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900 dark:text-white text-sm">{name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {s.price}\u00a0zł</p>

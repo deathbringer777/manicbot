@@ -243,6 +243,8 @@ export const masterRouter = createTRPCRouter({
       price: z.number(),
       names: z.string(),
       description: z.string().optional(),
+      photos: z.string().optional(),
+      promo: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertPersonalMaster(ctx, input.tenantId);
@@ -255,6 +257,8 @@ export const masterRouter = createTRPCRouter({
         price: input.price,
         names: input.names,
         description: input.description ?? null,
+        photos: input.photos ?? null,
+        promo: input.promo ?? null,
         active: 1,
         hidden: 0,
         sortOrder: 0,
@@ -272,6 +276,8 @@ export const masterRouter = createTRPCRouter({
       names: z.string().optional(),
       active: z.number().min(0).max(1).optional(),
       description: z.string().optional(),
+      photos: z.string().optional(),
+      promo: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertPersonalMaster(ctx, input.tenantId);

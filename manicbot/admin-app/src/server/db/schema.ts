@@ -170,6 +170,7 @@ export const services = sqliteTable("services", {
   names: text("names"),
   description: text("description"),
   photos: text("photos"),
+  promo: text("promo"),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 

@@ -17,7 +17,7 @@
 
 import { timingSafeEqual } from '../utils/security.js';
 
-export const ALLOWED_KINDS = new Set(['logo', 'cover', 'photo', 'portfolio']);
+export const ALLOWED_KINDS = new Set(['logo', 'cover', 'photo', 'portfolio', 'service_photo']);
 export const ALLOWED_MIME = new Map([
   ['image/png', 'png'],
   ['image/jpeg', 'jpg'],

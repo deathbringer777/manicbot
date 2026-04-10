@@ -56,26 +56,26 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },
   { id: "god.system",        href: "/system",             icon: Activity,        labelKey: "System",           roles: ["system_admin"], group: "platform" },
 
-  // ── Salon (tenant_owner) ──
-  { id: "salon.overview",      href: "/my-salon",               icon: LayoutGrid,    labelKey: "Dashboard",     roles: ["tenant_owner"] },
-  { id: "salon.appointments",  href: "/my-salon/appointments",  icon: CalendarDays,  labelKey: "Appointments",  roles: ["tenant_owner"], hideable: true },
-  { id: "salon.services",      href: "/my-salon/services",      icon: Scissors,      labelKey: "Services",      roles: ["tenant_owner"], hideable: true },
-  { id: "salon.masters",       href: "/my-salon/masters",       icon: UserRound,     labelKey: "Masters",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.clients",       href: "/my-salon/clients",       icon: Users,         labelKey: "Clients",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.billing",       href: "/my-salon/billing",       icon: Wallet,        labelKey: "Billing",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.channels",      href: "/my-salon/channels",      icon: MessageSquare, labelKey: "Channels",      roles: ["tenant_owner"], hideable: true },
-  { id: "salon.analytics",     href: "/my-salon/analytics",     icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
-  { id: "salon.reviews",       href: "/my-salon/reviews",       icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.publicProfile", href: "/my-salon/public-profile",icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
+  // ── Salon (tenant_owner) — flat routes with s- prefix ──
+  { id: "salon.overview",      href: "/s-overview",       icon: LayoutGrid,    labelKey: "Dashboard",     roles: ["tenant_owner"] },
+  { id: "salon.appointments",  href: "/s-appointments",   icon: CalendarDays,  labelKey: "Appointments",  roles: ["tenant_owner"], hideable: true },
+  { id: "salon.services",      href: "/s-services",       icon: Scissors,      labelKey: "Services",      roles: ["tenant_owner"], hideable: true },
+  { id: "salon.masters",       href: "/s-masters",        icon: UserRound,     labelKey: "Masters",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.clients",       href: "/s-clients",        icon: Users,         labelKey: "Clients",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.billing",       href: "/s-billing",        icon: Wallet,        labelKey: "Billing",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.channels",      href: "/s-channels",       icon: MessageSquare, labelKey: "Channels",      roles: ["tenant_owner"], hideable: true },
+  { id: "salon.analytics",     href: "/s-analytics",      icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
+  { id: "salon.reviews",       href: "/s-reviews",        icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
+  { id: "salon.publicProfile", href: "/s-public-profile", icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
 
-  // ── Master ──
-  { id: "master.today",    href: "/master",              icon: Home,          labelKey: "Today",    roles: ["master"] },
-  { id: "master.schedule", href: "/master/schedule",     icon: CalendarCheck, labelKey: "Schedule", roles: ["master"] },
-  { id: "master.clients",  href: "/master/clients",      icon: Users,         labelKey: "Clients",  roles: ["master"] },
-  { id: "master.earnings", href: "/master/earnings",     icon: Wallet,        labelKey: "Earnings", roles: ["master"] },
-  { id: "master.reviews",  href: "/master/reviews",      icon: Star,          labelKey: "Reviews",  roles: ["master"] },
-  { id: "master.services", href: "/master/services",     icon: Scissors,      labelKey: "Services", roles: ["master"], requiresPersonalTenant: true },
-  { id: "master.profile",  href: "/master/profile",      icon: UserRound,     labelKey: "Profile",  roles: ["master"] },
+  // ── Master — flat routes with m- prefix ──
+  { id: "master.today",    href: "/m-today",       icon: Home,          labelKey: "Today",    roles: ["master"] },
+  { id: "master.schedule", href: "/m-schedule",    icon: CalendarCheck, labelKey: "Schedule", roles: ["master"] },
+  { id: "master.clients",  href: "/m-clients",     icon: Users,         labelKey: "Clients",  roles: ["master"] },
+  { id: "master.earnings", href: "/m-earnings",    icon: Wallet,        labelKey: "Earnings", roles: ["master"] },
+  { id: "master.reviews",  href: "/m-reviews",     icon: Star,          labelKey: "Reviews",  roles: ["master"] },
+  { id: "master.services", href: "/m-services",    icon: Scissors,      labelKey: "Services", roles: ["master"], requiresPersonalTenant: true },
+  { id: "master.profile",  href: "/m-profile",     icon: UserRound,     labelKey: "Profile",  roles: ["master"] },
 
   // ── Support ──
   { id: "support.tickets", href: "/dashboard", icon: HeadphonesIcon, labelKey: "Tickets", roles: ["support", "technical_support"] },

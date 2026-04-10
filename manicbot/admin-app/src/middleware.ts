@@ -2,32 +2,32 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Redirect legacy ?tab= URLs to new /my-salon/* and /master/* routes.
+ * Redirect legacy ?tab= URLs to new flat /s-* and /m-* routes.
  * Only fires on /dashboard with a tab query param.
  */
 
 const SALON_TAB_REDIRECTS: Record<string, string> = {
-  appointments: "/my-salon/appointments",
-  services: "/my-salon/services",
-  masters: "/my-salon/masters",
-  clients: "/my-salon/clients",
-  billing: "/my-salon/billing",
-  channels: "/my-salon/channels",
-  analytics: "/my-salon/analytics",
-  reviews: "/my-salon/reviews",
-  public_profile: "/my-salon/public-profile",
+  appointments: "/s-appointments",
+  services: "/s-services",
+  masters: "/s-masters",
+  clients: "/s-clients",
+  billing: "/s-billing",
+  channels: "/s-channels",
+  analytics: "/s-analytics",
+  reviews: "/s-reviews",
+  public_profile: "/s-public-profile",
   // Channel shortcuts
-  instagram: "/my-salon/channels",
-  whatsapp: "/my-salon/channels",
+  instagram: "/s-channels",
+  whatsapp: "/s-channels",
 };
 
 const MASTER_TAB_REDIRECTS: Record<string, string> = {
-  schedule: "/master/schedule",
-  clients: "/master/clients",
-  earnings: "/master/earnings",
-  reviews: "/master/reviews",
-  services: "/master/services",
-  profile: "/master/profile",
+  schedule: "/m-schedule",
+  clients: "/m-clients",
+  earnings: "/m-earnings",
+  reviews: "/m-reviews",
+  services: "/m-services",
+  profile: "/m-profile",
 };
 
 export function middleware(request: NextRequest) {

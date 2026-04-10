@@ -121,8 +121,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
     if (item.href === "/dashboard" || item.href === "/") {
       return (pathname === "/dashboard" || pathname === "/") && !searchParams.get("tab");
     }
-    // Segment roots (e.g. /salon, /master): exact match only (avoid /salon matching /salon/appointments)
-    if (item.href === "/my-salon" || item.href === "/master") {
+    // Flat route overviews: exact match only (avoid /s-overview matching /s-appointments)
+    if (item.href === "/s-overview" || item.href === "/m-today") {
       return pathname === item.href;
     }
     // Sub-routes: prefix match

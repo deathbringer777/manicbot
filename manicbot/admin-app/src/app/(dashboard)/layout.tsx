@@ -114,8 +114,8 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "tenant_owner") {
-    const isSalonRoute = pathname.startsWith("/my-salon/") || pathname === "/my-salon";
-    const isMasterRoute = pathname.startsWith("/master/") || pathname === "/master";
+    const isSalonRoute = pathname.startsWith("/s-") || pathname === "/s-";
+    const isMasterRoute = pathname.startsWith("/m-") || pathname === "/m-";
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
@@ -136,7 +136,7 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "master") {
-    const isMasterRoute = pathname.startsWith("/master/") || pathname === "/master";
+    const isMasterRoute = pathname.startsWith("/m-") || pathname === "/m-";
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>

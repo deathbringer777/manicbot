@@ -113,6 +113,13 @@ export default function RegisterPage() {
     setError(null);
     setSuccessMessage(null);
 
+    const emailVal = email.trim();
+    if (!emailVal) { setError(copy.shared.emailRequired); return; }
+    if (!emailVal.includes("@") || emailVal.indexOf("@") === emailVal.length - 1) {
+      setError(copy.shared.emailInvalid); return;
+    }
+    if (!password) { setError(copy.shared.passwordRequired); return; }
+
     if (password !== confirmPassword) {
       setError(copy.register.passwordsMismatch);
       return;
@@ -184,7 +191,7 @@ export default function RegisterPage() {
         </p>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {googlePrefillToken && prefillQuery.isFetched && prefillQuery.data && !prefillQuery.data.ok && (
           <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-100">
             {copy.register.googlePrefillExpired}

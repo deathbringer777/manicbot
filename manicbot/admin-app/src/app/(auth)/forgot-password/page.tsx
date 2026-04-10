@@ -26,6 +26,11 @@ export default function ForgotPasswordPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const emailVal = email.trim();
+    if (!emailVal) { setError(copy.shared.emailRequired); return; }
+    if (!emailVal.includes("@") || emailVal.indexOf("@") === emailVal.length - 1) {
+      setError(copy.shared.emailInvalid); return;
+    }
     startTransition(async () => {
       try {
         await mutation.mutateAsync({ email: email.trim().toLowerCase() });
@@ -59,7 +64,7 @@ export default function ForgotPasswordPage() {
           {f.done}
         </p>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               {f.email}

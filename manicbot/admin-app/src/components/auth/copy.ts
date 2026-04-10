@@ -17,6 +17,9 @@ export const authCopy: Record<
       featureThreeTitle: string;
       featureThreeText: string;
       or: string;
+      emailRequired: string;
+      emailInvalid: string;
+      passwordRequired: string;
     };
     login: {
       kicker: string;
@@ -161,6 +164,9 @@ export const authCopy: Record<
       featureThreeTitle: "Команда и роли",
       featureThreeText: "Владелец, мастер и поддержка работают в одном кабинете без лишних переключений.",
       or: "или",
+      emailRequired: "Введите email",
+      emailInvalid: "Введите корректный email",
+      passwordRequired: "Введите пароль",
     },
     login: {
       kicker: "Кабинет ManicBot",
@@ -306,6 +312,9 @@ export const authCopy: Record<
       featureThreeTitle: "Команда та ролі",
       featureThreeText: "Власник, майстер і підтримка працюють в одному кабінеті без зайвих перемикань.",
       or: "або",
+      emailRequired: "Введіть email",
+      emailInvalid: "Введіть коректний email",
+      passwordRequired: "Введіть пароль",
     },
     login: {
       kicker: "Кабінет ManicBot",
@@ -451,6 +460,9 @@ export const authCopy: Record<
       featureThreeTitle: "Team roles that make sense",
       featureThreeText: "Owner, master, and support work inside one cabinet without bouncing between tools.",
       or: "or",
+      emailRequired: "Enter your email",
+      emailInvalid: "Enter a valid email address",
+      passwordRequired: "Enter your password",
     },
     login: {
       kicker: "ManicBot cabinet",
@@ -596,6 +608,9 @@ export const authCopy: Record<
       featureThreeTitle: "Role bez zamieszania",
       featureThreeText: "Właścicielka, stylistka i support pracują w jednym panelu bez skakania między narzędziami.",
       or: "lub",
+      emailRequired: "Wprowadź email",
+      emailInvalid: "Wprowadź prawidłowy adres email",
+      passwordRequired: "Wprowadź hasło",
     },
     login: {
       kicker: "Panel ManicBot",

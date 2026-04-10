@@ -56,11 +56,12 @@ database_name = "manicbot-db"
 database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 
 # ─── R2 object storage for salon branding assets ─────────────────────────────
-# Buckets: wrangler r2 bucket create manicbot-assets
-[[r2_buckets]]
-binding = "ASSETS"
-bucket_name = "manicbot-assets"
-preview_bucket_name = "manicbot-assets-preview"
+# Enable R2 in Cloudflare Dashboard first, then uncomment:
+#   wrangler r2 bucket create manicbot-assets
+# [[r2_buckets]]
+# binding = "ASSETS"
+# bucket_name = "manicbot-assets"
+# preview_bucket_name = "manicbot-assets-preview"
 
 # ─── Required secret for signed upload tokens ────────────────────────────────
 #   wrangler secret put UPLOAD_TOKEN_SECRET

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
 import { platformTickets, platformTicketMessages, platformRoles, tenantRoles } from "~/server/db/schema";
-import { eq, desc, or, like } from "drizzle-orm";
+import { eq, desc, or, like, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { timingSafeEqualStr } from "~/server/auth/telegram";
@@ -31,6 +31,24 @@ function supportSenderId(ctx: any): string {
   if (ctx.user) return `support:${ctx.user.id}`;
   if (ctx.webUser) return `support:web:${ctx.webUser.id}`;
   return "support:unknown";
+}
+
+function userSenderId(ctx: any): string {
+  if (ctx.user) return `user:${ctx.user.id}`;
+  if (ctx.webUser) return `user:web:${ctx.webUser.id}`;
+  return "user:unknown";
+}
+
+/** Build WHERE condition matching tickets created by the current user */
+function myTicketsFilter(ctx: any) {
+  if (ctx.user) return eq(platformTickets.clientChatId, ctx.user.id);
+  if (ctx.webUser) {
+    return and(
+      eq(platformTickets.clientChatId, 0),
+      eq(platformTickets.clientName, ctx.webUser.email),
+    );
+  }
+  throw new TRPCError({ code: "UNAUTHORIZED" });
 }
 
 export const supportRouter = createTRPCRouter({
@@ -151,6 +169,65 @@ export const supportRouter = createTRPCRouter({
       await assertSupport(ctx);
       await ctx.db.update(platformTickets)
         .set({ status: "escalated", updatedAt: Math.floor(Date.now() / 1000) })
+        .where(eq(platformTickets.id, input.ticketId));
+      return { ok: true };
+    }),
+
+  // ── Creator-facing procedures ──────────────────────────────────────
+
+  /** List tickets created by the current user */
+  getMyTickets: protectedProcedure.query(async ({ ctx }) => {
+    const filter = myTicketsFilter(ctx);
+    return ctx.db
+      .select()
+      .from(platformTickets)
+      .where(filter)
+      .orderBy(desc(platformTickets.updatedAt))
+      .limit(50);
+  }),
+
+  /** Get a single ticket + messages (only if the current user created it) */
+  getMyTicket: protectedProcedure
+    .input(z.object({ ticketId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const filter = myTicketsFilter(ctx);
+      const rows = await ctx.db
+        .select()
+        .from(platformTickets)
+        .where(and(eq(platformTickets.id, input.ticketId), filter))
+        .limit(1);
+      if (!rows.length) throw new TRPCError({ code: "NOT_FOUND" });
+      const messages = await ctx.db
+        .select()
+        .from(platformTicketMessages)
+        .where(eq(platformTicketMessages.ticketId, input.ticketId))
+        .orderBy(platformTicketMessages.createdAt);
+      return { ticket: rows[0]!, messages };
+    }),
+
+  /** Reply to own ticket (reopens if closed) */
+  replyToMyTicket: protectedProcedure
+    .input(z.object({ ticketId: z.string(), text: z.string().min(1).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      const filter = myTicketsFilter(ctx);
+      const rows = await ctx.db
+        .select()
+        .from(platformTickets)
+        .where(and(eq(platformTickets.id, input.ticketId), filter))
+        .limit(1);
+      if (!rows.length) throw new TRPCError({ code: "NOT_FOUND" });
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db.insert(platformTicketMessages).values({
+        ticketId: input.ticketId,
+        sender: userSenderId(ctx),
+        text: input.text,
+        createdAt: now,
+      });
+      const updates: Record<string, any> = { updatedAt: now };
+      if (rows[0]!.status === "closed") updates.status = "open";
+      await ctx.db
+        .update(platformTickets)
+        .set(updates)
         .where(eq(platformTickets.id, input.ticketId));
       return { ok: true };
     }),

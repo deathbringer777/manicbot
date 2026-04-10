@@ -178,12 +178,9 @@ describe("rate limiter", () => {
 // ── Email templates ───────────────────────────────────────────────────────────
 
 describe("verificationCodeEmailHtml", () => {
-  it("includes each digit of the code in the output", () => {
+  it("includes the full code in the output as a single block", () => {
     const html = verificationCodeEmailHtml("847291", "en");
-    // Digits are rendered in individual table cells — verify each appears
-    for (const digit of "847291") {
-      expect(html).toContain(`>${digit}<`);
-    }
+    expect(html).toContain("847291");
   });
 
   it("renders for all 4 supported languages without throwing", () => {
@@ -258,10 +255,7 @@ describe("sendVerificationCodeEmail", () => {
     const call = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     const body = JSON.parse(call[1]!.body as string);
     expect(body.subject).toContain("ManicBot");
-    // Digits are rendered in individual table cells
-    for (const digit of "123456") {
-      expect(body.html).toContain(`>${digit}<`);
-    }
+    expect(body.html).toContain("123456");
     expect(body.to).toEqual(["user@example.com"]);
   });
 
@@ -274,9 +268,7 @@ describe("sendVerificationCodeEmail", () => {
     expect(result).toEqual({ ok: true });
     const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1]!.body as string);
     expect(body.subject).toMatch(/ManicBot/);
-    for (const digit of "654321") {
-      expect(body.html).toContain(`>${digit}<`);
-    }
+    expect(body.html).toContain("654321");
   });
 
   it("returns ok:false when Resend is not configured", async () => {

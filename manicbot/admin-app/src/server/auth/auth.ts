@@ -74,8 +74,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const user = rows[0];
 
-        // Unknown email — log attempt, return null (same response as wrong password)
-        if (!user?.passwordHash) {
+        // Unknown email or no password set — log attempt, return null
+        if (!user?.passwordHash || user.passwordHash === "") {
           try {
             await db.insert(auditLog).values({
               tenantId: null,

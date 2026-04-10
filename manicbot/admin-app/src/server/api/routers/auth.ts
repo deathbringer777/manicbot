@@ -52,7 +52,7 @@ export const authRouter = createTRPCRouter({
           .limit(1);
         createdAt = rows[0]?.createdAt ?? null;
         emailVerified = !!(rows[0]?.emailVerified);
-        hasPassword = !!(rows[0]?.passwordHash);
+        hasPassword = !!(rows[0]?.passwordHash && rows[0].passwordHash !== "");
       } catch { /* non-critical */ }
 
       // For web masters: look up their masterId and check if personal tenant

@@ -181,7 +181,7 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "CONFLICT", message: "Registration failed. Please try again or use a different email." });
       }
       const id = crypto.randomUUID();
-      const passwordHash = input.password ? await hashPassword(input.password) : null;
+      const passwordHash = input.password ? await hashPassword(input.password) : "";
       const verificationCode = generateVerificationCode();
       // Store hashed code in DB; email contains the plaintext code
       const verificationCodeHash = await hashToken(verificationCode);
@@ -705,7 +705,7 @@ export const webUsersRouter = createTRPCRouter({
       }
 
       const user = rows[0]!;
-      if (!user.passwordHash) {
+      if (!user.passwordHash || user.passwordHash === "") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No password set. Use 'Set password' instead." });
       }
       const valid = await verifyPassword(input.currentPassword, user.passwordHash);
@@ -805,8 +805,8 @@ export const webUsersRouter = createTRPCRouter({
       if (!rows.length) {
         throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
       }
-      // Only allow setting initial password if none is set
-      if (rows[0]!.passwordHash) {
+      // Only allow setting initial password if none is set (empty string = no password)
+      if (rows[0]!.passwordHash && rows[0]!.passwordHash !== "") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Password already set. Use change password instead." });
       }
       const newHash = await hashPassword(input.newPassword);

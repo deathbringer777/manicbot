@@ -3,7 +3,8 @@
 export const runtime = "edge";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { api } from "~/trpc/react";
 import { RoleContext } from "~/components/RoleContext";
 import { WebShell } from "~/components/layout/WebShell";
@@ -16,6 +17,11 @@ import { EmailVerificationPopup } from "~/components/EmailVerificationPopup";
 import { SetPasswordBanner } from "~/components/SetPasswordBanner";
 import type { AppRole } from "~/server/api/routers/auth";
 
+// Lazy-loaded god-mode tab pages that live under broken (dashboard) routes on CF Pages.
+// @cloudflare/next-on-pages routes new (dashboard)/* paths to (public) layout → 404.
+// Workaround: render them inline via ?tab= on the working /dashboard route.
+const GodRoleRequests = dynamic(() => import("./role-requests/RoleRequestsPageClient"));
+
 export default function DashboardLayout({
   children,
 }: {
@@ -23,6 +29,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [previewRole, setPreviewRoleState] = useState<AppRole>(null);
   const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
   const [previewMasterId, setPreviewMasterIdState] = useState<number | null>(null);
@@ -157,10 +164,18 @@ export default function DashboardLayout({
     );
   }
 
-  // system_admin → full page routing with WebShell
+  // system_admin → full page routing with WebShell.
+  // Some (dashboard)/* routes 404 on CF Pages (routed to (public) group).
+  // For those, render inline via ?tab= on the working /dashboard route.
+  const godTab = searchParams.get("tab");
+  const GOD_TAB_COMPONENTS: Record<string, React.ComponentType> = {
+    "role-requests": GodRoleRequests,
+  };
+  const GodTabComponent = godTab ? GOD_TAB_COMPONENTS[godTab] : null;
+
   return (
     <RoleContext.Provider value={ctxValue}>
-      <WebShell>{wrapWithEmailGate(children)}</WebShell>
+      <WebShell>{wrapWithEmailGate(GodTabComponent ? <GodTabComponent /> : children)}</WebShell>
     </RoleContext.Provider>
   );
 }

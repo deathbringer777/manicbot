@@ -49,7 +49,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.users",         href: "/users",              icon: Users,           labelKey: "Users",            roles: ["system_admin"], group: "management" },
   { id: "god.appointments",  href: "/appointments",       icon: CalendarDays,    labelKey: "Appointments",     roles: ["system_admin"], group: "management" },
   { id: "god.conversations", href: "/conversations",      icon: MessageSquare,   labelKey: "Inbox",            roles: ["system_admin"], group: "management" },
-  { id: "god.roleRequests",  href: "/role-requests",      icon: ArrowLeftRight,  labelKey: "Role Requests",    roles: ["system_admin"], group: "management" },
+  { id: "god.roleRequests",  href: "/dashboard?tab=role-requests", icon: ArrowLeftRight, labelKey: "Role Requests", roles: ["system_admin"], group: "management" },
   { id: "god.agents",        href: "/agents",             icon: UserCog,         labelKey: "Agents",           roles: ["system_admin"], group: "management" },
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },

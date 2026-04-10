@@ -57,9 +57,9 @@ export default function DashboardLayout({
   // Loading
   if (roleQuery.isLoading || !roleQuery.data?.role) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-800 border-t-brand-500" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-brand-500" />
           <p className="text-sm text-slate-500">Loading...</p>
         </div>
       </div>
@@ -111,10 +111,10 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            !effectiveTenantId
-              ? <NoTenantOnboarding role="tenant_owner" />
-              : isSettingsPage
-                ? children
+            isSettingsPage
+              ? children
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="tenant_owner" />
                 : previewMasterId !== null
                   ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
                   : <SalonDashboard tenantId={effectiveTenantId} />
@@ -129,9 +129,11 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            !effectiveTenantId
-              ? <NoTenantOnboarding role="master" />
-              : isSettingsPage ? children : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
+            isSettingsPage
+              ? children
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="master" />
+                : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
           )}
         </WebShell>
       </RoleContext.Provider>

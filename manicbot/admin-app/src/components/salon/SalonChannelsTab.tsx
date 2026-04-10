@@ -7,6 +7,7 @@ import {
   Eye, EyeOff, Download, QrCode,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import Link from "next/link";
 import { api } from "~/trpc/react";
 import { SectionHeader } from "./SalonShared";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
@@ -345,7 +346,10 @@ function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicAct
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">Веб-профиль не настроен</h3>
-            <p className="text-[11px] text-slate-500">Настройте адрес профиля во вкладке «Профиль»</p>
+            <p className="text-[11px] text-slate-500">
+              Настройте адрес профиля во вкладке{" "}
+              <Link href="/dashboard?tab=public_profile" className="text-sky-400 hover:underline">«Публичный профиль»</Link>
+            </p>
           </div>
         </div>
       </section>

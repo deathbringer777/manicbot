@@ -4,7 +4,7 @@ export default {
   reg_change: '✏️ Change name',
   reg_enter_name: '✏️ Enter your name:',
   reg_name_err: '❌ Enter a valid name (2-50 characters):',
-  reg_phone: 'Great, <b>{n}</b>! 😊\n\n📱 Enter your phone number or press the button:',
+  reg_phone: 'Great, <b>{n}</b>! 😊\n\n📱 Enter your phone number or press the button:\n\nPlease type your phone number (e.g. +48123456789):',
   reg_phone_btn: '📱 Send number',
   reg_phone_err: '❌ Enter a valid phone number:',
   reg_done: '✅ <b>Registration complete!</b>\n\n👤 Name: <b>{n}</b>\n📱 Phone: <b>{p}</b>',

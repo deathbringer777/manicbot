@@ -9,9 +9,17 @@ import { getApts, getSlots } from '../services/appointments.js';
 import { svcKb, calKb, timeKb } from './keyboards.js';
 import { showMyApts } from './screens.js';
 
-export async function startBooking(ctx, cid, from) {
+export async function startBooking(ctx, cid, from, bookingIntent = null) {
   const lg = await getLang(ctx, cid) || 'ru';
   const user = await getUser(ctx, cid);
+  // Spread booking intent into state so finishPhone() can resume the flow
+  // after registration completes (it checks st.svcId / st.date / st.time).
+  const intentFields = bookingIntent ? {
+    ...(bookingIntent.svcId ? { svcId: bookingIntent.svcId } : {}),
+    ...(bookingIntent.dateHint ? { date: bookingIntent.dateHint } : {}),
+    ...(bookingIntent.timeHint ? { time: bookingIntent.timeHint } : {}),
+    ...(bookingIntent.masterId ? { masterId: bookingIntent.masterId } : {}),
+  } : {};
   if (!isRegComplete(user)) {
     // Web channel: there's no genuine Telegram name to confirm, so skip
     // REG_CONFIRM and prompt for a typed name directly. This is also
@@ -22,6 +30,7 @@ export async function startBooking(ctx, cid, from) {
         step: STEP.REG_NAME, flow: 'book',
         tgUser: from?.username || null,
         tgLang: from?.language_code || null,
+        ...intentFields,
       });
       return send(ctx, cid, t(lg, 'reg_enter_name'));
     }
@@ -30,6 +39,7 @@ export async function startBooking(ctx, cid, from) {
       step: 'rc', flow: 'book', tgName,
       tgUser: from?.username || null,
       tgLang: from?.language_code || null,
+      ...intentFields,
     });
     return send(ctx, cid, fill(t(lg, 'reg_confirm_name'), { n: escHtml(tgName) }), {
       reply_markup: { inline_keyboard: [
@@ -45,7 +55,7 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
   const lg = await getLang(ctx, cid) || 'ru';
   if (!ctx.svcIds?.has(svcId)) return startBooking(ctx, cid, from);
   const user = await getUser(ctx, cid);
-  if (!isRegComplete(user)) return startBooking(ctx, cid, from);
+  if (!isRegComplete(user)) return startBooking(ctx, cid, from, { svcId, dateHint, timeHint, masterId });
   const s = ctx.svc.find(x => x.id === svcId);
   if (!s) return startBooking(ctx, cid, from);
 

@@ -1427,6 +1427,12 @@ export async function onMsg(ctx, msg) {
     if (quick) {
       return startBookingWithService(ctx, cid, msg.from, quick.svcId, quick.dateHint, quick.timeHint);
     }
+    // Detect bare service mention ("педикюр", "на педик", "гель-лак") — start
+    // booking with that service even without the "запиши" trigger word.
+    const mention = parseServiceMention(txt, ctx);
+    if (mention) {
+      return startBookingWithService(ctx, cid, msg.from, mention);
+    }
   }
 
   if ((realRole === 'admin' || realRole === 'master' || realRole === 'system_admin') && isConfirmAllRequestsMessage(txt)) {

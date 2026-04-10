@@ -418,3 +418,15 @@ export async function getAptById(ctx, aptId) {
   const row = await dbGet(ctx, 'SELECT * FROM appointments WHERE id = ? AND tenant_id = ?', aptId, ctx.tenantId);
   return aptRowToDoc(row);
 }
+
+/**
+ * Look up an appointment by ID without tenant scoping.
+ * Used exclusively by the calendar HTTP handler where the HMAC signature
+ * already authenticates the request, so tenant constraint is unnecessary.
+ * The appointment ID (a<timestamp>_<random>) is globally unique.
+ */
+export async function getAptByIdGlobal(ctx, aptId) {
+  if (!ctx?.db) return null;
+  const row = await dbGet(ctx, 'SELECT * FROM appointments WHERE id = ?', aptId);
+  return aptRowToDoc(row);
+}

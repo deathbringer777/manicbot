@@ -88,7 +88,7 @@ export function MessageBubble({
                         href={btn.url}
                         target="_blank"
                         rel="noopener noreferrer nofollow"
-                        className="text-xs px-3 py-1.5 rounded-full border border-slate-300 dark:border-white/15 bg-white/70 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                        className="text-sm px-4 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white/80 dark:bg-slate-800/70 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition min-w-[72px] text-center"
                       >
                         {btn.text}
                       </a>
@@ -100,11 +100,11 @@ export function MessageBubble({
                       type="button"
                       onClick={() => btn.callback_data && onButtonClick(btn.callback_data, msg.id)}
                       disabled={!btn.callback_data}
-                      className="text-xs px-3 py-1.5 rounded-full border transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="text-sm px-4 py-2 rounded-xl border transition disabled:opacity-40 disabled:cursor-not-allowed min-w-[72px] text-center hover:brightness-95 active:scale-[0.97]"
                       style={{
-                        borderColor: `${palette}66`,
+                        borderColor: `${palette}44`,
                         color: palette,
-                        background: `${palette}10`,
+                        background: `${palette}0d`,
                       }}
                     >
                       {btn.text}

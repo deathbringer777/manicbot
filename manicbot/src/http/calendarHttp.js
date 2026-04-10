@@ -1,4 +1,4 @@
-import { getAptById } from '../services/appointments.js';
+import { getAptByIdGlobal } from '../services/appointments.js';
 import { getLang } from '../services/chat.js';
 import { makeICS } from '../utils/ics.js';
 import { initServices } from '../services/services.js';
@@ -58,11 +58,16 @@ export async function tryCalendar(request, ctx, url) {
   }
 
   if (!ctx.db) return new Response('Service unavailable', { status: 503 });
-  await initServices(ctx);
-  const apt = await getAptById(ctx, aptId);
+  // Look up without tenant constraint — HMAC signature already authenticates
+  const apt = await getAptByIdGlobal(ctx, aptId);
   if (!apt || apt.cx) {
     return new Response('Appointment not found', { status: 404 });
   }
+  // Re-init services for the appointment's tenant (calendar links are cross-tenant)
+  if (apt.tenantId && apt.tenantId !== ctx.tenantId) {
+    ctx.tenantId = apt.tenantId;
+  }
+  await initServices(ctx);
   const svc = ctx.svc.find(x => x.id === apt.svcId);
   if (!svc) return new Response('Service not found', { status: 404 });
 

@@ -4,7 +4,7 @@ export default {
   reg_change: '✏️ Zmień imię',
   reg_enter_name: '✏️ Podaj swoje imię:',
   reg_name_err: '❌ Podaj poprawne imię (2-50 znaków):',
-  reg_phone: 'Świetnie, <b>{n}</b>! 😊\n\n📱 Podaj numer telefonu lub naciśnij przycisk:',
+  reg_phone: 'Świetnie, <b>{n}</b>! 😊\n\n📱 Podaj numer telefonu lub naciśnij przycisk:\n\n<i>Prosimy sprawdzić poprawność numeru</i>',
   reg_phone_btn: '📱 Wyślij numer',
   reg_phone_err: '❌ Podaj poprawny numer telefonu:',
   reg_done: '✅ <b>Rejestracja zakończona!</b>\n\n👤 Imię: <b>{n}</b>\n📱 Telefon: <b>{p}</b>',

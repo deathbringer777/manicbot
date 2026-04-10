@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   User, CreditCard, Palette, HelpCircle, ArrowLeft,
-  ChevronRight, Settings, Wrench, MessageSquare,
+  ChevronRight, Settings, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -24,12 +24,6 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     ua: { label: "Акаунт", desc: "Email, пароль, профіль" },
     en: { label: "Account", desc: "Email, password, profile" },
     pl: { label: "Konto", desc: "Email, hasło, profil" },
-  },
-  bot: {
-    ru: { label: "Каналы", desc: "Telegram, Instagram, WhatsApp" },
-    ua: { label: "Канали", desc: "Telegram, Instagram, WhatsApp" },
-    en: { label: "Channels", desc: "Telegram, Instagram, WhatsApp" },
-    pl: { label: "Kanały", desc: "Telegram, Instagram, WhatsApp" },
   },
   billing: {
     ru: { label: "Биллинг", desc: "Тариф, подписка, оплата" },
@@ -73,7 +67,6 @@ const SETTINGS_TITLE: Record<Lang, string> = {
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
   account: User,
-  bot: MessageSquare,
   billing: CreditCard,
   appearance: Palette,
   help: HelpCircle,
@@ -84,15 +77,14 @@ function getSections(role: string | null, lang: Lang, isPersonalTenant?: boolean
   const sections: string[] = [];
 
   if (role === "tenant_owner") {
-    sections.push("account", "bot", "billing", "appearance", "help");
+    sections.push("account", "billing", "appearance", "help");
   } else if (role === "master") {
     sections.push("account");
-    if (isPersonalTenant) sections.push("bot");
     sections.push("appearance", "help");
   } else if (role === "support" || role === "technical_support") {
     sections.push("account", "appearance", "help");
   } else if (role === "system_admin") {
-    sections.push("account", "bot", "billing", "appearance", "help", "platform");
+    sections.push("account", "billing", "appearance", "help", "platform");
   } else {
     sections.push("account", "appearance", "help");
   }

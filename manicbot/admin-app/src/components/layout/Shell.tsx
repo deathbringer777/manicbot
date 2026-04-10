@@ -7,7 +7,7 @@ import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
   X, Scissors, HeadphonesIcon, Globe, MessageSquare,
-  Lock, Unlock,
+  Lock, Unlock, Radio,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -31,6 +31,7 @@ const godModeNavItems: NavItem[] = [
   { href: "/appointments", icon: CalendarDays, label: "Appts" },
   { href: "/conversations", icon: MessageSquare, label: "Inbox" },
   { href: "/agents", icon: UserCog, label: "Agents" },
+  { href: "/channels", icon: Radio, label: "Channels" },
   { href: "/billing", icon: CreditCard, label: "Billing" },
   { href: "/system", icon: Activity, label: "System" },
   { href: "/settings", icon: Settings, label: "Settings" },

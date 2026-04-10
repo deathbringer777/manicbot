@@ -11,7 +11,7 @@ export default function GlobalError({
 
   return (
     <html lang="ru">
-      <body className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+      <body className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
         <div className="text-center px-4">
           <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
           <p className="text-slate-400 mb-6 text-sm">An unexpected error occurred.</p>

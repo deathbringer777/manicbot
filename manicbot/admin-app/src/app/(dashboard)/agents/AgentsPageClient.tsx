@@ -24,7 +24,13 @@ const AGENT_TYPES: { key: AgentType; label: string; desc: string; icon: React.El
   },
 ];
 
+const TAB_ICONS: Record<AgentType, React.ReactNode> = {
+  support: <Headphones className="h-4 w-4" />,
+  technical_support: <Wrench className="h-4 w-4" />,
+};
+
 export default function AgentsPageClient() {
+  const [activeTab, setActiveTab] = useState<AgentType>("support");
   const [showAdd, setShowAdd] = useState(false);
   const [addChatId, setAddChatId] = useState("");
   const [addType, setAddType] = useState<AgentType>("support");
@@ -55,6 +61,9 @@ export default function AgentsPageClient() {
     : 0;
   const legacyAdmins: AgentInfo[] = data?.platformAdmins ?? [];
 
+  const activeType = AGENT_TYPES.find((t) => t.key === activeTab)!;
+  const activeList = getListForType(activeTab);
+
   return (
     <Shell>
       <div className="space-y-4">
@@ -68,7 +77,7 @@ export default function AgentsPageClient() {
             </p>
           </div>
           <button
-            onClick={() => setShowAdd(true)}
+            onClick={() => { setAddType(activeTab); setShowAdd(true); }}
             className="flex items-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl shadow-lg shadow-brand-500/20"
           >
             <Plus className="w-4 h-4" />
@@ -90,109 +99,120 @@ export default function AgentsPageClient() {
           </div>
         </div>
 
+        {/* Tab switcher */}
+        <div className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-white/[0.06]">
+          {AGENT_TYPES.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                activeTab === key
+                  ? "bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              }`}
+            >
+              {TAB_ICONS[key]}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
         {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => <div key={i} className="glass-card rounded-2xl h-28 animate-pulse" />)}
-          </div>
+          <div className="glass-card rounded-2xl h-28 animate-pulse" />
         ) : (
-          <div className="space-y-4">
-            {AGENT_TYPES.map(({ key, label, desc, icon: Icon, color }) => {
-              const list = getListForType(key);
-              return (
-                <div key={key} className="glass-card rounded-2xl overflow-hidden">
-                  {/* Type header */}
-                  <div className={`px-4 py-3 flex items-center gap-3 border-b border-border/30`}>
-                    <div className={`p-2 rounded-xl border ${color}`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{label}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{desc}</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${color}`}>{list.length}</span>
-                  </div>
+          <div className="glass-card rounded-2xl overflow-hidden">
+            {/* Type header */}
+            <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30">
+              <div className={`p-2 rounded-xl border ${activeType.color}`}>
+                <activeType.icon className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{activeType.label}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">{activeType.desc}</p>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${activeType.color}`}>{activeList.length}</span>
+            </div>
 
-                  {/* Agents list */}
-                  {list.length > 0 ? (
-                    <div className="divide-y divide-border/20">
-                      {list.map((agent) => (
-                        <div key={agent.chatId} className="flex items-center justify-between px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500 dark:text-slate-400">
-                              {agent.name ? agent.name.charAt(0).toUpperCase() : <Icon className="w-3.5 h-3.5" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                {agent.name || `#${agent.chatId}`}
-                              </p>
-                              <p className="text-[10px] text-slate-500">
-                                {agent.username ? `@${agent.username} · ` : ""}#{agent.chatId}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => removeMut.mutate({ chatId: agent.chatId })}
-                            disabled={removeMut.isPending}
-                            className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-4 py-6 text-center text-xs text-slate-500">
-                      Нет агентов этого типа
-                    </div>
-                  )}
-
-                  {/* Quick add button */}
-                  <div className="px-4 py-3 border-t border-border/20">
-                    <button
-                      onClick={() => { setAddType(key); setShowAdd(true); }}
-                      className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 active:bg-slate-200 dark:active:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs font-medium"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Добавить {label.toLowerCase()}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {legacyAdmins.length > 0 && (
-              <div className="glass-card rounded-2xl overflow-hidden border border-amber-500/20">
-                <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30 bg-amber-500/5">
-                  <Shield className="w-4 h-4 text-amber-400 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">Устаревшие записи system_admin</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Назначение через API отключено. Удалите строки, чтобы очистить БД (ваш ADMIN_CHAT_ID удалить нельзя).
-                    </p>
-                  </div>
-                </div>
-                <div className="divide-y divide-border/20">
-                  {legacyAdmins.map((agent) => (
-                    <div key={agent.chatId} className="flex items-center justify-between px-4 py-3">
+            {/* Agents list */}
+            {activeList.length > 0 ? (
+              <div className="divide-y divide-border/20">
+                {activeList.map((agent) => (
+                  <div key={agent.chatId} className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                        {agent.name ? agent.name.charAt(0).toUpperCase() : <activeType.icon className="w-3.5 h-3.5" />}
+                      </div>
                       <div>
                         <p className="text-sm font-semibold text-slate-900 dark:text-white">
                           {agent.name || `#${agent.chatId}`}
                         </p>
-                        {agent.username && <p className="text-[10px] text-slate-500">@{agent.username}</p>}
+                        <p className="text-[10px] text-slate-500">
+                          {agent.username ? `@${agent.username} · ` : ""}#{agent.chatId}
+                        </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeMut.mutate({ chatId: agent.chatId })}
-                        disabled={removeMut.isPending}
-                        className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => removeMut.mutate({ chatId: agent.chatId })}
+                      disabled={removeMut.isPending}
+                      className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-6 text-center text-xs text-slate-500">
+                Нет агентов этого типа
               </div>
             )}
+
+            {/* Quick add button */}
+            <div className="px-4 py-3 border-t border-border/20">
+              <button
+                onClick={() => { setAddType(activeTab); setShowAdd(true); }}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 active:bg-slate-200 dark:active:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs font-medium"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Добавить {activeType.label.toLowerCase()}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Legacy admins — outside tabs */}
+        {legacyAdmins.length > 0 && (
+          <div className="glass-card rounded-2xl overflow-hidden border border-amber-500/20">
+            <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30 bg-amber-500/5">
+              <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">Устаревшие записи system_admin</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Назначение через API отключено. Удалите строки, чтобы очистить БД (ваш ADMIN_CHAT_ID удалить нельзя).
+                </p>
+              </div>
+            </div>
+            <div className="divide-y divide-border/20">
+              {legacyAdmins.map((agent) => (
+                <div key={agent.chatId} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {agent.name || `#${agent.chatId}`}
+                    </p>
+                    {agent.username && <p className="text-[10px] text-slate-500">@{agent.username}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeMut.mutate({ chatId: agent.chatId })}
+                    disabled={removeMut.isPending}
+                    className="p-2 rounded-xl bg-red-500/10 active:bg-red-500/20 text-red-400 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

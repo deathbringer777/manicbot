@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { User, Mail, Key, CheckCircle, Save, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
+import { User, Mail, Key, CheckCircle, Save, ShieldCheck, ShieldAlert, Loader2, ArrowLeftRight, Clock, Check, XCircle } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
@@ -63,6 +63,83 @@ const VERIFY_L: Record<Lang, {
     resend: "Wyślij kod ponownie",
     resendCooldown: "Kod wysłany",
     success: "Email potwierdzony pomyślnie!",
+  },
+};
+
+const ROLE_CHANGE_L: Record<Lang, {
+  heading: string;
+  currentRole: string;
+  requestTo: string;
+  reason: string;
+  reasonPlaceholder: string;
+  submit: string;
+  pending: string;
+  pendingDesc: string;
+  approved: string;
+  denied: string;
+  adminNote: string;
+  newRequest: string;
+  alreadyPending: string;
+}> = {
+  ru: {
+    heading: "Смена роли",
+    currentRole: "Текущая роль",
+    requestTo: "Запросить роль",
+    reason: "Причина (необязательно)",
+    reasonPlaceholder: "Почему вы хотите сменить роль?",
+    submit: "Отправить запрос",
+    pending: "На рассмотрении",
+    pendingDesc: "Ваш запрос на смену роли ожидает рассмотрения администратором.",
+    approved: "Одобрено",
+    denied: "Отклонено",
+    adminNote: "Комментарий администратора",
+    newRequest: "Новый запрос",
+    alreadyPending: "У вас уже есть активный запрос",
+  },
+  ua: {
+    heading: "Зміна ролі",
+    currentRole: "Поточна роль",
+    requestTo: "Запросити роль",
+    reason: "Причина (необов'язково)",
+    reasonPlaceholder: "Чому ви хочете змінити роль?",
+    submit: "Надіслати запит",
+    pending: "На розгляді",
+    pendingDesc: "Ваш запит на зміну ролі очікує на розгляд адміністратором.",
+    approved: "Схвалено",
+    denied: "Відхилено",
+    adminNote: "Коментар адміністратора",
+    newRequest: "Новий запит",
+    alreadyPending: "У вас вже є активний запит",
+  },
+  en: {
+    heading: "Change Role",
+    currentRole: "Current role",
+    requestTo: "Request role",
+    reason: "Reason (optional)",
+    reasonPlaceholder: "Why do you want to change your role?",
+    submit: "Submit request",
+    pending: "Pending review",
+    pendingDesc: "Your role change request is waiting for admin review.",
+    approved: "Approved",
+    denied: "Denied",
+    adminNote: "Admin note",
+    newRequest: "New request",
+    alreadyPending: "You already have a pending request",
+  },
+  pl: {
+    heading: "Zmiana roli",
+    currentRole: "Obecna rola",
+    requestTo: "Żądaj roli",
+    reason: "Powód (opcjonalnie)",
+    reasonPlaceholder: "Dlaczego chcesz zmienić rolę?",
+    submit: "Wyślij prośbę",
+    pending: "Oczekuje na przegląd",
+    pendingDesc: "Twoja prośba o zmianę roli czeka na zatwierdzenie przez administratora.",
+    approved: "Zatwierdzona",
+    denied: "Odrzucona",
+    adminNote: "Komentarz administratora",
+    newRequest: "Nowa prośba",
+    alreadyPending: "Masz już aktywną prośbę",
   },
 };
 
@@ -161,6 +238,43 @@ export function AccountSection() {
     e.preventDefault();
     setEmailError(null);
     changeEmailMut.mutate({ newEmail: emailForm.newEmail });
+  };
+
+  // Role change request
+  const rcl = ROLE_CHANGE_L[lang];
+  const canRequestRoleChange = effectiveRole === "tenant_owner" || effectiveRole === "master";
+  const targetRole = effectiveRole === "tenant_owner" ? "master" : "tenant_owner";
+  const [rcReason, setRcReason] = useState("");
+  const [rcError, setRcError] = useState<string | null>(null);
+  const [rcSuccess, setRcSuccess] = useState(false);
+
+  const myRequestQuery = canRequestRoleChange
+    ? (api as any).roleChangeRequests.getMyRequest.useQuery()
+    : { data: null, isLoading: false };
+  const myRequest = (myRequestQuery as any).data as {
+    id: string; status: string; requestedRole: string; adminNote: string | null; createdAt: number;
+  } | null;
+
+  const requestRoleChangeMut = (api as any).roleChangeRequests.requestRoleChange.useMutation({
+    onSuccess: () => {
+      setRcSuccess(true);
+      setRcError(null);
+      setRcReason("");
+      (myRequestQuery as any).refetch?.();
+    },
+    onError: (err: { message?: string }) => {
+      setRcError(err.message ?? "Failed to submit request");
+    },
+  }) as { mutate: (args: { requestedRole: string; reason?: string }) => void; isPending: boolean };
+
+  const handleRoleChangeRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRcError(null);
+    setRcSuccess(false);
+    requestRoleChangeMut.mutate({
+      requestedRole: targetRole,
+      ...(rcReason.trim() ? { reason: rcReason.trim() } : {}),
+    });
   };
 
   const handleVerifyCode = (e: React.FormEvent) => {
@@ -293,6 +407,104 @@ export function AccountSection() {
           </div>
         </div>
       </section>
+
+      {/* Role change request */}
+      {canRequestRoleChange && (
+        <section className="glass-card rounded-2xl p-4 border border-violet-500/10">
+          <div className="flex items-center gap-2 mb-4">
+            <ArrowLeftRight className="w-4 h-4 text-violet-400 shrink-0" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{rcl.heading}</h2>
+          </div>
+
+          {/* Show pending request status */}
+          {myRequest?.status === "pending" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">{rcl.pending}</span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{rcl.pendingDesc}</p>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {rcl.requestTo}: <span className="font-medium text-violet-400">{friendlyRoleName(myRequest.requestedRole, lang)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Show approved/denied result */}
+          {myRequest && (myRequest.status === "approved" || myRequest.status === "denied") && (
+            <div className="space-y-3">
+              <div className={`flex items-center gap-2 ${myRequest.status === "approved" ? "text-emerald-400" : "text-red-400"}`}>
+                {myRequest.status === "approved" ? <Check className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                <span className="text-sm font-medium">
+                  {myRequest.status === "approved" ? rcl.approved : rcl.denied}
+                </span>
+              </div>
+              {myRequest.adminNote && (
+                <div className="bg-slate-50 dark:bg-slate-900/70 rounded-xl p-3 border border-slate-200 dark:border-slate-700/50">
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">{rcl.adminNote}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">{myRequest.adminNote}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Show request form if no pending request */}
+          {(!myRequest || myRequest.status === "approved" || myRequest.status === "denied") && (
+            <form onSubmit={handleRoleChangeRequest} className="space-y-3 mt-2">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  {rcl.currentRole}
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={friendlyRoleName(effectiveRole, lang)}
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  {rcl.requestTo}
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={friendlyRoleName(targetRole, lang)}
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-violet-500/20 dark:border-violet-500/20 rounded-xl px-4 py-3 text-sm text-violet-500 dark:text-violet-400 outline-none cursor-default select-none font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  {rcl.reason}
+                </label>
+                <textarea
+                  value={rcReason}
+                  onChange={(e) => setRcReason(e.target.value)}
+                  placeholder={rcl.reasonPlaceholder}
+                  maxLength={500}
+                  rows={2}
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 text-slate-900 dark:text-white resize-none"
+                />
+              </div>
+              {rcError && <p className="text-xs text-red-400">{rcError}</p>}
+              {rcSuccess && (
+                <p className="text-xs text-emerald-400 flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {rcl.pending}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={requestRoleChangeMut.isPending}
+                className="w-full flex items-center justify-center gap-1.5 bg-violet-600 active:bg-violet-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-70 mt-1"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                {requestRoleChangeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : rcl.submit}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
 
       {/* Change email */}
       <section className="glass-card rounded-2xl p-4">

@@ -20,6 +20,7 @@ import { eventsRouter } from "~/server/api/routers/events";
 import { webUsersRouter } from "~/server/api/routers/webUsers";
 import { reviewsRouter } from "~/server/api/routers/reviews";
 import { analyticsRouter } from "~/server/api/routers/analytics";
+import { roleChangeRequestsRouter } from "~/server/api/routers/roleChangeRequests";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -43,6 +44,7 @@ export const appRouter = createTRPCRouter({
   webUsers: webUsersRouter,
   reviews: reviewsRouter,
   analytics: analyticsRouter,
+  roleChangeRequests: roleChangeRequestsRouter,
 });
 
 export type AppRouter = typeof appRouter;

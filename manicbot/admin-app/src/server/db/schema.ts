@@ -412,3 +412,22 @@ export const auditLog = sqliteTable("audit_log", {
   index("idx_audit_log_tenant").on(t.tenantId, t.createdAt),
   index("idx_audit_log_action").on(t.action, t.createdAt),
 ]);
+
+// ─── Role Change Requests ───────────────────────────────────────────────────
+
+export const roleChangeRequests = sqliteTable("role_change_requests", {
+  id: text("id").primaryKey(),
+  webUserId: text("web_user_id").notNull(),
+  currentRole: text("current_role").notNull(),
+  requestedRole: text("requested_role").notNull(),
+  reason: text("reason"),
+  status: text("status").notNull().default("pending"),
+  adminNote: text("admin_note"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: integer("reviewed_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_rcr_user").on(t.webUserId, t.createdAt),
+  index("idx_rcr_status").on(t.status, t.createdAt),
+]);

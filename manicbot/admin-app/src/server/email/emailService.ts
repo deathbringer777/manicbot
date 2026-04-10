@@ -13,6 +13,8 @@ import {
   welcomeEmailHtml,
   emailChangeEmailHtml,
   loginAlertEmailHtml,
+  roleRequestAdminEmailHtml,
+  roleRequestDecisionEmailHtml,
   getEmailCopy,
 } from "./templates";
 
@@ -107,5 +109,49 @@ export async function sendLoginAlert(
     to,
     subject: copy.loginAlert.subject,
     html: loginAlertEmailHtml(ip, time, lang),
+  });
+}
+
+/** Role change request: notify admin(s). */
+export async function sendRoleChangeAdminNotification(
+  adminEmails: string[],
+  userName: string,
+  userEmail: string,
+  currentRole: string,
+  requestedRole: string,
+  reason: string | null,
+  lang: Lang = "en",
+): Promise<SendEmailResult[]> {
+  const reviewUrl = `${baseUrl()}/role-requests`;
+  const copy = getEmailCopy(lang);
+  const results: SendEmailResult[] = [];
+  for (const to of adminEmails) {
+    results.push(await sendResendEmail({
+      to,
+      subject: copy.roleRequestAdmin.subject,
+      html: roleRequestAdminEmailHtml(userName, userEmail, currentRole, requestedRole, reason, reviewUrl, lang),
+    }));
+  }
+  return results;
+}
+
+/** Role change request: notify user of decision. */
+export async function sendRoleChangeDecisionEmail(
+  to: string,
+  decision: "approved" | "denied",
+  oldRole: string,
+  newRole: string,
+  adminNote: string | null,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const dashboardUrl = `${baseUrl()}/dashboard`;
+  const copy = getEmailCopy(lang);
+  const subject = decision === "approved"
+    ? copy.roleRequestDecision.approvedSubject
+    : copy.roleRequestDecision.deniedSubject;
+  return sendResendEmail({
+    to,
+    subject,
+    html: roleRequestDecisionEmailHtml(decision, oldRole, newRole, adminNote, dashboardUrl, lang),
   });
 }

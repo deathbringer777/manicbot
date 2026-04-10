@@ -9,7 +9,6 @@ import { AccountSection } from "~/components/settings/sections/AccountSection";
 import { AppearanceSection } from "~/components/settings/sections/AppearanceSection";
 import { HelpSection } from "~/components/settings/sections/HelpSection";
 import { PlatformSection } from "~/components/settings/sections/PlatformSection";
-import { BotSection } from "~/components/settings/sections/BotSection";
 import { BillingSection } from "~/components/settings/sections/BillingSection";
 
 export default function SettingsPageClient() {
@@ -34,8 +33,6 @@ export default function SettingsPageClient() {
     switch (activeSection) {
       case "account":
         return <AccountSection />;
-      case "bot":
-        return effectiveTenantId ? <BotSection tenantId={effectiveTenantId} /> : null;
       case "billing":
         return effectiveTenantId ? <BillingSection tenantId={effectiveTenantId} /> : null;
       case "appearance":

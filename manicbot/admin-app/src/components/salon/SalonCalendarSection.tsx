@@ -57,7 +57,7 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
       {integrations.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
       {!integrations.isLoading && rows.length === 0 && (
         <div className="glass-card rounded-2xl p-4 text-center">
-          <CalendarDays className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+          <CalendarDays className="h-8 w-8 text-slate-400 dark:text-slate-600 mx-auto mb-2" />
           <p className="text-sm text-slate-400">
             {t("gcal.noCalendars", lang)}
           </p>

@@ -14,6 +14,13 @@ const emailCopy: Record<Lang, {
   welcome: { subject: string; heading: string; body: string; cta: string };
   emailChange: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
   loginAlert: { subject: string; heading: string; body: string; ip: string; time: string; warning: string };
+  roleRequestAdmin: { subject: string; heading: string; body: string; from: string; to: string; reason: string; cta: string };
+  roleRequestDecision: {
+    approvedSubject: string; deniedSubject: string;
+    approvedHeading: string; deniedHeading: string;
+    approvedBody: string; deniedBody: string;
+    note: string; cta: string;
+  };
   footer: string;
 }> = {
   ru: {
@@ -62,6 +69,25 @@ const emailCopy: Record<Lang, {
       ip: "IP-адрес",
       time: "Время",
       warning: "Если это были не вы, смените пароль немедленно.",
+    },
+    roleRequestAdmin: {
+      subject: "Запрос на смену роли — ManicBot",
+      heading: "Запрос на смену роли",
+      body: "Пользователь отправил запрос на смену роли.",
+      from: "Текущая роль",
+      to: "Запрошенная роль",
+      reason: "Причина",
+      cta: "Посмотреть запросы",
+    },
+    roleRequestDecision: {
+      approvedSubject: "Ваша роль изменена — ManicBot",
+      deniedSubject: "Запрос на смену роли рассмотрен — ManicBot",
+      approvedHeading: "Роль изменена",
+      deniedHeading: "Запрос отклонён",
+      approvedBody: "Ваш запрос на смену роли одобрен. Новая роль вступила в силу.",
+      deniedBody: "К сожалению, ваш запрос на смену роли был отклонён.",
+      note: "Комментарий администратора",
+      cta: "Перейти в кабинет",
     },
     footer: "ManicBot.com — платформа для салонов красоты",
   },
@@ -112,6 +138,25 @@ const emailCopy: Record<Lang, {
       time: "Час",
       warning: "Якщо це були не ви, змініть пароль негайно.",
     },
+    roleRequestAdmin: {
+      subject: "Запит на зміну ролі — ManicBot",
+      heading: "Запит на зміну ролі",
+      body: "Користувач надіслав запит на зміну ролі.",
+      from: "Поточна роль",
+      to: "Запитувана роль",
+      reason: "Причина",
+      cta: "Переглянути запити",
+    },
+    roleRequestDecision: {
+      approvedSubject: "Вашу роль змінено — ManicBot",
+      deniedSubject: "Запит на зміну ролі розглянуто — ManicBot",
+      approvedHeading: "Роль змінено",
+      deniedHeading: "Запит відхилено",
+      approvedBody: "Ваш запит на зміну ролі схвалено. Нова роль набула чинності.",
+      deniedBody: "На жаль, ваш запит на зміну ролі було відхилено.",
+      note: "Коментар адміністратора",
+      cta: "Перейти до кабінету",
+    },
     footer: "ManicBot.com — платформа для салонів краси",
   },
   en: {
@@ -161,6 +206,25 @@ const emailCopy: Record<Lang, {
       time: "Time",
       warning: "If this wasn't you, change your password immediately.",
     },
+    roleRequestAdmin: {
+      subject: "Role change request — ManicBot",
+      heading: "Role Change Request",
+      body: "A user has submitted a role change request.",
+      from: "Current role",
+      to: "Requested role",
+      reason: "Reason",
+      cta: "Review requests",
+    },
+    roleRequestDecision: {
+      approvedSubject: "Your role has been changed — ManicBot",
+      deniedSubject: "Role change request reviewed — ManicBot",
+      approvedHeading: "Role Changed",
+      deniedHeading: "Request Denied",
+      approvedBody: "Your role change request has been approved. Your new role is now active.",
+      deniedBody: "Unfortunately, your role change request has been denied.",
+      note: "Admin note",
+      cta: "Go to dashboard",
+    },
     footer: "ManicBot.com — beauty salon platform",
   },
   pl: {
@@ -209,6 +273,25 @@ const emailCopy: Record<Lang, {
       ip: "Adres IP",
       time: "Czas",
       warning: "Jeśli to nie Ty, zmień hasło natychmiast.",
+    },
+    roleRequestAdmin: {
+      subject: "Prośba o zmianę roli — ManicBot",
+      heading: "Prośba o zmianę roli",
+      body: "Użytkownik przesłał prośbę o zmianę roli.",
+      from: "Obecna rola",
+      to: "Żądana rola",
+      reason: "Powód",
+      cta: "Sprawdź prośby",
+    },
+    roleRequestDecision: {
+      approvedSubject: "Twoja rola została zmieniona — ManicBot",
+      deniedSubject: "Prośba o zmianę roli rozpatrzona — ManicBot",
+      approvedHeading: "Rola zmieniona",
+      deniedHeading: "Prośba odrzucona",
+      approvedBody: "Twoja prośba o zmianę roli została zatwierdzona. Nowa rola jest aktywna.",
+      deniedBody: "Niestety, Twoja prośba o zmianę roli została odrzucona.",
+      note: "Komentarz administratora",
+      cta: "Przejdź do panelu",
     },
     footer: "ManicBot.com — platforma dla salonów kosmetycznych",
   },
@@ -340,6 +423,62 @@ export function loginAlertEmailHtml(ip: string, time: string, lang: Lang): strin
       <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.time}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;">${time}</td></tr>
     </table>` +
     paragraph(`<strong style="color:#f87171;">${c.warning}</strong>`),
+    getEmailCopy(lang).footer,
+  );
+}
+
+// ─── Role change request emails ─────────────────────────────────────────────
+
+export function roleRequestAdminEmailHtml(
+  userName: string,
+  userEmail: string,
+  currentRole: string,
+  requestedRole: string,
+  reason: string | null,
+  reviewUrl: string,
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).roleRequestAdmin;
+  const reasonRow = reason
+    ? `<tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.reason}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;">${reason}</td></tr>`
+    : "";
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) +
+    paragraph(`<strong>${userName}</strong> (${userEmail})`, "#e2e8f0") +
+    `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
+      <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.from}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${currentRole}</td></tr>
+      <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;${reason ? "border-bottom:1px solid rgba(255,255,255,0.06);" : ""}">${c.to}</td><td style="padding:8px 12px;font-size:13px;color:#a78bfa;font-weight:600;${reason ? "border-bottom:1px solid rgba(255,255,255,0.06);" : ""}">${requestedRole}</td></tr>
+      ${reasonRow}
+    </table>` +
+    ctaButton(reviewUrl, c.cta),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function roleRequestDecisionEmailHtml(
+  decision: "approved" | "denied",
+  oldRole: string,
+  newRole: string,
+  adminNote: string | null,
+  dashboardUrl: string,
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).roleRequestDecision;
+  const heading = decision === "approved" ? c.approvedHeading : c.deniedHeading;
+  const body = decision === "approved" ? c.approvedBody : c.deniedBody;
+  const roleInfo = decision === "approved"
+    ? paragraph(`${oldRole} → <strong style="color:#a78bfa;">${newRole}</strong>`, "#e2e8f0")
+    : "";
+  const noteBlock = adminNote
+    ? `<div style="margin:16px 0;padding:12px 16px;background-color:#1e293b;border-radius:10px;border-left:3px solid #7c3aed;">
+        <p style="margin:0 0 4px;font-size:11px;color:#94a3b8;">${c.note}</p>
+        <p style="margin:0;font-size:14px;color:#e2e8f0;">${adminNote}</p>
+      </div>`
+    : "";
+  return baseLayout(
+    heading,
+    paragraph(body) + roleInfo + noteBlock + ctaButton(dashboardUrl, c.cta),
     getEmailCopy(lang).footer,
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
-import { TrendingUp, Target, Users, Loader2 } from "lucide-react";
+import { TrendingUp, Target, Users, Loader2, Link2, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { SectionHeader } from "~/components/salon/SalonShared";
 import { TrackingLinksGenerator } from "~/components/salon/TrackingLinksGenerator";
@@ -21,8 +21,26 @@ const SOURCE_COLORS: Record<string, string> = {
   other: "#94A3B8",
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+  qr: "QR-код",
+  website: "Сайт",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  facebook: "Facebook",
+  google_maps: "Google Maps",
+  flyer: "Листовка",
+  sms: "SMS",
+  telegram: "Telegram",
+  direct: "Напрямую",
+  other: "Другое",
+};
+
 function colorFor(source: string): string {
   return SOURCE_COLORS[source] ?? "#94A3B8";
+}
+
+function labelFor(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
 }
 
 function StatBox({
@@ -90,6 +108,31 @@ function FunnelCard({
   );
 }
 
+function AnalyticsEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
+  return (
+    <div className="glass-card rounded-2xl p-8 flex flex-col items-center text-center space-y-4">
+      <div className="h-14 w-14 rounded-2xl bg-brand-500/10 flex items-center justify-center">
+        <BarChart3 className="h-7 w-7 text-brand-400" />
+      </div>
+      <div className="space-y-1">
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">Пока нет данных</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
+          Аналитика появится, когда клиенты начнут взаимодействовать с ботом или публичным профилем.
+          Создайте трекинг-ссылку и поделитесь ею, чтобы отслеживать источники привлечения.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onCreateLink}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500/15 text-brand-400 text-sm font-medium hover:bg-brand-500/25 transition-colors"
+      >
+        <Link2 className="h-4 w-4" />
+        Создать трекинг-ссылку
+      </button>
+    </div>
+  );
+}
+
 export function AnalyticsTab({
   tenantId,
   botUsername,
@@ -100,12 +143,18 @@ export function AnalyticsTab({
   slug?: string | null;
 }) {
   const [days, setDays] = useState<7 | 30 | 90>(30);
+  const [showLinkGen, setShowLinkGen] = useState(false);
 
   const acquisition = api.analytics.getAcquisition.useQuery({ tenantId, days });
   const funnel = api.analytics.getFunnel.useQuery({ tenantId, days });
   const topCampaigns = api.analytics.getTopCampaigns.useQuery({ tenantId, days });
 
   const isLoading = acquisition.isLoading || funnel.isLoading || topCampaigns.isLoading;
+
+  const totalUsers = acquisition.data?.totalUsers ?? 0;
+  const totalBookings = funnel.data?.stages.find((s) => s.key === "booked")?.count ?? 0;
+  const totalTouches = funnel.data?.stages[0]?.count ?? 0;
+  const hasAnyData = totalUsers > 0 || totalBookings > 0 || totalTouches > 0;
 
   return (
     <div className="space-y-5">
@@ -135,19 +184,23 @@ export function AnalyticsTab({
         </div>
       )}
 
-      {!isLoading && (
+      {!isLoading && !hasAnyData && (
+        <AnalyticsEmptyState onCreateLink={() => setShowLinkGen(true)} />
+      )}
+
+      {!isLoading && hasAnyData && (
         <>
           {/* ── Stat cards ─────────────────────────────────────── */}
           <div className="grid grid-cols-3 gap-3">
             <StatBox
               label="Новых клиентов"
-              value={acquisition.data?.totalUsers ?? 0}
+              value={totalUsers}
               hint={`за ${days} дней`}
               icon={Users}
             />
             <StatBox
               label="Записей"
-              value={funnel.data?.stages.find((s) => s.key === "booked")?.count ?? 0}
+              value={totalBookings}
               hint="уникальных"
               icon={Target}
             />
@@ -156,8 +209,7 @@ export function AnalyticsTab({
               value={`${
                 funnel.data && (funnel.data.stages[1]?.count ?? 0) > 0
                   ? Math.round(
-                      ((funnel.data.stages.find((s) => s.key === "booked")?.count ?? 0) /
-                        (funnel.data.stages[1]!.count ?? 1)) * 100,
+                      (totalBookings / (funnel.data.stages[1]!.count ?? 1)) * 100,
                     )
                   : 0
               }%`}
@@ -199,14 +251,14 @@ export function AnalyticsTab({
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {acquisition.data.sources.map((src) => (
-                      <Bar key={src} dataKey={src} stackId="a" fill={colorFor(src)} name={src} />
+                      <Bar key={src} dataKey={src} stackId="a" fill={colorFor(src)} name={labelFor(src)} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
               <div className="glass-card rounded-2xl p-8 text-center text-sm text-slate-500">
-                Пока нет данных. Сгенерируйте трекинг-ссылку ниже и поделитесь ею.
+                Нет данных за выбранный период
               </div>
             )}
           </div>
@@ -245,7 +297,7 @@ export function AnalyticsTab({
                               className="h-2 w-2 rounded-full"
                               style={{ background: colorFor(c.source) }}
                             />
-                            {c.source}
+                            {labelFor(c.source)}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-slate-500">{c.campaign ?? "—"}</td>
@@ -265,20 +317,30 @@ export function AnalyticsTab({
               </div>
             )}
           </div>
+        </>
+      )}
 
-          {/* ── Tracking links generator ───────────────────────── */}
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-              Трекинг-ссылки
-            </h3>
+      {/* ── Tracking links (collapsible) ───────────────────── */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowLinkGen((v) => !v)}
+          className="flex items-center gap-2 w-full glass-card rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
+        >
+          <Link2 className="h-4 w-4 text-brand-400" />
+          <span className="flex-1 text-left">Создать трекинг-ссылку</span>
+          {showLinkGen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+        </button>
+        {showLinkGen && (
+          <div className="mt-3">
             <TrackingLinksGenerator
               tenantId={tenantId}
               botUsername={botUsername}
               slug={slug}
             />
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

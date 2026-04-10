@@ -850,10 +850,10 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" });
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
   const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
-  const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" });
+  const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
 
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
     onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
@@ -876,8 +876,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { key: "clients", label: t("salon.clients", lang) },
     { key: "analytics", label: "📊 Аналитика" },
     { key: "billing", label: t("salon.billing", lang) },
-    { key: "channels", label: "Channels" },
-    { key: "reviews", label: "Reviews" },
+    { key: "channels", label: "Каналы" },
+    { key: "reviews", label: "Отзывы" },
     { key: "public_profile", label: "🌐 Профиль" },
     { key: "settings", label: t("common.settings", lang) },
   ];
@@ -1159,7 +1159,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
       )}
 
       {/* ── CHANNELS ── */}
-      {tab === "channels" && <SalonChannelsTab tenantId={tenantId} />}
+      {tab === "channels" && <SalonChannelsTab tenantId={tenantId} slug={profile.data?.slug ?? null} publicActive={!!profile.data?.publicActive} />}
 
       {/* ── PUBLIC PROFILE ── */}
       {tab === "public_profile" && (

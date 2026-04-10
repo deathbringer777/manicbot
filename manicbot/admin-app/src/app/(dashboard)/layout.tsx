@@ -114,21 +114,17 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "tenant_owner") {
-    const isSalonRoute = pathname.startsWith("/s-") || pathname === "/s-";
-    const isMasterRoute = pathname.startsWith("/m-") || pathname === "/m-";
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : (isSalonRoute || isMasterRoute)
-                ? children
-                : !effectiveTenantId
-                  ? <NoTenantOnboarding role="tenant_owner" />
-                  : previewMasterId !== null
-                    ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
-                    : <SalonDashboard tenantId={effectiveTenantId} />
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="tenant_owner" />
+                : previewMasterId !== null
+                  ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
+                  : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
       </RoleContext.Provider>
@@ -136,18 +132,15 @@ export default function DashboardLayout({
   }
 
   if (effectiveRole === "master") {
-    const isMasterRoute = pathname.startsWith("/m-") || pathname === "/m-";
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : isMasterRoute
-                ? children
-                : !effectiveTenantId
-                  ? <NoTenantOnboarding role="master" />
-                  : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="master" />
+                : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
           )}
         </WebShell>
       </RoleContext.Provider>

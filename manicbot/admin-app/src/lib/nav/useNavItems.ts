@@ -53,19 +53,14 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
       return true;
     });
 
-    // Apply hidden-tab filter for tenant_owner salon items.
-    // hiddenTabs stores legacy tab names (e.g. "appointments", "services").
-    // We match by extracting the last path segment from href (e.g. "/salon/appointments" → "appointments")
-    // or by checking id suffix (e.g. "salon.appointments" → "appointments").
+    // Apply hidden-tab filter for tenant_owner salon items
     const visible = (effectiveRole === "tenant_owner")
       ? filtered.filter(item => {
           if (!item.hideable) return true;
-          // Extract tab key: "salon.appointments" → "appointments", "salon.publicProfile" → "public_profile"
-          const idSuffix = item.id.split(".")[1];
-          // Map camelCase ids to underscore for legacy compat
-          const TAB_ID_MAP: Record<string, string> = { publicProfile: "public_profile" };
-          const tabKey = TAB_ID_MAP[idSuffix ?? ""] ?? idSuffix ?? "";
-          return !dashPrefs.hiddenTabs.includes(tabKey);
+          const qIdx = item.href.indexOf("?tab=");
+          if (qIdx === -1) return true;
+          const tab = item.href.slice(qIdx + 5);
+          return !dashPrefs.hiddenTabs.includes(tab);
         })
       : filtered;
 

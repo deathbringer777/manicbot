@@ -110,22 +110,15 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const isActive = (item: NavItem) => {
-    // Legacy ?tab= links (if any remain)
     const qIdx = item.href.indexOf("?");
     if (qIdx !== -1) {
       const itemParams = new URLSearchParams(item.href.slice(qIdx));
       const itemTab = itemParams.get("tab");
       return itemTab ? itemTab === searchParams.get("tab") : false;
     }
-    // Dashboard / root — exact match, only when no ?tab= in URL
     if (item.href === "/dashboard" || item.href === "/") {
       return (pathname === "/dashboard" || pathname === "/") && !searchParams.get("tab");
     }
-    // Flat route overviews: exact match only (avoid /s-overview matching /s-appointments)
-    if (item.href === "/s-overview" || item.href === "/m-today") {
-      return pathname === item.href;
-    }
-    // Sub-routes: prefix match
     return pathname.startsWith(item.href);
   };
 

@@ -39,8 +39,16 @@ describe('Google Calendar sync plumbing', () => {
       syncDirection: 'two_way',
     });
 
-    const startTs = warsawToUTC(2026, 4, 11, 10, 15).getTime();
-    const endTs = warsawToUTC(2026, 4, 11, 11, 15).getTime();
+    // Use a future date so the test never becomes stale
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 7);
+    const fY = futureDate.getFullYear();
+    const fM = futureDate.getMonth() + 1;
+    const fD = futureDate.getDate();
+    const futureDateStr = `${fY}-${String(fM).padStart(2,'0')}-${String(fD).padStart(2,'0')}`;
+
+    const startTs = warsawToUTC(fY, fM, fD, 10, 15).getTime();
+    const endTs = warsawToUTC(fY, fM, fD, 11, 15).getTime();
     await dbRun(ctx,
       `INSERT OR REPLACE INTO google_busy_blocks
         (id, integration_id, tenant_id, calendar_id, external_event_id, summary, start_ts, end_ts, updated_at)
@@ -56,7 +64,7 @@ describe('Google Calendar sync plumbing', () => {
       Date.now(),
     );
 
-    const slots = await getSlots(ctx, '2026-04-11', 'classic');
+    const slots = await getSlots(ctx, futureDateStr, 'classic');
     expect(slots).toContain('09:00');
     expect(slots).not.toContain('10:00');
     expect(slots).not.toContain('10:30');

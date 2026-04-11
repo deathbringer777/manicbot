@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
-  CreditCard, Settings, ChevronRight, AlertCircle,
-  Loader2, Plus, Pencil, Trash2, Save, X,
+  CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
+  Loader2, Plus, Pencil, Trash2, Save, X, List,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon,
 } from "lucide-react";
@@ -949,6 +949,199 @@ function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
   );
 }
 
+// ─── Salon BigCalendar ────────────────────────────────────────────────────
+const WEEKDAYS_SHORT: Record<string, string[]> = {
+  ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+  ua: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
+  en: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+  pl: ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"],
+};
+
+function SalonBigCalendar({
+  apts,
+  viewDate,
+  setViewDate,
+  selectedDay,
+  setSelectedDay,
+  isLoading,
+  lang,
+  onAction,
+  onNoShow,
+}: {
+  apts: any[];
+  viewDate: Date;
+  setViewDate: (d: Date) => void;
+  selectedDay: string | null;
+  setSelectedDay: (iso: string | null) => void;
+  isLoading: boolean;
+  lang: Lang;
+  onAction: (id: number, status: "confirmed" | "cancelled" | "rejected") => void;
+  onNoShow: (id: number, noShowBy: "client" | "master") => void;
+}) {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const fmtISO = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const firstDowSun = new Date(year, month, 1).getDay();
+  const firstDow = (firstDowSun + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (number | null)[] = [
+    ...Array<null>(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const today = new Date();
+  const isToday = (day: number) =>
+    today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+
+  const dayMap = useMemo(() => {
+    const m: Record<string, any[]> = {};
+    apts.forEach((a) => {
+      if (!m[a.date]) m[a.date] = [];
+      m[a.date]!.push(a);
+    });
+    return m;
+  }, [apts]);
+
+  const monthLabel = viewDate.toLocaleString(lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU", { month: "long", year: "numeric" });
+  const weekdays = WEEKDAYS_SHORT[lang] ?? WEEKDAYS_SHORT.ru!;
+
+  const selectedDayApts = useMemo(
+    () => (selectedDay ? (dayMap[selectedDay] ?? []) : []),
+    [selectedDay, dayMap],
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="glass-card rounded-2xl p-3">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-brand-400" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{monthLabel}</h2>
+            {isLoading && (
+              <div className="w-3 h-3 rounded-full border-2 border-brand-500/40 border-t-brand-400 animate-spin" />
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setViewDate(new Date(year, month - 1))}
+              className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button onClick={() => { setViewDate(new Date()); setSelectedDay(null); }}
+              className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
+              {lang === "ru" ? "сегодня" : lang === "ua" ? "сьогодні" : "today"}
+            </button>
+            <button onClick={() => setViewDate(new Date(year, month + 1))}
+              className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Weekday headers */}
+        <div className="grid grid-cols-7 mb-1">
+          {weekdays.map((d) => (
+            <div key={d} className="text-center text-[10px] font-medium text-slate-500 py-1">{d}</div>
+          ))}
+        </div>
+
+        {/* Day cells */}
+        <div className="grid grid-cols-7 gap-px">
+          {cells.map((day, i) => {
+            if (day === null) return <div key={`empty-${i}`} className="min-h-[64px]" />;
+
+            const iso = fmtISO(year, month, day);
+            const dayApts = dayMap[iso] ?? [];
+            const count = dayApts.length;
+            const isSelected = selectedDay === iso;
+            const todayDay = isToday(day);
+            const visible = dayApts.slice(0, 2);
+            const overflow = count - visible.length;
+
+            return (
+              <button key={iso}
+                onClick={() => setSelectedDay(isSelected ? null : iso)}
+                className={`relative flex flex-col rounded-xl p-1.5 text-left transition-all min-h-[64px] ${
+                  isSelected ? "bg-brand-500/25 ring-1 ring-brand-500/60"
+                  : todayDay ? "bg-brand-500/15 ring-1 ring-brand-500/30"
+                  : "hover:bg-white/[0.04] active:bg-white/[0.08]"
+                }`}>
+                <span className={`text-xs font-bold leading-none mb-1 ${
+                  todayDay ? "text-brand-400"
+                  : isSelected ? "text-slate-900 dark:text-white"
+                  : count > 0 ? "text-slate-200" : "text-slate-600"
+                }`}>{day}</span>
+                <div className="flex flex-col gap-0.5 w-full">
+                  {visible.map((a: any) => {
+                    const sk = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
+                    const chipColor =
+                      sk === "pending" ? "bg-amber-500/20 text-amber-300"
+                      : sk === "confirmed" ? "bg-emerald-500/20 text-emerald-300"
+                      : sk === "done" ? "bg-brand-500/20 text-brand-300"
+                      : sk === "no_show" ? "bg-orange-500/20 text-orange-300"
+                      : "bg-slate-700/40 text-slate-400";
+                    return (
+                      <div key={a.id} className={`text-[9px] leading-tight rounded px-1 py-0.5 truncate font-medium ${chipColor}`}>
+                        {a.time} {a.userName ?? a.userTg ?? ""}
+                      </div>
+                    );
+                  })}
+                  {overflow > 0 && <div className="text-[9px] text-slate-500 pl-1">+{overflow}</div>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded bg-brand-500/40 ring-1 ring-brand-500/40" />
+            <span>{lang === "ru" ? "Сегодня" : lang === "ua" ? "Сьогодні" : "Today"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded bg-amber-500/25" />
+            <span>{lang === "ru" ? "Ожидание" : lang === "ua" ? "Очікування" : "Pending"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded bg-emerald-500/25" />
+            <span>{lang === "ru" ? "Подтверждено" : lang === "ua" ? "Підтверджено" : "Confirmed"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Selected day panel */}
+      {selectedDay && (
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+              {new Date(selectedDay + "T12:00:00").toLocaleDateString(
+                lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU",
+                { weekday: "long", day: "numeric", month: "long" }
+              )}
+            </h3>
+            <button onClick={() => setSelectedDay(null)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {selectedDayApts.length === 0 && (
+            <p className="text-slate-500 text-sm text-center py-4">{t("salon.noApts", lang)}</p>
+          )}
+          <div className="space-y-2">
+            {selectedDayApts.map((a: any) => (
+              <AptCard key={a.id} a={a} lang={lang} onAction={onAction} onNoShow={onNoShow} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; forceTab?: Tab }) {
   const { lang } = useLang();
   const searchParams = useSearchParams();
@@ -971,6 +1164,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     if (inWeb) setTab(resolvedSalonTab);
   }, [resolvedSalonTab, inWeb, forceTab]);
   const [aptDate, setAptDate] = useState("");
+  const [aptViewMode, setAptViewMode] = useState<"calendar" | "list">("calendar");
+  const [calViewDate, setCalViewDate] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null }>({ open: false, svc: null });
   const [masterModal, setMasterModal] = useState(false);
 
@@ -987,7 +1183,18 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
   const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
-  const apts = api.salon.getAppointments.useQuery({ tenantId, date: aptDate || undefined }, { enabled: tab === "appointments" });
+  const apts = api.salon.getAppointments.useQuery({ tenantId, date: aptDate || undefined }, { enabled: tab === "appointments" && aptViewMode === "list" });
+
+  // Calendar data: full month
+  const calYear = calViewDate.getFullYear();
+  const calMonth = calViewDate.getMonth();
+  const fmtISO = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const calDateFrom = fmtISO(calYear, calMonth, 1);
+  const calDateTo = fmtISO(calYear, calMonth, new Date(calYear, calMonth + 1, 0).getDate());
+  const calApts = api.salon.getAppointments.useQuery(
+    { tenantId, dateFrom: calDateFrom, dateTo: calDateTo, limit: 300 },
+    { enabled: tab === "appointments" && aptViewMode === "calendar" },
+  );
   const mastersList = api.salon.getMasters.useQuery({ tenantId }, { enabled: tab === "masters" });
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
@@ -1104,21 +1311,56 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {/* ── APPOINTMENTS ── */}
       {tab === "appointments" && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("salon.appointments", lang)}</h2>
-            <input type="date" value={aptDate} onChange={e => setAptDate(e.target.value)}
-              className="text-xs bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
+            <div className="flex items-center gap-2">
+              {aptViewMode === "list" && (
+                <input type="date" value={aptDate} onChange={e => setAptDate(e.target.value)}
+                  className="text-xs bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+              )}
+              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5">
+                <button onClick={() => setAptViewMode("calendar")}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "calendar" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  {lang === "ru" ? "Календарь" : lang === "ua" ? "Календар" : "Calendar"}
+                </button>
+                <button onClick={() => setAptViewMode("list")}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "list" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
+                  <List className="w-3.5 h-3.5" />
+                  {lang === "ru" ? "Список" : lang === "ua" ? "Список" : "List"}
+                </button>
+              </div>
+            </div>
           </div>
-          {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
-          <div className="space-y-2">
-            {apts.data?.map((a: any) => (
-              <AptCard key={a.id} a={a} lang={lang}
-                onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
-                onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
-            ))}
-            {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
-          </div>
+
+          {aptViewMode === "calendar" && (
+            <SalonBigCalendar
+              apts={calApts.data ?? []}
+              viewDate={calViewDate}
+              setViewDate={setCalViewDate}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
+              isLoading={calApts.isFetching}
+              lang={lang}
+              onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+              onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+            />
+          )}
+
+          {aptViewMode === "list" && (
+            <>
+              {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+              {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+              <div className="space-y-2">
+                {apts.data?.map((a: any) => (
+                  <AptCard key={a.id} a={a} lang={lang}
+                    onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+                    onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
+                ))}
+                {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
+              </div>
+            </>
+          )}
         </div>
       )}
 

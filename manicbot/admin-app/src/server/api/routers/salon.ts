@@ -7,7 +7,7 @@ import {
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
 import { getOrCreateCustomer, createCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
@@ -39,17 +39,26 @@ export const salonRouter = createTRPCRouter({
   }),
 
   getAppointments: publicProcedure
-    .input(z.object({ tenantId: z.string(), date: z.string().optional(), status: z.string().optional() }))
+    .input(z.object({
+      tenantId: z.string(),
+      date: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+      status: z.string().optional(),
+      limit: z.number().min(1).max(500).optional(),
+    }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       const rows = await ctx.db.select().from(appointments)
         .where(and(
           eq(appointments.tenantId, input.tenantId),
           ...(input.date ? [eq(appointments.date, input.date)] : []),
+          ...(input.dateFrom ? [gte(appointments.date, input.dateFrom)] : []),
+          ...(input.dateTo ? [lte(appointments.date, input.dateTo)] : []),
           ...(input.status ? [eq(appointments.status, input.status)] : []),
         ))
         .orderBy(desc(appointments.ts))
-        .limit(100);
+        .limit(input.limit ?? 100);
       return rows;
     }),
 

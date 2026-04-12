@@ -2,8 +2,9 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
-  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs,
+  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers,
 } from "~/server/db/schema";
+import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
 import { getOrCreateCustomer, createCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
@@ -560,7 +561,86 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.delete(tenantRoles).where(
         and(eq(tenantRoles.tenantId, input.tenantId), eq(tenantRoles.chatId, input.chatId), eq(tenantRoles.role, "master"))
       );
+      // Clean up web_users record for web-created masters (synthetic chatId >= 10B)
+      // Match by reverse-engineering the UUID prefix or simply by tenantId + role + name
+      if (input.chatId >= 10_000_000_000) {
+        try {
+          const webMasters = await ctx.db.select({ id: webUsers.id }).from(webUsers)
+            .where(and(eq(webUsers.tenantId, input.tenantId), eq(webUsers.role, "master")));
+          for (const wu of webMasters) {
+            const synth = 10_000_000_000 + (parseInt(wu.id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
+            if (synth === input.chatId) {
+              await ctx.db.delete(webUsers).where(eq(webUsers.id, wu.id));
+              break;
+            }
+          }
+        } catch { /* best-effort */ }
+      }
       return { success: true };
+    }),
+
+  createMasterAccount: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      name: z.string().min(1).max(200),
+      email: z.string().email().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Generate login
+      const sanitized = input.name.toLowerCase().replace(/[^a-z0-9а-яёіїєґ]/gi, "").slice(0, 20) || "master";
+      const suffix = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+        .map(b => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
+      const login = input.email?.trim().toLowerCase() ?? `${sanitized}.${suffix}@salon.manicbot.local`;
+
+      // Check duplicate
+      const existing = await ctx.db.select({ id: webUsers.id }).from(webUsers)
+        .where(eq(webUsers.email, login)).limit(1);
+      if (existing.length) {
+        throw new TRPCError({ code: "CONFLICT", message: "Account with this email already exists" });
+      }
+
+      // Generate 16-char password
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+      const pwArr = crypto.getRandomValues(new Uint8Array(16));
+      const password = Array.from(pwArr).map(b => chars[b % chars.length]).join("");
+
+      const passwordHash = await hashPassword(password);
+      const id = crypto.randomUUID();
+      const now = Math.floor(Date.now() / 1000);
+
+      // Synthetic chatId (same formula as webUsers.register)
+      const syntheticChatId = 10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
+
+      // Insert web_users
+      await ctx.db.insert(webUsers).values({
+        id,
+        email: login,
+        passwordHash,
+        role: "master",
+        tenantId: input.tenantId,
+        name: input.name,
+        emailVerified: input.email ? 0 : 1, // generated emails don't need verification
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Insert masters
+      await ctx.db.insert(masters).values({
+        tenantId: input.tenantId,
+        chatId: syntheticChatId,
+        name: input.name,
+        active: 1,
+        addedAt: now,
+      });
+
+      // Assign tenant_roles
+      await ctx.db.insert(tenantRoles)
+        .values({ tenantId: input.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
+        .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
+
+      return { login, password, masterId: syntheticChatId, webUserId: id };
     }),
 
   // ── Bot Connection ─────────────────────────────────────────────

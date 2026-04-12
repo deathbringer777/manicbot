@@ -14,6 +14,7 @@ export type AppRole =
 type RoleResult = {
   role: AppRole;
   tenantId: string | null;
+  tenantName: string | null;
   masterId: number | null;
   isPersonalTenant: boolean;
   createdAt: number | null;
@@ -25,6 +26,7 @@ type RoleResult = {
 const EMPTY: RoleResult = {
   role: null,
   tenantId: null,
+  tenantName: null,
   masterId: null,
   isPersonalTenant: false,
   createdAt: null,
@@ -58,24 +60,32 @@ export const authRouter = createTRPCRouter({
       // For web masters: look up their masterId and check if personal tenant
       let masterId: number | null = null;
       let isPersonalTenant = false;
-      if (role === "master" && tenantId) {
+      let tenantName: string | null = null;
+      if (tenantId) {
         try {
-          const [masterRow] = await ctx.db
-            .select({ chatId: masters.chatId })
-            .from(masters)
-            .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
-            .limit(1);
-          if (masterRow) masterId = masterRow.chatId;
           const [tenantRow] = await ctx.db
-            .select({ isPersonal: tenants.isPersonal })
+            .select({ name: tenants.name, displayName: tenants.displayName, isPersonal: tenants.isPersonal })
             .from(tenants)
             .where(eq(tenants.id, tenantId))
             .limit(1);
-          if (tenantRow?.isPersonal) isPersonalTenant = true;
+          if (tenantRow) {
+            tenantName = tenantRow.displayName || tenantRow.name || null;
+            if (tenantRow.isPersonal) isPersonalTenant = true;
+          }
         } catch { /* non-critical */ }
+        if (role === "master") {
+          try {
+            const [masterRow] = await ctx.db
+              .select({ chatId: masters.chatId })
+              .from(masters)
+              .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
+              .limit(1);
+            if (masterRow) masterId = masterRow.chatId;
+          } catch { /* non-critical */ }
+        }
       }
 
-      return { role, tenantId, masterId, isPersonalTenant, createdAt, emailVerified, email, hasPassword };
+      return { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, email, hasPassword };
     }
 
     if (!ctx.user) return EMPTY;
@@ -117,7 +127,12 @@ export const authRouter = createTRPCRouter({
       const role = tenantRow[0]!.role as AppRole;
       const tenantId = tenantRow[0]!.tenantId;
       if (role === "tenant_owner" || role === "master") {
-        return { ...EMPTY, role, tenantId, masterId: role === "master" ? userId : null };
+        let tn: string | null = null;
+        try {
+          const [t] = await ctx.db.select({ name: tenants.name, displayName: tenants.displayName }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+          tn = t?.displayName || t?.name || null;
+        } catch { /* non-critical */ }
+        return { ...EMPTY, role, tenantId, tenantName: tn, masterId: role === "master" ? userId : null };
       }
     }
 

@@ -113,6 +113,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
   const ctxValue = {
     role,
     tenantId,
+    tenantName: null,
     userId,
     createdAt: null,
     emailVerified: true,

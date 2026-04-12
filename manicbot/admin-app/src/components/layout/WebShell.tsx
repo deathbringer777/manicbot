@@ -7,7 +7,7 @@ import { signOut } from "next-auth/react";
 import {
   Settings,
   LogOut, Menu, X, Zap, ChevronLeft, ChevronRight,
-  Sun, Moon, Compass,
+  Sun, Moon, Compass, Building2,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -74,7 +74,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { role, previewRole, createdAt, emailVerified, isPersonalTenant } = useRole();
+  const { role, previewRole, createdAt, emailVerified, isPersonalTenant, tenantName } = useRole();
   const { lang, setLang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -291,8 +291,15 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{pageTitle}</h2>
             </div>
 
-            {/* Right: theme toggle + user pill */}
+            {/* Right: salon badge + theme toggle + user pill */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Salon name badge for masters */}
+              {role === "master" && tenantName && (
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium max-w-[180px]">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{tenantName}</span>
+                </div>
+              )}
               {/* Tour replay button (first 2 days) */}
               {showTourButton && (
                 <button

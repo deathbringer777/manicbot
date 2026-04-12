@@ -6,6 +6,7 @@ import type { AppRole } from "~/server/api/routers/auth";
 interface RoleContextValue {
   role: AppRole;
   tenantId: string | null;
+  tenantName: string | null;
   userId: number | null;
   createdAt: number | null;
   emailVerified: boolean;
@@ -23,6 +24,7 @@ interface RoleContextValue {
 export const RoleContext = createContext<RoleContextValue>({
   role: null,
   tenantId: null,
+  tenantName: null,
   userId: null,
   createdAt: null,
   emailVerified: true,

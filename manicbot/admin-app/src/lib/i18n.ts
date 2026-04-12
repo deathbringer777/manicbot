@@ -338,6 +338,17 @@ const translations = {
   "master.vacation":        { ru: "Отпуск",         ua: "Відпустка",      en: "Vacation",    pl: "Urlop" },
   "master.vacationOn":      { ru: "Вы в отпуске — запись приостановлена", ua: "Ви у відпустці — запис призупинено", en: "On vacation — bookings paused", pl: "Na urlopie — rezerwacje wstrzymane" },
   "master.vacationOff":     { ru: "Рабочий режим",  ua: "Робочий режим",  en: "Working mode", pl: "Tryb pracy" },
+
+  // ── Create master account modal ──────────────────────────────────────────────
+  "master.createAccount":         { ru: "Создать аккаунт",       ua: "Створити акаунт",        en: "Create Account",        pl: "Utwórz konto" },
+  "master.addViaTelegram":        { ru: "Добавить через Telegram", ua: "Додати через Telegram", en: "Add via Telegram",      pl: "Dodaj przez Telegram" },
+  "master.createAccountTitle":    { ru: "Создать аккаунт мастера", ua: "Створити акаунт майстра", en: "Create Master Account", pl: "Utwórz konto mistrza" },
+  "master.masterEmail":           { ru: "Email (опционально)",   ua: "Email (опціонально)",    en: "Email (optional)",      pl: "Email (opcjonalnie)" },
+  "master.loginLabel":            { ru: "Логин",                  ua: "Логін",                  en: "Login",                 pl: "Login" },
+  "master.passwordLabel":         { ru: "Пароль",                 ua: "Пароль",                 en: "Password",              pl: "Hasło" },
+  "master.saveWarning":           { ru: "Сохраните данные для входа — пароль показывается только один раз!", ua: "Збережіть дані для входу — пароль показується лише один раз!", en: "Save the credentials — the password is shown only once!", pl: "Zapisz dane logowania — hasło wyświetlane jest tylko raz!" },
+  "master.webBadge":              { ru: "Web",                    ua: "Web",                    en: "Web",                   pl: "Web" },
+  "master.done":                  { ru: "Готово",                 ua: "Готово",                 en: "Done",                  pl: "Gotowe" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

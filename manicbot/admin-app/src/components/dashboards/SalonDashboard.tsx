@@ -7,7 +7,7 @@ import {
   CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
   Loader2, Plus, Pencil, Trash2, Save, X, List,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
-  Star, MessageSquare, Reply, Camera, Tag, ImageIcon,
+  Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
 } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
@@ -230,6 +230,99 @@ function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: ()
             {t("common.save", lang)}
           </Btn>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Create Master Account Modal ─────────────────────────────────
+function CreateMasterAccountModal({ onClose, tenantId }: { onClose: () => void; tenantId: string }) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [credentials, setCredentials] = useState<{ login: string; password: string } | null>(null);
+  const [copiedLogin, setCopiedLogin] = useState(false);
+  const [copiedPw, setCopiedPw] = useState(false);
+
+  const createAccount = api.salon.createMasterAccount.useMutation({
+    onSuccess: (data) => {
+      void utils.salon.getMasters.invalidate();
+      setCredentials({ login: data.login, password: data.password });
+      setStep(2);
+    },
+  });
+
+  function copy(text: string, which: "login" | "pw") {
+    void navigator.clipboard.writeText(text);
+    if (which === "login") { setCopiedLogin(true); setTimeout(() => setCopiedLogin(false), 2000); }
+    else { setCopiedPw(true); setTimeout(() => setCopiedPw(false), 2000); }
+  }
+
+  return (
+    <div role="dialog" aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose} onKeyDown={e => e.key === "Escape" && onClose()}>
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-t-3xl md:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("master.createAccountTitle", lang)}</h3>
+          <button onClick={onClose} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {step === 1 && (
+          <>
+            <Input label={t("master.name", lang)} value={name} onChange={setName} placeholder="Анна" />
+            <Input label={t("master.masterEmail", lang)} value={email} onChange={setEmail} placeholder="anna@example.com" type="email" />
+            {createAccount.error && (
+              <p className="text-red-400 text-xs rounded-lg bg-red-500/10 px-3 py-2">{createAccount.error.message}</p>
+            )}
+            <Btn
+              onClick={() => createAccount.mutate({ tenantId, name: name.trim(), email: email.trim() || undefined })}
+              disabled={!name.trim() || createAccount.isPending}
+              className="w-full justify-center py-2.5">
+              {createAccount.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {t("master.createAccount", lang)}
+            </Btn>
+          </>
+        )}
+
+        {step === 2 && credentials && (
+          <>
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-400">
+              {t("master.saveWarning", lang)}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">{t("master.loginLabel", lang)}</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 min-w-0 bg-slate-100 dark:bg-white/5 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-white break-all">{credentials.login}</code>
+                  <button
+                    onClick={() => copy(credentials.login, "login")}
+                    className="shrink-0 h-9 w-9 rounded-lg bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-brand-400 transition-colors">
+                    {copiedLogin ? <span className="text-[10px] text-emerald-400 font-bold">✓</span> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">{t("master.passwordLabel", lang)}</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 min-w-0 bg-slate-100 dark:bg-white/5 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-white break-all">{credentials.password}</code>
+                  <button
+                    onClick={() => copy(credentials.password, "pw")}
+                    className="shrink-0 h-9 w-9 rounded-lg bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-brand-400 transition-colors">
+                    {copiedPw ? <span className="text-[10px] text-emerald-400 font-bold">✓</span> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <Btn onClick={onClose} className="w-full justify-center py-2.5">
+              {t("master.done", lang)}
+            </Btn>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1168,7 +1261,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null }>({ open: false, svc: null });
-  const [masterModal, setMasterModal] = useState(false);
+  const [masterModal, setMasterModal] = useState<"telegram" | "create" | null>(null);
 
   const utils = api.useUtils();
 
@@ -1424,26 +1517,39 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "masters" && (
         <div className="space-y-3">
           <SectionHeader title={t("salon.masters", lang)} action={
-            <Btn onClick={() => setMasterModal(true)}><Plus className="h-3.5 w-3.5" />{t("action.add", lang)}</Btn>
+            <div className="flex items-center gap-2">
+              <Btn onClick={() => setMasterModal("telegram")}><Plus className="h-3.5 w-3.5" />{t("master.addViaTelegram", lang)}</Btn>
+              <Btn onClick={() => setMasterModal("create")}><Plus className="h-3.5 w-3.5" />{t("master.createAccount", lang)}</Btn>
+            </div>
           } />
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
           <div className="space-y-2">
-            {mastersList.data?.map((m: any) => (
-              <div key={m.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-brand-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                  {(m.name ?? "?").charAt(0).toUpperCase()}
+            {mastersList.data?.map((m: any) => {
+              const isWebAccount = m.chatId >= 10_000_000_000;
+              return (
+                <div key={m.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-brand-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                    {(m.name ?? "?").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-slate-900 dark:text-white text-sm">{m.name ?? `#${m.chatId}`}</p>
+                      {isWebAccount && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                          {t("master.webBadge", lang)}
+                        </span>
+                      )}
+                    </div>
+                    {!isWebAccount && <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>}
+                  </div>
+                  <button onClick={() => { if (confirm(t("confirm.removeMaster", lang))) removeMaster.mutate({ tenantId, chatId: m.chatId }); }}
+                    className="h-8 w-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 dark:text-white text-sm">{m.name ?? `#${m.chatId}`}</p>
-                  <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>
-                </div>
-                <button onClick={() => { if (confirm(t("confirm.removeMaster", lang))) removeMaster.mutate({ tenantId, chatId: m.chatId }); }}
-                  className="h-8 w-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
             {mastersList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noMasters", lang)}</p>}
           </div>
         </div>
@@ -1568,7 +1674,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* Modals */}
       {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} />}
-      {masterModal && <AddMasterModal onClose={() => setMasterModal(false)} tenantId={tenantId} />}
+      {masterModal === "telegram" && <AddMasterModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
+      {masterModal === "create" && <CreateMasterAccountModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
     </Shell>
   );
 }

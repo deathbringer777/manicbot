@@ -17,81 +17,31 @@ import {
   sendEmailChangeVerification,
 } from "~/server/email/emailService";
 
+import { checkRateLimit } from "~/server/auth/rateLimit";
+
 /*
- * Simple in-memory rate limiter for registration.
- * NOTE: resets per Cloudflare edge isolate (not shared across regions).
- * This is a best-effort first-pass defense — the DB UNIQUE constraint is the
- * authoritative guard against duplicate registrations.
+ * D1-based rate limiting — durable across Cloudflare edge isolates.
+ * See server/auth/rateLimit.ts for implementation.
  */
-const registerRl = new Map<string, { count: number; resetAt: number }>();
-const RL_MAX = 5;
 const RL_WINDOW = 10 * 60 * 1000; // 10 minutes
-
-function checkRegisterRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = registerRl.get(ip);
-  if (!entry || now > entry.resetAt) {
-    registerRl.set(ip, { count: 1, resetAt: now + RL_WINDOW });
-    return true;
-  }
-  if (entry.count >= RL_MAX) return false;
-  entry.count++;
-  return true;
-}
-
-const resendRl = new Map<string, { count: number; resetAt: number }>();
-const RESEND_RL_MAX = 3;
-
-function checkResendRateLimit(email: string): boolean {
-  const now = Date.now();
-  const entry = resendRl.get(email);
-  if (!entry || now > entry.resetAt) {
-    resendRl.set(email, { count: 1, resetAt: now + RL_WINDOW });
-    return true;
-  }
-  if (entry.count >= RESEND_RL_MAX) return false;
-  entry.count++;
-  return true;
-}
-
-const verifyRl = new Map<string, { count: number; resetAt: number }>();
-
-function checkVerifyRateLimit(email: string): boolean {
-  const now = Date.now();
-  const entry = verifyRl.get(email);
-  if (!entry || now > entry.resetAt) {
-    verifyRl.set(email, { count: 1, resetAt: now + RL_WINDOW });
-    return true;
-  }
-  if (entry.count >= RL_MAX) return false;
-  entry.count++;
-  return true;
-}
+const RL_REGISTER_MAX = 5;
+const RL_RESEND_MAX = 3;
+const RL_VERIFY_MAX = 5;
+const RL_RESET_MAX = 5;
+const RL_LOGIN_IP_MAX = 20; // max login attempts per IP across all accounts
+const RL_LOGIN_IP_WINDOW = 15 * 60 * 1000; // 15 minutes
 
 /**
- * Generate a 6-digit email verification code using crypto.getRandomValues
+ * Generate an 8-digit email verification code using crypto.getRandomValues
  * (NOT Math.random — CSPRNG required so codes are not predictable).
+ * 8 digits = 90M possible codes — infeasible to brute-force within TTL.
  */
 function generateVerificationCode(): string {
   const buf = new Uint32Array(1);
   crypto.getRandomValues(buf);
-  // 6-digit range: 100000..999999 (900k codes)
-  const code = (buf[0]! % 900000) + 100000;
+  // 8-digit range: 10000000..99999999 (90M codes)
+  const code = (buf[0]! % 90000000) + 10000000;
   return code.toString();
-}
-
-const resetRl = new Map<string, { count: number; resetAt: number }>();
-
-function checkPasswordResetRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = resetRl.get(ip);
-  if (!entry || now > entry.resetAt) {
-    resetRl.set(ip, { count: 1, resetAt: now + RL_WINDOW });
-    return true;
-  }
-  if (entry.count >= RL_MAX) return false;
-  entry.count++;
-  return true;
 }
 
 function randomId(len = 6): string {
@@ -144,9 +94,10 @@ export const webUsersRouter = createTRPCRouter({
         });
       }
 
-      // Rate limit by IP
+      // Rate limit by IP (D1-backed — durable across edge isolates)
       const ip = clientIp(ctx as { headers?: Headers | null });
-      if (!checkRegisterRateLimit(ip)) {
+      const rl = await checkRateLimit(ctx.db, ip, "register", RL_REGISTER_MAX, RL_WINDOW);
+      if (!rl.allowed) {
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many registration attempts. Try again later." });
       }
       const email = input.email.toLowerCase().trim();
@@ -294,13 +245,14 @@ export const webUsersRouter = createTRPCRouter({
       };
     }),
 
-  /** Verify email address with 6-digit code. */
+  /** Verify email address with verification code. */
   verifyEmail: publicProcedure
-    .input(z.object({ email: z.string().email(), code: z.string().length(6) }))
+    .input(z.object({ email: z.string().email(), code: z.string().min(6).max(8) }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase().trim();
 
-      if (!checkVerifyRateLimit(email)) {
+      const rl = await checkRateLimit(ctx.db, email, "verify", RL_VERIFY_MAX, RL_WINDOW);
+      if (!rl.allowed) {
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many verification attempts. Try again later." });
       }
 
@@ -363,7 +315,8 @@ export const webUsersRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase().trim();
 
-      if (!checkResendRateLimit(email)) {
+      const rl = await checkRateLimit(ctx.db, email, "resend", RL_RESEND_MAX, RL_WINDOW);
+      if (!rl.allowed) {
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many resend attempts. Try again later." });
       }
 
@@ -413,7 +366,8 @@ export const webUsersRouter = createTRPCRouter({
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
       const ip = clientIp(ctx as { headers?: Headers | null });
-      if (!checkPasswordResetRateLimit(ip)) {
+      const rl = await checkRateLimit(ctx.db, ip, "password_reset", RL_RESET_MAX, RL_WINDOW);
+      if (!rl.allowed) {
         throw new TRPCError({
           code: "TOO_MANY_REQUESTS",
           message: "Too many attempts. Try again later.",

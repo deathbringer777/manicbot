@@ -440,3 +440,12 @@ CREATE TABLE IF NOT EXISTS role_change_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_rcr_user ON role_change_requests(web_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_rcr_status ON role_change_requests(status, created_at);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT NOT NULL,
+  action TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1,
+  window_start INTEGER NOT NULL,
+  PRIMARY KEY (key, action)
+);
+CREATE INDEX IF NOT EXISTS idx_rl_window ON rate_limits(window_start);

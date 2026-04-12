@@ -432,3 +432,14 @@ export const roleChangeRequests = sqliteTable("role_change_requests", {
   index("idx_rcr_user").on(t.webUserId, t.createdAt),
   index("idx_rcr_status").on(t.status, t.createdAt),
 ]);
+
+// ─── D1-based rate limiting ─────────────────────────────────────────────────
+
+export const rateLimits = sqliteTable("rate_limits", {
+  key: text("key").notNull(),
+  action: text("action").notNull(),
+  count: integer("count").notNull().default(1),
+  windowStart: integer("window_start").notNull(),
+}, (t) => [
+  index("idx_rl_window").on(t.windowStart),
+]);

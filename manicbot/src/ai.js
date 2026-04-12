@@ -417,7 +417,8 @@ export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client',
   let prompt = sys + '\n\n';
   for (const m of history) {
     const roleLabel = m.role === 'user' ? 'User' : 'Assistant';
-    prompt += `${roleLabel}: ${m.content}\n\n`;
+    const safeContent = m.role === 'user' ? sanitizeUserInput(m.content) : m.content;
+    prompt += `${roleLabel}: ${safeContent}\n\n`;
   }
   prompt += `User: ${userText}`;
   const promptBody = { prompt: prompt.slice(0, 6000), max_tokens: AI_MAX_TOKENS };
@@ -448,7 +449,8 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
     const userText = sanitizeUserInput(userMessage.slice(0, 500));
     const messages = [{ role: 'system', content: sys }];
     for (const m of history) {
-      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content });
+      const safeContent = m.role === 'user' ? sanitizeUserInput(m.content) : m.content;
+      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: safeContent });
     }
     messages.push({ role: 'user', content: userText });
     const messagesPayload = { messages, max_tokens: AI_MAX_TOKENS };

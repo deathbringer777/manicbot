@@ -10,6 +10,7 @@ import { signGooglePrefillToken } from "./googlePrefillToken";
 import { authPublicBaseUrl } from "./authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
 import { sendLoginAlert } from "~/server/email/emailService";
+import { checkRateLimit } from "./rateLimit";
 
 export { authPublicBaseUrl };
 
@@ -66,6 +67,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const ip = getClientIp(request?.headers);
         const now = Math.floor(Date.now() / 1000);
 
+        // IP-based rate limiting (D1-backed) — blocks credential stuffing across accounts
+        const ipRl = await checkRateLimit(db, ip, "login", 20, 15 * 60 * 1000);
+        if (!ipRl.allowed) {
+          throw new Error("Too many login attempts from this address. Try again later.");
+        }
+
         const rows = await db
           .select()
           .from(webUsers)
@@ -111,7 +118,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 updatedAt: now,
               })
               .where(eq(webUsers.id, user.id));
-          } catch { /* non-critical — login is still rejected below */ }
+          } catch (e) { console.error("[auth] failed to increment login attempts:", e); }
           try {
             await db.insert(auditLog).values({
               tenantId: user.tenantId ?? null,
@@ -228,22 +235,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         t.tenantId = user.tenantId ?? null;
         t.webRole = user.webRole ?? "tenant_owner";
         t.emailVerified = user.isEmailVerified ?? true;
-      } else {
-        // Re-check DB for tenant assignment + emailVerified refresh
-        if (t.sub && (!t.tenantId || t.emailVerified !== true)) {
-          try {
-            const db = getDb();
-            const rows = await db
-              .select({ tenantId: webUsers.tenantId, emailVerified: webUsers.emailVerified })
-              .from(webUsers)
-              .where(eq(webUsers.id, t.sub))
-              .limit(1);
-            if (rows[0]) {
-              if (rows[0].tenantId) t.tenantId = rows[0].tenantId;
-              if (rows[0].emailVerified) t.emailVerified = true;
-            }
-          } catch { /* non-critical — next request will retry */ }
-        }
+      } else if (t.sub) {
+        // Always re-check DB for role, tenant, and emailVerified —
+        // ensures role demotions take effect immediately, not after 8h JWT expiry.
+        try {
+          const db = getDb();
+          const rows = await db
+            .select({ tenantId: webUsers.tenantId, emailVerified: webUsers.emailVerified, role: webUsers.role })
+            .from(webUsers)
+            .where(eq(webUsers.id, t.sub))
+            .limit(1);
+          if (rows[0]) {
+            if (rows[0].tenantId) t.tenantId = rows[0].tenantId;
+            if (rows[0].emailVerified) t.emailVerified = true;
+            t.webRole = rows[0].role;
+          }
+        } catch { /* non-critical — next request will retry */ }
       }
       return token;
     },

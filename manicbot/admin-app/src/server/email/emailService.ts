@@ -22,7 +22,7 @@ function baseUrl(): string {
   return authPublicBaseUrl() || "";
 }
 
-/** Registration: 6-digit verification code. */
+/** Registration: 8-digit verification code. */
 export async function sendVerificationCodeEmail(
   to: string,
   code: string,

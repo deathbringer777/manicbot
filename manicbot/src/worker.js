@@ -211,7 +211,7 @@ export default {
           void logEvent(envCtx(env), 'error.handler', { level: 'error', message: fallbackError?.message ?? 'Unknown error', stack: fallbackError?.stack?.slice(0, 300) });
         }
       }
-      if (!ctx) return new Response(e?.message || 'Server Error', { status: 500 });
+      if (!ctx) return new Response('Internal Server Error', { status: 500 });
     }
     if (!ctx) {
       if (disallowLegacyWebhook(env, request, url)) {

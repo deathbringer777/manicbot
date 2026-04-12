@@ -191,7 +191,7 @@ export const authCopy: Record<
     verifyEmail: {
       kicker: "Подтверждение email",
       title: "Введите код подтверждения",
-      description: "Мы отправили 6-значный код на вашу почту. Введите его ниже.",
+      description: "Мы отправили код подтверждения на вашу почту. Введите его ниже.",
       panelTitle: "Подтверждение",
       panelDescription: "Проверяем код…",
       verifying: "Проверяем код…",
@@ -339,7 +339,7 @@ export const authCopy: Record<
     verifyEmail: {
       kicker: "Підтвердження email",
       title: "Введіть код підтвердження",
-      description: "Ми надіслали 6-значний код на вашу пошту. Введіть його нижче.",
+      description: "Ми надіслали код підтвердження на вашу пошту. Введіть його нижче.",
       panelTitle: "Підтвердження",
       panelDescription: "Перевіряємо код…",
       verifying: "Перевіряємо код…",
@@ -487,7 +487,7 @@ export const authCopy: Record<
     verifyEmail: {
       kicker: "Email verification",
       title: "Enter verification code",
-      description: "We sent a 6-digit code to your email. Enter it below.",
+      description: "We sent a verification code to your email. Enter it below.",
       panelTitle: "Verification",
       panelDescription: "Checking your code.",
       verifying: "Verifying…",

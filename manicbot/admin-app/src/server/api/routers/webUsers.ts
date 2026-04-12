@@ -79,11 +79,11 @@ export const webUsersRouter = createTRPCRouter({
         email: z.string().email(),
         password: z.string().min(12, "Минимум 12 символов").optional(),
         role: z.enum(["tenant_owner", "master"]),
-        name: z.string().max(200).optional(),
+        name: z.string().max(200).nullish(),
         lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
-        referralSource: z.string().max(100).optional(),
+        referralSource: z.string().max(100).nullish(),
         tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
-        googlePrefillToken: z.string().min(1).max(8000).optional(),
+        googlePrefillToken: z.string().min(1).max(8000).nullish(),
       })
     )
     .mutation(async ({ ctx, input }) => {

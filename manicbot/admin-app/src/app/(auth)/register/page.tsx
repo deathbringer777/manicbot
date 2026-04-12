@@ -173,6 +173,8 @@ export default function RegisterPage() {
         if (msg.includes("already exists") || msg.includes("Registration failed")) {
           setIsConflict(true);
           setError(copy.register.conflict);
+        } else if (msg.includes("invalid_type") || msg.includes("Expected")) {
+          setError(copy.register.registrationError);
         } else {
           setError(msg || copy.register.registrationError);
         }

@@ -60,6 +60,7 @@ export const authCopy: Record<
       resendSuccess: string;
       invalidCode: string;
       expiredCode: string;
+      backToRegister: string;
     };
     forgotPassword: {
       kicker: string;
@@ -125,6 +126,9 @@ export const authCopy: Record<
       login: string;
       registrationError: string;
       conflict: string;
+      conflictHint: string;
+      conflictLogin: string;
+      conflictForgot: string;
       verifyNotice: string;
       verifyReady: string;
       showPassword: string;
@@ -207,6 +211,7 @@ export const authCopy: Record<
       resendSuccess: "Код отправлен повторно",
       invalidCode: "Неверный код",
       expiredCode: "Код истёк. Запросите новый.",
+      backToRegister: "Вернуться к регистрации",
     },
     forgotPassword: {
       kicker: "Сброс пароля",
@@ -271,7 +276,10 @@ export const authCopy: Record<
       hasAccount: "Уже есть аккаунт?",
       login: "Войти",
       registrationError: "Ошибка регистрации",
-      conflict: "Регистрация не удалась. Попробуйте другой email или войдите в существующий кабинет.",
+      conflict: "Аккаунт с этим email уже существует.",
+      conflictHint: "Если вы уже регистрировались — войдите в свой кабинет. Если забыли пароль, его можно восстановить.",
+      conflictLogin: "Войти",
+      conflictForgot: "Забыли пароль?",
       verifyNotice: "Аккаунт создан. Подтвердите email и затем войдите.",
       verifyReady: "Аккаунт создан. Можно сразу входить в панель.",
       showPassword: "Показать пароль",
@@ -355,6 +363,7 @@ export const authCopy: Record<
       resendSuccess: "Код надіслано повторно",
       invalidCode: "Невірний код",
       expiredCode: "Код минув. Запросіть новий.",
+      backToRegister: "Повернутися до реєстрації",
     },
     forgotPassword: {
       kicker: "Скидання пароля",
@@ -419,7 +428,10 @@ export const authCopy: Record<
       hasAccount: "Вже є акаунт?",
       login: "Увійти",
       registrationError: "Помилка реєстрації",
-      conflict: "Реєстрація не вдалася. Спробуйте інший email або увійдіть в існуючий кабінет.",
+      conflict: "Акаунт з цим email вже існує.",
+      conflictHint: "Якщо ви вже реєструвалися — увійдіть до свого кабінету. Якщо забули пароль, його можна відновити.",
+      conflictLogin: "Увійти",
+      conflictForgot: "Забули пароль?",
       verifyNotice: "Акаунт створено. Підтвердьте email, а потім увійдіть.",
       verifyReady: "Акаунт створено. Можна одразу входити в панель.",
       showPassword: "Показати пароль",
@@ -503,6 +515,7 @@ export const authCopy: Record<
       resendSuccess: "Code resent",
       invalidCode: "Invalid code",
       expiredCode: "Code expired. Request a new one.",
+      backToRegister: "Back to registration",
     },
     forgotPassword: {
       kicker: "Password reset",
@@ -567,7 +580,10 @@ export const authCopy: Record<
       hasAccount: "Already have an account?",
       login: "Sign in",
       registrationError: "Registration error",
-      conflict: "Registration failed. Try another email or sign in to your existing cabinet.",
+      conflict: "An account with this email already exists.",
+      conflictHint: "If you already registered — sign in to your cabinet. If you forgot your password, you can reset it.",
+      conflictLogin: "Sign in",
+      conflictForgot: "Forgot password?",
       verifyNotice: "Account created. Verify your email and then sign in.",
       verifyReady: "Account created. You can sign in right away.",
       showPassword: "Show password",
@@ -651,6 +667,7 @@ export const authCopy: Record<
       resendSuccess: "Kod wysłany ponownie",
       invalidCode: "Nieprawidłowy kod",
       expiredCode: "Kod wygasł. Poproś o nowy.",
+      backToRegister: "Wróć do rejestracji",
     },
     forgotPassword: {
       kicker: "Reset hasła",
@@ -715,7 +732,10 @@ export const authCopy: Record<
       hasAccount: "Masz już konto?",
       login: "Zaloguj się",
       registrationError: "Błąd rejestracji",
-      conflict: "Rejestracja nie powiodła się. Spróbuj innego emaila albo zaloguj się do istniejącego panelu.",
+      conflict: "Konto z tym emailem już istnieje.",
+      conflictHint: "Jeśli już się rejestrowałeś — zaloguj się do swojego panelu. Jeśli nie pamiętasz hasła, możesz je zresetować.",
+      conflictLogin: "Zaloguj się",
+      conflictForgot: "Nie pamiętasz hasła?",
       verifyNotice: "Konto zostało utworzone. Potwierdź email, a potem się zaloguj.",
       verifyReady: "Konto zostało utworzone. Możesz od razu się zalogować.",
       showPassword: "Pokaż hasło",

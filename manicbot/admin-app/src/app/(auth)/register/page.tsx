@@ -30,6 +30,7 @@ export default function RegisterPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConflict, setIsConflict] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [hasGoogle, setHasGoogle] = useState(false);
@@ -111,6 +112,7 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setIsConflict(false);
     setSuccessMessage(null);
 
     const emailVal = email.trim();
@@ -169,6 +171,7 @@ export default function RegisterPage() {
       } catch (err: any) {
         const msg = err?.message ?? "";
         if (msg.includes("already exists") || msg.includes("Registration failed")) {
+          setIsConflict(true);
           setError(copy.register.conflict);
         } else {
           setError(msg || copy.register.registrationError);
@@ -356,9 +359,32 @@ export default function RegisterPage() {
         )}
 
         {error && (
-          <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200">
-            {error}
-          </p>
+          <div className={`rounded-2xl border px-4 py-3 text-sm ${
+            isConflict
+              ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-100"
+              : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-500/10 dark:text-red-200"
+          }`}>
+            <p className="font-medium">{error}</p>
+            {isConflict && (
+              <>
+                <p className="mt-1.5 text-xs opacity-80">{copy.register.conflictHint}</p>
+                <div className="mt-3 flex gap-3">
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center rounded-lg bg-cyan-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-cyan-500 dark:bg-cyan-500 dark:hover:bg-cyan-400"
+                  >
+                    {copy.register.conflictLogin}
+                  </Link>
+                  <Link
+                    href="/forgot-password"
+                    className="inline-flex items-center rounded-lg border border-current/20 px-4 py-1.5 text-xs font-medium transition hover:opacity-80"
+                  >
+                    {copy.register.conflictForgot}
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         <label className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-cyan-200/40 bg-cyan-50/50 px-4 py-3 transition hover:bg-cyan-50 dark:border-cyan-400/20 dark:bg-cyan-500/5 dark:hover:bg-cyan-500/10">

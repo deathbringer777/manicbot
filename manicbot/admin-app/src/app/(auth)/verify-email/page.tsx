@@ -176,11 +176,15 @@ function VerifyEmailInner() {
       panelTitle={v.panelTitle}
       panelDescription={v.panelDescription}
       footer={
-        <p className="text-center text-sm">
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <Link href="/register" className="font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+            {v.backToRegister}
+          </Link>
+          <span className="text-slate-300 dark:text-slate-600">|</span>
           <Link href="/login" className="font-medium text-cyan-700 transition hover:text-slate-900 dark:text-cyan-200 dark:hover:text-white">
             {v.goLogin}
           </Link>
-        </p>
+        </div>
       }
     >
       <div className="space-y-6">

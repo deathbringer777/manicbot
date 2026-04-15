@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   User, CreditCard, Palette, HelpCircle, ArrowLeft,
-  ChevronRight, Settings, Wrench,
+  Settings, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -32,9 +32,9 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     pl: { label: "Płatności", desc: "Plan, subskrypcja, płatność" },
   },
   appearance: {
-    ru: { label: "Внешний вид", desc: "Настройки дашборда" },
-    ua: { label: "Зовнішній вигляд", desc: "Налаштування дашборду" },
-    en: { label: "Appearance", desc: "Dashboard display settings" },
+    ru: { label: "Вид", desc: "Настройки дашборда" },
+    ua: { label: "Вигляд", desc: "Налаштування дашборду" },
+    en: { label: "Appearance", desc: "Dashboard display" },
     pl: { label: "Wygląd", desc: "Ustawienia panelu" },
   },
   help: {
@@ -77,14 +77,15 @@ function getSections(role: string | null, lang: Lang, isPersonalTenant?: boolean
   const sections: string[] = [];
 
   if (role === "tenant_owner") {
+    // Billing only for salon owners
     sections.push("account", "billing", "appearance", "help");
   } else if (role === "master") {
-    sections.push("account");
-    sections.push("appearance", "help");
+    sections.push("account", "appearance", "help");
   } else if (role === "support" || role === "technical_support") {
     sections.push("account", "appearance", "help");
   } else if (role === "system_admin") {
-    sections.push("account", "billing", "appearance", "help", "platform");
+    // system_admin: no billing — God Mode, all features are free
+    sections.push("account", "appearance", "help", "platform");
   } else {
     sections.push("account", "appearance", "help");
   }
@@ -108,23 +109,13 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
   const { lang } = useLang();
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const sections = getSections(effectiveRole, lang, isPersonalTenant);
-  const [mobileListMode, setMobileListMode] = useState(!activeSection);
-
-  const handleSectionClick = (id: string) => {
-    onSectionChange(id);
-    setMobileListMode(false);
-  };
-
-  const handleMobileBack = () => {
-    setMobileListMode(true);
-  };
 
   const activeSectionData = sections.find((s) => s.id === activeSection);
 
   return (
     <div className="min-h-full">
       {/* Back to dashboard + title */}
-      <div className="mb-6">
+      <div className="mb-4 lg:mb-6">
         <Link
           href="/dashboard"
           className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors mb-3"
@@ -137,9 +128,43 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
         </h1>
       </div>
 
-      <div className="flex gap-6">
-        {/* ── Desktop sidebar ── */}
-        <nav className="hidden lg:block w-56 shrink-0">
+      {/* ── Mobile: horizontal tab bar at the top ── */}
+      <div className="lg:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-3 -mx-1 px-1 scrollbar-hide">
+          {sections.map((s) => {
+            const Icon = s.icon;
+            const active = s.id === activeSection;
+            return (
+              <button
+                key={s.id}
+                onClick={() => onSectionChange(s.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                  active
+                    ? "bg-brand-500 text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/[0.10]"
+                }`}
+              >
+                <Icon className="h-3 w-3 shrink-0" />
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active section content */}
+        <div className="mt-2">
+          {activeSectionData && (
+            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              {activeSectionData.label}
+            </h2>
+          )}
+          {children}
+        </div>
+      </div>
+
+      {/* ── Desktop: sidebar + content ── */}
+      <div className="hidden lg:flex gap-6">
+        <nav className="w-56 shrink-0">
           <div className="space-y-0.5">
             {sections.map((s) => {
               const Icon = s.icon;
@@ -147,7 +172,7 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
               return (
                 <button
                   key={s.id}
-                  onClick={() => handleSectionClick(s.id)}
+                  onClick={() => onSectionChange(s.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
                     active
                       ? "bg-brand-500/10 text-brand-500 dark:text-brand-400"
@@ -162,51 +187,7 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
           </div>
         </nav>
 
-        {/* ── Mobile: section list or content ── */}
-        <div className="flex-1 min-w-0 lg:hidden">
-          {mobileListMode ? (
-            <div className="space-y-1">
-              {sections.map((s) => {
-                const Icon = s.icon;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => handleSectionClick(s.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl glass-card text-left transition-colors hover:bg-white/[0.06]"
-                  >
-                    <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-white/[0.06] flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{s.label}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-500 truncate">{s.description}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div>
-              <button
-                onClick={handleMobileBack}
-                className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors mb-4"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                {SETTINGS_TITLE[lang]}
-              </button>
-              {activeSectionData && (
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
-                  {activeSectionData.label}
-                </h2>
-              )}
-              {children}
-            </div>
-          )}
-        </div>
-
-        {/* ── Desktop content ── */}
-        <div className="hidden lg:block flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
           {children}
         </div>
       </div>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { CreditCard, Check, Loader2, ExternalLink, Zap, X, CheckCircle2 } from "lucide-react";
+import { CreditCard, Check, Loader2, ExternalLink, Zap, X, CheckCircle2, AlertCircle, ShieldCheck } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { useRole } from "~/components/RoleContext";
 import { api } from "~/trpc/react";
 import { t } from "~/lib/i18n";
 import type { Lang } from "~/lib/i18n";
@@ -28,6 +29,11 @@ const LABELS: Record<Lang, {
   paySuccess: string;
   paySuccessDesc: string;
   close: string;
+  trialExpiredTitle: string;
+  trialExpiredDesc: string;
+  trialExpiredCta: string;
+  godMode: string;
+  godModeDesc: string;
 }> = {
   ru: {
     currentPlan: "Текущий тариф",
@@ -43,6 +49,11 @@ const LABELS: Record<Lang, {
     paySuccess: "Оплата прошла успешно",
     paySuccessDesc: "Ваша подписка активна.",
     close: "Закрыть",
+    trialExpiredTitle: "Пробный период завершён",
+    trialExpiredDesc: "Выберите тариф ниже, чтобы продолжить пользоваться ManicBot. Бот и все функции приостановлены до активации подписки.",
+    trialExpiredCta: "Выберите тариф",
+    godMode: "God Mode",
+    godModeDesc: "Все функции платформы разблокированы. Подписка не требуется.",
   },
   ua: {
     currentPlan: "Поточний тариф",
@@ -58,6 +69,11 @@ const LABELS: Record<Lang, {
     paySuccess: "Оплата пройшла успішно",
     paySuccessDesc: "Ваша підписка активна.",
     close: "Закрити",
+    trialExpiredTitle: "Пробний період завершено",
+    trialExpiredDesc: "Оберіть тариф нижче, щоб продовжити користуватися ManicBot. Бот та всі функції призупинено до активації підписки.",
+    trialExpiredCta: "Оберіть тариф",
+    godMode: "God Mode",
+    godModeDesc: "Всі функції платформи розблоковано. Підписка не потрібна.",
   },
   en: {
     currentPlan: "Current plan",
@@ -73,6 +89,11 @@ const LABELS: Record<Lang, {
     paySuccess: "Payment successful",
     paySuccessDesc: "Your subscription is now active.",
     close: "Close",
+    trialExpiredTitle: "Trial period ended",
+    trialExpiredDesc: "Choose a plan below to continue using ManicBot. Your bot and all features are paused until a subscription is active.",
+    trialExpiredCta: "Choose a plan",
+    godMode: "God Mode",
+    godModeDesc: "All platform features are unlocked. No subscription required.",
   },
   pl: {
     currentPlan: "Obecny plan",
@@ -88,6 +109,11 @@ const LABELS: Record<Lang, {
     paySuccess: "Płatność zakończona sukcesem",
     paySuccessDesc: "Twoja subskrypcja jest aktywna.",
     close: "Zamknij",
+    trialExpiredTitle: "Okres próbny zakończony",
+    trialExpiredDesc: "Wybierz plan poniżej, aby kontynuować korzystanie z ManicBot. Bot i wszystkie funkcje są wstrzymane do aktywacji subskrypcji.",
+    trialExpiredCta: "Wybierz plan",
+    godMode: "God Mode",
+    godModeDesc: "Wszystkie funkcje platformy są odblokowane. Subskrypcja nie jest wymagana.",
   },
 };
 
@@ -144,7 +170,24 @@ function CheckoutModal({
 
 export function BillingSection({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
+  const { role, previewRole } = useRole();
   const l = LABELS[lang];
+
+  // ── God Mode: system_admin not previewing a tenant ──────────────────────────
+  if (role === "system_admin" && !previewRole) {
+    return (
+      <div className="space-y-4">
+        <div className="glass-card rounded-2xl p-6 text-center space-y-3">
+          <div className="flex items-center justify-center gap-2">
+            <ShieldCheck className="h-6 w-6 text-brand-400" />
+            <span className="text-lg font-bold text-slate-900 dark:text-white">{l.godMode}</span>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{l.godModeDesc}</p>
+        </div>
+      </div>
+    );
+  }
+
   const utils = api.useUtils();
   const billing = api.salon.getBillingStatus.useQuery({ tenantId });
   const plans = api.salon.getPlans.useQuery();
@@ -188,7 +231,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
     } else {
       checkoutMut.mutate({ tenantId, plan, locale: lang });
     }
-  }, [hasEmbedded, embeddedMut, checkoutMut, tenantId]);
+  }, [hasEmbedded, embeddedMut, checkoutMut, tenantId, lang]);
 
   const handleCloseCheckout = useCallback(() => {
     setClientSecret(null);
@@ -201,6 +244,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
   const currentPlan = billing.data?.plan ?? "start";
   const billingStatus = billing.data?.billingStatus ?? "trialing";
   const hasStripeCustomer = !!billing.data?.stripeCustomerId;
+  const isTrialExpired = billingStatus === "inactive" && !hasStripeCustomer;
 
   const trialDaysLeft = (() => {
     if (billingStatus !== "trialing" || !billing.data?.trialEndsAt) return null;
@@ -231,8 +275,21 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
         </section>
       )}
 
-      {/* Trial banner */}
-      {trialDaysLeft !== null && trialDaysLeft >= 0 && (
+      {/* Trial expired — hard block */}
+      {isTrialExpired && (
+        <section className="rounded-2xl bg-red-500/10 border border-red-500/30 p-5 space-y-2">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-red-700 dark:text-red-400">{l.trialExpiredTitle}</p>
+              <p className="text-xs text-red-600/80 dark:text-red-400/70 mt-0.5">{l.trialExpiredDesc}</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Trial banner — only when days > 0 */}
+      {trialDaysLeft !== null && trialDaysLeft > 0 && (
         <section className="rounded-2xl bg-gradient-to-r from-brand-500/15 to-purple-500/15 border border-brand-500/20 p-4">
           <div className="flex items-center gap-3">
             <Zap className="h-5 w-5 text-brand-400 shrink-0" />
@@ -266,7 +323,10 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
               billingStatus === "grace_period" ? "bg-amber-500/15 text-amber-500" :
               "bg-red-500/15 text-red-500"
             }`}>
-              {t(`billing.${billingStatus === "grace_period" ? "grace" : billingStatus}` as any, lang)}
+              {isTrialExpired
+                ? (lang === "ru" ? "Триал истёк" : lang === "ua" ? "Триал закінчився" : lang === "pl" ? "Próba wygasła" : "Trial expired")
+                : t(`billing.${billingStatus === "grace_period" ? "grace" : billingStatus}` as any, lang)
+              }
             </span>
           </div>
         )}
@@ -276,8 +336,8 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
       {plans.data && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {plans.data.map((plan) => {
-            const isCurrent = plan.id === currentPlan;
-            const isUpgrade = !isCurrent && (
+            const isCurrent = plan.id === currentPlan && !isTrialExpired;
+            const isUpgrade = !isCurrent && !isTrialExpired && (
               (currentPlan === "start" && (plan.id === "pro" || plan.id === "max")) ||
               (currentPlan === "pro" && plan.id === "max")
             );
@@ -332,7 +392,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
                     onClick={() => handleSubscribe(plan.id as "start" | "pro" | "max")}
                     disabled={isBusy}
                     className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
-                      plan.popular
+                      plan.popular || isTrialExpired
                         ? "bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:from-brand-500 hover:to-purple-500"
                         : "bg-brand-600 text-white hover:bg-brand-500"
                     }`}
@@ -340,7 +400,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
                     {isBusy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      isUpgrade ? l.upgrade : l.subscribe
+                      isTrialExpired ? l.trialExpiredCta : isUpgrade ? l.upgrade : l.subscribe
                     )}
                   </button>
                 )}

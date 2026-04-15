@@ -132,9 +132,21 @@ export const salonRouter = createTRPCRouter({
     const row = await ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
     if (!row.length) throw new TRPCError({ code: "NOT_FOUND" });
     const t = row[0]!;
+
+    // Real-time expiry bridge: cron runs every 15 min but user opens the page now.
+    // If trial has already expired in the DB but cron hasn't flipped it yet, flip it here.
+    const nowUnix = Math.floor(Date.now() / 1000);
+    let billingStatus = t.billingStatus ?? "trialing";
+    if (billingStatus === "trialing" && t.trialEndsAt && nowUnix > t.trialEndsAt) {
+      billingStatus = "inactive";
+      void ctx.db.update(tenants)
+        .set({ billingStatus: "inactive", updatedAt: nowUnix })
+        .where(eq(tenants.id, input.tenantId));
+    }
+
     return {
       plan: t.plan,
-      billingStatus: t.billingStatus,
+      billingStatus,
       subscriptionStatus: t.subscriptionStatus,
       trialEndsAt: t.trialEndsAt,
       graceEndsAt: t.graceEndsAt,

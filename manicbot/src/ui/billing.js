@@ -70,8 +70,8 @@ export async function showBillingMenu(ctx, cid) {
       text += `\n${fill(t(lg, 'billing_grace_warning'), { days: String(days) })}\n`;
     }
 
-    if (billing.nextPaymentDate) text += `${t(lg, 'billing_next_payment')}: ${fmtDate(billing.nextPaymentDate)}\n`;
-    if (billing.currentPeriodEnd) text += `${t(lg, 'billing_period_end')}: ${fmtDate(billing.currentPeriodEnd)}\n`;
+    if (billing.nextPaymentDate) text += `${t(lg, 'billing_next_payment')}: ${fmtDate(billing.nextPaymentDate * 1000)}\n`;
+    if (billing.currentPeriodEnd) text += `${t(lg, 'billing_period_end')}: ${fmtDate(billing.currentPeriodEnd * 1000)}\n`;
     if (billing.billingEmail) text += `${t(lg, 'billing_email')}: ${escHtml(billing.billingEmail)}\n`;
   } else {
     text += `${t(lg, 'billing_plan')}: —\n${t(lg, 'billing_status')}: —\n`;

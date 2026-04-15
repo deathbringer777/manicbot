@@ -68,7 +68,7 @@ async function resolveTenantIdByCustomer(ctx, customerId) {
 
 function subscriptionToBillingUpdates(sub) {
   const status = mapStripeStatusToBilling(sub.status);
-  const periodEnd = sub.current_period_end ? sub.current_period_end * 1000 : null;
+  const periodEnd = sub.current_period_end || null;
   const priceId = sub.items?.data?.[0]?.price?.id || null;
   return {
     billingStatus: status,

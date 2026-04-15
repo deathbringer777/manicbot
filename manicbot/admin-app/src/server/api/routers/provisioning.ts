@@ -74,7 +74,7 @@ export const provisioningRouter = createTRPCRouter({
       const webhookSecret = input.webhookSecret || randomId(16);
       const tempPassword = generatePassword(16);
       const now = Math.floor(Date.now() / 1000);
-      const trialEndsAt = now + 7 * 24 * 3600;
+      const trialEndsAt = now + 14 * 24 * 3600;
 
       // 1. Create tenant
       await ctx.db.insert(tenants).values({
@@ -177,7 +177,7 @@ export const provisioningRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const tenantId = "t_" + randomId(6);
       const now = Math.floor(Date.now() / 1000);
-      const trialEndsAt = now + 7 * 24 * 3600; // 7 days — matches Worker TRIAL_DURATION_MS
+      const trialEndsAt = now + 14 * 24 * 3600; // 14 days — matches Worker TRIAL_DURATION_MS
 
       await ctx.db.insert(tenants).values({
         id: tenantId,

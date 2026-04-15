@@ -146,7 +146,7 @@ export const webUsersRouter = createTRPCRouter({
       let assignedTenantId: string | null = null;
       if (input.role === "tenant_owner" || input.role === "master") {
         const tid = "t_" + randomId(6);
-        const trialEndsAt = now + 7 * 24 * 3600; // 7 days
+        const trialEndsAt = now + 14 * 24 * 3600; // 14 days
         const isPersonal = input.role === "master" ? 1 : 0;
         await ctx.db.insert(tenants).values({
           id: tid,
@@ -699,7 +699,7 @@ export const webUsersRouter = createTRPCRouter({
       }
       const tid = "t_" + randomId(6);
       const now = Math.floor(Date.now() / 1000);
-      const trialEndsAt = now + 7 * 24 * 3600;
+      const trialEndsAt = now + 14 * 24 * 3600;
       const isPersonal = webRole === "master" ? 1 : 0;
       await ctx.db.insert(tenants).values({
         id: tid,

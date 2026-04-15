@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escHtml, fill, t, p2, detectLang, isValidChatId, isCorrectionSvc,
-  parseInstagramAiTriggers, instagramAiTriggerAllows,
+  parseInstagramAiTriggers, instagramAiTriggerAllows, isLooseOmnichannelGreeting,
 } from '../src/utils/helpers.js';
 
 describe('escHtml', () => {
@@ -151,5 +151,20 @@ describe('instagramAiTriggerAllows', () => {
 
   it('allows when all comma segments empty after trim (no effective triggers)', () => {
     expect(instagramAiTriggerAllows(igCtx(' , , '), 'привет')).toBe(true);
+  });
+});
+
+describe('isLooseOmnichannelGreeting', () => {
+  it('matches common short openers', () => {
+    expect(isLooseOmnichannelGreeting('привет')).toBe(true);
+    expect(isLooseOmnichannelGreeting('Привет!')).toBe(true);
+    expect(isLooseOmnichannelGreeting('hello')).toBe(true);
+    expect(isLooseOmnichannelGreeting('good morning')).toBe(true);
+    expect(isLooseOmnichannelGreeting('witam')).toBe(true);
+  });
+
+  it('rejects commands and long text', () => {
+    expect(isLooseOmnichannelGreeting('/start')).toBe(false);
+    expect(isLooseOmnichannelGreeting('привет как дела запишите меня')).toBe(false);
   });
 });

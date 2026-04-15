@@ -2,7 +2,7 @@ import { CB, STEP } from '../config.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
-import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows, isLooseOmnichannelGreeting } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
 import { ticketFwdAckKey } from '../utils/kv-keys.js';
@@ -1450,6 +1450,18 @@ export async function onMsg(ctx, msg) {
   if (txt && /\b(отмени|отменить|скасуй|скасувати|cancel|anuluj)\b/i.test(txt) && /\b(все|всі|всё|all|wszystk)/i.test(txt)) {
     if (realRole === 'client') return showCancelAllConfirm(ctx, cid);
     return showAdminCancelAllConfirm(ctx, cid);
+  }
+
+  // Instagram / WhatsApp: no /start in DM — map short hellos to the same home as /start for clients
+  // (avoids relying on AI + long Graph path for the common "привет" open).
+  if (
+    txt &&
+    (ctx.channel?.type === 'instagram' || ctx.channel?.type === 'whatsapp') &&
+    realRole === 'client' &&
+    (!st.step || st.step === 'idle') &&
+    isLooseOmnichannelGreeting(txt)
+  ) {
+    return showWelcome(ctx, cid, name);
   }
 
   if (!instagramAiTriggerAllows(ctx, txt)) {

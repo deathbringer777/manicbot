@@ -80,3 +80,15 @@ export function instagramAiTriggerAllows(ctxOrEnv, txt) {
   const lower = String(txt ?? '').toLowerCase();
   return triggers.some(t => t.length > 0 && lower.includes(t));
 }
+
+/**
+ * Short DM openers on Instagram/WhatsApp (users rarely type /start).
+ * Used to route to welcome/home without hitting AI first.
+ * @param {string} txt
+ */
+export function isLooseOmnichannelGreeting(txt) {
+  const s = String(txt ?? '').trim();
+  if (!s || s.length > 48) return false;
+  if (s.startsWith('/')) return false;
+  return /^(привет|привіт|здравствуйте|здрасте|хай|hi+|hello|hey|yo|добрый\s+(день|вечер|утро)|good\s+(morning|afternoon|evening)|вітаю|witam|cześć|servus)[.!?…\s]*$/iu.test(s);
+}

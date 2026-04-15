@@ -74,7 +74,7 @@ export async function tryAdminPanel(request, ctx, url, ADMIN_401) {
     if (!ctx.db) return new Response('DB not bound', { status: 500 });
     const tenantIds = await listTenantIds(ctx);
     const tenants = await Promise.all(tenantIds.map(id => getTenant(ctx, id)));
-    const fmt = ts => (ts ? new Date(ts).toISOString().slice(0, 10) : '—');
+    const fmt = ts => (ts ? new Date(ts * 1000).toISOString().slice(0, 10) : '—');
     let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>ManicBot — Platform Billing</title>
 <style>*{box-sizing:border-box}body{font-family:system-ui;margin:0;padding:20px;background:#fdf2f8;color:#1a1a2e}

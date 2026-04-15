@@ -12,7 +12,7 @@ import { execSync } from 'child_process';
 const KV_BINDING = 'MANICBOT';
 const BASE_URL = 'https://manicbot.com';
 const ADMIN_CHAT_ID = '321706035';
-const TRIAL_DURATION_MS = 7 * 24 * 3600 * 1000;
+const TRIAL_DURATION_MS = 14 * 24 * 3600 * 1000;
 
 // ── Bot definitions ─────────────────────────────────────────────
 

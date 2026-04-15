@@ -26,7 +26,7 @@ export const PLAN_LIMITS = {
   max:    { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true,  channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 5000 },
 };
 
-export const TRIAL_DURATION_MS = 7 * 24 * 3600 * 1000;  // 7 дней
+export const TRIAL_DURATION_MS = 14 * 24 * 3600 * 1000;  // 14 дней
 export const GRACE_DURATION_MS  = 7 * 24 * 3600 * 1000;  // 7 дней
 
 /**

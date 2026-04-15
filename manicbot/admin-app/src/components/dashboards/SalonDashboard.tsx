@@ -1256,7 +1256,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
   }, [resolvedSalonTab, inWeb, forceTab]);
-  const [aptDate, setAptDate] = useState("");
   const [aptViewMode, setAptViewMode] = useState<"calendar" | "list">("calendar");
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -1276,7 +1275,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
   const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
-  const apts = api.salon.getAppointments.useQuery({ tenantId, date: aptDate || undefined }, { enabled: tab === "appointments" && aptViewMode === "list" });
+  const apts = api.salon.getAppointments.useQuery({ tenantId }, { enabled: tab === "appointments" && aptViewMode === "list" });
 
   // Calendar data: full month
   const calYear = calViewDate.getFullYear();
@@ -1407,10 +1406,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
             <div className="flex items-center gap-2">
-              {aptViewMode === "list" && (
-                <input type="date" value={aptDate} onChange={e => setAptDate(e.target.value)}
-                  className="text-xs bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500" />
-              )}
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5">
                 <button onClick={() => setAptViewMode("calendar")}
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "calendar" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>

@@ -144,8 +144,6 @@ export function MasterDashboard({
     if (inWeb) setTab(resolvedTab);
   }, [resolvedTab, inWeb, forceTab]);
   const [period, setPeriod] = useState<Period>("month");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const masterNavItems: NavItem[] = [
     { href: "#today", icon: CalendarDays, label: t("master.today", lang) },
@@ -161,7 +159,7 @@ export function MasterDashboard({
     { enabled: tab === "today" }
   );
   const schedule = api.master.getMyAppointments.useQuery(
-    { tenantId, masterId, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
+    { tenantId, masterId },
     { enabled: tab === "schedule" }
   );
   const clientsList = api.master.getMyClients.useQuery(
@@ -293,10 +291,6 @@ export function MasterDashboard({
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("master.allApts", lang)}</h2>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5" />
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl px-3 py-1.5" />
           </div>
           {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}

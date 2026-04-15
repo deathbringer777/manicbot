@@ -10,9 +10,11 @@ import {
   tenantRoles,
   appointments,
   users,
+  webUsers,
 } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
+import { hashPassword } from "~/server/auth/password";
 
 function randomId(len = 6): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -23,7 +25,146 @@ function randomId(len = 6): string {
     .join("");
 }
 
+function generatePassword(len = 16): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return Array.from(arr)
+    .map((b) => chars[b % chars.length])
+    .join("");
+}
+
 export const provisioningRouter = createTRPCRouter({
+  // ─── QUICK ONBOARD ──────────────────────────────────────────
+
+  quickOnboard: adminProcedure
+    .input(
+      z.object({
+        salonName: z.string().min(1).max(100),
+        plan: z.enum(["start", "pro", "max"]).default("pro"),
+        botToken: z.string().min(10),
+        ownerEmail: z.string().email(),
+        webhookSecret: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const workerUrl = env.WORKER_PUBLIC_URL;
+      const adminKey = env.ADMIN_KEY;
+      if (!workerUrl || !adminKey) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "WORKER_PUBLIC_URL and ADMIN_KEY must be configured",
+        });
+      }
+
+      const email = input.ownerEmail.toLowerCase().trim();
+
+      // Check email uniqueness
+      const existing = await ctx.db
+        .select({ id: webUsers.id })
+        .from(webUsers)
+        .where(eq(webUsers.email, email))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "User with this email already exists" });
+      }
+
+      const tenantId = "t_" + randomId(6);
+      const botId = input.botToken.split(":")[0]!;
+      const webhookSecret = input.webhookSecret || randomId(16);
+      const tempPassword = generatePassword(16);
+      const now = Math.floor(Date.now() / 1000);
+      const trialEndsAt = now + 7 * 24 * 3600;
+
+      // 1. Create tenant
+      await ctx.db.insert(tenants).values({
+        id: tenantId,
+        name: input.salonName.trim(),
+        active: 1,
+        plan: input.plan,
+        billingStatus: "trialing",
+        trialEndsAt,
+        cancelAtPeriodEnd: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // 2. Call Worker /admin/provision for bot registration (encryption + webhook)
+      let webhookUrl = "";
+      let webhookOk = false;
+      try {
+        const res = await fetch(
+          `${workerUrl}/admin/provision?key=${encodeURIComponent(adminKey)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              bots: [{ botToken: input.botToken, tenantId, tenantName: input.salonName.trim(), webhookSecret }],
+            }),
+            signal: AbortSignal.timeout(15_000),
+          }
+        );
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          results?: Array<{ botId: string; tenantId?: string; webhook?: boolean; webhookUrl?: string; error?: string; skip?: string }>;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? `Worker returned ${res.status}`);
+        }
+        const botResult = data.results?.[0];
+        if (botResult?.error) {
+          throw new Error(botResult.error);
+        }
+        webhookUrl = botResult?.webhookUrl ?? "";
+        webhookOk = botResult?.webhook ?? false;
+      } catch (e) {
+        // Rollback tenant
+        try { await ctx.db.delete(tenants).where(eq(tenants.id, tenantId)); } catch {}
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Bot provisioning failed: ${e instanceof Error ? e.message : "unknown error"}`,
+        });
+      }
+
+      // 3. Upsert local bot record
+      await ctx.db
+        .insert(bots)
+        .values({ botId, tenantId, webhookSecret, active: 1, createdAt: now, updatedAt: now })
+        .onConflictDoUpdate({
+          target: bots.botId,
+          set: { tenantId, webhookSecret, updatedAt: now },
+        });
+
+      // 4. Create web user with temp password
+      try {
+        const passwordHash = await hashPassword(tempPassword);
+        await ctx.db.insert(webUsers).values({
+          id: crypto.randomUUID(),
+          email,
+          passwordHash,
+          role: "tenant_owner",
+          tenantId,
+          emailVerified: 1,
+          tosAcceptedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (e) {
+        // Rollback tenant + bot
+        try {
+          await ctx.db.delete(bots).where(eq(bots.botId, botId));
+          await ctx.db.delete(tenants).where(eq(tenants.id, tenantId));
+        } catch {}
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `User creation failed: ${e instanceof Error ? e.message : "unknown error"}`,
+        });
+      }
+
+      return { ok: true, tenantId, botId, webhookUrl, webhookOk, ownerEmail: email, tempPassword };
+    }),
+
   // ─── TENANTS ────────────────────────────────────────────────
 
   createTenant: adminProcedure

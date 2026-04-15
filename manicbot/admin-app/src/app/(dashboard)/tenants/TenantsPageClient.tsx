@@ -18,6 +18,11 @@ import {
   Shield,
   UserPlus,
   Trash2,
+  Zap,
+  Copy,
+  Check,
+  ArrowLeft,
+  Loader2,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -76,6 +81,32 @@ function ConfirmButton({
   );
 }
 
+function CopyBtn({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        try { await navigator.clipboard.writeText(value); } catch {}
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className="shrink-0 p-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-colors"
+    >
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+type QuickOnboardResult = {
+  ok: boolean;
+  tenantId: string;
+  botId: string;
+  webhookUrl: string;
+  webhookOk: boolean;
+  ownerEmail: string;
+  tempPassword: string;
+};
+
 export default function TenantsPageClient() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -87,6 +118,14 @@ export default function TenantsPageClient() {
   const [botModal, setBotModal] = useState<string | null>(null); // tenantId
   const [botId, setBotId] = useState("");
   const [botUsername, setBotUsername] = useState("");
+
+  // Quick Onboard state
+  const [qoStep, setQoStep] = useState<0 | 1 | 2 | 3>(0); // 0=closed
+  const [qoName, setQoName] = useState("");
+  const [qoPlan, setQoPlan] = useState<"start" | "pro" | "max">("pro");
+  const [qoToken, setQoToken] = useState("");
+  const [qoEmail, setQoEmail] = useState("");
+  const [qoResult, setQoResult] = useState<QuickOnboardResult | null>(null);
 
   const utils = api.useUtils();
 
@@ -122,6 +161,23 @@ export default function TenantsPageClient() {
   const linkBotMut = api.provisioning.linkBot.useMutation({
     onSuccess: () => { utils.tenants.getAll.invalidate(); setBotModal(null); setBotId(""); setBotUsername(""); },
   });
+  const quickOnboardMut = api.provisioning.quickOnboard.useMutation({
+    onSuccess: (data) => {
+      setQoResult(data);
+      setQoStep(3);
+      utils.tenants.getAll.invalidate();
+    },
+  });
+
+  const closeQuickOnboard = () => {
+    setQoStep(0);
+    setQoName("");
+    setQoPlan("pro");
+    setQoToken("");
+    setQoEmail("");
+    setQoResult(null);
+    quickOnboardMut.reset();
+  };
 
   const ROLE_LABELS: Record<string, string> = {
     tenant_owner: "Владелец", master: "Мастер", admin: "Администратор",
@@ -136,13 +192,22 @@ export default function TenantsPageClient() {
             <h1 className="text-2xl font-extrabold tracking-tight">Tenants</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{tenants.length} салонов</p>
           </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl shadow-lg shadow-brand-500/20 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Создать
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setQoStep(1)}
+              className="flex items-center gap-1.5 bg-emerald-600 active:bg-emerald-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all"
+            >
+              <Zap className="w-4 h-4" />
+              Quick Onboard
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl shadow-lg shadow-brand-500/20 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Создать
+            </button>
+          </div>
         </div>
 
         {/* Tenants list */}
@@ -467,6 +532,180 @@ export default function TenantsPageClient() {
                 {linkBotMut.isPending ? "..." : "Привязать бота"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Onboard Wizard ── */}
+      {qoStep > 0 && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={closeQuickOnboard}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
+
+            {/* Step 1: Salon + Plan */}
+            {qoStep === 1 && (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Quick Onboard</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Шаг 1/2 — Салон и тариф</p>
+                  </div>
+                  <button onClick={closeQuickOnboard} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Название салона</label>
+                    <input
+                      type="text"
+                      value={qoName}
+                      onChange={(e) => setQoName(e.target.value)}
+                      placeholder="Например: Nails Studio"
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Тарифный план</label>
+                    <div className="flex gap-2">
+                      {(["start", "pro", "max"] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setQoPlan(p)}
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase border transition-colors ${
+                            qoPlan === p ? "bg-brand-500/20 text-brand-400 border-brand-500/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700/30"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setQoStep(2)}
+                    disabled={!qoName.trim()}
+                    className="w-full py-3.5 rounded-2xl bg-brand-600 text-white font-semibold text-sm active:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                  >
+                    Далее
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2: Bot + Owner */}
+            {qoStep === 2 && (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setQoStep(1)} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Quick Onboard</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Шаг 2/2 — Бот и владелец</p>
+                    </div>
+                  </div>
+                  <button onClick={closeQuickOnboard} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Bot Token (из BotFather)</label>
+                    <input
+                      type="text"
+                      value={qoToken}
+                      onChange={(e) => setQoToken(e.target.value)}
+                      placeholder="123456789:ABCdefGHI..."
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60 font-mono"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Email владельца (для входа в дашборд)</label>
+                    <input
+                      type="email"
+                      value={qoEmail}
+                      onChange={(e) => setQoEmail(e.target.value)}
+                      placeholder="owner@salon.com"
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60"
+                    />
+                  </div>
+                  {quickOnboardMut.error && (
+                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                      {quickOnboardMut.error.message}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => quickOnboardMut.mutate({ salonName: qoName, plan: qoPlan, botToken: qoToken, ownerEmail: qoEmail })}
+                    disabled={!qoToken.includes(":") || !qoEmail.includes("@") || quickOnboardMut.isPending}
+                    className="w-full py-3.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm active:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                  >
+                    {quickOnboardMut.isPending ? (
+                      <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Создание...</span>
+                    ) : (
+                      "Создать всё"
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 3: Success / Credentials */}
+            {qoStep === 3 && qoResult && (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-base font-bold text-emerald-400">Салон создан!</h3>
+                  <button onClick={closeQuickOnboard} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="space-y-3">
+                  {/* Credentials card */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Email</p>
+                        <p className="text-sm font-mono text-slate-900 dark:text-white">{qoResult.ownerEmail}</p>
+                      </div>
+                      <CopyBtn value={qoResult.ownerEmail} />
+                    </div>
+                    <div className="border-t border-slate-200 dark:border-slate-700/40" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Пароль</p>
+                        <p className="text-sm font-mono text-slate-900 dark:text-white select-all">{qoResult.tempPassword}</p>
+                      </div>
+                      <CopyBtn value={qoResult.tempPassword} />
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-amber-400 text-center font-medium">
+                    Пароль показан один раз. Скопируйте его сейчас.
+                  </p>
+
+                  {/* Details */}
+                  <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center justify-between">
+                      <span>Tenant ID</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-300">{qoResult.tenantId}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Bot ID</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-300">{qoResult.botId}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Webhook</span>
+                      <span className={qoResult.webhookOk ? "text-emerald-400" : "text-red-400"}>
+                        {qoResult.webhookOk ? "OK" : "Failed"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={closeQuickOnboard}
+                    className="w-full py-3.5 rounded-2xl bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-sm active:bg-slate-300 dark:active:bg-slate-700 mt-2"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

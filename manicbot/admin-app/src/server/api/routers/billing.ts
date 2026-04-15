@@ -86,4 +86,32 @@ export const billingRouter = createTRPCRouter({
         .where(eq(tenants.id, input.tenantId));
       return { success: true };
     }),
+
+  manualActivate: adminProcedure
+    .input(
+      z.object({
+        tenantId: z.string(),
+        plan: z.enum(["start", "pro", "max"]),
+        months: z.number().int().min(1).max(24),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const now = Math.floor(Date.now() / 1000);
+      const periodEnd = now + input.months * 30 * 24 * 3600;
+
+      await ctx.db
+        .update(tenants)
+        .set({
+          plan: input.plan,
+          billingStatus: "active",
+          currentPeriodEnd: periodEnd,
+          trialEndsAt: null,
+          graceEndsAt: null,
+          cancelAtPeriodEnd: 0,
+          updatedAt: now,
+        })
+        .where(eq(tenants.id, input.tenantId));
+
+      return { success: true, periodEnd };
+    }),
 });

@@ -9,7 +9,7 @@ import { api } from "~/trpc/react";
 import { AuthShell } from "~/components/auth/AuthShell";
 import { authCopy } from "~/components/auth/copy";
 
-const CODE_LENGTH = 8;
+const CODE_LENGTH = 6;
 const RESEND_COOLDOWN = 60; // seconds
 
 function VerifyEmailInner() {
@@ -102,7 +102,7 @@ function VerifyEmailInner() {
 
     // Auto-submit if all filled
     const code = newDigits.join("");
-    if (code.length === CODE_LENGTH && code.match(/^\d{8}$/)) {
+    if (code.length === CODE_LENGTH && code.match(/^\d{6}$/)) {
       void handleVerify(code);
     }
   };

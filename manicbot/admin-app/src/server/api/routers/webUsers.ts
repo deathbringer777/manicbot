@@ -32,15 +32,15 @@ const RL_LOGIN_IP_MAX = 20; // max login attempts per IP across all accounts
 const RL_LOGIN_IP_WINDOW = 15 * 60 * 1000; // 15 minutes
 
 /**
- * Generate an 8-digit email verification code using crypto.getRandomValues
+ * Generate a 6-digit email verification code using crypto.getRandomValues
  * (NOT Math.random — CSPRNG required so codes are not predictable).
- * 8 digits = 90M possible codes — infeasible to brute-force within TTL.
+ * 6 digits = 900K codes — safe given rate limiting (5 attempts / 10 min) + 15-min TTL.
  */
 function generateVerificationCode(): string {
   const buf = new Uint32Array(1);
   crypto.getRandomValues(buf);
-  // 8-digit range: 10000000..99999999 (90M codes)
-  const code = (buf[0]! % 90000000) + 10000000;
+  // 6-digit range: 100000..999999
+  const code = (buf[0]! % 900000) + 100000;
   return code.toString();
 }
 
@@ -247,7 +247,7 @@ export const webUsersRouter = createTRPCRouter({
 
   /** Verify email address with verification code. */
   verifyEmail: publicProcedure
-    .input(z.object({ email: z.string().email(), code: z.string().min(6).max(8) }))
+    .input(z.object({ email: z.string().email(), code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase().trim();
 

@@ -29,18 +29,112 @@ type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "b
 const NAIL_EMOJIS = ['💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧','🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫','🎨','🌷','🪸','🫐','🍒'];
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
 
-function ServiceModal({ svc, onClose, tenantId }: { svc: any | null; onClose: () => void; tenantId: string }) {
+const SERVICE_TEMPLATES = [
+  { emoji: '💅', name: 'Классический маникюр',   price: 80,  duration: 60  },
+  { emoji: '💅', name: 'Маникюр с гель-лаком',   price: 120, duration: 90  },
+  { emoji: '✂️', name: 'Снятие гель-лака',        price: 40,  duration: 30  },
+  { emoji: '✨', name: 'Укрепление ногтей',       price: 80,  duration: 45  },
+  { emoji: '🦶', name: 'Педикюр классический',    price: 100, duration: 60  },
+  { emoji: '🦶', name: 'Педикюр с гель-лаком',    price: 150, duration: 90  },
+  { emoji: '💎', name: 'Наращивание ногтей',      price: 200, duration: 120 },
+  { emoji: '🎨', name: 'Дизайн ногтей',           price: 50,  duration: 30  },
+  { emoji: '🌸', name: 'Парафинотерапия рук',     price: 60,  duration: 20  },
+  { emoji: '🫧', name: 'СПА-маникюр',            price: 130, duration: 90  },
+  { emoji: '🧴', name: 'Уход за кутикулой',       price: 40,  duration: 20  },
+  { emoji: '💜', name: 'Французский маникюр',     price: 100, duration: 75  },
+] as const;
+type ServiceTemplate = typeof SERVICE_TEMPLATES[number];
+
+// Dropdown that opens on the "+ Add" button with "Новый" / "Шаблоны" choices
+function AddServiceDropdown({ lang, onNew, onTemplates }: { lang: Lang; onNew: () => void; onTemplates: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <Btn onClick={() => setOpen(p => !p)}>
+        <Plus className="h-3.5 w-3.5" />
+        {t("action.add", lang)}
+      </Btn>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 z-40 min-w-[168px] rounded-2xl bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border border-slate-200/60 dark:border-white/10 shadow-2xl overflow-hidden">
+          <button
+            onClick={() => { setOpen(false); onNew(); }}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
+            <Plus className="h-4 w-4 text-brand-500 shrink-0" />
+            Новый
+          </button>
+          <div className="h-px bg-slate-100 dark:bg-white/5 mx-3" />
+          <button
+            onClick={() => { setOpen(false); onTemplates(); }}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
+            <List className="h-4 w-4 text-brand-500 shrink-0" />
+            Шаблоны
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Bottom-sheet template picker
+function ServiceTemplatesSheet({ onClose, onSelect }: { onClose: () => void; onSelect: (tmpl: ServiceTemplate) => void }) {
+  return (
+    <div role="dialog" aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      onKeyDown={e => e.key === 'Escape' && onClose()}>
+      <div
+        className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-t-3xl md:rounded-2xl shadow-2xl overflow-y-auto max-h-[80dvh]"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 dark:border-white/5">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Шаблоны услуг</h3>
+          <button onClick={onClose}
+            className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-4 space-y-2">
+          {SERVICE_TEMPLATES.map((tmpl, i) => (
+            <button key={i} onClick={() => onSelect(tmpl)}
+              className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-brand-50 dark:hover:bg-brand-500/10 text-left transition-colors group">
+              <span className="text-2xl w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-xl shrink-0 shadow-sm">
+                {tmpl.emoji}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate-900 dark:text-white text-sm">{tmpl.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{tmpl.duration} мин · {tmpl.price} zł</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-400 dark:text-slate-600 group-hover:text-brand-500 transition-colors shrink-0" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null; onClose: () => void; tenantId: string; initialData?: ServiceTemplate }) {
   const { lang } = useLang();
   const utils = api.useUtils();
   const [name, setName] = useState(() => {
-    if (!svc) return "";
+    if (!svc) return initialData?.name ?? "";
     let names: Record<string, string> = {};
     try { names = svc.names ? JSON.parse(svc.names) : {}; } catch { /* ignore malformed JSON */ }
     return names.ru ?? names.en ?? svc.svcId ?? "";
   });
-  const [price, setPrice] = useState(String(svc?.price ?? ""));
-  const [duration, setDuration] = useState(String(svc?.duration ?? "60"));
-  const [emoji, setEmoji] = useState(svc?.emoji ?? "💅");
+  const [price, setPrice] = useState(String(svc?.price ?? initialData?.price ?? ""));
+  const [duration, setDuration] = useState(String(svc?.duration ?? initialData?.duration ?? "60"));
+  const [emoji, setEmoji] = useState(svc?.emoji ?? initialData?.emoji ?? "💅");
   const [active, setActive] = useState(svc?.active !== 0);
   const [description, setDescription] = useState(svc?.description ?? "");
   const [promo, setPromo] = useState(svc?.promo ?? "");
@@ -1259,8 +1353,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [aptViewMode, setAptViewMode] = useState<"calendar" | "list">("calendar");
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null }>({ open: false, svc: null });
+  const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
+  const [showTemplates, setShowTemplates] = useState(false);
   const [masterModal, setMasterModal] = useState<"telegram" | "create" | null>(null);
+
+  function handleAddNew() { setSvcModal({ open: true, svc: null }); }
+  function handleAddTemplates() { setShowTemplates(true); }
+  function handleTemplateSelect(tmpl: ServiceTemplate) {
+    setShowTemplates(false);
+    setSvcModal({ open: true, svc: null, initialData: tmpl });
+  }
 
   const utils = api.useUtils();
 
@@ -1456,7 +1558,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "services" && (
         <div className="space-y-3">
           <SectionHeader title={t("salon.services", lang)} action={
-            <Btn onClick={() => setSvcModal({ open: true, svc: null })}><Plus className="h-3.5 w-3.5" />{t("action.add", lang)}</Btn>
+            <AddServiceDropdown lang={lang} onNew={handleAddNew} onTemplates={handleAddTemplates} />
           } />
           {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {svcList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
@@ -1503,7 +1605,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 </div>
               );
             })}
-            {svcList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noServices", lang)}</p>}
+            {svcList.data?.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-14 gap-5">
+                <span className="text-4xl">💅</span>
+                <p className="text-slate-500 dark:text-slate-400 text-sm text-center">{t("salon.noServices", lang)}</p>
+                <AddServiceDropdown lang={lang} onNew={handleAddNew} onTemplates={handleAddTemplates} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1668,7 +1776,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       )}
 
       {/* Modals */}
-      {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} />}
+      {showTemplates && <ServiceTemplatesSheet onClose={() => setShowTemplates(false)} onSelect={handleTemplateSelect} />}
+      {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} initialData={svcModal.initialData} />}
       {masterModal === "telegram" && <AddMasterModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
       {masterModal === "create" && <CreateMasterAccountModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
     </Shell>

@@ -7,6 +7,8 @@
  */
 export function isAdminAppPath(pathname) {
   // NOTE: '/' is intentionally NOT proxied to admin-app — root serves the landing page.
+  // Worker-handled Stripe routes must NOT be proxied to Pages.
+  if (pathname === '/stripe/webhook' || pathname === '/stripe/success') return false;
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
   if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
   if (pathname === '/forgot-password' || pathname === '/reset-password') return true;

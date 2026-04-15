@@ -247,7 +247,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .limit(1);
           if (rows[0]) {
             if (rows[0].tenantId) t.tenantId = rows[0].tenantId;
-            if (rows[0].emailVerified) t.emailVerified = true;
+            t.emailVerified = !!rows[0].emailVerified;
             t.webRole = rows[0].role;
           }
         } catch { /* non-critical — next request will retry */ }

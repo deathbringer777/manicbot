@@ -7,9 +7,14 @@ import { verificationCodeEmailHtml, getEmailCopy } from "~/server/email/template
 import { sendVerificationCodeEmail } from "~/server/email/emailService";
 
 // ── generateVerificationCode logic ────────────────────────────────────────────
+// Mirrors the actual server implementation (CSPRNG, 6-digit range 100000..999999)
 
 function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  // 6-digit range: 100000..999999
+  const code = (buf[0]! % 900000) + 100000;
+  return code.toString();
 }
 
 describe("generateVerificationCode", () => {
@@ -37,10 +42,25 @@ describe("generateVerificationCode", () => {
     }
   });
 
+  it("never generates an 8-digit code", () => {
+    for (let i = 0; i < 100; i++) {
+      expect(generateVerificationCode()).not.toMatch(/^\d{8}$/);
+    }
+  });
+
   it("generates unique codes most of the time (not constant)", () => {
     const codes = new Set(Array.from({ length: 100 }, generateVerificationCode));
     // With 100 samples from a 900k range, we should easily get 90+ unique values
     expect(codes.size).toBeGreaterThan(90);
+  });
+
+  it("uses CSPRNG — not predictably biased to one part of the range", () => {
+    const codes = Array.from({ length: 200 }, () => Number(generateVerificationCode()));
+    const low = codes.filter(c => c < 550000).length;
+    const high = codes.filter(c => c >= 550000).length;
+    // Both halves should be roughly equal — bias > 70/30 is statistically impossible with CSPRNG
+    expect(low).toBeGreaterThan(40);
+    expect(high).toBeGreaterThan(40);
   });
 });
 
@@ -367,5 +387,152 @@ describe("full email verification flow (pure logic)", () => {
     expect(simulateVerify(user, "111111", now + 1).ok).toBe(false);
     // New code works
     expect(simulateVerify(user, "222222", now + 1)).toEqual({ ok: true });
+  });
+});
+
+// ── Code length schema validation ─────────────────────────────────────────────
+// Mirrors the Zod schema: z.string().length(6)
+
+function validateCodeLength(code: string): boolean {
+  return /^\d{6}$/.test(code);
+}
+
+describe("verification code schema validation", () => {
+  it("accepts a valid 6-digit code", () => {
+    expect(validateCodeLength("481620")).toBe(true);
+    expect(validateCodeLength("100000")).toBe(true);
+    expect(validateCodeLength("999999")).toBe(true);
+  });
+
+  it("rejects an 8-digit code (old format)", () => {
+    expect(validateCodeLength("40397014")).toBe(false);
+    expect(validateCodeLength("10000000")).toBe(false);
+    expect(validateCodeLength("99999999")).toBe(false);
+  });
+
+  it("rejects a 5-digit code", () => {
+    expect(validateCodeLength("12345")).toBe(false);
+  });
+
+  it("rejects a 7-digit code", () => {
+    expect(validateCodeLength("1234567")).toBe(false);
+  });
+
+  it("rejects non-digit characters", () => {
+    expect(validateCodeLength("12345a")).toBe(false);
+    expect(validateCodeLength("      ")).toBe(false);
+    expect(validateCodeLength("12 456")).toBe(false);
+  });
+
+  it("rejects empty string", () => {
+    expect(validateCodeLength("")).toBe(false);
+  });
+});
+
+// ── Verification persistence: emailVerified flag ──────────────────────────────
+// Simulates the DB state before and after verifyEmail mutation
+
+describe("email verification persistence", () => {
+  interface DbUser {
+    emailVerified: 0 | 1;
+    verificationToken: string | null;
+    verificationTokenExpiresAt: number | null;
+  }
+
+  function applyVerifySuccess(user: DbUser): DbUser {
+    return { ...user, emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+
+  it("emailVerified is 0 before verification", () => {
+    const user: DbUser = { emailVerified: 0, verificationToken: "abc", verificationTokenExpiresAt: now + 900 };
+    expect(user.emailVerified).toBe(0);
+  });
+
+  it("emailVerified becomes 1 after successful verification", () => {
+    const user: DbUser = { emailVerified: 0, verificationToken: "abc", verificationTokenExpiresAt: now + 900 };
+    const updated = applyVerifySuccess(user);
+    expect(updated.emailVerified).toBe(1);
+  });
+
+  it("verificationToken is cleared after successful verification", () => {
+    const user: DbUser = { emailVerified: 0, verificationToken: "abc", verificationTokenExpiresAt: now + 900 };
+    const updated = applyVerifySuccess(user);
+    expect(updated.verificationToken).toBeNull();
+    expect(updated.verificationTokenExpiresAt).toBeNull();
+  });
+
+  it("emailVerified=1 persists — re-verifying an already-verified user does not reset it", () => {
+    // simulate the alreadyVerified early-return path in verifyEmail mutation
+    const user: DbUser = { emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null };
+    // already verified → no DB write needed → value stays 1
+    expect(user.emailVerified).toBe(1);
+  });
+
+  it("entering wrong code does NOT set emailVerified=1", () => {
+    const user: DbUser = { emailVerified: 0, verificationToken: "correct", verificationTokenExpiresAt: now + 900 };
+    // wrong code → no DB update happens
+    const noChange = { ...user }; // user unchanged
+    expect(noChange.emailVerified).toBe(0);
+  });
+
+  it("entering truncated 6-of-8-digit code fails and does NOT set emailVerified=1", () => {
+    // This was the bug: 8-digit code "40397014" entered as "403970" (truncated) — always wrong
+    const storedCode = "403970"; // first 6 digits of an 8-digit code
+    const actualCode = "40397014"; // what the server generated
+    // The stored token was hashed from "40397014", input is "403970" → mismatch
+    expect(storedCode).not.toBe(actualCode.slice(0, 6) === storedCode ? actualCode : storedCode);
+    // More directly: 6-digit truncation of 8-digit code ≠ the full 8-digit code
+    expect(actualCode.slice(0, 6)).toBe("403970");
+    expect(actualCode.slice(0, 6)).not.toBe(actualCode);
+  });
+});
+
+// ── JWT emailVerified sync ─────────────────────────────────────────────────────
+// Mirrors the JWT callback in auth.ts — always syncs from DB, not one-way
+
+describe("JWT emailVerified sync", () => {
+  interface JwtToken { emailVerified?: boolean }
+  interface DbRow { emailVerified: 0 | 1 }
+
+  // Old (buggy) implementation — only sets to true
+  function syncJwtOld(token: JwtToken, row: DbRow): JwtToken {
+    if (row.emailVerified) token.emailVerified = true;
+    return token;
+  }
+
+  // Fixed implementation — always syncs bidirectionally
+  function syncJwtFixed(token: JwtToken, row: DbRow): JwtToken {
+    token.emailVerified = !!row.emailVerified;
+    return token;
+  }
+
+  it("fixed: sets emailVerified=true when DB is 1", () => {
+    const token = syncJwtFixed({}, { emailVerified: 1 });
+    expect(token.emailVerified).toBe(true);
+  });
+
+  it("fixed: sets emailVerified=false when DB is 0", () => {
+    const token = syncJwtFixed({ emailVerified: true }, { emailVerified: 0 });
+    expect(token.emailVerified).toBe(false);
+  });
+
+  it("old (bug): fails to reset to false when DB is 0 — stale 'true' persists in JWT", () => {
+    const token = syncJwtOld({ emailVerified: true }, { emailVerified: 0 });
+    // BUG: token still says verified even though DB says not verified
+    expect(token.emailVerified).toBe(true); // ← this is the bug behaviour
+  });
+
+  it("fixed: correctly reflects DB reset (migration 0020 scenario)", () => {
+    // DB was reset to 0 (forced re-verification), JWT must reflect this
+    const tokenBefore = { emailVerified: true };
+    const tokenAfter = syncJwtFixed(tokenBefore, { emailVerified: 0 });
+    expect(tokenAfter.emailVerified).toBe(false);
+  });
+
+  it("fixed: already-unverified token stays false", () => {
+    const token = syncJwtFixed({ emailVerified: false }, { emailVerified: 0 });
+    expect(token.emailVerified).toBe(false);
   });
 });

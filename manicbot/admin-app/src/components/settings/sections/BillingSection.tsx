@@ -184,9 +184,9 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
 
   const handleSubscribe = useCallback((plan: "start" | "pro" | "max") => {
     if (hasEmbedded) {
-      embeddedMut.mutate({ tenantId, plan });
+      embeddedMut.mutate({ tenantId, plan, locale: lang });
     } else {
-      checkoutMut.mutate({ tenantId, plan });
+      checkoutMut.mutate({ tenantId, plan, locale: lang });
     }
   }, [hasEmbedded, embeddedMut, checkoutMut, tenantId]);
 

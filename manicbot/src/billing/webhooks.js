@@ -9,6 +9,7 @@ import { mapStripeStatusToBilling } from './stripe.js';
 import { GRACE_DURATION_MS } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
 import { nowSec, msToSec } from '../utils/time.js';
+import { sendInvoiceEmail } from './invoiceEmail.js';
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
@@ -148,6 +149,19 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         updates.cancelAtPeriodEnd = false;
       }
       await updateTenantBilling(ctx, tenantId, updates);
+    }
+  }
+
+  if (type === 'invoice.payment_succeeded') {
+    const invoice = body.data?.object;
+    const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+    if (customerId) {
+      const tenantId = await resolveTenantIdByCustomer(ctx, customerId);
+      if (tenantId && ctx.resendApiKey && ctx.resendFrom) {
+        // fire-and-forget: don't block 200 response on email delivery
+        sendInvoiceEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
+          .catch(e => console.error('[webhook] invoiceEmail failed:', e.message));
+      }
     }
   }
 

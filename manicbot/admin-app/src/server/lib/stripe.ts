@@ -71,6 +71,12 @@ export async function getOrCreateCustomer(
   return customer.id;
 }
 
+/** Map our app lang codes to Stripe's supported locale strings. */
+function toStripeLocale(lang?: string): string {
+  const map: Record<string, string> = { ru: "ru", ua: "uk", en: "en", pl: "pl" };
+  return map[lang ?? ""] ?? "auto";
+}
+
 export async function createCheckoutSession(
   secretKey: string,
   opts: {
@@ -79,6 +85,7 @@ export async function createCheckoutSession(
     successUrl: string;
     cancelUrl: string;
     tenantId: string;
+    locale?: string;
   },
 ): Promise<string> {
   const session = await stripePost<{ url: string }>(secretKey, "/checkout/sessions", {
@@ -89,6 +96,7 @@ export async function createCheckoutSession(
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
     "subscription_data[metadata][tenantId]": opts.tenantId,
+    locale: toStripeLocale(opts.locale),
   });
   return session.url;
 }
@@ -100,6 +108,7 @@ export async function createEmbeddedCheckoutSession(
     priceId: string;
     returnUrl: string;
     tenantId: string;
+    locale?: string;
   },
 ): Promise<string> {
   const session = await stripePost<{ client_secret: string }>(secretKey, "/checkout/sessions", {
@@ -110,6 +119,7 @@ export async function createEmbeddedCheckoutSession(
     ui_mode: "embedded",
     return_url: opts.returnUrl,
     "subscription_data[metadata][tenantId]": opts.tenantId,
+    locale: toStripeLocale(opts.locale),
   });
   return session.client_secret;
 }

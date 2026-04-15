@@ -896,7 +896,7 @@ export const salonRouter = createTRPCRouter({
   }),
 
   createCheckoutSession: publicProcedure
-    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]) }))
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]), locale: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
@@ -945,13 +945,14 @@ export const salonRouter = createTRPCRouter({
         successUrl: `${baseUrl}/settings?section=billing&checkout=success`,
         cancelUrl: `${baseUrl}/settings?section=billing`,
         tenantId: input.tenantId,
+        locale: input.locale,
       });
 
       return { url };
     }),
 
   createEmbeddedCheckout: publicProcedure
-    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]) }))
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]), locale: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
@@ -998,6 +999,7 @@ export const salonRouter = createTRPCRouter({
         priceId,
         returnUrl,
         tenantId: input.tenantId,
+        locale: input.locale,
       });
 
       return { clientSecret };

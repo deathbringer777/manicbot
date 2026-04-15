@@ -213,23 +213,6 @@ export default function RegisterPage() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.login.email}</label>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                readOnly={emailFromGoogleLocked}
-                placeholder="salon@example.com"
-                className={`${authFieldWithIconsClassName}${emailFromGoogleLocked ? " opacity-90" : ""}`}
-              />
-            </div>
-          </div>
-
-          <div className="sm:col-span-2">
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.role}</label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button
@@ -254,6 +237,23 @@ export default function RegisterPage() {
               >
                 {copy.register.roleMaster}
               </button>
+            </div>
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.login.email}</label>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                readOnly={emailFromGoogleLocked}
+                placeholder="salon@example.com"
+                className={`${authFieldWithIconsClassName}${emailFromGoogleLocked ? " opacity-90" : ""}`}
+              />
             </div>
           </div>
 

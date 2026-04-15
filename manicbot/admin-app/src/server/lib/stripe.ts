@@ -93,6 +93,27 @@ export async function createCheckoutSession(
   return session.url;
 }
 
+export async function createEmbeddedCheckoutSession(
+  secretKey: string,
+  opts: {
+    customerId: string;
+    priceId: string;
+    returnUrl: string;
+    tenantId: string;
+  },
+): Promise<string> {
+  const session = await stripePost<{ client_secret: string }>(secretKey, "/checkout/sessions", {
+    customer: opts.customerId,
+    "line_items[0][price]": opts.priceId,
+    "line_items[0][quantity]": "1",
+    mode: "subscription",
+    ui_mode: "embedded",
+    return_url: opts.returnUrl,
+    "subscription_data[metadata][tenantId]": opts.tenantId,
+  });
+  return session.client_secret;
+}
+
 export async function createBillingPortalSession(
   secretKey: string,
   opts: { customerId: string; returnUrl: string },

@@ -1,10 +1,18 @@
 "use client";
 
-import { CreditCard, Check, Loader2, ExternalLink, Zap } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { CreditCard, Check, Loader2, ExternalLink, Zap, X, CheckCircle2 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { api } from "~/trpc/react";
 import { t } from "~/lib/i18n";
 import type { Lang } from "~/lib/i18n";
+import { loadStripe } from "@stripe/stripe-js";
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
+
+// Stripe.js loaded once — publishable key is baked in at build time
+const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+  : null;
 
 const LABELS: Record<Lang, {
   currentPlan: string;
@@ -17,6 +25,9 @@ const LABELS: Record<Lang, {
   trialBanner: string;
   daysLeft: string;
   notConfigured: string;
+  paySuccess: string;
+  paySuccessDesc: string;
+  close: string;
 }> = {
   ru: {
     currentPlan: "Текущий тариф",
@@ -29,6 +40,9 @@ const LABELS: Record<Lang, {
     trialBanner: "Пробный период",
     daysLeft: "дней осталось",
     notConfigured: "Биллинг будет доступен в ближайшее время.",
+    paySuccess: "Оплата прошла успешно",
+    paySuccessDesc: "Ваша подписка активна.",
+    close: "Закрыть",
   },
   ua: {
     currentPlan: "Поточний тариф",
@@ -41,6 +55,9 @@ const LABELS: Record<Lang, {
     trialBanner: "Пробний період",
     daysLeft: "днів залишилось",
     notConfigured: "Білінг буде доступний найближчим часом.",
+    paySuccess: "Оплата пройшла успішно",
+    paySuccessDesc: "Ваша підписка активна.",
+    close: "Закрити",
   },
   en: {
     currentPlan: "Current plan",
@@ -53,6 +70,9 @@ const LABELS: Record<Lang, {
     trialBanner: "Trial period",
     daysLeft: "days left",
     notConfigured: "Billing will be available soon.",
+    paySuccess: "Payment successful",
+    paySuccessDesc: "Your subscription is now active.",
+    close: "Close",
   },
   pl: {
     currentPlan: "Obecny plan",
@@ -65,32 +85,123 @@ const LABELS: Record<Lang, {
     trialBanner: "Okres próbny",
     daysLeft: "dni pozostało",
     notConfigured: "Płatności będą dostępne wkrótce.",
+    paySuccess: "Płatność zakończona sukcesem",
+    paySuccessDesc: "Twoja subskrypcja jest aktywna.",
+    close: "Zamknij",
   },
 };
+
+// ─── Checkout modal ───────────────────────────────────────────────────────────
+
+function CheckoutModal({
+  clientSecret,
+  onClose,
+}: {
+  clientSecret: string;
+  onClose: () => void;
+}) {
+  // Close on Escape key
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!stripePromise) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white">Оформление подписки</span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Stripe Embedded Checkout — Apple Pay / Google Pay included automatically */}
+        <div className="overflow-y-auto flex-1">
+          <EmbeddedCheckoutProvider
+            stripe={stripePromise}
+            options={{ clientSecret }}
+          >
+            <EmbeddedCheckout />
+          </EmbeddedCheckoutProvider>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BillingSection ──────────────────────────────────────────────────────────
 
 export function BillingSection({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const l = LABELS[lang];
+  const utils = api.useUtils();
   const billing = api.salon.getBillingStatus.useQuery({ tenantId });
   const plans = api.salon.getPlans.useQuery();
 
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+
+  // Detect return from Stripe Embedded Checkout (checkout=success in URL)
+  const [showSuccess, setShowSuccess] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      setShowSuccess(true);
+      // Clean up URL without reloading the page
+      const cleaned = window.location.pathname + "?section=billing";
+      window.history.replaceState({}, "", cleaned);
+      // Refresh billing data
+      void utils.salon.getBillingStatus.invalidate({ tenantId });
+    }
+  }, [tenantId, utils]);
+
+  // Use embedded checkout if Stripe.js publishable key is configured,
+  // fall back to redirect checkout otherwise
+  const hasEmbedded = !!stripePromise;
+
+  const embeddedMut = api.salon.createEmbeddedCheckout.useMutation({
+    onSuccess: (data) => setClientSecret(data.clientSecret),
+  });
+
   const checkoutMut = api.salon.createCheckoutSession.useMutation({
-    onSuccess: (data) => {
-      window.location.href = data.url;
-    },
+    onSuccess: (data) => { window.location.href = data.url; },
   });
 
   const portalMut = api.salon.createBillingPortalSession.useMutation({
-    onSuccess: (data) => {
-      window.location.href = data.url;
-    },
+    onSuccess: (data) => { window.location.href = data.url; },
   });
+
+  const handleSubscribe = useCallback((plan: "start" | "pro" | "max") => {
+    if (hasEmbedded) {
+      embeddedMut.mutate({ tenantId, plan });
+    } else {
+      checkoutMut.mutate({ tenantId, plan });
+    }
+  }, [hasEmbedded, embeddedMut, checkoutMut, tenantId]);
+
+  const handleCloseCheckout = useCallback(() => {
+    setClientSecret(null);
+    void utils.salon.getBillingStatus.invalidate({ tenantId });
+  }, [tenantId, utils]);
+
+  const isBusy = embeddedMut.isPending || checkoutMut.isPending;
+  const mutError = embeddedMut.error ?? checkoutMut.error;
 
   const currentPlan = billing.data?.plan ?? "start";
   const billingStatus = billing.data?.billingStatus ?? "trialing";
   const hasStripeCustomer = !!billing.data?.stripeCustomerId;
 
-  // Trial days remaining
   const trialDaysLeft = (() => {
     if (billingStatus !== "trialing" || !billing.data?.trialEndsAt) return null;
     const diff = billing.data.trialEndsAt - Math.floor(Date.now() / 1000);
@@ -99,6 +210,27 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Checkout modal */}
+      {clientSecret && (
+        <CheckoutModal clientSecret={clientSecret} onClose={handleCloseCheckout} />
+      )}
+
+      {/* Payment success banner */}
+      {showSuccess && (
+        <section className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{l.paySuccess}</p>
+              <p className="text-xs text-emerald-600/70 dark:text-emerald-500/70">{l.paySuccessDesc}</p>
+            </div>
+            <button onClick={() => setShowSuccess(false)} className="text-emerald-400 hover:text-emerald-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Trial banner */}
       {trialDaysLeft !== null && trialDaysLeft >= 0 && (
         <section className="rounded-2xl bg-gradient-to-r from-brand-500/15 to-purple-500/15 border border-brand-500/20 p-4">
@@ -197,15 +329,15 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
                   </div>
                 ) : (
                   <button
-                    onClick={() => checkoutMut.mutate({ tenantId, plan: plan.id as "start" | "pro" | "max" })}
-                    disabled={checkoutMut.isPending}
+                    onClick={() => handleSubscribe(plan.id as "start" | "pro" | "max")}
+                    disabled={isBusy}
                     className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
                       plan.popular
                         ? "bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:from-brand-500 hover:to-purple-500"
                         : "bg-brand-600 text-white hover:bg-brand-500"
                     }`}
                   >
-                    {checkoutMut.isPending ? (
+                    {isBusy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       isUpgrade ? l.upgrade : l.subscribe
@@ -236,8 +368,8 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
         </button>
       )}
 
-      {checkoutMut.error && (
-        <p className="text-xs text-red-400 text-center">{checkoutMut.error.message}</p>
+      {mutError && (
+        <p className="text-xs text-red-400 text-center">{mutError.message}</p>
       )}
     </div>
   );

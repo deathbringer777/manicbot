@@ -31,9 +31,12 @@ export const env = createEnv({
       .default("development"),
   },
 
-  client: {},
+  client: {
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  },
 
   runtimeEnv: {
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
     TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
     ADMIN_CHAT_ID: process.env.ADMIN_CHAT_ID,

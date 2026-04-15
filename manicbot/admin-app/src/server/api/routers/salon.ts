@@ -6,7 +6,7 @@ import {
 } from "~/server/db/schema";
 import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
-import { getOrCreateCustomer, createCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
+import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
 import { eq, and, desc, sql, ne, like, or, gte, lte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -948,6 +948,59 @@ export const salonRouter = createTRPCRouter({
       });
 
       return { url };
+    }),
+
+  createEmbeddedCheckout: publicProcedure
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      }
+
+      const priceMap: Record<string, string | undefined> = {
+        start: env.STRIPE_PRICE_START_MONTHLY,
+        pro: env.STRIPE_PRICE_PRO_MONTHLY,
+        max: env.STRIPE_PRICE_MAX_MONTHLY,
+      };
+      const priceId = priceMap[input.plan];
+      if (!priceId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Price not configured for plan: ${input.plan}` });
+      }
+
+      const [tenant] = await ctx.db
+        .select({ name: tenants.name, stripeCustomerId: tenants.stripeCustomerId, billingEmail: tenants.billingEmail })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      if (!tenant) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
+
+      let customerId = tenant.stripeCustomerId;
+      if (!customerId) {
+        customerId = await getOrCreateCustomer(stripeKey, {
+          tenantId: input.tenantId,
+          name: tenant.name,
+          email: tenant.billingEmail ?? ctx.webUser?.email ?? undefined,
+        });
+        await ctx.db
+          .update(tenants)
+          .set({ stripeCustomerId: customerId, updatedAt: Math.floor(Date.now() / 1000) })
+          .where(eq(tenants.id, input.tenantId));
+      }
+
+      const baseUrl = process.env.AUTH_URL ?? "https://admin.manicbot.com";
+      const returnUrl = `${baseUrl}/settings?section=billing&checkout=success`;
+
+      const clientSecret = await createEmbeddedCheckoutSession(stripeKey, {
+        customerId,
+        priceId,
+        returnUrl,
+        tenantId: input.tenantId,
+      });
+
+      return { clientSecret };
     }),
 
   createBillingPortalSession: publicProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {

@@ -67,11 +67,23 @@ async function resolveTenantIdByCustomer(ctx, customerId) {
   return row?.tenant_id || null;
 }
 
+/** Derive plan key (start/pro/max) from subscription metadata or price metadata. */
+function resolvePlanFromSub(sub) {
+  // 1. Prefer subscription metadata[plan] set at checkout time
+  const metaPlan = sub.metadata?.plan;
+  if (metaPlan) return metaPlan;
+  // 2. Fallback: price metadata[plan] (set on the Stripe Price object itself)
+  const priceMeta = sub.items?.data?.[0]?.price?.metadata?.plan;
+  if (priceMeta) return priceMeta;
+  return null;
+}
+
 function subscriptionToBillingUpdates(sub) {
   const status = mapStripeStatusToBilling(sub.status);
   const periodEnd = sub.current_period_end || null;
   const priceId = sub.items?.data?.[0]?.price?.id || null;
-  return {
+  const planKey = resolvePlanFromSub(sub);
+  const updates = {
     billingStatus: status,
     subscriptionStatus: sub.status,
     stripeSubscriptionId: sub.id,
@@ -81,6 +93,8 @@ function subscriptionToBillingUpdates(sub) {
     cancelAtPeriodEnd: sub.cancel_at_period_end === true,
     updatedAt: nowSec(),
   };
+  if (planKey) updates.plan = planKey;
+  return updates;
 }
 
 export async function handleStripeWebhook(ctx, payload, signature, webhookSecret) {
@@ -122,6 +136,8 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         updates.trialEndsAt = null;
         updates.graceEndsAt = null;
       }
+      // Update plan from session metadata (set at checkout creation time)
+      if (session.metadata?.plan) updates.plan = session.metadata.plan;
       if (session.customer_email) updates.billingEmail = session.customer_email;
       await updateTenantBilling(ctx, tenantId, updates);
       if (customerId) {

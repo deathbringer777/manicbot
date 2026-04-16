@@ -957,6 +957,7 @@ export const salonRouter = createTRPCRouter({
         successUrl: `${baseUrl}/settings?section=billing&checkout=success`,
         cancelUrl: `${baseUrl}/settings?section=billing`,
         tenantId: input.tenantId,
+        plan: input.plan,
         locale: input.locale,
       });
 
@@ -1011,6 +1012,7 @@ export const salonRouter = createTRPCRouter({
         priceId,
         returnUrl,
         tenantId: input.tenantId,
+        plan: input.plan,
         locale: input.locale,
       });
 

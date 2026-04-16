@@ -85,6 +85,7 @@ export async function createCheckoutSession(
     successUrl: string;
     cancelUrl: string;
     tenantId: string;
+    plan: string;
     locale?: string;
   },
 ): Promise<string> {
@@ -95,7 +96,12 @@ export async function createCheckoutSession(
     mode: "subscription",
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
+    // Session metadata — available in checkout.session.completed
+    "metadata[tenantId]": opts.tenantId,
+    "metadata[plan]": opts.plan,
+    // Subscription metadata — available in subscription.updated
     "subscription_data[metadata][tenantId]": opts.tenantId,
+    "subscription_data[metadata][plan]": opts.plan,
     locale: toStripeLocale(opts.locale),
   });
   return session.url;
@@ -108,6 +114,7 @@ export async function createEmbeddedCheckoutSession(
     priceId: string;
     returnUrl: string;
     tenantId: string;
+    plan: string;
     locale?: string;
   },
 ): Promise<string> {
@@ -118,7 +125,12 @@ export async function createEmbeddedCheckoutSession(
     mode: "subscription",
     ui_mode: "embedded",
     return_url: opts.returnUrl,
+    // Session metadata — available in checkout.session.completed
+    "metadata[tenantId]": opts.tenantId,
+    "metadata[plan]": opts.plan,
+    // Subscription metadata — available in subscription.updated
     "subscription_data[metadata][tenantId]": opts.tenantId,
+    "subscription_data[metadata][plan]": opts.plan,
     locale: toStripeLocale(opts.locale),
   });
   return session.client_secret;

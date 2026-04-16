@@ -12,7 +12,7 @@ import { execSync } from 'child_process';
 const KV_BINDING = 'MANICBOT';
 const BASE_URL = 'https://manicbot.com';
 const ADMIN_CHAT_ID = '321706035';
-const TRIAL_DURATION_MS = 14 * 24 * 3600 * 1000;
+const TRIAL_DURATION_SEC = 14 * 24 * 3600;
 
 // ── Bot definitions ─────────────────────────────────────────────
 
@@ -237,7 +237,7 @@ async function main() {
       continue;
     }
 
-    const now = Date.now();
+    const now = Math.floor(Date.now() / 1000);
     const webhookSecret = generateWebhookSecret();
 
     // 2. Create tenant
@@ -250,7 +250,7 @@ async function main() {
       salon: bot.tenant.salon,
       plan: 'pro',
       billingStatus: 'trialing',
-      trialEndsAt: now + TRIAL_DURATION_MS,
+      trialEndsAt: now + TRIAL_DURATION_SEC,
       graceEndsAt: null,
       stripeCustomerId: null,
       stripeSubscriptionId: null,

@@ -15,6 +15,7 @@ import {
   authSecondaryButtonClassName,
 } from "~/components/auth/AuthShell";
 import { authCopy } from "~/components/auth/copy";
+import { ReferralSourceSelect } from "~/components/auth/ReferralSourceSelect";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<"tenant_owner" | "master">("tenant_owner");
   const [referralSource, setReferralSource] = useState("");
+  const [referralNote, setReferralNote] = useState("");
   const [tosAccepted, setTosAccepted] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -146,6 +148,7 @@ export default function RegisterPage() {
           name: name.trim() || undefined,
           lang,
           referralSource: referralSource || undefined,
+          referralNote: (referralSource === "other" && referralNote.trim()) ? referralNote.trim() : undefined,
           tosAccepted: true as const,
           googlePrefillToken:
             emailFromGoogleLocked && googlePrefillToken ? googlePrefillToken : undefined,
@@ -339,18 +342,13 @@ export default function RegisterPage() {
 
           <div className="sm:col-span-2">
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">{copy.register.referral}</label>
-            <select
+            <ReferralSourceSelect
               value={referralSource}
-              onChange={(e) => setReferralSource(e.target.value)}
-              className={`${authFieldClassName} appearance-none`}
-            >
-              <option value="">{copy.register.referralPlaceholder}</option>
-              <option value="google">{copy.register.referralGoogle}</option>
-              <option value="instagram">{copy.register.referralInstagram}</option>
-              <option value="telegram">{copy.register.referralTelegram}</option>
-              <option value="friends">{copy.register.referralFriends}</option>
-              <option value="other">{copy.register.referralOther}</option>
-            </select>
+              note={referralNote}
+              onChange={setReferralSource}
+              onNoteChange={setReferralNote}
+              copy={copy.register}
+            />
           </div>
         </div>
 

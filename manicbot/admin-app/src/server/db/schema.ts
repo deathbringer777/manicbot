@@ -357,6 +357,7 @@ export const webUsers = sqliteTable("web_users", {
   name: text("name"),
   lang: text("lang").default("en"),
   referralSource: text("referral_source"),
+  referralNote: text("referral_note"),
   emailVerified: integer("email_verified").notNull().default(0),
   verificationToken: text("verification_token"),
   verificationTokenExpiresAt: integer("verification_token_expires_at"),

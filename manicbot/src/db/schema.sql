@@ -372,6 +372,7 @@ CREATE TABLE IF NOT EXISTS web_users (
   name TEXT,
   lang TEXT DEFAULT 'en',
   referral_source TEXT,
+  referral_note TEXT,
   email_verified INTEGER NOT NULL DEFAULT 0,
   verification_token TEXT,
   verification_token_expires_at INTEGER,

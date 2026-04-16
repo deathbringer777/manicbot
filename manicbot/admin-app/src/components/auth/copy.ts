@@ -115,6 +115,7 @@ export const authCopy: Record<
       referralTelegram: string;
       referralFriends: string;
       referralOther: string;
+      referralNotePlaceholder: string;
       passwordsMismatch: string;
       passwordTooShort: string;
       googleStartError: string;
@@ -266,6 +267,7 @@ export const authCopy: Record<
       referralTelegram: "Telegram",
       referralFriends: "Друзья / знакомые",
       referralOther: "Другое",
+      referralNotePlaceholder: "Напишите откуда",
       passwordsMismatch: "Пароли не совпадают",
       passwordTooShort: "Пароль должен содержать минимум 12 символов",
       googleStartError: "Не удалось начать вход через Google",
@@ -418,6 +420,7 @@ export const authCopy: Record<
       referralTelegram: "Telegram",
       referralFriends: "Друзі / знайомі",
       referralOther: "Інше",
+      referralNotePlaceholder: "Напишіть звідки",
       passwordsMismatch: "Паролі не збігаються",
       passwordTooShort: "Пароль має містити щонайменше 12 символів",
       googleStartError: "Не вдалося почати вхід через Google",
@@ -570,6 +573,7 @@ export const authCopy: Record<
       referralTelegram: "Telegram",
       referralFriends: "Friends / colleagues",
       referralOther: "Other",
+      referralNotePlaceholder: "Specify the source",
       passwordsMismatch: "Passwords do not match",
       passwordTooShort: "Password must be at least 12 characters long",
       googleStartError: "Could not start Google sign-in",
@@ -722,6 +726,7 @@ export const authCopy: Record<
       referralTelegram: "Telegram",
       referralFriends: "Znajomi / polecenie",
       referralOther: "Inne",
+      referralNotePlaceholder: "Podaj źródło",
       passwordsMismatch: "Hasła nie są takie same",
       passwordTooShort: "Hasło musi mieć co najmniej 12 znaków",
       googleStartError: "Nie udało się rozpocząć logowania przez Google",

@@ -82,6 +82,7 @@ export const webUsersRouter = createTRPCRouter({
         name: z.string().max(200).nullish(),
         lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
         referralSource: z.string().max(100).nullish(),
+        referralNote: z.string().max(200).nullish(),
         tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
         googlePrefillToken: z.string().min(1).max(8000).nullish(),
       })
@@ -186,6 +187,7 @@ export const webUsersRouter = createTRPCRouter({
           name: input.name ?? null,
           lang: input.lang,
           referralSource: input.referralSource ?? null,
+          referralNote: input.referralNote ?? null,
           emailVerified: skipEmailVerification ? 1 : 0,
           verificationToken: skipEmailVerification ? null : verificationCodeHash,
           verificationTokenExpiresAt: skipEmailVerification ? null : codeExpiresAt,

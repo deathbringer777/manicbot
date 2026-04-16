@@ -26,7 +26,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<"tenant_owner" | "master">("tenant_owner");
-  const [referralSource, setReferralSource] = useState("");
+  const [referralSource, setReferralSource] = useState<"google" | "instagram" | "telegram" | "friends" | "other" | "">("");
   const [referralNote, setReferralNote] = useState("");
   const [tosAccepted, setTosAccepted] = useState(false);
   const [showPwd, setShowPwd] = useState(false);

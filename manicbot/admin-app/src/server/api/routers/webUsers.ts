@@ -81,7 +81,7 @@ export const webUsersRouter = createTRPCRouter({
         role: z.enum(["tenant_owner", "master"]),
         name: z.string().max(200).nullish(),
         lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
-        referralSource: z.string().max(100).nullish(),
+        referralSource: z.enum(["google", "instagram", "telegram", "friends", "other"]).nullish(),
         referralNote: z.string().max(200).nullish(),
         tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
         googlePrefillToken: z.string().min(1).max(8000).nullish(),

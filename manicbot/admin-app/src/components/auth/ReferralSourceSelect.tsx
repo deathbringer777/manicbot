@@ -23,9 +23,9 @@ interface ReferralCopy {
 }
 
 interface Props {
-  value: string;
+  value: OptionValue | "";
   note: string;
-  onChange: (value: string) => void;
+  onChange: (value: OptionValue | "") => void;
   onNoteChange: (note: string) => void;
   copy: ReferralCopy;
 }

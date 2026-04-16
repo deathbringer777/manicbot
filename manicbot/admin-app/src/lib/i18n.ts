@@ -250,6 +250,10 @@ const translations = {
   "service.emoji":          { ru: "Иконка",         ua: "Іконка",          en: "Icon",       pl: "Ikona" },
   "service.active":         { ru: "Активна",        ua: "Активна",         en: "Active",     pl: "Aktywna" },
   "service.hidden":         { ru: "Скрыта",         ua: "Приховано",       en: "Hidden",     pl: "Ukryta" },
+  "service.new":            { ru: "Новый",          ua: "Новий",           en: "New",        pl: "Nowy" },
+  "service.templates":      { ru: "Шаблоны",        ua: "Шаблони",         en: "Templates",  pl: "Szablony" },
+  "service.templatesTitle": { ru: "Шаблоны услуг",  ua: "Шаблони послуг",  en: "Service templates", pl: "Szablony usług" },
+  "service.min":            { ru: "мин",            ua: "хв",              en: "min",        pl: "min" },
 
   // ── Master fields ─────────────────────────────────────────────────────────
   "master.chatId":          { ru: "Telegram ID мастера", ua: "Telegram ID майстра", en: "Master's Telegram ID", pl: "Telegram ID mistrza" },

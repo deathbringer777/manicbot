@@ -337,7 +337,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           </header>
 
           {/* Content */}
-          <main className="flex-1 overflow-y-auto relative">
+          <main className="flex-1 overflow-y-auto relative h-0">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
               <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-brand-500/[0.05] blur-[120px]" />
               <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-purple-500/[0.05] blur-[120px]" />
@@ -346,8 +346,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
                 {children}
               </div>
-              {/* Same legal/footer links as auth + public pages; pb clears fixed mobile tab bar */}
-              <div className="relative z-10 pb-24 lg:pb-6">
+              {/* Footer pushed to bottom by flex-1 on content; pb clears fixed mobile tab bar */}
+              <div className="relative z-10 pb-24 lg:pb-6 mt-auto shrink-0">
                 <PublicFooter />
               </div>
             </div>

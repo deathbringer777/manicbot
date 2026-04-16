@@ -8,8 +8,10 @@ import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, type Lang } from "~/lib/i18n";
 import { TodayTab } from "~/components/master/tabs/TodayTab";
+import { type ServiceTemplate } from "~/lib/serviceTemplates";
+import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 
 type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "services" | "profile";
 
@@ -191,6 +193,7 @@ export function MasterDashboard({
   const [svcForm, setSvcForm] = useState<{ names: string; price: string; duration: string; emoji: string; description: string; promo: string; photos: string[] } | null>(null);
   const [editingSvcId, setEditingSvcId] = useState<string | null>(null);
   const [showSvcEmojiPicker, setShowSvcEmojiPicker] = useState(false);
+  const [showSvcTemplates, setShowSvcTemplates] = useState(false);
   const [svcUploading, setSvcUploading] = useState(false);
   const svcFileRef = useRef<HTMLInputElement>(null);
   const mintToken = api.salon.mintUploadToken.useMutation();
@@ -438,14 +441,32 @@ export function MasterDashboard({
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.services", lang)}</h2>
             {!svcForm && (
-              <button
-                onClick={() => setSvcForm({ names: "", price: "", duration: "60", emoji: "💅", description: "", promo: "", photos: [] })}
-                className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 transition shadow-sm"
-              >
-                <Plus className="h-3.5 w-3.5" />{t("master.addService", lang)}
-              </button>
+              <AddServiceDropdown
+                lang={lang}
+                onNew={() => setSvcForm({ names: "", price: "", duration: "60", emoji: "💅", description: "", promo: "", photos: [] })}
+                onTemplates={() => setShowSvcTemplates(true)}
+              />
             )}
           </div>
+
+          {showSvcTemplates && (
+            <ServiceTemplatesSheet
+              lang={lang}
+              onClose={() => setShowSvcTemplates(false)}
+              onSelect={(tmpl: ServiceTemplate) => {
+                setShowSvcTemplates(false);
+                setSvcForm({
+                  names: tmpl.names[lang] ?? tmpl.names.en,
+                  price: String(tmpl.price),
+                  duration: String(tmpl.duration),
+                  emoji: tmpl.emoji,
+                  description: "",
+                  promo: "",
+                  photos: [],
+                });
+              }}
+            />
+          )}
 
           {/* Add/Edit form */}
           {svcForm && (
@@ -601,9 +622,14 @@ export function MasterDashboard({
 
           {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {svcList.data?.length === 0 && !svcForm && (
-            <div className="glass-card rounded-2xl p-8 text-center">
-              <Scissors className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+            <div className="flex flex-col items-center justify-center py-14 gap-5">
+              <span className="text-4xl">💅</span>
               <p className="text-slate-400 text-sm">{t("master.noServices", lang)}</p>
+              <AddServiceDropdown
+                lang={lang}
+                onNew={() => setSvcForm({ names: "", price: "", duration: "60", emoji: "💅", description: "", promo: "", photos: [] })}
+                onTemplates={() => setShowSvcTemplates(true)}
+              />
             </div>
           )}
           <div className="space-y-2">

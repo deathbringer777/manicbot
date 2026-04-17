@@ -346,10 +346,13 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
                 {children}
               </div>
-              {/* Footer pushed to bottom by flex-1 on content; pb clears fixed mobile tab bar */}
-              <div className="relative z-10 pb-24 lg:pb-6 mt-auto shrink-0">
-                <PublicFooter />
-              </div>
+              {/* Footer — public pages only. Dashboard/settings/master/support
+                  are immersive surfaces where a marketing footer is clutter. */}
+              {!pathname?.startsWith("/dashboard") && !pathname?.startsWith("/settings") && (
+                <div className="relative z-10 pb-24 lg:pb-6 mt-auto shrink-0">
+                  <PublicFooter />
+                </div>
+              )}
             </div>
           </main>
 

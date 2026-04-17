@@ -93,17 +93,18 @@ export const provisioningRouter = createTRPCRouter({
       let webhookUrl = "";
       let webhookOk = false;
       try {
-        const res = await fetch(
-          `${workerUrl}/admin/provision?key=${encodeURIComponent(adminKey)}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              bots: [{ botToken: input.botToken, tenantId, tenantName: input.salonName.trim(), webhookSecret }],
-            }),
-            signal: AbortSignal.timeout(15_000),
-          }
-        );
+        // #S9: ADMIN_KEY moved from query string to Authorization: Bearer header.
+        const res = await fetch(`${workerUrl}/admin/provision`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${adminKey}`,
+          },
+          body: JSON.stringify({
+            bots: [{ botToken: input.botToken, tenantId, tenantName: input.salonName.trim(), webhookSecret }],
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
         const data = (await res.json()) as {
           ok?: boolean;
           error?: string;

@@ -524,9 +524,10 @@ export const salonRouter = createTRPCRouter({
       const workerUrl = env.WORKER_PUBLIC_URL;
       const adminKey = env.ADMIN_KEY;
       if (workerUrl && adminKey) {
-        fetch(`${workerUrl}/admin/appointment-action?key=${encodeURIComponent(adminKey)}`, {
+        // #S9: ADMIN_KEY moved from query string to Authorization: Bearer header.
+        fetch(`${workerUrl}/admin/appointment-action`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
           body: JSON.stringify({ action: input.status, appointmentId: input.appointmentId, tenantId: input.tenantId, confirmedBy: setObj.confirmedBy ?? null }),
         }).catch(e => console.error("[salon] Worker notification error:", e.message));
       }
@@ -1082,9 +1083,10 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Server not configured for Instagram connection. Set WORKER_PUBLIC_URL and ADMIN_KEY." });
       }
 
-      const res = await fetch(`${workerUrl}/admin/ig-channel?key=${encodeURIComponent(adminKey)}`, {
+      // #S9: ADMIN_KEY moved from query string to Authorization: Bearer header.
+      const res = await fetch(`${workerUrl}/admin/ig-channel`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
         body: JSON.stringify({
           token: input.token,
           pageId: input.pageId,

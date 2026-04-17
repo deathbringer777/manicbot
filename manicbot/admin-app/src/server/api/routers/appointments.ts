@@ -16,9 +16,10 @@ async function notifyWorker(action: string, appointmentId: string, tenantId: str
     return;
   }
   try {
-    const resp = await fetch(`${workerUrl}/admin/appointment-action?key=${encodeURIComponent(adminKey)}`, {
+    // #S9: ADMIN_KEY moved from query string to Authorization: Bearer header.
+    const resp = await fetch(`${workerUrl}/admin/appointment-action`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
       body: JSON.stringify({ action, appointmentId, tenantId, confirmedBy }),
     });
     if (!resp.ok) {

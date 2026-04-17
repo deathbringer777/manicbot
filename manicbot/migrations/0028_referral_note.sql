@@ -1,0 +1,15 @@
+-- 0028: web_users.referral_note (record-only — column already exists in production)
+--
+-- History: this migration was originally numbered 0026, colliding with 0026_service_promo.sql.
+-- The referral_note column was added to production out-of-band before the migration tracker
+-- recorded this file (likely via direct ALTER or a partial migration apply that errored on
+-- the duplicate filename).
+--
+-- D1 SQLite has no `ADD COLUMN IF NOT EXISTS`, so to make this idempotent for fresh
+-- environments without breaking prod, this migration is a no-op SELECT that just advances
+-- the migration tracker. Fresh dev/preview DBs without the column should add it manually:
+--   ALTER TABLE web_users ADD COLUMN referral_note TEXT;
+-- or rebuild from src/db/schema.sql.
+--
+-- Production state at 2026-04-17 confirmed: web_users.referral_note exists at cid=23.
+SELECT 1;

@@ -11,6 +11,7 @@ import { handleInbound } from '../handlers/inbound.js';
 import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
+import { claimMetaMessage } from '../utils/dedup.js';
 
 /**
  * @param {Request} request
@@ -161,6 +162,13 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             adapter._ctx = ctx; // give adapter access to db for 24h window check
             await initServices(ctx);
             for (const m of entry?.messaging ?? []) {
+              // Sprint 2: dedup by message.mid. Meta retries deliveries for up
+              // to 24h on 5xx — without dedup every retry replays the message.
+              const mid = m?.message?.mid || m?.read?.mid || m?.delivery?.mids?.[0];
+              if (mid) {
+                const fresh = await claimMetaMessage({ MANICBOT: env.MANICBOT }, String(pageId), String(mid));
+                if (!fresh) continue;
+              }
               const inbound = adapter.normalizeMessaging(m, entry);
               if (inbound) await handleInbound(ctx, inbound);
             }

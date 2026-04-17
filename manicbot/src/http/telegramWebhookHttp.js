@@ -2,6 +2,7 @@ import { timingSafeEqual } from '../utils/security.js';
 import { onMsg } from '../handlers/message.js';
 import { onCb } from '../handlers/callback.js';
 import { initServices } from '../services/services.js';
+import { claimTelegramUpdate } from '../utils/dedup.js';
 
 /**
  * @param {Request} request
@@ -40,6 +41,15 @@ export async function tryTelegramWebhook(request, ctx, url) {
 
   try {
     const upd = await request.json();
+
+    // Sprint 2: dedup by update_id. Telegram retries on 5xx; without dedup the
+    // bot processes the same message twice (duplicate replies, duplicate
+    // bookings, duplicate analytics).
+    if (upd?.update_id != null) {
+      const botKey = ctx.botId || 'legacy';
+      const fresh = await claimTelegramUpdate({ MANICBOT: ctx.kv }, botKey, upd.update_id);
+      if (!fresh) return new Response('OK'); // dup, ack and skip
+    }
 
     await initServices(ctx);
 

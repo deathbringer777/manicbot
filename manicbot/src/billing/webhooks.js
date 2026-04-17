@@ -111,16 +111,30 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     return { ok: false, status: 400 };
   }
   const eventId = body.id;
-  if (eventId && kv) {
-    // ⚠️  Намеренно используется прямой kv (без tenant-prefix и без kvGet/kvPut).
-    // Stripe-события глобальны: один webhook от Stripe может относиться к любому
-    // тенанту, поэтому дедупликация хранится в глобальном пространстве KV без префикса.
-    // Использование kvGet/kvPut добавило бы tenant-prefix и сломало бы dedup.
-    const seen = await kv.get(STRIPE_EVT_PREFIX + eventId, 'text');
-    if (seen) return { ok: true, status: 200, skipped: true };
-    await kv.put(STRIPE_EVT_PREFIX + eventId, '1', { expirationTtl: EVT_TTL });
-  }
   const type = body.type || '';
+
+  // Sprint 2: D1-backed idempotency in addition to KV (KV has eventual
+  // consistency; D1 gives us durable audit). KV remains for fast path.
+  if (eventId) {
+    if (ctx.db) {
+      try {
+        const existing = await dbGet(ctx, 'SELECT event_id FROM stripe_events WHERE event_id = ?', eventId);
+        if (existing) return { ok: true, status: 200, skipped: true };
+        await dbRun(ctx,
+          'INSERT OR IGNORE INTO stripe_events (event_id, type, received_at) VALUES (?, ?, ?)',
+          eventId, type, nowSec(),
+        );
+      } catch (e) {
+        console.error('[stripe-webhook] D1 idempotency insert failed:', e?.message);
+      }
+    }
+    if (kv) {
+      // Namespace-global key: Stripe events are cross-tenant.
+      const seen = await kv.get(STRIPE_EVT_PREFIX + eventId, 'text');
+      if (seen) return { ok: true, status: 200, skipped: true };
+      await kv.put(STRIPE_EVT_PREFIX + eventId, '1', { expirationTtl: EVT_TTL });
+    }
+  }
 
   if (type === 'checkout.session.completed') {
     const session = body.data?.object;
@@ -196,6 +210,72 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         });
       }
     }
+  }
+
+  // Sprint 2: new webhook handlers
+  if (type === 'customer.subscription.trial_will_end') {
+    const sub = body.data?.object;
+    const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+    const tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(ctx, customerId);
+    if (tenantId) {
+      // Emit analytics + structured log. Owner email send deferred to cron
+      // to avoid blocking webhook 200 on Resend latency.
+      console.log('[stripe] trial_will_end for tenant', tenantId, 'ends', sub.trial_end);
+      try {
+        const { dbRun: dbRun2 } = await import('../utils/db.js');
+        await dbRun2(ctx,
+          'INSERT INTO analytics_events (tenant_id, event, properties, created_at) VALUES (?, ?, ?, ?)',
+          tenantId, 'billing.trial_will_end',
+          JSON.stringify({ trialEnd: sub.trial_end, subscriptionId: sub.id }),
+          nowSec(),
+        );
+      } catch { /* best-effort */ }
+    }
+  }
+
+  if (type === 'invoice.upcoming') {
+    const invoice = body.data?.object;
+    const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+    const tenantId = await resolveTenantIdByCustomer(ctx, customerId);
+    if (tenantId) {
+      console.log('[stripe] invoice.upcoming for tenant', tenantId, 'due', invoice.next_payment_attempt);
+      try {
+        const { dbRun: dbRun2 } = await import('../utils/db.js');
+        await dbRun2(ctx,
+          'INSERT INTO analytics_events (tenant_id, event, properties, created_at) VALUES (?, ?, ?, ?)',
+          tenantId, 'billing.invoice_upcoming',
+          JSON.stringify({ amountDue: invoice.amount_due, dueDate: invoice.next_payment_attempt }),
+          nowSec(),
+        );
+      } catch { /* best-effort */ }
+    }
+  }
+
+  if (type === 'charge.dispute.created') {
+    const dispute = body.data?.object;
+    const customerId = dispute?.charge && typeof dispute.charge === 'string'
+      ? null  // would need GET /charges/{id} to resolve customer; skip for now
+      : dispute?.payment_intent?.customer;
+    const tenantId = customerId ? await resolveTenantIdByCustomer(ctx, customerId) : null;
+    console.error('[stripe] DISPUTE for tenant', tenantId, 'amount', dispute?.amount, 'reason', dispute?.reason);
+    if (tenantId) {
+      try {
+        const { dbRun: dbRun2 } = await import('../utils/db.js');
+        await dbRun2(ctx,
+          'INSERT INTO analytics_events (tenant_id, event, properties, created_at) VALUES (?, ?, ?, ?)',
+          tenantId, 'billing.dispute',
+          JSON.stringify({ disputeId: dispute.id, amount: dispute.amount, reason: dispute.reason }),
+          nowSec(),
+        );
+      } catch { /* best-effort */ }
+    }
+  }
+
+  // Mark processed in D1
+  if (eventId && ctx.db) {
+    try {
+      await dbRun(ctx, 'UPDATE stripe_events SET processed_at = ? WHERE event_id = ?', nowSec(), eventId);
+    } catch { /* best-effort */ }
   }
 
   return { ok: true, status: 200 };

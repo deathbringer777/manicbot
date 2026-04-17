@@ -7,8 +7,16 @@ import { getStripeConfig, PLANS } from './config.js';
 const STRIPE_API = 'https://api.stripe.com/v1';
 const STRIPE_TIMEOUT_MS = 8000;
 
+// Sprint 2: Pin Stripe-Version so API upgrades don't silently change response
+// shapes (e.g. new fields, relocated errors). Update this with intent — not
+// whenever Stripe releases a new version.
+const STRIPE_API_VERSION = '2024-06-20';
+
 function authHeader(secretKey) {
-  return { Authorization: `Bearer ${secretKey}` };
+  return {
+    Authorization: `Bearer ${secretKey}`,
+    'Stripe-Version': STRIPE_API_VERSION,
+  };
 }
 
 function formBody(obj) {

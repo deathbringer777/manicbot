@@ -23,6 +23,7 @@ import { analyticsRouter } from "~/server/api/routers/analytics";
 import { roleChangeRequestsRouter } from "~/server/api/routers/roleChangeRequests";
 import { onboardingRouter } from "~/server/api/routers/onboarding";
 import { promoCodesRouter } from "~/server/api/routers/promoCodes";
+import { stampCardRouter } from "~/server/api/routers/stampCard";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -49,6 +50,7 @@ export const appRouter = createTRPCRouter({
   roleChangeRequests: roleChangeRequestsRouter,
   onboarding: onboardingRouter,
   promoCodes: promoCodesRouter,
+  stampCard: stampCardRouter,
 });
 
 export type AppRouter = typeof appRouter;

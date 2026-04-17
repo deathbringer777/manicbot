@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { api } from "~/trpc/react";
 
 interface Props {
@@ -8,6 +8,129 @@ interface Props {
 }
 
 const DAY_SEC = 86_400;
+
+function StampCardConfig({ tenantId }: { tenantId: string }) {
+  const cfg = api.stampCard.getConfig.useQuery({ tenantId });
+  const utils = api.useUtils();
+  const save = api.stampCard.updateConfig.useMutation({
+    onSuccess: () => utils.stampCard.getConfig.invalidate({ tenantId }),
+  });
+
+  const [enabled, setEnabled] = useState(false);
+  const [visitsRequired, setVisitsRequired] = useState(5);
+  const [rewardType, setRewardType] = useState<"free_service" | "percent_off" | "fixed_off">("free_service");
+  const [rewardValue, setRewardValue] = useState<string>("");
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (cfg.data) {
+      setEnabled(cfg.data.enabled === 1);
+      setVisitsRequired(cfg.data.visitsRequired ?? 5);
+      setRewardType((cfg.data.rewardType ?? "free_service") as "free_service" | "percent_off" | "fixed_off");
+      setRewardValue(cfg.data.rewardValue != null ? String(cfg.data.rewardValue) : "");
+      setDirty(false);
+    }
+  }, [cfg.data]);
+
+  function onChange<T>(setter: (v: T) => void, v: T) {
+    setter(v);
+    setDirty(true);
+  }
+
+  function submit() {
+    save.mutate({
+      tenantId,
+      enabled,
+      visitsRequired,
+      rewardType,
+      rewardValue: rewardValue ? Number(rewardValue) : null,
+    }, {
+      onSuccess: () => setDirty(false),
+    });
+  }
+
+  return (
+    <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Stamp card (карта лояльности)</h3>
+          <p className="text-xs text-white/50">Каждый N-й визит клиента — в подарок или со скидкой.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(setEnabled, !enabled)}
+          className={`relative h-6 w-11 rounded-full transition ${
+            enabled ? "bg-emerald-500" : "bg-white/20"
+          }`}
+          aria-label={enabled ? "Отключить" : "Включить"}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
+              enabled ? "left-5" : "left-0.5"
+            }`}
+          />
+        </button>
+      </div>
+
+      {enabled && (
+        <div className="space-y-3 border-t border-white/10 pt-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/70">Визитов для награды</label>
+              <input
+                type="number"
+                min={2}
+                max={30}
+                value={visitsRequired}
+                onChange={(e) => onChange(setVisitsRequired, Math.max(2, Math.min(30, Number(e.target.value) || 5)))}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/70">Тип награды</label>
+              <select
+                value={rewardType}
+                onChange={(e) => onChange(setRewardType, e.target.value as "free_service" | "percent_off" | "fixed_off")}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+              >
+                <option value="free_service">Бесплатная услуга</option>
+                <option value="percent_off">% скидки</option>
+                <option value="fixed_off">Фикс. скидка (zł)</option>
+              </select>
+            </div>
+          </div>
+          {rewardType !== "free_service" && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-white/70">
+                {rewardType === "percent_off" ? "Процент скидки" : "Сумма скидки (zł)"}
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={10000}
+                value={rewardValue}
+                onChange={(e) => onChange(setRewardValue, e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {dirty && (
+        <button
+          type="button"
+          onClick={submit}
+          disabled={save.isPending}
+          className="mt-4 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+        >
+          {save.isPending ? "Сохраняем…" : "Сохранить"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function PromoCodesTab({ tenantId }: Props) {
   const list = api.promoCodes.list.useQuery({ tenantId, activeOnly: false });
@@ -64,6 +187,9 @@ export function PromoCodesTab({ tenantId }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Stamp card config */}
+      <StampCardConfig tenantId={tenantId} />
+
       {/* Create form */}
       <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <h3 className="mb-4 text-sm font-semibold text-white">Новый промокод</h3>

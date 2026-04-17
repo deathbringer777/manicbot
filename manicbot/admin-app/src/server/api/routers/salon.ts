@@ -93,6 +93,26 @@ export const salonRouter = createTRPCRouter({
       return ctx.db.select().from(users).where(baseWhere).limit(200);
     }),
 
+  /**
+   * Set client date-of-birth (YYYY-MM-DD). Used by the birthday-promo cron
+   * to auto-generate a BDAY-* promo code on the matching MM-DD each year.
+   * Pass null/empty string to clear.
+   */
+  setClientDob: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatId: z.number().int(),
+      dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db
+        .update(users)
+        .set({ dob: input.dob })
+        .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, input.chatId)));
+      return { ok: true };
+    }),
+
   getSalonProfile: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const [tenantRow, configRows] = await Promise.all([

@@ -481,9 +481,33 @@ export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client',
 export async function runWorkersAI(ctx, userMessage, lg, role = 'client', history = [], bookingAdjust = null) {
   if (!userMessage || userMessage.length < 2) return null;
 
+  // Sprint 2: per-tenant AI cost cap. If the tenant has exhausted their
+  // monthly budget, skip AI entirely and let the caller fall back to a
+  // scripted reply. Platform admins (no tenantId) bypass.
+  if (ctx?.tenantId) {
+    try {
+      const { checkAiBudget } = await import('./services/aiUsage.js');
+      const budget = await checkAiBudget(ctx);
+      if (!budget.allowed) {
+        console.warn('[ai] tenant', ctx.tenantId, 'over AI budget:', budget.used, '/', budget.cap, 'cents');
+        return null;
+      }
+    } catch (e) {
+      // Non-fatal — if budget check fails, allow the call.
+      console.error('[ai] checkAiBudget error:', e?.message);
+    }
+  }
+
   if (ctx.WORKERS_AI_API_TOKEN && ctx.CLOUDFLARE_ACCOUNT_ID) {
     const rest = await runWorkersAIViaREST(ctx, userMessage, lg, role, history, bookingAdjust);
-    if (rest) return rest;
+    if (rest) {
+      // Best-effort usage record; coarse token estimate from text length.
+      try {
+        const { recordAiUsage } = await import('./services/aiUsage.js');
+        await recordAiUsage(ctx, Math.ceil(userMessage.length / 4), Math.ceil(rest.length / 4), 'rest');
+      } catch { /* non-fatal */ }
+      return rest;
+    }
   }
 
   if (ctx.AI) {

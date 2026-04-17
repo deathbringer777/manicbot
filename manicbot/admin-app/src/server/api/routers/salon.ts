@@ -909,7 +909,12 @@ export const salonRouter = createTRPCRouter({
   }),
 
   createCheckoutSession: publicProcedure
-    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]), locale: z.string().optional() }))
+    .input(z.object({
+      tenantId: z.string(),
+      plan: z.enum(["start", "pro", "max"]),
+      locale: z.string().optional(),
+      billingCycle: z.enum(["monthly", "annual"]).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
@@ -918,14 +923,21 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
       }
 
-      const priceMap: Record<string, string | undefined> = {
+      const cycle = input.billingCycle ?? "monthly";
+      const monthly: Record<string, string | undefined> = {
         start: env.STRIPE_PRICE_START_MONTHLY,
         pro: env.STRIPE_PRICE_PRO_MONTHLY,
         max: env.STRIPE_PRICE_MAX_MONTHLY,
       };
-      const priceId = priceMap[input.plan];
+      const annual: Record<string, string | undefined> = {
+        start: env.STRIPE_PRICE_START_ANNUAL,
+        pro: env.STRIPE_PRICE_PRO_ANNUAL,
+        max: env.STRIPE_PRICE_MAX_ANNUAL,
+      };
+      const priceId = (cycle === "annual" ? annual[input.plan] : monthly[input.plan])
+        ?? monthly[input.plan]; // fallback to monthly if annual unset
       if (!priceId) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: `Price not configured for plan: ${input.plan}` });
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Price not configured for plan: ${input.plan} (${cycle})` });
       }
 
       // Get tenant info for customer name

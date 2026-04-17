@@ -27,6 +27,7 @@ import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/Se
 import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
+import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes";
 
@@ -1606,33 +1607,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── BILLING ── */}
       {tab === "billing" && (
-        <div className="space-y-4">
-          <SectionHeader title={t("salon.billingTitle", lang)} />
-          {billing.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {billing.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
-          {billing.data && (
-            <div className="glass-card rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.plan", lang)}</span>
-                <span className="font-bold text-slate-900 dark:text-white text-lg">{(billing.data.plan ?? "start").toUpperCase()}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.status", lang)}</span>
-                <span className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
-                  billing.data.billingStatus === "active" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
-                }`}>
-                  {t(`billing.${billing.data.billingStatus ?? "trialing"}` as any, lang)}
-                </span>
-              </div>
-              {billing.data.nextPaymentDate && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.nextPayment", lang)}</span>
-                  <span className="text-slate-900 dark:text-white text-sm">{new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString()}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <BillingTabContent tenantId={tenantId} billing={billing} lang={lang} />
       )}
 
       {/* ── REVIEWS ── */}

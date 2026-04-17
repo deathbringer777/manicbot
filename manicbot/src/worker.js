@@ -12,6 +12,7 @@ import { getCtx } from './http/resolveCtx.js';
 import { tryLanding } from './http/landingHttp.js';
 import { tryStripe } from './http/stripeHttp.js';
 import { tryAdminKeyRoutes } from './http/adminKeyHttp.js';
+import { tryLeadRoutes } from './http/leadsHttp.js';
 import { tryGoogle } from './http/googleHttp.js';
 import { tryAdminPanel } from './http/adminPanelHttp.js';
 import { tryCalendar } from './http/calendarHttp.js';
@@ -170,6 +171,9 @@ export default {
     if (res) return res; // Stripe webhook — no browser headers needed
 
     res = await tryAdminKeyRoutes(request, env, url);
+    if (res) return addSecurityHeaders(res);
+
+    res = await tryLeadRoutes(request, env, url);
     if (res) return addSecurityHeaders(res);
 
     // Upload + CDN routes (POST /upload/asset, GET /cdn/*) — before landing proxy.

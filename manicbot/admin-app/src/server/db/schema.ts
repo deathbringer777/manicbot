@@ -35,6 +35,7 @@ export const tenants = sqliteTable("tenants", {
   coverR2Key: text("cover_r2_key"),
   brandPalette: text("brand_palette"),
   isPersonal: integer("is_personal").notNull().default(0),
+  industry: text("industry").notNull().default("beauty"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -152,6 +153,9 @@ export const appointments = sqliteTable("appointments", {
   syncRetryAfter: integer("sync_retry_after"),
   syncLastError: text("sync_last_error"),
   reviewRequested: integer("review_requested").default(0),
+  visitConfirmedAt: integer("visit_confirmed_at"),
+  visitConfirmedBy: text("visit_confirmed_by"),
+  reviewRequestedAt: integer("review_requested_at"),
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_apt_tenant_date").on(t.tenantId, t.date),
@@ -172,6 +176,8 @@ export const services = sqliteTable("services", {
   photos: text("photos"),
   promo: text("promo"),
   sortOrder: integer("sort_order").notNull().default(0),
+  category: text("category"),
+  industrySpecificProps: text("industry_specific_props"),
 });
 
 export const tenantConfig = sqliteTable("tenant_config", {
@@ -371,6 +377,8 @@ export const webUsers = sqliteTable("web_users", {
   lockedUntil: integer("locked_until"),
   lastLoginIp: text("last_login_ip"),
   lastLoginAt: integer("last_login_at"),
+  passwordChangedAt: integer("password_changed_at").notNull().default(0),
+  sessionsInvalidatedAt: integer("sessions_invalidated_at").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [
@@ -444,3 +452,132 @@ export const rateLimits = sqliteTable("rate_limits", {
 }, (t) => [
   index("idx_rl_window").on(t.windowStart),
 ]);
+
+// ─── Sprint 2-5 additions (migration 0029) ──────────────────────────────────
+
+export const aiUsage = sqliteTable("ai_usage", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  usageDate: text("usage_date").notNull(),
+  tokensIn: integer("tokens_in").notNull().default(0),
+  tokensOut: integer("tokens_out").notNull().default(0),
+  modelCalls: integer("model_calls").notNull().default(0),
+  estimatedCostCents: integer("estimated_cost_cents").notNull().default(0),
+}, (t) => [
+  index("idx_ai_usage_tenant_date").on(t.tenantId, t.usageDate),
+]);
+
+export const emailSuppressions = sqliteTable("email_suppressions", {
+  email: text("email").primaryKey(),
+  reason: text("reason").notNull(),
+  source: text("source").notNull().default("resend"),
+  suppressedAt: integer("suppressed_at").notNull(),
+  detail: text("detail"),
+});
+
+export const stripeEvents = sqliteTable("stripe_events", {
+  eventId: text("event_id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: integer("received_at").notNull(),
+  processedAt: integer("processed_at"),
+}, (t) => [
+  index("idx_stripe_events_type").on(t.type, t.receivedAt),
+]);
+
+export const tenantOnboarding = sqliteTable("tenant_onboarding", {
+  tenantId: text("tenant_id").primaryKey(),
+  completedSteps: text("completed_steps").notNull().default("[]"),
+  allCompletedAt: integer("all_completed_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const promoCodes = sqliteTable("promo_codes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  code: text("code").notNull(),
+  kind: text("kind").notNull(),
+  discountType: text("discount_type").notNull(),
+  discountValue: integer("discount_value").notNull(),
+  maxUses: integer("max_uses"),
+  maxUsesPerClient: integer("max_uses_per_client").notNull().default(1),
+  validFrom: integer("valid_from").notNull(),
+  validUntil: integer("valid_until"),
+  minOrderPln: integer("min_order_pln"),
+  clientId: text("client_id"),
+  serviceIds: text("service_ids"),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_promos_tenant_valid").on(t.tenantId, t.validUntil, t.validFrom),
+]);
+
+export const promoCodeUses = sqliteTable("promo_code_uses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  promoCodeId: integer("promo_code_id").notNull(),
+  appointmentId: text("appointment_id").notNull(),
+  clientId: text("client_id").notNull(),
+  usedAt: integer("used_at").notNull(),
+});
+
+export const stampCardConfigs = sqliteTable("stamp_card_configs", {
+  tenantId: text("tenant_id").primaryKey(),
+  enabled: integer("enabled").notNull().default(0),
+  visitsRequired: integer("visits_required").notNull().default(5),
+  rewardType: text("reward_type").notNull().default("free_service"),
+  rewardValue: integer("reward_value"),
+  serviceIds: text("service_ids"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const stampCardProgress = sqliteTable("stamp_card_progress", {
+  tenantId: text("tenant_id").notNull(),
+  clientId: text("client_id").notNull(),
+  visitsCompleted: integer("visits_completed").notNull().default(0),
+  rewardsEarned: integer("rewards_earned").notNull().default(0),
+  rewardsRedeemed: integer("rewards_redeemed").notNull().default(0),
+  lastVisitAt: integer("last_visit_at"),
+});
+
+export const analyticsEvents = sqliteTable("analytics_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id"),
+  userId: text("user_id"),
+  event: text("event").notNull(),
+  properties: text("properties"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_analytics_tenant_event_time").on(t.tenantId, t.event, t.createdAt),
+]);
+
+export const leads = sqliteTable("leads", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  salonType: text("salon_type"),
+  mastersCount: integer("masters_count"),
+  note: text("note"),
+  source: text("source").notNull(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  status: text("status").notNull().default("new"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const emailSubscribers = sqliteTable("email_subscribers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull().unique(),
+  locale: text("locale").notNull().default("ru"),
+  confirmed: integer("confirmed").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const industryConfigs = sqliteTable("industry_configs", {
+  industry: text("industry").primaryKey(),
+  displayName: text("display_name").notNull(),
+  defaultServiceCategories: text("default_service_categories").notNull(),
+  defaultFeatures: text("default_features").notNull(),
+  aiPromptSuffix: text("ai_prompt_suffix"),
+  createdAt: integer("created_at").notNull(),
+});

@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   sync_retry_after INTEGER DEFAULT NULL,
   sync_last_error TEXT DEFAULT NULL,
   review_requested INTEGER DEFAULT 0,
+  visit_confirmed_at INTEGER,
+  visit_confirmed_by TEXT,
+  review_requested_at INTEGER,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);
@@ -119,6 +122,8 @@ CREATE TABLE IF NOT EXISTS services (
   description TEXT,
   photos TEXT,
   promo TEXT,
+  category TEXT,
+  industry_specific_props TEXT,
   PRIMARY KEY (tenant_id, svc_id)
 );
 
@@ -188,6 +193,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   cover_r2_key TEXT,
   brand_palette TEXT,
   is_personal INTEGER NOT NULL DEFAULT 0,
+  industry TEXT NOT NULL DEFAULT 'beauty',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -386,6 +392,8 @@ CREATE TABLE IF NOT EXISTS web_users (
   locked_until INTEGER DEFAULT NULL,
   last_login_ip TEXT,
   last_login_at INTEGER,
+  password_changed_at INTEGER NOT NULL DEFAULT 0,
+  sessions_invalidated_at INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -450,3 +458,132 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   PRIMARY KEY (key, action)
 );
 CREATE INDEX IF NOT EXISTS idx_rl_window ON rate_limits(window_start);
+
+-- ── Sprint 2-5 additions (migration 0029) ────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  usage_date TEXT NOT NULL,
+  tokens_in INTEGER NOT NULL DEFAULT 0,
+  tokens_out INTEGER NOT NULL DEFAULT 0,
+  model_calls INTEGER NOT NULL DEFAULT 0,
+  estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(tenant_id, usage_date)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_tenant_date ON ai_usage(tenant_id, usage_date);
+
+CREATE TABLE IF NOT EXISTS email_suppressions (
+  email TEXT PRIMARY KEY,
+  reason TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'resend',
+  suppressed_at INTEGER NOT NULL,
+  detail TEXT
+);
+
+CREATE TABLE IF NOT EXISTS stripe_events (
+  event_id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  received_at INTEGER NOT NULL,
+  processed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_stripe_events_type ON stripe_events(type, received_at);
+
+CREATE TABLE IF NOT EXISTS tenant_onboarding (
+  tenant_id TEXT PRIMARY KEY,
+  completed_steps TEXT NOT NULL DEFAULT '[]',
+  all_completed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  discount_type TEXT NOT NULL,
+  discount_value INTEGER NOT NULL,
+  max_uses INTEGER,
+  max_uses_per_client INTEGER NOT NULL DEFAULT 1,
+  valid_from INTEGER NOT NULL,
+  valid_until INTEGER,
+  min_order_pln INTEGER,
+  client_id TEXT,
+  service_ids TEXT,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(tenant_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_promos_tenant_valid ON promo_codes(tenant_id, valid_until, valid_from);
+
+CREATE TABLE IF NOT EXISTS promo_code_uses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  promo_code_id INTEGER NOT NULL,
+  appointment_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  used_at INTEGER NOT NULL,
+  UNIQUE(promo_code_id, appointment_id)
+);
+
+CREATE TABLE IF NOT EXISTS stamp_card_configs (
+  tenant_id TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  visits_required INTEGER NOT NULL DEFAULT 5,
+  reward_type TEXT NOT NULL DEFAULT 'free_service',
+  reward_value INTEGER,
+  service_ids TEXT,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS stamp_card_progress (
+  tenant_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  visits_completed INTEGER NOT NULL DEFAULT 0,
+  rewards_earned INTEGER NOT NULL DEFAULT 0,
+  rewards_redeemed INTEGER NOT NULL DEFAULT 0,
+  last_visit_at INTEGER,
+  PRIMARY KEY (tenant_id, client_id)
+);
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT,
+  user_id TEXT,
+  event TEXT NOT NULL,
+  properties TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_tenant_event_time ON analytics_events(tenant_id, event, created_at);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  salon_type TEXT,
+  masters_count INTEGER,
+  note TEXT,
+  source TEXT NOT NULL,
+  ip TEXT,
+  user_agent TEXT,
+  status TEXT NOT NULL DEFAULT 'new',
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS email_subscribers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  locale TEXT NOT NULL DEFAULT 'ru',
+  confirmed INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS industry_configs (
+  industry TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  default_service_categories TEXT NOT NULL,
+  default_features TEXT NOT NULL,
+  ai_prompt_suffix TEXT,
+  created_at INTEGER NOT NULL
+);

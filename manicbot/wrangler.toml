@@ -46,6 +46,20 @@ ADMIN_APP_URL = "https://admin-app-3nc.pages.dev"
 [triggers]
 crons = ["*/15 * * * *"]
 
+# Sprint 2 (#5): Queues fan-out for tenant cron — scales past 100 tenants.
+# Producer: scheduled() lists tenants and enqueues one message each.
+# Consumer: queue() handles one tenant per message with full CPU budget.
+[[queues.producers]]
+queue = "manicbot-tenant-cron"
+binding = "MANICBOT_TENANT_CRON"
+
+[[queues.consumers]]
+queue = "manicbot-tenant-cron"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "manicbot-tenant-cron-dlq"
+
 [[kv_namespaces]]
 binding = "MANICBOT"
 id = "62a7d16805e742918a82184e879537cc"

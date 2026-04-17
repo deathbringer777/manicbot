@@ -242,9 +242,42 @@ export default {
     return addSecurityHeaders(new Response('Not Found', { status: 404 }));
   },
 
+  /**
+   * Cron entry — Cloudflare scheduled trigger every 15 min.
+   *
+   * Sprint 2 (#5 in audit): refactored from sequential for-loop (capped at ~100
+   * tenants by 30s CPU budget) to a Cloudflare Queues fan-out. The producer
+   * (this handler) only LISTS active tenants and enqueues one message each —
+   * fast even for 5000+ tenants. The consumer (`queue` handler below) gets a
+   * fresh CPU budget per batch.
+   *
+   * Falls back to legacy single-bot cron if MANICBOT_TENANT_CRON binding is
+   * absent (local dev / tests).
+   */
   async scheduled(event, env, _scheduledCtx) {
     try {
       const ec = envCtx(env);
+      // Queues fan-out path
+      if (ec.db && env.MANICBOT_TENANT_CRON?.sendBatch) {
+        const tenantIds = await listTenantIds(ec);
+        if (tenantIds.length > 0) {
+          const batchSize = 100;
+          const scheduledAt = event.scheduledTime || Date.now();
+          for (let i = 0; i < tenantIds.length; i += batchSize) {
+            const batch = tenantIds.slice(i, i + batchSize).map(tenantId => ({
+              body: { tenantId, scheduledAt },
+            }));
+            await env.MANICBOT_TENANT_CRON.sendBatch(batch);
+          }
+          void logEvent(ec, 'cron.scheduled.enqueued', {
+            level: 'info',
+            message: `Enqueued ${tenantIds.length} tenant cron jobs`,
+            data: { tenantCount: tenantIds.length, scheduledAt },
+          });
+          return;
+        }
+      }
+      // Legacy in-process path (no Queue binding OR no D1 tenants)
       if (ec.db) {
         const tenantIds = await listTenantIds(ec);
         if (tenantIds.length > 0) {
@@ -259,8 +292,7 @@ export default {
           return;
         }
       }
-      const ctx =
-        env.BOT_TOKEN && env.WEBHOOK_SECRET ? buildLegacyCtx(env) : buildCtx(env);
+      const ctx = env.BOT_TOKEN && env.WEBHOOK_SECRET ? buildLegacyCtx(env) : buildCtx(env);
       _scheduledCtx.waitUntil(handleCron(ctx));
     } catch (e) {
       console.error('Cron init error:', {
@@ -268,6 +300,45 @@ export default {
         stack: e?.stack || null,
       });
       void logEvent(envCtx(env), 'error.cron', { level: 'error', message: e?.message ?? 'Cron init error', data: { stack: e?.stack?.slice(0, 300) } });
+    }
+  },
+
+  /**
+   * Queue consumer — processes one tenant's cron per message with full CPU budget.
+   * Receives batches of {tenantId, scheduledAt}. On error, message.retry()
+   * with backoff; after 3 retries the message goes to the DLQ.
+   */
+  async queue(batch, env, _ctx) {
+    const ec = envCtx(env);
+    for (const msg of batch.messages) {
+      const { tenantId, scheduledAt } = msg.body || {};
+      if (!tenantId) {
+        msg.ack();
+        continue;
+      }
+      try {
+        const botIds = await getBotIdsByTenantId(ec, tenantId);
+        if (botIds.length === 0) {
+          msg.ack();
+          continue;
+        }
+        const resolved = await resolveTenantFromBotId(ec, botIds[0], env.BOT_ENCRYPTION_KEY || null);
+        if (!resolved) {
+          msg.ack();
+          continue;
+        }
+        const ctx = buildTenantCtx(env, resolved);
+        await handleCron(ctx);
+        msg.ack();
+      } catch (e) {
+        void logEvent(ec, 'cron.tenant.failed', {
+          level: 'error',
+          message: `Cron failed for tenant ${tenantId}: ${e?.message ?? 'unknown'}`,
+          data: { tenantId, scheduledAt, attempts: msg.attempts, error: e?.message?.slice(0, 200) },
+        });
+        // Retry up to 3 times (configured in wrangler.toml max_retries)
+        msg.retry({ delaySeconds: Math.min(60 * msg.attempts, 300) });
+      }
     }
   },
 };

@@ -258,6 +258,30 @@ async function refreshAccessToken(ctx, integration) {
     if (res.ok && data.access_token) return data.access_token;
     // 4xx = permanent (invalid_grant, etc.) — fail immediately
     if (res.status < 500) {
+      // Sprint 2: invalid_grant = user revoked access or refresh token rotated.
+      // Mark integration disabled so future cron runs skip it.
+      if (data.error === 'invalid_grant') {
+        try {
+          const { dbRun } = await import('../utils/db.js');
+          await dbRun(ctx,
+            `UPDATE google_integrations
+             SET sync_enabled = 0, last_sync_status = 'disabled_invalid_grant',
+                 last_sync_error = 'Google refresh token invalid — user must re-authorize',
+                 updated_at = ?
+             WHERE id = ?`,
+            Math.floor(Date.now() / 1000), integration.id,
+          );
+          const { logEvent } = await import('../utils/events.js');
+          await logEvent(ctx, 'google.invalid_grant', {
+            level: 'warn',
+            tenantId: integration.tenantId,
+            message: 'Google integration disabled — refresh token invalid',
+            data: { integrationId: integration.id, scope: integration.scope },
+          });
+        } catch (e) {
+          console.error('[google] failed to mark integration disabled:', e?.message);
+        }
+      }
       throw new Error(data.error_description || data.error || 'Failed to refresh Google access token');
     }
     // 5xx = transient — retry

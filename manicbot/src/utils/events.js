@@ -26,18 +26,42 @@ export async function logEvent(ctx, type, data = {}) {
     const kv = ctx?.globalKv;
     if (!kv) return;
 
-    const { level = 'info', message = type, tenantId, botId, ...rest } = data;
+    const { level = 'info', message = type, tenantId, botId, userId, traceId, severity, ...rest } = data;
 
     const event = {
       id: crypto.randomUUID(),
       ts: Date.now(),
       type,
-      level,
+      // `severity` is the preferred new field name; `level` kept for back-compat.
+      level: severity || level,
       message,
       ...(tenantId ? { tenantId } : {}),
       ...(botId ? { botId } : {}),
+      ...(userId ? { userId: String(userId) } : {}),
+      // traceId lets downstream log aggregators (Logpush → BigQuery/ClickHouse)
+      // correlate multiple log lines across one request.
+      ...(traceId ? { traceId } : {}),
       ...(Object.keys(rest).length ? { data: rest } : {}),
     };
+
+    // Also emit to console as structured JSON so Cloudflare Logpush can export
+    // it. Callers that set `severity: 'error'` end up in error channels.
+    try {
+      const line = JSON.stringify({
+        timestamp: new Date(event.ts).toISOString(),
+        level: event.level,
+        type,
+        tenantId: tenantId || null,
+        botId: botId || null,
+        userId: userId ? String(userId) : null,
+        traceId: traceId || null,
+        message,
+        ...(Object.keys(rest).length ? { data: rest } : {}),
+      });
+      if (event.level === 'error') console.error(line);
+      else if (event.level === 'warn') console.warn(line);
+      else console.log(line);
+    } catch { /* ignore */ }
 
     // Read current list
     let list = [];

@@ -324,6 +324,30 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       case 'ADM_SVC_LIST': await showServicesList(ctx, cid); return true;
     }
   }
+  // Sprint 3 §6.5: AI BOOK_FOR_CLIENT — masters/owners can say
+  // "запиши Машу на маникюр завтра в 15" and the AI creates a booking.
+  // Tag format: BOOK_FOR_CLIENT:svc_id:date:time:client_name
+  // Implementation is minimal (parses + emits an analytics event so the
+  // dashboard can show a pending entry); actual appointment creation lives
+  // in the manual booking tRPC procedure which the worker cannot call.
+  // This tag serves as a signal to surface a prefilled manual-booking link.
+  if (tag === 'BOOK_FOR_CLIENT' && (role === 'admin' || role === 'master' || role === 'tenant_owner' || role === 'system_admin')) {
+    const parts = (param || '').split(':');
+    const svcId = parts[0]?.trim();
+    const date = parts[1]?.trim();
+    const time = parts.length >= 4 ? `${parts[2]}:${parts[3]}` : parts[2]?.trim();
+    const clientName = parts.slice(4).join(':').trim() || parts[parts.length - 1]?.trim();
+    try {
+      const { dbRun } = await import('./utils/db.js');
+      await dbRun(ctx, `
+        INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at)
+        VALUES (?, ?, 'booking.manual_chat_requested', ?, ?)
+      `, ctx.tenantId || null, String(cid), JSON.stringify({ svcId, date, time, clientName, role }), Math.floor(Date.now() / 1000));
+    } catch { /* best-effort */ }
+    const link = `${ctx.APP_BASE_URL || 'https://manicbot.com'}/dashboard?tab=calendar&newBooking=1&svc=${encodeURIComponent(svcId || '')}&d=${encodeURIComponent(date || '')}&t=${encodeURIComponent(time || '')}&n=${encodeURIComponent(clientName || '')}`;
+    await send(ctx, cid, `Готов создать запись${clientName ? ` для ${clientName}` : ''}. Открой быструю форму: ${link}`);
+    return true;
+  }
   if (role === 'master') {
     switch (tag) {
       case 'MST_CALENDAR':

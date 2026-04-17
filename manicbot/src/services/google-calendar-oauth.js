@@ -18,7 +18,14 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const GCAL_API = 'https://www.googleapis.com/calendar/v3';
-const OAUTH_SCOPE = 'https://www.googleapis.com/auth/calendar';
+// Sprint 5: scope minimization. 'calendar' grants full read/write/delete on ALL
+// calendars; we only need to read busy blocks + read-write our own events.
+// Google will ask users to re-authorize with the narrower scope on next connect;
+// existing integrations with the legacy 'calendar' scope continue to work.
+const OAUTH_SCOPE = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
+].join(' ');
 const OAUTH_SESSION_PREFIX = 'gcal:oauth:';
 const SYNC_HORIZON_DAYS = 90;
 const WATCH_RENEW_WINDOW_MS = 24 * 3600 * 1000;

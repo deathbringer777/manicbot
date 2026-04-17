@@ -2,7 +2,7 @@
  * Stripe API service (fetch-based, no SDK). Used for customers, checkout, portal.
  */
 
-import { getStripeConfig, PLANS } from './config.js';
+import { getStripeConfig, PLANS, resolvePriceId } from './config.js';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 const STRIPE_TIMEOUT_MS = 8000;
@@ -57,16 +57,17 @@ export async function createStripeCustomer(secretKey, opts = {}) {
 }
 
 /**
- * Create Checkout Session for subscription (monthly).
+ * Create Checkout Session for subscription (monthly or annual).
  * @param {object} env - Worker env
- * @param {object} opts - { tenantId, customerId?, customer_email?, plan, successUrl, cancelUrl }
+ * @param {object} opts - { tenantId, customerId?, customer_email?, plan, billingCycle?, successUrl, cancelUrl, allowPromotionCodes? }
  * @returns {{ url?: string, sessionId?: string, error?: string }}
  */
 export async function createCheckoutSession(env, opts) {
   const cfg = getStripeConfig(env);
   if (!cfg.ok) return { error: cfg.error };
-  const priceId = cfg.priceIds?.[opts.plan];
-  if (!priceId) return { error: `Plan ${opts.plan} has no Stripe price configured` };
+  const cycle = opts.billingCycle === 'annual' ? 'annual' : 'monthly';
+  const priceId = resolvePriceId(cfg, opts.plan, cycle);
+  if (!priceId) return { error: `Plan ${opts.plan} (${cycle}) has no Stripe price configured` };
   const successUrl = opts.successUrl || `${cfg.baseUrl}/stripe/success?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = opts.cancelUrl || (cfg.baseUrl ? `${cfg.baseUrl}/` : 'https://example.com');
 
@@ -78,7 +79,13 @@ export async function createCheckoutSession(env, opts) {
     'cancel_url': cancelUrl,
     'client_reference_id': opts.tenantId || '',
     'metadata[tenantId]': opts.tenantId || '',
+    'metadata[billingCycle]': cycle,
+    'metadata[plan]': opts.plan || '',
     'subscription_data[metadata][tenantId]': opts.tenantId || '',
+    'subscription_data[metadata][plan]': opts.plan || '',
+    'subscription_data[metadata][billingCycle]': cycle,
+    // Enable Stripe-hosted promotion code redemption.
+    'allow_promotion_codes': opts.allowPromotionCodes === false ? 'false' : 'true',
   };
   if (opts.customerId) {
     params.customer = opts.customerId;

@@ -46,6 +46,11 @@ jobs:
         run: npm run check-schema
         working-directory: manicbot
 
+      - name: Security audit (worker deps)
+        run: npm audit --audit-level=high --production || echo "npm audit found high issues — review before next release"
+        working-directory: manicbot
+        continue-on-error: true
+
       - name: Admin app — install
         run: npm ci --legacy-peer-deps
         working-directory: manicbot/admin-app
@@ -57,6 +62,11 @@ jobs:
       - name: Admin app — test
         run: npm test
         working-directory: manicbot/admin-app
+
+      - name: Admin app — security audit
+        run: npm audit --audit-level=high --production || echo "admin-app npm audit found high issues — review before next release"
+        working-directory: manicbot/admin-app
+        continue-on-error: true
 
   # ─── Bot: deploy to Cloudflare Workers ──────────────────────
   deploy-bot:

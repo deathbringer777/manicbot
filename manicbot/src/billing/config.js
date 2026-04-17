@@ -50,13 +50,34 @@ export function getStripeConfig(env) {
     [PLANS.PRO]: env.STRIPE_PRICE_PRO_MONTHLY || null,
     [PLANS.MAX]: env.STRIPE_PRICE_MAX_MONTHLY || null,
   };
+  // Sprint 4: annual billing (20% discount reflected in the Stripe Price itself).
+  // Set STRIPE_PRICE_*_ANNUAL via `wrangler secret put` to enable the toggle
+  // on landing + admin-app checkout. If unset, monthly is the only option.
+  const priceIdsAnnual = {
+    [PLANS.START]: env.STRIPE_PRICE_START_ANNUAL || null,
+    [PLANS.PRO]: env.STRIPE_PRICE_PRO_ANNUAL || null,
+    [PLANS.MAX]: env.STRIPE_PRICE_MAX_ANNUAL || null,
+  };
 
   return {
     ok: true,
     secretKey,
     webhookSecret,
     priceIds,
+    priceIdsAnnual,
     baseUrl: baseUrl || undefined,
   };
+}
+
+/**
+ * Resolve the price ID for a plan + billing cycle.
+ * @param {{ priceIds: object, priceIdsAnnual: object }} cfg
+ * @param {'start'|'pro'|'max'} plan
+ * @param {'monthly'|'annual'} [cycle='monthly']
+ * @returns {string|null}
+ */
+export function resolvePriceId(cfg, plan, cycle = 'monthly') {
+  if (cycle === 'annual') return cfg?.priceIdsAnnual?.[plan] || cfg?.priceIds?.[plan] || null;
+  return cfg?.priceIds?.[plan] || null;
 }
 

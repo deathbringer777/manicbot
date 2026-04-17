@@ -1,4 +1,4 @@
-import { timingSafeEqual, checkAdmin } from '../utils/security.js';
+import { timingSafeEqual, checkAdmin, requireAdmin } from '../utils/security.js';
 import { dbAll } from '../utils/db.js';
 import { escHtml } from '../utils/helpers.js';
 import { getAdminAllApts } from '../services/appointments.js';
@@ -70,7 +70,9 @@ export async function tryAdminPanel(request, ctx, url, ADMIN_401) {
   }
 
   if (url.pathname === '/admin/billing') {
-    if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
+    // #S10: rate-limited admin auth (per-credential, not per-IP).
+    const authResp = await requireAdmin(request, ctx);
+    if (authResp) return authResp;
     if (!ctx.db) return new Response('DB not bound', { status: 500 });
     const tenantIds = await listTenantIds(ctx);
     const tenants = await Promise.all(tenantIds.map(id => getTenant(ctx, id)));
@@ -103,7 +105,9 @@ tr:hover td{background:#fdf2f8}
   }
 
   if (url.pathname === '/admin') {
-    if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
+    // #S10: rate-limited admin auth.
+    const authResp = await requireAdmin(request, ctx);
+    if (authResp) return authResp;
     if (!ctx.db) return new Response('DB not bound', { status: 500 });
     await initServices(ctx);
 
@@ -240,7 +244,9 @@ tr:hover td{background:#fdf2f8}
   }
 
   if (url.pathname.startsWith('/admin/export/')) {
-    if (!checkAdmin(request, ctx.ADMIN_KEY)) return ADMIN_401;
+    // #S10: rate-limited admin auth.
+    const authResp = await requireAdmin(request, ctx);
+    if (authResp) return authResp;
     await initServices(ctx);
     const file = url.pathname.split('/').pop();
 

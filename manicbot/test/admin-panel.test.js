@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../src/utils/security.js', () => ({
   timingSafeEqual: vi.fn(() => true),
   checkAdmin: vi.fn(() => true),
+  // requireAdmin returns null on success (auth ok), Response on failure
+  requireAdmin: vi.fn(async () => null),
 }));
 
 vi.mock('../src/services/appointments.js', () => ({

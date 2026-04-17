@@ -24,8 +24,11 @@ import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
 import { SERVICE_TEMPLATES, type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
+import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
+import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
+import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 const NAIL_EMOJIS = ['💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧','🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫','🎨','🌷','🪸','🫐','🍒'];
@@ -1243,7 +1246,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -1326,12 +1329,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { key: "masters", label: t("salon.masters", lang) },
     { key: "clients", label: t("salon.clients", lang) },
     { key: "analytics", label: "📊 Аналитика" },
+    { key: "promo_codes", label: "🎟 Промокоды" },
     { key: "billing", label: t("salon.billing", lang) },
     { key: "channels", label: "Каналы" },
     { key: "reviews", label: "Отзывы" },
     { key: "public_profile", label: "🌐 Профиль" },
     { key: "settings", label: t("common.settings", lang) },
   ];
+
+  // Sprint 3/4 — manual booking modal state
+  const [manualBookingOpen, setManualBookingOpen] = useState(false);
 
   return (
     <Shell navItems={salonNavItems} title={t("salon.title", lang)} subtitle="ManicBot Salon">
@@ -1349,9 +1356,35 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         ))}
       </div>}
 
+      {/* Floating "+ Новая запись" button — visible on Overview / Appointments / Clients */}
+      {(tab === "overview" || tab === "appointments" || tab === "clients") && (
+        <button
+          type="button"
+          onClick={() => setManualBookingOpen(true)}
+          className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(124,58,237,0.55)] transition hover:scale-105 active:scale-95 sm:bottom-6 sm:right-6 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
+          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+          aria-label="Новая запись"
+        >
+          <Plus className="h-6 w-6 sm:hidden" />
+          <span className="hidden sm:inline">+ Новая запись</span>
+        </button>
+      )}
+
+      {manualBookingOpen && (
+        <ManualBookingModal
+          tenantId={tenantId}
+          onClose={() => setManualBookingOpen(false)}
+          onCreated={() => {
+            apts.refetch();
+            todayApts.refetch();
+          }}
+        />
+      )}
+
       {/* ── OVERVIEW ── */}
       {tab === "overview" && (
         <div className="space-y-4">
+          <OnboardingChecklist tenantId={tenantId} />
           {overview.isLoading ? (
             <div className="grid grid-cols-2 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
           ) : overview.isError ? (
@@ -1663,6 +1696,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           slug={profile.data?.slug ?? null}
         />
       )}
+
+      {/* ── PROMO CODES ── */}
+      {tab === "promo_codes" && <PromoCodesTab tenantId={tenantId} />}
 
       {/* ── CHANNELS ── */}
       {tab === "channels" && <SalonChannelsTab tenantId={tenantId} slug={profile.data?.slug ?? null} publicActive={!!profile.data?.publicActive} />}

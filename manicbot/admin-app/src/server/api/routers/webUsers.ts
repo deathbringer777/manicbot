@@ -461,6 +461,9 @@ export const webUsersRouter = createTRPCRouter({
           passwordHash: newHash,
           passwordResetToken: null,
           passwordResetExpiresAt: null,
+          // #S8: bump password_changed_at so existing JWTs are rejected on next
+          // session check (NextAuth callback compares stored value to token).
+          passwordChangedAt: now,
           updatedAt: now,
         })
         .where(eq(webUsers.id, user.id));
@@ -673,7 +676,12 @@ export const webUsersRouter = createTRPCRouter({
       const now = Math.floor(Date.now() / 1000);
       await ctx.db
         .update(webUsers)
-        .set({ passwordHash: newHash, updatedAt: now })
+        .set({
+          passwordHash: newHash,
+          // #S8: bump password_changed_at so existing JWTs are rejected.
+          passwordChangedAt: now,
+          updatedAt: now,
+        })
         .where(eq(webUsers.email, ctx.webUser.email));
 
       return { success: true };

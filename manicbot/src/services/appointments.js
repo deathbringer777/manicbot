@@ -299,6 +299,46 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
   return a;
 }
 
+/**
+ * Check whether a candidate booking would conflict with existing appointments.
+ * Extracted from getSlots() logic (Sprint 3 Section 9) so manual booking from
+ * dashboard + AI BOOK_FOR_CLIENT action can share the same check.
+ *
+ * Back-to-back appointments are NOT considered a conflict (strict overlap).
+ * Cancelled appointments do not block.
+ *
+ * @param {object} ctx - tenant ctx with svc + db
+ * @param {string|number|null} masterId
+ * @param {string} date - YYYY-MM-DD
+ * @param {string} time - HH:MM
+ * @param {string} svcId
+ * @returns {Promise<{conflict: boolean, withAppointmentId?: string}>}
+ */
+export async function checkSlotConflict(ctx, masterId, date, time, svcId) {
+  const svc = ctx.svc?.find(s => s.id === svcId);
+  if (!svc) return { conflict: false };
+  const [h, m] = String(time).split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return { conflict: false };
+  const candStart = h + m / 60;
+  const candEnd = candStart + svc.dur / 60;
+
+  const booked = await loadDayAppointments(ctx, date, masterId);
+  const svcMap = new Map(ctx.svc.map(s => [s.id, s]));
+  for (const a of booked) {
+    if (a.cx || a.cancelled) continue;
+    const bs = svcMap.get(a.svcId);
+    if (!bs) continue;
+    const [ah, am] = String(a.time).split(':').map(Number);
+    const as = ah + am / 60;
+    const ae = as + bs.dur / 60;
+    // Strict overlap: candidate starts before booked ends AND candidate ends after booked starts
+    if (candStart < ae && candEnd > as) {
+      return { conflict: true, withAppointmentId: a.id };
+    }
+  }
+  return { conflict: false };
+}
+
 export async function getSlots(ctx, date, svcId, masterId = null) {
   const svc = ctx.svc.find(s => s.id === svcId);
   if (!svc) return [];

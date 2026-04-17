@@ -21,6 +21,8 @@ import { webUsersRouter } from "~/server/api/routers/webUsers";
 import { reviewsRouter } from "~/server/api/routers/reviews";
 import { analyticsRouter } from "~/server/api/routers/analytics";
 import { roleChangeRequestsRouter } from "~/server/api/routers/roleChangeRequests";
+import { onboardingRouter } from "~/server/api/routers/onboarding";
+import { promoCodesRouter } from "~/server/api/routers/promoCodes";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -45,6 +47,8 @@ export const appRouter = createTRPCRouter({
   reviews: reviewsRouter,
   analytics: analyticsRouter,
   roleChangeRequests: roleChangeRequestsRouter,
+  onboarding: onboardingRouter,
+  promoCodes: promoCodesRouter,
 });
 
 export type AppRouter = typeof appRouter;

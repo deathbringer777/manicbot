@@ -43,7 +43,13 @@ declare module "next-auth" {
 }
 
 /** Local type helper for JWT token with custom fields (next-auth v5 beta doesn't export JWT for augmentation). */
-type ExtendedJWT = { tenantId?: string | null; webRole?: string; emailVerified?: boolean };
+type ExtendedJWT = {
+  tenantId?: string | null;
+  webRole?: string;
+  emailVerified?: boolean;
+  /** #S8: snapshot of web_users.password_changed_at at JWT issue time. */
+  passwordChangedAt?: number;
+};
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -235,13 +241,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         t.tenantId = user.tenantId ?? null;
         t.webRole = user.webRole ?? "tenant_owner";
         t.emailVerified = user.isEmailVerified ?? true;
+        // #S8: snapshot password_changed_at so a password change / reset
+        // issued AFTER this JWT will cause the session callback to reject it.
+        try {
+          if (user.id) {
+            const db = getDb();
+            const rows = await db
+              .select({ pca: webUsers.passwordChangedAt })
+              .from(webUsers)
+              .where(eq(webUsers.id, user.id))
+              .limit(1);
+            t.passwordChangedAt = rows[0]?.pca ?? 0;
+          } else {
+            t.passwordChangedAt = 0;
+          }
+        } catch {
+          t.passwordChangedAt = 0;
+        }
       } else if (t.sub) {
-        // Always re-check DB for role, tenant, and emailVerified —
-        // ensures role demotions take effect immediately, not after 8h JWT expiry.
+        // Always re-check DB for role, tenant, emailVerified, AND passwordChangedAt —
+        // ensures role demotions + password changes take effect immediately.
         try {
           const db = getDb();
           const rows = await db
-            .select({ tenantId: webUsers.tenantId, emailVerified: webUsers.emailVerified, role: webUsers.role })
+            .select({
+              tenantId: webUsers.tenantId,
+              emailVerified: webUsers.emailVerified,
+              role: webUsers.role,
+              passwordChangedAt: webUsers.passwordChangedAt,
+              sessionsInvalidatedAt: webUsers.sessionsInvalidatedAt,
+            })
             .from(webUsers)
             .where(eq(webUsers.id, t.sub))
             .limit(1);
@@ -249,13 +278,30 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             if (rows[0].tenantId) t.tenantId = rows[0].tenantId;
             t.emailVerified = !!rows[0].emailVerified;
             t.webRole = rows[0].role;
+            // #S8: if password was changed AFTER this JWT was issued,
+            // or admin bumped sessionsInvalidatedAt past the token's iat,
+            // the session callback will return null and force re-login.
+            const jwtIat = typeof token.iat === "number" ? token.iat : 0;
+            const storedPca = rows[0].passwordChangedAt ?? 0;
+            const storedSia = rows[0].sessionsInvalidatedAt ?? 0;
+            if (storedPca > jwtIat || storedSia > jwtIat) {
+              // Mark token as stale — session callback checks this below
+              (t as { stale?: boolean }).stale = true;
+            }
+            t.passwordChangedAt = storedPca;
           }
         } catch { /* non-critical — next request will retry */ }
       }
       return token;
     },
     session({ session, token }) {
-      const t = token as typeof token & ExtendedJWT;
+      const t = token as typeof token & ExtendedJWT & { stale?: boolean };
+      // #S8: if JWT was marked stale by the jwt callback (password changed /
+      // sessions invalidated after token issue), reject this session so the
+      // client is forced to re-login.
+      if (t.stale) {
+        return null as unknown as typeof session;
+      }
       session.user.id = token.sub ?? "";
       session.user.tenantId = t.tenantId ?? null;
       session.user.webRole = t.webRole ?? "tenant_owner";

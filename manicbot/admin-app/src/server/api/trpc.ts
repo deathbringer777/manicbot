@@ -157,6 +157,42 @@ export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({
  * Protected (authenticated) procedure for Bot Admins
  * Accepts both Telegram Mini App auth AND web session (email/password login).
  */
+/**
+ * Sprint 3: role-scoped procedure builders. These are the new canonical
+ * way to gate tRPC endpoints. Existing routers still use `publicProcedure` +
+ * `assertTenantOwner()` which is equivalent; migration to these builders is
+ * deferred to a follow-up PR to keep this change review-sized.
+ */
+export const tenantOwnerProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(async ({ ctx, next }) => {
+    const role = ctx.webUser?.webRole;
+    if (role !== "tenant_owner" && role !== "system_admin") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "tenant_owner or system_admin required" });
+    }
+    return next({ ctx });
+  });
+
+export const masterProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(async ({ ctx, next }) => {
+    const role = ctx.webUser?.webRole;
+    if (role !== "master" && role !== "tenant_owner" && role !== "system_admin") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "master/tenant_owner/system_admin required" });
+    }
+    return next({ ctx });
+  });
+
+export const systemAdminProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(async ({ ctx, next }) => {
+    const role = ctx.webUser?.webRole;
+    if (role !== "system_admin") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "system_admin required" });
+    }
+    return next({ ctx });
+  });
+
 /** God Mode API — only platform owner (Telegram ADMIN_CHAT_ID or web session with role system_admin). */
 export const adminProcedure = t.procedure
   .use(timingMiddleware)

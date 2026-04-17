@@ -1,5 +1,10 @@
 import { randomId, encryptToken, decryptToken } from '../utils/security.js';
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
+
+// #S6: HKDF subkey label for Google OAuth refresh tokens.
+// Distinct trust domain from channel/bot tokens — leak in one shouldn't
+// compromise the others.
+const GOOGLE_REFRESH_LABEL = 'google-refresh-v1';
 import { warsawToUTC } from '../utils/date.js';
 import { getMaster, saveMaster } from './users.js';
 import {
@@ -223,7 +228,7 @@ async function exchangeCodeForTokens(ctx, code) {
 async function refreshAccessToken(ctx, integration) {
   const key = getTokenEncryptionKey(ctx);
   const refreshToken = integration.refreshTokenEnc && key
-    ? await decryptToken(integration.refreshTokenEnc, key)
+    ? await decryptToken(integration.refreshTokenEnc, key, GOOGLE_REFRESH_LABEL)
     : null;
   if (!refreshToken) throw new Error('Missing Google refresh token');
 
@@ -718,7 +723,7 @@ export async function handleGoogleCallback(ctx, url) {
   }
   const key = getTokenEncryptionKey(ctx);
   const refreshTokenEnc = tokens.refresh_token && key
-    ? await encryptToken(tokens.refresh_token, key)
+    ? await encryptToken(tokens.refresh_token, key, GOOGLE_REFRESH_LABEL)
     : null;
   if (!refreshTokenEnc) {
     return new Response('Unable to securely store Google refresh token. Configure GOOGLE_TOKEN_ENCRYPTION_KEY or BOT_ENCRYPTION_KEY.', { status: 500 });
@@ -1095,7 +1100,7 @@ export async function revokeGoogleIntegration(ctx, { scope = 'tenant', masterCha
   try {
     const key = getTokenEncryptionKey(ctx);
     const refreshToken = integration.refreshTokenEnc && key
-      ? await decryptToken(integration.refreshTokenEnc, key)
+      ? await decryptToken(integration.refreshTokenEnc, key, GOOGLE_REFRESH_LABEL)
       : null;
     if (refreshToken) {
       await fetch(`${GOOGLE_REVOKE_URL}?token=${encodeURIComponent(refreshToken)}`, { method: 'POST' }).catch(() => {});

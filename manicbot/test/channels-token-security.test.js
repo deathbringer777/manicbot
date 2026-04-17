@@ -241,8 +241,10 @@ describe('createChannelConfig security enforcement', () => {
     ).bind(id).first();
     expect(row).not.toBeNull();
     expect(row.token_encrypted).not.toBe(plain);
-    // The stored value should be decryptable
-    const decrypted = await decryptToken(row.token_encrypted, VALID_ENC_KEY);
+    // The stored value should be decryptable. After #S6 the new format is v1$...
+    // and decryption requires the matching HKDF subkey label.
+    expect(row.token_encrypted).toMatch(/^v1\$/);
+    const decrypted = await decryptToken(row.token_encrypted, VALID_ENC_KEY, 'channel-token-v1');
     expect(decrypted).toBe(plain);
   });
 

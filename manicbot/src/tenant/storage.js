@@ -6,6 +6,11 @@
  */
 
 import { encryptToken, decryptToken } from '../utils/security.js';
+
+// #S6: HKDF subkey label for Telegram bot tokens stored in KV.
+// Distinct from 'channel-token-v1' (D1 channel_configs) so a leaked label
+// derivation in one storage tier doesn't compromise the other.
+const BOT_TOKEN_LABEL = 'bot-token-v1';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { SALON, ADDRESS, PHONE, MAPS_URL, INSTAGRAM_URL, WORK, DEFAULT_SVC, DEFAULT_PHOTOS, DEFAULT_ABOUT_PHOTOS } from '../config.js';
@@ -139,7 +144,7 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
     const kv = ctx.kv || ctx.globalKv;
     if (data.botToken && kv) {
       if (encryptionKey) {
-        const encrypted = await encryptToken(data.botToken, encryptionKey);
+        const encrypted = await encryptToken(data.botToken, encryptionKey, BOT_TOKEN_LABEL);
         if (!encrypted) {
           console.error('[putBot] encryption failed — refusing to store plaintext bot token');
           return false;
@@ -178,7 +183,7 @@ export async function getBotToken(ctx, botId, encryptionKey = null) {
     if (!raw) return null;
     // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.
     if (encryptionKey && !raw.includes(':')) {
-      return await decryptToken(raw, encryptionKey);
+      return await decryptToken(raw, encryptionKey, BOT_TOKEN_LABEL);
     }
     return raw;
   } catch {

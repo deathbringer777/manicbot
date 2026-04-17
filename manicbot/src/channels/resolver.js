@@ -11,6 +11,9 @@ import { decryptToken } from '../utils/security.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
 import { getTenant, getBot, getBotIdsByTenantId, getBotToken } from '../tenant/storage.js';
 
+// #S6: must match the label used in token-manager.js so encrypt/decrypt agree.
+const CHANNEL_TOKEN_LABEL = 'channel-token-v1';
+
 /** @param {unknown} v */
 function channelIdString(v) {
   if (v == null || v === '') return null;
@@ -169,12 +172,12 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
   let token = null;
   const rawTok = row.token_encrypted;
   if (rawTok) {
-    if (encKey) token = await decryptToken(rawTok, encKey);
+    if (encKey) token = await decryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
     if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) {
       if (encKey) {
         // Encryption key is set but token is plaintext — auto-encrypt it in place and use it
         console.warn('[resolver] Auto-encrypting plaintext Meta token for tenant:', tenantId);
-        const encrypted = await encryptToken(rawTok, encKey);
+        const encrypted = await encryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
         if (encrypted) {
           await dbRun(ctx,
             'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ?',

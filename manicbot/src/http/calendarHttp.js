@@ -1,29 +1,28 @@
 import { getAptByIdGlobal } from '../services/appointments.js';
 import { getLang } from '../services/chat.js';
-import { makeICS } from '../utils/ics.js';
+import { makeICS, verifyCalendarSig as verifyCalendarSigSubkey } from '../utils/ics.js';
 import { initServices } from '../services/services.js';
 
 const ICS_LINK_MAX_AGE_SEC = 48 * 3600; // 48 hours (reduced from 7 days)
 const ICS_HMAC_MIN_KEY_LEN = 32;
 
+/**
+ * Verify a calendar link signature with timestamp freshness check.
+ * Delegates the actual HMAC math to ics.js (which handles HKDF subkey + legacy
+ * raw-key fallback during the rotation grace window). This wrapper layers in
+ * the timestamp age check, which is a presentation-tier policy not a crypto one.
+ */
 async function verifyCalendarSig(aptId, sig, secret, ts) {
-  // Refuse to validate without a strong key — prevents HMAC over empty/short secret
-  // which would allow forging valid signatures for any appointment ID.
   if (!sig || !secret || secret.length < ICS_HMAC_MIN_KEY_LEN) return false;
-  // If timestamp provided, reject links older than max age
   if (ts) {
     const age = Date.now() / 1000 - Number(ts);
     if (!Number.isFinite(age) || age > ICS_LINK_MAX_AGE_SEC || age < -300) return false;
+  } else {
+    // Old links without ts: refuse — used to be allowed for back-compat with
+    // pre-timestamp links, but the link generator has emitted ts since 2025-Q3.
+    return false;
   }
-  const payload = ts ? `${aptId}:${ts}` : aptId; // backward compat: old links have no ts
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
-  const expected = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
-  if (sig.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
+  return verifyCalendarSigSubkey(secret, aptId, ts, sig);
 }
 
 

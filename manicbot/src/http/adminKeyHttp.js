@@ -189,7 +189,8 @@ export async function tryAdminKeyRoutes(request, env, url) {
       const ec = envCtx(env);
       const { dbRun } = await import('../utils/db.js');
       const { encryptToken } = await import('../utils/security.js');
-      const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY);
+      // #S6: same label as token-manager.js — IG tokens go in channel_configs.
+      const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY, 'channel-token-v1');
       if (!encrypted) {
         console.error('[admin/ig-token] Failed to encrypt IG token for tenant:', tenantId);
         return Response.json({ error: 'Token encryption failed' }, { status: 500 });

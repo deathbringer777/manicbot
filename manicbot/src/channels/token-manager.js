@@ -9,6 +9,10 @@ import { encryptToken, decryptToken, randomId } from '../utils/security.js';
 import { dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 
+// #S6: HKDF subkey label for channel tokens (TG/IG/WA bot access tokens).
+// Separates this trust domain from google-refresh, calendar-hmac, etc.
+const CHANNEL_TOKEN_LABEL = 'channel-token-v1';
+
 /**
  * Encrypt a plaintext token and store (or update) it in channel_configs.
  *
@@ -21,7 +25,7 @@ import { nowSec } from '../utils/time.js';
  */
 export async function encryptAndStoreToken(ctx, channelConfigId, plainToken, encKey, expiresAt = null) {
   if (!ctx?.db) return false;
-  const encrypted = encKey ? await encryptToken(plainToken, encKey) : plainToken;
+  const encrypted = encKey ? await encryptToken(plainToken, encKey, CHANNEL_TOKEN_LABEL) : plainToken;
   if (!encrypted) return false;
   await dbRun(ctx,
     'UPDATE channel_configs SET token_encrypted = ?, token_expires_at = ?, updated_at = ? WHERE id = ?',
@@ -42,7 +46,7 @@ export async function getDecryptedToken(ctx, channelConfigId, encKey) {
   if (!ctx?.db) return null;
   const rows = await dbAll(ctx, 'SELECT token_encrypted FROM channel_configs WHERE id = ? LIMIT 1', channelConfigId);
   if (!rows.length || !rows[0].token_encrypted) return null;
-  return encKey ? await decryptToken(rows[0].token_encrypted, encKey) : rows[0].token_encrypted;
+  return encKey ? await decryptToken(rows[0].token_encrypted, encKey, CHANNEL_TOKEN_LABEL) : rows[0].token_encrypted;
 }
 
 /**
@@ -113,7 +117,7 @@ export async function createChannelConfig(ctx, tenantId, channelType, config, pl
     console.error('[createChannelConfig] encryption key missing or too short — refusing to store token for tenant:', tenantId);
     return null;
   }
-  const encrypted = await encryptToken(plainToken, encKey);
+  const encrypted = await encryptToken(plainToken, encKey, CHANNEL_TOKEN_LABEL);
   if (!encrypted) {
     console.error('[createChannelConfig] encryption failed for tenant:', tenantId);
     return null;

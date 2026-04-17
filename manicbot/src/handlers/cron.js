@@ -1,5 +1,5 @@
 import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL } from '../config.js';
-import { dbAll, dbRun } from '../utils/db.js';
+import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { svcName, fill, t, p2 } from '../utils/helpers.js';
 import { warsawNow, fmtDT } from '../utils/date.js';
 import { send } from '../telegram.js';
@@ -360,13 +360,34 @@ async function processPostVisitConfirmations(ctx, nowMs) {
   }
   for (const a of toPrompt) {
     try {
+      // Send Telegram prompt to master with Yes/No-show buttons.
+      // master_id is a Telegram chat_id for human masters (positive ints).
+      // Negative IDs = synthetic (manual-booking clients) → skip.
+      if (a.master_id && a.master_id > 0) {
+        const client = await dbGet(ctx,
+          'SELECT name, phone FROM users WHERE tenant_id = ? AND chat_id = ?',
+          ctx.tenantId, a.chat_id,
+        ).catch(() => null);
+        const clientName = client?.name || 'клиент';
+        const svc = (ctx.svc || []).find(s => s.id === a.svc_id);
+        const svcLabel = svc ? (svc.names?.ru || svc.names?.en || svc.id) : a.svc_id;
+        const text = `Был ли визит? ${clientName} — ${svcLabel} (${a.date} ${a.time})`;
+        await send(ctx, a.master_id, text, {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '✅ Пришёл', callback_data: `visit_ok:${a.id}` },
+              { text: '❌ Не пришёл', callback_data: `visit_noshow:${a.id}` },
+            ]],
+          },
+        }).catch(() => {});
+      }
       await dbRun(ctx,
         'UPDATE appointments SET review_requested_at = ? WHERE id = ? AND tenant_id = ?',
         nowSec, a.id, ctx.tenantId,
       );
       await dbRun(ctx, `
         INSERT INTO analytics_events (tenant_id, event, properties, created_at)
-        VALUES (?, 'post_visit.prompt_due', ?, ?)
+        VALUES (?, 'post_visit.prompt_sent', ?, ?)
       `, ctx.tenantId, JSON.stringify({ appointmentId: a.id, masterId: a.master_id }), nowSec);
     } catch { /* best-effort */ }
   }
@@ -404,7 +425,49 @@ async function processBirthdayAndReturningPromos(ctx, nowMs) {
     }
   } catch { /* best-effort */ }
 
-  // Birthday promo stub — requires users.dob column (not yet in schema).
-  // Logged here as TODO: when dob is added in Sprint 4 UI, emit analytics events.
-  void today; // placeholder
+  // Birthday promo: users whose dob MM-DD == today, no birthday promo
+  // issued yet this year. Code is auto-generated as BDAY-{yyyy}-{chatId[-6:]}.
+  try {
+    const thisYear = new Date(nowMs).getUTCFullYear();
+    const birthdayRows = await dbAll(ctx, `
+      SELECT chat_id, name FROM users
+      WHERE tenant_id = ? AND dob IS NOT NULL AND substr(dob, 6, 5) = ?
+      LIMIT 50
+    `, ctx.tenantId, today);
+
+    for (const u of birthdayRows) {
+      const code = `BDAY-${thisYear}-${String(u.chat_id).slice(-6)}`;
+      // Skip if already issued
+      const existing = await dbGet(ctx,
+        'SELECT id FROM promo_codes WHERE tenant_id = ? AND code = ?',
+        ctx.tenantId, code,
+      ).catch(() => null);
+      if (existing) continue;
+
+      const validUntil = nowSec + 30 * 86400; // 30 days to redeem
+      await dbRun(ctx, `
+        INSERT OR IGNORE INTO promo_codes
+          (tenant_id, code, kind, discount_type, discount_value,
+           max_uses, max_uses_per_client, valid_from, valid_until,
+           client_id, created_by, created_at)
+        VALUES (?, ?, 'birthday', 'percent', 20, 1, 1, ?, ?, ?, 'system', ?)
+      `, ctx.tenantId, code, nowSec, validUntil, String(u.chat_id), nowSec).catch(() => {});
+
+      await dbRun(ctx, `
+        INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at)
+        VALUES (?, ?, 'promo.birthday_issued', ?, ?)
+      `, ctx.tenantId, String(u.chat_id),
+         JSON.stringify({ code, validUntil, name: u.name }), nowSec).catch(() => {});
+
+      // Send the promo code to the client
+      if (u.chat_id > 0) {
+        await send(ctx, u.chat_id,
+          `🎉 С днём рождения${u.name ? `, ${u.name}` : ''}!\n\nДарим промокод на -20%: <b>${code}</b>\nДействует 30 дней.`,
+          { parse_mode: 'HTML' },
+        ).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.error('[cron] birthday promo error:', e?.message);
+  }
 }

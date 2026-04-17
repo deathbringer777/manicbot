@@ -56,8 +56,10 @@ CREATE TABLE IF NOT EXISTS users (
   first_campaign TEXT,
   first_medium TEXT,
   first_touch_at INTEGER,
+  dob TEXT,
   PRIMARY KEY (tenant_id, chat_id)
 );
+CREATE INDEX IF NOT EXISTS idx_users_tenant_dob ON users(tenant_id, dob);
 CREATE INDEX IF NOT EXISTS idx_user_username ON users(tenant_id, tg_username);
 CREATE INDEX IF NOT EXISTS idx_user_phone ON users(tenant_id, phone);
 

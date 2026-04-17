@@ -151,6 +151,83 @@ export async function onCb(ctx, cb) {
     return showHomeByRole(ctx, cid, name);
   }
 
+  // Sprint 3 §8: post-visit confirmation callbacks (master clicks Yes/No-show).
+  if (d.startsWith('visit_ok:') || d.startsWith('visit_noshow:')) {
+    const aptId = d.split(':', 2)[1];
+    const isOk = d.startsWith('visit_ok:');
+    const { dbGet: _dbGet, dbRun: _dbRun } = await import('../utils/db.js');
+    const apt = await _dbGet(ctx,
+      'SELECT * FROM appointments WHERE id = ? AND tenant_id = ?',
+      aptId, ctx.tenantId,
+    ).catch(() => null);
+    if (!apt) {
+      return send(ctx, cid, 'Запись не найдена или уже обработана.');
+    }
+    // Only the assigned master (or owner/system_admin) can confirm
+    const role = await getRole(ctx, cid);
+    const isAuthorized = (apt.master_id && Number(apt.master_id) === Number(cid))
+      || role === 'tenant_owner'
+      || role === 'system_admin';
+    if (!isAuthorized) {
+      return send(ctx, cid, 'Нет доступа к этой записи.');
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const newStatus = isOk ? 'done' : 'no_show';
+    await _dbRun(ctx,
+      `UPDATE appointments
+       SET status = ?, visit_confirmed_at = ?, visit_confirmed_by = 'master',
+           no_show = ?, no_show_by = ?
+       WHERE id = ? AND tenant_id = ?`,
+      newStatus, now, isOk ? 0 : 1, isOk ? null : 'master', aptId, ctx.tenantId,
+    );
+    // Analytics
+    await _dbRun(ctx, `
+      INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `, ctx.tenantId, String(cid),
+       isOk ? 'booking.completed' : 'booking.no_show',
+       JSON.stringify({ appointmentId: aptId, confirmedBy: 'master' }), now).catch(() => {});
+
+    // On success, ask the client to leave a review (best-effort)
+    if (isOk && apt.chat_id > 0) {
+      const { markReviewRequested: mrr } = await import('../services/reviews.js');
+      await mrr(ctx, aptId).catch(() => {});
+      await send(ctx, apt.chat_id,
+        'Надеемся, вам понравилось! Поставьте оценку от 1 до 5:',
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '⭐1', callback_data: `rate:${aptId}:1` },
+              { text: '⭐2', callback_data: `rate:${aptId}:2` },
+              { text: '⭐3', callback_data: `rate:${aptId}:3` },
+              { text: '⭐4', callback_data: `rate:${aptId}:4` },
+              { text: '⭐5', callback_data: `rate:${aptId}:5` },
+            ]],
+          },
+        },
+      ).catch(() => {});
+    }
+    // Stamp-card increment on a confirmed visit (Sprint 4)
+    if (isOk && apt.chat_id) {
+      try {
+        const cfg = await _dbGet(ctx,
+          'SELECT enabled, visits_required FROM stamp_card_configs WHERE tenant_id = ?',
+          ctx.tenantId,
+        );
+        if (cfg && cfg.enabled) {
+          await _dbRun(ctx, `
+            INSERT INTO stamp_card_progress (tenant_id, client_id, visits_completed, last_visit_at)
+            VALUES (?, ?, 1, ?)
+            ON CONFLICT(tenant_id, client_id) DO UPDATE SET
+              visits_completed = visits_completed + 1,
+              last_visit_at = excluded.last_visit_at
+          `, ctx.tenantId, String(apt.chat_id), now).catch(() => {});
+        }
+      } catch { /* best-effort */ }
+    }
+    return send(ctx, cid, isOk ? '✅ Визит отмечен выполненным.' : '❌ Визит отмечен как no-show.');
+  }
+
   const lg = (await getLang(ctx, cid)) || 'ru';
 
   if (await isBlocked(ctx, cid)) return send(ctx, cid, t(lg, 'client_blocked'));

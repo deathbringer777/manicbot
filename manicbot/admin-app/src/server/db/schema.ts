@@ -63,8 +63,10 @@ export const users = sqliteTable("users", {
   firstCampaign: text("first_campaign"),
   firstMedium: text("first_medium"),
   firstTouchAt: integer("first_touch_at"),
+  dob: text("dob"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
+  index("idx_users_tenant_dob").on(t.tenantId, t.dob),
   index("idx_user_phone").on(t.tenantId, t.phone),
 ]);
 

@@ -66,6 +66,29 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json(result);
   }
 
+  // Sprint 5: seed 3 demo tenants (beauty / cosmetology / auto)
+  if (request.method === 'POST' && url.pathname === '/admin/seed-demo-tenants') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const { seedDemoTenants } = await import('../../scripts/seed-demo-tenants.js');
+    const result = await seedDemoTenants(envCtx(env));
+    return Response.json({ ok: true, result });
+  }
+
+  // Sprint 2/6: run one pass of the BOT_ENCRYPTION_KEY rotation sweep.
+  // Call repeatedly (cron-friendly) until all tables return 0 remaining.
+  if (request.method === 'POST' && url.pathname === '/admin/key-rotation-sweep') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const { sweepKeyRotation } = await import('../../scripts/rotate-bot-encryption-key.js');
+    const ec = envCtx(env);
+    // Inject BOT_ENCRYPTION_KEY + KV into ctx for the sweep
+    ec.BOT_ENCRYPTION_KEY = env.BOT_ENCRYPTION_KEY;
+    ec.MANICBOT = env.MANICBOT;
+    const result = await sweepKeyRotation(ec);
+    return Response.json(result);
+  }
+
   if (request.method === 'POST' && url.pathname === '/admin/provision') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     const ec = envCtx(env);

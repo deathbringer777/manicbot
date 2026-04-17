@@ -9,6 +9,14 @@ import { audit } from '../utils/audit.js';
 import { buildSearchVariants, hasCyrillic } from '../lib/searchNormalize.js';
 
 /**
+ * Roles that may be created or upserted via POST /admin/web-user.
+ * `system_admin` is deliberately excluded — platform-level roles must be granted via
+ * direct DB write or wrangler command with audit log, never via HTTP. Adding `system_admin`
+ * here would re-introduce the #S1 privilege-escalation vulnerability.
+ */
+const ALLOWED_CREATE_ROLES = new Set(['tenant_owner', 'support', 'technical_support', 'master']);
+
+/**
  * Returns true if the admin key matches env.ADMIN_KEY (timing-safe).
  * Checks Authorization: Bearer header first, then falls back to ?key= query param.
  * Prefer Authorization header — query params leak in logs, Referer headers, browser history.
@@ -397,6 +405,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
   if (request.method === 'POST' && url.pathname === '/admin/web-user') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const ec = envCtx(env);
 
     let body;
     try { body = await request.json(); } catch { return new Response('Invalid JSON', { status: 400 }); }
@@ -404,6 +413,18 @@ export async function tryAdminKeyRoutes(request, env, url) {
     const { email, password, tenantId = null, role = 'tenant_owner' } = body || {};
     if (!email || !password) return Response.json({ error: 'email and password required' }, { status: 400 });
     if (password.length < 8) return Response.json({ error: 'password must be at least 8 characters' }, { status: 400 });
+
+    // #S1 fix — privilege escalation: enforce role allowlist.
+    // system_admin is intentionally NOT in this set: platform admins are minted via
+    // direct DB migration or wrangler command with audit, never via HTTP.
+    if (!ALLOWED_CREATE_ROLES.has(role)) {
+      void logEvent(ec, 'security.role_rejected', {
+        level: 'warn',
+        message: `Rejected /admin/web-user with role="${role}"`,
+        detail: { email, attemptedRole: role, ip: request.headers.get('cf-connecting-ip') || null },
+      });
+      return Response.json({ error: 'invalid_role', allowed: Array.from(ALLOWED_CREATE_ROLES) }, { status: 400 });
+    }
 
     // Hash password with PBKDF2 (Web Crypto — same algorithm as admin-app/src/server/auth/password.ts)
     // Iterations raised to 600k per OWASP 2023 recommendation.

@@ -21,6 +21,7 @@ import type { AppRole } from "~/server/api/routers/auth";
 // @cloudflare/next-on-pages routes new (dashboard)/* paths to (public) layout → 404.
 // Workaround: render them inline via ?tab= on the working /dashboard route.
 const GodRoleRequests = dynamic(() => import("./role-requests/RoleRequestsPageClient"));
+const GodLeads = dynamic(() => import("./leads/LeadsPageClient"));
 
 export default function DashboardLayout({
   children,
@@ -171,6 +172,7 @@ export default function DashboardLayout({
   const godTab = searchParams.get("tab");
   const GOD_TAB_COMPONENTS: Record<string, React.ComponentType> = {
     "role-requests": GodRoleRequests,
+    "leads": GodLeads,
   };
   const GodTabComponent = godTab ? GOD_TAB_COMPONENTS[godTab] : null;
 

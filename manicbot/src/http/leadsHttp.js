@@ -12,6 +12,7 @@ import { dbRun } from '../utils/db.js';
 import { envCtx } from './envCtx.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
+import { notifyAdminNewLead } from '../utils/notifyAdmin.js';
 
 const ALLOWED_SALON_TYPES = new Set(['nail', 'beauty', 'cosmetology', 'barber', 'other']);
 const ALLOWED_LOCALES = new Set(['ru', 'uk', 'ua', 'en', 'pl']);
@@ -84,6 +85,14 @@ export async function tryLeadRoutes(request, env, url) {
         message: `New lead: ${email}`,
         data: { name, email, salonType, mastersCount, ip },
       });
+      void notifyAdminNewLead(env, {
+        name, email, phone,
+        salon_type: salonType,
+        masters_count: mastersCount,
+        note,
+        source: 'landing',
+        ip,
+      }).catch((e) => console.error('[leads] notify failed:', e?.message));
     } catch (e) {
       console.error('[leads] insert failed:', e?.message);
       return json({ error: 'db_error' }, 500);

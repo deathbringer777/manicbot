@@ -102,6 +102,49 @@ describe('POST /api/leads', () => {
     expect(r.status).toBe(429);
   });
 
+  it('notifies admin via Telegram when BOT_TOKEN and ADMIN_CHAT_ID are set', async () => {
+    const calls = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response('{"ok":true}', { status: 200 });
+    });
+    try {
+      env.BOT_TOKEN = 'TESTTOKEN';
+      env.ADMIN_CHAT_ID = '777';
+      const req = reqJson('/api/leads', {
+        name: 'Anna', email: 'a@b.com', phone: '+48501234567', note: 'hi',
+      });
+      const res = await tryLeadRoutes(req, env, new URL(req.url));
+      expect(res.status).toBe(200);
+      // notifyAdmin is fire-and-forget — wait a microtask
+      await new Promise((r) => setTimeout(r, 10));
+      const tgCall = calls.find(c => c.url.includes('api.telegram.org/botTESTTOKEN/sendMessage'));
+      expect(tgCall).toBeDefined();
+      const body = JSON.parse(tgCall.init.body);
+      expect(body.chat_id).toBe('777');
+      expect(body.text).toContain('Anna');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('skips TG notification when BOT_TOKEN missing', async () => {
+    const calls = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url) => { calls.push(String(url)); return new Response('{}', { status: 200 }); });
+    try {
+      const req = reqJson('/api/leads', {
+        name: 'Anna', email: 'a@b.com', phone: '+48501234567',
+      });
+      await tryLeadRoutes(req, env, new URL(req.url));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(calls.some(u => u.includes('api.telegram.org'))).toBe(false);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it('responds to OPTIONS preflight', async () => {
     const req = new Request('https://manicbot.com/api/leads', { method: 'OPTIONS' });
     const res = await tryLeadRoutes(req, env, new URL(req.url));

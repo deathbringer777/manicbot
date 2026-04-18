@@ -2,7 +2,7 @@ import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
-  HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight,
+  HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -50,6 +50,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.appointments",  href: "/appointments",       icon: CalendarDays,    labelKey: "Appointments",     roles: ["system_admin"], group: "management" },
   { id: "god.conversations", href: "/conversations",      icon: MessageSquare,   labelKey: "Inbox",            roles: ["system_admin"], group: "management" },
   { id: "god.roleRequests",  href: "/dashboard?tab=role-requests", icon: ArrowLeftRight, labelKey: "Role Requests", roles: ["system_admin"], group: "management" },
+  { id: "god.leads",         href: "/dashboard?tab=leads", icon: Inbox,             labelKey: "Leads",            roles: ["system_admin"], group: "management" },
   { id: "god.agents",        href: "/agents",             icon: UserCog,         labelKey: "Agents",           roles: ["system_admin"], group: "management" },
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },

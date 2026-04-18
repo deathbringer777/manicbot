@@ -85,7 +85,7 @@ export async function tryLeadRoutes(request, env, url) {
         message: `New lead: ${email}`,
         data: { name, email, salonType, mastersCount, ip },
       });
-      void notifyAdminNewLead(env, {
+      await notifyAdminNewLead(env, {
         name, email, phone,
         salon_type: salonType,
         masters_count: mastersCount,

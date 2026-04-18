@@ -87,8 +87,8 @@ describe('POST /api/leads', () => {
     expect(rows[0].params[3]).toBe('other');
   });
 
-  it('rate-limits after 3 leads from the same IP in an hour', async () => {
-    for (let i = 0; i < 3; i++) {
+  it('rate-limits only after 30 leads from the same IP in an hour', async () => {
+    for (let i = 0; i < 30; i++) {
       const req = reqJson('/api/leads', {
         name: 'Anna' + i, email: `a${i}@b.com`, phone: '+48501234567',
       }, '9.9.9.9');
@@ -96,10 +96,98 @@ describe('POST /api/leads', () => {
       expect(r.status, `call ${i}`).toBe(200);
     }
     const req = reqJson('/api/leads', {
-      name: 'Anna4', email: 'a4@b.com', phone: '+48501234567',
+      name: 'Anna31', email: 'a31@b.com', phone: '+48501234567',
     }, '9.9.9.9');
     const r = await tryLeadRoutes(req, env, new URL(req.url));
     expect(r.status).toBe(429);
+  });
+
+  it('creates a new leads row AND upserts marketing_contacts on every submission', async () => {
+    const makeMockEnv = () => {
+      const leadRows = [];
+      const contactRows = new Map(); // email → { name, phone, lead_count, ... }
+      return {
+        rows: { leads: leadRows, contacts: contactRows },
+        env: {
+          DB: {
+            prepare(sql) {
+              return {
+                bind(...params) {
+                  return {
+                    run: async () => {
+                      if (sql.includes('INSERT INTO leads')) {
+                        leadRows.push(params);
+                      } else if (sql.includes('INSERT INTO marketing_contacts')) {
+                        const [email, name, phone, , firstSeen, lastSeen] = params;
+                        const existing = contactRows.get(email);
+                        if (existing) {
+                          existing.name = name;
+                          existing.phone = phone;
+                          existing.last_seen_at = lastSeen;
+                          existing.lead_count += 1;
+                        } else {
+                          contactRows.set(email, {
+                            email, name, phone,
+                            first_seen_at: firstSeen, last_seen_at: lastSeen,
+                            lead_count: 1,
+                          });
+                        }
+                      } else if (sql.includes('rate_limits')) { /* ignore */ }
+                      return { success: true };
+                    },
+                    first: async () => null,
+                  };
+                },
+              };
+            },
+          },
+        },
+      };
+    };
+
+    const { env: env2, rows } = makeMockEnv();
+    const body = { name: 'Repeat', email: 'repeat@x.com', phone: '+48500000000', note: 'first' };
+
+    // First submission
+    const r1 = await tryLeadRoutes(reqJson('/api/leads', body), env2, new URL('https://manicbot.com/api/leads'));
+    expect(r1.status).toBe(200);
+
+    // Second submission — same email, different note
+    const r2 = await tryLeadRoutes(
+      reqJson('/api/leads', { ...body, note: 'second' }),
+      env2,
+      new URL('https://manicbot.com/api/leads'),
+    );
+    expect(r2.status).toBe(200);
+
+    // Two lead rows
+    expect(rows.leads).toHaveLength(2);
+    // But only ONE marketing contact, with lead_count = 2
+    expect(rows.contacts.size).toBe(1);
+    expect(rows.contacts.get('repeat@x.com').lead_count).toBe(2);
+  });
+
+  it('sends TG notification on EVERY submission, not just the first', async () => {
+    env.BOT_TOKEN = 'TOKEN';
+    env.ADMIN_CHAT_ID = '42';
+    const tgCalls = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('api.telegram.org')) tgCalls.push(String(url));
+      return new Response('{"ok":true}', { status: 200 });
+    });
+    try {
+      for (let i = 0; i < 3; i++) {
+        const req = reqJson('/api/leads', {
+          name: 'Dup', email: 'dup@x.com', phone: '+48500000000', note: `try ${i}`,
+        });
+        const res = await tryLeadRoutes(req, env, new URL(req.url));
+        expect(res.status).toBe(200);
+      }
+      expect(tgCalls.length).toBe(3);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it('notifies admin via Telegram when BOT_TOKEN and ADMIN_CHAT_ID are set', async () => {

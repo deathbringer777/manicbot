@@ -45,8 +45,9 @@ export async function tryLeadRoutes(request, env, url) {
     const ec = envCtx(env);
     const ip = clientIp(request);
 
-    // Rate limit: 3 leads per hour per IP
-    const rl = await checkAndIncrement(ec, `lead-form:${ip}`, 'post', 3, 3600);
+    // Rate limit: 30 leads per hour per IP (generous — real users may
+    // re-submit, and we want every submission to land as a separate lead row)
+    const rl = await checkAndIncrement(ec, `lead-form:${ip}`, 'post', 30, 3600);
     if (rl.limited) return json({ error: 'rate_limited' }, 429);
 
     let body;

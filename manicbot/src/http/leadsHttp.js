@@ -13,6 +13,7 @@ import { envCtx } from './envCtx.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { notifyAdminNewLead } from '../utils/notifyAdmin.js';
+import { sendSubscriberWelcomeEmail } from '../email/subscriberWelcomeEmail.js';
 
 const ALLOWED_SALON_TYPES = new Set(['nail', 'beauty', 'cosmetology', 'barber', 'other']);
 const MAX_LEADS_PER_EMAIL = 10;
@@ -144,7 +145,10 @@ export async function tryLeadRoutes(request, env, url) {
     if (!email.includes('@') || email.length < 5) return json({ error: 'invalid_email' }, 400);
 
     const now = Math.floor(Date.now() / 1000);
+    let isNew = false;
     try {
+      const existing = await dbGet(ec, 'SELECT id FROM email_subscribers WHERE email = ?', email);
+      isNew = !existing;
       await dbRun(ec, `
         INSERT INTO email_subscribers (email, locale, confirmed, created_at)
         VALUES (?, ?, 0, ?)
@@ -154,6 +158,17 @@ export async function tryLeadRoutes(request, env, url) {
       console.error('[newsletter] insert failed:', e?.message);
       return json({ error: 'db_error' }, 500);
     }
+
+    // Fire-and-forget welcome email — only on first subscribe
+    if (isNew && ec.resendApiKey && ec.resendFrom) {
+      sendSubscriberWelcomeEmail({
+        resendKey: ec.resendApiKey,
+        fromAddr: ec.resendFrom,
+        email,
+        locale,
+      }).catch((e) => console.error('[newsletter] welcome email failed:', e?.message));
+    }
+
     return json({ ok: true });
   }
 

@@ -316,6 +316,69 @@ describe('POST /api/email-subscribe', () => {
     expect(rows[0].params[1]).toBe('ru');
   });
 
+  it('sends welcome email via Resend on first subscribe only', async () => {
+    // Custom env that tracks whether the email already exists
+    const subs = new Set();
+    const env2 = {
+      RESEND_API_KEY: 'rk_test',
+      RESEND_FROM: 'ManicBot <noreply@manicbot.com>',
+      DB: {
+        prepare(sql) {
+          return {
+            bind(...params) {
+              return {
+                run: async () => {
+                  if (sql.includes('INSERT INTO email_subscribers')) subs.add(params[0]);
+                  return { success: true };
+                },
+                first: async () => {
+                  if (sql.includes('SELECT id FROM email_subscribers')) {
+                    return subs.has(params[0]) ? { id: 1 } : null;
+                  }
+                  return null;
+                },
+              };
+            },
+          };
+        },
+      },
+    };
+    const calls = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response('{"id":"e_1"}', { status: 200 });
+    });
+    try {
+      // First time: new subscriber → email sent
+      const r1 = await tryLeadRoutes(
+        reqJson('/api/email-subscribe', { email: 'wel@test.com', locale: 'pl' }, '8.8.8.8'),
+        env2, new URL('https://manicbot.com/api/email-subscribe'),
+      );
+      expect(r1.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 10));
+      const resendCalls = calls.filter((c) => c.url.includes('api.resend.com'));
+      expect(resendCalls).toHaveLength(1);
+      const body = JSON.parse(resendCalls[0].init.body);
+      expect(body.to).toEqual(['wel@test.com']);
+      expect(body.subject).toMatch(/ManicBot/);
+      expect(body.html).toContain('ManicBot');
+      // Polish copy check
+      expect(body.html).toContain('Dziękujemy');
+
+      // Second time: same email → no new email
+      const r2 = await tryLeadRoutes(
+        reqJson('/api/email-subscribe', { email: 'wel@test.com', locale: 'pl' }, '8.8.8.9'),
+        env2, new URL('https://manicbot.com/api/email-subscribe'),
+      );
+      expect(r2.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(calls.filter((c) => c.url.includes('api.resend.com'))).toHaveLength(1);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it('rate-limits after 5 requests per IP per hour', async () => {
     for (let i = 0; i < 5; i++) {
       const req = reqJson('/api/email-subscribe', { email: `x${i}@y.com` }, '7.7.7.7');

@@ -87,8 +87,10 @@ export async function createCheckoutSession(
     tenantId: string;
     plan: string;
     locale?: string;
+    billingCycle?: "monthly" | "annual";
   },
 ): Promise<string> {
+  const cycle = opts.billingCycle ?? "monthly";
   const session = await stripePost<{ url: string }>(secretKey, "/checkout/sessions", {
     customer: opts.customerId,
     "line_items[0][price]": opts.priceId,
@@ -99,9 +101,11 @@ export async function createCheckoutSession(
     // Session metadata — available in checkout.session.completed
     "metadata[tenantId]": opts.tenantId,
     "metadata[plan]": opts.plan,
+    "metadata[billingCycle]": cycle,
     // Subscription metadata — available in subscription.updated
     "subscription_data[metadata][tenantId]": opts.tenantId,
     "subscription_data[metadata][plan]": opts.plan,
+    "subscription_data[metadata][billingCycle]": cycle,
     locale: toStripeLocale(opts.locale),
   });
   return session.url;
@@ -116,8 +120,10 @@ export async function createEmbeddedCheckoutSession(
     tenantId: string;
     plan: string;
     locale?: string;
+    billingCycle?: "monthly" | "annual";
   },
 ): Promise<string> {
+  const cycle = opts.billingCycle ?? "monthly";
   const session = await stripePost<{ client_secret: string }>(secretKey, "/checkout/sessions", {
     customer: opts.customerId,
     "line_items[0][price]": opts.priceId,
@@ -128,9 +134,11 @@ export async function createEmbeddedCheckoutSession(
     // Session metadata — available in checkout.session.completed
     "metadata[tenantId]": opts.tenantId,
     "metadata[plan]": opts.plan,
+    "metadata[billingCycle]": cycle,
     // Subscription metadata — available in subscription.updated
     "subscription_data[metadata][tenantId]": opts.tenantId,
     "subscription_data[metadata][plan]": opts.plan,
+    "subscription_data[metadata][billingCycle]": cycle,
     locale: toStripeLocale(opts.locale),
   });
   return session.client_secret;

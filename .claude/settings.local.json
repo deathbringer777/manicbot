@@ -48,7 +48,9 @@
       "Bash(git fetch:*)",
       "Read(//Users/vdovin/Desktop/**)",
       "Bash(python3 -c \"import reportlab; print\\(reportlab.Version\\)\")",
-      "Bash(pip3 install:*)"
+      "Bash(pip3 install:*)",
+      "Bash(xargs ls:*)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

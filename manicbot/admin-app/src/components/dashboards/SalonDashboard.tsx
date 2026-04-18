@@ -655,6 +655,8 @@ function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null 
 function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const utils = api.useUtils();
   const profile = api.salon.getSalonProfile.useQuery({ tenantId });
+  const servicesList = api.salon.getServices.useQuery({ tenantId });
+  const [publishError, setPublishError] = useState<string[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
@@ -690,8 +692,31 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   }, [data, editing]);
 
   const update = api.salon.updateSalonProfile.useMutation({
-    onSuccess: () => { utils.salon.getSalonProfile.invalidate(); setEditing(false); },
+    onSuccess: () => {
+      utils.salon.getSalonProfile.invalidate();
+      setEditing(false);
+      setPublishError(null);
+    },
+    onError: (err) => {
+      const msg = err.message ?? "";
+      if (msg.startsWith("NOT_READY_TO_PUBLISH:")) {
+        setPublishError(msg.replace("NOT_READY_TO_PUBLISH:", "").split(","));
+        setIsPublic(false);
+      }
+    },
   });
+
+  const readinessMissing: string[] = [];
+  if (!data?.slug) readinessMissing.push("slug");
+  if (!data?.name || !String(data.name).trim()) readinessMissing.push("name");
+  if (servicesList.data && servicesList.data.length === 0) readinessMissing.push("services");
+  const isReadyToPublish = readinessMissing.length === 0;
+
+  const MISSING_LABELS: Record<string, string> = {
+    slug: "URL (slug) для публичной ссылки",
+    name: "Название салона",
+    services: "хотя бы 1 услуга в каталоге",
+  };
 
   const slugCheck = api.salon.checkSlugAvailable.useQuery(
     { slug, tenantId },
@@ -710,6 +735,20 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 
   function handleSave() {
     if (!validateSlug(slug)) return;
+    // Client-side pre-check: if trying to enable publishing without a ready
+    // profile, surface the red banner without round-tripping to the server.
+    if (isPublic) {
+      const missing: string[] = [];
+      if (!slug) missing.push("slug");
+      if (!data?.name || !String(data.name).trim()) missing.push("name");
+      if (servicesList.data && servicesList.data.length === 0) missing.push("services");
+      if (missing.length) {
+        setPublishError(missing);
+        setIsPublic(false);
+        return;
+      }
+    }
+    setPublishError(null);
     update.mutate({
       tenantId,
       slug: slug || undefined,
@@ -766,6 +805,11 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
         {!editing && (
           <button onClick={() => {
             const newVal = isPublic ? 0 : 1;
+            if (newVal === 1 && !isReadyToPublish) {
+              setPublishError(readinessMissing);
+              return;
+            }
+            setPublishError(null);
             setIsPublic(!!newVal);
             update.mutate({ tenantId, publicActive: newVal });
           }}
@@ -774,6 +818,38 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           </button>
         )}
       </div>
+
+      {publishError && publishError.length > 0 && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+                Нельзя опубликовать салон — заполните обязательные поля
+              </p>
+              <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-red-700/90 dark:text-red-300/90">
+                {publishError.map((k) => (
+                  <li key={k}>{MISSING_LABELS[k] ?? k}</li>
+                ))}
+              </ul>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => setEditing(true)}
+                  className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
+                >
+                  Редактировать профиль
+                </button>
+                <button
+                  onClick={() => setPublishError(null)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-700/70 transition hover:text-red-700 dark:text-red-300/70 dark:hover:text-red-300"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!editing ? (
         <div className="glass-card rounded-2xl p-4 space-y-3">

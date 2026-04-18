@@ -213,7 +213,13 @@ export const publicSalonRouter = createTRPCRouter({
       const { query, city, lat, lng, radiusKm, page, limit } = input;
       const offset = (page - 1) * limit;
 
-      const conditions: any[] = [eq(tenants.publicActive, 1)];
+      // Require slug — salons without a slug cannot be opened via /salon/[slug],
+      // so clicking their card would lead to "#". Hide them from the directory
+      // until an owner sets one (also hides half-configured personal tenants).
+      const conditions: any[] = [
+        eq(tenants.publicActive, 1),
+        isNotNull(tenants.slug),
+      ];
 
       if (city) {
         // Match city column (title-case) and search_text (lowercase + Cyrillic variants)

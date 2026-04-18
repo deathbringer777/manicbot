@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useLang } from "~/components/LangContext";
 import {
   COOKIE_BANNER_APPEAR_DELAY_MS,
+  markCookieBannerShown,
   readCookieConsent,
+  wasCookieBannerShownThisSession,
   writeCookieConsent,
 } from "~/lib/cookieConsentStorage";
 import { isTelegramInAppContext } from "~/lib/telegramInApp";
@@ -29,10 +31,16 @@ export function CookieBanner() {
 
   useEffect(() => {
     if (!shouldShow) return;
-    const id = window.setTimeout(
-      () => setMounted(true),
-      COOKIE_BANNER_APPEAR_DELAY_MS,
-    );
+    // If the banner already appeared in this session (user navigated without
+    // deciding), show it immediately on subsequent routes instead of waiting
+    // another 10s — but don't re-trigger the "fresh pop-up" animation.
+    const delay = wasCookieBannerShownThisSession()
+      ? 0
+      : COOKIE_BANNER_APPEAR_DELAY_MS;
+    const id = window.setTimeout(() => {
+      setMounted(true);
+      markCookieBannerShown();
+    }, delay);
     return () => window.clearTimeout(id);
   }, [shouldShow]);
 
@@ -57,10 +65,10 @@ export function CookieBanner() {
       ].join(" ")}
     >
       <div className="mx-auto max-w-6xl px-3 pb-[env(safe-area-inset-bottom)] sm:px-6">
-        <div className="mb-2 flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 shadow-lg backdrop-blur-md sm:mb-3 sm:flex-row sm:items-center sm:gap-4 sm:px-5 sm:py-2.5">
+        <div className="mb-2 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-lg backdrop-blur-md sm:mb-3 sm:flex-row sm:items-center sm:gap-4 sm:px-5 sm:py-2.5 dark:border-white/10 dark:bg-slate-950/70">
           <p
             id="mb-admin-cookie-body"
-            className="flex-1 text-xs leading-relaxed text-slate-300/90 sm:text-sm"
+            className="flex-1 text-xs leading-relaxed text-slate-600 sm:text-sm dark:text-slate-300/90"
           >
             <span id="mb-admin-cookie-title" className="sr-only">
               {t("cookies.title", lang)}
@@ -70,11 +78,11 @@ export function CookieBanner() {
               href={`https://manicbot.com/cookies?lang=${lang}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline decoration-dotted underline-offset-2 hover:text-violet-300"
+              className="underline decoration-dotted underline-offset-2 hover:text-violet-600 dark:hover:text-violet-300"
             >
               {t("cookies.policy", lang)}
             </a>
-            <span className="mt-1.5 block text-[11px] leading-snug text-slate-400/95 sm:text-xs">
+            <span className="mt-1.5 block text-[11px] leading-snug text-slate-500 sm:text-xs dark:text-slate-400/95">
               {t("cookies.necessaryDisclaimer", lang)}
             </span>
           </p>
@@ -83,7 +91,7 @@ export function CookieBanner() {
             <button
               type="button"
               onClick={() => decide(false)}
-              className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 text-xs font-medium text-white/90 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-violet-500 sm:flex-none sm:text-sm"
+              className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500 sm:flex-none sm:text-sm dark:border-white/15 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
             >
               {t("cookies.onlyNecessary", lang)}
             </button>

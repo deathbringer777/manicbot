@@ -14,6 +14,33 @@ export const COOKIE_CONSENT_LOCAL_KEY = "mb-admin-cookie-consent-v1";
 export const COOKIE_CONSENT_LEGACY_SESSION_KEY =
   "mb-admin-cookie-consent-session-v1";
 
+/**
+ * Session flag set the first time the banner is presented in the current tab.
+ * Prevents the 10s timer from re-triggering on every client-side route change
+ * when the user hasn't made a choice yet — the banner stays visible on the
+ * first page that showed it instead of popping up anew on each section.
+ */
+export const COOKIE_BANNER_SHOWN_SESSION_KEY =
+  "mb-admin-cookie-banner-shown-v1";
+
+export function markCookieBannerShown(): void {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    sessionStorage.setItem(COOKIE_BANNER_SHOWN_SESSION_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function wasCookieBannerShownThisSession(): boolean {
+  try {
+    if (typeof sessionStorage === "undefined") return false;
+    return sessionStorage.getItem(COOKIE_BANNER_SHOWN_SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export type CookieConsentRecord = {
   version: 1;
   decidedAt: number;

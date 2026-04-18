@@ -354,6 +354,28 @@ export const salonRouter = createTRPCRouter({
       const tenantRow = await ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
       if (!tenantRow.length) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
 
+      // Guard: going public requires a usable profile — slug + name + at least
+      // one service. Prevents empty cards from appearing in the public catalog
+      // and being unclickable (see publicSalon.search slug filter).
+      if (input.publicActive === 1) {
+        const nextSlug = input.slug !== undefined ? input.slug : tenantRow[0]!.slug;
+        const nextName = input.name !== undefined ? input.name : tenantRow[0]!.name;
+        const missing: string[] = [];
+        if (!nextSlug) missing.push("slug");
+        if (!nextName || !nextName.trim()) missing.push("name");
+        const serviceCount = await ctx.db.select({ svcId: services.svcId })
+          .from(services)
+          .where(eq(services.tenantId, input.tenantId))
+          .limit(1);
+        if (serviceCount.length === 0) missing.push("services");
+        if (missing.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `NOT_READY_TO_PUBLISH:${missing.join(",")}`,
+          });
+        }
+      }
+
       let existing: Record<string, unknown> = {};
       try { existing = tenantRow[0]!.salon ? JSON.parse(tenantRow[0]!.salon!) : {}; } catch { /* ignore malformed JSON */ }
       if (input.address !== undefined) existing.address = input.address;

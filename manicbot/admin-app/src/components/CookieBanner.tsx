@@ -26,21 +26,25 @@ export function CookieBanner() {
 
   useEffect(() => {
     if (isTelegramInAppContext(window)) return;
-    setShouldShow(!readCookieConsent());
+    // Show the banner only if:
+    //  1) user has not already made a persistent choice (localStorage), AND
+    //  2) the banner has not already been presented in this tab/session.
+    // If the user navigated away without deciding, we treat that as "seen"
+    // for the rest of the session and won't re-pop on every route change —
+    // this matches the one-impression-per-session behaviour used by most
+    // major sites. A fresh session (new tab/browser) will show it again
+    // until an explicit choice is saved.
+    if (readCookieConsent()) return;
+    if (wasCookieBannerShownThisSession()) return;
+    setShouldShow(true);
   }, []);
 
   useEffect(() => {
     if (!shouldShow) return;
-    // If the banner already appeared in this session (user navigated without
-    // deciding), show it immediately on subsequent routes instead of waiting
-    // another 10s — but don't re-trigger the "fresh pop-up" animation.
-    const delay = wasCookieBannerShownThisSession()
-      ? 0
-      : COOKIE_BANNER_APPEAR_DELAY_MS;
     const id = window.setTimeout(() => {
       setMounted(true);
       markCookieBannerShown();
-    }, delay);
+    }, COOKIE_BANNER_APPEAR_DELAY_MS);
     return () => window.clearTimeout(id);
   }, [shouldShow]);
 

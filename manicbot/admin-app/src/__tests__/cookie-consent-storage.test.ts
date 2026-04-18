@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   COOKIE_BANNER_APPEAR_DELAY_MS,
+  COOKIE_BANNER_SHOWN_SESSION_KEY,
   COOKIE_CONSENT_LEGACY_SESSION_KEY,
   COOKIE_CONSENT_LOCAL_KEY,
+  markCookieBannerShown,
   readCookieConsent,
+  wasCookieBannerShownThisSession,
   writeCookieConsent,
 } from "~/lib/cookieConsentStorage";
 
@@ -100,6 +103,36 @@ describe("cookieConsentStorage (localStorage + legacy session migration)", () =>
     expect(rec).toEqual({ version: 1, decidedAt, acceptedAll: false });
     expect(localStorage.getItem(COOKIE_CONSENT_LOCAL_KEY)).toBeTruthy();
     expect(sessionStorage.getItem(COOKIE_CONSENT_LEGACY_SESSION_KEY)).toBeNull();
+  });
+});
+
+describe("cookie banner session-shown flag", () => {
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", createMemoryStorage());
+    vi.stubGlobal("sessionStorage", createMemoryStorage());
+  });
+
+  it("wasCookieBannerShownThisSession returns false by default", () => {
+    expect(wasCookieBannerShownThisSession()).toBe(false);
+  });
+
+  it("markCookieBannerShown flips the session-shown flag", () => {
+    markCookieBannerShown();
+    expect(wasCookieBannerShownThisSession()).toBe(true);
+    expect(sessionStorage.getItem(COOKIE_BANNER_SHOWN_SESSION_KEY)).toBe("1");
+  });
+
+  it("mark+wasShown is decoupled from the legacy session consent key", () => {
+    markCookieBannerShown();
+    expect(sessionStorage.getItem(COOKIE_CONSENT_LEGACY_SESSION_KEY)).toBeNull();
+  });
+
+  it("session-shown flag is independent of persisted consent", () => {
+    writeCookieConsent(true);
+    // A future session can still track its own "shown" state separately.
+    expect(wasCookieBannerShownThisSession()).toBe(false);
+    markCookieBannerShown();
+    expect(wasCookieBannerShownThisSession()).toBe(true);
   });
 });
 

@@ -77,6 +77,8 @@ Recent migrations:
 - `0023_personal_tenants.sql` — `is_personal` on `tenants` (independent masters)
 - `0024_role_change_requests.sql` — role change request system
 - `0025_nullable_password_hash.sql` — `password_hash` nullable for Google OAuth registration
+- `0031_marketing_contacts.sql` — deduped lead directory (email/phone) for marketing module
+- `0032_marketing_schema.sql` — full marketing module (segments, templates, campaigns, sends, automations, providers, consent log) + CRM columns on `marketing_contacts` (tags, consent, lifecycle, tenant scope)
 
 ---
 
@@ -194,6 +196,7 @@ Telegram Mini App opens
 | `provisioning` | `routers/provisioning.ts` | adminProcedure |
 | `settings` | `routers/settings.ts` | adminProcedure |
 | `system` | `routers/system.ts` | adminProcedure |
+| `marketing` | `routers/marketing.ts` | adminProcedure (God Mode CRM: contacts, segments, templates, campaigns, providers) |
 
 ### Key Components
 
@@ -346,6 +349,9 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 - `RESEND_FROM` — sender address (e.g. `ManicBot <noreply@manicbot.com>`)
 - `AUTH_URL` — public URL for email links (e.g. `https://admin.manicbot.com`)
 - `DATABASE_URL` (optional, for local dev with LibSQL)
+- `BREVO_API_KEY` (optional — dormant marketing provider; see [PROVIDERS.md](manicbot/admin-app/src/server/email/PROVIDERS.md))
+- `BREVO_FROM` (optional — Brevo sender, same format as `RESEND_FROM`)
+- `BREVO_SMS_SENDER` (optional — SMS sender ID, 11 chars max; used by Max-plan SMS add-on)
 
 ---
 

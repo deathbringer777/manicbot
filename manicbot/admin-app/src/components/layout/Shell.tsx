@@ -7,7 +7,7 @@ import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
   X, Scissors, HeadphonesIcon, Globe, MessageSquare,
-  Lock, Unlock, Radio, ArrowLeftRight,
+  Lock, Unlock, Radio, ArrowLeftRight, Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -33,6 +33,7 @@ const godModeNavItems: NavItem[] = [
   { href: "/agents", icon: UserCog, label: "Agents" },
   { href: "/?tab=role-requests", icon: ArrowLeftRight, label: "Roles" },
   { href: "/channels", icon: Radio, label: "Channels" },
+  { href: "/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/billing", icon: CreditCard, label: "Billing" },
   { href: "/system", icon: Activity, label: "System" },
   { href: "/settings", icon: Settings, label: "Settings" },

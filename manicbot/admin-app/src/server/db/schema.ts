@@ -585,10 +585,141 @@ export const marketingContacts = sqliteTable("marketing_contacts", {
   lastSeenAt: integer("last_seen_at").notNull(),
   leadCount: integer("lead_count").notNull().default(1),
   unsubscribed: integer("unsubscribed").notNull().default(0),
+  tenantId: text("tenant_id"),
+  tags: text("tags"),
+  customFields: text("custom_fields"),
+  consentEmail: integer("consent_email").notNull().default(1),
+  consentSms: integer("consent_sms").notNull().default(0),
+  brevoContactId: text("brevo_contact_id"),
+  unsubscribeToken: text("unsubscribe_token"),
+  locale: text("locale"),
+  lifecycleStage: text("lifecycle_stage"),
 }, (t) => [
   uniqueIndex("idx_marketing_contacts_email").on(t.email),
   index("idx_marketing_contacts_phone").on(t.phone),
   index("idx_marketing_contacts_last_seen").on(t.lastSeenAt),
+  index("idx_marketing_contacts_tenant").on(t.tenantId),
+  uniqueIndex("idx_marketing_contacts_unsub_tok").on(t.unsubscribeToken),
+]);
+
+export const marketingSegments = sqliteTable("marketing_segments", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  name: text("name").notNull(),
+  description: text("description"),
+  filterJson: text("filter_json").notNull(),
+  contactCount: integer("contact_count").notNull().default(0),
+  lastComputedAt: integer("last_computed_at"),
+  createdBy: integer("created_by"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [index("idx_mkt_segments_tenant").on(t.tenantId)]);
+
+export const marketingTemplates = sqliteTable("marketing_templates", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  name: text("name").notNull(),
+  channel: text("channel").notNull(),
+  subject: text("subject"),
+  body: text("body").notNull(),
+  variablesJson: text("variables_json"),
+  locale: text("locale"),
+  createdBy: integer("created_by"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_mkt_templates_tenant").on(t.tenantId),
+  index("idx_mkt_templates_channel").on(t.channel),
+]);
+
+export const marketingCampaigns = sqliteTable("marketing_campaigns", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  name: text("name").notNull(),
+  channel: text("channel").notNull(),
+  segmentId: text("segment_id"),
+  templateId: text("template_id"),
+  provider: text("provider"),
+  status: text("status").notNull().default("draft"),
+  scheduledAt: integer("scheduled_at"),
+  startedAt: integer("started_at"),
+  finishedAt: integer("finished_at"),
+  statsJson: text("stats_json"),
+  error: text("error"),
+  createdBy: integer("created_by"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_mkt_campaigns_tenant").on(t.tenantId),
+  index("idx_mkt_campaigns_status").on(t.status),
+  index("idx_mkt_campaigns_scheduled").on(t.scheduledAt),
+]);
+
+export const marketingSends = sqliteTable("marketing_sends", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull(),
+  contactId: integer("contact_id").notNull(),
+  recipient: text("recipient").notNull(),
+  provider: text("provider").notNull(),
+  providerMessageId: text("provider_message_id"),
+  status: text("status").notNull().default("queued"),
+  error: text("error"),
+  queuedAt: integer("queued_at").notNull(),
+  sentAt: integer("sent_at"),
+  deliveredAt: integer("delivered_at"),
+  openedAt: integer("opened_at"),
+  clickedAt: integer("clicked_at"),
+  bouncedAt: integer("bounced_at"),
+}, (t) => [
+  index("idx_mkt_sends_campaign").on(t.campaignId),
+  index("idx_mkt_sends_contact").on(t.contactId),
+  index("idx_mkt_sends_status").on(t.status),
+  index("idx_mkt_sends_provider_msg").on(t.providerMessageId),
+]);
+
+export const marketingAutomations = sqliteTable("marketing_automations", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  name: text("name").notNull(),
+  triggerType: text("trigger_type").notNull(),
+  triggerConfigJson: text("trigger_config_json"),
+  stepsJson: text("steps_json").notNull(),
+  enabled: integer("enabled").notNull().default(0),
+  createdBy: integer("created_by"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_mkt_automations_tenant").on(t.tenantId),
+  index("idx_mkt_automations_enabled").on(t.enabled),
+]);
+
+export const marketingProviders = sqliteTable("marketing_providers", {
+  name: text("name").primaryKey(),
+  type: text("type").notNull(),
+  enabled: integer("enabled").notNull().default(0),
+  isDefault: integer("is_default").notNull().default(0),
+  configJson: text("config_json"),
+  healthStatus: text("health_status"),
+  healthDetail: text("health_detail"),
+  lastCheckAt: integer("last_check_at"),
+  quotaUsed: integer("quota_used"),
+  quotaLimit: integer("quota_limit"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const marketingConsentLog = sqliteTable("marketing_consent_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id").notNull(),
+  event: text("event").notNull(),
+  source: text("source"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  note: text("note"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_mkt_consent_contact").on(t.contactId),
+  index("idx_mkt_consent_created").on(t.createdAt),
 ]);
 
 export const industryConfigs = sqliteTable("industry_configs", {

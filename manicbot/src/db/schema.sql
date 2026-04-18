@@ -590,11 +590,138 @@ CREATE TABLE IF NOT EXISTS marketing_contacts (
   first_seen_at INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL,
   lead_count INTEGER NOT NULL DEFAULT 1,
-  unsubscribed INTEGER NOT NULL DEFAULT 0
+  unsubscribed INTEGER NOT NULL DEFAULT 0,
+  tenant_id TEXT,
+  tags TEXT,
+  custom_fields TEXT,
+  consent_email INTEGER NOT NULL DEFAULT 1,
+  consent_sms INTEGER NOT NULL DEFAULT 0,
+  brevo_contact_id TEXT,
+  unsubscribe_token TEXT,
+  locale TEXT,
+  lifecycle_stage TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_email ON marketing_contacts(email);
 CREATE INDEX IF NOT EXISTS idx_marketing_contacts_phone ON marketing_contacts(phone);
 CREATE INDEX IF NOT EXISTS idx_marketing_contacts_last_seen ON marketing_contacts(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_marketing_contacts_tenant ON marketing_contacts(tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_unsub_tok ON marketing_contacts(unsubscribe_token);
+
+CREATE TABLE IF NOT EXISTS marketing_segments (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  name TEXT NOT NULL,
+  description TEXT,
+  filter_json TEXT NOT NULL,
+  contact_count INTEGER NOT NULL DEFAULT 0,
+  last_computed_at INTEGER,
+  created_by INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_segments_tenant ON marketing_segments(tenant_id);
+
+CREATE TABLE IF NOT EXISTS marketing_templates (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  name TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  subject TEXT,
+  body TEXT NOT NULL,
+  variables_json TEXT,
+  locale TEXT,
+  created_by INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_templates_tenant ON marketing_templates(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_templates_channel ON marketing_templates(channel);
+
+CREATE TABLE IF NOT EXISTS marketing_campaigns (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  name TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  segment_id TEXT,
+  template_id TEXT,
+  provider TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  scheduled_at INTEGER,
+  started_at INTEGER,
+  finished_at INTEGER,
+  stats_json TEXT,
+  error TEXT,
+  created_by INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_campaigns_tenant ON marketing_campaigns(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_campaigns_status ON marketing_campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_mkt_campaigns_scheduled ON marketing_campaigns(scheduled_at);
+
+CREATE TABLE IF NOT EXISTS marketing_sends (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  contact_id INTEGER NOT NULL,
+  recipient TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_message_id TEXT,
+  status TEXT NOT NULL DEFAULT 'queued',
+  error TEXT,
+  queued_at INTEGER NOT NULL,
+  sent_at INTEGER,
+  delivered_at INTEGER,
+  opened_at INTEGER,
+  clicked_at INTEGER,
+  bounced_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_sends_campaign ON marketing_sends(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_sends_contact ON marketing_sends(contact_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_sends_status ON marketing_sends(status);
+CREATE INDEX IF NOT EXISTS idx_mkt_sends_provider_msg ON marketing_sends(provider_message_id);
+
+CREATE TABLE IF NOT EXISTS marketing_automations (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT,
+  name TEXT NOT NULL,
+  trigger_type TEXT NOT NULL,
+  trigger_config_json TEXT,
+  steps_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_automations_tenant ON marketing_automations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_automations_enabled ON marketing_automations(enabled);
+
+CREATE TABLE IF NOT EXISTS marketing_providers (
+  name TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  config_json TEXT,
+  health_status TEXT,
+  health_detail TEXT,
+  last_check_at INTEGER,
+  quota_used INTEGER,
+  quota_limit INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing_consent_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  contact_id INTEGER NOT NULL,
+  event TEXT NOT NULL,
+  source TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  note TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_consent_contact ON marketing_consent_log(contact_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_consent_created ON marketing_consent_log(created_at);
 
 CREATE TABLE IF NOT EXISTS industry_configs (
   industry TEXT PRIMARY KEY,

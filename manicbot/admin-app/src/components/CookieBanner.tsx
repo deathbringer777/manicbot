@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useLang } from "~/components/LangContext";
 import {
   COOKIE_BANNER_APPEAR_DELAY_MS,
-  readSessionCookieConsent,
-  writeSessionCookieConsent,
-} from "~/lib/cookieConsentSession";
+  readCookieConsent,
+  writeCookieConsent,
+} from "~/lib/cookieConsentStorage";
 import { t } from "~/lib/i18n";
 
 function isTelegramWebApp(): boolean {
@@ -18,8 +18,8 @@ function isTelegramWebApp(): boolean {
 
 /**
  * Cookie notice — bottom bar, appears after 10s (web and mobile). Choice is stored
- * for the current browser tab session (sessionStorage), so the bar stays hidden
- * after the user picks an option until the session ends.
+ * in localStorage (12 months) so the bar does not re-spam after mobile/WebView
+ * sessionStorage resets.
  * Suppressed inside the Telegram WebApp embed.
  */
 export function CookieBanner() {
@@ -29,7 +29,7 @@ export function CookieBanner() {
 
   useEffect(() => {
     if (isTelegramWebApp()) return;
-    setShouldShow(!readSessionCookieConsent());
+    setShouldShow(!readCookieConsent());
   }, []);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function CookieBanner() {
   if (!shouldShow) return null;
 
   const decide = (acceptAll: boolean) => {
-    writeSessionCookieConsent(acceptAll);
+    writeCookieConsent(acceptAll);
     setMounted(false);
     window.setTimeout(() => setShouldShow(false), 350);
   };

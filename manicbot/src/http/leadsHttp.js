@@ -36,7 +36,10 @@ function clientIp(request) {
   return request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 }
 
-export async function tryLeadRoutes(request, env, url) {
+export async function tryLeadRoutes(request, env, url, execCtx) {
+  const waitUntil = execCtx && typeof execCtx.waitUntil === 'function'
+    ? execCtx.waitUntil.bind(execCtx)
+    : (p) => { p.catch(() => {}); };
   if (request.method === 'OPTIONS' && (url.pathname === '/api/leads' || url.pathname === '/api/email-subscribe')) {
     return json({ ok: true });
   }
@@ -159,14 +162,25 @@ export async function tryLeadRoutes(request, env, url) {
       return json({ error: 'db_error' }, 500);
     }
 
-    // Fire-and-forget welcome email — only on first subscribe
-    if (isNew && ec.resendApiKey && ec.resendFrom) {
-      sendSubscriberWelcomeEmail({
-        resendKey: ec.resendApiKey,
-        fromAddr: ec.resendFrom,
-        email,
-        locale,
-      }).catch((e) => console.error('[newsletter] welcome email failed:', e?.message));
+    // Welcome email — only on first subscribe. waitUntil so the promise
+    // survives after the HTTP response returns (Workers cancel naked
+    // promises once the response is sent).
+    if (isNew) {
+      if (ec.resendApiKey && ec.resendFrom) {
+        console.log(`[newsletter] sending welcome email to ${email} (locale=${locale})`);
+        waitUntil(
+          sendSubscriberWelcomeEmail({
+            resendKey: ec.resendApiKey,
+            fromAddr: ec.resendFrom,
+            email,
+            locale,
+          })
+            .then((ok) => console.log(`[newsletter] welcome email ${ok ? 'sent' : 'FAILED'} for ${email}`))
+            .catch((e) => console.error('[newsletter] welcome email threw:', e?.message)),
+        );
+      } else {
+        console.warn('[newsletter] RESEND_API_KEY or RESEND_FROM missing — skipping welcome email');
+      }
     }
 
     return json({ ok: true });

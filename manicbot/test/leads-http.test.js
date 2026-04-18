@@ -316,6 +316,67 @@ describe('POST /api/email-subscribe', () => {
     expect(rows[0].params[1]).toBe('ru');
   });
 
+  it('does NOT send welcome email when RESEND_API_KEY is missing (warns instead)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const calls = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url) => {
+      calls.push(String(url));
+      return new Response('{}', { status: 200 });
+    });
+    try {
+      const r = await tryLeadRoutes(
+        reqJson('/api/email-subscribe', { email: 'nokey@test.com', locale: 'en' }, '6.6.6.6'),
+        env, new URL('https://manicbot.com/api/email-subscribe'),
+      );
+      expect(r.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(calls.filter((u) => u.includes('api.resend.com'))).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('RESEND_API_KEY or RESEND_FROM missing'));
+    } finally {
+      global.fetch = originalFetch;
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('uses execCtx.waitUntil so the welcome email survives after response', async () => {
+    const env2 = {
+      RESEND_API_KEY: 'rk',
+      RESEND_FROM: 'ManicBot <noreply@manicbot.com>',
+      DB: {
+        prepare() {
+          return {
+            bind() {
+              return {
+                run: async () => ({ success: true }),
+                first: async () => null,
+              };
+            },
+          };
+        },
+      },
+    };
+    const tracked = [];
+    const execCtx = { waitUntil: (p) => { tracked.push(p); } };
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async () => new Response('{"id":"1"}', { status: 200 }));
+    try {
+      const r = await tryLeadRoutes(
+        reqJson('/api/email-subscribe', { email: 'wu@test.com', locale: 'en' }, '5.5.5.5'),
+        env2, new URL('https://manicbot.com/api/email-subscribe'), execCtx,
+      );
+      expect(r.status).toBe(200);
+      expect(tracked).toHaveLength(1);
+      await Promise.all(tracked);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://api.resend.com/emails',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it('sends welcome email via Resend on first subscribe only', async () => {
     // Custom env that tracks whether the email already exists
     const subs = new Set();

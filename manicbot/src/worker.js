@@ -173,7 +173,7 @@ export default {
     res = await tryAdminKeyRoutes(request, env, url);
     if (res) return addSecurityHeaders(res);
 
-    res = await tryLeadRoutes(request, env, url);
+    res = await tryLeadRoutes(request, env, url, executionCtx);
     if (res) return addSecurityHeaders(res);
 
     // Upload + CDN routes (POST /upload/asset, GET /cdn/*) — before landing proxy.

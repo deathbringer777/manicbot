@@ -7,20 +7,15 @@ import {
   readCookieConsent,
   writeCookieConsent,
 } from "~/lib/cookieConsentStorage";
+import { isTelegramInAppContext } from "~/lib/telegramInApp";
 import { t } from "~/lib/i18n";
-
-function isTelegramWebApp(): boolean {
-  if (typeof window === "undefined") return false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tg = (window as any).Telegram?.WebApp;
-  return !!tg?.initData;
-}
 
 /**
  * Cookie notice — bottom bar, appears after 10s (web and mobile). Choice is stored
  * in localStorage (12 months) so the bar does not re-spam after mobile/WebView
  * sessionStorage resets.
- * Suppressed inside the Telegram WebApp embed.
+ * Not shown in Telegram (mini app / in-app browser / Telegram WebView) — not all
+ * of those expose WebApp.initData, so we use a broader isTelegramInAppContext() check.
  */
 export function CookieBanner() {
   const { lang } = useLang();
@@ -28,7 +23,7 @@ export function CookieBanner() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (isTelegramWebApp()) return;
+    if (isTelegramInAppContext(window)) return;
     setShouldShow(!readCookieConsent());
   }, []);
 

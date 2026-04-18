@@ -114,7 +114,7 @@ export default function TenantsPageClient() {
   const [createPlan, setCreatePlan] = useState<"start" | "pro" | "max">("pro");
   const [roleModal, setRoleModal] = useState<string | null>(null); // tenantId
   const [roleChatId, setRoleChatId] = useState("");
-  const [roleType, setRoleType] = useState<"tenant_owner" | "master" | "admin">("master");
+  const [roleType, setRoleType] = useState<"tenant_owner" | "master">("master");
   const [botModal, setBotModal] = useState<string | null>(null); // tenantId
   const [botId, setBotId] = useState("");
   const [botUsername, setBotUsername] = useState("");
@@ -180,7 +180,7 @@ export default function TenantsPageClient() {
   };
 
   const ROLE_LABELS: Record<string, string> = {
-    tenant_owner: "Владелец", master: "Мастер", admin: "Администратор",
+    tenant_owner: "Владелец", master: "Мастер",
   };
 
   return (
@@ -465,7 +465,6 @@ export default function TenantsPageClient() {
                   {([
                     { key: "master", label: "Мастер" },
                     { key: "tenant_owner", label: "Владелец" },
-                    { key: "admin", label: "Админ" },
                   ] as const).map(({ key, label }) => (
                     <button
                       key={key}

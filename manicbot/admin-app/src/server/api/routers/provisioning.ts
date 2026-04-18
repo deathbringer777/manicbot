@@ -356,7 +356,7 @@ export const provisioningRouter = createTRPCRouter({
       z.object({
         tenantId: z.string(),
         chatId: z.number(),
-        role: z.enum(["tenant_owner", "master", "admin"]),
+        role: z.enum(["tenant_owner", "master"]),
       })
     )
     .mutation(async ({ ctx, input }) => {

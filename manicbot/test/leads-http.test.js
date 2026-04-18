@@ -26,6 +26,11 @@ function makeEnv() {
                 const [key, action] = params;
                 return rateLimitStore.get(`${key}|${action}`) || null;
               }
+              if (sql.includes('SELECT COUNT(*)') && sql.includes('FROM leads')) {
+                const [emailParam] = params;
+                const count = rows.filter(r => r.table === 'leads' && r.params[1] === emailParam).length;
+                return { n: count };
+              }
               return null;
             };
             return { run, first };
@@ -165,6 +170,50 @@ describe('POST /api/leads', () => {
     // But only ONE marketing contact, with lead_count = 2
     expect(rows.contacts.size).toBe(1);
     expect(rows.contacts.get('repeat@x.com').lead_count).toBe(2);
+  });
+
+  it('caps leads at 10 per email and returns already_submitted (no new row, no TG)', async () => {
+    env.BOT_TOKEN = 'TOK';
+    env.ADMIN_CHAT_ID = '1';
+    const tgCalls = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).includes('api.telegram.org')) tgCalls.push(String(url));
+      return new Response('{"ok":true}', { status: 200 });
+    });
+    try {
+      for (let i = 0; i < 10; i++) {
+        const r = await tryLeadRoutes(
+          reqJson('/api/leads', { name: 'Cap', email: 'cap@x.com', phone: '+48500000000' }),
+          env, new URL('https://manicbot.com/api/leads'),
+        );
+        expect(r.status, `call ${i}`).toBe(200);
+        expect(await r.json()).toEqual({ ok: true });
+      }
+      expect(rows.filter(r => r.table === 'leads')).toHaveLength(10);
+      expect(tgCalls).toHaveLength(10);
+
+      // 11th: silent ack, no new row, no TG
+      const r11 = await tryLeadRoutes(
+        reqJson('/api/leads', { name: 'Cap', email: 'cap@x.com', phone: '+48500000000' }),
+        env, new URL('https://manicbot.com/api/leads'),
+      );
+      expect(r11.status).toBe(200);
+      expect(await r11.json()).toEqual({ ok: true, already_submitted: true });
+      expect(rows.filter(r => r.table === 'leads')).toHaveLength(10);
+      expect(tgCalls).toHaveLength(10);
+
+      // Different email still accepted
+      const rOther = await tryLeadRoutes(
+        reqJson('/api/leads', { name: 'New', email: 'other@x.com', phone: '+48500000000' }),
+        env, new URL('https://manicbot.com/api/leads'),
+      );
+      expect(rOther.status).toBe(200);
+      expect(await rOther.json()).toEqual({ ok: true });
+      expect(rows.filter(r => r.table === 'leads')).toHaveLength(11);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it('sends TG notification on EVERY submission, not just the first', async () => {

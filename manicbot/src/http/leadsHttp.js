@@ -8,13 +8,14 @@
  * Honeypot `company_name_hp` silently accepted-then-discarded.
  */
 
-import { dbRun } from '../utils/db.js';
+import { dbRun, dbGet } from '../utils/db.js';
 import { envCtx } from './envCtx.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { notifyAdminNewLead } from '../utils/notifyAdmin.js';
 
 const ALLOWED_SALON_TYPES = new Set(['nail', 'beauty', 'cosmetology', 'barber', 'other']);
+const MAX_LEADS_PER_EMAIL = 10;
 const ALLOWED_LOCALES = new Set(['ru', 'uk', 'ua', 'en', 'pl']);
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -68,6 +69,21 @@ export async function tryLeadRoutes(request, env, url) {
 
     if (name.length < 2 || !email.includes('@') || phone.length < 6) {
       return json({ error: 'invalid_fields' }, 400);
+    }
+
+    // Per-contact cap: up to 10 leads per email lifetime. Past that we
+    // silently acknowledge with already_submitted:true — no new row,
+    // no marketing upsert, no TG. DDoS protection is handled by the IP
+    // rate-limit above.
+    try {
+      const row = await dbGet(ec, 'SELECT COUNT(*) AS n FROM leads WHERE email = ?', email);
+      const n = Number(row?.n ?? 0);
+      if (n >= MAX_LEADS_PER_EMAIL) {
+        return json({ ok: true, already_submitted: true });
+      }
+    } catch (e) {
+      console.error('[leads] dedupe count failed:', e?.message);
+      // fall through — better to accept the lead than to drop it
     }
 
     const now = Math.floor(Date.now() / 1000);

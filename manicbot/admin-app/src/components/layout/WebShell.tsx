@@ -16,7 +16,6 @@ import { LangDropdown } from "~/components/public/LangDropdown";
 import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding";
 import type { NavItem, NavGroup } from "~/lib/nav/useNavItems";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
-import { PublicFooter } from "~/components/public/PublicFooter";
 import { useNavItems, tNav, getRoleInfo } from "~/lib/nav/useNavItems";
 import { MasterSwitcherInline } from "~/components/layout/Shell";
 
@@ -346,13 +345,6 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
                 {children}
               </div>
-              {/* Footer — public pages only. Dashboard/settings/master/support
-                  are immersive surfaces where a marketing footer is clutter. */}
-              {!pathname?.startsWith("/dashboard") && !pathname?.startsWith("/settings") && (
-                <div className="relative z-10 pb-24 lg:pb-6 mt-auto shrink-0">
-                  <PublicFooter />
-                </div>
-              )}
             </div>
           </main>
 

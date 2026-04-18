@@ -575,6 +575,22 @@ export const emailSubscribers = sqliteTable("email_subscribers", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const marketingContacts = sqliteTable("marketing_contacts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull(),
+  name: text("name"),
+  phone: text("phone"),
+  source: text("source"),
+  firstSeenAt: integer("first_seen_at").notNull(),
+  lastSeenAt: integer("last_seen_at").notNull(),
+  leadCount: integer("lead_count").notNull().default(1),
+  unsubscribed: integer("unsubscribed").notNull().default(0),
+}, (t) => [
+  uniqueIndex("idx_marketing_contacts_email").on(t.email),
+  index("idx_marketing_contacts_phone").on(t.phone),
+  index("idx_marketing_contacts_last_seen").on(t.lastSeenAt),
+]);
+
 export const industryConfigs = sqliteTable("industry_configs", {
   industry: text("industry").primaryKey(),
   displayName: text("display_name").notNull(),

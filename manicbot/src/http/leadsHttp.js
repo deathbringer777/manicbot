@@ -80,6 +80,15 @@ export async function tryLeadRoutes(request, env, url) {
         (request.headers.get('user-agent') || '').slice(0, 300),
         now,
       );
+      await dbRun(ec, `
+        INSERT INTO marketing_contacts (email, name, phone, source, first_seen_at, last_seen_at, lead_count)
+        VALUES (?, ?, ?, 'landing', ?, ?, 1)
+        ON CONFLICT(email) DO UPDATE SET
+          name = excluded.name,
+          phone = excluded.phone,
+          last_seen_at = excluded.last_seen_at,
+          lead_count = marketing_contacts.lead_count + 1
+      `, email, name, phone, now, now).catch((e) => console.error('[leads] contacts upsert failed:', e?.message));
       void logEvent(ec, 'lead.received', {
         level: 'info',
         message: `New lead: ${email}`,

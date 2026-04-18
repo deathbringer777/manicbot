@@ -17,10 +17,12 @@ function escapeHtml(s) {
 }
 
 async function sendToAdmin(env, text) {
-  const token = env.BOT_TOKEN;
-  const chatId = env.ADMIN_CHAT_ID;
+  // Prefer dedicated notification bot (e.g. @manic_preview_bot) when set.
+  // Falls back to the legacy platform BOT_TOKEN.
+  const token = env.NOTIFY_BOT_TOKEN || env.BOT_TOKEN;
+  const chatId = env.NOTIFY_CHAT_ID || env.ADMIN_CHAT_ID;
   if (!token || !chatId) {
-    console.warn('[notifyAdmin] missing BOT_TOKEN or ADMIN_CHAT_ID — skip');
+    console.warn('[notifyAdmin] missing NOTIFY_BOT_TOKEN/BOT_TOKEN or chat id — skip');
     return;
   }
   try {

@@ -2,34 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useLang } from "~/components/LangContext";
+import {
+  COOKIE_BANNER_APPEAR_DELAY_MS,
+  readSessionCookieConsent,
+  writeSessionCookieConsent,
+} from "~/lib/cookieConsentSession";
 import { t } from "~/lib/i18n";
-
-/** Session-scoped: banner does not reappear in this tab until the session ends. */
-const STORAGE_KEY = "mb-admin-cookie-consent-session-v1";
-const APPEAR_DELAY_MS = 10_000;
-
-type Record = { version: 1; decidedAt: number; acceptedAll: boolean };
-
-function read(): Record | null {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw) as Partial<Record>;
-    if (p.version !== 1 || typeof p.decidedAt !== "number") return null;
-    return p as Record;
-  } catch {
-    return null;
-  }
-}
-
-function write(acceptedAll: boolean): void {
-  try {
-    sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ version: 1, decidedAt: Date.now(), acceptedAll }),
-    );
-  } catch {}
-}
 
 function isTelegramWebApp(): boolean {
   if (typeof window === "undefined") return false;
@@ -51,19 +29,22 @@ export function CookieBanner() {
 
   useEffect(() => {
     if (isTelegramWebApp()) return;
-    setShouldShow(!read());
+    setShouldShow(!readSessionCookieConsent());
   }, []);
 
   useEffect(() => {
     if (!shouldShow) return;
-    const id = window.setTimeout(() => setMounted(true), APPEAR_DELAY_MS);
+    const id = window.setTimeout(
+      () => setMounted(true),
+      COOKIE_BANNER_APPEAR_DELAY_MS,
+    );
     return () => window.clearTimeout(id);
   }, [shouldShow]);
 
   if (!shouldShow) return null;
 
   const decide = (acceptAll: boolean) => {
-    write(acceptAll);
+    writeSessionCookieConsent(acceptAll);
     setMounted(false);
     window.setTimeout(() => setShouldShow(false), 350);
   };

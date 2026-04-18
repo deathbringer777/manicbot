@@ -49,4 +49,11 @@ describe("i18n t()", () => {
     expect(t("gate.forbidden", "ru")).toBe("Доступ запрещён");
     expect(t("gate.tgOnly", "en")).toBe("Telegram only");
   });
+
+  it("cookies.necessaryDisclaimer exists in all four languages (non-empty)", () => {
+    for (const lang of ["ru", "ua", "en", "pl"] as const) {
+      const s = t("cookies.necessaryDisclaimer", lang);
+      expect(s.length).toBeGreaterThan(20);
+    }
+  });
 });

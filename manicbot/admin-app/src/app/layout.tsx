@@ -6,6 +6,7 @@ import { Geist } from "next/font/google";
 import { TRPCReactProvider } from "~/trpc/react";
 import { LangProvider } from "~/components/LangContext";
 import { AuthProvider } from "~/components/AuthProvider";
+import { CookieBanner } from "~/components/CookieBanner";
 import { SITE_URL, SITE_NAME } from "~/lib/seo";
 
 export const metadata: Metadata = {
@@ -92,7 +93,10 @@ export default function RootLayout({
       <body className="antialiased min-h-screen selection:bg-brand-500/30">
         <AuthProvider>
           <TRPCReactProvider>
-            <LangProvider>{children}</LangProvider>
+            <LangProvider>
+              {children}
+              <CookieBanner />
+            </LangProvider>
           </TRPCReactProvider>
         </AuthProvider>
       </body>

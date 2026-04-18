@@ -353,6 +353,13 @@ const translations = {
   "master.saveWarning":           { ru: "Сохраните данные для входа — пароль показывается только один раз!", ua: "Збережіть дані для входу — пароль показується лише один раз!", en: "Save the credentials — the password is shown only once!", pl: "Zapisz dane logowania — hasło wyświetlane jest tylko raz!" },
   "master.webBadge":              { ru: "Web",                    ua: "Web",                    en: "Web",                   pl: "Web" },
   "master.done":                  { ru: "Готово",                 ua: "Готово",                 en: "Done",                  pl: "Gotowe" },
+
+  // ── Cookies ────────────────────────────────────────────────────────────────
+  "cookies.title":          { ru: "Cookies на ManicBot",                              ua: "Cookies на ManicBot",                              en: "Cookies on ManicBot",                                pl: "Pliki cookie w ManicBot" },
+  "cookies.body":           { ru: "Мы используем необходимые cookie для работы сервиса. Вы можете принять все или оставить только необходимые.", ua: "Ми використовуємо необхідні cookie для роботи сервісу. Ви можете прийняти всі або залишити лише необхідні.", en: "We use necessary cookies so the service works. You can accept all or keep only necessary ones.", pl: "Używamy niezbędnych plików cookie, aby serwis działał. Możesz zaakceptować wszystkie lub zachować tylko niezbędne." },
+  "cookies.acceptAll":      { ru: "Принять все",                                      ua: "Прийняти всі",                                     en: "Accept all",                                         pl: "Akceptuj wszystkie" },
+  "cookies.onlyNecessary":  { ru: "Только необходимые",                               ua: "Тільки необхідні",                                 en: "Only necessary",                                     pl: "Tylko niezbędne" },
+  "cookies.policy":         { ru: "Политика cookies",                                 ua: "Політика cookies",                                 en: "Cookie policy",                                      pl: "Polityka cookies" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

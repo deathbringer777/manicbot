@@ -39,6 +39,45 @@ describe('subscriberWelcomeEmail — localization', () => {
     expect(html).toContain('Спасибо');
     expect(html).toContain('🤖');
   });
+
+  it('does NOT use the "omnichannel" jargon anywhere in benefit copy (all locales)', () => {
+    for (const lang of ['ru', 'uk', 'en', 'pl']) {
+      const blob = COPY[lang].benefits.join(' ').toLowerCase();
+      expect(blob).not.toContain('омниканал');
+      expect(blob).not.toContain('омніканал');
+      expect(blob).not.toContain('omnichannel');
+    }
+  });
+
+  it('uses plain-language "all chats in one inbox" phrasing per locale', () => {
+    expect(COPY.ru.benefits.some((b) => b.includes('Все чаты в одном месте'))).toBe(true);
+    expect(COPY.uk.benefits.some((b) => b.includes('Всі чати в одному місці'))).toBe(true);
+    expect(COPY.en.benefits.some((b) => /all client chats in one inbox/i.test(b))).toBe(true);
+    expect(COPY.pl.benefits.some((b) => b.includes('Wszystkie czaty w jednej skrzynce'))).toBe(true);
+  });
+
+  it('renders color-scheme meta tags so clients know we support dark+light', () => {
+    const html = buildHtml(COPY.ru, 'ru', 'https://manicbot.com');
+    expect(html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(html).toContain('<meta name="supported-color-schemes" content="light dark">');
+  });
+
+  it('includes a prefers-color-scheme media query for adaptive dark polish', () => {
+    const html = buildHtml(COPY.ru, 'ru', 'https://manicbot.com');
+    expect(html).toContain('@media (prefers-color-scheme: dark)');
+    // Dark overrides target the body and content card so iOS Mail tunes them
+    expect(html).toMatch(/\.mb-body\s*\{\s*background:#0b1020/);
+    expect(html).toMatch(/\.mb-card\s*\{\s*background:#0f172a/);
+  });
+
+  it('CTA card uses a dark-safe palette (survives iOS auto-inversion)', () => {
+    const html = buildHtml(COPY.ru, 'ru', 'https://manicbot.com');
+    // New: dark indigo CTA bg with white heading
+    expect(html).toContain('background:#1e1b4b');
+    // Old light-gradient pair must be gone — that's what triggered the bug
+    expect(html).not.toContain('#eef2ff');
+    expect(html).not.toContain('#f5f3ff');
+  });
 });
 
 describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {

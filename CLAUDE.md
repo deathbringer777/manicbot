@@ -87,7 +87,7 @@ HTTP request → src/worker.js
   ├─ src/http/*              → match URL first (landing, Stripe, admin keys, Google OAuth, HTML admin, calendar, webhooks)
   ├─ src/http/resolveCtx.js  → getCtx() → tenant/resolver.js (POST /webhook/:botId or legacy /webhook)
   └─ scheduled               → cron per tenant (D1) or legacy ctx
-       └─ handlers/message.js, callback.js, inbound.js → onMsg / onCb (Telegram + омниканал)
+       └─ handlers/message.js, callback.js, inbound.js → onMsg / onCb (Telegram + WhatsApp/Instagram)
        └─ handlers/cron.js   ← scheduled tasks (every 15min)
 ```
 

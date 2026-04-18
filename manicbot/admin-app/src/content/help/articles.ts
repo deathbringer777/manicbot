@@ -240,10 +240,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
     categoryKey: "channels",
     keywords: ["канал", "channel", "telegram", "instagram", "whatsapp", "омниканал", "inbox"],
     titles: {
-      ru: "Омниканал",
-      ua: "Омніканал",
-      en: "Omnichannel inbox",
-      pl: "Omnichannel",
+      ru: "Единые входящие",
+      ua: "Єдині вхідні",
+      en: "Unified inbox",
+      pl: "Wspólna skrzynka",
     },
     excerpts: {
       ru: "Telegram, Instagram и WhatsApp в одном потоке.",
@@ -252,7 +252,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       pl: "Jeden strumień dla Telegram, Instagram i WhatsApp.",
     },
     bodies: {
-      ru: "Подключите каналы в настройках. Входящие сообщения попадают в единую ленту разговоров (в God Mode — «Омниканал»). Ответы уходят обратно в тот канал, откуда написал клиент, с учётом окон WhatsApp/Instagram.",
+      ru: "Подключите каналы в настройках. Входящие сообщения попадают в единую ленту разговоров (в God Mode — «Входящие»). Ответы уходят обратно в тот канал, откуда написал клиент, с учётом окон WhatsApp/Instagram.",
       ua: "Підключіть канали в налаштуваннях. Вхідні повідомлення збираються в одній стрічці.",
       en: "Connect channels in settings. Inbound chats land in one conversation list (God Mode: Inbox). Replies go back on the originating channel, respecting WhatsApp/Instagram messaging windows.",
       pl: "Podłącz kanały w ustawieniach. Wiadomości trafiają do jednej listy. Odpowiedzi wracają tym samym kanałem, z zasadami okien WA/IG.",
@@ -382,9 +382,9 @@ export const HELP_ARTICLES: HelpArticle[] = [
       pl: "Dziś, kalendarz i wizyty.",
     },
     bodies: {
-      ru: "В кабинете мастера откройте «Сегодня» для ближайших записей и «Расписание» для недели. Записи, созданные клиентами в боте или омниканале, отображаются здесь же. Если слот пустой, проверьте часы работы салона и привязку мастера к услугам.",
+      ru: "В кабинете мастера откройте «Сегодня» для ближайших записей и «Расписание» для недели. Записи, созданные клиентами в боте или во «Входящих», отображаются здесь же. Если слот пустой, проверьте часы работы салона и привязку мастера к услугам.",
       ua: "У кабінеті майстра — «Сьогодні» та «Розклад». Записи з бота видно тут. Перевірте години та послуги, якщо слотів немає.",
-      en: "Use Today for your next bookings and Schedule for the week. Bookings from the bot or omnichannel appear here. If slots look wrong, ask the owner to check work hours and which services you offer.",
+      en: "Use Today for your next bookings and Schedule for the week. Bookings from the bot or the unified inbox appear here. If slots look wrong, ask the owner to check work hours and which services you offer.",
       pl: "Zakładki Dziś i Grafik. Rezerwacje z bota są widoczne tutaj. Gdy sloty są puste, poproś właścicielkę o godziny i przypisanie usług.",
     },
   },

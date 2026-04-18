@@ -29,7 +29,7 @@ npx wrangler d1 execute manicbot-db --remote --file src/db/schema.sql
 ```bash
 npx wrangler d1 execute manicbot-db --remote --command "SELECT name FROM sqlite_master WHERE type='table';"
 ```
-Should return around **20+** tables (including `channel_configs`, `conversations`, `message_windows` for omnichannel). After changes in `migrations/` and `schema.sql`, sync Drizzle (`admin-app/src/server/db/schema.ts`) and run **`npm run check-schema`** in the `manicbot/` directory.
+Should return around **20+** tables (including `channel_configs`, `conversations`, `message_windows` for the unified inbox). After changes in `migrations/` and `schema.sql`, sync Drizzle (`admin-app/src/server/db/schema.ts`) and run **`npm run check-schema`** in the `manicbot/` directory.
 
 ### Existing data (if you had a KV-only setup):
 If you already have a bot running with KV storage, run the data migration — see **MIGRATION.md**.

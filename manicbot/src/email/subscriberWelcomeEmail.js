@@ -23,7 +23,7 @@ const COPY = {
       '🤖 AI-ассистент отвечает на вопросы клиентов круглосуточно',
       '📅 Автоматическая запись и напоминания — минус 80% пропусков',
       '👥 Управление мастерами, услугами и расписанием в один клик',
-      '💬 Омниканал: Telegram, WhatsApp и Instagram в одном окне',
+      '💬 Все чаты в одном месте: Telegram, WhatsApp и Instagram',
       '📊 Аналитика загрузки, доходов и клиентской базы',
     ],
     ctaTitle: 'Хотите попробовать?',
@@ -44,7 +44,7 @@ const COPY = {
       '🤖 AI-асистент відповідає на питання клієнтів цілодобово',
       '📅 Автоматичний запис і нагадування — мінус 80% пропусків',
       '👥 Керування майстрами, послугами та розкладом в один клік',
-      '💬 Омніканал: Telegram, WhatsApp та Instagram в одному вікні',
+      '💬 Всі чати в одному місці: Telegram, WhatsApp та Instagram',
       '📊 Аналітика завантаження, доходів та клієнтської бази',
     ],
     ctaTitle: 'Хочете спробувати?',
@@ -65,7 +65,7 @@ const COPY = {
       '🤖 AI assistant answers client questions around the clock',
       '📅 Automatic bookings and reminders — up to 80% fewer no-shows',
       '👥 Manage masters, services, and schedule in one click',
-      '💬 Omnichannel: Telegram, WhatsApp, and Instagram in one inbox',
+      '💬 All client chats in one inbox: Telegram, WhatsApp, Instagram',
       '📊 Analytics on utilization, revenue, and customer base',
     ],
     ctaTitle: 'Want to try it?',
@@ -86,7 +86,7 @@ const COPY = {
       '🤖 Asystent AI odpowiada klientom przez całą dobę',
       '📅 Automatyczne zapisy i przypomnienia — nawet 80% mniej no-show',
       '👥 Zarządzanie mistrzami, usługami i grafikiem w jednym miejscu',
-      '💬 Omnichannel: Telegram, WhatsApp i Instagram w jednej skrzynce',
+      '💬 Wszystkie czaty w jednej skrzynce: Telegram, WhatsApp, Instagram',
       '📊 Analityka obłożenia, przychodów i bazy klientów',
     ],
     ctaTitle: 'Chcesz spróbować?',
@@ -108,61 +108,84 @@ function buildHtml(c, lang, ctaUrl) {
   const benefitsHtml = c.benefits
     .map(
       (b) =>
-        `<tr><td style="padding:10px 0;font-size:15px;color:#334155;line-height:1.5;">${b}</td></tr>`,
+        `<tr><td class="mb-text-soft" style="padding:10px 0;font-size:15px;color:#334155;line-height:1.5;">${b}</td></tr>`,
     )
     .join('');
 
+  // Palette strategy:
+  //  - Baseline inline styles: white content card + dark CTA card. Both
+  //    look good on clients that don't honor color-scheme / media queries.
+  //  - `<meta name="color-scheme">` tells Apple Mail / iOS Mail / Outlook
+  //    that we support both modes, suppressing aggressive auto-inversion.
+  //  - `@media (prefers-color-scheme: dark)` tunes the white card to a
+  //    dark card on capable clients. Gmail web strips this but our
+  //    inline baseline is already legible.
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>${c.heading}</title>
+<style>
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  @media (prefers-color-scheme: dark) {
+    .mb-body { background:#0b1020 !important; }
+    .mb-card { background:#0f172a !important; }
+    .mb-text-strong { color:#f8fafc !important; }
+    .mb-text-soft { color:#cbd5e1 !important; }
+    .mb-footer { background:#111827 !important; }
+    .mb-footer-text { color:#94a3b8 !important; }
+  }
+</style>
 </head>
-<body style="margin:0;padding:0;background:#0b1020;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1e293b;">
+<body class="mb-body" style="margin:0;padding:0;background:#0b1020;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1e293b;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${c.preheader}</div>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0b1020;padding:32px 16px;">
+<table class="mb-body" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1020;padding:32px 16px;">
 <tr><td align="center">
 <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
 
   <!-- Header / Hero -->
   <tr><td style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#3b82f6 100%);border-radius:20px 20px 0 0;padding:40px 32px 32px;text-align:center;">
-    <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#fff;letter-spacing:-0.5px;">ManicBot</p>
-    <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.8);letter-spacing:1.5px;text-transform:uppercase;">${c.preheader}</p>
+    <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">ManicBot</p>
+    <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.85);letter-spacing:1.5px;text-transform:uppercase;">${c.preheader}</p>
   </td></tr>
 
   <!-- Body -->
-  <tr><td style="background:#ffffff;padding:40px 32px 32px;">
-    <h1 style="margin:0 0 16px;font-size:24px;font-weight:800;color:#0f172a;letter-spacing:-0.4px;">${c.heading}</h1>
-    <p style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#475569;">${c.intro}</p>
+  <tr><td class="mb-card" style="background:#ffffff;padding:40px 32px 32px;">
+    <h1 class="mb-text-strong" style="margin:0 0 16px;font-size:24px;font-weight:800;color:#0f172a;letter-spacing:-0.4px;">${c.heading}</h1>
+    <p class="mb-text-soft" style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#475569;">${c.intro}</p>
 
     <!-- What is -->
-    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#0f172a;">${c.whatIsTitle}</h2>
-    <p style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#475569;">${c.whatIs}</p>
+    <h2 class="mb-text-strong" style="margin:0 0 12px;font-size:18px;font-weight:700;color:#0f172a;">${c.whatIsTitle}</h2>
+    <p class="mb-text-soft" style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#475569;">${c.whatIs}</p>
 
     <!-- Benefits -->
-    <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#0f172a;">${c.offerTitle}</h2>
+    <h2 class="mb-text-strong" style="margin:0 0 12px;font-size:18px;font-weight:700;color:#0f172a;">${c.offerTitle}</h2>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
       ${benefitsHtml}
     </table>
 
-    <!-- CTA card -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);border-radius:14px;margin-bottom:24px;">
+    <!-- CTA card — always-dark palette so auto-inversion on iOS dark mode
+         never flips dark text onto a light bg (the readability bug that
+         triggered this rewrite). -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1b4b;border-radius:14px;margin-bottom:24px;">
       <tr><td style="padding:24px 24px 28px;text-align:center;">
-        <p style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;">${c.ctaTitle}</p>
-        <p style="margin:0 0 18px;font-size:14px;color:#475569;">${c.ctaText}</p>
-        <a href="${ctaUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:12px;box-shadow:0 6px 18px rgba(99,102,241,0.35);">
+        <p style="margin:0 0 6px;font-size:17px;font-weight:700;color:#ffffff;">${c.ctaTitle}</p>
+        <p style="margin:0 0 18px;font-size:14px;color:#c7d2fe;">${c.ctaText}</p>
+        <a href="${ctaUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:12px;box-shadow:0 6px 18px rgba(99,102,241,0.35);">
           ${c.ctaButton} →
         </a>
       </td></tr>
     </table>
 
-    <p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#475569;">${c.signOff}</p>
+    <p class="mb-text-soft" style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#475569;">${c.signOff}</p>
   </td></tr>
 
   <!-- Footer -->
-  <tr><td style="background:#f1f5f9;border-radius:0 0 20px 20px;padding:20px 32px;text-align:center;">
-    <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">${c.footer}</p>
+  <tr><td class="mb-footer" style="background:#f1f5f9;border-radius:0 0 20px 20px;padding:20px 32px;text-align:center;">
+    <p class="mb-footer-text" style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">${c.footer}</p>
   </td></tr>
 
 </table>

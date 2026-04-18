@@ -12,7 +12,7 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **AI assistant** — Workers AI (Llama) handles free-form dialogue and understands client intent
 - **Roles** — system_admin / technical_support / support / tenant_owner / master / client
 - **Multi-tenancy** — D1 (primary tenant/bot registry) + KV for state; prefix `t:{tenantId}:*`; legacy mode `b:{botId}:*` with a single `BOT_TOKEN`
-- **Omnichannel** — WhatsApp / Instagram (Meta webhooks) via shared `handlers/inbound.js` → same `onMsg` / `onCb` as Telegram
+- **Unified inbox** — WhatsApp / Instagram (Meta webhooks) merged with Telegram in one conversation view via shared `handlers/inbound.js` → same `onMsg` / `onCb`
 - **Billing** — Stripe Checkout and Portal, three plans (Start / Pro / Studio)
 - **Support** — client↔master tickets and platform tickets client↔support agent
 - **Notifications** — cron every 15 min, appointment reminders

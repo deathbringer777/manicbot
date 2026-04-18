@@ -73,7 +73,7 @@ export function ConversationsPage() {
 
   if (!isGod && !tenantId) {
     return (
-      <Shell navItems={[]} title="Conversations" subtitle="Omnichannel inbox">
+      <Shell navItems={[]} title="Conversations" subtitle="Unified inbox">
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <MessageSquare className="h-10 w-10 text-slate-600" />
           <p className="text-slate-500 text-sm">No salon context</p>
@@ -86,7 +86,7 @@ export function ConversationsPage() {
     <Shell
       navItems={[]}
       title="Conversations"
-      subtitle="Omnichannel: client chats (TG / WA / IG). Platform staff mail lives in Support tickets."
+      subtitle="Unified inbox: client chats (TG / WA / IG). Platform staff mail lives in Support tickets."
     >
       {isGod && (
         <div className="flex flex-col sm:flex-row gap-2 mb-4">

@@ -823,8 +823,8 @@ export const HELP_FIGURES_BY_SLUG: Record<string, HelpUiFigure[]> = {
         pl: "Pełny panel tylko dla zaufanych ról",
       },
       items: {
-        ru: ["Тенанты", "Метрики", "Биллинг", "Омниканал", "Настройки"],
-        ua: ["Тенанти", "Метрики", "Білінг", "Омніканал", "Налаштування"],
+        ru: ["Тенанты", "Метрики", "Биллинг", "Входящие", "Настройки"],
+        ua: ["Тенанти", "Метрики", "Білінг", "Вхідні", "Налаштування"],
         en: ["Tenants", "Metrics", "Billing", "Inbox", "Settings"],
         pl: ["Tenanty", "Metryki", "Rozliczenia", "Inbox", "Ustawienia"],
       },

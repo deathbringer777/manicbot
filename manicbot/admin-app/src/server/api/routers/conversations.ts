@@ -11,7 +11,7 @@ import { eq, and, desc, lt, like, sql } from "drizzle-orm";
 
 export const conversationsRouter = createTRPCRouter({
   /**
-   * God Mode: all tenants' omnichannel rows (optional tenant + search on channel_user_id).
+   * God Mode: all tenants' unified-inbox rows (optional tenant + search on channel_user_id).
    */
   listAdmin: adminProcedure
     .input(

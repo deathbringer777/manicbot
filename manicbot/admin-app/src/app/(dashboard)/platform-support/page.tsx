@@ -7,7 +7,7 @@ import { useRole } from "~/components/RoleContext";
 
 const SUPPORT_ROLES = new Set(["system_admin", "support", "technical_support"]);
 
-/** Platform tickets (staff ↔ ManicBot). Salon omnichannel stays under /conversations. */
+/** Platform tickets (staff ↔ ManicBot). Salon unified inbox stays under /conversations. */
 export default function PlatformSupportPage() {
   const { role } = useRole();
   const router = useRouter();

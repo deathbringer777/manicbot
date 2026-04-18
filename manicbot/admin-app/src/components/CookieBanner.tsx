@@ -4,19 +4,18 @@ import { useEffect, useState } from "react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
-const STORAGE_KEY = "mb-admin-cookie-consent-v1";
-const EXPIRY_MS = 12 * 30 * 24 * 60 * 60 * 1000;
+/** Session-scoped: banner does not reappear in this tab until the session ends. */
+const STORAGE_KEY = "mb-admin-cookie-consent-session-v1";
 const APPEAR_DELAY_MS = 10_000;
 
 type Record = { version: 1; decidedAt: number; acceptedAll: boolean };
 
 function read(): Record | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as Partial<Record>;
     if (p.version !== 1 || typeof p.decidedAt !== "number") return null;
-    if (Date.now() - p.decidedAt > EXPIRY_MS) return null;
     return p as Record;
   } catch {
     return null;
@@ -25,7 +24,7 @@ function read(): Record | null {
 
 function write(acceptedAll: boolean): void {
   try {
-    localStorage.setItem(
+    sessionStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ version: 1, decidedAt: Date.now(), acceptedAll }),
     );
@@ -40,7 +39,9 @@ function isTelegramWebApp(): boolean {
 }
 
 /**
- * GDPR-compliant cookie notice — thin bottom bar, appears softly after 10s.
+ * Cookie notice — bottom bar, appears after 10s (web and mobile). Choice is stored
+ * for the current browser tab session (sessionStorage), so the bar stays hidden
+ * after the user picks an option until the session ends.
  * Suppressed inside the Telegram WebApp embed.
  */
 export function CookieBanner() {
@@ -97,6 +98,9 @@ export function CookieBanner() {
             >
               {t("cookies.policy", lang)}
             </a>
+            <span className="mt-1.5 block text-[11px] leading-snug text-slate-400/95 sm:text-xs">
+              {t("cookies.necessaryDisclaimer", lang)}
+            </span>
           </p>
 
           <div className="flex shrink-0 gap-2">

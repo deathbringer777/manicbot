@@ -440,13 +440,13 @@ describe('POST /api/email-subscribe', () => {
     }
   });
 
-  it('rate-limits after 5 requests per IP per hour', async () => {
-    for (let i = 0; i < 5; i++) {
+  it('rate-limits after 20 requests per IP per hour', async () => {
+    for (let i = 0; i < 20; i++) {
       const req = reqJson('/api/email-subscribe', { email: `x${i}@y.com` }, '7.7.7.7');
       const r = await tryLeadRoutes(req, env, new URL(req.url));
-      expect(r.status).toBe(200);
+      expect(r.status, `call ${i}`).toBe(200);
     }
-    const req = reqJson('/api/email-subscribe', { email: 'x5@y.com' }, '7.7.7.7');
+    const req = reqJson('/api/email-subscribe', { email: 'x20@y.com' }, '7.7.7.7');
     const r = await tryLeadRoutes(req, env, new URL(req.url));
     expect(r.status).toBe(429);
   });

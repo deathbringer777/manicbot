@@ -136,7 +136,9 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
     const ec = envCtx(env);
     const ip = clientIp(request);
 
-    const rl = await checkAndIncrement(ec, `newsletter:${ip}`, 'post', 5, 3600);
+    // 20/hr per IP — generous enough for shared NAT (offices, mobile carriers)
+    // but still DDoS-safe. Dedup is enforced at the DB level via UNIQUE(email).
+    const rl = await checkAndIncrement(ec, `newsletter:${ip}`, 'post', 20, 3600);
     if (rl.limited) return json({ error: 'rate_limited' }, 429);
 
     let body;

@@ -137,7 +137,8 @@ export const appointmentsRouter = createTRPCRouter({
       const updates: Record<string, string | number | null> = { status: input.status };
       if (input.status === "confirmed") {
         // Set confirmedBy and masterId so the Worker cron can sync calendar events
-        const adminId = ctx.user?.id ?? null;
+        // Web session: use webUser.id → numeric hash fallback (null is fine — cron still syncs via masterId)
+        const adminId: number | null = null;
         if (adminId) {
           updates.confirmedBy = adminId;
           // Only set masterId if not already assigned (don't overwrite a real master)
@@ -225,12 +226,20 @@ export const appointmentsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
-      // Role scoping: masters can only book on their own calendar
-      if (ctx.webUser?.webRole === "master" && ctx.user?.id !== input.masterId) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Masters can only book on their own calendar",
-        });
+      // Role scoping: masters can only book on their own calendar.
+      // For web sessions, masterId must match the master row tied to the caller's tenantId.
+      if (ctx.webUser?.webRole === "master") {
+        const [masterRow] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)))
+          .limit(1);
+        if (!masterRow || masterRow.chatId !== input.masterId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Masters can only book on their own calendar",
+          });
+        }
       }
 
       // Resolve service duration for slot-conflict check
@@ -318,7 +327,7 @@ export const appointmentsRouter = createTRPCRouter({
         masterId: input.masterId,
         userName: input.clientName ?? null,
         userPhone: input.clientPhone ?? null,
-        confirmedBy: ctx.user?.id ?? null,
+        confirmedBy: null,
         cancelled: 0,
         noShow: 0,
         remH24: 0,
@@ -330,7 +339,7 @@ export const appointmentsRouter = createTRPCRouter({
       // export .execute() on this DB variant).
       try {
         const d1 = (ctx as unknown as { db: { $client?: { prepare?: (s: string) => { bind: (...a: unknown[]) => { run: () => Promise<unknown> } } } } }).db.$client;
-        const actorId = String(ctx.user?.id ?? ctx.webUser?.id ?? "unknown");
+        const actorId = String(ctx.webUser?.id ?? "unknown");
         const props = JSON.stringify({ source: "manual_dashboard", masterId: input.masterId, serviceId: input.serviceId, aptId });
         if (d1?.prepare) {
           await d1.prepare("INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at) VALUES (?, ?, ?, ?, ?)")

@@ -223,7 +223,7 @@ export const roleChangeRequestsRouter = createTRPCRouter({
       if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
 
       const now = Math.floor(Date.now() / 1000);
-      const reviewerId = ctx.webUser?.id ?? ctx.user?.id?.toString() ?? "admin";
+      const reviewerId = ctx.webUser?.id ?? "admin";
 
       // If approved, perform the role switch
       if (input.decision === "approved") {

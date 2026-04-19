@@ -55,9 +55,6 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
           headers: () => {
             const headers = new Headers();
             headers.set("x-trpc-source", "nextjs-react");
-            if (typeof window !== "undefined" && (window as any).Telegram?.WebApp?.initData) {
-              headers.set("x-telegram-init-data", (window as any).Telegram.WebApp.initData);
-            }
             return headers;
           },
         }),

@@ -18,7 +18,6 @@ import { appointmentsRouter } from "~/server/api/routers/appointments";
 import {
   createDbMock,
   makeAdminCtx,
-  makeTgAdminCtx,
   makeUnauthCtx,
   makeForbiddenWebCtx,
 } from "./helpers/db-mock";
@@ -140,54 +139,27 @@ describe("appointmentsRouter", () => {
     });
   });
 
-  // ── updateStatus — confirmed (Telegram admin, so adminId is set) ─────────
+  // ── updateStatus — confirmed ────────────────────────────────────────────
   describe("updateStatus — confirmed", () => {
-    it("sets confirmedBy to Telegram admin id and status=confirmed", async () => {
+    it("sets status=confirmed (confirmedBy null for web God Mode sessions)", async () => {
       const dbMock = createDbMock([
-        [{ masterId: null }],      // masterId check (for TG admin path)
-        [{ tenantId: "t_demo" }],  // tenantId for notifyWorker
+        [{ tenantId: "t_demo" }],
       ]);
-      const caller = createCaller(makeTgAdminCtx(dbMock.db) as never);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       const result = await caller.updateStatus({ id: "apt_1", status: "confirmed" });
 
       expect(result.success).toBe(true);
       expect(dbMock.updateCalls[0]?.values).toMatchObject({
         status: "confirmed",
-        confirmedBy: 12345,
       });
-    });
-
-    it("sets masterId to adminId when masterId is currently null", async () => {
-      const dbMock = createDbMock([
-        [{ masterId: null }],
-        [{ tenantId: "t_demo" }],
-      ]);
-      const caller = createCaller(makeTgAdminCtx(dbMock.db) as never);
-
-      await caller.updateStatus({ id: "apt_1", status: "confirmed" });
-
-      expect(dbMock.updateCalls[0]?.values).toMatchObject({ masterId: 12345 });
-    });
-
-    it("does NOT overwrite masterId when already assigned", async () => {
-      const dbMock = createDbMock([
-        [{ masterId: 999 }],       // existing master
-        [{ tenantId: "t_demo" }],
-      ]);
-      const caller = createCaller(makeTgAdminCtx(dbMock.db) as never);
-
-      await caller.updateStatus({ id: "apt_1", status: "confirmed" });
-
-      expect(dbMock.updateCalls[0]?.values.masterId).toBeUndefined();
     });
 
     it("calls notifyWorker with action=confirm and correct tenantId", async () => {
       const dbMock = createDbMock([
-        [{ masterId: null }],
         [{ tenantId: "t_demo" }],
       ]);
-      const caller = createCaller(makeTgAdminCtx(dbMock.db) as never);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       await caller.updateStatus({ id: "apt_1", status: "confirmed" });
 
@@ -202,10 +174,9 @@ describe("appointmentsRouter", () => {
 
     it("does NOT call notifyWorker when tenantId is not found", async () => {
       const dbMock = createDbMock([
-        [{ masterId: null }],
         [],  // empty → no tenantId
       ]);
-      const caller = createCaller(makeTgAdminCtx(dbMock.db) as never);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       await caller.updateStatus({ id: "apt_1", status: "confirmed" });
 

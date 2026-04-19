@@ -68,12 +68,11 @@ export function createDbMock(selectResults: unknown[] = []) {
   };
 }
 
-// ── Auth context factories ───────────────────────────────────────────────────
+// ── Auth context factories (web-session only, Telegram Mini App removed) ────
 
 export function makeAdminCtx(db: any) {
   return {
     db,
-    user: null as null,
     webUser: {
       id: "w_admin",
       email: "admin@test.com",
@@ -84,19 +83,9 @@ export function makeAdminCtx(db: any) {
   };
 }
 
-export function makeTgAdminCtx(db: any, userId = 12345) {
-  return {
-    db,
-    user: { id: userId, first_name: "Admin" },
-    webUser: null as null,
-    headers: new Headers(),
-  };
-}
-
 export function makeTenantOwnerCtx(db: any, tenantId: string) {
   return {
     db,
-    user: null as null,
     webUser: {
       id: "w_owner",
       email: "owner@test.com",
@@ -107,10 +96,35 @@ export function makeTenantOwnerCtx(db: any, tenantId: string) {
   };
 }
 
+export function makeTenantManagerCtx(db: any, tenantId: string) {
+  return {
+    db,
+    webUser: {
+      id: "w_manager",
+      email: "manager@test.com",
+      tenantId,
+      webRole: "tenant_manager",
+    },
+    headers: new Headers(),
+  };
+}
+
+export function makeMasterCtx(db: any, tenantId: string) {
+  return {
+    db,
+    webUser: {
+      id: "w_master",
+      email: "master@test.com",
+      tenantId,
+      webRole: "master",
+    },
+    headers: new Headers(),
+  };
+}
+
 export function makeUnauthCtx(db: any) {
   return {
     db,
-    user: null as null,
     webUser: null as null,
     headers: new Headers(),
   };
@@ -119,7 +133,6 @@ export function makeUnauthCtx(db: any) {
 export function makeForbiddenWebCtx(db: any) {
   return {
     db,
-    user: null as null,
     webUser: {
       id: "w_user",
       email: "user@test.com",
@@ -136,22 +149,12 @@ export function makeSupportCtx(
 ) {
   return {
     db,
-    user: null as null,
     webUser: {
       id: "w_support",
       email: "support@test.com",
       tenantId: null as string | null,
       webRole: role,
     },
-    headers: new Headers(),
-  };
-}
-
-export function makeTelegramUserCtx(db: any, userId: number) {
-  return {
-    db,
-    user: { id: userId, first_name: "TGUser" },
-    webUser: null as null,
     headers: new Headers(),
   };
 }

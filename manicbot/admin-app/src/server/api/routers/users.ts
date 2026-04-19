@@ -4,7 +4,7 @@ import { eq, inArray, and, asc, sql, or, like } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
-import { timingSafeEqualStr } from "~/server/auth/telegram";
+import { timingSafeEqualStr } from "~/server/auth/crypto";
 
 export const usersRouter = createTRPCRouter({
   getAll: adminProcedure

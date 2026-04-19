@@ -35,15 +35,7 @@ export default function DashboardLayout({
   const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
   const [previewMasterId, setPreviewMasterIdState] = useState<number | null>(null);
 
-  // Check for Telegram WebApp — redirect to /tg if present
-  useEffect(() => {
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg?.initData) {
-      window.location.replace("/tg");
-    }
-  }, []);
-
-  // Auth: query role from next-auth session or Telegram initData
+  // Auth: query role from next-auth session (email/password)
   const roleQuery = api.auth.getMyRole.useQuery(undefined, { retry: false });
 
   // Redirect to login if not authenticated

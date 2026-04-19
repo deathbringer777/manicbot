@@ -11,67 +11,43 @@ import superjson from "superjson";
 import { ZodError } from "zod";
 
 import { getDb } from "~/server/db";
-import { validateWebAppData, timingSafeEqualStr } from "~/server/auth/telegram";
-import { env } from "~/env";
 import { auth } from "~/server/auth/auth";
 
 /**
  * 1. CONTEXT
  *
- * This section defines the "contexts" that are available in the backend API.
- *
- * These allow you to access things when processing a request, like the database, the session, etc.
- *
- * This helper generates the "internals" for a tRPC context. The API handler and RSC clients each
- * wrap this and provides the required context.
+ * Auth is web-session only (NextAuth email/password). The legacy Telegram Mini App path
+ * (x-telegram-init-data HMAC) has been removed in Phase 1.
  *
  * @see https://trpc.io/docs/server/context
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
-  // 1. Try Telegram Mini App auth (x-telegram-init-data header)
-  const telegramInitData = opts.headers.get("x-telegram-init-data");
-  let user = null;
-  if (telegramInitData) {
-    const validData = await validateWebAppData(telegramInitData);
-    if (validData.valid) {
-      user = validData.user;
-    }
-  }
-
-  // 2. Fallback: next-auth web session (JWT cookie) for browser-based logins
   let webUser: { id: string; email: string; tenantId: string | null; webRole: string } | null = null;
-  if (!user) {
-    try {
-      const session = await auth();
-      if (session?.user?.email) {
-        webUser = {
-          id: session.user.id ?? session.user.email,
-          email: session.user.email,
-          tenantId: session.user.tenantId ?? null,
-          webRole: session.user.webRole ?? "tenant_owner",
-        };
-      }
-    } catch {
-      // auth() may throw in non-request contexts — ignore
+  try {
+    const session = await auth();
+    if (session?.user?.email) {
+      webUser = {
+        id: session.user.id ?? session.user.email,
+        email: session.user.email,
+        tenantId: session.user.tenantId ?? null,
+        webRole: session.user.webRole ?? "tenant_owner",
+      };
     }
+  } catch {
+    // auth() may throw in non-request contexts — ignore
   }
 
   const db = getDb();
 
   return {
     db,
-    user,       // Telegram user (id = Telegram chatId)
-    webUser,    // Web session user (id = web user UUID)
+    webUser,
     ...opts,
   };
 };
 
 /**
  * 2. INITIALIZATION
- *
- * This is where the tRPC API is initialized, connecting the context and transformer. We also parse
- * ZodErrors so that you get typesafety on the frontend if your procedure fails due to validation
- * errors on the backend.
  */
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
@@ -96,23 +72,12 @@ export const createCallerFactory = t.createCallerFactory;
 
 /**
  * 3. ROUTER & PROCEDURE (THE IMPORTANT BIT)
- *
- * These are the pieces you use to build your tRPC API. You should import these a lot in the
- * "/src/server/api/routers" directory.
  */
 
-/**
- * This is how you create new routers and sub-routers in your tRPC API.
- *
- * @see https://trpc.io/docs/router
- */
 export const createTRPCRouter = t.router;
 
 /**
  * Middleware for timing procedure execution and adding an artificial delay in development.
- *
- * You can remove this if you don't like it, but it can help catch unwanted waterfalls by simulating
- * network latency that would occur in production but not in local development.
  */
 const timingMiddleware = t.middleware(async ({ next, path }) => {
   const start = Date.now();
@@ -132,19 +97,15 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 });
 
 /**
- * Public (unauthenticated) procedure
- *
- * This is the base piece you use to build new queries and mutations on your tRPC API. It does not
- * guarantee that a user querying is authorized, but you can still access user session data if they
- * are logged in.
+ * Public (unauthenticated) procedure.
  */
 export const publicProcedure = t.procedure.use(timingMiddleware);
 
 /**
- * Authenticated procedure — requires valid Telegram WebApp init data OR a web session.
+ * Authenticated procedure — requires a valid web session.
  */
 export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({ ctx, next }) => {
-  if (!ctx.user && !ctx.webUser) {
+  if (!ctx.webUser) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
       message: "Authentication required",
@@ -154,14 +115,8 @@ export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({
 });
 
 /**
- * Protected (authenticated) procedure for Bot Admins
- * Accepts both Telegram Mini App auth AND web session (email/password login).
- */
-/**
- * Sprint 3: role-scoped procedure builders. These are the new canonical
- * way to gate tRPC endpoints. Existing routers still use `publicProcedure` +
- * `assertTenantOwner()` which is equivalent; migration to these builders is
- * deferred to a follow-up PR to keep this change review-sized.
+ * Role-scoped procedure builders — use these instead of `publicProcedure + assertTenantOwner()`
+ * so authorization is type-enforced at the procedure boundary.
  */
 export const tenantOwnerProcedure = t.procedure
   .use(timingMiddleware)
@@ -169,6 +124,25 @@ export const tenantOwnerProcedure = t.procedure
     const role = ctx.webUser?.webRole;
     if (role !== "tenant_owner" && role !== "system_admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: "tenant_owner or system_admin required" });
+    }
+    return next({ ctx });
+  });
+
+/**
+ * Allows tenant_owner, tenant_manager, master, or system_admin — use for shared dashboards
+ * where finer-grained permissions are checked inside the procedure via assertPermission().
+ */
+export const managerProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(async ({ ctx, next }) => {
+    const role = ctx.webUser?.webRole;
+    if (
+      role !== "tenant_owner" &&
+      role !== "tenant_manager" &&
+      role !== "master" &&
+      role !== "system_admin"
+    ) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "tenant member role required" });
     }
     return next({ ctx });
   });
@@ -193,33 +167,21 @@ export const systemAdminProcedure = t.procedure
     return next({ ctx });
   });
 
-/** God Mode API — only platform owner (Telegram ADMIN_CHAT_ID or web session with role system_admin). */
+/** God Mode API — only web session with role system_admin. */
 export const adminProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
-    if (!ctx.user && ctx.webUser) {
-      if (ctx.webUser.webRole === "system_admin") {
-        return next({ ctx });
-      }
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "You do not have administration privileges.",
-      });
-    }
-
-    if (!ctx.user) {
+    if (!ctx.webUser) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
         message: "Authentication required.",
       });
     }
-
-    if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) {
-      return next({ ctx: { ...ctx, user: ctx.user } });
+    if (ctx.webUser.webRole !== "system_admin") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You do not have administration privileges.",
+      });
     }
-
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "You do not have administration privileges.",
-    });
+    return next({ ctx });
   });

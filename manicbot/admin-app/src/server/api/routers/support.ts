@@ -1,54 +1,33 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
-import { platformTickets, platformTicketMessages, platformRoles, tenantRoles } from "~/server/db/schema";
+import { platformTickets, platformTicketMessages } from "~/server/db/schema";
 import { eq, desc, or, like, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { env } from "~/env";
-import { timingSafeEqualStr } from "~/server/auth/telegram";
 
 async function assertSupport(ctx: any) {
-  if (!ctx.user && ctx.webUser) {
-    const r = ctx.webUser.webRole;
-    if (r === "system_admin") return;
-    if (r === "support" || r === "technical_support") return;
-    throw new TRPCError({ code: "FORBIDDEN" });
-  }
-  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) return;
-  const row = await ctx.db
-    .select()
-    .from(platformRoles)
-    .where(eq(platformRoles.chatId, ctx.user.id))
-    .limit(1);
-  if (!row.length) throw new TRPCError({ code: "FORBIDDEN" });
-  const role = row[0]!.role;
-  if (role !== "support" && role !== "technical_support") {
-    throw new TRPCError({ code: "FORBIDDEN" });
-  }
+  if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const r = ctx.webUser.webRole;
+  if (r === "system_admin" || r === "support" || r === "technical_support") return;
+  throw new TRPCError({ code: "FORBIDDEN" });
 }
 
 function supportSenderId(ctx: any): string {
-  if (ctx.user) return `support:${ctx.user.id}`;
   if (ctx.webUser) return `support:web:${ctx.webUser.id}`;
   return "support:unknown";
 }
 
 function userSenderId(ctx: any): string {
-  if (ctx.user) return `user:${ctx.user.id}`;
   if (ctx.webUser) return `user:web:${ctx.webUser.id}`;
   return "user:unknown";
 }
 
 /** Build WHERE condition matching tickets created by the current user */
 function myTicketsFilter(ctx: any) {
-  if (ctx.user) return eq(platformTickets.clientChatId, ctx.user.id);
-  if (ctx.webUser) {
-    return and(
-      eq(platformTickets.clientChatId, 0),
-      eq(platformTickets.clientName, ctx.webUser.email),
-    );
-  }
-  throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  return and(
+    eq(platformTickets.clientChatId, 0),
+    eq(platformTickets.clientName, ctx.webUser.email),
+  );
 }
 
 export const supportRouter = createTRPCRouter({
@@ -129,27 +108,15 @@ export const supportRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertSupport(ctx);
       const now = Math.floor(Date.now() / 1000);
-      if (ctx.user) {
-        await ctx.db.update(platformTickets)
-          .set({
-            claimedBy: ctx.user.id,
-            claimedByWebUserId: null,
-            claimedAt: now,
-            updatedAt: now,
-            status: "claimed",
-          })
-          .where(eq(platformTickets.id, input.ticketId));
-      } else if (ctx.webUser) {
-        await ctx.db.update(platformTickets)
-          .set({
-            claimedBy: null,
-            claimedByWebUserId: ctx.webUser.id,
-            claimedAt: now,
-            updatedAt: now,
-            status: "claimed",
-          })
-          .where(eq(platformTickets.id, input.ticketId));
-      }
+      await ctx.db.update(platformTickets)
+        .set({
+          claimedBy: null,
+          claimedByWebUserId: ctx.webUser!.id,
+          claimedAt: now,
+          updatedAt: now,
+          status: "claimed",
+        })
+        .where(eq(platformTickets.id, input.ticketId));
       return { ok: true };
     }),
 
@@ -243,28 +210,11 @@ export const supportRouter = createTRPCRouter({
       const ticketId = `pt_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
       // Resolve caller identity
-      let clientChatId = 0;
-      let clientName: string | null = null;
-      let tenantId: string | null = null;
-      let sender = "user:unknown";
-
-      if (ctx.user) {
-        clientChatId = ctx.user.id;
-        clientName = [ctx.user.first_name, ctx.user.last_name].filter(Boolean).join(" ") || null;
-        sender = `user:${ctx.user.id}`;
-        // Resolve tenantId from tenant_roles
-        const trRow = await ctx.db
-          .select({ tenantId: tenantRoles.tenantId })
-          .from(tenantRoles)
-          .where(eq(tenantRoles.chatId, ctx.user.id))
-          .limit(1);
-        if (trRow.length) tenantId = trRow[0]!.tenantId;
-      } else if (ctx.webUser) {
-        clientChatId = 0;
-        clientName = ctx.webUser.email;
-        sender = `user:web:${ctx.webUser.id}`;
-        tenantId = ctx.webUser.tenantId ?? null;
-      }
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const clientChatId = 0;
+      const clientName: string | null = ctx.webUser.email;
+      const tenantId: string | null = ctx.webUser.tenantId ?? null;
+      const sender = `user:web:${ctx.webUser.id}`;
 
       await ctx.db.insert(platformTickets).values({
         id: ticketId,

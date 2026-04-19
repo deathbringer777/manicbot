@@ -1,7 +1,7 @@
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
-import { timingSafeEqualStr } from "~/server/auth/telegram";
+import { timingSafeEqualStr } from "~/server/auth/crypto";
 import {
   tenants,
   bots,
@@ -389,7 +389,7 @@ export const provisioningRouter = createTRPCRouter({
   confirmAllPending: adminProcedure
     .input(z.object({ tenantId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const confirmedBy = ctx.user?.id ? Number(ctx.user.id) : Number(env.ADMIN_CHAT_ID ?? 0);
+      const confirmedBy = Number(env.ADMIN_CHAT_ID ?? 0);
       await ctx.db
         .update(appointments)
         .set({ status: "confirmed", confirmedBy })

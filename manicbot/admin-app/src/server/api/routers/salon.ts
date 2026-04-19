@@ -554,7 +554,7 @@ export const salonRouter = createTRPCRouter({
         setObj.rejectComment = input.rejectComment;
       }
       if (input.status === "confirmed") {
-        setObj.confirmedBy = ctx.user?.id ?? null;
+        setObj.confirmedBy = null;
       }
 
       // Defense-in-depth: include tenant_id in WHERE clause even though

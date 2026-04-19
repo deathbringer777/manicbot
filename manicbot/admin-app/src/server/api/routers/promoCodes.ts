@@ -54,7 +54,7 @@ export const promoCodesRouter = createTRPCRouter({
       await assertTenantOwner(ctx, input.tenantId);
       const now = nowSec();
       // Creator identity: require a web session (tenant_owner only)
-      const creatorId = ctx.webUser?.id ?? ctx.user?.id ?? "unknown";
+      const creatorId = ctx.webUser?.id ?? "unknown";
       await ctx.db.insert(promoCodes).values({
         tenantId: input.tenantId,
         code: input.code.toUpperCase(),

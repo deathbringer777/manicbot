@@ -16,7 +16,7 @@ import {
   createDbMock,
   makeUnauthCtx,
   makeSupportCtx,
-  makeTelegramUserCtx,
+  makeTenantOwnerCtx,
 } from "./helpers/db-mock";
 
 describe("supportRouter", () => {
@@ -63,25 +63,9 @@ describe("supportRouter", () => {
       await expect(caller.getOpenTickets()).resolves.toEqual([]);
     });
 
-    it("allows Telegram user with support role in platform_roles", async () => {
-      // assertSupport queries platformRoles for TG users; result must be non-empty with support role
-      const dbMock = createDbMock([
-        [{ chatId: 99, role: "support" }],  // platformRoles check
-        [],                                   // getOpenTickets result
-      ]);
-      const caller = createCaller(makeTelegramUserCtx(dbMock.db, 99) as never);
-      await expect(caller.getOpenTickets()).resolves.toEqual([]);
-    });
-
-    it("throws FORBIDDEN when Telegram user has no platform_roles row", async () => {
-      const dbMock = createDbMock([[]]); // no rows in platformRoles
-      const caller = createCaller(makeTelegramUserCtx(dbMock.db, 99) as never);
-      await expect(caller.getOpenTickets()).rejects.toMatchObject({ code: "FORBIDDEN" });
-    });
-
-    it("throws FORBIDDEN when Telegram user has non-support role in platform_roles", async () => {
-      const dbMock = createDbMock([[{ chatId: 99, role: "tenant_owner" }]]);
-      const caller = createCaller(makeTelegramUserCtx(dbMock.db, 99) as never);
+    it("throws FORBIDDEN when webUser has non-support role", async () => {
+      const dbMock = createDbMock([[]]);
+      const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_demo") as never);
       await expect(caller.getOpenTickets()).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
   });
@@ -198,16 +182,6 @@ describe("supportRouter", () => {
       expect(dbMock.insertCalls[0]?.values.text).toBe("We are looking into it");
     });
 
-    it("inserts message with senderId=support:{id} for Telegram user", async () => {
-      // TG user: assertSupport does a platformRoles DB query first
-      const dbMock = createDbMock([[{ chatId: 77, role: "support" }]]);
-      const caller = createCaller(makeTelegramUserCtx(dbMock.db, 77) as never);
-
-      await caller.replyToTicket({ ticketId: "tkt_1", text: "Got it" });
-
-      expect(dbMock.insertCalls[0]?.values.sender).toBe("support:77");
-    });
-
     it("sets attachmentUrl from input when provided", async () => {
       const dbMock = createDbMock();
       const caller = createCaller(makeSupportCtx(dbMock.db) as never);
@@ -256,17 +230,6 @@ describe("supportRouter", () => {
       expect(vals.status).toBe("claimed");
     });
 
-    it("sets claimedBy=user.id and claimedByWebUserId=null for Telegram user", async () => {
-      const dbMock = createDbMock([[{ chatId: 77, role: "technical_support" }]]);
-      const caller = createCaller(makeTelegramUserCtx(dbMock.db, 77) as never);
-
-      await caller.claimTicket({ ticketId: "tkt_1" });
-
-      const vals = dbMock.updateCalls[0]?.values!;
-      expect(vals.claimedBy).toBe(77);
-      expect(vals.claimedByWebUserId).toBeNull();
-      expect(vals.status).toBe("claimed");
-    });
   });
 
   // ── closeTicket / escalateTicket ──────────────────────────────────────────

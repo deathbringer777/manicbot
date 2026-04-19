@@ -161,18 +161,17 @@ export async function showAdminPanel(ctx, cid, name) {
   await send(ctx, cid, fill(t(lg, 'adm_welcome'), { n: escHtml(name) }), adminKb(lg, ctx));
 }
 
-/** Подсказка по подключению Instagram / WhatsApp (Mini App → Channels). */
+/** Подсказка по подключению Instagram / WhatsApp — ссылка на админ-панель (web). */
 export async function showMetaChannelsGuide(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
-  const base = (ctx.APP_BASE_URL || '').replace(/\/$/, '');
-  const miniAppUrl = base ? `${base}/tg?tab=channels` : '';
+  const base = (ctx.ADMIN_APP_URL || ctx.APP_BASE_URL || '').replace(/\/$/, '');
+  const panelUrl = base ? `${base}/channels` : '';
   const title = t(lg, 'adm_meta_channels_title');
   const body = t(lg, 'adm_meta_channels_body');
   const rows = [];
-  if (miniAppUrl) {
-    rows.push([{ text: t(lg, 'adm_meta_open_miniapp'), web_app: { url: miniAppUrl } }]);
-    rows.push([{ text: t(lg, 'adm_meta_open_browser'), url: miniAppUrl }]);
+  if (panelUrl) {
+    rows.push([{ text: t(lg, 'adm_meta_open_browser'), url: panelUrl }]);
   }
   rows.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
   await send(ctx, cid, `${title}\n\n${body}`, { reply_markup: { inline_keyboard: rows } });

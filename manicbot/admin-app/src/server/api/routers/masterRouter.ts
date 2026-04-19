@@ -1,42 +1,25 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { appointments, masters, users, services, tenantRoles, tenants } from "~/server/db/schema";
+import { appointments, masters, users, services, tenants } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { env } from "~/env";
-import { timingSafeEqualStr } from "~/server/auth/telegram";
 
 /** Assert caller is master on a personal (independent) tenant — allows service/config management */
 async function assertPersonalMaster(ctx: any, tenantId: string) {
   await assertMaster(ctx, tenantId);
+  if (ctx.webUser?.webRole === "system_admin") return;
   const [t] = await ctx.db.select({ isPersonal: tenants.isPersonal }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-  // System admins always pass
-  if (!ctx.user && ctx.webUser?.webRole === "system_admin") return;
-  if (ctx.user && env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) return;
   if (!t?.isPersonal) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Service management is only available for independent masters" });
   }
 }
 
 async function assertMaster(ctx: any, tenantId: string) {
-  // Web session path
-  if (!ctx.user && ctx.webUser) {
-    const r = ctx.webUser.webRole;
-    if (r === "system_admin") return;
-    if ((r === "master" || r === "tenant_owner") && ctx.webUser.tenantId === tenantId) return;
-    throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
-  }
-  // Telegram path
-  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-  if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) return;
-  const row = await ctx.db
-    .select()
-    .from(tenantRoles)
-    .where(and(eq(tenantRoles.tenantId, tenantId), eq(tenantRoles.chatId, ctx.user.id)))
-    .limit(1);
-  if (!row.length || (row[0]!.role !== "master" && row[0]!.role !== "tenant_owner")) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
-  }
+  if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const r = ctx.webUser.webRole;
+  if (r === "system_admin") return;
+  if ((r === "master" || r === "tenant_owner") && ctx.webUser.tenantId === tenantId) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
 }
 
 export const masterRouter = createTRPCRouter({
@@ -62,19 +45,9 @@ export const masterRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       // Only the master themselves can change this setting (not the owner, not the admin)
-      if (!ctx.user && ctx.webUser) {
-        if (ctx.webUser.webRole !== "master" || ctx.webUser.tenantId !== input.tenantId) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Only the master can change delegation setting" });
-        }
-      } else if (ctx.user) {
-        if (env.ADMIN_CHAT_ID && timingSafeEqualStr(String(ctx.user.id), env.ADMIN_CHAT_ID)) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin cannot change master delegation setting" });
-        }
-        if (ctx.user.id !== input.masterId) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Only the master can change delegation setting" });
-        }
-      } else {
-        throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (ctx.webUser.webRole !== "master" || ctx.webUser.tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the master can change delegation setting" });
       }
       await ctx.db.update(masters)
         .set({ allowDelegation: input.allowDelegation })

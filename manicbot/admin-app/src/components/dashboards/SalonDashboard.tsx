@@ -22,6 +22,7 @@ import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
+import { StaffTab } from "~/components/salon/tabs/StaffTab";
 import { SERVICE_TEMPLATES, type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
@@ -30,8 +31,9 @@ import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { useRole } from "~/components/RoleContext";
+import type { PermissionKey } from "~/server/api/permissions";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 const NAIL_EMOJIS = ['💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧','🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫','🎨','🌷','🪸','🫐','🍒'];
@@ -1325,7 +1327,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -1401,20 +1403,33 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     onSuccess: () => utils.salon.getServices.invalidate(),
   });
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "overview", label: t("salon.overview", lang) },
-    { key: "appointments", label: t("salon.appointments", lang) },
-    { key: "services", label: t("salon.services", lang) },
-    { key: "masters", label: t("salon.masters", lang) },
-    { key: "clients", label: t("salon.clients", lang) },
-    { key: "analytics", label: "📊 Аналитика" },
-    { key: "promo_codes", label: "🎟 Промокоды" },
-    { key: "billing", label: t("salon.billing", lang) },
-    { key: "channels", label: "Каналы" },
-    { key: "reviews", label: "Отзывы" },
-    { key: "public_profile", label: "🌐 Профиль" },
-    { key: "settings", label: t("common.settings", lang) },
+  const role = useRole().role;
+  const perms = useRole().permissions;
+  const isOwnerLevel = role === "tenant_owner" || role === "system_admin" || (role === "master" && useRole().isPersonalTenant);
+  const canSee = (p: PermissionKey | null) => {
+    if (isOwnerLevel) return true;
+    if (role !== "tenant_manager") return false;
+    return p === null || perms.includes(p);
+  };
+  const allTabs: { key: Tab; label: string; perm: PermissionKey | null; ownerOnly?: boolean }[] = [
+    { key: "overview", label: t("salon.overview", lang), perm: "appointments.view" },
+    { key: "appointments", label: t("salon.appointments", lang), perm: "appointments.view" },
+    { key: "services", label: t("salon.services", lang), perm: "services.view" },
+    { key: "masters", label: t("salon.masters", lang), perm: "masters.view" },
+    { key: "clients", label: t("salon.clients", lang), perm: "clients.view" },
+    { key: "analytics", label: "📊 Аналитика", perm: null, ownerOnly: true },
+    { key: "promo_codes", label: "🎟 Промокоды", perm: null, ownerOnly: true },
+    { key: "billing", label: t("salon.billing", lang), perm: "billing.manage" },
+    { key: "channels", label: "Каналы", perm: "settings.manage" },
+    { key: "reviews", label: "Отзывы", perm: "reviews.view" },
+    { key: "public_profile", label: "🌐 Профиль", perm: "branding.manage" },
+    { key: "staff", label: "👥 Персонал", perm: null, ownerOnly: true },
+    { key: "settings", label: t("common.settings", lang), perm: "settings.manage" },
   ];
+  const tabs = allTabs.filter((tb) => {
+    if (tb.ownerOnly) return isOwnerLevel;
+    return canSee(tb.perm);
+  });
 
   // Sprint 3/4 — manual booking modal state
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
@@ -1760,6 +1775,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── PROMO CODES ── */}
       {tab === "promo_codes" && <PromoCodesTab tenantId={tenantId} />}
+
+      {/* ── STAFF (tenant_owner only) ── */}
+      {tab === "staff" && <StaffTab tenantId={tenantId} />}
 
       {/* ── CHANNELS ── */}
       {tab === "channels" && <SalonChannelsTab tenantId={tenantId} slug={profile.data?.slug ?? null} publicActive={!!profile.data?.publicActive} />}

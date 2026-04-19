@@ -78,10 +78,10 @@ export const tenantsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        active: z.number().optional(),
-        plan: z.string().optional(),
-        billingStatus: z.string().optional(),
-        name: z.string().optional(),
+        active: z.number().min(0).max(1).optional(),
+        plan: z.enum(["start", "pro", "max"]).optional(),
+        billingStatus: z.enum(["active", "trialing", "grace_period", "inactive"]).optional(),
+        name: z.string().min(1).max(200).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

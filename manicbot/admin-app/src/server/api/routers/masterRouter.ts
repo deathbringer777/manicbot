@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, masterProcedure } from "~/server/api/trpc";
 import { appointments, masters, users, services, tenants } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -23,7 +23,7 @@ async function assertMaster(ctx: any, tenantId: string) {
 }
 
 export const masterRouter = createTRPCRouter({
-  getMastersForOwner: publicProcedure
+  getMastersForOwner: masterProcedure
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
@@ -37,7 +37,7 @@ export const masterRouter = createTRPCRouter({
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)));
     }),
 
-  updateDelegation: publicProcedure
+  updateDelegation: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),
@@ -56,7 +56,7 @@ export const masterRouter = createTRPCRouter({
     }),
 
 
-  getMySchedule: publicProcedure
+  getMySchedule: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
@@ -70,7 +70,7 @@ export const masterRouter = createTRPCRouter({
         .orderBy(appointments.time);
     }),
 
-  getMyAppointments: publicProcedure
+  getMyAppointments: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),
@@ -91,7 +91,7 @@ export const masterRouter = createTRPCRouter({
       return rows;
     }),
 
-  getMyEarnings: publicProcedure
+  getMyEarnings: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),
@@ -115,7 +115,7 @@ export const masterRouter = createTRPCRouter({
       return { total, count: rows.length };
     }),
 
-  getMyClients: publicProcedure
+  getMyClients: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
@@ -141,7 +141,7 @@ export const masterRouter = createTRPCRouter({
       }));
     }),
 
-  markNoShow: publicProcedure
+  markNoShow: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       id: z.string(),
@@ -157,7 +157,7 @@ export const masterRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  getMyProfile: publicProcedure
+  getMyProfile: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
@@ -171,7 +171,7 @@ export const masterRouter = createTRPCRouter({
       return { ...m, portfolio };
     }),
 
-  updateProfile: publicProcedure
+  updateProfile: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),
@@ -199,7 +199,7 @@ export const masterRouter = createTRPCRouter({
 
   // ── Service management for independent (personal tenant) masters ──
 
-  getMyServices: publicProcedure
+  getMyServices: masterProcedure
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
@@ -208,7 +208,7 @@ export const masterRouter = createTRPCRouter({
         .orderBy(services.sortOrder);
     }),
 
-  createService: publicProcedure
+  createService: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       emoji: z.string().optional(),
@@ -239,7 +239,7 @@ export const masterRouter = createTRPCRouter({
       return { svcId };
     }),
 
-  updateService: publicProcedure
+  updateService: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       svcId: z.string(),
@@ -266,7 +266,7 @@ export const masterRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  deleteService: publicProcedure
+  deleteService: masterProcedure
     .input(z.object({ tenantId: z.string(), svcId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertPersonalMaster(ctx, input.tenantId);
@@ -277,7 +277,7 @@ export const masterRouter = createTRPCRouter({
     }),
 
   /** Update work hours for independent master */
-  updateWorkHours: publicProcedure
+  updateWorkHours: masterProcedure
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),

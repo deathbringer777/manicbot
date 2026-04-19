@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers,
@@ -16,7 +16,7 @@ import { buildMetaChannelHints } from "~/lib/metaChannelHints";
 const tenantIdInput = z.object({ tenantId: z.string() });
 
 export const salonRouter = createTRPCRouter({
-  getOverview: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getOverview: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const today = new Date().toISOString().slice(0, 10);
 
@@ -29,7 +29,7 @@ export const salonRouter = createTRPCRouter({
       ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1),
     ]);
 
-    const todayApts = aptRows.filter((a: any) => !a.cancelled);
+    const todayApts = aptRows.filter((a) => !a.cancelled);
     return {
       todayAppointments: todayApts.length,
       activeMasters: masterRows.length,
@@ -39,7 +39,7 @@ export const salonRouter = createTRPCRouter({
     };
   }),
 
-  getAppointments: publicProcedure
+  getAppointments: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       date: z.string().optional(),
@@ -63,19 +63,19 @@ export const salonRouter = createTRPCRouter({
       return rows;
     }),
 
-  getMasters: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getMasters: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     return ctx.db.select().from(masters).where(eq(masters.tenantId, input.tenantId));
   }),
 
-  getServices: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getServices: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     return ctx.db.select().from(services)
       .where(eq(services.tenantId, input.tenantId))
       .orderBy(services.sortOrder);
   }),
 
-  getClients: publicProcedure
+  getClients: tenantOwnerProcedure
     .input(z.object({ tenantId: z.string(), search: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -98,7 +98,7 @@ export const salonRouter = createTRPCRouter({
    * to auto-generate a BDAY-* promo code on the matching MM-DD each year.
    * Pass null/empty string to clear.
    */
-  setClientDob: publicProcedure
+  setClientDob: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       chatId: z.number().int(),
@@ -113,7 +113,7 @@ export const salonRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  getSalonProfile: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getSalonProfile: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const [tenantRow, configRows] = await Promise.all([
       ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1),
@@ -147,7 +147,7 @@ export const salonRouter = createTRPCRouter({
     };
   }),
 
-  getBillingStatus: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getBillingStatus: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const row = await ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
     if (!row.length) throw new TRPCError({ code: "NOT_FOUND" });
@@ -178,7 +178,7 @@ export const salonRouter = createTRPCRouter({
   }),
 
   /** URL вебхуков и verify token для настройки Meta (значения с сервера Pages — совпадают с Worker). */
-  getMetaChannelHints: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getMetaChannelHints: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     return buildMetaChannelHints({
       workerPublicUrl: env.WORKER_PUBLIC_URL,
@@ -187,7 +187,7 @@ export const salonRouter = createTRPCRouter({
     });
   }),
 
-  markNoShow: publicProcedure
+  markNoShow: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       id: z.string(),
@@ -205,7 +205,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  cancelAppointment: publicProcedure
+  cancelAppointment: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       id: z.string(),
@@ -224,7 +224,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  checkSlugAvailable: publicProcedure
+  checkSlugAvailable: tenantOwnerProcedure
     .input(z.object({ slug: z.string(), tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       if (!input.slug) return { available: true };
@@ -238,7 +238,7 @@ export const salonRouter = createTRPCRouter({
 
   // ── Mutations ──────────────────────────────────────────────────────
 
-  updateService: publicProcedure
+  updateService: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       svcId: z.string(),
@@ -269,7 +269,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  createService: publicProcedure
+  createService: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       emoji: z.string().optional(),
@@ -303,7 +303,7 @@ export const salonRouter = createTRPCRouter({
       return { svcId };
     }),
 
-  deleteService: publicProcedure
+  deleteService: tenantOwnerProcedure
     .input(z.object({ tenantId: z.string(), svcId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -314,7 +314,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  updateSalonProfile: publicProcedure
+  updateSalonProfile: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       name: z.string().optional(),
@@ -443,7 +443,7 @@ export const salonRouter = createTRPCRouter({
    * (`manicbot/src/services/services.js:getAutoConfirm`); the values
    * returned here must match.
    */
-  getAutoConfirmSettings: publicProcedure
+  getAutoConfirmSettings: tenantOwnerProcedure
     .input(tenantIdInput)
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -475,7 +475,7 @@ export const salonRouter = createTRPCRouter({
    * JSON literal `true` / `false` so the Worker's `getAutoConfirm`
    * helper can parse it back.
    */
-  setAutoConfirm: publicProcedure
+  setAutoConfirm: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       channel: z.enum(["web", "telegram", "whatsapp", "instagram"]),
@@ -499,7 +499,7 @@ export const salonRouter = createTRPCRouter({
    * Requires: tenant owner for `tenantId`, UPLOAD_TOKEN_SECRET env var on Pages,
    * WORKER_PUBLIC_URL env var on Pages.
    */
-  mintUploadToken: publicProcedure
+  mintUploadToken: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo"]),
@@ -530,7 +530,7 @@ export const salonRouter = createTRPCRouter({
       };
     }),
 
-  updateAppointmentStatus: publicProcedure
+  updateAppointmentStatus: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       appointmentId: z.string(),
@@ -577,7 +577,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  addMaster: publicProcedure
+  addMaster: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       chatId: z.number(),
@@ -605,7 +605,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  removeMaster: publicProcedure
+  removeMaster: tenantOwnerProcedure
     .input(z.object({ tenantId: z.string(), chatId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -634,7 +634,7 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  createMasterAccount: publicProcedure
+  createMasterAccount: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       name: z.string().min(1).max(200),
@@ -700,7 +700,7 @@ export const salonRouter = createTRPCRouter({
 
   // ── Bot Connection ─────────────────────────────────────────────
 
-  getBotStatus: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getBotStatus: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const rows = await ctx.db
       .select()
@@ -716,7 +716,7 @@ export const salonRouter = createTRPCRouter({
     };
   }),
 
-  connectBot: publicProcedure
+  connectBot: tenantOwnerProcedure
     .input(z.object({ tenantId: z.string(), token: z.string().min(10).max(200) }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -784,7 +784,7 @@ export const salonRouter = createTRPCRouter({
       };
     }),
 
-  disconnectBot: publicProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
+  disconnectBot: tenantOwnerProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const rows = await ctx.db
       .select()
@@ -801,7 +801,7 @@ export const salonRouter = createTRPCRouter({
 
   // ── Stripe Billing ─────────────────────────────────────────────
 
-  getPlans: publicProcedure.query(() => {
+  getPlans: tenantOwnerProcedure.query(() => {
     return [
       {
         id: "start",
@@ -950,7 +950,7 @@ export const salonRouter = createTRPCRouter({
     ];
   }),
 
-  createCheckoutSession: publicProcedure
+  createCheckoutSession: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       plan: z.enum(["start", "pro", "max"]),
@@ -1020,7 +1020,7 @@ export const salonRouter = createTRPCRouter({
       return { url };
     }),
 
-  createEmbeddedCheckout: publicProcedure
+  createEmbeddedCheckout: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       plan: z.enum(["start", "pro", "max"]),
@@ -1088,7 +1088,7 @@ export const salonRouter = createTRPCRouter({
       return { clientSecret };
     }),
 
-  createBillingPortalSession: publicProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
+  createBillingPortalSession: tenantOwnerProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
 
     const stripeKey = env.STRIPE_SECRET_KEY;
@@ -1118,7 +1118,7 @@ export const salonRouter = createTRPCRouter({
   // ── Meta Channels (Instagram / WhatsApp) ───────────────────────
 
   /** List connected Meta channels for a tenant. */
-  getChannels: publicProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+  getChannels: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const rows = await ctx.db
       .select({
@@ -1134,7 +1134,7 @@ export const salonRouter = createTRPCRouter({
   }),
 
   /** Connect Instagram via Worker /admin/ig-channel. Requires WORKER_PUBLIC_URL + ADMIN_KEY env vars. */
-  connectInstagram: publicProcedure
+  connectInstagram: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
       token: z.string().min(10),
@@ -1174,7 +1174,7 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /** Disconnect a Meta channel (instagram or whatsapp) by deleting its config. */
-  disconnectChannel: publicProcedure
+  disconnectChannel: tenantOwnerProcedure
     .input(z.object({ tenantId: z.string(), channelType: z.enum(["instagram", "whatsapp"]) }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

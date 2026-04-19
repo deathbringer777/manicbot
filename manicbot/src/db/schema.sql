@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   brand_palette TEXT,
   is_personal INTEGER NOT NULL DEFAULT 0,
   industry TEXT NOT NULL DEFAULT 'beauty',
+  is_test INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -204,6 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_tenant_personal ON tenants(is_personal);
 CREATE INDEX IF NOT EXISTS idx_tenant_city ON tenants(city);
 CREATE INDEX IF NOT EXISTS idx_tenant_location ON tenants(lat, lng);
 CREATE INDEX IF NOT EXISTS idx_tenant_public ON tenants(public_active, city);
+CREATE INDEX IF NOT EXISTS idx_tenant_is_test ON tenants(is_test);
 
 CREATE TABLE IF NOT EXISTS bots (
   bot_id TEXT PRIMARY KEY,

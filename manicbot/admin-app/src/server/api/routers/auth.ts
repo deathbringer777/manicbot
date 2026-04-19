@@ -17,6 +17,7 @@ type RoleResult = {
   tenantName: string | null;
   masterId: number | null;
   isPersonalTenant: boolean;
+  isTest: boolean;
   createdAt: number | null;
   emailVerified: boolean;
   email: string | null;
@@ -29,6 +30,7 @@ const EMPTY: RoleResult = {
   tenantName: null,
   masterId: null,
   isPersonalTenant: false,
+  isTest: false,
   createdAt: null,
   emailVerified: true,
   email: null,
@@ -60,17 +62,19 @@ export const authRouter = createTRPCRouter({
       // For web masters: look up their masterId and check if personal tenant
       let masterId: number | null = null;
       let isPersonalTenant = false;
+      let isTest = false;
       let tenantName: string | null = null;
       if (tenantId) {
         try {
           const [tenantRow] = await ctx.db
-            .select({ name: tenants.name, displayName: tenants.displayName, isPersonal: tenants.isPersonal })
+            .select({ name: tenants.name, displayName: tenants.displayName, isPersonal: tenants.isPersonal, isTest: tenants.isTest })
             .from(tenants)
             .where(eq(tenants.id, tenantId))
             .limit(1);
           if (tenantRow) {
             tenantName = tenantRow.displayName || tenantRow.name || null;
             if (tenantRow.isPersonal) isPersonalTenant = true;
+            if (tenantRow.isTest) isTest = true;
           }
         } catch { /* non-critical */ }
         if (role === "master") {
@@ -85,7 +89,7 @@ export const authRouter = createTRPCRouter({
         }
       }
 
-      return { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, email, hasPassword };
+      return { role, tenantId, tenantName, masterId, isPersonalTenant, isTest, createdAt, emailVerified, email, hasPassword };
     }
 
     if (!ctx.user) return EMPTY;
@@ -128,11 +132,13 @@ export const authRouter = createTRPCRouter({
       const tenantId = tenantRow[0]!.tenantId;
       if (role === "tenant_owner" || role === "master") {
         let tn: string | null = null;
+        let isTest = false;
         try {
-          const [t] = await ctx.db.select({ name: tenants.name, displayName: tenants.displayName }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+          const [t] = await ctx.db.select({ name: tenants.name, displayName: tenants.displayName, isTest: tenants.isTest }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
           tn = t?.displayName || t?.name || null;
+          isTest = !!t?.isTest;
         } catch { /* non-critical */ }
-        return { ...EMPTY, role, tenantId, tenantName: tn, masterId: role === "master" ? userId : null };
+        return { ...EMPTY, role, tenantId, tenantName: tn, isTest, masterId: role === "master" ? userId : null };
       }
     }
 

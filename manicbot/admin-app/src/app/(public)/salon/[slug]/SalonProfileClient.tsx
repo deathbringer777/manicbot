@@ -5,6 +5,7 @@ import {
   MapPin, Phone, Clock, Instagram, Send, Star, ChevronDown, ChevronUp,
   ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera, MessageCircle,
 } from "lucide-react";
+import { TestBadge } from "~/components/ui/TestBadge";
 
 type WorkHours = { from?: number; to?: number } | string | null;
 
@@ -46,6 +47,7 @@ interface SalonProfile {
   botUsername: string | null;
   services: ServiceItem[];
   masters: MasterItem[];
+  isTest?: boolean;
 }
 
 const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -287,7 +289,10 @@ export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
       <div className="mx-auto max-w-6xl px-4">
         <div className="-mt-10 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 md:flex md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 md:text-3xl dark:text-white">{profile.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-slate-900 md:text-3xl dark:text-white">{profile.name}</h1>
+              {profile.isTest ? <TestBadge /> : null}
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
               {profile.city && (
                 <span className="flex items-center gap-1">

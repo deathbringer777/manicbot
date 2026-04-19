@@ -36,6 +36,7 @@ export const tenants = sqliteTable("tenants", {
   brandPalette: text("brand_palette"),
   isPersonal: integer("is_personal").notNull().default(0),
   industry: text("industry").notNull().default("beauty"),
+  isTest: integer("is_test").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

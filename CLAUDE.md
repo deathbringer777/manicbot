@@ -4,23 +4,27 @@
 
 Multi-tenant Telegram bot platform for nail salon booking. Two deployable units:
 
-| Unit | Path | Runtime | Deploy |
-|------|------|---------|--------|
-| **Worker** | `manicbot/` | Cloudflare Workers | `npx wrangler deploy` |
+
+| Unit               | Path                  | Runtime                         | Deploy                    |
+| ------------------ | --------------------- | ------------------------------- | ------------------------- |
+| **Worker**         | `manicbot/`           | Cloudflare Workers              | `npx wrangler deploy`     |
 | **Admin Mini-App** | `manicbot/admin-app/` | Cloudflare Pages (Next.js edge) | git push → GitHub Actions |
+
 
 ---
 
 ## Roles
 
-| Role | Scope | Description | Mini-app |
-|------|-------|-------------|----------|
-| `system_admin` | Platform | Creator (ADMIN_CHAT_ID). Root access to everything. | God Mode dashboard |
-| `technical_support` | Platform | Platform tech support. Superset of `support`. | Support dashboard |
-| `support` | Platform | Customer support agents. | Support dashboard |
-| `tenant_owner` | Tenant | Salon owner. Manages their salon, staff, billing. | Salon dashboard |
-| `master` | Tenant | Nail technician. Sees own schedule, clients, earnings. | Master dashboard |
-| `client` | — | Default for all users. No mini-app access. | — |
+
+| Role                | Scope    | Description                                            | Mini-app           |
+| ------------------- | -------- | ------------------------------------------------------ | ------------------ |
+| `system_admin`      | Platform | Creator (ADMIN_CHAT_ID). Root access to everything.    | God Mode dashboard |
+| `technical_support` | Platform | Platform tech support. Superset of `support`.          | Support dashboard  |
+| `support`           | Platform | Customer support agents.                               | Support dashboard  |
+| `tenant_owner`      | Tenant   | Salon owner. Manages their salon, staff, billing.      | Salon dashboard    |
+| `master`            | Tenant   | Nail technician. Sees own schedule, clients, earnings. | Master dashboard   |
+| `client`            | —        | Default for all users. No mini-app access.             | —                  |
+
 
 **Important:** `ADMIN_CHAT_ID` (Cloudflare secret) is always God Mode regardless of DB state.
 **No "admin_salon" concept** — salon admin = `tenant_owner`.
@@ -39,22 +43,25 @@ Masters can work independently without belonging to a salon. When a master regis
 
 ## Storage
 
-| Store | What | Key pattern |
-|-------|------|-------------|
-| **D1** | Tenants, bots, users, appointments, roles, services, billing, tickets | SQL tables |
-| **KV** | User state, locks, encrypted bot tokens, chat history (TTL 1h) | Various prefixes |
+
+| Store  | What                                                                  | Key pattern      |
+| ------ | --------------------------------------------------------------------- | ---------------- |
+| **D1** | Tenants, bots, users, appointments, roles, services, billing, tickets | SQL tables       |
+| **KV** | User state, locks, encrypted bot tokens, chat history (TTL 1h)        | Various prefixes |
+
 
 KV key patterns:
-- `t:{tenantId}:*` — tenant-scoped data
-- `b:{botId}:*` — legacy single-bot data
+
+- `t:{tenantId}:`* — tenant-scoped data
+- `b:{botId}:`* — legacy single-bot data
 - `state:{cid}` — user conversation state
 - `master:{cid}` — master data (KV legacy mode)
 - `cfg:admin` — admin chat ID (legacy KV mode)
 
 ### Legacy single-bot vs D1 multi-tenant
 
-- **D1 path:** Telegram calls `POST /webhook/{botId}`; `resolveTenantFromBotId` loads tenant + encrypted token from D1. KV prefix `t:{tenantId}:*`.
-- **Legacy path:** Single `BOT_TOKEN` + `WEBHOOK_SECRET` in env; `POST /webhook` (no botId in path); `buildLegacyCtx` uses KV prefix `b:{botId}:*`. Used when the bot is not (yet) in the D1 registry or during migration.
+- **D1 path:** Telegram calls `POST /webhook/{botId}`; `resolveTenantFromBotId` loads tenant + encrypted token from D1. KV prefix `t:{tenantId}:`*.
+- **Legacy path:** Single `BOT_TOKEN` + `WEBHOOK_SECRET` in env; `POST /webhook` (no botId in path); `buildLegacyCtx` uses KV prefix `b:{botId}:`*. Used when the bot is not (yet) in the D1 registry or during migration.
 - **Stricter production:** set Worker var `REQUIRE_WEBHOOK_BOT_ID=1` when D1 is bound to reject legacy `POST /webhook` (403 — use `/webhook/{botId}` only). Cron and HTML admin routes are unchanged.
 
 ### D1 schema discipline
@@ -67,6 +74,7 @@ Any change under `manicbot/migrations/` must stay in sync with:
 Run `npm run check-schema` in `manicbot/` in CI to verify table names and columns match.
 
 Recent migrations:
+
 - `0010_google_sync_backoff.sql` — `sync_retries`, `sync_retry_after`, `sync_last_error` on `appointments`
 - `0011_tos_consent.sql` — `tos_accepted_at` on `web_users`
 - `0012_web_users_password_reset.sql` — `password_reset_token`, `password_reset_expires_at` on `web_users`
@@ -79,6 +87,7 @@ Recent migrations:
 - `0025_nullable_password_hash.sql` — `password_hash` nullable for Google OAuth registration
 - `0031_marketing_contacts.sql` — deduped lead directory (email/phone) for marketing module
 - `0032_marketing_schema.sql` — full marketing module (segments, templates, campaigns, sends, automations, providers, consent log) + CRM columns on `marketing_contacts` (tags, consent, lifecycle, tenant scope)
+- `0033_is_test_flag.sql` — `is_test` column on `tenants` (synthetic accounts created by `npm run seed:test-accounts`; surfaced in `auth.getMyRole.isTest`, `publicSalon.search`, `tenants.getAll({ test })`, and a yellow `TEST` badge in the admin/public UI). Roster lives in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
 
 ---
 
@@ -95,38 +104,42 @@ HTTP request → src/worker.js
 
 ### HTTP modules (`src/http/`)
 
-| Module | Routes / role |
-|--------|----------------|
-| `envCtx.js` | `{ db, kv, globalKv }` helper for handlers |
-| `demoBots.js` | Self-provision demo tenants/bots when env secrets `BOT_TOKEN_SALON*` etc. are set |
-| `resolveCtx.js` | `getCtx(env, url, request)` — D1 webhook by `botId`, legacy `/webhook`, `REQUIRE_WEBHOOK_BOT_ID` |
-| `landingHttp.js` | GET paths proxied to `LANDING_URL` |
-| `stripeHttp.js` | `POST /stripe/webhook`, `GET /stripe/success` |
-| `adminKeyHttp.js` | `GET /admin/migrate`, `migrate-d1`, `seed`; `POST /admin/provision` (ADMIN_KEY) |
-| `googleHttp.js` | `/google/connect`, `callback`, `select`, `webhook` |
-| `adminPanelHttp.js` | `GET /setup`, `remove-webhook`, `/admin`, `/admin/billing`, `/admin/export/*` |
-| `calendarHttp.js` | `GET /calendar/:aptId[.ics]` |
-| `telegramWebhookHttp.js` | `POST /webhook`, `POST /webhook/:botId` (excluding `wa` / `ig`) |
-| `metaWebhooksHttp.js` | `GET|POST /webhook/wa`, `GET|POST /webhook/ig` (Meta verify + HMAC) |
+
+| Module                   | Routes / role                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| `envCtx.js`              | `{ db, kv, globalKv }` helper for handlers                                                       |
+| `demoBots.js`            | Self-provision demo tenants/bots when env secrets `BOT_TOKEN_SALON*` etc. are set                |
+| `resolveCtx.js`          | `getCtx(env, url, request)` — D1 webhook by `botId`, legacy `/webhook`, `REQUIRE_WEBHOOK_BOT_ID` |
+| `landingHttp.js`         | GET paths proxied to `LANDING_URL`                                                               |
+| `stripeHttp.js`          | `POST /stripe/webhook`, `GET /stripe/success`                                                    |
+| `adminKeyHttp.js`        | `GET /admin/migrate`, `migrate-d1`, `seed`; `POST /admin/provision` (ADMIN_KEY)                  |
+| `googleHttp.js`          | `/google/connect`, `callback`, `select`, `webhook`                                               |
+| `adminPanelHttp.js`      | `GET /setup`, `remove-webhook`, `/admin`, `/admin/billing`, `/admin/export/*`                    |
+| `calendarHttp.js`        | `GET /calendar/:aptId[.ics]`                                                                     |
+| `telegramWebhookHttp.js` | `POST /webhook`, `POST /webhook/:botId` (excluding `wa` / `ig`)                                  |
+| `metaWebhooksHttp.js`    | `GET                                                                                             |
+
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/worker.js` | Entry point; delegates HTTP to `src/http/*.js`; `validateSecurityConfig()` startup checks |
-| `src/http/` | Isolated route handlers (see table above) |
-| `src/handlers/message.js` | Text message routing, AI chat trigger |
-| `src/handlers/callback.js` | Inline button callbacks |
-| `src/ai.js` | LLM integration (Cloudflare Workers AI, 3-model fallback) + AI input sanitization (`sanitizeUserInput`, `validateActionParams`) |
-| `src/roles/roles.js` | Role CRUD (D1) + helper functions |
-| `src/services/users.js` | isAdmin, isCreator, getRole, master CRUD |
-| `src/services/appointments.js` | Booking CRUD, slot logic |
-| `src/billing/` | Stripe subscriptions, feature gating |
-| `src/tenant/resolver.js` | Multi-tenant routing |
-| `src/tenant/storage.js` | D1-backed tenant/bot registry |
-| `src/support/tickets.js` | Platform support tickets (global KV) |
-| `src/services/tickets.js` | Tenant-local support tickets |
-| `src/utils/kv.js` | KV helpers — always use `kvGet/kvPut/kvDel` |
+
+| File                           | Purpose                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `src/worker.js`                | Entry point; delegates HTTP to `src/http/*.js`; `validateSecurityConfig()` startup checks                                       |
+| `src/http/`                    | Isolated route handlers (see table above)                                                                                       |
+| `src/handlers/message.js`      | Text message routing, AI chat trigger                                                                                           |
+| `src/handlers/callback.js`     | Inline button callbacks                                                                                                         |
+| `src/ai.js`                    | LLM integration (Cloudflare Workers AI, 3-model fallback) + AI input sanitization (`sanitizeUserInput`, `validateActionParams`) |
+| `src/roles/roles.js`           | Role CRUD (D1) + helper functions                                                                                               |
+| `src/services/users.js`        | isAdmin, isCreator, getRole, master CRUD                                                                                        |
+| `src/services/appointments.js` | Booking CRUD, slot logic                                                                                                        |
+| `src/billing/`                 | Stripe subscriptions, feature gating                                                                                            |
+| `src/tenant/resolver.js`       | Multi-tenant routing                                                                                                            |
+| `src/tenant/storage.js`        | D1-backed tenant/bot registry                                                                                                   |
+| `src/support/tickets.js`       | Platform support tickets (global KV)                                                                                            |
+| `src/services/tickets.js`      | Tenant-local support tickets                                                                                                    |
+| `src/utils/kv.js`              | KV helpers — always use `kvGet/kvPut/kvDel`                                                                                     |
+
 
 ### LLM Integration (`src/ai.js`)
 
@@ -159,55 +172,61 @@ Telegram Mini App opens
 
 ### Dashboard → Role Mapping
 
-| Role | Dashboard | Component |
-|------|-----------|-----------|
-| `system_admin` | God Mode | All existing pages (`/`, `/users`, `/tenants`, etc.) |
-| `tenant_owner` | Salon Dashboard | `SalonDashboard.tsx` |
-| `master` | Master Dashboard | `MasterDashboard.tsx` |
-| `support` / `technical_support` | Support Dashboard | `SupportDashboard.tsx` |
+
+| Role                            | Dashboard         | Component                                            |
+| ------------------------------- | ----------------- | ---------------------------------------------------- |
+| `system_admin`                  | God Mode          | All existing pages (`/`, `/users`, `/tenants`, etc.) |
+| `tenant_owner`                  | Salon Dashboard   | `SalonDashboard.tsx`                                 |
+| `master`                        | Master Dashboard  | `MasterDashboard.tsx`                                |
+| `support` / `technical_support` | Support Dashboard | `SupportDashboard.tsx`                               |
+
 
 ### tRPC procedures
 
-- **`publicProcedure`** — no Telegram user required.
-- **`protectedProcedure`** — valid `x-telegram-init-data`; sets `ctx.user`.
-- **`adminProcedure`** — God Mode: `ADMIN_CHAT_ID` **or** `platform_roles.role` in `system_admin` \| `support` \| `technical_support` (see `server/api/platformRoles.ts` for the single source of truth). Same set is used by `support` router access checks.
+- `**publicProcedure**` — no Telegram user required.
+- `**protectedProcedure**` — valid `x-telegram-init-data`; sets `ctx.user`.
+- `**adminProcedure**` — God Mode: `ADMIN_CHAT_ID` **or** `platform_roles.role` in `system_admin`  `support`  `technical_support` (see `server/api/platformRoles.ts` for the single source of truth). Same set is used by `support` router access checks.
 
 ### tRPC Routers
 
-| Router | File | Auth |
-|--------|------|------|
-| `auth` | `routers/auth.ts` | public (validates initData in ctx) |
-| `webUsers` | `routers/webUsers.ts` | mixed: public (register, verify, reset) / protected (changePassword, requestEmailChange) / admin (create, list) |
-| `publicSalon` | `routers/publicSalon.ts` | public (salon directory: getProfile, search, getCities, autocomplete) |
-| `salon` | `routers/salon.ts` | `tenant_owner` for tenantId (`assertTenantOwner`) |
-| `master` | `routers/masterRouter.ts` | `master` or `tenant_owner` for tenantId |
-| `support` | `routers/support.ts` | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`) |
-| `channels` | `routers/channels.ts` | protected + `assertTenantOwner` |
-| `googleCalendar` | `routers/googleCalendar.ts` | protected + `assertTenantOwner` |
-| `conversations` | `routers/conversations.ts` | protected + `assertTenantOwner` |
-| `events` | `routers/events.ts` | adminProcedure (getRecent, clear — proxies to Worker) |
-| `metrics` | `routers/metrics.ts` | adminProcedure |
-| `users` | `routers/users.ts` | adminProcedure |
-| `tenants` | `routers/tenants.ts` | adminProcedure |
-| `appointments` | `routers/appointments.ts` | adminProcedure |
-| `billing` | `routers/billing.ts` | adminProcedure |
-| `export` | `routers/export.ts` | adminProcedure |
-| `stripe` | `routers/stripe.ts` | adminProcedure |
-| `provisioning` | `routers/provisioning.ts` | adminProcedure |
-| `settings` | `routers/settings.ts` | adminProcedure |
-| `system` | `routers/system.ts` | adminProcedure |
-| `marketing` | `routers/marketing.ts` | adminProcedure (God Mode CRM: contacts, segments, templates, campaigns, providers) |
+
+| Router           | File                        | Auth                                                                                                            |
+| ---------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `auth`           | `routers/auth.ts`           | public (validates initData in ctx)                                                                              |
+| `webUsers`       | `routers/webUsers.ts`       | mixed: public (register, verify, reset) / protected (changePassword, requestEmailChange) / admin (create, list) |
+| `publicSalon`    | `routers/publicSalon.ts`    | public (salon directory: getProfile, search, getCities, autocomplete)                                           |
+| `salon`          | `routers/salon.ts`          | `tenant_owner` for tenantId (`assertTenantOwner`)                                                               |
+| `master`         | `routers/masterRouter.ts`   | `master` or `tenant_owner` for tenantId                                                                         |
+| `support`        | `routers/support.ts`        | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`)                         |
+| `channels`       | `routers/channels.ts`       | protected + `assertTenantOwner`                                                                                 |
+| `googleCalendar` | `routers/googleCalendar.ts` | protected + `assertTenantOwner`                                                                                 |
+| `conversations`  | `routers/conversations.ts`  | protected + `assertTenantOwner`                                                                                 |
+| `events`         | `routers/events.ts`         | adminProcedure (getRecent, clear — proxies to Worker)                                                           |
+| `metrics`        | `routers/metrics.ts`        | adminProcedure                                                                                                  |
+| `users`          | `routers/users.ts`          | adminProcedure                                                                                                  |
+| `tenants`        | `routers/tenants.ts`        | adminProcedure                                                                                                  |
+| `appointments`   | `routers/appointments.ts`   | adminProcedure                                                                                                  |
+| `billing`        | `routers/billing.ts`        | adminProcedure                                                                                                  |
+| `export`         | `routers/export.ts`         | adminProcedure                                                                                                  |
+| `stripe`         | `routers/stripe.ts`         | adminProcedure                                                                                                  |
+| `provisioning`   | `routers/provisioning.ts`   | adminProcedure                                                                                                  |
+| `settings`       | `routers/settings.ts`       | adminProcedure                                                                                                  |
+| `system`         | `routers/system.ts`         | adminProcedure                                                                                                  |
+| `marketing`      | `routers/marketing.ts`      | adminProcedure (God Mode CRM: contacts, segments, templates, campaigns, providers)                              |
+
 
 ### Key Components
 
-| Component | Purpose |
-|-----------|---------|
-| `TelegramGate.tsx` | Auth + role-based routing |
-| `RoleContext.tsx` | React context: `{ role, tenantId, userId, hasPassword, emailVerified }` |
-| `layout/Shell.tsx` | Main layout (sidebar + mobile nav). Accepts `navItems`, `title`, `subtitle` props |
-| `dashboards/SalonDashboard.tsx` | Salon owner: Overview, Appointments, Masters, Services, Clients, Billing, Settings |
-| `dashboards/MasterDashboard.tsx` | Master: Today, Schedule, Clients, Earnings, Profile |
-| `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close |
+
+| Component                         | Purpose                                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| `TelegramGate.tsx`                | Auth + role-based routing                                                          |
+| `RoleContext.tsx`                 | React context: `{ role, tenantId, userId, hasPassword, emailVerified }`            |
+| `layout/Shell.tsx`                | Main layout (sidebar + mobile nav). Accepts `navItems`, `title`, `subtitle` props  |
+| `dashboards/SalonDashboard.tsx`   | Salon owner: Overview, Appointments, Masters, Services, Clients, Billing, Settings |
+| `dashboards/MasterDashboard.tsx`  | Master: Today, Schedule, Clients, Earnings, Profile                                |
+| `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close                       |
+
 
 ### Web User Authentication (`server/auth/`, `server/email/`)
 
@@ -234,6 +253,7 @@ Password reset:
 ```
 
 **Google registration specifics:**
+
 - `password_hash` is nullable in `web_users` — Google users may have NULL
 - `auth.getMyRole` returns `hasPassword: boolean` — drives UI banners
 - `SetPasswordBanner` component shown in dashboard for users without password
@@ -242,17 +262,20 @@ Password reset:
 
 **Key modules:**
 
-| Module | Purpose |
-|--------|---------|
-| `server/auth/password.ts` | PBKDF2-SHA256 hashing (Web Crypto API, edge-compatible) |
-| `server/auth/authBaseUrl.ts` | Resolves public URL for email links (AUTH_URL / NEXTAUTH_URL / VERCEL_URL) |
+
+| Module                         | Purpose                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| `server/auth/password.ts`      | PBKDF2-SHA256 hashing (Web Crypto API, edge-compatible)                         |
+| `server/auth/authBaseUrl.ts`   | Resolves public URL for email links (AUTH_URL / NEXTAUTH_URL / VERCEL_URL)      |
 | `server/email/emailService.ts` | 5 email types: verification, password_reset, welcome, email_change, login_alert |
-| `server/email/templates.ts` | Branded HTML templates with i18n (ru/ua/en/pl) |
-| `server/email/resend.ts` | Resend HTTP transport (`RESEND_API_KEY`, `RESEND_FROM`) |
+| `server/email/templates.ts`    | Branded HTML templates with i18n (ru/ua/en/pl)                                  |
+| `server/email/resend.ts`       | Resend HTTP transport (`RESEND_API_KEY`, `RESEND_FROM`)                         |
+
 
 **Auth pages** (`app/(auth)/`): `register`, `login`, `forgot-password`, `reset-password`, `verify-email`, `confirm-email-change`
 
 **Security:**
+
 - Rate limiting: 5 attempts / 10 min per IP (in-memory, resets per isolate)
 - Brute-force: 5 failed logins → 15-min lockout (`login_attempts`, `locked_until` columns)
 - Login alerts: email on new IP (`last_login_ip`, `last_login_at`)
@@ -275,9 +298,15 @@ npm test                     # Mini App Vitest (~268 tests)
 
 GitHub Actions `test` job runs the same checks (Worker tests + `check-schema` + admin-app typecheck + tests) before Worker/Pages deploys.
 
+### Test accounts
+
+Reproducible 8-account roster for billing/role/catalog regression — see [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
+Pre-deployed by `cd manicbot && npm run seed:test-accounts` (idempotent; emits SQL via `wrangler d1 execute --remote`).
+
 ## Deploy
 
 ### Worker
+
 ```bash
 source ~/.nvm/nvm.sh
 cd manicbot/
@@ -287,6 +316,7 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 ```
 
 **Secrets required** (set via `wrangler secret put <NAME>`):
+
 - `ADMIN_CHAT_ID` — creator's Telegram chat ID (God Mode)
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
@@ -294,15 +324,16 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 - `CLOUDFLARE_ACCOUNT_ID`
 - `WORKERS_AI_API_TOKEN`
 
-**Meta channels** (WhatsApp / Instagram via [`metaWebhooksHttp.js`](manicbot/src/http/metaWebhooksHttp.js)):
+**Meta channels** (WhatsApp / Instagram via `[metaWebhooksHttp.js](manicbot/src/http/metaWebhooksHttp.js)`):
+
 - `META_APP_SECRET` — must match the Meta app; required for signed POST webhooks (otherwise 403).
 - `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` — webhook verification; same values on Pages for Mini App hints.
 - `BOT_ENCRYPTION_KEY` — recommended (startup `[SECURITY]` warning if missing); decrypts `channel_configs.token_encrypted` for outbound Graph calls. When set, plaintext fallback is disabled for channel tokens.
 - Optional: `INSTAGRAM_IGNORE_SENDER_IDS`, `INSTAGRAM_AI_TRIGGER` — see [META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md).
 
-**Outbound Instagram** uses `graph.facebook.com` + Page ID + Page access token ([`channels/instagram.js`](manicbot/src/channels/instagram.js)); **`entry.id`** is matched to `page_id` / `instagram_business_id` / `ig_account_id` in D1 ([`channels/resolver.js`](manicbot/src/channels/resolver.js)).
+**Outbound Instagram** uses `graph.facebook.com` + Page ID + Page access token (`[channels/instagram.js](manicbot/src/channels/instagram.js)`); `**entry.id`** is matched to `page_id` / `instagram_business_id` / `ig_account_id` in D1 (`[channels/resolver.js](manicbot/src/channels/resolver.js)`).
 
-**IG E2E fixture:** `cd manicbot && npm run ig-e2e:tenant -- --owner=TG_USER_ID --bot-id=BOT_ID` (optional `--dry-run` / `--local`) — see [`META_CHANNELS_SETUP.md`](manicbot/META_CHANNELS_SETUP.md) § «Тестовый тенант для E2E».
+**IG E2E fixture:** `cd manicbot && npm run ig-e2e:tenant -- --owner=TG_USER_ID --bot-id=BOT_ID` (optional `--dry-run` / `--local`) — see `[META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md)` § «Тестовый тенант для E2E».
 
 **Instagram channel provisioning (new client onboarding):**
 
@@ -335,14 +366,17 @@ To update an existing IG token: `POST /admin/ig-token?key=ADMIN_KEY` with `{ "to
 **Billing model:** Clients (regular users) always have free access to the bot (booking, info, catalog). Billing gates (`isInactive`) only restrict staff features (admin panel, master panel, AI, calendar, support). Platform admins (`ADMIN_CHAT_ID` / `system_admin`) always bypass all billing checks.
 
 ### Admin Mini-App
+
 ```bash
 cd manicbot/admin-app/
 npm run typecheck && npm test   # optional local gate
 # Push to GitHub → GitHub Actions → Cloudflare Pages (project `admin-app`)
 ```
+
 Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (includes admin-app typecheck + tests).
 
 **Pages env vars required** (set in Cloudflare Pages dashboard):
+
 - `TELEGRAM_BOT_TOKEN`
 - `ADMIN_CHAT_ID` — same value as worker secret
 - `RESEND_API_KEY` — Resend API key for transactional emails
@@ -357,37 +391,41 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 
 ## D1 Schema Key Tables
 
-| Table | Purpose |
-|-------|---------|
-| `tenants` | Salon registrations (id, name, plan, billing_status) |
-| `bots` | Bot registrations (bot_id, tenant_id, webhook_secret) |
-| `tenant_roles` | tenant_owner / master assignments per tenant |
-| `platform_roles` | system_admin / support / technical_support (platform-wide) |
-| `appointments` | All bookings (tenant-scoped); sync columns: `sync_retries`, `sync_retry_after`, `sync_last_error` |
-| `masters` | Master profiles (tenant-scoped) |
-| `services` | Service catalog (tenant-scoped) |
-| `users` | Client registrations (tenant-scoped) |
-| `platform_tickets` | Platform support tickets |
-| `platform_ticket_messages` | Messages per platform ticket |
-| `local_tickets` | Tenant-local support tickets |
-| `tenant_config` | Key-value config per tenant (salon_name, address, work_hours, etc.) |
-| `support_agents` | Platform support agents (type: 'support' or 'technical_support') |
-| `channel_configs` | WhatsApp / Instagram bindings per tenant |
-| `conversations` | Unified inbox rows (омниканал) |
-| `message_windows` | Last user message time (WA/IG 24h policy) |
-| `google_integrations` | Tenant/master Google OAuth integrations + sync status |
-| `google_busy_blocks` | Cached external busy windows loaded from Google Calendar |
-| `web_users` | Web panel accounts (email/password auth, verification tokens, brute-force tracking) |
+
+| Table                      | Purpose                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `tenants`                  | Salon registrations (id, name, plan, billing_status)                                              |
+| `bots`                     | Bot registrations (bot_id, tenant_id, webhook_secret)                                             |
+| `tenant_roles`             | tenant_owner / master assignments per tenant                                                      |
+| `platform_roles`           | system_admin / support / technical_support (platform-wide)                                        |
+| `appointments`             | All bookings (tenant-scoped); sync columns: `sync_retries`, `sync_retry_after`, `sync_last_error` |
+| `masters`                  | Master profiles (tenant-scoped)                                                                   |
+| `services`                 | Service catalog (tenant-scoped)                                                                   |
+| `users`                    | Client registrations (tenant-scoped)                                                              |
+| `platform_tickets`         | Platform support tickets                                                                          |
+| `platform_ticket_messages` | Messages per platform ticket                                                                      |
+| `local_tickets`            | Tenant-local support tickets                                                                      |
+| `tenant_config`            | Key-value config per tenant (salon_name, address, work_hours, etc.)                               |
+| `support_agents`           | Platform support agents (type: 'support' or 'technical_support')                                  |
+| `channel_configs`          | WhatsApp / Instagram bindings per tenant                                                          |
+| `conversations`            | Unified inbox rows (омниканал)                                                                    |
+| `message_windows`          | Last user message time (WA/IG 24h policy)                                                         |
+| `google_integrations`      | Tenant/master Google OAuth integrations + sync status                                             |
+| `google_busy_blocks`       | Cached external busy windows loaded from Google Calendar                                          |
+| `web_users`                | Web panel accounts (email/password auth, verification tokens, brute-force tracking)               |
+
 
 ---
 
 ## Billing Plans
 
-| Plan | Price | Masters | Features |
-|------|-------|---------|---------|
-| `start` | 45 zł/mo | 1 | Basic booking |
-| `pro` | 60 zł/mo | 5 | AI assistant, support agents, Google Calendar |
-| `max` | 90 zł/mo | Unlimited | All features, white label |
+
+| Plan    | Price    | Masters   | Features                                      |
+| ------- | -------- | --------- | --------------------------------------------- |
+| `start` | 45 zł/mo | 1         | Basic booking                                 |
+| `pro`   | 60 zł/mo | 5         | AI assistant, support agents, Google Calendar |
+| `max`   | 90 zł/mo | Unlimited | All features, white label                     |
+
 
 Status flow: `trialing` → `active` → `grace` (7-day grace on payment fail) → `expired`
 
@@ -424,3 +462,4 @@ Notes:
 - If `REQUIRE_WEBHOOK_BOT_ID=1`, legacy `POST /webhook` is rejected with 403. Use `/webhook/{botId}`.
 - If the worker still serves old behavior, confirm the latest local commit is actually deployed.
 - For Google OAuth connect URLs from Telegram callbacks, `APP_BASE_URL` must be set on the Worker so the bot can mint absolute `/google/connect` links.
+

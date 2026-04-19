@@ -104,7 +104,7 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const { role, tenantId, masterId: authMasterId, isPersonalTenant } = roleQuery.data;
+  const { role, tenantId, masterId: authMasterId, isPersonalTenant, isTest } = roleQuery.data;
 
   // Effective role — creator can preview as any role
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
@@ -118,6 +118,8 @@ export function TelegramGate({ children }: { children: React.ReactNode }) {
     createdAt: null,
     emailVerified: true,
     hasPassword: true,
+    isPersonalTenant,
+    isTest: !!isTest,
     previewRole,
     previewTenantId,
     setPreviewRole,

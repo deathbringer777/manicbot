@@ -136,6 +136,7 @@ export const publicSalonRouter = createTRPCRouter({
         id: tenant.id,
         slug: tenant.slug,
         publicActive: tenant.publicActive ?? 0,
+        isTest: !!tenant.isTest,
         name: tenant.name,
         displayName: tenant.displayName ?? null,
         logo: tenant.logo ?? null,
@@ -248,6 +249,7 @@ export const publicSalonRouter = createTRPCRouter({
           salon: tenants.salon,
           mapsUrl: tenants.mapsUrl,
           instagramUrl: tenants.instagramUrl,
+          isTest: tenants.isTest,
         })
         .from(tenants)
         .where(and(...conditions))
@@ -288,6 +290,7 @@ export const publicSalonRouter = createTRPCRouter({
           coverPhoto: photos[0] ?? null,
           mapsUrl: t.mapsUrl,
           distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : null,
+          isTest: !!t.isTest,
         };
       });
 
@@ -298,6 +301,67 @@ export const publicSalonRouter = createTRPCRouter({
           : items;
 
       return { items: filtered, hasMore, page, total: filtered.length };
+    }),
+
+  /** Search public independent masters (personal tenants only). */
+  searchMasters: publicProcedure
+    .input(
+      z.object({
+        query: z.string().optional(),
+        city: z.string().optional(),
+        page: z.number().int().min(1).default(1),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const { query, city, page, limit } = input;
+      const offset = (page - 1) * limit;
+
+      const conditions: any[] = [
+        eq(tenants.isPersonal, 1),
+        eq(tenants.publicActive, 1),
+        isNotNull(tenants.slug),
+      ];
+      if (city) {
+        conditions.push(or(like(tenants.city, `%${city}%`), searchLike(tenants.searchText, city))!);
+      }
+      if (query) {
+        conditions.push(searchLike(tenants.searchText, query));
+      }
+
+      const rows = await ctx.db
+        .select({
+          id: tenants.id,
+          slug: tenants.slug,
+          name: tenants.name,
+          displayName: tenants.displayName,
+          city: tenants.city,
+          logo: tenants.logo,
+          coverPhoto: tenants.coverPhoto,
+          photos: tenants.photos,
+          isTest: tenants.isTest,
+        })
+        .from(tenants)
+        .where(and(...conditions))
+        .orderBy(tenants.name)
+        .limit(limit + 1)
+        .offset(offset);
+
+      const hasMore = rows.length > limit;
+      const items = rows.slice(0, limit).map((t) => {
+        let photos: string[] = [];
+        try { photos = t.photos ? JSON.parse(t.photos) : []; } catch { /* ignore */ }
+        return {
+          id: t.id,
+          slug: t.slug,
+          name: t.displayName || t.name,
+          city: t.city,
+          photo: t.logo || t.coverPhoto || photos[0] || null,
+          isTest: !!t.isTest,
+        };
+      });
+
+      return { items, hasMore, page };
     }),
 
   /** List distinct cities that have public salons (for search autocomplete). */

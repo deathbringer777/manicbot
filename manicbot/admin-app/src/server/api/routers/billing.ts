@@ -89,15 +89,21 @@ export const billingRouter = createTRPCRouter({
 
   manualActivate: adminProcedure
     .input(
-      z.object({
-        tenantId: z.string(),
-        plan: z.enum(["start", "pro", "max"]),
-        months: z.number().int().min(1).max(24),
-      })
+      z
+        .object({
+          tenantId: z.string(),
+          plan: z.enum(["start", "pro", "max"]),
+          months: z.number().int().min(1).max(24).optional(),
+          days: z.number().int().min(1).max(3650).optional(),
+        })
+        .refine((v) => (v.months == null) !== (v.days == null), {
+          message: "Provide exactly one of months or days",
+        })
     )
     .mutation(async ({ ctx, input }) => {
       const now = Math.floor(Date.now() / 1000);
-      const periodEnd = now + input.months * 30 * 24 * 3600;
+      const seconds = input.days != null ? input.days * 86400 : input.months! * 30 * 86400;
+      const periodEnd = now + seconds;
 
       await ctx.db
         .update(tenants)

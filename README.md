@@ -11,7 +11,7 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **Online booking** — choose service, master, date, and time directly in Telegram
 - **AI assistant** — Workers AI (Llama) handles free-form dialogue and understands client intent
 - **Roles** — system_admin / technical_support / support / tenant_owner / master / client
-- **Multi-tenancy** — D1 (primary tenant/bot registry) + KV for state; prefix `t:{tenantId}:*`; legacy mode `b:{botId}:*` with a single `BOT_TOKEN`
+- **Multi-tenancy** — D1 (primary tenant/bot registry) + KV for state; prefix `t:{tenantId}:`*; legacy mode `b:{botId}:*` with a single `BOT_TOKEN`
 - **Unified inbox** — WhatsApp / Instagram (Meta webhooks) merged with Telegram in one conversation view via shared `handlers/inbound.js` → same `onMsg` / `onCb`
 - **Billing** — Stripe Checkout and Portal, three plans (Start / Pro / Studio)
 - **Support** — client↔master tickets and platform tickets client↔support agent
@@ -20,20 +20,23 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **4-language interface** — RU, UA, EN, PL
 - **Management panels** — HTML admin panel for tenants, sysadmin panel for the platform
 - **CSV export** — clients and appointments
+- **Test accounts** — reproducible 8-account roster (3 salons + 3 masters with annual plans + 1 salon + 1 master with expired trials). See [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
 
 ---
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Runtime | Cloudflare Workers |
-| Storage | Cloudflare D1 (SQL) + KV |
-| AI | Cloudflare Workers AI (REST, `@cf/meta/llama-3.1-8b-instruct`) |
-| Billing | Stripe API |
-| Messenger | Telegram Bot API |
-| Tests | Vitest 4.x + `@cloudflare/vitest-pool-workers` (Worker ~826 tests); admin-app — separate Vitest |
-| Deploy | Wrangler 4.x → `manicbot.com` |
+
+| Layer     | Technology                                                                                      |
+| --------- | ----------------------------------------------------------------------------------------------- |
+| Runtime   | Cloudflare Workers                                                                              |
+| Storage   | Cloudflare D1 (SQL) + KV                                                                        |
+| AI        | Cloudflare Workers AI (REST, `@cf/meta/llama-3.1-8b-instruct`)                                  |
+| Billing   | Stripe API                                                                                      |
+| Messenger | Telegram Bot API                                                                                |
+| Tests     | Vitest 4.x + `@cloudflare/vitest-pool-workers` (Worker ~826 tests); admin-app — separate Vitest |
+| Deploy    | Wrangler 4.x → `manicbot.com`                                                                   |
+
 
 ---
 
@@ -115,12 +118,14 @@ manicbot/
 **KV** (`MANICBOT`) — ephemeral state, locks, encrypted tokens, AI history. Keys:
 
 **Global:**
+
 - `tenant:{tenantId}` — tenant document (plan, billing, stripeCustomerId)
 - `bot:{botId}` — bot document (tenantId, webhookSecret, encryptedToken)
 - `role:{chatId}` — platform role: `system_admin` / `support`
 - `ticket:{ticketId}` — platform support ticket
 
 **Tenant-scoped** (prefix `t:{tenantId}:`)
+
 - `cfg:svc_list` — salon services
 - `u:{chatId}` — client profile
 - `master:{chatId}` — master profile
@@ -132,14 +137,16 @@ manicbot/
 
 ## Roles
 
-| Role | Scope | Permissions |
-|---|---|---|
-| `system_admin` | Platform | Full access to everything |
+
+| Role                | Scope    | Permissions                                                                              |
+| ------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `system_admin`      | Platform | Full access to everything                                                                |
 | `technical_support` | Platform | Platform tech support (Mini App + same God Mode APIs as `support`, via `platform_roles`) |
-| `support` | Platform | Support agents, tickets |
-| `tenant_owner` | Tenant | Salon management, masters, billing |
-| `master` | Tenant | Schedule, client appointments |
-| `client` | Tenant | Booking, view own appointments |
+| `support`           | Platform | Support agents, tickets                                                                  |
+| `tenant_owner`      | Tenant   | Salon management, masters, billing                                                       |
+| `master`            | Tenant   | Schedule, client appointments                                                            |
+| `client`            | Tenant   | Booking, view own appointments                                                           |
+
 
 ---
 
@@ -170,6 +177,7 @@ Cron: `*/15 * * * *` → `handleCron` per tenant (D1) or legacy context
 ## Quick Start
 
 ### Requirements
+
 - Node.js 18+ (via nvm)
 - Cloudflare account with Workers and KV
 - Telegram Bot Token
@@ -214,35 +222,37 @@ cd manicbot/admin-app && npm run typecheck && npm test
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `MANICBOT` | KV namespace binding |
-| `BOT_TOKEN` | Telegram Bot Token (legacy/fallback) |
-| `WEBHOOK_SECRET` | Telegram webhook secret |
-| `ADMIN_KEY` | Key for /sysadmin and service endpoints |
-| `ADMIN_CHAT_ID` | Telegram chat_id of the platform creator |
-| `WORKERS_AI_API_TOKEN` | Token for Workers AI REST API |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account (Workers AI) |
-| `STRIPE_SECRET_KEY` | Stripe API key |
-| `STRIPE_WEBHOOK_SECRET` | Secret for Stripe webhook verification |
-| `STRIPE_PRICE_START_MONTHLY` | Stripe Price ID for Start plan |
-| `STRIPE_PRICE_PRO_MONTHLY` | Stripe Price ID for Pro plan |
-| `STRIPE_PRICE_STUDIO_MONTHLY` | Stripe Price ID for Studio plan |
-| `APP_BASE_URL` | Public worker URL (`https://manicbot.com`) |
-| `BOT_ENCRYPTION_KEY` | Recommended (startup warning if missing): encrypts bot tokens in D1/KV |
-| `REQUIRE_WEBHOOK_BOT_ID` | Optional: `"1"` — reject legacy `POST /webhook` without `botId` when D1 is bound |
-| `META_APP_SECRET`, `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` | For Meta webhooks (see `wrangler` / dashboard) |
+
+| Variable                                                          | Description                                                                      |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `MANICBOT`                                                        | KV namespace binding                                                             |
+| `BOT_TOKEN`                                                       | Telegram Bot Token (legacy/fallback)                                             |
+| `WEBHOOK_SECRET`                                                  | Telegram webhook secret                                                          |
+| `ADMIN_KEY`                                                       | Key for /sysadmin and service endpoints                                          |
+| `ADMIN_CHAT_ID`                                                   | Telegram chat_id of the platform creator                                         |
+| `WORKERS_AI_API_TOKEN`                                            | Token for Workers AI REST API                                                    |
+| `CLOUDFLARE_ACCOUNT_ID`                                           | Cloudflare account (Workers AI)                                                  |
+| `STRIPE_SECRET_KEY`                                               | Stripe API key                                                                   |
+| `STRIPE_WEBHOOK_SECRET`                                           | Secret for Stripe webhook verification                                           |
+| `STRIPE_PRICE_START_MONTHLY`                                      | Stripe Price ID for Start plan                                                   |
+| `STRIPE_PRICE_PRO_MONTHLY`                                        | Stripe Price ID for Pro plan                                                     |
+| `STRIPE_PRICE_STUDIO_MONTHLY`                                     | Stripe Price ID for Studio plan                                                  |
+| `APP_BASE_URL`                                                    | Public worker URL (`https://manicbot.com`)                                       |
+| `BOT_ENCRYPTION_KEY`                                              | Recommended (startup warning if missing): encrypts bot tokens in D1/KV           |
+| `REQUIRE_WEBHOOK_BOT_ID`                                          | Optional: `"1"` — reject legacy `POST /webhook` without `botId` when D1 is bound |
+| `META_APP_SECRET`, `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` | For Meta webhooks (see `wrangler` / dashboard)                                   |
+
 
 ---
 
 ## Documentation
 
-- [`CLAUDE.md`](CLAUDE.md) — architecture reference for development (Worker, Mini App, roles, deploy)
-- [`BOT_GUIDE.md`](manicbot/BOT_GUIDE.md) — bot user guide
-- [`CLOUDFLARE_SETUP.md`](manicbot/CLOUDFLARE_SETUP.md) — Cloudflare setup
-- [`STRIPE_SETUP.md`](manicbot/STRIPE_SETUP.md) — billing setup
-- [`MIGRATION.md`](manicbot/MIGRATION.md) — migration from legacy to multi-tenant
-- [`SEED_TEST_DATA.md`](manicbot/SEED_TEST_DATA.md) — test data
+- `[CLAUDE.md](CLAUDE.md)` — architecture reference for development (Worker, Mini App, roles, deploy)
+- `[BOT_GUIDE.md](manicbot/BOT_GUIDE.md)` — bot user guide
+- `[CLOUDFLARE_SETUP.md](manicbot/CLOUDFLARE_SETUP.md)` — Cloudflare setup
+- `[STRIPE_SETUP.md](manicbot/STRIPE_SETUP.md)` — billing setup
+- `[MIGRATION.md](manicbot/MIGRATION.md)` — migration from legacy to multi-tenant
+- `[SEED_TEST_DATA.md](manicbot/SEED_TEST_DATA.md)` — test data
 
 ---
 

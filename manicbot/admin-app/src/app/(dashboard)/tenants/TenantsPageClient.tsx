@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Loader2,
 } from "lucide-react";
+import { TestBadge } from "~/components/ui/TestBadge";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20",
@@ -228,7 +229,10 @@ export default function TenantsPageClient() {
                       {t.name.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{t.name}</h3>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{t.name}</h3>
+                        {t.isTest ? <TestBadge /> : null}
+                      </div>
                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                         <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold uppercase ${STATUS_COLORS[t.billingStatus ?? "inactive"] ?? STATUS_COLORS.inactive}`}>
                           {t.billingStatus ?? "inactive"}

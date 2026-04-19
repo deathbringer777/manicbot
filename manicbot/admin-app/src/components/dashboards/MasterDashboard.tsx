@@ -12,6 +12,8 @@ import { t, type Lang } from "~/lib/i18n";
 import { TodayTab } from "~/components/master/tabs/TodayTab";
 import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
+import { TestBadge } from "~/components/ui/TestBadge";
+import { useRole } from "~/components/RoleContext";
 
 type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "services" | "profile";
 
@@ -246,8 +248,15 @@ export function MasterDashboard({
     "profile",
   ];
 
+  const isTest = useRole().isTest;
   return (
     <Shell navItems={masterNavItems} title={t("master.title", lang)} subtitle="ManicBot Master">
+      {isTest && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-300/40 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-300">
+          <TestBadge />
+          <span>Тестовый аккаунт. Создан seed-test-accounts; не используется реальными клиентами.</span>
+        </div>
+      )}
       {/* Delegation banner — shown when owner or admin is viewing as this master */}
       {isDelegating && (
         <div className={`mb-4 flex items-center gap-3 rounded-2xl px-4 py-3 ${

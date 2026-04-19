@@ -28,6 +28,8 @@ import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
+import { TestBadge } from "~/components/ui/TestBadge";
+import { useRole } from "~/components/RoleContext";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes";
 
@@ -1417,8 +1419,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Sprint 3/4 — manual booking modal state
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
 
+  const isTest = useRole().isTest;
+
   return (
     <Shell navItems={salonNavItems} title={t("salon.title", lang)} subtitle="ManicBot Salon">
+      {isTest && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-300/40 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-300">
+          <TestBadge />
+          <span>Тестовый аккаунт. Создан seed-test-accounts; не используется реальными клиентами.</span>
+        </div>
+      )}
       {/* Tab pills — hidden in WebShell (sidebar handles navigation) */}
       {!inWeb && <div data-tour="salon-tabs" className="flex overflow-x-auto scrollbar-none gap-1.5 mb-5 -mx-1 px-1">
         {tabs.map(tb => (

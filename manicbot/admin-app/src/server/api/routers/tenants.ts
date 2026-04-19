@@ -5,11 +5,13 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
 export const tenantsRouter = createTRPCRouter({
-  getAll: adminProcedure.query(async ({ ctx }) => {
-    const allTenants = await ctx.db
-      .select()
-      .from(tenants)
-      .orderBy(desc(tenants.createdAt));
+  getAll: adminProcedure
+    .input(z.object({ test: z.boolean().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const baseQuery = ctx.db.select().from(tenants);
+      const allTenants = await (input?.test === undefined
+        ? baseQuery.orderBy(desc(tenants.createdAt))
+        : baseQuery.where(eq(tenants.isTest, input.test ? 1 : 0)).orderBy(desc(tenants.createdAt)));
 
     const [allBots, userCounts, aptCounts, masterCounts] = await Promise.all([
       ctx.db.select().from(bots),

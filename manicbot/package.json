@@ -9,7 +9,9 @@
 		"test": "vitest run",
 		"check-schema": "node scripts/check-schema-tables.mjs",
 		"migrate": "node scripts/run-migrate.js",
-		"ig-e2e:tenant": "node scripts/create-ig-e2e-tenant.mjs"
+		"ig-e2e:tenant": "node scripts/create-ig-e2e-tenant.mjs",
+		"seed:test-accounts": "node scripts/seed-test-accounts.mjs --apply",
+		"seed:test-accounts:dry": "node scripts/seed-test-accounts.mjs"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.20",

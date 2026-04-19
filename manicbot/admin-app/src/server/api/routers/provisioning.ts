@@ -11,6 +11,7 @@ import {
   appointments,
   users,
   webUsers,
+  masters,
 } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -25,6 +26,20 @@ function randomId(len = 6): string {
     .join("");
 }
 
+function slugify(name: string): string {
+  const map: Record<string, string> = {
+    а:"a",б:"b",в:"v",г:"g",ґ:"g",д:"d",е:"e",є:"ie",ё:"e",ж:"zh",з:"z",и:"y",
+    і:"i",ї:"i",й:"i",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",
+    у:"u",ф:"f",х:"h",ц:"ts",ч:"ch",ш:"sh",щ:"shch",ъ:"",ы:"y",ь:"",э:"e",ю:"iu",я:"ia",
+  };
+  return name
+    .toLowerCase()
+    .replace(/[а-яёіїєґ]/g, (c) => map[c] ?? c)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
 function generatePassword(len = 16): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   const arr = new Uint8Array(len);
@@ -35,6 +50,145 @@ function generatePassword(len = 16): string {
 }
 
 export const provisioningRouter = createTRPCRouter({
+  // ─── TEST ACCOUNT PROVISIONING ──────────────────────────────
+  /**
+   * Provision a fully-formed test account: tenant + (master row, if kind=master)
+   * + verified web_user with the supplied password. The tenant is flagged
+   * `is_test=1` and made publicly visible. Idempotent by lower-cased email:
+   * a second call with the same email returns the existing account untouched.
+   *
+   * Plan handling:
+   *   - start | pro | max → billing_status='active', current_period_end = now + 365d
+   *   - expired_trial    → billing_status='trialing', trial_ends_at = now - 86400
+   */
+  provisionTestAccount: adminProcedure
+    .input(
+      z.object({
+        kind: z.enum(["salon", "master"]),
+        plan: z.enum(["start", "pro", "max", "expired_trial"]),
+        email: z.string().email(),
+        password: z.string().min(8).max(128),
+        name: z.string().min(1).max(100),
+        city: z.string().max(100).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase().trim();
+      const now = Math.floor(Date.now() / 1000);
+
+      // Idempotency: if a web user with this email exists and is bound to a
+      // test tenant, return the existing record unchanged.
+      const existing = await ctx.db
+        .select({ id: webUsers.id, tenantId: webUsers.tenantId, role: webUsers.role })
+        .from(webUsers)
+        .where(eq(webUsers.email, email))
+        .limit(1);
+      if (existing[0]) {
+        const tid = existing[0].tenantId;
+        if (tid) {
+          const [trow] = await ctx.db.select().from(tenants).where(eq(tenants.id, tid)).limit(1);
+          if (trow?.isTest) {
+            return {
+              tenantId: tid,
+              webUserId: existing[0].id,
+              role: existing[0].role,
+              plan: trow.plan ?? "start",
+              billingStatus: trow.billingStatus ?? "trialing",
+              currentPeriodEnd: trow.currentPeriodEnd,
+              trialEndsAt: trow.trialEndsAt,
+              isTest: true,
+              skipped: true as const,
+            };
+          }
+        }
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Email ${email} is already used by a non-test account`,
+        });
+      }
+
+      const tenantId = "t_" + randomId(6);
+      const slugBase = slugify(input.name) || "test";
+      const slug = `${slugBase}-${randomId(4)}`;
+      const isPersonal = input.kind === "master" ? 1 : 0;
+
+      const isExpiredTrial = input.plan === "expired_trial";
+      const planValue = isExpiredTrial ? "start" : input.plan;
+      const billingStatus = isExpiredTrial ? "trialing" : "active";
+      const currentPeriodEnd = isExpiredTrial ? null : now + 365 * 86400;
+      const trialEndsAt = isExpiredTrial ? now - 86400 : null;
+
+      await ctx.db.insert(tenants).values({
+        id: tenantId,
+        name: input.name.trim(),
+        active: 1,
+        plan: planValue,
+        billingStatus,
+        trialEndsAt,
+        graceEndsAt: null,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: 0,
+        slug,
+        city: input.city ?? null,
+        publicActive: 1,
+        isPersonal,
+        isTest: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      let masterId: number | null = null;
+      if (input.kind === "master") {
+        // Synthetic chatId in the 10B+ range (no Telegram collision).
+        masterId = 10_000_000_000 + Math.floor(Math.random() * 1_000_000_000);
+        await ctx.db.insert(masters).values({
+          tenantId,
+          chatId: masterId,
+          name: input.name.trim(),
+          active: 1,
+          addedAt: now,
+        });
+      }
+
+      const webUserId = crypto.randomUUID();
+      const passwordHash = await hashPassword(input.password);
+      try {
+        await ctx.db.insert(webUsers).values({
+          id: webUserId,
+          email,
+          passwordHash,
+          role: input.kind === "master" ? "master" : "tenant_owner",
+          tenantId,
+          name: input.name.trim(),
+          emailVerified: 1,
+          tosAcceptedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (e) {
+        // Roll back tenant + master on failure.
+        try { await ctx.db.delete(masters).where(eq(masters.tenantId, tenantId)); } catch {}
+        try { await ctx.db.delete(tenants).where(eq(tenants.id, tenantId)); } catch {}
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Failed to create test web user: ${e instanceof Error ? e.message : "unknown"}`,
+        });
+      }
+
+      return {
+        tenantId,
+        webUserId,
+        role: input.kind === "master" ? ("master" as const) : ("tenant_owner" as const),
+        plan: planValue,
+        billingStatus,
+        currentPeriodEnd,
+        trialEndsAt,
+        masterId,
+        isTest: true,
+        skipped: false as const,
+      };
+    }),
+
   // ─── QUICK ONBOARD ──────────────────────────────────────────
 
   quickOnboard: adminProcedure

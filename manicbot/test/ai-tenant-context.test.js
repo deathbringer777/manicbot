@@ -61,7 +61,7 @@ describe('buildAISystemPrompt — tenant-aware', () => {
   });
 
   it('admin prompt includes admin-specific actions', () => {
-    const prompt = buildAISystemPrompt('admin', 'русском', '2026-03-19');
+    const prompt = buildAISystemPrompt('tenant_owner', 'русском', '2026-03-19');
     expect(prompt).toContain('ADM_PANEL');
     expect(prompt).toContain('ADM_TODAY');
   });

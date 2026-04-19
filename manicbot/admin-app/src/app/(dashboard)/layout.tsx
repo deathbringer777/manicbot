@@ -71,7 +71,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword } = roleQuery.data;
+  const { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -84,6 +84,7 @@ export default function DashboardLayout({
     emailVerified: emailVerified ?? true,
     hasPassword: hasPassword ?? true,
     isPersonalTenant: isPersonalTenant ?? false,
+    permissions: permissions ?? [],
     previewRole,
     previewTenantId,
     setPreviewRole,
@@ -126,6 +127,23 @@ export default function DashboardLayout({
                 : previewMasterId !== null
                   ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
                   : <SalonDashboard tenantId={effectiveTenantId} />
+          )}
+        </WebShell>
+      </RoleContext.Provider>
+    );
+  }
+
+  // Phase 2: tenant_manager — render SalonDashboard (tabs are gated by useHasPermission).
+  if (effectiveRole === "tenant_manager") {
+    return (
+      <RoleContext.Provider value={ctxValue}>
+        <WebShell>
+          {wrapWithEmailGate(
+            isSettingsPage
+              ? children
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="tenant_owner" />
+                : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
       </RoleContext.Provider>

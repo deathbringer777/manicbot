@@ -327,13 +327,14 @@ export async function getRole(ctx, cid) {
   if (ctx.db && ctx.tenantId) {
     const role = await resolveRole(ctx, cid);
     if (role === ROLES.SYSTEM_ADMIN) return 'system_admin';
-    if (role === ROLES.TENANT_OWNER) return 'admin';
+    if (role === ROLES.TENANT_OWNER) return 'tenant_owner';
+    if (role === ROLES.TENANT_MANAGER) return 'tenant_manager';
     if (role === ROLES.SUPPORT) return 'support';
     if (role === ROLES.MASTER) return 'master';
-    if (role === ROLES.CLIENT && String(await getAdminId(ctx)) === String(cid)) return 'admin';
+    if (role === ROLES.CLIENT && String(await getAdminId(ctx)) === String(cid)) return 'tenant_owner';
     return 'client';
   }
-  if (await isAdmin(ctx, cid)) return 'admin';
+  if (await isAdmin(ctx, cid)) return 'tenant_owner';
   if (await isMaster(ctx, cid)) return 'master';
   return 'client';
 }

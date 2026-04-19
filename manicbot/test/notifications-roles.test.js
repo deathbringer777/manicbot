@@ -195,7 +195,7 @@ describe('Role resolution — D1 migration correctness', () => {
     ).bind(999, 'admin', Date.now()).run();
 
     const role = await getPlatformRole(ctx, 999);
-    expect(role).toBe('admin'); // reads what was stored
+    expect(role).toBe('admin'); // reads the raw stored value (legacy wrong data)
     expect(role).not.toBe('system_admin'); // NOT recognized as system_admin!
     // → isPlatformAdmin would return false for this user (unless they are isCreator)
   });
@@ -208,7 +208,7 @@ describe('Role resolution — D1 migration correctness', () => {
 
     await setTenantRole(ctx, 500, 'tenant_owner');
     const role = await getRole(ctx, 500);
-    expect(role).toBe('admin'); // tenant_owner = 'admin' in UI terms
+    expect(role).toBe('tenant_owner'); // tenant_owner = 'admin' in UI terms
   });
 
   it('tenant_roles: master maps to master role in getRole', async () => {

@@ -470,3 +470,70 @@ export function roleRequestDecisionEmailHtml(
     getEmailCopy(lang).footer,
   );
 }
+
+// ─── Phase 2: permission elevation (English-only for launch) ────────────────
+
+const permissionElevationCopy: Record<Lang, {
+  subject: string;
+  heading: string;
+  body: (targetEmail: string, perms: string) => string;
+  copy: string;
+  expires: string;
+  ignore: string;
+}> = {
+  en: {
+    subject: "ManicBot — confirm staff permission elevation",
+    heading: "Confirm permission elevation",
+    body: (target, perms) => `You're granting sensitive permissions (<b>${perms}</b>) to <b>${target}</b>. Enter this code in the ManicBot dashboard to confirm.`,
+    copy: "Tap to copy",
+    expires: "The code expires in 15 minutes.",
+    ignore: "If you didn't request this change, ignore this email and revoke the staff invitation.",
+  },
+  ru: {
+    subject: "ManicBot — подтвердите расширение прав сотрудника",
+    heading: "Подтверждение расширения прав",
+    body: (target, perms) => `Вы предоставляете чувствительные права (<b>${perms}</b>) пользователю <b>${target}</b>. Введите этот код в панели ManicBot для подтверждения.`,
+    copy: "Нажмите, чтобы скопировать",
+    expires: "Код действует 15 минут.",
+    ignore: "Если вы не запрашивали это изменение — проигнорируйте письмо и отзовите приглашение сотрудника.",
+  },
+  ua: {
+    subject: "ManicBot — підтвердіть розширення прав співробітника",
+    heading: "Підтвердження розширення прав",
+    body: (target, perms) => `Ви надаєте чутливі права (<b>${perms}</b>) користувачу <b>${target}</b>. Введіть цей код у панелі ManicBot для підтвердження.`,
+    copy: "Натисніть, щоб скопіювати",
+    expires: "Код діє 15 хвилин.",
+    ignore: "Якщо ви не запитували цю зміну — ігноруйте лист та відкличте запрошення.",
+  },
+  pl: {
+    subject: "ManicBot — potwierdź rozszerzenie uprawnień personelu",
+    heading: "Potwierdzenie rozszerzenia uprawnień",
+    body: (target, perms) => `Przyznajesz uprawnienia wrażliwe (<b>${perms}</b>) użytkownikowi <b>${target}</b>. Wpisz ten kod w panelu ManicBot, aby potwierdzić.`,
+    copy: "Kliknij, aby skopiować",
+    expires: "Kod wygasa po 15 minutach.",
+    ignore: "Jeśli nie prosiłeś o tę zmianę — zignoruj ten e-mail i cofnij zaproszenie.",
+  },
+};
+
+export function getPermissionElevationCopy(lang: Lang) {
+  return permissionElevationCopy[lang] ?? permissionElevationCopy.en;
+}
+
+export function permissionElevationCodeEmailHtml(
+  code: string,
+  targetEmail: string,
+  permissions: string[],
+  lang: Lang,
+): string {
+  const c = getPermissionElevationCopy(lang);
+  const permsLabel = permissions.join(", ");
+  const codeBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${code}</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
+  </div>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body(targetEmail, permsLabel)) + codeBlock + muted(c.expires) + muted(c.ignore),
+    getEmailCopy(lang).footer,
+  );
+}

@@ -206,6 +206,6 @@ describe('SECURITY: web session is hard-locked to the client role', () => {
     });
     delete ctx._lockToClientRole;
     expect(await isAdmin(ctx, ACTIVE_CHAT)).toBe(true);
-    expect(await getRole(ctx, ACTIVE_CHAT)).toBe('admin');
+    expect(await getRole(ctx, ACTIVE_CHAT)).toBe('tenant_owner');
   });
 });

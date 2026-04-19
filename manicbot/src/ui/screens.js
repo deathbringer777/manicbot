@@ -42,7 +42,7 @@ export async function showHomeByRole(ctx, cid, name) {
   const role = await getRole(ctx, cid);
   // system_admin in tenant bot acts as admin
   if (role === 'system_admin') return showAdminPanel(ctx, cid, name);
-  if (role === 'admin' || role === 'tenant_owner') return showAdminPanel(ctx, cid, name);
+  if (role === 'tenant_owner') return showAdminPanel(ctx, cid, name);
   if (role === 'master') return showMasterPanel(ctx, cid, name);
   return showWelcome(ctx, cid, name);
 }

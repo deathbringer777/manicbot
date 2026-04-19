@@ -256,7 +256,7 @@ export async function onCb(ctx, cb) {
   if (d === CB.SUPPORT) {
     // Support plan check only for salon staff — clients & platform roles always have support
     const supportRole = await getRole(ctx, cid);
-    const isSalonStaffSupport = supportRole === 'admin' || supportRole === 'master' || supportRole === 'tenant_owner';
+    const isSalonStaffSupport = supportRole === 'tenant_owner' || supportRole === 'master' || supportRole === 'tenant_owner';
     if (isSalonStaffSupport && !canUse(ctx, 'support_tickets') && !(await isPlatformAdmin(ctx, cid))) {
       return send(ctx, cid, t(lg, 'feature_support_unavailable'));
     }
@@ -266,7 +266,7 @@ export async function onCb(ctx, cb) {
 
   if (d === CB.TECH_SUPPORT_REQ) {
     const role = await getRole(ctx, cid);
-    if (role !== 'master' && role !== 'admin' && role !== 'tenant_owner' && role !== 'system_admin') return;
+    if (role !== 'master' && role !== 'tenant_owner' && role !== 'system_admin') return;
     await setState(ctx, cid, { step: STEP.TECH_SUPPORT_MSG });
     return send(ctx, cid, t(lg, 'tech_support_enter_msg'), {
       reply_markup: { inline_keyboard: [[{ text: t(lg, 'back'), callback_data: CB.ADM_MAIN }]] },
@@ -307,7 +307,7 @@ export async function onCb(ctx, cb) {
     const suffix = d.slice(CB.TICKET_TAKE.length);
     if (suffix.startsWith('tk_') && ctx.db) {
       const role = await getRole(ctx, cid);
-      if (role !== 'support' && role !== 'technical_support' && role !== 'admin' && role !== 'tenant_owner' && role !== 'system_admin') return;
+      if (role !== 'support' && role !== 'technical_support' && role !== 'tenant_owner' && role !== 'system_admin') return;
       const result = await claimTicket(ctx, suffix, cid);
       if (result.ok) {
         const clientCid = result.ticket.clientChatId;

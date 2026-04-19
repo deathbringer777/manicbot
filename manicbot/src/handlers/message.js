@@ -103,7 +103,7 @@ async function showHelp(ctx, cid, lg, realRole) {
       '• «Агенты поддержки» / «Техподдержка»',
       '• «Биллинг» / «Ссылки на панели»',
     ].join('\n');
-  } else if (realRole === 'admin' || realRole === 'tenant_owner') {
+  } else if (realRole === 'tenant_owner') {
     text = [
       '📋 <b>Помощь — Администратор</b>',
       '',
@@ -170,7 +170,7 @@ async function showHelp(ctx, cid, lg, realRole) {
 async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
   // Gate: AI plan check only for salon staff (master/admin) — clients & platform roles always have AI
   const isPlatformRole = realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support';
-  const isSalonStaff = realRole === 'admin' || realRole === 'master' || realRole === 'tenant_owner';
+  const isSalonStaff = realRole === 'tenant_owner' || realRole === 'master' || realRole === 'tenant_owner';
   const isStaff = isPlatformRole || isSalonStaff;
   if (isSalonStaff && !canUse(ctx, 'ai')) {
     return send(ctx, cid, t(lg, 'feature_ai_unavailable'));
@@ -228,7 +228,7 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
   const finalHint = extraConsult.reply_markup ? '\n\n' + t(lg, 'consultant_btn_hint') : '';
   // Стафф получает кнопку «В меню» (нейтральная, не «Панель админа» — только в админ-разделах)
   if (isStaff) {
-    const backCb = (realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support') ? CB.SYSADM_MAIN : (realRole === 'admin' || realRole === 'tenant_owner') ? CB.ADM_MAIN : CB.MST_MAIN;
+    const backCb = (realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support') ? CB.SYSADM_MAIN : (realRole === 'tenant_owner') ? CB.ADM_MAIN : CB.MST_MAIN;
     extraConsult = { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: backCb }]] } };
     // Короткое сообщение (< 2 символа) не уходило в AI — не показываем «AI недоступен»; при реальном сбое AI — отдельная фраза
     const toSendStaff = aiText ? escHtml(aiText) : (txtTooShort ? t(lg, 'ai_short_use_panel') : t(lg, 'ai_unavailable_use_panel'));
@@ -389,7 +389,7 @@ export async function onMsg(ctx, msg) {
       } else {
         await clearState(ctx, cid);
         const senderRole = await getRole(ctx, cid);
-        if (senderRole !== 'master' && senderRole !== 'admin' && senderRole !== 'tenant_owner' && senderRole !== 'system_admin') {
+        if (senderRole !== 'master' && senderRole !== 'tenant_owner' && senderRole !== 'system_admin') {
           return send(ctx, cid, t(lg, 'tech_support_only_staff'));
         }
         const agents = ctx.db ? await getTechnicalSupportAgents(ctx) : [];
@@ -434,7 +434,7 @@ export async function onMsg(ctx, msg) {
     const key = txt.slice(17).trim();
     if (!timingSafeEqual(key, ctx.ADMIN_KEY)) return send(ctx, cid, t(lg, 'adm_wrong_key'));
     const role = await getRole(ctx, cid);
-    if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (role !== 'tenant_owner' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     if (ctx.db) {
       await addSupport(ctx, cid);
       return send(ctx, cid, t(lg, 'support_registered'));
@@ -444,7 +444,7 @@ export async function onMsg(ctx, msg) {
 
   if (txt.startsWith('/add_support ')) {
     const role = await getRole(ctx, cid);
-    if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (role !== 'tenant_owner' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     const arg = txt.slice(13).trim();
     if (!arg) return send(ctx, cid, t(lg, 'support_add_usage'));
     if (!ctx.kv) return send(ctx, cid, t(lg, 'unknown'));
@@ -504,7 +504,7 @@ export async function onMsg(ctx, msg) {
 
   if (txt === '/remove_support' || txt.startsWith('/remove_support ')) {
     const role = await getRole(ctx, cid);
-    if (role !== 'admin' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
+    if (role !== 'tenant_owner' && role !== 'system_admin') return send(ctx, cid, t(lg, 'support_only_admin'));
     const arg = txt.startsWith('/remove_support ') ? txt.slice(15).trim() : '';
     if (!arg) return send(ctx, cid, t(lg, 'support_remove_usage'));
     if (!ctx.db) return send(ctx, cid, t(lg, 'unknown'));
@@ -543,7 +543,7 @@ export async function onMsg(ctx, msg) {
 
   // Platform tech ticket: staff follow-up (text or media) → D1 + notify agents / claimed agent
   if (ctx.db && ctx.kv && ctx.tenantId) {
-    const staffRoles = ['master', 'admin', 'tenant_owner', 'system_admin'];
+    const staffRoles = ['master', 'tenant_owner', 'system_admin'];
     const staffLine = (msg.text || msg.caption || '').trim().slice(0, 2000);
     let staffAtt = null;
     if (msg.photo?.length) staffAtt = `telegram:file_id:${msg.photo[msg.photo.length - 1].file_id}`;
@@ -602,7 +602,7 @@ export async function onMsg(ctx, msg) {
         }
         return;
       }
-    } else if (realRole === 'master' || realRole === 'admin' || realRole === 'tenant_owner' || realRole === 'system_admin') {
+    } else if (realRole === 'master' || realRole === 'tenant_owner' || realRole === 'system_admin') {
       const clientCid = await getTicketMaster(ctx, cid);
       if (clientCid) {
         if (isTicketCloseWord(txt)) {
@@ -629,7 +629,7 @@ export async function onMsg(ctx, msg) {
     const isSalonCmd = txt.startsWith('/grant_salon');
     const targetRole = isSalonCmd ? ROLES.TENANT_OWNER : ROLES.MASTER;
     const cmd = isSalonCmd ? '/grant_salon' : '/grant_master';
-    if (realRole !== 'admin' && realRole !== 'system_admin') {
+    if (realRole !== 'tenant_owner' && realRole !== 'system_admin') {
       return send(ctx, cid, t(lg, 'support_only_admin'));
     }
     if (isSalonCmd && realRole !== 'system_admin') {
@@ -660,12 +660,12 @@ export async function onMsg(ctx, msg) {
   if (txt === '/client' && realRole !== 'client') {
     return showWelcome(ctx, cid, name);
   }
-  if (txt === '/master' && (realRole === 'admin' || realRole === 'master' || realRole === 'system_admin')) {
+  if (txt === '/master' && (realRole === 'tenant_owner' || realRole === 'master' || realRole === 'system_admin')) {
     return showMasterPanel(ctx, cid, name);
   }
   if (txt === '/panel' && realRole !== 'client') {
     if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
-    if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
+    if (realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
   }
 
@@ -764,7 +764,7 @@ export async function onMsg(ctx, msg) {
         }).catch(() => null);
       }
     }
-    if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
+    if (realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
     if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     return showWelcome(ctx, cid, name);
   }
@@ -791,14 +791,14 @@ export async function onMsg(ctx, msg) {
       await setState(ctx, cid, { step: STEP.SUPPORT_MSG });
       return send(ctx, cid, t(lg, 'support_enter_msg'), { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]] } });
     }
-    if (txt === t(lg, 'm_tech_support') && (realRole === 'master' || realRole === 'admin' || realRole === 'tenant_owner')) {
+    if (txt === t(lg, 'm_tech_support') && (realRole === 'master' || realRole === 'tenant_owner')) {
       await setState(ctx, cid, { step: STEP.TECH_SUPPORT_MSG });
       return send(ctx, cid, t(lg, 'tech_support_enter_msg'), { reply_markup: { inline_keyboard: [[{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]] } });
     }
-    if (txt === t(lg, 'mst_panel') && (realRole === 'master' || realRole === 'admin')) return showMasterPanel(ctx, cid, name);
+    if (txt === t(lg, 'mst_panel') && (realRole === 'master' || realRole === 'tenant_owner')) return showMasterPanel(ctx, cid, name);
     if (txt === t(lg, 'adm_management') && realRole !== 'client') {
       if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return showPlatformAdminPanel(ctx, cid, name);
-      if (realRole === 'admin' || realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
+      if (realRole === 'tenant_owner' || (ctx.tenantId && realRole === 'system_admin')) return showAdminPanel(ctx, cid, name);
       if (realRole === 'master') return showMasterPanel(ctx, cid, name);
     }
   }
@@ -855,11 +855,11 @@ export async function onMsg(ctx, msg) {
       // For staff users who cancelled their own appointment — route back to their panel
       // to avoid confusing "free text → AI → admin actions" DTP scenario
       const cancellerRole = realRole;
-      const isStaffCanceller = cancellerRole === 'system_admin' || cancellerRole === 'admin' ||
+      const isStaffCanceller = cancellerRole === 'system_admin' || cancellerRole === 'tenant_owner' ||
         cancellerRole === 'master' || cancellerRole === 'tenant_owner';
       if (isStaffCanceller) {
         const backCb = cancellerRole === 'system_admin' ? CB.SYSADM_MAIN
-          : (cancellerRole === 'admin' || cancellerRole === 'tenant_owner') ? CB.ADM_MAIN
+          : (cancellerRole === 'tenant_owner' || cancellerRole === 'tenant_owner') ? CB.ADM_MAIN
           : CB.MST_MAIN;
         await send(ctx, cid, fill(t(lg, 'cancel_ok'), {
           svc: svcName(ctx, lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time),
@@ -1433,15 +1433,15 @@ export async function onMsg(ctx, msg) {
     }
   }
 
-  if ((realRole === 'admin' || realRole === 'master' || realRole === 'system_admin') && isConfirmAllRequestsMessage(txt)) {
+  if ((realRole === 'tenant_owner' || realRole === 'master' || realRole === 'system_admin') && isConfirmAllRequestsMessage(txt)) {
     const count = await confirmAllPendingApts(ctx, cid);
     const confirmLg = await getLang(ctx, cid) || 'ru';
     const confirmMsg = count > 0 ? fill(t(confirmLg, 'confirm_all_done'), { n: String(count) }) : t(confirmLg, 'confirm_all_none');
-    const backCb = realRole === 'system_admin' ? CB.SYSADM_MAIN : realRole === 'admin' ? CB.ADM_MAIN : CB.MST_MAIN;
+    const backCb = realRole === 'system_admin' ? CB.SYSADM_MAIN : realRole === 'tenant_owner' ? CB.ADM_MAIN : CB.MST_MAIN;
     return send(ctx, cid, confirmMsg, { reply_markup: { inline_keyboard: [[{ text: t(confirmLg, 'back_m'), callback_data: backCb }]] } });
   }
 
-  if ((realRole === 'admin' || realRole === 'system_admin') && isAdminCancelAllMessage(txt)) {
+  if ((realRole === 'tenant_owner' || realRole === 'system_admin') && isAdminCancelAllMessage(txt)) {
     return showAdminCancelAllConfirm(ctx, cid);
   }
 

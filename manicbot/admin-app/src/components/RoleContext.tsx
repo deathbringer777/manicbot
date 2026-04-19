@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { AppRole } from "~/server/api/routers/auth";
+import type { PermissionKey } from "~/server/api/permissions";
 
 interface RoleContextValue {
   role: AppRole;
@@ -13,6 +14,8 @@ interface RoleContextValue {
   hasPassword: boolean;
   isPersonalTenant?: boolean;
   isTest?: boolean;
+  /** Only populated when role === "tenant_manager". */
+  permissions: PermissionKey[];
   // Creator-only preview
   previewRole: AppRole;
   previewTenantId: string | null;
@@ -32,6 +35,7 @@ export const RoleContext = createContext<RoleContextValue>({
   hasPassword: true,
   isPersonalTenant: false,
   isTest: false,
+  permissions: [],
   previewRole: null,
   previewTenantId: null,
   setPreviewRole: () => {},
@@ -41,4 +45,17 @@ export const RoleContext = createContext<RoleContextValue>({
 
 export function useRole() {
   return useContext(RoleContext);
+}
+
+/**
+ * Convenience hook: true if the current user has the named permission.
+ * tenant_owner and system_admin always return true. Masters on their personal
+ * tenant always return true.
+ */
+export function useHasPermission(permission: PermissionKey): boolean {
+  const { role, permissions, isPersonalTenant } = useRole();
+  if (role === "system_admin" || role === "tenant_owner") return true;
+  if (role === "master" && isPersonalTenant) return true;
+  if (role === "tenant_manager") return permissions.includes(permission);
+  return false;
 }

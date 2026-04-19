@@ -92,7 +92,7 @@ describe('parseAIActions', () => {
 // ── buildAISystemPrompt ────────────────────────────────────────────────────
 describe('buildAISystemPrompt', () => {
   it('returns string for all roles', () => {
-    for (const role of ['client', 'admin', 'master', 'system_admin', 'support']) {
+    for (const role of ['client', 'tenant_owner', 'master', 'system_admin', 'support']) {
       const prompt = buildAISystemPrompt(role, 'English', '2026-03-22');
       expect(typeof prompt).toBe('string');
       expect(prompt.length).toBeGreaterThan(200);
@@ -111,7 +111,7 @@ describe('buildAISystemPrompt', () => {
   });
 
   it('admin prompt contains admin-specific tags', () => {
-    const prompt = buildAISystemPrompt('admin', 'русском', '2026-03-22');
+    const prompt = buildAISystemPrompt('tenant_owner', 'русском', '2026-03-22');
     expect(prompt).toContain('[ADM_PANEL]');
     expect(prompt).toContain('[ADM_TODAY]');
     expect(prompt).toContain('[ADM_TOMORROW]');

@@ -5,7 +5,7 @@ import { canUse } from '../billing/features.js';
 
 export function mainKb(lg, role = 'client', ctx = null) {
   // Support button: always shown for clients; salon staff (master/admin) gated by plan
-  const isSalonStaffKb = role === 'master' || role === 'admin' || role === 'tenant_owner';
+  const isSalonStaffKb = role === 'master' || role === 'tenant_owner';
   const showSupport = !ctx || !isSalonStaffKb || canUse(ctx, 'support_tickets');
   const lastRow = [
     { text: t(lg, 'm_cont'), callback_data: CB.CONTACTS },
@@ -26,10 +26,10 @@ export function mainKb(lg, role = 'client', ctx = null) {
     rows.push([{ text: t(lg, 'adm_management'), callback_data: CB.ADM_MAIN }]);
     rows.push([{ text: t(lg, 'sysadm_title'), callback_data: CB.SYSADM_MAIN }]);
   }
-  if (role === 'master' || role === 'admin') {
+  if (role === 'master' || role === 'tenant_owner') {
     rows.push([{ text: t(lg, 'mst_panel'), callback_data: CB.MST_MAIN }]);
   }
-  if (role === 'admin') {
+  if (role === 'tenant_owner') {
     rows.push([{ text: t(lg, 'adm_management'), callback_data: CB.ADM_MAIN }]);
   }
   return { reply_markup: { inline_keyboard: rows } };

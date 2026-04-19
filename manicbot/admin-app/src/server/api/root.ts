@@ -26,6 +26,7 @@ import { promoCodesRouter } from "~/server/api/routers/promoCodes";
 import { stampCardRouter } from "~/server/api/routers/stampCard";
 import { leadsRouter } from "~/server/api/routers/leads";
 import { marketingRouter } from "~/server/api/routers/marketing";
+import { tenantStaffRouter } from "~/server/api/routers/tenantStaff";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -55,6 +56,7 @@ export const appRouter = createTRPCRouter({
   stampCard: stampCardRouter,
   leads: leadsRouter,
   marketing: marketingRouter,
+  tenantStaff: tenantStaffRouter,
 });
 
 export type AppRouter = typeof appRouter;

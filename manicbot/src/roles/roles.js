@@ -11,6 +11,9 @@ export const ROLES = {
   TECHNICAL_SUPPORT: 'technical_support',
   SUPPORT: 'support',
   TENANT_OWNER: 'tenant_owner',
+  /** Salon-level limited admin (Phase 2). Invited by tenant_owner. Default permissions
+   *  cover appointments + chat; sensitive permissions require email-verified elevation. */
+  TENANT_MANAGER: 'tenant_manager',
   MASTER: 'master',
   CLIENT: 'client',
 };
@@ -56,7 +59,7 @@ export async function getTenantRole(ctx, chatId) {
 }
 
 export async function setTenantRole(ctx, chatId, role) {
-  if (!role || (role !== ROLES.TENANT_OWNER && role !== ROLES.MASTER)) return false;
+  if (!role || (role !== ROLES.TENANT_OWNER && role !== ROLES.TENANT_MANAGER && role !== ROLES.MASTER)) return false;
   if (!ctx?.db || !ctx?.tenantId) return false;
   try {
     await dbRun(ctx,
@@ -88,7 +91,11 @@ export async function resolveRole(ctx, chatId) {
   }
   if (ctx?.tenantId) {
     const tenantRole = await getTenantRole(ctx, chatId);
-    if (tenantRole === ROLES.TENANT_OWNER || tenantRole === ROLES.MASTER) {
+    if (
+      tenantRole === ROLES.TENANT_OWNER ||
+      tenantRole === ROLES.TENANT_MANAGER ||
+      tenantRole === ROLES.MASTER
+    ) {
       return tenantRole;
     }
   }
@@ -212,5 +219,6 @@ export function isSystemAdmin(role) { return role === ROLES.SYSTEM_ADMIN; }
 export function isTechnicalSupport(role) { return role === ROLES.TECHNICAL_SUPPORT; }
 export function isSupport(role) { return role === ROLES.SUPPORT || role === ROLES.TECHNICAL_SUPPORT; }
 export function isTenantOwner(role) { return role === ROLES.TENANT_OWNER; }
+export function isTenantManager(role) { return role === ROLES.TENANT_MANAGER; }
 export function isMaster(role) { return role === ROLES.MASTER; }
 export function isClient(role) { return role === ROLES.CLIENT; }

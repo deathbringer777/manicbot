@@ -731,3 +731,48 @@ export const industryConfigs = sqliteTable("industry_configs", {
   aiPromptSuffix: text("ai_prompt_suffix"),
   createdAt: integer("created_at").notNull(),
 });
+
+// ─── Phase 2: tenant_manager role ──────────────────────────────────────────
+
+export const tenantMemberPermissions = sqliteTable("tenant_member_permissions", {
+  tenantId: text("tenant_id").notNull(),
+  webUserId: text("web_user_id").notNull(),
+  permission: text("permission").notNull(),
+  grantedAt: integer("granted_at").notNull(),
+  grantedBy: text("granted_by").notNull(),
+}, (t) => [
+  index("idx_tmp_user").on(t.webUserId),
+  index("idx_tmp_tenant").on(t.tenantId),
+]);
+
+export const tenantActionRequests = sqliteTable("tenant_action_requests", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  requesterId: text("requester_id").notNull(),
+  action: text("action").notNull(),
+  payload: text("payload"),
+  status: text("status").notNull().default("pending"),
+  ownerNote: text("owner_note"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: integer("reviewed_at"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_tar_tenant_status").on(t.tenantId, t.status, t.createdAt),
+  index("idx_tar_requester").on(t.requesterId, t.createdAt),
+]);
+
+export const permissionElevationCodes = sqliteTable("permission_elevation_codes", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  ownerUserId: text("owner_user_id").notNull(),
+  targetUserId: text("target_user_id").notNull(),
+  permissions: text("permissions").notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_pec_owner").on(t.ownerUserId, t.expiresAt),
+  index("idx_pec_tenant").on(t.tenantId, t.expiresAt),
+]);

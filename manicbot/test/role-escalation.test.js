@@ -99,7 +99,7 @@ describe('master cannot escalate to tenant_owner', () => {
     await setTenantRole(ctx, 300, ROLES.MASTER);
     const role = await getRole(ctx, 300);
     expect(role).toBe('master');
-    expect(role).not.toBe('admin');
+    expect(role).not.toBe('tenant_owner');
     expect(role).not.toBe('system_admin');
   });
 
@@ -141,7 +141,7 @@ describe('tenant_owner cannot escalate to system_admin', () => {
     const ctx = makeCtx({ tenantId: 't_salon' });
     await setTenantRole(ctx, 500, ROLES.TENANT_OWNER);
     const role = await getRole(ctx, 500);
-    expect(role).toBe('admin');
+    expect(role).toBe('tenant_owner');
     expect(role).not.toBe('system_admin');
   });
 
@@ -178,7 +178,7 @@ describe('support cannot modify tenant data', () => {
     await setPlatformRole(ctx, 700, ROLES.SUPPORT);
     const role = await getRole(ctx, 700);
     expect(role).toBe('support');
-    expect(role).not.toBe('admin');
+    expect(role).not.toBe('tenant_owner');
     expect(role).not.toBe('system_admin');
   });
 

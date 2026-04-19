@@ -254,7 +254,7 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
     const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:[^\n]*\n?/g, '').trim();
     return `${adminBase}\n\n${sysAdminActions}${adj}`;
   }
-  if (role === 'admin') return `${base}\n\n${adminActions}${adj}`;
+  if (role === 'tenant_owner') return `${base}\n\n${adminActions}${adj}`;
   if (role === 'master') return `${base}\n\n${masterActions}${adj}`;
   return `${base}\n\n${clientActions}${adj}`;
 }
@@ -312,12 +312,12 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
     case 'REVIEWS': await showReviews(ctx, cid); return true;
     case 'ABOUT': await showAbout(ctx, cid); return true;
   }
-  if (role === 'admin' || role === 'master' || role === 'tenant_owner' || role === 'system_admin' || role === 'support') {
+  if (role === 'tenant_owner' || role === 'master' || role === 'tenant_owner' || role === 'system_admin' || role === 'support') {
     switch (tag) {
       case 'BILLING': await showBillingMenu(ctx, cid); return true;
     }
   }
-  if (role === 'admin' || role === 'tenant_owner' || role === 'system_admin') {
+  if (role === 'tenant_owner' || role === 'system_admin') {
     switch (tag) {
       case 'ADM_CLIENTS': await showClientsList(ctx, cid); return true;
       case 'ADM_ALL_APTS': await showAdminAllApts(ctx, cid); return true;
@@ -331,7 +331,7 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
   // dashboard can show a pending entry); actual appointment creation lives
   // in the manual booking tRPC procedure which the worker cannot call.
   // This tag serves as a signal to surface a prefilled manual-booking link.
-  if (tag === 'BOOK_FOR_CLIENT' && (role === 'admin' || role === 'master' || role === 'tenant_owner' || role === 'system_admin')) {
+  if (tag === 'BOOK_FOR_CLIENT' && (role === 'tenant_owner' || role === 'master' || role === 'tenant_owner' || role === 'system_admin')) {
     const parts = (param || '').split(':');
     const svcId = parts[0]?.trim();
     const date = parts[1]?.trim();
@@ -394,7 +394,7 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
       case 'SUPPORT_LIST': await showPlatformSupportList(ctx, cid); return true;
     }
   }
-  if (role === 'admin') {
+  if (role === 'tenant_owner') {
     switch (tag) {
       case 'ADM_PANEL': await showAdminPanel(ctx, cid, name); return true;
       case 'ADM_TODAY': await showAdminApts(ctx, cid, dateStrForOffset(0)); return true;

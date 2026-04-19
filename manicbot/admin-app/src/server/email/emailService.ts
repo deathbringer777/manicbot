@@ -15,7 +15,9 @@ import {
   loginAlertEmailHtml,
   roleRequestAdminEmailHtml,
   roleRequestDecisionEmailHtml,
+  permissionElevationCodeEmailHtml,
   getEmailCopy,
+  getPermissionElevationCopy,
 } from "./templates";
 
 function baseUrl(): string {
@@ -153,5 +155,21 @@ export async function sendRoleChangeDecisionEmail(
     to,
     subject,
     html: roleRequestDecisionEmailHtml(decision, oldRole, newRole, adminNote, dashboardUrl, lang),
+  });
+}
+
+/** Phase 2: permission elevation 6-digit code sent to OWNER's email. */
+export async function sendPermissionElevationCodeEmail(
+  to: string,
+  code: string,
+  targetEmail: string,
+  permissions: string[],
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const copy = getPermissionElevationCopy(lang);
+  return sendResendEmail({
+    to,
+    subject: copy.subject,
+    html: permissionElevationCodeEmailHtml(code, targetEmail, permissions, lang),
   });
 }

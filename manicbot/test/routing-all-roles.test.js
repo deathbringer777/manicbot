@@ -158,10 +158,10 @@ describe('mainKb — keyboard buttons per role', () => {
     expect(allCbs).toContain(CB.ADM_MAIN);
   });
 
-  it('admin gets ADM_MAIN and MST_MAIN buttons', async () => {
+  it('tenant_owner gets ADM_MAIN and MST_MAIN buttons', async () => {
     const { mainKb } = await import('../src/ui/keyboards.js');
     const { CB } = await import('../src/config.js');
-    const kb = mainKb('ru', 'admin');
+    const kb = mainKb('ru', 'tenant_owner');
     const allCbs = kb.reply_markup.inline_keyboard.flat().map(b => b.callback_data);
     expect(allCbs).toContain(CB.ADM_MAIN);
     expect(allCbs).toContain(CB.MST_MAIN);

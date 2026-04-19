@@ -1,6 +1,7 @@
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { webUsers, masters, tenants } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
+import { listPermissions, type PermissionKey } from "~/server/api/permissions";
 
 export type AppRole =
   | "system_admin"
@@ -22,6 +23,8 @@ type RoleResult = {
   emailVerified: boolean;
   email: string | null;
   hasPassword: boolean;
+  /** Only populated for role === "tenant_manager". [] for other roles. */
+  permissions: PermissionKey[];
 };
 
 const EMPTY: RoleResult = {
@@ -35,6 +38,7 @@ const EMPTY: RoleResult = {
   emailVerified: true,
   email: null,
   hasPassword: true,
+  permissions: [],
 };
 
 export const authRouter = createTRPCRouter({
@@ -97,6 +101,13 @@ export const authRouter = createTRPCRouter({
       }
     }
 
-    return { role, tenantId, tenantName, masterId, isPersonalTenant, isTest, createdAt, emailVerified, email, hasPassword };
+    let permissions: PermissionKey[] = [];
+    if (role === "tenant_manager" && tenantId) {
+      try {
+        permissions = await listPermissions(ctx, tenantId, ctx.webUser.id);
+      } catch { /* non-critical */ }
+    }
+
+    return { role, tenantId, tenantName, masterId, isPersonalTenant, isTest, createdAt, emailVerified, email, hasPassword, permissions };
   }),
 });

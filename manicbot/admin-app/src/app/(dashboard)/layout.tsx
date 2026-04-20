@@ -22,6 +22,14 @@ import type { AppRole } from "~/server/api/routers/auth";
 // Workaround: render them inline via ?tab= on the working /dashboard route.
 const GodRoleRequests = dynamic(() => import("./role-requests/RoleRequestsPageClient"));
 const GodLeads = dynamic(() => import("./leads/LeadsPageClient"));
+const CommandPalette = dynamic(
+  () => import("~/components/CommandPalette").then((m) => m.CommandPalette),
+  { ssr: false },
+);
+const ActivityFeed = dynamic(
+  () => import("~/components/ActivityFeed").then((m) => m.ActivityFeed),
+  { ssr: false },
+);
 
 export default function DashboardLayout({
   children,
@@ -189,6 +197,8 @@ export default function DashboardLayout({
   return (
     <RoleContext.Provider value={ctxValue}>
       <WebShell>{wrapWithEmailGate(GodTabComponent ? <GodTabComponent /> : children)}</WebShell>
+      <CommandPalette />
+      <ActivityFeed />
     </RoleContext.Provider>
   );
 }

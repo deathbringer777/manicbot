@@ -776,3 +776,36 @@ export const permissionElevationCodes = sqliteTable("permission_elevation_codes"
   index("idx_pec_owner").on(t.ownerUserId, t.expiresAt),
   index("idx_pec_tenant").on(t.tenantId, t.expiresAt),
 ]);
+
+// ─── Plugin Marketplace (migration 0035) ───────────────────────────────────
+
+export const pluginInstallations = sqliteTable("plugin_installations", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  pluginSlug: text("plugin_slug").notNull(),
+  enabled: integer("enabled").notNull().default(1),
+  version: text("version").notNull(),
+  installedBy: text("installed_by").notNull(),
+  installedAt: integer("installed_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  settingsJson: text("settings_json"),
+  billingState: text("billing_state").notNull().default("not_applicable"),
+  stripeSubscriptionItemId: text("stripe_subscription_item_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+}, (t) => [
+  index("idx_plugin_inst_tenant").on(t.tenantId),
+  index("idx_plugin_inst_slug").on(t.pluginSlug),
+  index("idx_plugin_inst_billing").on(t.billingState),
+]);
+
+export const pluginEvents = sqliteTable("plugin_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  installationId: text("installation_id").notNull(),
+  event: text("event").notNull(),
+  actorWebUserId: text("actor_web_user_id"),
+  detailJson: text("detail_json"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_plugin_events_inst").on(t.installationId, t.createdAt),
+  index("idx_plugin_events_created").on(t.createdAt),
+]);

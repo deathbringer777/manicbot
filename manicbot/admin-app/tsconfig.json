@@ -27,7 +27,8 @@
     /* Path Aliases */
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "@plugins/*": ["../plugins/*"]
     }
   },
   "include": [
@@ -36,7 +37,8 @@
     "**/*.tsx",
     "**/*.cjs",
     "**/*.js",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "../plugins/**/*.ts"
   ],
   "exclude": ["node_modules", "generated"]
 }

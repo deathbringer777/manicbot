@@ -776,3 +776,36 @@ CREATE TABLE IF NOT EXISTS permission_elevation_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_pec_owner ON permission_elevation_codes (owner_user_id, expires_at);
 CREATE INDEX IF NOT EXISTS idx_pec_tenant ON permission_elevation_codes (tenant_id, expires_at);
+
+-- ─── Plugin Marketplace (migration 0035) ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS plugin_installations (
+  id                          TEXT    PRIMARY KEY,
+  tenant_id                   TEXT,
+  plugin_slug                 TEXT    NOT NULL,
+  enabled                     INTEGER NOT NULL DEFAULT 1,
+  version                     TEXT    NOT NULL,
+  installed_by                TEXT    NOT NULL,
+  installed_at                INTEGER NOT NULL,
+  updated_at                  INTEGER NOT NULL,
+  settings_json               TEXT,
+  billing_state               TEXT    NOT NULL DEFAULT 'not_applicable',
+  stripe_subscription_item_id TEXT,
+  stripe_payment_intent_id    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plugin_inst_scope_slug
+  ON plugin_installations (COALESCE(tenant_id, '__platform__'), plugin_slug);
+CREATE INDEX IF NOT EXISTS idx_plugin_inst_tenant  ON plugin_installations (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_plugin_inst_slug    ON plugin_installations (plugin_slug);
+CREATE INDEX IF NOT EXISTS idx_plugin_inst_billing ON plugin_installations (billing_state);
+
+CREATE TABLE IF NOT EXISTS plugin_events (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  installation_id    TEXT    NOT NULL,
+  event              TEXT    NOT NULL,
+  actor_web_user_id  TEXT,
+  detail_json        TEXT,
+  created_at         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_events_inst    ON plugin_events (installation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_plugin_events_created ON plugin_events (created_at);

@@ -10,6 +10,12 @@ import { GRACE_DURATION_MS } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
 import { nowSec, msToSec } from '../utils/time.js';
 import { sendInvoiceEmail } from './invoiceEmail.js';
+import {
+  handleAddonCheckoutCompleted,
+  handleAddonInvoicePaid,
+  handleAddonInvoiceFailed,
+  handleAddonSubscriptionCanceled,
+} from './pluginWebhooks.js';
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
@@ -138,6 +144,10 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
 
   if (type === 'checkout.session.completed') {
     const session = body.data?.object;
+    // Plugin add-on one-time purchase — handled first; returns silently if
+    // session carries no plugin_slug metadata.
+    try { await handleAddonCheckoutCompleted(ctx, session); }
+    catch (e) { console.error('[plugin-webhook] addon checkout failed:', e?.message); }
     const tenantId = session?.metadata?.tenantId;
     const customerId = session?.customer;
     if (tenantId) {
@@ -165,6 +175,10 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
 
   if (type === 'customer.subscription.updated' || type === 'customer.subscription.deleted') {
     const sub = body.data?.object;
+    if (type === 'customer.subscription.deleted') {
+      try { await handleAddonSubscriptionCanceled(ctx, sub); }
+      catch (e) { console.error('[plugin-webhook] addon sub-canceled failed:', e?.message); }
+    }
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
     let tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(ctx, customerId);
     if (tenantId) {
@@ -182,8 +196,10 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     }
   }
 
-  if (type === 'invoice.payment_succeeded') {
+  if (type === 'invoice.payment_succeeded' || type === 'invoice.paid') {
     const invoice = body.data?.object;
+    try { await handleAddonInvoicePaid(ctx, invoice); }
+    catch (e) { console.error('[plugin-webhook] addon invoice.paid failed:', e?.message); }
     const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
     if (customerId) {
       const tenantId = await resolveTenantIdByCustomer(ctx, customerId);
@@ -197,6 +213,8 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
 
   if (type === 'invoice.payment_failed') {
     const invoice = body.data?.object;
+    try { await handleAddonInvoiceFailed(ctx, invoice); }
+    catch (e) { console.error('[plugin-webhook] addon invoice.failed failed:', e?.message); }
     const subscriptionId = invoice.subscription;
     const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
     if (subscriptionId) {

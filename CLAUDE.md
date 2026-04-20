@@ -88,6 +88,53 @@ Recent migrations:
 - `0031_marketing_contacts.sql` — deduped lead directory (email/phone) for marketing module
 - `0032_marketing_schema.sql` — full marketing module (segments, templates, campaigns, sends, automations, providers, consent log) + CRM columns on `marketing_contacts` (tags, consent, lifecycle, tenant scope)
 - `0033_is_test_flag.sql` — `is_test` column on `tenants` (synthetic accounts created by `npm run seed:test-accounts`; surfaced in `auth.getMyRole.isTest`, `publicSalon.search`, `tenants.getAll({ test })`, and a yellow `TEST` badge in the admin/public UI). Roster lives in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
+- `0034_tenant_manager.sql` — `tenant_member_permissions`, `tenant_action_requests`, `permission_elevation_codes` for the `tenant_manager` role.
+- `0035_plugins.sql` — `plugin_installations` (install rows, platform- or tenant-scoped) and `plugin_events` (immutable audit trail). Powers the Plugin Marketplace — see [Plugin Marketplace](#plugin-marketplace) below.
+
+---
+
+## Plugin Marketplace
+
+1st-party extension system. Plugins are compile-time modules in `manicbot/plugins/<slug>/` with:
+
+- `manifest.ts` (required — default export of a `PluginManifest`)
+- optional `router.ts` (tRPC sub-router), `lifecycle.ts`, `health.ts`, `worker.ts`, `ui/SettingsPanel.tsx`
+- localized `name / tagline / description / keywords` in all 4 languages (ru/ua/en/pl)
+
+Key files:
+
+- `manicbot/plugins/README.md` — full overview
+- `manicbot/plugins/AUTHORING.md` — step-by-step authoring guide
+- `manicbot/plugins/SECURITY.md` — enforcement invariants
+- `manicbot/plugins/types.ts` — shared TypeScript types (no runtime deps)
+- `manicbot/plugins/registry.ts` — static registry; one import per plugin
+- `manicbot/admin-app/src/server/api/routers/plugins.ts` — tRPC CRUD (`install / uninstall / enable / disable / updateSettings / listCatalog / getInstalled / auditTrail / checkoutAddon`)
+- `manicbot/admin-app/src/server/plugins/assertPluginEnabled.ts` — runtime guard (role + plan + billing)
+- `manicbot/admin-app/src/server/plugins/manifestSchema.ts` — Zod validator
+- `manicbot/admin-app/src/app/(dashboard)/plugins/` — marketplace UI (`/plugins` catalog + `/plugins/[slug]` detail)
+- `manicbot/admin-app/src/components/plugins/` — `PluginCard`, `LockedFeatureCard`, `PluginFilters`, `InstallConfirmModal`, `PluginIcon`
+- `manicbot/admin-app/src/lib/plugins/clientIndex.ts` — Fuse.js search index
+- `manicbot/admin-app/src/components/settings/pluginPanels.ts` — registry of lazy-loaded settings panels
+- `manicbot/src/billing/pluginWebhooks.js` — Stripe webhook → `plugin_installations.billing_state` mapping
+
+Billing models: `free | included_in_plan (→ canUse) | paid_addon_monthly | paid_addon_onetime`. Paid addons go through Worker `POST /admin/plugin-addon-checkout` → Stripe Checkout; `price.metadata.plugin_slug` routes the webhook.
+
+Lock precedence (catalog UI): `coming_soon` > `role_mismatch` > `platform_only` > `plan` > `none`.
+
+Seed catalog: 30 first-party plugins across 6 role buckets (5 universal) — see `manicbot/plugins/registry.ts`.
+
+---
+
+## God Mode Living Command Center
+
+System-admin upgrades on top of the existing 11 God Mode pages:
+
+- **Command Palette (Cmd+K)** — `CommandPalette.tsx` + `search.global` tRPC → cross-table fuzzy lookup (tenants / users / leads / marketing contacts)
+- **Activity Feed** — right drawer in the `(dashboard)` layout, polls `events.getRecent` every 5s when open
+- **Health Grid** — `HealthGrid.tsx` on the home dashboard; `system.getHealth` + plugin `checkHealth()` summaries
+- **Plugin Marketplace** — `/plugins` (see above)
+
+Both `CommandPalette` and `ActivityFeed` mount globally in `src/app/(dashboard)/layout.tsx` and render only when `role === "system_admin"`.
 
 ---
 

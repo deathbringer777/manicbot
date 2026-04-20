@@ -191,6 +191,65 @@ export async function tryAdminKeyRoutes(request, env, url) {
   }
 
   // POST /admin/ig-token?key=ADMIN_KEY — set and validate Instagram Page Access Token
+  if (request.method === 'POST' && url.pathname === '/admin/plugin-addon-checkout') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    try {
+      const { slug, tenantId, cycle, priceIdEnv, returnUrl } = await request.json();
+      if (!slug || !tenantId || !priceIdEnv) {
+        return Response.json({ error: 'slug, tenantId, priceIdEnv required' }, { status: 400 });
+      }
+      if (cycle !== 'monthly' && cycle !== 'onetime') {
+        return Response.json({ error: 'cycle must be monthly or onetime' }, { status: 400 });
+      }
+      const priceId = env[priceIdEnv];
+      if (!priceId) {
+        return Response.json({ error: `Env var ${priceIdEnv} not configured` }, { status: 503 });
+      }
+      // Look up tenant's existing Stripe customer
+      const ec = envCtx(env);
+      const { dbGet } = await import('../utils/db.js');
+      const tenantRow = await dbGet(ec, 'SELECT stripe_customer_id FROM tenants WHERE id = ?', tenantId);
+      const customerId = tenantRow?.stripe_customer_id || null;
+
+      const { getStripeConfig } = await import('../billing/config.js');
+      const cfg = getStripeConfig(env);
+      if (!cfg.ok) return Response.json({ error: cfg.error }, { status: 503 });
+
+      const success = returnUrl || `${cfg.baseUrl}/?plugin_checkout_ok=1`;
+      const cancel = returnUrl || `${cfg.baseUrl}/?plugin_checkout_cancel=1`;
+      const params = {
+        mode: cycle === 'monthly' ? 'subscription' : 'payment',
+        'line_items[0][price]': priceId,
+        'line_items[0][quantity]': '1',
+        success_url: success,
+        cancel_url: cancel,
+        'metadata[plugin_slug]': slug,
+        'metadata[tenantId]': tenantId,
+      };
+      if (customerId) params.customer = customerId;
+      // Encode form body
+      const body = Object.entries(params)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+        .join('&');
+      const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${cfg.secretKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.url) {
+        return Response.json({ error: data.error?.message || 'Stripe checkout failed' }, { status: 400 });
+      }
+      return Response.json({ url: data.url, sessionId: data.id });
+    } catch (e) {
+      console.error('[admin/plugin-addon-checkout]', e?.message);
+      return Response.json({ error: 'Request failed' }, { status: 400 });
+    }
+  }
+
   if (request.method === 'POST' && url.pathname === '/admin/ig-token') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });

@@ -10,6 +10,7 @@ import { AppearanceSection } from "~/components/settings/sections/AppearanceSect
 import { HelpSection } from "~/components/settings/sections/HelpSection";
 import { PlatformSection } from "~/components/settings/sections/PlatformSection";
 import { BillingSection } from "~/components/settings/sections/BillingSection";
+import { PluginSettingsSection } from "~/components/settings/PluginSettingsSection";
 
 export default function SettingsPageClient() {
   const { role, previewRole, tenantId, previewTenantId } = useRole();
@@ -30,6 +31,12 @@ export default function SettingsPageClient() {
   };
 
   const renderSection = () => {
+    if (activeSection.startsWith("plugin:")) {
+      const slug = activeSection.slice("plugin:".length);
+      if (/^[a-z][a-z0-9-]{2,40}$/.test(slug)) {
+        return <PluginSettingsSection slug={slug} />;
+      }
+    }
     switch (activeSection) {
       case "account":
         return <AccountSection />;

@@ -3,6 +3,7 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
+  Puzzle,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -56,6 +57,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },
   { id: "god.system",        href: "/system",             icon: Activity,        labelKey: "System",           roles: ["system_admin"], group: "platform" },
+  { id: "god.plugins",       href: "/plugins",            icon: Puzzle,          labelKey: "Plugins",          roles: ["system_admin"], group: "platform" },
 
   // ── Salon (tenant_owner) — ?tab= hrefs handled by SalonDashboard monolith ──
   { id: "salon.overview",      href: "/dashboard",                    icon: LayoutGrid,    labelKey: "Dashboard",     roles: ["tenant_owner"] },
@@ -68,6 +70,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "salon.analytics",     href: "/dashboard?tab=analytics",      icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
   { id: "salon.reviews",       href: "/dashboard?tab=reviews",        icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.publicProfile", href: "/dashboard?tab=public_profile", icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
+  { id: "salon.plugins",       href: "/plugins",                      icon: Puzzle,        labelKey: "Plugins",       roles: ["tenant_owner"], hideable: true },
 
   // ── Master — ?tab= hrefs handled by MasterDashboard monolith ──
   { id: "master.today",    href: "/dashboard",                  icon: Home,          labelKey: "Today",    roles: ["master"] },
@@ -77,9 +80,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "master.reviews",  href: "/dashboard?tab=reviews",      icon: Star,          labelKey: "Reviews",  roles: ["master"] },
   { id: "master.services", href: "/dashboard?tab=services",     icon: Scissors,      labelKey: "Services", roles: ["master"], requiresPersonalTenant: true },
   { id: "master.profile",  href: "/dashboard?tab=profile",      icon: UserRound,     labelKey: "Profile",  roles: ["master"] },
+  { id: "master.plugins",  href: "/plugins",                    icon: Puzzle,        labelKey: "Plugins",  roles: ["master"] },
 
   // ── Support ──
   { id: "support.tickets", href: "/dashboard", icon: HeadphonesIcon, labelKey: "Tickets", roles: ["support", "technical_support"] },
+  { id: "support.plugins", href: "/plugins",   icon: Puzzle,         labelKey: "Plugins", roles: ["support", "technical_support"] },
 ];
 
 /** Settings item — always appended in sidebar footer, separate from nav groups. */

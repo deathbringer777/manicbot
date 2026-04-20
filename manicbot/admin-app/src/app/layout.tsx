@@ -3,6 +3,8 @@ import "~/styles/globals.css";
 import { type Metadata, type Viewport } from "next";
 import { Geist } from "next/font/google";
 
+import { Toaster } from "sonner";
+
 import { TRPCReactProvider } from "~/trpc/react";
 import { LangProvider } from "~/components/LangContext";
 import { AuthProvider } from "~/components/AuthProvider";
@@ -96,6 +98,13 @@ export default function RootLayout({
             <LangProvider>
               {children}
               <CookieBanner />
+              <Toaster
+                position="top-right"
+                richColors
+                closeButton
+                theme="system"
+                toastOptions={{ className: "manicbot-toast" }}
+              />
             </LangProvider>
           </TRPCReactProvider>
         </AuthProvider>

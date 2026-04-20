@@ -6,6 +6,7 @@ import { ChatHeader } from "~/components/chat/ChatHeader";
 import { MessageBubble } from "~/components/chat/MessageBubble";
 import { Composer } from "~/components/chat/Composer";
 import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import type {
   ChatMessage,
   ChatMessageFromBot,
@@ -138,7 +139,7 @@ export function ChatClient({
       } catch (e) {
         if (cancelled) return;
         setStatus("error");
-        setErrorMsg(e instanceof Error ? e.message : "Connection failed");
+        setErrorMsg(e instanceof Error ? e.message : t("chat.connectionFailed", langRef.current));
       }
     }
 
@@ -256,7 +257,7 @@ export function ChatClient({
         // Revert optimistic message on failure
         if (optimisticList) setMessages((prev) => prev.filter((m) => !optimisticList.includes(m)));
         setStatus("error");
-        setErrorMsg(e instanceof Error ? e.message : "Send failed");
+        setErrorMsg(e instanceof Error ? e.message : t("chat.sendFailed", langRef.current));
         return false;
       }
     },

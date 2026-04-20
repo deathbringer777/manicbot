@@ -17,7 +17,20 @@ const BRIDGE_SCRIPT = `<script>
 (function () {
   if (document.querySelector('script[src*="/embed/demo-chat.js"]')) return;
   var SLUG = 'preview-landing';
-  var LANG = 'ru';
+  // Pick up locale from the landing (?lang= → localStorage → <html lang> → 'ru').
+  // Keeps the widget in sync with the Vite landing's LanguageProvider.
+  var LANG = (function () {
+    try {
+      var q = new URLSearchParams(window.location.search).get('lang');
+      if (q && /^(ru|en|ua|pl)$/.test(q)) return q;
+      var s = localStorage.getItem('manicbot-locale');
+      if (s && /^(ru|en|ua|pl)$/.test(s)) return s;
+      var h = (document.documentElement.getAttribute('lang') || '').toLowerCase();
+      if (h === 'uk') return 'ua';
+      if (/^(ru|en|ua|pl)$/.test(h)) return h;
+    } catch (_) {}
+    return 'ru';
+  })();
   var activated = false;
 
   function loadWidget(targetId) {

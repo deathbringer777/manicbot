@@ -35,6 +35,14 @@ export const DEMO_CHAT_SRC = `
   var LANG = scriptEl.dataset.lang || 'ru';
   var TITLE = scriptEl.dataset.title || 'Preview Salon';
   var SHOW_HEADER = scriptEl.dataset.showHeader === '1';
+  var I18N = {
+    ru: { placeholder: 'Сообщение…', online: 'онлайн',    send: 'Отправить' },
+    ua: { placeholder: 'Повідомлення…', online: 'онлайн',   send: 'Надіслати' },
+    en: { placeholder: 'Message…',    online: 'online',   send: 'Send' },
+    pl: { placeholder: 'Wiadomość…',  online: 'online',   send: 'Wyślij' }
+  };
+  var T = I18N[LANG] || I18N.ru;
+  function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
   var STORAGE_KEY = 'mb.chat.' + SLUG;
   var SESSION_TTL_MS = 24 * 60 * 60 * 1000;
   var POLL_MS = 3000;
@@ -87,7 +95,7 @@ export const DEMO_CHAT_SRC = `
     header.innerHTML =
       '<div class="mb-header-av">&#x1F485;</div>' +
       '<div><span class="mb-header-name">' + TITLE + '</span>' +
-      '<span class="mb-header-status">&#x25CF; онлайн</span></div>';
+      '<span class="mb-header-status">&#x25CF; ' + escAttr(T.online) + '</span></div>';
     root.appendChild(header);
   }
   var feed = document.createElement('div');
@@ -95,8 +103,8 @@ export const DEMO_CHAT_SRC = `
   var composer = document.createElement('form');
   composer.className = 'mb-composer';
   composer.innerHTML =
-    '<input type="text" placeholder="Сообщение…" autocomplete="off" />' +
-    '<button type="submit" aria-label="Send">&#10148;</button>';
+    '<input type="text" placeholder="' + escAttr(T.placeholder) + '" autocomplete="off" />' +
+    '<button type="submit" aria-label="' + escAttr(T.send) + '">&#10148;</button>';
   root.appendChild(feed);
   root.appendChild(composer);
 

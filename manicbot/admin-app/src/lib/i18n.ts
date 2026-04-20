@@ -420,6 +420,15 @@ const translations = {
   "plugins.admin.installAll": { ru: "Установить все плагины", ua: "Встановити всі плагіни", en: "Install all plugins", pl: "Zainstaluj wszystkie" },
   "plugins.admin.allInstalled":{ ru: "Все плагины установлены", ua: "Усі плагіни встановлені", en: "All plugins installed", pl: "Wszystkie wtyczki zainstalowane" },
 
+  // ── Chat widget ────────────────────────────────────────────────────────────
+  "chat.inputPlaceholder":  { ru: "Сообщение…",                                             ua: "Повідомлення…",                                      en: "Message…",                                           pl: "Wiadomość…" },
+  "chat.send":              { ru: "Отправить",                                              ua: "Надіслати",                                           en: "Send",                                               pl: "Wyślij" },
+  "chat.connecting":        { ru: "Подключение…",                                           ua: "Підключення…",                                       en: "Connecting…",                                        pl: "Łączenie…" },
+  "chat.offline":           { ru: "Нет соединения",                                         ua: "Немає з'єднання",                                     en: "No connection",                                      pl: "Brak połączenia" },
+  "chat.online":            { ru: "онлайн",                                                 ua: "онлайн",                                             en: "online",                                             pl: "online" },
+  "chat.connectionFailed":  { ru: "Ошибка соединения",                                      ua: "Помилка з'єднання",                                  en: "Connection failed",                                  pl: "Błąd połączenia" },
+  "chat.sendFailed":        { ru: "Не удалось отправить",                                   ua: "Не вдалося надіслати",                               en: "Send failed",                                        pl: "Nie udało się wysłać" },
+
   // ── Cookies ────────────────────────────────────────────────────────────────
   "cookies.title":          { ru: "Cookies на ManicBot",                              ua: "Cookies на ManicBot",                              en: "Cookies on ManicBot",                                pl: "Pliki cookie w ManicBot" },
   "cookies.body":           { ru: "Мы используем необходимые cookie для работы сервиса. Вы можете принять все или оставить только необходимые.", ua: "Ми використовуємо необхідні cookie для роботи сервісу. Ви можете прийняти всі або залишити лише необхідні.", en: "We use necessary cookies so the service works. You can accept all or keep only necessary ones.", pl: "Używamy niezbędnych plików cookie, aby serwis działał. Możesz zaakceptować wszystkie lub zachować tylko niezbędne." },

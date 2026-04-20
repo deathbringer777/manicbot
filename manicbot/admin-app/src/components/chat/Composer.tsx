@@ -2,18 +2,23 @@
 
 import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Send, Loader2 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 export function Composer({
   onSend,
   disabled,
   brandColor = "#EC4899",
-  placeholder = "Сообщение…",
+  placeholder,
 }: {
   onSend: (text: string) => void;
   disabled?: boolean;
   brandColor?: string;
   placeholder?: string;
 }) {
+  const { lang } = useLang();
+  const ph = placeholder ?? t("chat.inputPlaceholder", lang);
+  const sendLabel = t("chat.send", lang);
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -52,7 +57,7 @@ export function Composer({
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={ph}
         disabled={disabled}
         rows={1}
         className="flex-1 resize-none rounded-2xl bg-white dark:bg-slate-800 px-4 py-3 text-sm md:text-base text-slate-900 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50"
@@ -65,7 +70,7 @@ export function Composer({
         disabled={!canSend}
         className="h-11 w-11 shrink-0 rounded-full flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed transition active:scale-95"
         style={{ background: brandColor }}
-        aria-label="Send"
+        aria-label={sendLabel}
       >
         {disabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
       </button>

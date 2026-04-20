@@ -1,9 +1,13 @@
 "use client";
 
 import type { ChatSalon } from "./chatTypes";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 export function ChatHeader({ salon }: { salon: ChatSalon }) {
   const palette = salon.brandPalette?.primary ?? "#EC4899";
+  const { lang } = useLang();
+  const onlineLabel = t("chat.online", lang);
 
   return (
     <header
@@ -37,7 +41,7 @@ export function ChatHeader({ salon }: { salon: ChatSalon }) {
         </h1>
         <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
           <span className="truncate">
-            {salon.city ? `online · ${salon.city}` : "online"}
+            {salon.city ? `${onlineLabel} · ${salon.city}` : onlineLabel}
           </span>
         </p>
       </div>

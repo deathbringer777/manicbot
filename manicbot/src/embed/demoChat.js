@@ -33,6 +33,8 @@ export const DEMO_CHAT_SRC = `
   var SLUG = scriptEl.dataset.slug || 'preview-landing';
   var TARGET = scriptEl.dataset.target || '#mb-demo';
   var LANG = scriptEl.dataset.lang || 'ru';
+  var TITLE = scriptEl.dataset.title || 'Preview Salon';
+  var SHOW_HEADER = scriptEl.dataset.showHeader === '1';
   var STORAGE_KEY = 'mb.chat.' + SLUG;
   var SESSION_TTL_MS = 24 * 60 * 60 * 1000;
   var POLL_MS = 3000;
@@ -46,7 +48,11 @@ export const DEMO_CHAT_SRC = `
     // position:absolute fills the parent container precisely, so the widget
     // is always fully contained in the iPhone frame regardless of whether the
     // landing page sets an explicit height on the target div.
-    '.mb-demo{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;min-height:0;font:14px system-ui,sans-serif;color:#0f172a;overflow:hidden;background:transparent}' +
+    '.mb-demo{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;min-height:0;font:14px system-ui,sans-serif;color:#0f172a;overflow:hidden;background:#fff}' +
+    '.mb-header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid rgba(15,23,42,.08);background:#fff;flex-shrink:0;position:relative;z-index:2}' +
+    '.mb-header-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;flex-shrink:0}' +
+    '.mb-header-name{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:1.2}' +
+    '.mb-header-status{font-size:11px;color:#22c55e;font-weight:500;display:block;line-height:1.2}' +
     '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:8px}' +
     '.mb-bubble{max-width:82%;padding:9px 12px;border-radius:16px;line-height:1.35;word-wrap:break-word}' +
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot,#f1f5f9);color:var(--mb-bot-text,#0f172a);border-bottom-left-radius:6px}' +
@@ -75,6 +81,15 @@ export const DEMO_CHAT_SRC = `
     root.style.position = 'relative';
   }
   root.classList.add('mb-demo');
+  if (SHOW_HEADER) {
+    var header = document.createElement('div');
+    header.className = 'mb-header';
+    header.innerHTML =
+      '<div class="mb-header-av">&#x1F485;</div>' +
+      '<div><span class="mb-header-name">' + TITLE + '</span>' +
+      '<span class="mb-header-status">&#x25CF; онлайн</span></div>';
+    root.appendChild(header);
+  }
   var feed = document.createElement('div');
   feed.className = 'mb-demo-feed';
   var composer = document.createElement('form');
@@ -236,8 +251,10 @@ export const DEMO_CHAT_SRC = `
   function sanitizeBotHtml(html, parseMode) {
     if (parseMode !== 'HTML') return escapeHtml(html).replace(/\\n/g, '<br>');
     var escaped = escapeHtml(html);
-    escaped = escaped.replace(/&lt;(\\/?)(b|strong|i|em|u|s|code|pre|br|a)(\\s[^&]*)?&gt;/gi, function (m) {
-      return m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    // Allow HTML entities (&amp; &quot; etc.) inside tag attributes so that
+    // <a href="...?a=1&amp;b=2"> is correctly un-escaped rather than shown raw.
+    escaped = escaped.replace(/&lt;(\\/?)(b|strong|i|em|u|s|code|pre|br|a)(\\s(?:[^&]|&(?:amp|quot|lt|gt|apos|#\\d+);)*)?&gt;/gi, function (m) {
+      return m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
     });
     return escaped.replace(/\\n/g, '<br>');
   }

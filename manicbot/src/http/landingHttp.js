@@ -26,6 +26,8 @@ const BRIDGE_SCRIPT = `<script>
     s.setAttribute('data-slug', SLUG);
     s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);
+    s.setAttribute('data-show-header', '1');
+    s.setAttribute('data-title', 'Preview Salon');
     document.head.appendChild(s);
   }
 
@@ -42,16 +44,17 @@ const BRIDGE_SCRIPT = `<script>
     var h = screen.offsetHeight, w = screen.offsetWidth;
     console.log('[mb-bridge] screen element', screen.tagName, w+'x'+h, screen.id||screen.className.toString().slice(0,60));
 
-    // Ensure the screen is a positioning context so the overlay can use inset:0.
+    // Clear existing static mockup content so it doesn't bleed through.
+    screen.innerHTML = '';
+    // Positioning context + clip so the widget stays inside the phone frame.
     if (getComputedStyle(screen).position === 'static') screen.style.position = 'relative';
+    screen.style.overflow = 'hidden';
     // Guarantee height (phones with auto height collapse after React re-renders).
     if (h < 200) screen.style.height = (w>0 ? Math.round(w*1.88) : 540)+'px';
 
-    // Create a full-cover overlay that sits on top of the static preview.
-    // We do NOT clear the screen's innerHTML so the phone keeps its chrome.
     var ov = document.createElement('div');
     ov.id = 'mb-target';
-    ov.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;z-index:200;overflow:hidden;background:#fff;border-radius:inherit';
+    ov.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:#fff;border-radius:inherit';
     screen.appendChild(ov);
     loadWidget('mb-target');
   }
@@ -70,7 +73,7 @@ const BRIDGE_SCRIPT = `<script>
       best = c; break;
     }
     if (best) {
-      console.log('[mb-bridge] white screen found inside frame');
+      console.log('[mb-bridge] white screen found inside frame', best.tagName, best.offsetWidth+'x'+best.offsetHeight);
       mountOnScreen(best);
     } else {
       // No white child — create our own screen inside the frame.

@@ -270,7 +270,11 @@ export class WebAdapter {
    */
   _buildPublicMessage(outbound) {
     const text = outbound?.text ?? '';
-    const rawButtons = outbound?.buttons ?? null;
+    // Accept both our internal `buttons` field and the Telegram-native
+    // `reply_markup.inline_keyboard` shape that all bot handlers produce.
+    const rawButtons = outbound?.buttons
+      ?? outbound?.reply_markup?.inline_keyboard
+      ?? null;
     return {
       id: randomId(12),
       ts: nowSec(),

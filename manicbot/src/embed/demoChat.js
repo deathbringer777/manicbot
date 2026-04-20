@@ -43,7 +43,10 @@ export const DEMO_CHAT_SRC = `
 
   var styleTag = document.createElement('style');
   styleTag.textContent =
-    '.mb-demo{display:flex;flex-direction:column;height:100%;min-height:320px;font:14px system-ui,sans-serif;color:#0f172a;overflow:hidden;background:transparent}' +
+    // position:absolute fills the parent container precisely, so the widget
+    // is always fully contained in the iPhone frame regardless of whether the
+    // landing page sets an explicit height on the target div.
+    '.mb-demo{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;min-height:0;font:14px system-ui,sans-serif;color:#0f172a;overflow:hidden;background:transparent}' +
     '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:8px}' +
     '.mb-bubble{max-width:82%;padding:9px 12px;border-radius:16px;line-height:1.35;word-wrap:break-word}' +
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot,#f1f5f9);color:var(--mb-bot-text,#0f172a);border-bottom-left-radius:6px}' +
@@ -63,6 +66,14 @@ export const DEMO_CHAT_SRC = `
     '@keyframes mb-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}';
   document.head.appendChild(styleTag);
 
+  // Ensure the container is a positioning context so position:absolute children
+  // (the feed + composer flex layout) stay inside the iPhone frame.
+  if (typeof getComputedStyle !== 'undefined') {
+    var pos = getComputedStyle(root).position;
+    if (pos === 'static') root.style.position = 'relative';
+  } else {
+    root.style.position = 'relative';
+  }
   root.classList.add('mb-demo');
   var feed = document.createElement('div');
   feed.className = 'mb-demo-feed';

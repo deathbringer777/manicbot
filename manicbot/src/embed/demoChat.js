@@ -56,26 +56,36 @@ export const DEMO_CHAT_SRC = `
     // position:absolute fills the parent container precisely, so the widget
     // is always fully contained in the iPhone frame regardless of whether the
     // landing page sets an explicit height on the target div.
-    '.mb-demo{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;min-height:0;font:14px system-ui,sans-serif;color:#0f172a;overflow:hidden;background:#fff}' +
-    '.mb-header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid rgba(15,23,42,.08);background:#fff;flex-shrink:0;position:relative;z-index:2}' +
-    '.mb-header-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;flex-shrink:0}' +
-    '.mb-header-name{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:1.2}' +
-    '.mb-header-status{font-size:11px;color:#22c55e;font-weight:500;display:block;line-height:1.2}' +
-    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:8px}' +
-    '.mb-bubble{max-width:82%;padding:9px 12px;border-radius:16px;line-height:1.35;word-wrap:break-word}' +
-    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot,#f1f5f9);color:var(--mb-bot-text,#0f172a);border-bottom-left-radius:6px}' +
-    '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user,#8b5cf6);color:var(--mb-user-text,#fff);border-bottom-right-radius:6px}' +
-    '.mb-bubble img{max-width:100%;border-radius:10px;margin:-2px 0 6px;display:block}' +
-    '.mb-btns{display:flex;flex-direction:column;gap:6px;margin-top:8px}' +
-    '.mb-btn{display:block;padding:8px 12px;text-align:center;border:1px solid var(--mb-btn-border,#e2e8f0);background:var(--mb-btn-bg,#fff);color:inherit;border-radius:12px;cursor:pointer;font:inherit;transition:background .15s;text-decoration:none}' +
+    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:#0f172a;overflow:hidden;background:#fff}' +
+    // iPhone-style status bar (time + signal/battery)
+    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:6px 14px 2px;font-size:10.5px;font-weight:600;color:#0f172a;flex-shrink:0;background:#fff;position:relative;z-index:3}' +
+    '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center;opacity:.88}' +
+    '.mb-statusbar svg{width:14px;height:10px;display:block}' +
+    // Header
+    '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid rgba(15,23,42,.06);background:#fff;flex-shrink:0;position:relative;z-index:2}' +
+    '.mb-header-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;overflow:hidden}' +
+    '.mb-header-meta{display:flex;flex-direction:column;min-width:0}' +
+    '.mb-header-name{font-size:12px;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
+    '.mb-header-status{font-size:10px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:3px}' +
+    '.mb-header-status::before{content:"";width:5px;height:5px;border-radius:50%;background:#22c55e}' +
+    // Feed + bubbles (tighter spacing to fit inside iPhone screen)
+    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch}' +
+    '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
+    '.mb-bubble{max-width:86%;padding:6px 10px;border-radius:14px;line-height:1.35;word-wrap:break-word;font-size:11.5px}' +
+    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot,#f1f5f9);color:var(--mb-bot-text,#0f172a);border-bottom-left-radius:4px}' +
+    '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user,#8b5cf6);color:var(--mb-user-text,#fff);border-bottom-right-radius:4px}' +
+    '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
+    '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
+    '.mb-btn{display:block;padding:6px 10px;text-align:center;border:1px solid var(--mb-btn-border,#e2e8f0);background:var(--mb-btn-bg,#fff);color:inherit;border-radius:10px;cursor:pointer;font:inherit;font-size:11px;transition:background .15s;text-decoration:none}' +
     '.mb-btn:hover{background:var(--mb-btn-hover,#f8fafc)}' +
-    '.mb-composer{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--mb-composer-border,rgba(15,23,42,.08));background:var(--mb-composer-bg,transparent)}' +
-    '.mb-composer input{flex:1;border:1px solid var(--mb-btn-border,#e2e8f0);border-radius:999px;padding:9px 14px;font:inherit;background:var(--mb-input-bg,#fff);color:inherit;outline:none}' +
+    // Composer — compact, fits nicely at the bottom of the iPhone screen
+    '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border,rgba(15,23,42,.08));background:#fff;flex-shrink:0}' +
+    '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border,#e2e8f0);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg,#fff);color:inherit;outline:none}' +
     '.mb-composer input:focus{border-color:var(--mb-bubble-user,#8b5cf6)}' +
-    '.mb-composer button{border:0;background:var(--mb-bubble-user,#8b5cf6);color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:16px}' +
+    '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user,#8b5cf6);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}' +
     '.mb-composer button:disabled{opacity:.4;cursor:not-allowed}' +
-    '.mb-typing{align-self:flex-start;padding:6px 10px;border-radius:12px;background:var(--mb-bubble-bot,#f1f5f9);display:inline-flex;gap:3px}' +
-    '.mb-typing span{width:6px;height:6px;border-radius:50%;background:#94a3b8;animation:mb-bounce 1s infinite}' +
+    '.mb-typing{align-self:flex-start;padding:5px 9px;border-radius:12px;background:var(--mb-bubble-bot,#f1f5f9);display:inline-flex;gap:3px}' +
+    '.mb-typing span{width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:mb-bounce 1s infinite}' +
     '.mb-typing span:nth-child(2){animation-delay:.15s}.mb-typing span:nth-child(3){animation-delay:.3s}' +
     '@keyframes mb-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}';
   document.head.appendChild(styleTag);
@@ -90,12 +100,34 @@ export const DEMO_CHAT_SRC = `
   }
   root.classList.add('mb-demo');
   if (SHOW_HEADER) {
+    // iPhone-style status bar — current time + signal/wifi/battery glyphs.
+    // Keeps the mockup feeling real instead of a naked chat pane.
+    var now = new Date();
+    var hh = String(now.getHours()).padStart(2, '0');
+    var mm = String(now.getMinutes()).padStart(2, '0');
+    var statusbar = document.createElement('div');
+    statusbar.className = 'mb-statusbar';
+    statusbar.innerHTML =
+      '<span>' + hh + ':' + mm + '</span>' +
+      '<span class="icons">' +
+        // signal bars
+        '<svg viewBox="0 0 18 10" fill="currentColor"><rect x="0"  y="7" width="3" height="3" rx=".5"/><rect x="5"  y="5" width="3" height="5" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg>' +
+        // wifi
+        '<svg viewBox="0 0 14 10" fill="currentColor"><path d="M7 10a1.3 1.3 0 1 0 0-2.6A1.3 1.3 0 0 0 7 10Zm-3.2-3.1 1.1 1.1A3 3 0 0 1 7 7a3 3 0 0 1 2.1.8l1.1-1.1a4.6 4.6 0 0 0-6.4 0ZM1 4l1.1 1.1a7 7 0 0 1 9.8 0L13 4A8.6 8.6 0 0 0 1 4Z"/></svg>' +
+        // battery
+        '<svg viewBox="0 0 22 10" fill="none" stroke="currentColor" stroke-width="1"><rect x=".5" y=".5" width="18" height="9" rx="2"/><rect x="2" y="2" width="14" height="6" rx="1" fill="currentColor" stroke="none"/><rect x="19.5" y="3.5" width="1.5" height="3" rx=".5" fill="currentColor" stroke="none"/></svg>' +
+      '</span>';
+    root.appendChild(statusbar);
+
     var header = document.createElement('div');
     header.className = 'mb-header';
+    var initial = (TITLE.charAt(0) || 'P').toUpperCase();
     header.innerHTML =
-      '<div class="mb-header-av">&#x1F485;</div>' +
-      '<div><span class="mb-header-name">' + TITLE + '</span>' +
-      '<span class="mb-header-status">&#x25CF; ' + escAttr(T.online) + '</span></div>';
+      '<div class="mb-header-av">' + escAttr(initial) + '</div>' +
+      '<div class="mb-header-meta">' +
+        '<span class="mb-header-name">' + escAttr(TITLE) + '</span>' +
+        '<span class="mb-header-status">' + escAttr(T.online) + '</span>' +
+      '</div>';
     root.appendChild(header);
   }
   var feed = document.createElement('div');

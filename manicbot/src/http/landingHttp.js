@@ -74,29 +74,42 @@ const BRIDGE_SCRIPT = `<script>
 
   function mountOnFrame(frame) {
     if (activated) return;
-    // Try to find a white screen element inside the frame first.
+    // Find the inner SCREEN element by geometry (theme-agnostic): the direct
+    // descendant with large border-radius, overflow:hidden and dimensions
+    // close to the frame minus its padding. Colour-based detection (old
+    // "isLight" heuristic) missed dark-theme iPhone mockups and the overlay
+    // ended up on the outer body — causing the composer to overflow the
+    // phone's bottom-corner radius.
+    var fw = frame.offsetWidth, fh = frame.offsetHeight;
     var best = null;
+    var bestScore = -Infinity;
     var all = frame.querySelectorAll('*');
     for (var i = 0; i < all.length; i++) {
       var c = all[i];
-      if (c.offsetWidth < 220 || c.offsetHeight < 280) continue;
+      var cw = c.offsetWidth, ch = c.offsetHeight;
+      if (cw < 200 || ch < 260) continue;
+      if (cw > fw || ch > fh) continue;
       var cs = getComputedStyle(c);
-      if (!isLight(parseRgb(cs.backgroundColor))) continue;
-      if (parseFloat(cs.borderRadius) < 6) continue;
-      best = c; break;
+      var radius = parseFloat(cs.borderRadius) || 0;
+      if (radius < 18) continue;                   // screen has big radius
+      if (cs.overflow !== 'hidden' && cs.overflowX !== 'hidden' && cs.overflowY !== 'hidden') continue;
+      // Prefer the element with the largest area that still fits inside the
+      // frame — the actual screen bezel, not a descendant bubble.
+      var score = cw * ch - Math.abs(fw - cw) * 2 - Math.abs(fh - ch) * 2;
+      if (score > bestScore) { bestScore = score; best = c; }
     }
     if (best) {
-      console.log('[mb-bridge] white screen found inside frame', best.tagName, best.offsetWidth+'x'+best.offsetHeight);
+      console.log('[mb-bridge] screen found', best.tagName, best.offsetWidth+'x'+best.offsetHeight, 'radius='+getComputedStyle(best).borderRadius);
       mountOnScreen(best);
     } else {
-      // No white child — create our own screen inside the frame.
-      console.log('[mb-bridge] no white screen — creating one inside frame');
+      // Last-resort fallback: build our own screen inside the frame, sized
+      // to the real iPhone bezel ratios (~5% sides, ~9% top for notch, ~4%
+      // bottom for home bar).
+      console.log('[mb-bridge] no screen found — creating overlay inside frame');
       if (activated) return; activated = true;
-      var fw = frame.offsetWidth, fh = frame.offsetHeight;
       if (getComputedStyle(frame).position === 'static') frame.style.position = 'relative';
       var scr = document.createElement('div');
       scr.id = 'mb-target';
-      // Typical iPhone bezel: ~5% sides, ~9% top (notch), ~4% bottom.
       scr.style.cssText = 'position:absolute;top:9%;left:5%;right:5%;bottom:4%;background:#fff;border-radius:30px;overflow:hidden;z-index:200;';
       frame.appendChild(scr);
       loadWidget('mb-target');

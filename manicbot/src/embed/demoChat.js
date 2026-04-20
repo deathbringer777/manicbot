@@ -36,10 +36,26 @@ export const DEMO_CHAT_SRC = `
   var TITLE = scriptEl.dataset.title || 'Preview Salon';
   var SHOW_HEADER = scriptEl.dataset.showHeader === '1';
   var I18N = {
-    ru: { placeholder: 'Сообщение…', online: 'онлайн',    send: 'Отправить' },
-    ua: { placeholder: 'Повідомлення…', online: 'онлайн',   send: 'Надіслати' },
-    en: { placeholder: 'Message…',    online: 'online',   send: 'Send' },
-    pl: { placeholder: 'Wiadomość…',  online: 'online',   send: 'Wyślij' }
+    ru: { placeholder: 'Сообщение…', online: 'онлайн', send: 'Отправить',
+          offline: 'нет связи', reconnecting: 'подключение…',
+          initFailed: 'Не удалось подключиться. Повторная попытка…',
+          sendError: 'Ошибка отправки. Попробуйте ещё раз.',
+          netError: 'Нет соединения. Проверьте интернет.' },
+    ua: { placeholder: 'Повідомлення…', online: 'онлайн', send: 'Надіслати',
+          offline: 'немає зв\'язку', reconnecting: 'підключення…',
+          initFailed: 'Не вдалося підключитися. Повторна спроба…',
+          sendError: 'Помилка відправки. Спробуйте ще раз.',
+          netError: 'Немає з\'єднання. Перевірте інтернет.' },
+    en: { placeholder: 'Message…', online: 'online', send: 'Send',
+          offline: 'offline', reconnecting: 'reconnecting…',
+          initFailed: 'Connection failed. Retrying…',
+          sendError: 'Send failed. Please try again.',
+          netError: 'No connection. Check your internet.' },
+    pl: { placeholder: 'Wiadomość…', online: 'online', send: 'Wyślij',
+          offline: 'brak połączenia', reconnecting: 'łączenie…',
+          initFailed: 'Błąd połączenia. Ponowna próba…',
+          sendError: 'Błąd wysyłania. Spróbuj ponownie.',
+          netError: 'Brak połączenia. Sprawdź internet.' },
   };
   var T = I18N[LANG] || I18N.ru;
   function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -61,13 +77,16 @@ export const DEMO_CHAT_SRC = `
     '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:6px 14px 2px;font-size:10.5px;font-weight:600;color:#0f172a;flex-shrink:0;background:#fff;position:relative;z-index:3}' +
     '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center;opacity:.88}' +
     '.mb-statusbar svg{width:14px;height:10px;display:block}' +
-    // Header
+    // Header — slightly taller avatar (32px) for logo images to read well
     '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid rgba(15,23,42,.06);background:#fff;flex-shrink:0;position:relative;z-index:2}' +
-    '.mb-header-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;overflow:hidden}' +
-    '.mb-header-meta{display:flex;flex-direction:column;min-width:0}' +
+    '.mb-header-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;flex-shrink:0;overflow:hidden}' +
+    '.mb-header-meta{display:flex;flex-direction:column;min-width:0;flex:1}' +
     '.mb-header-name{font-size:12px;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
-    '.mb-header-status{font-size:10px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:3px}' +
-    '.mb-header-status::before{content:"";width:5px;height:5px;border-radius:50%;background:#22c55e}' +
+    // Status dot uses currentColor so toggling .mb-offline changes both text and dot in one step.
+    // transition:color gives a smooth fade when switching between online/offline states.
+    '.mb-header-status{font-size:10px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:3px;transition:color .3s}' +
+    '.mb-header-status::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}' +
+    '.mb-header-status.mb-offline{color:#94a3b8}' +
     // Feed + bubbles (tighter spacing to fit inside iPhone screen)
     '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch}' +
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
@@ -99,9 +118,14 @@ export const DEMO_CHAT_SRC = `
     root.style.position = 'relative';
   }
   root.classList.add('mb-demo');
+
+  // Refs to header sub-elements — populated below if SHOW_HEADER is true.
+  var headerAvEl = null;
+  var headerNameEl = null;
+  var headerStatusEl = null;
+
   if (SHOW_HEADER) {
     // iPhone-style status bar — current time + signal/wifi/battery glyphs.
-    // Keeps the mockup feeling real instead of a naked chat pane.
     var now = new Date();
     var hh = String(now.getHours()).padStart(2, '0');
     var mm = String(now.getMinutes()).padStart(2, '0');
@@ -128,8 +152,12 @@ export const DEMO_CHAT_SRC = `
         '<span class="mb-header-name">' + escAttr(TITLE) + '</span>' +
         '<span class="mb-header-status">' + escAttr(T.online) + '</span>' +
       '</div>';
+    headerAvEl = header.querySelector('.mb-header-av');
+    headerNameEl = header.querySelector('.mb-header-name');
+    headerStatusEl = header.querySelector('.mb-header-status');
     root.appendChild(header);
   }
+
   var feed = document.createElement('div');
   feed.className = 'mb-demo-feed';
   var composer = document.createElement('form');
@@ -148,6 +176,43 @@ export const DEMO_CHAT_SRC = `
   var bubbles = new Map();
   var messages = [];
   var sending = false;
+  var currentBranding = null;
+  var _pollFails = 0;
+
+  // Toggle the header status dot + text between online (green) and offline (grey).
+  // Uses a CSS class that switches color via currentColor on the ::before dot.
+  function setStatus(text, isOnline) {
+    if (!headerStatusEl) return;
+    headerStatusEl.textContent = text;
+    if (isOnline) {
+      headerStatusEl.classList.remove('mb-offline');
+    } else {
+      headerStatusEl.classList.add('mb-offline');
+    }
+  }
+
+  // Apply salon branding from /chat/init response: update avatar logo + display name.
+  // Safe to call multiple times; persisted branding is restored on page reload.
+  function applyBranding(salon) {
+    if (!salon) return;
+    currentBranding = salon;
+    if (headerNameEl && salon.name) {
+      headerNameEl.textContent = salon.name;
+    }
+    if (headerAvEl && salon.logo) {
+      var img = document.createElement('img');
+      img.alt = '';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block';
+      img.onerror = function () {
+        headerAvEl.innerHTML = '';
+        headerAvEl.textContent = (salon.name || TITLE).charAt(0).toUpperCase();
+      };
+      headerAvEl.innerHTML = '';
+      headerAvEl.appendChild(img);
+      // Set src after appending so onerror fires on the DOM-attached element.
+      img.src = salon.logo;
+    }
+  }
 
   function loadPersisted() {
     try {
@@ -168,6 +233,7 @@ export const DEMO_CHAT_SRC = `
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         sessionId: sessionId, lastTs: lastTs,
         messages: messages.slice(-HISTORY_CAP),
+        branding: currentBranding,
         savedAt: Date.now(),
       }));
     } catch (_) {}
@@ -199,6 +265,8 @@ export const DEMO_CHAT_SRC = `
     if (persisted) {
       sessionId = persisted.sessionId;
       lastTs = persisted.lastTs || 0;
+      // Restore salon branding so the avatar/name are correct without a network call.
+      if (persisted.branding) applyBranding(persisted.branding);
       (persisted.messages || []).forEach(function (m) {
         messages.push(m);
         renderBubble(m);
@@ -209,6 +277,8 @@ export const DEMO_CHAT_SRC = `
       var res = await postJson('/chat/init', { slug: SLUG });
       if (!res || !res.ok) throw new Error((res && res.error) || 'init failed');
       sessionId = res.sessionId;
+      // Update header with real salon name + logo from the server response.
+      if (res.salon) applyBranding(res.salon);
       _initRetries = 0;
       persist();
       await sendRaw({ text: '/start', userLang: LANG });
@@ -217,7 +287,7 @@ export const DEMO_CHAT_SRC = `
       _initRetries++;
       var delay = Math.min(2000 * Math.pow(2, _initRetries - 1), 30000);
       if (_initRetries === 1) {
-        showErrorBubble('Не удалось подключиться. Повторная попытка…');
+        showErrorBubble(T.initFailed);
       }
       _initRetryTimer = setTimeout(function () {
         _initRetryTimer = null;
@@ -252,7 +322,7 @@ export const DEMO_CHAT_SRC = `
       hideTyping();
       if (!res || !res.ok) {
         console.warn('[mb-demo] send error:', res);
-        showErrorBubble('Ошибка отправки. Попробуйте ещё раз.');
+        showErrorBubble(T.sendError);
         return;
       }
       (res.messages || []).forEach(function (m) {
@@ -265,7 +335,7 @@ export const DEMO_CHAT_SRC = `
     } catch (e) {
       hideTyping();
       console.error('[mb-demo] send failed:', e);
-      showErrorBubble('Нет соединения. Проверьте интернет.');
+      showErrorBubble(T.netError);
     }
     finally { sending = false; sendBtn.disabled = false; input.focus(); }
   }
@@ -388,7 +458,15 @@ export const DEMO_CHAT_SRC = `
           '&sessionId=' + encodeURIComponent(sessionId) +
           '&since=' + lastTs,
       );
-      if (!r.ok) return;
+      if (!r.ok) {
+        _pollFails++;
+        // Show offline indicator after 5 consecutive failures (~15s).
+        if (_pollFails === 5) setStatus(T.offline, false);
+        return;
+      }
+      // Recover from offline state on next successful poll.
+      if (_pollFails >= 5) setStatus(T.online, true);
+      _pollFails = 0;
       var d = await r.json();
       if (d && d.ok && d.messages && d.messages.length) {
         d.messages.forEach(function (m) {
@@ -399,7 +477,10 @@ export const DEMO_CHAT_SRC = `
         });
         persist();
       }
-    } catch (_) {}
+    } catch (_) {
+      _pollFails++;
+      if (_pollFails === 5) setStatus(T.offline, false);
+    }
   }, POLL_MS);
 
   init();

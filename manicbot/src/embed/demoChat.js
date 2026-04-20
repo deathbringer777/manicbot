@@ -299,6 +299,15 @@ export const DEMO_CHAT_SRC = `
     return escaped.replace(/\\n/g, '<br>');
   }
 
+  function isEmptyMessage(m) {
+    // The bot sometimes emits a zero-width-space placeholder for layout
+    // reasons; rendering it as a bubble leaves a tiny grey pill in the feed.
+    var hasText = m && m.text && String(m.text).replace(/[\\s\\u200b-\\u200f\\ufeff]/g, '').length > 0;
+    var hasPhoto = !!(m && m.photo);
+    var hasButtons = m && m.buttons && m.buttons.some(function (row) { return row && row.length > 0; });
+    return !hasText && !hasPhoto && !hasButtons;
+  }
+
   function renderBubble(m) {
     if (m.editMessageId && bubbles.has(m.editMessageId)) {
       var old = bubbles.get(m.editMessageId);
@@ -310,6 +319,7 @@ export const DEMO_CHAT_SRC = `
       return;
     }
     if (bubbles.has(m.id)) return;
+    if (isEmptyMessage(m)) return;
     var node = buildBubbleNode(m);
     bubbles.set(m.id, node);
     feed.appendChild(node);

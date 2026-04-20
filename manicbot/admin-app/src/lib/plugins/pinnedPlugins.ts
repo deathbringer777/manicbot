@@ -1,11 +1,14 @@
 /**
- * LocalStorage-backed pinned-plugins registry.
+ * Server-authoritative pinned-plugins hook.
  *
- * Pinned plugins surface in a special "Закреплённые" group at the top of the
- * sidebar. Each user manages their own list; no server round-trip.
+ * D1 (via `plugins.listPinned` / `plugins.togglePin`) is the source of truth.
+ * localStorage is kept as an optimistic cache so first paint is instant and
+ * the sidebar doesn't flash empty. `CustomEvent("manicbot:pinned-changed")`
+ * is preserved for any legacy listeners.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
+import { api } from "~/trpc/react";
 
 const KEY = "manicbot_pinned_plugins";
 
@@ -38,56 +41,73 @@ export function usePinnedPlugins(): {
   pin: (slug: string) => void;
   unpin: (slug: string) => void;
   toggle: (slug: string) => void;
+  error: string | null;
 } {
-  const [pinned, setPinned] = useState<string[]>([]);
+  const utils = api.useUtils();
+  const q = api.plugins.listPinned.useQuery(undefined, {
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    initialData: () => (typeof window !== "undefined" ? readPinned() : undefined),
+  });
 
-  // Hydrate from localStorage on mount
+  // Mirror server truth → localStorage for next-paint seed
   useEffect(() => {
-    setPinned(readPinned());
-    const h = (e: Event) => {
-      const detail = (e as CustomEvent<string[]>).detail;
-      if (Array.isArray(detail)) setPinned(detail);
-      else setPinned(readPinned());
-    };
-    window.addEventListener("manicbot:pinned-changed", h);
-    window.addEventListener("storage", () => setPinned(readPinned()));
-    return () => {
-      window.removeEventListener("manicbot:pinned-changed", h);
-    };
-  }, []);
+    if (q.data) writePinned(q.data);
+  }, [q.data]);
 
-  const pin = useCallback((slug: string) => {
-    const current = readPinned();
-    if (current.includes(slug)) return;
-    const next = [slug, ...current].slice(0, 20);
-    writePinned(next);
-    setPinned(next);
-  }, []);
-
-  const unpin = useCallback((slug: string) => {
-    const current = readPinned();
-    const next = current.filter((s) => s !== slug);
-    writePinned(next);
-    setPinned(next);
-  }, []);
-
-  const toggle = useCallback((slug: string) => {
-    const current = readPinned();
-    if (current.includes(slug)) {
-      const next = current.filter((s) => s !== slug);
+  const toggleMut = api.plugins.togglePin.useMutation({
+    onMutate: async ({ slug }) => {
+      await utils.plugins.listPinned.cancel();
+      const prev = utils.plugins.listPinned.getData() ?? [];
+      const next = prev.includes(slug)
+        ? prev.filter((s) => s !== slug)
+        : [slug, ...prev].slice(0, 20);
+      utils.plugins.listPinned.setData(undefined, next);
       writePinned(next);
-      setPinned(next);
-    } else {
-      const next = [slug, ...current].slice(0, 20);
-      writePinned(next);
-      setPinned(next);
-    }
-  }, []);
+      return { prev };
+    },
+    onError: (_err, _v, ctx) => {
+      if (ctx?.prev) {
+        utils.plugins.listPinned.setData(undefined, ctx.prev);
+        writePinned(ctx.prev);
+      }
+    },
+    onSettled: () => {
+      void utils.plugins.listPinned.invalidate();
+    },
+  });
 
+  const pinned = q.data ?? [];
+
+  const toggle = useCallback(
+    (slug: string) => {
+      toggleMut.mutate({ slug });
+    },
+    [toggleMut],
+  );
+  const pin = useCallback(
+    (slug: string) => {
+      if (!pinned.includes(slug)) toggleMut.mutate({ slug });
+    },
+    [pinned, toggleMut],
+  );
+  const unpin = useCallback(
+    (slug: string) => {
+      if (pinned.includes(slug)) toggleMut.mutate({ slug });
+    },
+    [pinned, toggleMut],
+  );
   const isPinned = useCallback((slug: string) => pinned.includes(slug), [pinned]);
 
-  return { pinned, isPinned, pin, unpin, toggle };
+  return {
+    pinned,
+    isPinned,
+    pin,
+    unpin,
+    toggle,
+    error: toggleMut.error?.message ?? null,
+  };
 }
 
-// Pure helpers for tests
+// Pure helpers retained for existing tests / cache seeding
 export { readPinned, writePinned };

@@ -7,6 +7,8 @@ import { t, type Lang } from "~/lib/i18n";
 import { PluginIcon } from "./PluginIcon";
 import { LockedFeatureCard } from "./LockedFeatureCard";
 import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
+import { toast } from "~/lib/toast";
+import { useEffect, useRef } from "react";
 import { getPlugin } from "@plugins/index";
 import type { CatalogCard } from "@plugins/types";
 
@@ -65,7 +67,16 @@ function renderBadge(card: CatalogCard, lang: Lang): React.ReactNode {
 
 export function PluginCard({ card }: { card: CatalogCard }) {
   const { lang } = useLang();
-  const { isPinned, toggle } = usePinnedPlugins();
+  const { isPinned, toggle, error: pinError } = usePinnedPlugins();
+  const lastErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (pinError && pinError !== lastErrorRef.current) {
+      lastErrorRef.current = pinError;
+      if (pinError === "pin_limit_reached") {
+        toast.error(t("plugins.pin.limit", lang));
+      }
+    }
+  }, [pinError, lang]);
   const pinned = isPinned(card.slug);
   const href = `/plugins/${card.slug}`;
   const actionable = card.installed && card.lock.kind === "none";

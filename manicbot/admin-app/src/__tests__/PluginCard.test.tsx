@@ -1,6 +1,21 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
+
+vi.mock("~/trpc/react", () => ({
+  api: {
+    useUtils: () => ({
+      plugins: {
+        listPinned: { cancel: () => Promise.resolve(), getData: () => [], setData: () => {}, invalidate: () => Promise.resolve() },
+      },
+    }),
+    plugins: {
+      listPinned: { useQuery: () => ({ data: [], isLoading: false }) },
+      togglePin: { useMutation: () => ({ mutate: () => {}, error: null }) },
+    },
+  },
+}));
+
 import { PluginCard } from "~/components/plugins/PluginCard";
 import { renderWithLang, setDarkMode } from "./helpers/renderWithLang";
 import type { CatalogCard, PluginLockReason } from "@plugins/types";

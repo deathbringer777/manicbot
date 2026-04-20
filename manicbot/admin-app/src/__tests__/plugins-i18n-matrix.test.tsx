@@ -4,8 +4,23 @@
  * and localizations are asserted to be present + distinct.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
+
+vi.mock("~/trpc/react", () => ({
+  api: {
+    useUtils: () => ({
+      plugins: {
+        listPinned: { cancel: () => Promise.resolve(), getData: () => [], setData: () => {}, invalidate: () => Promise.resolve() },
+      },
+    }),
+    plugins: {
+      listPinned: { useQuery: () => ({ data: [], isLoading: false }) },
+      togglePin: { useMutation: () => ({ mutate: () => {}, error: null }) },
+    },
+  },
+}));
+
 import { PluginCard } from "~/components/plugins/PluginCard";
 import { renderWithLang } from "./helpers/renderWithLang";
 import { listManifests, PLUGIN_LANGS } from "@plugins/index";

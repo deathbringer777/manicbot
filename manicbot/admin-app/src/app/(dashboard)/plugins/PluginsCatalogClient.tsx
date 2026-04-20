@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Puzzle, Loader2, Sparkles } from "lucide-react";
+import { Puzzle, Sparkles } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
@@ -68,35 +68,47 @@ export default function PluginsCatalogClient() {
 
   return (
     <div className="min-h-0 flex flex-col">
-      <header className="px-4 sm:px-6 pt-5 sm:pt-8 pb-4 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1
-            data-testid="plugins-title"
-            className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-2"
-          >
-            <Puzzle size={22} className="text-brand-500" />
-            {t("plugins.title", lang)}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
-            {t("plugins.subtitle", lang)}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="text-xs text-slate-500 dark:text-slate-400" data-testid="plugins-count">
-            {t("plugins.catalog.countAll", lang)}: {cards.length} · {t("plugins.filters.installed", lang)}: {totalInstalled}
-          </div>
-          {role === "system_admin" && (
-            <button
-              type="button"
-              data-testid="plugins-admin-install-all"
-              onClick={() => installAllMut.mutate()}
-              disabled={installAllMut.isPending}
-              className="text-[11px] inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 disabled:opacity-40"
+      <header className="relative px-4 sm:px-6 pt-5 sm:pt-8 pb-5 overflow-hidden">
+        <div className="pointer-events-none absolute -top-20 -right-20 h-60 w-60 rounded-full bg-brand-500/[0.10] blur-[100px]" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-24 -left-16 h-60 w-60 rounded-full bg-purple-500/[0.08] blur-[100px]" aria-hidden />
+        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-500 dark:text-brand-400 mb-2">
+              <Sparkles size={11} /> Marketplace
+            </div>
+            <h1
+              data-testid="plugins-title"
+              className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight inline-flex items-center gap-3"
             >
-              <Sparkles size={12} />
-              {t("plugins.admin.installAll", lang)}
-            </button>
-          )}
+              <Puzzle size={26} className="text-brand-500" />
+              {t("plugins.title", lang)}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+              {t("plugins.subtitle", lang)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap" data-testid="plugins-count">
+            <div className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white/60 dark:bg-white/[0.02] backdrop-blur">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">{t("plugins.catalog.countAll", lang)}</div>
+              <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{cards.length}</div>
+            </div>
+            <div className="px-3 py-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04]">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t("plugins.filters.installed", lang)}</div>
+              <div className="text-lg font-semibold text-emerald-700 dark:text-emerald-300 tabular-nums">{totalInstalled}</div>
+            </div>
+            {role === "system_admin" && (
+              <button
+                type="button"
+                data-testid="plugins-admin-install-all"
+                onClick={() => installAllMut.mutate()}
+                disabled={installAllMut.isPending}
+                className="text-[11px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 disabled:opacity-40 font-medium"
+              >
+                <Sparkles size={12} />
+                {t("plugins.admin.installAll", lang)}
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -106,8 +118,22 @@ export default function PluginsCatalogClient() {
 
       <main className="px-4 sm:px-6 pb-10">
         {catalogQ.isLoading ? (
-          <div className="h-64 flex items-center justify-center text-slate-400">
-            <Loader2 size={20} className="animate-spin" />
+          <div
+            data-testid="plugins-skeleton"
+            className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"
+          >
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-2xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-5 animate-pulse min-h-[200px]"
+              >
+                <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-white/10" />
+                <div className="mt-4 h-4 w-3/4 rounded bg-slate-200 dark:bg-white/10" />
+                <div className="mt-2 h-3 w-full rounded bg-slate-200 dark:bg-white/5" />
+                <div className="mt-1 h-3 w-5/6 rounded bg-slate-200 dark:bg-white/5" />
+                <div className="mt-4 h-5 w-20 rounded-full bg-slate-200 dark:bg-white/10" />
+              </div>
+            ))}
           </div>
         ) : visible.length === 0 ? (
           <div

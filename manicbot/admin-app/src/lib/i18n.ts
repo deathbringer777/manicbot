@@ -412,8 +412,11 @@ const translations = {
   "plugins.settings.disable": { ru: "Отключить",              ua: "Вимкнути",               en: "Disable",              pl: "Wyłącz" },
   "plugins.settings.uninstall":{ ru: "Удалить",               ua: "Видалити",               en: "Uninstall",            pl: "Odinstaluj" },
   "plugins.pinned.header":    { ru: "Закреплённое",           ua: "Закріплене",             en: "Pinned",               pl: "Przypięte" },
+  "plugins.pinned.emptyHint": { ru: "Часто используемые плагины появятся здесь.", ua: "Часто використовувані плагіни з'являться тут.", en: "Frequently-used plugins will appear here.", pl: "Najczęściej używane wtyczki pojawią się tutaj." },
+  "plugins.pinned.emptyCta":  { ru: "Открыть магазин →",       ua: "Відкрити магазин →",     en: "Open marketplace →",   pl: "Otwórz sklep →" },
   "plugins.pin":              { ru: "Закрепить",              ua: "Закріпити",              en: "Pin",                  pl: "Przypnij" },
   "plugins.unpin":            { ru: "Открепить",              ua: "Відкріпити",             en: "Unpin",                pl: "Odepnij" },
+  "plugins.pin.limit":        { ru: "Максимум 20 закрепов",    ua: "Максимум 20 закріплень", en: "20-pin limit reached", pl: "Limit 20 przypięć" },
   "plugins.admin.installAll": { ru: "Установить все плагины", ua: "Встановити всі плагіни", en: "Install all plugins", pl: "Zainstaluj wszystkie" },
   "plugins.admin.allInstalled":{ ru: "Все плагины установлены", ua: "Усі плагіни встановлені", en: "All plugins installed", pl: "Wszystkie wtyczki zainstalowane" },
 

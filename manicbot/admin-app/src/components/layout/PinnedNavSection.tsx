@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { Star, Pin } from "lucide-react";
+import { Pin } from "lucide-react";
 import { listManifests } from "@plugins/index";
 import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
 import { useLang } from "~/components/LangContext";
@@ -17,7 +17,14 @@ import { t } from "~/lib/i18n";
 import type { PluginLang } from "@plugins/types";
 import { PLUGIN_LANGS } from "@plugins/types";
 
-export function PinnedNavSection({ collapsed = false }: { collapsed?: boolean }) {
+export function PinnedNavSection({
+  collapsed = false,
+  showEmpty = false,
+}: {
+  collapsed?: boolean;
+  /** Render a dashed empty-state hint (with CTA to /plugins) when no pins exist. Desktop-only. */
+  showEmpty?: boolean;
+}) {
   const { lang } = useLang();
   const { pinned } = usePinnedPlugins();
   const items = useMemo(() => {
@@ -38,7 +45,22 @@ export function PinnedNavSection({ collapsed = false }: { collapsed?: boolean })
       }));
   }, [pinned, lang]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    if (!showEmpty || collapsed) return null;
+    return (
+      <div data-testid="pinned-nav-empty" className="mx-1 mb-1 rounded-xl border border-dashed border-slate-200 dark:border-white/10 px-3 py-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 inline-flex items-center gap-1">
+          <Pin size={10} /> {t("plugins.pinned.header", lang)}
+        </p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-snug">
+          {t("plugins.pinned.emptyHint", lang)}{" "}
+          <Link href="/plugins" className="text-brand-500 hover:underline">
+            {t("plugins.pinned.emptyCta", lang)}
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="pinned-nav-section">

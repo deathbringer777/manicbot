@@ -224,24 +224,14 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
           {/* Nav groups */}
           <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto scrollbar-none">
+            <PinnedNavSection collapsed={collapsed} showEmpty />
             {navGroups.map((group) => (
-              <div key={group.label}>
-                {group.label && !collapsed && (
-                  <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                    {group.label}
-                  </p>
-                )}
-                <div className="space-y-0.5">
-                  {group.items.map((item) => (
-                    <NavLink
-                      key={item.href + item.label}
-                      item={item}
-                      active={isActive(item)}
-                      collapsed={collapsed}
-                    />
-                  ))}
-                </div>
-              </div>
+              <CollapsibleNavGroup
+                key={group.id}
+                group={group}
+                collapsed={collapsed}
+                isActive={isActive}
+              />
             ))}
           </nav>
 

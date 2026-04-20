@@ -1,4 +1,4 @@
-import { uniqueIndex, index, sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { uniqueIndex, index, sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
 
 export const tenants = sqliteTable("tenants", {
   id: text("id").primaryKey(),
@@ -808,4 +808,18 @@ export const pluginEvents = sqliteTable("plugin_events", {
 }, (t) => [
   index("idx_plugin_events_inst").on(t.installationId, t.createdAt),
   index("idx_plugin_events_created").on(t.createdAt),
+]);
+
+// ─── Plugin Pins (migration 0036) ──────────────────────────────────────────
+// Per-user sidebar shortcuts. Independent of plugin_installations — a user may
+// pin a platform-wide plugin without owning the install row.
+export const pluginPins = sqliteTable("plugin_pins", {
+  webUserId: text("web_user_id").notNull(),
+  pluginSlug: text("plugin_slug").notNull(),
+  pinnedAt: integer("pinned_at").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.webUserId, t.pluginSlug] }),
+  index("idx_plugin_pins_user").on(t.webUserId, t.sortOrder),
+  index("idx_plugin_pins_user_at").on(t.webUserId, t.pinnedAt),
 ]);

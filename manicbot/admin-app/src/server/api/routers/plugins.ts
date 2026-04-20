@@ -19,7 +19,7 @@
  */
 
 import { z } from "zod";
-import { and, desc, eq, isNull, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 import {
@@ -28,7 +28,7 @@ import {
   protectedProcedure,
   managerProcedure,
 } from "~/server/api/trpc";
-import { pluginEvents, pluginInstallations, tenants } from "~/server/db/schema";
+import { pluginEvents, pluginInstallations, pluginPins, tenants } from "~/server/db/schema";
 import { listManifests, getPlugin } from "@plugins/index";
 import type {
   PluginLang,
@@ -643,6 +643,52 @@ export const pluginsRouter = createTRPCRouter({
             .orderBy(desc(pluginEvents.createdAt))
             .limit(limit);
       return rows;
+    }),
+
+  // ─── Plugin pins (Shopify-style sidebar shortcuts, per web_user) ──────
+  listPinned: protectedProcedure.query(async ({ ctx }) => {
+    const uid = ctx.webUser?.id;
+    if (!uid) return [] as string[];
+    const rows: Array<{ slug: string }> = await ctx.db
+      .select({ slug: pluginPins.pluginSlug })
+      .from(pluginPins)
+      .where(eq(pluginPins.webUserId, uid))
+      .orderBy(asc(pluginPins.sortOrder), desc(pluginPins.pinnedAt));
+    return rows.map((r) => r.slug);
+  }),
+
+  togglePin: protectedProcedure
+    .input(z.object({ slug: z.string().regex(/^[a-z][a-z0-9-]{2,60}$/) }))
+    .mutation(async ({ ctx, input }) => {
+      const uid = ctx.webUser?.id;
+      if (!uid) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const known = listManifests().some((m) => m.slug === input.slug);
+      if (!known) throw new TRPCError({ code: "NOT_FOUND", message: "Unknown plugin" });
+      const existing: Array<{ slug: string }> = await ctx.db
+        .select({ slug: pluginPins.pluginSlug })
+        .from(pluginPins)
+        .where(and(eq(pluginPins.webUserId, uid), eq(pluginPins.pluginSlug, input.slug)))
+        .limit(1);
+      if (existing.length) {
+        await ctx.db
+          .delete(pluginPins)
+          .where(and(eq(pluginPins.webUserId, uid), eq(pluginPins.pluginSlug, input.slug)));
+        return { pinned: false };
+      }
+      const countRows: Array<{ c: number }> = await ctx.db
+        .select({ c: sql<number>`count(*)` })
+        .from(pluginPins)
+        .where(eq(pluginPins.webUserId, uid));
+      if ((countRows[0]?.c ?? 0) >= 20) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "pin_limit_reached" });
+      }
+      await ctx.db.insert(pluginPins).values({
+        webUserId: uid,
+        pluginSlug: input.slug,
+        pinnedAt: Date.now(),
+        sortOrder: 0,
+      });
+      return { pinned: true };
     }),
 });
 

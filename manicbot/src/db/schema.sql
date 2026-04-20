@@ -809,3 +809,14 @@ CREATE TABLE IF NOT EXISTS plugin_events (
 );
 CREATE INDEX IF NOT EXISTS idx_plugin_events_inst    ON plugin_events (installation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_plugin_events_created ON plugin_events (created_at);
+
+-- Plugin pins (migration 0036) — per-user sidebar shortcuts
+CREATE TABLE IF NOT EXISTS plugin_pins (
+  web_user_id  TEXT    NOT NULL,
+  plugin_slug  TEXT    NOT NULL,
+  pinned_at    INTEGER NOT NULL,
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (web_user_id, plugin_slug)
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_pins_user    ON plugin_pins (web_user_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_plugin_pins_user_at ON plugin_pins (web_user_id, pinned_at);

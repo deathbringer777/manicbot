@@ -1,15 +1,17 @@
 import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from '../utils/landing-pages-proxy.js';
 
 /**
- * Bridge script injected into the landing homepage HTML by the Worker.
+ * Bridge injected into the landing homepage by the Worker.
  *
- * Strategy: find the phone FRAME (dark casing, large border-radius, portrait
- * size) then look for the white SCREEN inside it. This works for any class
- * naming convention — including hashed CSS Modules — because it relies only
- * on computed styles, not class names.
+ * Strategy (v3):
+ *  1. If landing already has id="mb-demo" or data-mb-demo → use it directly.
+ *  2. Find the phone FRAME (dark bg, portrait shape, large border-radius).
+ *  3. Inside the frame find the white SCREEN child element.
+ *  4. Append a full-cover overlay div INSIDE the screen (does not clear
+ *     existing content — overlay sits on top via z-index).
+ *  5. Load /embed/demo-chat.js into the overlay.
  *
- * Explicit escape hatch: add id="mb-demo" or data-mb-demo to the screen
- * element in the landing page and the bridge will use it directly.
+ * No CSS class name selectors — works with plain CSS, Tailwind, CSS Modules.
  */
 const BRIDGE_SCRIPT = `<script>
 (function () {
@@ -18,20 +20,11 @@ const BRIDGE_SCRIPT = `<script>
   var LANG = 'ru';
   var activated = false;
 
-  function activate(el) {
-    if (activated) return;
-    activated = true;
-    console.log('[mb-bridge] found container:', el.tagName, el.id || el.className.toString().slice(0,80));
-    el.innerHTML = '';
-    if (!el.id) el.id = 'mb-target';
-    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
-    if (el.offsetHeight < 200) {
-      el.style.height = (el.offsetWidth > 0 ? Math.round(el.offsetWidth * 1.85) : 520) + 'px';
-    }
+  function loadWidget(targetId) {
     var s = document.createElement('script');
     s.src = '/embed/demo-chat.js';
     s.setAttribute('data-slug', SLUG);
-    s.setAttribute('data-target', '#' + el.id);
+    s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);
     document.head.appendChild(s);
   }
@@ -40,58 +33,88 @@ const BRIDGE_SCRIPT = `<script>
     var m = css && css.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
     return m ? [+m[1], +m[2], +m[3]] : null;
   }
-  function isDark(rgb)  { return rgb && rgb[0] < 55 && rgb[1] < 55 && rgb[2] < 55; }
-  function isLight(rgb) { return rgb && rgb[0] > 228 && rgb[1] > 228 && rgb[2] > 228; }
+  function isDark(r)  { return r && r[0]<55  && r[1]<55  && r[2]<55;  }
+  function isLight(r) { return r && r[0]>225 && r[1]>225 && r[2]>225; }
 
-  function findScreen() {
-    // Explicit marker wins every time.
-    var explicit = document.getElementById('mb-demo') || document.querySelector('[data-mb-demo]');
-    if (explicit) return explicit;
+  function mountOnScreen(screen) {
+    if (activated) return;
+    activated = true;
+    var h = screen.offsetHeight, w = screen.offsetWidth;
+    console.log('[mb-bridge] screen element', screen.tagName, w+'x'+h, screen.id||screen.className.toString().slice(0,60));
 
-    // Find the phone frame: portrait shape, dark background, heavily rounded.
-    var all = document.querySelectorAll('*');
-    var frame = null;
+    // Ensure the screen is a positioning context so the overlay can use inset:0.
+    if (getComputedStyle(screen).position === 'static') screen.style.position = 'relative';
+    // Guarantee height (phones with auto height collapse after React re-renders).
+    if (h < 200) screen.style.height = (w>0 ? Math.round(w*1.88) : 540)+'px';
+
+    // Create a full-cover overlay that sits on top of the static preview.
+    // We do NOT clear the screen's innerHTML so the phone keeps its chrome.
+    var ov = document.createElement('div');
+    ov.id = 'mb-target';
+    ov.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;z-index:200;overflow:hidden;background:#fff;border-radius:inherit';
+    screen.appendChild(ov);
+    loadWidget('mb-target');
+  }
+
+  function mountOnFrame(frame) {
+    if (activated) return;
+    // Try to find a white screen element inside the frame first.
+    var best = null;
+    var all = frame.querySelectorAll('*');
     for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      var w = el.offsetWidth, h = el.offsetHeight;
-      if (w < 260 || w > 480 || h < 480 || h > 940) continue;
-      if (h / w < 1.6 || h / w > 2.55) continue;
-      var st = getComputedStyle(el);
-      if (parseFloat(st.borderRadius) < 28) continue;
-      if (!isDark(parseRgb(st.backgroundColor))) continue;
-      frame = el;
-      break;
-    }
-    if (!frame) { console.log('[mb-bridge] phone frame not found yet'); return null; }
-    console.log('[mb-bridge] phone frame:', frame.tagName, frame.offsetWidth + 'x' + frame.offsetHeight);
-
-    // Inside the frame find the white screen (rounded white/near-white child).
-    var kids = frame.querySelectorAll('*');
-    for (var j = 0; j < kids.length; j++) {
-      var c = kids[j];
+      var c = all[i];
       if (c.offsetWidth < 220 || c.offsetHeight < 280) continue;
       var cs = getComputedStyle(c);
       if (!isLight(parseRgb(cs.backgroundColor))) continue;
-      if (parseFloat(cs.borderRadius) < 8) continue;
-      return c;
+      if (parseFloat(cs.borderRadius) < 6) continue;
+      best = c; break;
     }
-    // No white screen found — use the frame itself.
-    return frame;
+    if (best) {
+      console.log('[mb-bridge] white screen found inside frame');
+      mountOnScreen(best);
+    } else {
+      // No white child — create our own screen inside the frame.
+      console.log('[mb-bridge] no white screen — creating one inside frame');
+      if (activated) return; activated = true;
+      var fw = frame.offsetWidth, fh = frame.offsetHeight;
+      if (getComputedStyle(frame).position === 'static') frame.style.position = 'relative';
+      var scr = document.createElement('div');
+      scr.id = 'mb-target';
+      // Typical iPhone bezel: ~5% sides, ~9% top (notch), ~4% bottom.
+      scr.style.cssText = 'position:absolute;top:9%;left:5%;right:5%;bottom:4%;background:#fff;border-radius:30px;overflow:hidden;z-index:200;';
+      frame.appendChild(scr);
+      loadWidget('mb-target');
+    }
   }
 
-  function tryActivate() {
-    var el = findScreen();
-    if (el) { activate(el); return true; }
+  function findPhoneFrame() {
+    var explicit = document.getElementById('mb-demo') || document.querySelector('[data-mb-demo]');
+    if (explicit) { mountOnScreen(explicit); return true; }
+
+    var all = document.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      var w = el.offsetWidth, h = el.offsetHeight;
+      if (w < 260 || w > 490 || h < 480 || h > 950) continue;
+      if (h/w < 1.55 || h/w > 2.6) continue;
+      var st = getComputedStyle(el);
+      if (parseFloat(st.borderRadius) < 26) continue;
+      var rgb = parseRgb(st.backgroundColor);
+      if (!isDark(rgb)) continue;
+      console.log('[mb-bridge] phone frame found', el.tagName, w+'x'+h, 'radius='+st.borderRadius, el.id||el.className.toString().slice(0,60));
+      mountOnFrame(el);
+      return true;
+    }
     return false;
   }
 
-  if (tryActivate()) return;
+  if (findPhoneFrame()) return;
 
   var obs = new MutationObserver(function () {
-    if (tryActivate()) obs.disconnect();
+    if (findPhoneFrame()) obs.disconnect();
   });
   function start() {
-    if (tryActivate()) return;
+    if (findPhoneFrame()) return;
     obs.observe(document.documentElement, { childList: true, subtree: true });
     setTimeout(function () { obs.disconnect(); }, 15000);
   }
@@ -116,8 +139,7 @@ export async function tryLanding(request, env, url, force) {
   const landingUrl = buildLandingFetchUrl(url.pathname, landingOrigin);
   const res = await fetch(landingUrl, { headers: request.headers });
 
-  // Inject bridge into homepage HTML so the live widget activates inside the
-  // existing iPhone mockup without touching the landing-pages repo.
+  // Inject bridge into homepage HTML.
   const ct = res.headers.get('content-type') || '';
   const isHomepage = url.pathname === '/' || url.pathname === '';
   if (isHomepage && res.status === 200 && ct.includes('text/html')) {

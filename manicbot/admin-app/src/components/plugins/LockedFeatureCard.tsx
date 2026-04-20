@@ -20,25 +20,21 @@ function reasonText(r: PluginLockReason, lang: Lang): string | null {
   return null;
 }
 
-function reasonStyle(r: PluginLockReason): { overlay: string; badge: string } {
+function reasonBadge(r: PluginLockReason): string {
   if (r.kind === "coming_soon") {
-    return {
-      overlay: "bg-slate-100/60 dark:bg-slate-900/60 backdrop-blur-[1px] grayscale",
-      badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
-    };
+    return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40";
   }
   if (r.kind === "plan") {
-    return {
-      overlay: "bg-white/40 dark:bg-slate-900/40 backdrop-blur-[1px]",
-      badge: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
-    };
+    return "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/40";
   }
-  return {
-    overlay: "bg-slate-100/70 dark:bg-slate-900/70 backdrop-blur-[1px] grayscale",
-    badge: "bg-slate-400/15 text-slate-600 dark:text-slate-300 border-slate-400/30",
-  };
+  return "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/40";
 }
 
+/**
+ * Renders a corner badge instead of covering the whole card — name/tagline
+ * stay readable, only the CTA is disabled. Greyscale is replaced with a
+ * light opacity so info remains accessible.
+ */
 export function LockedFeatureCard({
   reason,
   children,
@@ -49,25 +45,21 @@ export function LockedFeatureCard({
   const { lang } = useLang();
   const label = reasonText(reason, lang);
   if (!label || reason.kind === "none") return <>{children}</>;
-  const style = reasonStyle(reason);
+  const badgeClass = reasonBadge(reason);
+  const softenBody = reason.kind === "coming_soon" || reason.kind === "role_mismatch";
   return (
     <div
       className="relative"
       data-testid="locked-feature-card"
       data-lock-kind={reason.kind}
     >
-      <div className="pointer-events-none opacity-70">{children}</div>
-      <div
-        className={`absolute inset-0 rounded-2xl flex items-end justify-center p-3 ${style.overlay}`}
-        aria-hidden="false"
+      <div className={softenBody ? "opacity-75" : ""}>{children}</div>
+      <span
+        className={`absolute top-2 right-2 text-[10px] uppercase tracking-wider font-semibold rounded-full px-2 py-0.5 border shadow-sm pointer-events-none ${badgeClass}`}
+        role="status"
       >
-        <span
-          className={`text-[11px] uppercase tracking-wider font-semibold rounded-full px-2.5 py-1 border ${style.badge}`}
-          role="status"
-        >
-          {label}
-        </span>
-      </div>
+        {label}
+      </span>
     </div>
   );
 }

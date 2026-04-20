@@ -145,15 +145,14 @@ describe("LockedFeatureCard — accessibility", () => {
     expect(overlay?.getAttribute("aria-hidden")).not.toBe("true");
   });
 
-  it("children are pointer-events-none to prevent interaction on locked cards", () => {
+  it("badge is pointer-events-none so it doesn't block child interactions", () => {
     renderWithLang(
       <LockedFeatureCard reason={{ kind: "role_mismatch", availableFor: ["system_admin"] }}>
         <button data-testid="trapped">Click me</button>
       </LockedFeatureCard>,
     );
-    // parent of trapped button should have pointer-events-none class
-    const btn = screen.getByTestId("trapped");
-    const parent = btn.parentElement;
-    expect(parent?.className).toContain("pointer-events-none");
+    const wrapper = screen.getByTestId("locked-feature-card");
+    const badge = wrapper.querySelector("[role='status']");
+    expect(badge?.className).toContain("pointer-events-none");
   });
 });

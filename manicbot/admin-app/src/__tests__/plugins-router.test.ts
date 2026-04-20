@@ -176,12 +176,15 @@ describe("pluginsRouter.install — security rejections", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("rejects install of platform plugin at tenant scope", async () => {
-    const { db } = createDbMock();
+  it("platform plugin install auto-scopes to null even when tenantId is passed", async () => {
+    // New behaviour: platform plugins always land at tenant_id=null regardless
+    // of the tenantId hint, so admin's own salon-tenant doesn't break install.
+    const { db, insertCalls } = createDbMock([[]]); // dup check returns empty
     const caller = createCaller(makeAdminCtx(db) as never);
-    await expect(
-      caller.install({ slug: "platform-test", tenantId: "t_any" }),
-    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    const r = await caller.install({ slug: "platform-test", tenantId: "t_any" });
+    expect(r.id).toMatch(/.+/);
+    const row = insertCalls[0]!.values as Record<string, unknown>;
+    expect(row.tenantId).toBeNull();
   });
 
   it("rejects install of tenant plugin at platform scope", async () => {
@@ -206,6 +209,20 @@ describe("pluginsRouter.install — security rejections", () => {
     await expect(
       caller.install({ slug: "live-test", tenantId: "t_pro" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("system_admin bypasses the role-availability gate", async () => {
+    // portfolio-gallery is restricted to availableForRoles=["master","tenant_owner"],
+    // but system_admin should STILL be able to install for testing/support.
+    // minPlan is "any", so the plan lookup is skipped — we only need the dup
+    // check mock to return empty.
+    const { db, insertCalls } = createDbMock([
+      [], // dup check (no existing install)
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const r = await caller.install({ slug: "portfolio-gallery", tenantId: "t_test" });
+    expect(r.id).toMatch(/.+/);
+    expect(insertCalls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("rejects duplicate install (CONFLICT)", async () => {

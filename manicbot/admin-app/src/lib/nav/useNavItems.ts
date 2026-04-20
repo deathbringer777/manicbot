@@ -20,6 +20,7 @@ export interface NavItem {
 }
 
 export interface NavGroup {
+  id: string;
   label: string;
   items: NavItem[];
 }
@@ -116,11 +117,12 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
     let groups: NavGroup[];
     if (effectiveRole === "system_admin") {
       groups = NAV_GROUPS.map(g => ({
+        id: g.id,
         label: tNav(g.labelKey, lang),
         items: combined.filter(r => (r as { _group?: string })._group === g.id).map(({ _group, ...item }) => item),
       })).filter(g => g.items.length > 0);
     } else {
-      groups = [{ label: "", items: combined.map(({ _group, ...item }) => item) }];
+      groups = [{ id: "main", label: "", items: combined.map(({ _group, ...item }) => item) }];
     }
 
     const flat = groups.flatMap(g => g.items);

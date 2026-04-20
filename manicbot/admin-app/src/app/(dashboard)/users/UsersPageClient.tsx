@@ -333,16 +333,13 @@ export default function UsersPageClient() {
       {/* Role Modal — bottom sheet */}
       {roleModal && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
           onClick={() => setRoleModal(null)}
         >
           <div
-            className="bg-slate-900 border border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md"
+            className="bg-slate-900 border border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Handle */}
-            <div className="w-10 h-1 rounded-full bg-slate-700 mx-auto mb-5" />
-
             <div className="flex items-start justify-between mb-5">
               <div>
                 <h3 className="text-base font-bold text-white">Управление ролью</h3>

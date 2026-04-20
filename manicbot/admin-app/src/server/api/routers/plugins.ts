@@ -255,9 +255,15 @@ export const pluginsRouter = createTRPCRouter({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Plugin is not yet available" });
       }
 
-      // resolve target scope — null when not provided means "my tenant if I have one, else platform"
+      // Resolve target scope.
+      //  - Platform plugins always install at tenant_id=null (system_admin only).
+      //  - Tenant plugins install at caller's tenant (or explicit tenantId for system_admin).
+      //  - For `scope: "both"`, admin without explicit tenantId defaults to platform-wide,
+      //    everyone else installs for their own tenant.
       let scope: string | null;
-      if (input.tenantId === undefined) {
+      if (m.scope === "platform") {
+        scope = null;
+      } else if (input.tenantId === undefined) {
         scope = ctx.webUser!.webRole === "system_admin" && !ctx.webUser!.tenantId
           ? null
           : ctx.webUser!.tenantId;
@@ -265,9 +271,6 @@ export const pluginsRouter = createTRPCRouter({
         scope = input.tenantId;
       }
 
-      if (m.scope === "platform" && scope !== null) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Plugin can only be installed platform-wide" });
-      }
       if (m.scope === "tenant" && scope === null) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Plugin can only be installed per-tenant" });
       }
@@ -275,7 +278,11 @@ export const pluginsRouter = createTRPCRouter({
       await assertCanWriteScope(ctx as never, scope);
 
       // role-availability gate (based on who's clicking Install)
-      if (!(m.availableForRoles as string[]).includes(ctx.webUser!.webRole)) {
+      // system_admin bypass — they can install anything for testing/support.
+      if (
+        ctx.webUser!.webRole !== "system_admin" &&
+        !(m.availableForRoles as string[]).includes(ctx.webUser!.webRole)
+      ) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: `Plugin is not available for role "${ctx.webUser!.webRole}"`,
@@ -455,6 +462,76 @@ export const pluginsRouter = createTRPCRouter({
       await writePluginEvent(ctx.db, row.id, "settings_updated", ctx.webUser!.id);
       return { ok: true };
     }),
+
+  // ---------------------------------------------------------------------
+  // adminInstallAll — bulk-install every non-coming_soon plugin (system_admin).
+  //
+  // Idempotent — skips plugins that are already installed in the target scope.
+  // Platform plugins land at tenant_id=null; tenant/both plugins land at the
+  // admin's own tenant_id if present, else tenant_id=null.
+  // Used to pre-populate the dashboard for the creator so they can exercise
+  // every plugin without clicking Install one-by-one.
+  // ---------------------------------------------------------------------
+  adminInstallAll: adminProcedure.mutation(async ({ ctx }) => {
+    const adminTenant = ctx.webUser!.tenantId;
+    const manifests = listManifests().filter((m) => m.status !== "coming_soon");
+    let inserted = 0;
+    let skipped = 0;
+    for (const m of manifests) {
+      const scope: string | null = m.scope === "platform"
+        ? null
+        : m.scope === "tenant"
+          ? adminTenant
+          : adminTenant; // 'both' → prefer tenant if admin has one, else platform
+      // If scope must be a tenant but admin has none → fallback to platform for 'both'
+      const finalScope = m.scope === "tenant" && !scope ? null : scope;
+      // Skip tenant-only plugins that need a tenant we don't have.
+      if (m.scope === "tenant" && !finalScope) { skipped += 1; continue; }
+
+      // Duplicate check
+      const existing = await ctx.db
+        .select({ id: pluginInstallations.id })
+        .from(pluginInstallations)
+        .where(
+          and(
+            eq(pluginInstallations.pluginSlug, m.slug),
+            finalScope === null
+              ? isNull(pluginInstallations.tenantId)
+              : eq(pluginInstallations.tenantId, finalScope),
+          ) as never,
+        )
+        .limit(1);
+      if (existing.length > 0) { skipped += 1; continue; }
+
+      const id = newId();
+      const t = now();
+      const initialBillingState: PluginBillingState =
+        m.billing.model === "paid_addon_monthly" || m.billing.model === "paid_addon_onetime"
+          ? "paid" // admin bypass — assume access for testing
+          : m.billing.model === "included_in_plan"
+            ? "included"
+            : "not_applicable";
+      await ctx.db.insert(pluginInstallations).values({
+        id,
+        tenantId: finalScope,
+        pluginSlug: m.slug,
+        enabled: 1,
+        version: m.version,
+        installedBy: ctx.webUser!.id,
+        installedAt: t,
+        updatedAt: t,
+        settingsJson: null,
+        billingState: initialBillingState,
+      });
+      await writePluginEvent(ctx.db, id, "installed", ctx.webUser!.id, {
+        slug: m.slug,
+        scope: finalScope,
+        reason: "adminInstallAll",
+      });
+      inserted += 1;
+    }
+    return { ok: true, inserted, skipped, total: manifests.length };
+  }),
 
   // ---------------------------------------------------------------------
   // checkoutAddon — creates a Stripe Checkout Session URL for paid addons.

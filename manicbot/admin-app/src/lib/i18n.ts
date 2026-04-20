@@ -411,6 +411,11 @@ const translations = {
   "plugins.settings.enable":  { ru: "Включить",               ua: "Увімкнути",              en: "Enable",               pl: "Włącz" },
   "plugins.settings.disable": { ru: "Отключить",              ua: "Вимкнути",               en: "Disable",              pl: "Wyłącz" },
   "plugins.settings.uninstall":{ ru: "Удалить",               ua: "Видалити",               en: "Uninstall",            pl: "Odinstaluj" },
+  "plugins.pinned.header":    { ru: "Закреплённое",           ua: "Закріплене",             en: "Pinned",               pl: "Przypięte" },
+  "plugins.pin":              { ru: "Закрепить",              ua: "Закріпити",              en: "Pin",                  pl: "Przypnij" },
+  "plugins.unpin":            { ru: "Открепить",              ua: "Відкріпити",             en: "Unpin",                pl: "Odepnij" },
+  "plugins.admin.installAll": { ru: "Установить все плагины", ua: "Встановити всі плагіни", en: "Install all plugins", pl: "Zainstaluj wszystkie" },
+  "plugins.admin.allInstalled":{ ru: "Все плагины установлены", ua: "Усі плагіни встановлені", en: "All plugins installed", pl: "Wszystkie wtyczki zainstalowane" },
 
   // ── Cookies ────────────────────────────────────────────────────────────────
   "cookies.title":          { ru: "Cookies на ManicBot",                              ua: "Cookies на ManicBot",                              en: "Cookies on ManicBot",                                pl: "Pliki cookie w ManicBot" },

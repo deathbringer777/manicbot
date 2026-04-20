@@ -94,4 +94,36 @@ describe("computeLockReason", () => {
     });
     expect(r.kind).toBe("none");
   });
+
+  it("system_admin bypasses role_mismatch and plan gates", () => {
+    const r1 = computeLockReason(m({ availableForRoles: ["master"] }), {
+      role: "system_admin",
+      tenantPlan: "start",
+      tenantId: "t_1",
+    });
+    expect(r1.kind).toBe("none");
+
+    const r2 = computeLockReason(m({ minPlan: "max" }), {
+      role: "system_admin",
+      tenantPlan: "start",
+      tenantId: "t_1",
+    });
+    expect(r2.kind).toBe("none");
+
+    const r3 = computeLockReason(m({ scope: "platform", availableForRoles: ["tenant_owner"] }), {
+      role: "system_admin",
+      tenantPlan: null,
+      tenantId: null,
+    });
+    expect(r3.kind).toBe("none");
+  });
+
+  it("system_admin still sees coming_soon lock (feature not ready)", () => {
+    const r = computeLockReason(m({ status: "coming_soon" }), {
+      role: "system_admin",
+      tenantPlan: null,
+      tenantId: null,
+    });
+    expect(r.kind).toBe("coming_soon");
+  });
 });

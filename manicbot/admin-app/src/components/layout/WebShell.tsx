@@ -6,10 +6,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   Settings,
-  LogOut, Menu, X, Zap, ChevronLeft, ChevronRight,
+  LogOut, Menu, X, Zap, ChevronLeft, ChevronRight, ChevronDown,
   Sun, Moon, Compass, Building2,
   type LucideIcon,
 } from "lucide-react";
+import { PinnedNavSection } from "~/components/layout/PinnedNavSection";
+import { useCollapsedGroups } from "~/lib/plugins/collapsedGroups";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { LangDropdown } from "~/components/public/LangDropdown";
@@ -32,6 +34,55 @@ function getPageTitle(pathname: string, flat: NavItem[], lang: string): string {
   if (exact) return exact.label;
   const match = flat.find(n => n.href !== "/" && pathname.startsWith(n.href));
   return match?.label ?? tNav("Dashboard", lang);
+}
+
+function CollapsibleNavGroup({
+  group,
+  collapsed,
+  isActive,
+  onItemClick,
+}: {
+  group: NavGroup;
+  collapsed: boolean;
+  isActive: (item: NavItem) => boolean;
+  onItemClick?: () => void;
+}) {
+  const { isCollapsed, toggle } = useCollapsedGroups();
+  const groupCollapsed = isCollapsed(group.id);
+  const hasHeader = !!group.label;
+  return (
+    <div data-testid="nav-group" data-group-id={group.id} data-collapsed={groupCollapsed ? "1" : "0"}>
+      {hasHeader && !collapsed && (
+        <button
+          type="button"
+          onClick={() => toggle(group.id)}
+          data-testid="nav-group-toggle"
+          className="w-full flex items-center justify-between px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors"
+          aria-expanded={!groupCollapsed}
+          aria-controls={`nav-group-${group.id}`}
+        >
+          <span>{group.label}</span>
+          <ChevronDown
+            size={12}
+            className={`transition-transform ${groupCollapsed ? "-rotate-90" : ""}`}
+          />
+        </button>
+      )}
+      {!groupCollapsed && (
+        <div id={`nav-group-${group.id}`} className="space-y-0.5">
+          {group.items.map((item) => (
+            <NavLink
+              key={item.href + item.label}
+              item={item}
+              active={isActive(item)}
+              collapsed={collapsed}
+              onClick={onItemClick}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NavLink({ item, active, collapsed, onClick, dataTour, showBadge }: {
@@ -230,24 +281,15 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
               {/* Nav groups */}
               <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto scrollbar-none">
+                <PinnedNavSection />
                 {navGroups.map((group) => (
-                  <div key={group.label}>
-                    {group.label && (
-                      <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                        {group.label}
-                      </p>
-                    )}
-                    <div className="space-y-0.5">
-                      {group.items.map((item) => (
-                        <NavLink
-                          key={item.href + item.label}
-                          item={item}
-                          active={isActive(item)}
-                          onClick={() => setSidebarOpen(false)}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                  <CollapsibleNavGroup
+                    key={group.id}
+                    group={group}
+                    collapsed={false}
+                    isActive={isActive}
+                    onItemClick={() => setSidebarOpen(false)}
+                  />
                 ))}
               </nav>
 

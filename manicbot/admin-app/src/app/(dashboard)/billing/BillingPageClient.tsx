@@ -248,9 +248,8 @@ export default function BillingPageClient() {
 
       {/* ── Change Plan Modal ── */}
       {modal?.type === "plan" && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Сменить план</h3>
@@ -287,9 +286,8 @@ export default function BillingPageClient() {
 
       {/* ── Change Status Modal ── */}
       {modal?.type === "status" && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Сменить статус</h3>
@@ -327,9 +325,8 @@ export default function BillingPageClient() {
 
       {/* ── Manual Activate Modal ── */}
       {modal?.type === "activate" && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-t-3xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModal(null)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Ручная активация</h3>

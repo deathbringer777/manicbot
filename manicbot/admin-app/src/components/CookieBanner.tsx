@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { useLang } from "~/components/LangContext";
 import {
   COOKIE_BANNER_APPEAR_DELAY_MS,
@@ -18,14 +19,18 @@ import { t } from "~/lib/i18n";
  * sessionStorage resets.
  * Not shown in Telegram (mini app / in-app browser / Telegram WebView) — not all
  * of those expose WebApp.initData, so we use a broader isTelegramInAppContext() check.
+ * Not shown to authenticated web users — the banner only targets anonymous visitors.
  */
 export function CookieBanner() {
   const { lang } = useLang();
+  const { status } = useSession();
   const [shouldShow, setShouldShow] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (isTelegramInAppContext(window)) return;
+    if (status === "loading") return;
+    if (status === "authenticated") return;
     // Show the banner only if:
     //  1) user has not already made a persistent choice (localStorage), AND
     //  2) the banner has not already been presented in this tab/session.
@@ -37,7 +42,7 @@ export function CookieBanner() {
     if (readCookieConsent()) return;
     if (wasCookieBannerShownThisSession()) return;
     setShouldShow(true);
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     if (!shouldShow) return;

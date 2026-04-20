@@ -130,13 +130,17 @@ export default function DashboardLayout({
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : !effectiveTenantId
-                ? <NoTenantOnboarding role="tenant_owner" />
-                : previewMasterId !== null
-                  ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
-                  : <SalonDashboard tenantId={effectiveTenantId} />
+              : pathname === "/plugins" || pathname.startsWith("/plugins/")
+                ? children
+                : !effectiveTenantId
+                  ? <NoTenantOnboarding role="tenant_owner" />
+                  : previewMasterId !== null
+                    ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
+                    : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
+        <CommandPalette />
+        <ActivityFeed />
       </RoleContext.Provider>
     );
   }
@@ -149,11 +153,15 @@ export default function DashboardLayout({
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : !effectiveTenantId
-                ? <NoTenantOnboarding role="tenant_owner" />
-                : <SalonDashboard tenantId={effectiveTenantId} />
+              : pathname === "/plugins" || pathname.startsWith("/plugins/")
+                ? children
+                : !effectiveTenantId
+                  ? <NoTenantOnboarding role="tenant_owner" />
+                  : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
+        <CommandPalette />
+        <ActivityFeed />
       </RoleContext.Provider>
     );
   }
@@ -165,11 +173,15 @@ export default function DashboardLayout({
           {wrapWithEmailGate(
             isSettingsPage
               ? children
-              : !effectiveTenantId
-                ? <NoTenantOnboarding role="master" />
-                : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
+              : pathname === "/plugins" || pathname.startsWith("/plugins/")
+                ? children
+                : !effectiveTenantId
+                  ? <NoTenantOnboarding role="master" />
+                  : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
           )}
         </WebShell>
+        <CommandPalette />
+        <ActivityFeed />
       </RoleContext.Provider>
     );
   }
@@ -178,8 +190,14 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {wrapWithEmailGate(isSettingsPage ? children : <SupportDashboard />)}
+          {wrapWithEmailGate(
+            isSettingsPage || pathname === "/plugins" || pathname.startsWith("/plugins/")
+              ? children
+              : <SupportDashboard />,
+          )}
         </WebShell>
+        <CommandPalette />
+        <ActivityFeed />
       </RoleContext.Provider>
     );
   }

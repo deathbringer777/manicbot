@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Pin, PinOff } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { PluginIcon } from "./PluginIcon";
 import { LockedFeatureCard } from "./LockedFeatureCard";
+import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
 import type { CatalogCard } from "@plugins/types";
 
 function categoryLabel(cat: CatalogCard["category"], lang: Lang): string {
@@ -43,6 +44,8 @@ function statusBadge(card: CatalogCard, lang: Lang): React.ReactNode {
 
 export function PluginCard({ card }: { card: CatalogCard }) {
   const { lang } = useLang();
+  const { isPinned, toggle } = usePinnedPlugins();
+  const pinned = isPinned(card.slug);
   const href = `/plugins/${card.slug}`;
 
   const body = (
@@ -58,7 +61,30 @@ export function PluginCard({ card }: { card: CatalogCard }) {
       <div className="flex items-start justify-between gap-3">
         <PluginIcon name={card.iconName} tint={card.iconTint} size={22} />
         <div className="flex flex-col items-end gap-1">
-          {statusBadge(card, lang)}
+          <div className="flex items-center gap-1.5">
+            {card.installed && (
+              <button
+                type="button"
+                data-testid="plugin-card-pin"
+                data-pinned={pinned ? "1" : "0"}
+                aria-label={pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
+                title={pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggle(card.slug);
+                }}
+                className={`p-1 rounded-md text-[11px] transition-colors ${
+                  pinned
+                    ? "text-amber-500 hover:text-amber-600"
+                    : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                }`}
+              >
+                {pinned ? <Pin size={12} fill="currentColor" /> : <PinOff size={12} />}
+              </button>
+            )}
+            {statusBadge(card, lang)}
+          </div>
           <span className="text-[11px] text-slate-500 dark:text-slate-400">{categoryLabel(card.category, lang)}</span>
         </div>
       </div>

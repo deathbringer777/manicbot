@@ -8,7 +8,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeCtx } from './helpers/mock-db.js';
 import { saveApt, updateApt, getAptById } from '../src/services/appointments.js';
-import { warsawToUTC } from '../src/utils/date.js';
 import { dbAll, dbRun } from '../src/utils/db.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -24,7 +23,7 @@ async function makeApt(ctx, overrides = {}) {
     svcId: 'classic',
     date: '2026-04-20',
     time: '14:00',
-    ts: warsawToUTC(2026, 4, 20, 14, 0).getTime(),
+    ts: Date.now() + 60 * 60 * 1000,
     userName: 'Тест Клиент',
     userPhone: '+48111222333',
     ...overrides,
@@ -85,7 +84,7 @@ describe('confirmAllPendingApts masterId persistence', () => {
 
     // Create two pending apts without a master
     const apt1 = await makeApt(ctx, { chatId: 600 });
-    const apt2 = await makeApt(ctx, { chatId: 601, time: '15:00', ts: warsawToUTC(2026, 4, 20, 15, 0).getTime() });
+    const apt2 = await makeApt(ctx, { chatId: 601, time: '15:00', ts: Date.now() + 2 * 60 * 60 * 1000 });
     expect(apt1.masterId).toBeNull();
     expect(apt2.masterId).toBeNull();
 

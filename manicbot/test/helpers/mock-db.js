@@ -115,7 +115,13 @@ export function createMockD1() {
         if (inMatch) {
           const col = inMatch[1];
           const placeholders = inMatch[2].split(',').map(s => s.trim());
-          const values = placeholders.map(() => params[pIdx++]);
+          const values = placeholders.map(p => {
+            if (p === '?') return params[pIdx++];
+            const strLit = p.match(/^'([^']*)'$/);
+            if (strLit) return strLit[1];
+            if (/^\d+$/.test(p)) return parseInt(p, 10);
+            return params[pIdx++];
+          });
           conditions.push([col, 'IN', values]);
           continue;
         }

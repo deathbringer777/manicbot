@@ -28,10 +28,14 @@ const PREVIEW_MASTER_ALINA_CID = 10_000_000_001;
 const PREVIEW_MASTER_VIKA_CID = 10_000_000_002;
 
 const PREVIEW_SERVICES = [
-  { svcId: 'classic',  names: { ru: 'Классический маникюр', ua: 'Класичний манікюр', en: 'Classic manicure', pl: 'Manicure klasyczny' }, duration: 60, price: 45,  emoji: '💅', sortOrder: 1 },
-  { svcId: 'gel',      names: { ru: 'Гель-лак',              ua: 'Гель-лак',          en: 'Gel polish',       pl: 'Manicure hybrydowy' },  duration: 90, price: 80,  emoji: '✨', sortOrder: 2 },
-  { svcId: 'pedi',     names: { ru: 'Педикюр',               ua: 'Педикюр',           en: 'Pedicure',         pl: 'Pedicure' },            duration: 75, price: 120, emoji: '🦶', sortOrder: 3 },
-  { svcId: 'design',   names: { ru: 'Авторский дизайн',      ua: 'Авторський дизайн', en: 'Custom nail art',  pl: 'Zdobienia autorskie' }, duration: 30, price: 30,  emoji: '🎨', sortOrder: 4 },
+  { svcId: 'classic',  names: { ru: 'Классический маникюр', ua: 'Класичний манікюр', en: 'Classic manicure', pl: 'Manicure klasyczny' }, duration: 60, price: 45,  emoji: '💅', sortOrder: 1,
+    photos: ['https://images.pexels.com/photos/3997379/pexels-photo-3997379.jpeg?w=600', 'https://images.pexels.com/photos/3997354/pexels-photo-3997354.jpeg?w=600'] },
+  { svcId: 'gel',      names: { ru: 'Гель-лак',              ua: 'Гель-лак',          en: 'Gel polish',       pl: 'Manicure hybrydowy' },  duration: 90, price: 80,  emoji: '✨', sortOrder: 2,
+    photos: ['https://images.pexels.com/photos/3997388/pexels-photo-3997388.jpeg?w=600', 'https://images.pexels.com/photos/3997384/pexels-photo-3997384.jpeg?w=600'] },
+  { svcId: 'pedi',     names: { ru: 'Педикюр',               ua: 'Педикюр',           en: 'Pedicure',         pl: 'Pedicure' },            duration: 75, price: 120, emoji: '🦶', sortOrder: 3,
+    photos: ['https://images.pexels.com/photos/5874862/pexels-photo-5874862.jpeg?w=600', 'https://images.pexels.com/photos/9789207/pexels-photo-9789207.jpeg?w=600'] },
+  { svcId: 'design',   names: { ru: 'Авторский дизайн',      ua: 'Авторський дизайн', en: 'Custom nail art',  pl: 'Zdobienia autorskie' }, duration: 30, price: 30,  emoji: '🎨', sortOrder: 4,
+    photos: ['https://images.pexels.com/photos/704815/pexels-photo-704815.jpeg?w=600'] },
 ];
 
 const PREVIEW_MASTERS = [
@@ -62,14 +66,16 @@ export async function ensurePreviewTenantProvisioned(env) {
   if (existing && existing.slug === PREVIEW_TENANT_SLUG && existing.publicActive) {
     // Tenant row is fine; do the cheap checks on services/masters/config too.
     const { dbGet } = await import('../utils/db.js');
-    const [svcRow, masterRow, cfgRow] = await Promise.all([
+    const [svcRow, masterRow, cfgRow, svcNoPhotos] = await Promise.all([
       dbGet(ec, 'SELECT COUNT(*) as n FROM services WHERE tenant_id = ?', PREVIEW_TENANT_ID),
       dbGet(ec, 'SELECT COUNT(*) as n FROM masters  WHERE tenant_id = ?', PREVIEW_TENANT_ID),
       dbGet(ec, "SELECT value FROM tenant_config WHERE tenant_id = ? AND key = 'preview_mode'", PREVIEW_TENANT_ID),
+      dbGet(ec, "SELECT COUNT(*) as n FROM services WHERE tenant_id = ? AND (photos IS NULL OR photos = '[]')", PREVIEW_TENANT_ID),
     ]);
     if ((svcRow?.n || 0) >= PREVIEW_SERVICES.length &&
         (masterRow?.n || 0) >= PREVIEW_MASTERS.length &&
-        cfgRow?.value === '1') {
+        cfgRow?.value === '1' &&
+        (svcNoPhotos?.n || 0) === 0) {
       _previewProvisioned = true;
       return;
     }
@@ -135,10 +141,22 @@ export async function ensurePreviewTenantProvisioned(env) {
     await dbRun(
       ec,
       `INSERT OR IGNORE INTO services
-         (tenant_id, svc_id, emoji, duration, price, active, hidden, sort_order, names)
-       VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?)`,
-      PREVIEW_TENANT_ID, s.svcId, s.emoji, s.duration, s.price, s.sortOrder, JSON.stringify(s.names),
+         (tenant_id, svc_id, emoji, duration, price, active, hidden, sort_order, names, photos)
+       VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`,
+      PREVIEW_TENANT_ID, s.svcId, s.emoji, s.duration, s.price, s.sortOrder,
+      JSON.stringify(s.names), JSON.stringify(s.photos || []),
     );
+  }
+
+  // Backfill photos on rows that were already inserted without them.
+  for (const s of PREVIEW_SERVICES) {
+    if (s.photos?.length) {
+      await dbRun(
+        ec,
+        "UPDATE services SET photos = ? WHERE tenant_id = ? AND svc_id = ? AND (photos IS NULL OR photos = '[]')",
+        JSON.stringify(s.photos), PREVIEW_TENANT_ID, s.svcId,
+      );
+    }
   }
 
   for (const m of PREVIEW_MASTERS) {

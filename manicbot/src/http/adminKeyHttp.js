@@ -587,5 +587,69 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, indexed });
   }
 
+  // POST /admin/notify?key=ADMIN_KEY — send a Telegram message to the admin chat
+  // Body: { text: string, parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2' }
+  // Uses NOTIFY_BOT_TOKEN / NOTIFY_CHAT_ID with fallback to BOT_TOKEN / ADMIN_CHAT_ID.
+  // Splits text into chunks on newline boundaries (surrogate-safe) so long
+  // reports don't exceed Telegram's 4096-char limit and parse_mode entities
+  // aren't cut mid-tag.
+  if (request.method === 'POST' && url.pathname === '/admin/notify') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    const token = env.NOTIFY_BOT_TOKEN || env.BOT_TOKEN;
+    const chatId = env.NOTIFY_CHAT_ID || env.ADMIN_CHAT_ID;
+    if (!token || !chatId) return Response.json({ error: 'bot_token_or_chat_id_missing' }, { status: 503 });
+
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return Response.json({ error: 'invalid_json' }, { status: 400 });
+    }
+    const text = String(body.text || '').slice(0, 40000);
+    if (!text.trim()) return Response.json({ error: 'text_required' }, { status: 400 });
+    const parseMode = body.parse_mode === 'HTML' || body.parse_mode === 'Markdown' || body.parse_mode === 'MarkdownV2'
+      ? body.parse_mode : undefined;
+
+    // Split on line boundaries first; fall back to code-point-safe chunking.
+    // Never cuts inside a surrogate pair (Array.from respects code points).
+    const MAX = 3500; // safety margin under Telegram's 4096-char limit
+    const chunks = [];
+    let buf = '';
+    const pushBuf = () => { if (buf) { chunks.push(buf); buf = ''; } };
+    for (const line of text.split('\n')) {
+      const candidate = buf ? buf + '\n' + line : line;
+      if (candidate.length <= MAX) { buf = candidate; continue; }
+      pushBuf();
+      if (line.length <= MAX) { buf = line; continue; }
+      // Line itself exceeds MAX — split by code points, not code units.
+      for (const ch of Array.from(line)) {
+        if ((buf + ch).length > MAX) pushBuf();
+        buf += ch;
+      }
+    }
+    pushBuf();
+
+    const results = [];
+    for (const chunk of chunks) {
+      const payload = { chat_id: String(chatId), text: chunk, disable_web_page_preview: true };
+      if (parseMode) payload.parse_mode = parseMode;
+      try {
+        const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(8000),
+        });
+        const data = await r.json().catch(() => ({}));
+        results.push({ ok: r.ok && data.ok === true, status: r.status, description: data.description || null });
+        if (!r.ok || data.ok !== true) break;
+      } catch (e) {
+        results.push({ ok: false, error: e?.message || 'fetch_failed' });
+        break;
+      }
+    }
+    const allOk = results.length > 0 && results.every((r) => r.ok);
+    return Response.json({ ok: allOk, chunks: results.length, results });
+  }
+
   return null;
 }

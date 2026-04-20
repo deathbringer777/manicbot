@@ -18,13 +18,23 @@
  */
 export const DEMO_CHAT_SRC = `
 (function () {
-  var scriptEl = document.currentScript;
+  // document.currentScript is null for async/defer scripts — fall back to
+  // finding any <script> whose src contains our known path segment.
+  var scriptEl = document.currentScript ||
+    (function () {
+      var scripts = document.querySelectorAll('script[src]');
+      for (var i = 0; i < scripts.length; i++) {
+        if (scripts[i].src.indexOf('/embed/demo-chat.js') !== -1) return scripts[i];
+      }
+      return null;
+    })();
   if (!scriptEl) return;
   var ORIGIN = new URL(scriptEl.src).origin;
   var SLUG = scriptEl.dataset.slug || 'preview-landing';
   var TARGET = scriptEl.dataset.target || '#mb-demo';
   var LANG = scriptEl.dataset.lang || 'ru';
   var STORAGE_KEY = 'mb.chat.' + SLUG;
+  var SESSION_TTL_MS = 24 * 60 * 60 * 1000;
   var POLL_MS = 3000;
   var HISTORY_CAP = 200;
 
@@ -79,13 +89,20 @@ export const DEMO_CHAT_SRC = `
       if (!raw) return null;
       var p = JSON.parse(raw);
       if (!p || !p.sessionId) return null;
+      // Discard sessions older than SESSION_TTL_MS so visitors start fresh.
+      if (p.savedAt && (Date.now() - p.savedAt) > SESSION_TTL_MS) {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
       return p;
     } catch (_) { return null; }
   }
   function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        sessionId: sessionId, lastTs: lastTs, messages: messages.slice(-HISTORY_CAP),
+        sessionId: sessionId, lastTs: lastTs,
+        messages: messages.slice(-HISTORY_CAP),
+        savedAt: Date.now(),
       }));
     } catch (_) {}
   }
@@ -98,6 +115,18 @@ export const DEMO_CHAT_SRC = `
     });
     return r.json();
   }
+
+  function showErrorBubble(text) {
+    var div = document.createElement('div');
+    div.className = 'mb-bubble bot';
+    div.style.cssText = 'color:#ef4444;background:#fef2f2;border:1px solid #fecaca';
+    div.textContent = text;
+    feed.appendChild(div);
+    scrollToBottom();
+  }
+
+  var _initRetries = 0;
+  var _initRetryTimer = null;
 
   async function init() {
     var persisted = loadPersisted();
@@ -114,9 +143,21 @@ export const DEMO_CHAT_SRC = `
       var res = await postJson('/chat/init', { slug: SLUG });
       if (!res || !res.ok) throw new Error((res && res.error) || 'init failed');
       sessionId = res.sessionId;
+      _initRetries = 0;
       persist();
       await sendRaw({ text: '/start', userLang: LANG });
-    } catch (e) { console.error('[mb-demo] init failed:', e); }
+    } catch (e) {
+      console.error('[mb-demo] init failed:', e);
+      _initRetries++;
+      var delay = Math.min(2000 * Math.pow(2, _initRetries - 1), 30000);
+      if (_initRetries === 1) {
+        showErrorBubble('Не удалось подключиться. Повторная попытка…');
+      }
+      _initRetryTimer = setTimeout(function () {
+        _initRetryTimer = null;
+        init();
+      }, delay);
+    }
   }
 
   function showTyping() {
@@ -143,7 +184,11 @@ export const DEMO_CHAT_SRC = `
         slug: SLUG, sessionId: sessionId, userLang: LANG,
       }, payload));
       hideTyping();
-      if (!res || !res.ok) { console.warn('[mb-demo] send error:', res); return; }
+      if (!res || !res.ok) {
+        console.warn('[mb-demo] send error:', res);
+        showErrorBubble('Ошибка отправки. Попробуйте ещё раз.');
+        return;
+      }
       (res.messages || []).forEach(function (m) {
         m.role = 'bot';
         if (m.ts > lastTs) lastTs = m.ts;
@@ -151,7 +196,11 @@ export const DEMO_CHAT_SRC = `
         renderBubble(m);
       });
       persist();
-    } catch (e) { hideTyping(); console.error('[mb-demo] send failed:', e); }
+    } catch (e) {
+      hideTyping();
+      console.error('[mb-demo] send failed:', e);
+      showErrorBubble('Нет соединения. Проверьте интернет.');
+    }
     finally { sending = false; sendBtn.disabled = false; input.focus(); }
   }
 

@@ -4,6 +4,19 @@ import { todayStr, warsawNow } from '../utils/date.js';
 import { canUse } from '../billing/features.js';
 
 export function mainKb(lg, role = 'client', ctx = null) {
+  // Preview mode (landing iPhone mockup): render a tight 4-button menu that
+  // matches the marketing design — Записаться / Каталог работ / Прайс-лист /
+  // Мои записи. No language / contacts / support rows so the iPhone screen
+  // doesn't overflow with unrelated affordances.
+  if (ctx?.previewMode && role === 'client') {
+    return { reply_markup: { inline_keyboard: [
+      [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+      [{ text: t(lg, 'm_cat'),  callback_data: CB.CATALOG },
+       { text: t(lg, 'm_prices'), callback_data: CB.PRICES }],
+      [{ text: t(lg, 'm_my'), callback_data: CB.MY }],
+    ] } };
+  }
+
   // Support button: always shown for clients; salon staff (master/admin) gated by plan
   const isSalonStaffKb = role === 'master' || role === 'tenant_owner';
   const showSupport = !ctx || !isSalonStaffKb || canUse(ctx, 'support_tickets');

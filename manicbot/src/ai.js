@@ -94,6 +94,15 @@ function bookingAdjustPromptExtra(bookingAdjust) {
   return `\n\nРЕЖИМ КОРРЕКТИРОВКИ ЗАПИСИ: клиент отклонил карточку подтверждения; слот сохранён: ${d} ${tm}. Если называет другую услугу — СРАЗУ [BOOK:svcId:${d}:${tm}] с верным svcId из списка услуг. НЕ запрашивай дату и время заново, пока пользователь сам их не меняет.`;
 }
 
+/**
+ * Guardrail prepended to the AI system prompt when the tenant is running in
+ * preview mode (landing iPhone mockup demo). Keeps the assistant focused on
+ * salon booking and forbids off-topic answers or invented data.
+ */
+const PREVIEW_GUARDRAIL = `
+РЕЖИМ ДЕМО-ЛЕНДИНГА: это публичное превью-окно на сайте, а не настоящий чат клиента. Держи ответы короткими (1–2 предложения) и строго по теме салона: запись, услуги и цены, мастера, часы работы, контакты. На любые off-topic вопросы (погода, политика, общая болтовня, вопросы про ИИ) вежливо возвращай к теме: «Я помогу записаться на маникюр — выбрать услугу или время?». Используй только услуги и мастеров из предоставленного контекста — ничего не выдумывай.
+`.trim();
+
 export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null, bookingAdjust = null) {
   const lang = langHint || 'русском';
   const td = today || todayStr();
@@ -249,14 +258,15 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 `.replace(/\n+/g, '\n').trim();
 
   const adj = bookingAdjustPromptExtra(bookingAdjust);
+  const previewPrefix = tenantCtx?.previewMode ? `${PREVIEW_GUARDRAIL}\n\n` : '';
   if (role === 'system_admin' || role === 'support') {
     // Strip the "never say you're AI" restriction — use \n (single, after newline collapse)
     const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:[^\n]*\n?/g, '').trim();
-    return `${adminBase}\n\n${sysAdminActions}${adj}`;
+    return `${previewPrefix}${adminBase}\n\n${sysAdminActions}${adj}`;
   }
-  if (role === 'tenant_owner') return `${base}\n\n${adminActions}${adj}`;
-  if (role === 'master') return `${base}\n\n${masterActions}${adj}`;
-  return `${base}\n\n${clientActions}${adj}`;
+  if (role === 'tenant_owner') return `${previewPrefix}${base}\n\n${adminActions}${adj}`;
+  if (role === 'master') return `${previewPrefix}${base}\n\n${masterActions}${adj}`;
+  return `${previewPrefix}${base}\n\n${clientActions}${adj}`;
 }
 
 export function parseAIResponse(out) {
@@ -471,6 +481,7 @@ function buildTenantCtxForAI(ctx) {
     hoursStr,
     services: services.length ? services : null,
     masters: masters.length ? masters.map(m => ({ name: m.displayName || m.name, chatId: m.chatId })) : null,
+    previewMode: !!ctx.previewMode,
   };
 }
 

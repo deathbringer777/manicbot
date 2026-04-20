@@ -8,6 +8,7 @@ import { listTenantIds, getBotIdsByTenantId } from './tenant/storage.js';
 import { handleCron } from './handlers/cron.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
+import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
 import { getCtx } from './http/resolveCtx.js';
 import { tryLanding } from './http/landingHttp.js';
 import { tryStripe } from './http/stripeHttp.js';
@@ -21,6 +22,7 @@ import { tryMetaWebhooks } from './http/metaWebhooksHttp.js';
 import { trySearchApi } from './http/searchHttp.js';
 import { tryUpload } from './http/uploadHttp.js';
 import { tryChatWeb } from './http/chatWebHttp.js';
+import { tryEmbed } from './http/embedHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { logEvent } from './utils/events.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
@@ -163,6 +165,7 @@ export default {
     }
 
     await ensureDemoBotsProvisioned(env);
+    await ensurePreviewTenantProvisioned(env);
 
     let res = await tryLanding(request, env, url);
     if (res) return addSecurityHeaders(res);
@@ -191,6 +194,10 @@ export default {
     // These need env.DB + env.MANICBOT; they build their own ctx internally.
     res = await tryChatWeb(request, env, url);
     if (res) return res; // Structured JSON response with own CORS headers
+
+    // Embeddable landing widget (/embed/demo-chat.js): static JS, public CORS.
+    res = await tryEmbed(request, env, url);
+    if (res) return addSecurityHeaders(res);
 
     const isAdminPath = url.pathname.startsWith('/admin/');
     const needsFallback = url.pathname !== '/' && !isAdminPath;

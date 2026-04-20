@@ -12,10 +12,17 @@ import { useLang } from "~/components/LangContext";
 import { useRole } from "~/components/RoleContext";
 import { t } from "~/lib/i18n";
 import { toast } from "~/lib/toast";
+import dynamic from "next/dynamic";
 import { PluginIcon } from "~/components/plugins/PluginIcon";
 import { InstallConfirmModal } from "~/components/plugins/InstallConfirmModal";
 import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
+import { hasRuntime, loadRuntime } from "~/components/plugins/runtimePanels";
 import { getPlugin } from "@plugins/index";
+
+const BackgroundRuntimePlaceholder = dynamic(
+  () => import("~/components/plugins/runtimes/BackgroundRuntimePlaceholder"),
+  { ssr: false, loading: () => null },
+);
 import type { PluginLang } from "@plugins/types";
 import { PLUGIN_LANGS } from "@plugins/types";
 
@@ -234,6 +241,24 @@ export default function PluginDetailClient() {
             {card.lock.kind === "plan" && `${t("plugins.lock.plan", lang)}: ${card.lock.required.toUpperCase()}`}
           </span>
         </div>
+      )}
+
+      {/* Runtime — inline working area for installed+enabled plugins. */}
+      {card.installed && card.enabled && card.installationId && (
+        (() => {
+          const RuntimeComponent = hasRuntime(slug)
+            ? loadRuntime(slug)
+            : BackgroundRuntimePlaceholder;
+          if (!RuntimeComponent) return null;
+          return (
+            <section className="mt-6" data-testid="plugin-runtime-area">
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">
+                {manifest.name[pluginLang]}
+              </h2>
+              <RuntimeComponent installationId={card.installationId} slug={slug} />
+            </section>
+          );
+        })()
       )}
 
       <section className="mt-6">

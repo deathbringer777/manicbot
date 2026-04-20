@@ -195,6 +195,14 @@ export const pluginsRouter = createTRPCRouter({
 
       const cards: CatalogCard[] = [];
       for (const m of listManifests()) {
+        // Hide plugins not advertised for the viewer's role from the catalog
+        // entirely (except for system_admin, who sees everything for testing).
+        // Rule: role === null → show nothing except universal plugins (any role).
+        //      role !== system_admin → only plugins whose availableForRoles
+        //                             includes that role are surfaced.
+        if (role && role !== "system_admin" && !(m.availableForRoles as string[]).includes(role)) {
+          continue;
+        }
         const installed = installedSlugs.has(m.slug);
         if (input?.installedOnly && !installed) continue;
         const installRow = installIndex.get(m.slug) ?? null;

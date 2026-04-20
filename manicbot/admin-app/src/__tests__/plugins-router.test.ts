@@ -92,13 +92,15 @@ describe("pluginsRouter.listCatalog", () => {
     expect(live?.lock.kind).toBe("plan");
   });
 
-  it("marks platform_only plugins for non-admin viewers", async () => {
+  it("hides platform-only plugins from non-admin viewers entirely", async () => {
+    // New behaviour: server-side filter strips plugins whose availableForRoles
+    // doesn't include the viewer's role, so tenant_owner never sees
+    // platform-test (system_admin-only) in their catalog.
     const { db } = createDbMock([[{ plan: "pro" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "ru" });
     const platform = cards.find((c) => c.slug === "platform-test");
-    // tenant_owner is not in availableForRoles → role_mismatch wins first.
-    expect(platform?.lock.kind).toBe("role_mismatch");
+    expect(platform).toBeUndefined();
   });
 
   it("falls back to ru when unknown lang is passed", async () => {

@@ -15,10 +15,10 @@ const manifest: PluginManifest = {
     pl: "Przypomnienia SMS",
   },
   tagline: {
-    ru: "Автоматические SMS клиентам за сутки и за два часа",
-    ua: "Автоматичні SMS клієнтам за добу і за дві години",
-    en: "Automatic SMS 24h and 2h before appointments",
-    pl: "Automatyczne SMS 24h i 2h przed wizytą",
+    ru: "Клиенты не забывают о записи — меньше пустых окон",
+    ua: "Клієнти не забувають про запис — менше порожніх вікон",
+    en: "Clients never forget the appointment — fewer empty slots",
+    pl: "Klienci nie zapominają o wizycie — mniej pustych okienek",
   },
   description: {
     ru: "Снижает количество no-show на 30-50%. Шаблоны на 4 языках, отправка через Brevo SMS API. Подключается в пару кликов.",

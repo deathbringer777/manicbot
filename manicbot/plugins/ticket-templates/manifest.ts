@@ -11,14 +11,14 @@ const manifest: PluginManifest = {
   name: {
     ru: "Шаблоны ответов",
     ua: "Шаблони відповідей",
-    en: "Ticket Templates",
-    pl: "Szablony zgłoszeń",
+    en: "Response Templates",
+    pl: "Szablony odpowiedzi",
   },
   tagline: {
-    ru: "Заготовленные ответы для типовых тикетов",
-    ua: "Заготовлені відповіді для типових тикетів",
-    en: "Canned responses for common tickets",
-    pl: "Gotowe odpowiedzi na typowe zgłoszenia",
+    ru: "Готовые фразы — один клик и ответ вставлен",
+    ua: "Готові фрази — один клік і відповідь вставлена",
+    en: "Ready phrases — one click to paste a reply",
+    pl: "Gotowe frazy — jeden klik wkleja odpowiedź",
   },
   description: {
     ru: "Библиотека шаблонов: onboarding, billing, bug-report, prompt-injection. Вставляются в ответ одним кликом.",

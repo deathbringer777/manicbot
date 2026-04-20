@@ -15,10 +15,10 @@ const manifest: PluginManifest = {
     pl: "Skróty klawiaturowe",
   },
   tagline: {
-    ru: "Vim-style g-g, g-t навигация",
-    ua: "Vim-style g-g, g-t навігація",
-    en: "Vim-style g-g, g-t navigation",
-    pl: "Nawigacja vim-style g-g, g-t",
+    ru: "Работать быстрее без мышки",
+    ua: "Працювати швидше без миші",
+    en: "Work faster without the mouse",
+    pl: "Pracuj szybciej bez myszki",
   },
   description: {
     ru: "g-g → Dashboard, g-t → Tenants, g-u → Users. ? открывает справку по шорткатам.",

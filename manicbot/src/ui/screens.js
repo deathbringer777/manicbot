@@ -23,7 +23,7 @@ export async function showWelcome(ctx, cid, name) {
   const role = await getRole(ctx, cid);
   const salonName = ctx.tenant?.salon?.name || SALON;
   await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
-  await send(ctx, cid, fill(t(lg, 'welcome'), { s: salonName, n: escHtml(name) }), mainKb(lg, role));
+  await send(ctx, cid, fill(t(lg, 'welcome'), { s: salonName, n: escHtml(name) }), mainKb(lg, role, ctx));
 }
 
 /**

@@ -5,7 +5,7 @@
  * and builds a channel-scoped ctx ready for handler processing.
  */
 
-import { dbAll, dbRun } from '../utils/db.js';
+import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { encryptToken } from '../utils/security.js';
 import { decryptToken } from '../utils/security.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
@@ -219,6 +219,21 @@ export async function buildChannelCtx(env, tenantId, channelConfig, channelAdapt
     botToken = bot ? await getBotToken(ec, botIds[0], env.BOT_ENCRYPTION_KEY || null) : null;
   }
 
+  // Preview-mode flag (set by `ensurePreviewTenantProvisioned`). When true, the
+  // Worker suppresses destructive writes (saveApt, cancelApt) and adds an AI
+  // guardrail so the demo stays on-topic. Flag lives in `tenant_config` rather
+  // than a dedicated column because it's a platform-internal marker, not
+  // tenant-facing configuration.
+  let previewMode = false;
+  if (ec.db) {
+    const row = await dbGet(
+      ec,
+      "SELECT value FROM tenant_config WHERE tenant_id = ? AND key = 'preview_mode'",
+      tenantId,
+    ).catch(() => null);
+    if (row?.value === '1') previewMode = true;
+  }
+
   const prefix = `t:${tenantId}:`;
   const ctx = {
     ...env,
@@ -240,6 +255,7 @@ export async function buildChannelCtx(env, tenantId, channelConfig, channelAdapt
     baseUrl: null,
     channelConfig, // raw channel_configs row + decrypted token
     channel: channelAdapter,
+    previewMode,
   };
   return ctx;
 }

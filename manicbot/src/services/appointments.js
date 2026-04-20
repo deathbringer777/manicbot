@@ -147,6 +147,28 @@ export async function loadDayAppointments(ctx, date, masterId = null) {
 }
 
 export async function saveApt(ctx, apt) {
+  // Preview-mode short-circuit: landing demo tenant must not write real
+  // appointments. Return a synthetic doc so the confirmation UI still renders
+  // "✅ Запись оформлена". Flag is set by channels/resolver.js from
+  // tenant_config.preview_mode and by src/tenant/previewTenant.js.
+  if (ctx?.previewMode) {
+    const rnd = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(36)).join('').slice(0, 8);
+    return {
+      ...apt,
+      id: `demo_${rnd}`,
+      masterId: apt.masterId || null,
+      status: 'pending',
+      createdAt: nowSec(),
+      rem: { h24: false, h2: false },
+      confirmedBy: null,
+      counterTime: null,
+      counterComment: null,
+      rejectComment: null,
+      cancelReason: null,
+      previewOnly: true,
+    };
+  }
+
   if (!ctx?.db || !ctx?.tenantId) {
     const ul = (await kvGet(ctx, `ua:${apt.chatId}`)) || [];
     const existing = await Promise.all(ul.map(id => kvGet(ctx, `ap:${id}`)));
@@ -246,6 +268,20 @@ export async function getAdminAllApts(ctx) {
 }
 
 export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
+  // Preview-mode: demo appointments use `demo_<rnd>` ids (no DB row); treat
+  // cancel as a successful no-op so the UI flow still completes end-to-end.
+  if (ctx?.previewMode) {
+    return {
+      id,
+      chatId: ownerChatId,
+      cx: true,
+      cancelled: true,
+      status: 'cancelled',
+      cancelledBy: adminOverride ? 'admin' : 'client',
+      cancelledAt: Math.floor(Date.now() / 1000),
+      previewOnly: true,
+    };
+  }
   if (!/^a\d+_\w+$/.test(id)) return null;
   if (!ctx?.db || !ctx?.tenantId) {
     const a = normalizeAptDoc(await kvGet(ctx, `ap:${id}`));

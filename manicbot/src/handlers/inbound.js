@@ -27,7 +27,9 @@ export async function handleInbound(ctx, inbound) {
   if (!inbound) return;
 
   // 1. Side-effects: message window, identity, conversation (non-blocking for Telegram)
-  if (ctx.db && inbound.tenantId) {
+  // Preview mode (landing demo) skips all D1 side-effect writes to avoid
+  // polluting real tables with synthetic demo-session data.
+  if (ctx.db && inbound.tenantId && !ctx.previewMode) {
     const sideEffects = [];
 
     // Message window: track last user message time for WA/IG 24h window

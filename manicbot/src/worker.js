@@ -23,6 +23,7 @@ import { trySearchApi } from './http/searchHttp.js';
 import { tryUpload } from './http/uploadHttp.js';
 import { tryChatWeb } from './http/chatWebHttp.js';
 import { tryEmbed } from './http/embedHttp.js';
+import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { logEvent } from './utils/events.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
@@ -166,6 +167,11 @@ export default {
 
     await ensureDemoBotsProvisioned(env);
     await ensurePreviewTenantProvisioned(env);
+
+    // /demo — self-contained iPhone mockup with live preview-landing chat widget.
+    // Must come before tryLanding so the landing proxy doesn't swallow it.
+    const demoRes = tryDemoPage(request, env, url);
+    if (demoRes) return demoRes;
 
     let res = await tryLanding(request, env, url);
     if (res) return addSecurityHeaders(res);

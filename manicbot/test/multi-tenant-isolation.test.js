@@ -398,15 +398,17 @@ describe('cross-tenant appointment isolation', () => {
       svcIds: new Set(['classic']),
     };
 
+    // Use a future timestamp so `getApts` (ts > Date.now() - 3600000) doesn't filter them out.
+    const futureTs = Date.now() + 86400000;
     await saveApt(ctxA, {
-      chatId: 10, svcId: 'classic', date: '2026-04-20', time: '10:00',
-      ts: warsawToUTC(2026, 4, 20, 10, 0).getTime(),
+      chatId: 10, svcId: 'classic', date: '2026-04-21', time: '10:00',
+      ts: futureTs,
       userName: 'ClientA', userPhone: '+48111',
     });
 
     await saveApt(ctxB, {
-      chatId: 20, svcId: 'classic', date: '2026-04-20', time: '11:00',
-      ts: warsawToUTC(2026, 4, 20, 11, 0).getTime(),
+      chatId: 20, svcId: 'classic', date: '2026-04-21', time: '11:00',
+      ts: futureTs + 3600000,
       userName: 'ClientB', userPhone: '+48222',
     });
 

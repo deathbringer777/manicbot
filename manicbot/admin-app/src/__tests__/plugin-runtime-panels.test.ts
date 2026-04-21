@@ -79,7 +79,6 @@ describe("Friendly plugin names — no tech jargon for non-admin roles", () => {
     expect(aiab.name.ru.toLowerCase()).not.toContain("abuse");
     const gdpr = listManifests().find((m) => m.slug === "gdpr-center")!;
     expect(gdpr.name.ru).not.toContain("GDPR");
-    const rev = listManifests().find((m) => m.slug === "revenue-intelligence")!;
-    expect(rev.name.ru).not.toContain("Intelligence");
+    // revenue-intelligence was removed (duplicated God Mode billing analytics); gdpr-center verified above
   });
 });

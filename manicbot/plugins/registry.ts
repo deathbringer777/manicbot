@@ -23,25 +23,21 @@ import helloWorldManifest from "./_hello-world/manifest";
 import liveTestManifest from "./_live-test/manifest";
 import platformTestManifest from "./_platform-test/manifest";
 
-// ── system_admin (5) ────────────────────────────────────────────────────────
-import platformAnalyticsProManifest from "./platform-analytics-pro/manifest";
+// ── system_admin (3) ────────────────────────────────────────────────────────
 import aiAbuseMonitorManifest from "./ai-abuse-monitor/manifest";
-import revenueIntelligenceManifest from "./revenue-intelligence/manifest";
 import fraudShieldManifest from "./fraud-shield/manifest";
 import gdprCenterManifest from "./gdpr-center/manifest";
 
-// ── tenant_owner (5) ────────────────────────────────────────────────────────
-import smsRemindersManifest from "./sms-reminders/manifest";
+// ── tenant_owner (4) ────────────────────────────────────────────────────────
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
 import birthdayCampaignsManifest from "./birthday-campaigns/manifest";
 import noShowShieldManifest from "./no-show-shield/manifest";
 import multiLangBotManifest from "./multi-lang-bot/manifest";
 
-// ── tenant_manager (5) ──────────────────────────────────────────────────────
+// ── tenant_manager (4) ──────────────────────────────────────────────────────
 import shiftPlannerManifest from "./shift-planner/manifest";
 import taskBoardManifest from "./task-board/manifest";
 import inventoryLiteManifest from "./inventory-lite/manifest";
-import commissionCalcManifest from "./commission-calc/manifest";
 import dailyCloseManifest from "./daily-close/manifest";
 
 // ── master (5) ──────────────────────────────────────────────────────────────
@@ -58,12 +54,17 @@ import slaTrackerManifest from "./sla-tracker/manifest";
 import customerHealthScoreManifest from "./customer-health-score/manifest";
 import kbSearchManifest from "./kb-search/manifest";
 
-// ── universal (5) ───────────────────────────────────────────────────────────
+// ── universal (8) ───────────────────────────────────────────────────────────
 import commandPaletteManifest from "./command-palette/manifest";
 import activityFeedManifest from "./activity-feed/manifest";
 import keyboardShortcutsManifest from "./keyboard-shortcuts/manifest";
 import darkPlusManifest from "./dark-plus/manifest";
 import exportHubManifest from "./export-hub/manifest";
+import quickNotesManifest from "./quick-notes/manifest";
+
+// ── master + tenant_owner (2) ───────────────────────────────────────────────
+import bookingReminderManifest from "./booking-reminder/manifest";
+import messageTemplatesManifest from "./message-templates/manifest";
 
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // fixtures
@@ -71,13 +72,10 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   liveTestManifest,
   platformTestManifest,
   // system_admin
-  platformAnalyticsProManifest,
   aiAbuseMonitorManifest,
-  revenueIntelligenceManifest,
   fraudShieldManifest,
   gdprCenterManifest,
   // tenant_owner
-  smsRemindersManifest,
   loyaltyStampsManifest,
   birthdayCampaignsManifest,
   noShowShieldManifest,
@@ -86,7 +84,6 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   shiftPlannerManifest,
   taskBoardManifest,
   inventoryLiteManifest,
-  commissionCalcManifest,
   dailyCloseManifest,
   // master
   portfolioGalleryManifest,
@@ -106,21 +103,19 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   keyboardShortcutsManifest,
   darkPlusManifest,
   exportHubManifest,
+  quickNotesManifest,
+  // master + tenant_owner
+  bookingReminderManifest,
+  messageTemplatesManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────
 
-const PLUGIN_ROUTER_LOADERS: Record<string, PluginModule["loadRouter"]> = {
-  // "sms-reminders": () => import("./sms-reminders/router").then(m => ({ router: m.router })),
-};
+const PLUGIN_ROUTER_LOADERS: Record<string, PluginModule["loadRouter"]> = {};
 
-const PLUGIN_LIFECYCLE_LOADERS: Record<string, PluginModule["loadLifecycle"]> = {
-  // "sms-reminders": () => import("./sms-reminders/lifecycle"),
-};
+const PLUGIN_LIFECYCLE_LOADERS: Record<string, PluginModule["loadLifecycle"]> = {};
 
-const PLUGIN_HEALTH_LOADERS: Record<string, PluginModule["loadHealth"]> = {
-  // "sms-reminders": () => import("./sms-reminders/health"),
-};
+const PLUGIN_HEALTH_LOADERS: Record<string, PluginModule["loadHealth"]> = {};
 
 // ─── Registry assembly ──────────────────────────────────────────────────────
 

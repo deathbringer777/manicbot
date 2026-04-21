@@ -17,8 +17,8 @@ const manifests = listManifests();
 const realPlugins = manifests.filter((m) => !/^(hello-world|live-test|platform-test)$/.test(m.slug));
 
 describe("Seeded catalog — global shape", () => {
-  it("at least 30 real plugins are registered", () => {
-    expect(realPlugins.length).toBeGreaterThanOrEqual(30);
+  it("at least 26 real plugins are registered", () => {
+    expect(realPlugins.length).toBeGreaterThanOrEqual(26);
   });
 
   it("no duplicate slugs", () => {

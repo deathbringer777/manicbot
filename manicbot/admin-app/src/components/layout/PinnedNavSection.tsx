@@ -38,7 +38,7 @@ export function PinnedNavSection({
       .filter((m): m is NonNullable<typeof m> => !!m)
       .map((m) => ({
         slug: m.slug,
-        href: `/plugins/${m.slug}`,
+        href: `/plugin/${m.slug}`,
         label: m.name[pluginLang],
         Icon: resolvePluginIcon(m.icon.name),
         tint: m.icon.tint,

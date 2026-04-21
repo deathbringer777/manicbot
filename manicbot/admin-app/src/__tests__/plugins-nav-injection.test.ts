@@ -34,9 +34,9 @@ function filterContributionsFor(
 }
 
 const basic: NavContribution = {
-  id: "plugin.sms-reminders",
-  href: "/plugins/sms-reminders/settings",
-  iconName: "Bell",
+  id: "plugin.quick-notes",
+  href: "/plugins/quick-notes/settings",
+  iconName: "StickyNote",
   labelKey: "self.name",
   roles: ["tenant_owner"],
 };

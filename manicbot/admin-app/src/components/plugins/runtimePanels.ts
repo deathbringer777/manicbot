@@ -30,6 +30,9 @@ const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
   "availability-share": () => import("./runtimes/AvailabilityShareRuntime"),
   "earnings-goal": () => import("./runtimes/EarningsGoalRuntime"),
   "client-crm-lite": () => import("./runtimes/ClientCrmLiteRuntime"),
+  "quick-notes": () => import("./runtimes/QuickNotesRuntime"),
+  "booking-reminder": () => import("./runtimes/BookingReminderRuntime"),
+  "message-templates": () => import("./runtimes/MessageTemplatesRuntime"),
 };
 
 export function loadRuntime(slug: string): ComponentType<PluginRuntimeProps> | null {

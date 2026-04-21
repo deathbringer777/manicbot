@@ -1,19 +1,27 @@
 /**
  * Pure tests for the "Open" URL resolution + availableFor label formatting
  * used by PluginDetailClient.
+ *
+ * Updated: plugins with a runtime now return `/plugin/<slug>` as openUrl.
  */
 
 import { describe, it, expect } from "vitest";
 import { listManifests, getPlugin } from "@plugins/index";
+import { hasRuntime } from "~/components/plugins/runtimePanels";
 import type { PluginManifest, PluginRole } from "@plugins/types";
 
 function resolveOpenUrl(
+  slug: string,
   manifest: PluginManifest,
   installed: boolean,
   enabled: boolean,
   role: PluginRole | null,
 ): string | null {
   if (!installed || !enabled) return null;
+  // Plugins with a runtime get the dedicated open page.
+  if (hasRuntime(slug)) {
+    return `/plugin/${slug}`;
+  }
   if (manifest.capabilities.settingsPanel) {
     return `/settings?section=${manifest.capabilities.settingsPanel.sectionKey}`;
   }
@@ -26,23 +34,31 @@ describe("resolveOpenUrl", () => {
   const plainManifest = getPlugin("ai-abuse-monitor")!.manifest;
 
   it("returns null when not installed", () => {
-    expect(resolveOpenUrl(plainManifest, false, false, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("ai-abuse-monitor", plainManifest, false, false, "system_admin")).toBeNull();
   });
 
   it("returns null when installed but not enabled", () => {
-    expect(resolveOpenUrl(plainManifest, true, false, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("ai-abuse-monitor", plainManifest, true, false, "system_admin")).toBeNull();
   });
 
-  it("returns null for a plugin with no settingsPanel + no nav", () => {
-    expect(resolveOpenUrl(plainManifest, true, true, "system_admin")).toBeNull();
+  it("returns null for a plugin with no runtime, no settingsPanel + no nav", () => {
+    expect(resolveOpenUrl("ai-abuse-monitor", plainManifest, true, true, "system_admin")).toBeNull();
   });
 
-  it("returns settings URL when plugin has settingsPanel", () => {
+  it("returns /plugin/<slug> when plugin has a runtime", () => {
+    const runtimeSlug = "quick-notes";
+    const m = getPlugin(runtimeSlug)!.manifest;
+    expect(resolveOpenUrl(runtimeSlug, m, true, true, "system_admin")).toBe(`/plugin/${runtimeSlug}`);
+  });
+
+  it("returns settings URL when plugin has settingsPanel but no runtime", () => {
     const m: PluginManifest = {
       ...plainManifest,
+      slug: "ai-abuse-monitor", // ensure no runtime override
       capabilities: { settingsPanel: { sectionKey: "plugin:x", componentId: "x.Panel" } },
     };
-    expect(resolveOpenUrl(m, true, true, "system_admin")).toBe("/settings?section=plugin:x");
+    // ai-abuse-monitor has no runtime, so settingsPanel takes precedence
+    expect(resolveOpenUrl("ai-abuse-monitor", m, true, true, "system_admin")).toBe("/settings?section=plugin:x");
   });
 
   it("returns nav[0].href when only nav contributions exist and role matches", () => {
@@ -54,7 +70,7 @@ describe("resolveOpenUrl", () => {
         ],
       },
     };
-    expect(resolveOpenUrl(m, true, true, "tenant_owner")).toBe("/plugins/x/settings");
+    expect(resolveOpenUrl("ai-abuse-monitor", m, true, true, "tenant_owner")).toBe("/plugins/x/settings");
   });
 
   it("nav match respects role filter", () => {
@@ -66,7 +82,7 @@ describe("resolveOpenUrl", () => {
         ],
       },
     };
-    expect(resolveOpenUrl(m, true, true, "tenant_owner")).toBeNull();
+    expect(resolveOpenUrl("ai-abuse-monitor", m, true, true, "tenant_owner")).toBeNull();
   });
 });
 

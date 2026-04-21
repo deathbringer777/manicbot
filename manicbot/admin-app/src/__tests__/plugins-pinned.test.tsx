@@ -87,11 +87,11 @@ describe("usePinnedPlugins — server-backed (mocked tRPC)", () => {
   });
 
   it("mirrors server truth to localStorage for next-paint seeding", async () => {
-    mockPinnedData = ["sms-reminders"];
+    mockPinnedData = ["quick-notes"];
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem("manicbot_pinned_plugins") ?? "[]")).toEqual([
-        "sms-reminders",
+        "quick-notes",
       ]);
     });
   });

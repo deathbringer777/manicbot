@@ -103,6 +103,7 @@ export default function DashboardLayout({
   // Non-admin roles get their dedicated dashboard inside WebShell.
   // /settings is always rendered as {children} so SettingsPageClient mounts for all roles.
   const isSettingsPage = pathname === "/settings";
+  const isPluginsPage = pathname === "/plugins" || pathname.startsWith("/plugins/") || pathname.startsWith("/plugin/");
 
   // Gate: block dashboard content if email is not verified (except /settings)
   function wrapWithEmailGate(content: React.ReactNode) {
@@ -128,15 +129,13 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage
+            isSettingsPage || isPluginsPage
               ? children
-              : pathname === "/plugins" || pathname.startsWith("/plugins/")
-                ? children
-                : !effectiveTenantId
-                  ? <NoTenantOnboarding role="tenant_owner" />
-                  : previewMasterId !== null
-                    ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
-                    : <SalonDashboard tenantId={effectiveTenantId} />
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="tenant_owner" />
+                : previewMasterId !== null
+                  ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
+                  : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
         <CommandPalette />
@@ -151,13 +150,11 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage
+            isSettingsPage || isPluginsPage
               ? children
-              : pathname === "/plugins" || pathname.startsWith("/plugins/")
-                ? children
-                : !effectiveTenantId
-                  ? <NoTenantOnboarding role="tenant_owner" />
-                  : <SalonDashboard tenantId={effectiveTenantId} />
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="tenant_owner" />
+                : <SalonDashboard tenantId={effectiveTenantId} />
           )}
         </WebShell>
         <CommandPalette />
@@ -171,13 +168,11 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage
+            isSettingsPage || isPluginsPage
               ? children
-              : pathname === "/plugins" || pathname.startsWith("/plugins/")
-                ? children
-                : !effectiveTenantId
-                  ? <NoTenantOnboarding role="master" />
-                  : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
+              : !effectiveTenantId
+                ? <NoTenantOnboarding role="master" />
+                : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
           )}
         </WebShell>
         <CommandPalette />
@@ -191,7 +186,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage || pathname === "/plugins" || pathname.startsWith("/plugins/")
+            isSettingsPage || isPluginsPage
               ? children
               : <SupportDashboard />,
           )}

@@ -10,6 +10,7 @@ import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
 import { toast } from "~/lib/toast";
 import { useEffect, useRef } from "react";
 import { getPlugin } from "@plugins/index";
+import { hasRuntime } from "./runtimePanels";
 import type { CatalogCard } from "@plugins/types";
 
 function categoryLabel(cat: CatalogCard["category"], lang: Lang): string {
@@ -78,13 +79,17 @@ export function PluginCard({ card }: { card: CatalogCard }) {
     }
   }, [pinError, lang]);
   const pinned = isPinned(card.slug);
-  const href = `/plugins/${card.slug}`;
+  const detailHref = `/plugins/${card.slug}`;
   const actionable = card.installed && card.lock.kind === "none";
   const plugin = getPlugin(card.slug);
   const hasSettingsPanel = !!plugin?.manifest.capabilities.settingsPanel;
   const settingsHref = plugin?.manifest.capabilities.settingsPanel
     ? `/settings?section=${plugin.manifest.capabilities.settingsPanel.sectionKey}`
     : null;
+  // "Open" for installed plugins with a runtime goes to the dedicated runtime page.
+  const openHref = card.installed && hasRuntime(card.slug)
+    ? `/plugin/${card.slug}`
+    : detailHref;
 
   const body = (
     <div
@@ -167,7 +172,7 @@ export function PluginCard({ card }: { card: CatalogCard }) {
             </Link>
           )}
           <Link
-            href={href}
+            href={openHref}
             data-testid="plugin-card-cta"
             className="text-[12px] font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 inline-flex items-center gap-0.5 group/cta px-2 py-1"
           >

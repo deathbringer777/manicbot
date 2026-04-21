@@ -41,7 +41,7 @@ describe("HealthGrid", () => {
 
   it("appends a plugins-health section when any manifest declares healthCheck", () => {
     renderWithLang(<HealthGrid />);
-    // ai-abuse-monitor + sla-tracker + sms-reminders all declare healthCheck in seed catalog
+    // ai-abuse-monitor + sla-tracker declare healthCheck in seed catalog
     const pluginsRow = screen.getByTestId("health-grid-plugins");
     expect(pluginsRow).toBeTruthy();
   });

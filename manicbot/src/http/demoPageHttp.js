@@ -169,6 +169,23 @@ const HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+// #S13 — restrict resources to same origin. Inline <style> is required by the
+// current HTML, so style-src allows 'unsafe-inline'. Images/logos can come from
+// external CDNs (salon logos stored on R2/generic https). connect-src 'self'
+// since the widget talks only to /chat/* on the script's own origin.
+const DEMO_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "connect-src 'self'",
+  "font-src 'self' data:",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  "object-src 'none'",
+].join('; ');
+
 export function tryDemoPage(request, env, url) {
   if (url.pathname !== '/demo') return null;
   if (request.method !== 'GET' && request.method !== 'HEAD') return null;
@@ -177,6 +194,7 @@ export function tryDemoPage(request, env, url) {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-cache',
+      'Content-Security-Policy': DEMO_CSP,
       // Allow same-origin framing so the landing page can embed via <iframe>
       // without the full X-Frame-Options: DENY restriction applied to admin pages.
       'X-Frame-Options': 'SAMEORIGIN',

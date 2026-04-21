@@ -38,6 +38,11 @@ export async function tryEmbed(request, env, url) {
         // 5 minute cache at the edge / in the browser; source changes ride the
         // next Worker deploy so a short window keeps it reasonably fresh.
         'Cache-Control': 'public, max-age=300',
+        // #S13 — defense-in-depth. CSP on JS responses is not enforced by the
+        // browser (applies to HTML docs), but it documents intent and is
+        // harmless. The real enforcement lives on the hosting page.
+        'Content-Security-Policy': "default-src 'self'; script-src 'self'",
+        'X-Content-Type-Options': 'nosniff',
         ...CORS_HEADERS,
       },
     });

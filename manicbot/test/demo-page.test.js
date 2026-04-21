@@ -59,4 +59,21 @@ describe('tryDemoPage', () => {
     const res = tryDemoPage(request, {}, url);
     expect(res.headers.get('Cache-Control')).toContain('no-cache');
   });
+
+  // #S13 — CSP regression
+  it('sets a strict Content-Security-Policy header', () => {
+    const { request, url } = makeReq('GET', '/demo');
+    const res = tryDemoPage(request, {}, url);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toBeTruthy();
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).not.toContain("'unsafe-eval'");
+    // script-src must NOT allow inline scripts (the page uses an external
+    // <script src="/embed/...">), so a stray inline <script> would be blocked.
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+  });
 });

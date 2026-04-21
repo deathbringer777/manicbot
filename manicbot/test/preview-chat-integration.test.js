@@ -249,18 +249,36 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     expect(SRC).toMatch(/calc\(var\(--mb-island-clear\)/);
   });
 
-  // #S15 — dark mode: widget honours host <html class="dark"> and OS pref.
-  it('applies dark theme when host has html.dark or prefers-color-scheme:dark', () => {
-    expect(SRC).toMatch(/prefers-color-scheme: dark/);
+  // #S15 — dark mode follows host html.dark; OS pref is only a fallback when
+  // the host clearly doesn't manage theme (so a light landing on a dark-OS
+  // device still renders a light widget, matching the visible page state).
+  it('mirrors host html.dark for theming and watches for runtime toggles', () => {
     expect(SRC).toMatch(/classList\.contains\(['"]dark['"]\)/);
     expect(SRC).toMatch(/mb-demo\.mb-dark/);
-    // MutationObserver watches for runtime theme toggles on the landing
     expect(SRC).toMatch(/MutationObserver/);
+    expect(SRC).toMatch(/attributeFilter.*class/);
   });
 
-  // CSS variables should drive background/foreground so dark mode flips cleanly.
-  it('uses --mb-bg and --mb-fg variables instead of hardcoded white', () => {
-    expect(SRC).toMatch(/var\(--mb-bg/);
-    expect(SRC).toMatch(/var\(--mb-fg/);
+  it('falls back to prefers-color-scheme:dark only when host does not manage theme', () => {
+    expect(SRC).toMatch(/hostManagesTheme/);
+    expect(SRC).toMatch(/prefers-color-scheme: dark/);
+  });
+
+  // Every chrome colour must resolve through a CSS variable — no stray
+  // hardcoded white/black that would lock the widget to one theme.
+  it('drives all chrome colours through --mb-* variables', () => {
+    expect(SRC).toMatch(/--mb-bg:#ffffff/);
+    expect(SRC).toMatch(/--mb-fg:#1a1a1a/);
+    expect(SRC).toMatch(/--mb-btn-bg:#ffffff/);
+    expect(SRC).toMatch(/--mb-btn-text:#1a1a1a/);
+    expect(SRC).toMatch(/--mb-input-placeholder/);
+    // Dark palette matches the spec (iOS system surface colours).
+    expect(SRC).toMatch(/--mb-bg:#1c1c1e/);
+    expect(SRC).toMatch(/--mb-btn-bg:#2c2c2e/);
+    expect(SRC).toMatch(/--mb-input-text:#ffffff/);
+    expect(SRC).toMatch(/--mb-statusbar-bg:#000000/);
+    // Button text must be explicit (not color:inherit) so the label stays
+    // readable when the surrounding bubble's text colour differs.
+    expect(SRC).toMatch(/\.mb-btn\{[^}]*color:var\(--mb-btn-text\)/);
   });
 });

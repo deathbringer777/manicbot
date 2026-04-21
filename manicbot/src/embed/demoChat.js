@@ -76,44 +76,93 @@ export const DEMO_CHAT_SRC = `
     // at the top of the widget so the statusbar sits BELOW the host phone
     // mockup's Dynamic Island SVG (which sits above the screen with higher
     // z-index on the landing mockup).
-    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--mb-fg,#0f172a);overflow:hidden;background:var(--mb-bg,#fff);--mb-island-clear:0px}' +
+    // Light theme is the default palette (declared on .mb-demo). Dark theme
+    // overrides the same variables when .mb-dark is applied. Every visual
+    // surface/text/border colour resolves through a variable — no stray
+    // hardcoded #fff / #000 / slate tokens inside the widget chrome.
+    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;overflow:hidden;' +
+      '--mb-island-clear:0px;' +
+      '--mb-bg:#ffffff;' +
+      '--mb-fg:#1a1a1a;' +
+      '--mb-muted:#64748b;' +
+      '--mb-surface:#f5f5f5;' +
+      '--mb-border:#e0e0e0;' +
+      '--mb-statusbar-bg:#ffffff;' +
+      '--mb-statusbar-fg:#1a1a1a;' +
+      '--mb-header-bg:#ffffff;' +
+      '--mb-bubble-bot:#f1f5f9;' +
+      '--mb-bot-text:#1a1a1a;' +
+      '--mb-bubble-user:#8b5cf6;' +
+      '--mb-user-text:#ffffff;' +
+      '--mb-btn-bg:#ffffff;' +
+      '--mb-btn-text:#1a1a1a;' +
+      '--mb-btn-border:#d0d0d0;' +
+      '--mb-btn-hover:#f5f5f5;' +
+      '--mb-input-bg:#f5f5f5;' +
+      '--mb-input-text:#1a1a1a;' +
+      '--mb-input-placeholder:#999999;' +
+      '--mb-composer-border:#e0e0e0;' +
+      'color:var(--mb-fg);background:var(--mb-bg)}' +
+    // Dark theme — applied when the HOST page has <html class="dark"> (or the
+    // visitor's OS prefers dark AND the host hasn't opted into light). The
+    // landing script already reconciles OS pref into html.dark, so mirroring
+    // html.dark alone is sufficient and never contradicts the visible page.
+    '.mb-demo.mb-dark{' +
+      '--mb-bg:#1c1c1e;' +
+      '--mb-fg:#ffffff;' +
+      '--mb-muted:#8e8e93;' +
+      '--mb-surface:#2c2c2e;' +
+      '--mb-border:#3a3a3c;' +
+      '--mb-statusbar-bg:#000000;' +
+      '--mb-statusbar-fg:#ffffff;' +
+      '--mb-header-bg:#1c1c1e;' +
+      '--mb-bubble-bot:#2c2c2e;' +
+      '--mb-bot-text:#ffffff;' +
+      '--mb-btn-bg:#2c2c2e;' +
+      '--mb-btn-text:#ffffff;' +
+      '--mb-btn-border:#48484a;' +
+      '--mb-btn-hover:#3a3a3c;' +
+      '--mb-input-bg:#2c2c2e;' +
+      '--mb-input-text:#ffffff;' +
+      '--mb-input-placeholder:#8e8e93;' +
+      '--mb-composer-border:#3a3a3c}' +
     // SHOW_HEADER widgets sit inside an iPhone mockup whose Dynamic Island
     // pill overlaps the screen's top ~32-40px. Push statusbar down to clear it.
     '.mb-demo.mb-with-header{--mb-island-clear:38px}' +
     // iPhone-style status bar (time + signal/battery)
-    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 6px) 14px 2px;font-size:10.5px;font-weight:600;color:var(--mb-fg,#0f172a);flex-shrink:0;background:var(--mb-bg,#fff);position:relative;z-index:3}' +
+    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 6px) 14px 2px;font-size:10.5px;font-weight:600;color:var(--mb-statusbar-fg);flex-shrink:0;background:var(--mb-statusbar-bg);position:relative;z-index:3}' +
     '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center;opacity:.88}' +
     '.mb-statusbar svg{width:14px;height:10px;display:block}' +
     // Header — slightly taller avatar (32px) for logo images to read well
-    '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid var(--mb-border,rgba(15,23,42,.06));background:var(--mb-bg,#fff);flex-shrink:0;position:relative;z-index:2}' +
-    '.mb-header-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;flex-shrink:0;overflow:hidden}' +
+    '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid var(--mb-border);background:var(--mb-header-bg);flex-shrink:0;position:relative;z-index:2}' +
+    '.mb-header-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:14px;font-weight:700;flex-shrink:0;overflow:hidden}' +
     '.mb-header-meta{display:flex;flex-direction:column;min-width:0;flex:1}' +
-    '.mb-header-name{font-size:12px;font-weight:600;color:var(--mb-fg,#0f172a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
+    '.mb-header-name{font-size:12px;font-weight:600;color:var(--mb-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
     // Status dot uses currentColor so toggling .mb-offline changes both text and dot in one step.
-    // transition:color gives a smooth fade when switching between online/offline states.
     '.mb-header-status{font-size:10px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:3px;transition:color .3s}' +
     '.mb-header-status::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}' +
-    '.mb-header-status.mb-offline{color:#94a3b8}' +
+    '.mb-header-status.mb-offline{color:var(--mb-muted)}' +
     // Feed + bubbles (tighter spacing to fit inside iPhone screen)
-    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch}' +
+    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch;background:var(--mb-bg)}' +
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
     '.mb-bubble{max-width:86%;padding:6px 10px;border-radius:14px;line-height:1.35;word-wrap:break-word;font-size:11.5px}' +
-    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot,#f1f5f9);color:var(--mb-bot-text,#0f172a);border-bottom-left-radius:4px}' +
-    // Dark mode — activated by .mb-dark (set by JS when host has html.dark or prefers-color-scheme:dark).
-    '.mb-demo.mb-dark{--mb-bg:#0a0a0a;--mb-fg:#f1f5f9;--mb-border:rgba(255,255,255,.08);--mb-bubble-bot:#1c1c1e;--mb-bot-text:#f1f5f9;--mb-btn-bg:#1c1c1e;--mb-btn-border:#2c2c2e;--mb-btn-hover:#2c2c2e;--mb-composer-border:rgba(255,255,255,.1);--mb-input-bg:#1c1c1e}' +
-    '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user,#8b5cf6);color:var(--mb-user-text,#fff);border-bottom-right-radius:4px}' +
+    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
+    '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user);color:var(--mb-user-text);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
     '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
-    '.mb-btn{display:block;padding:6px 10px;text-align:center;border:1px solid var(--mb-btn-border,#e2e8f0);background:var(--mb-btn-bg,#fff);color:inherit;border-radius:10px;cursor:pointer;font:inherit;font-size:11px;transition:background .15s;text-decoration:none}' +
-    '.mb-btn:hover{background:var(--mb-btn-hover,#f8fafc)}' +
+    // Buttons use explicit --mb-btn-text (not color:inherit) so the label
+    // stays readable regardless of the surrounding bubble's text colour.
+    '.mb-btn{display:block;padding:6px 10px;text-align:center;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:10px;cursor:pointer;font:inherit;font-size:11px;transition:background .15s;text-decoration:none}' +
+    '.mb-btn:hover{background:var(--mb-btn-hover)}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
-    '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border,rgba(15,23,42,.08));background:var(--mb-bg,#fff);flex-shrink:0}' +
-    '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border,#e2e8f0);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg,#fff);color:inherit;outline:none}' +
-    '.mb-composer input:focus{border-color:var(--mb-bubble-user,#8b5cf6)}' +
-    '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user,#8b5cf6);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}' +
+    '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
+    '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
+    '.mb-composer input::placeholder{color:var(--mb-input-placeholder)}' +
+    '.mb-composer input:focus{border-color:var(--mb-bubble-user)}' +
+    '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user);color:var(--mb-user-text);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}' +
     '.mb-composer button:disabled{opacity:.4;cursor:not-allowed}' +
-    '.mb-typing{align-self:flex-start;padding:5px 9px;border-radius:12px;background:var(--mb-bubble-bot,#f1f5f9);display:inline-flex;gap:3px}' +
-    '.mb-typing span{width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:mb-bounce 1s infinite}' +
+    '.mb-typing{align-self:flex-start;padding:5px 9px;border-radius:12px;background:var(--mb-bubble-bot);display:inline-flex;gap:3px}' +
+    '.mb-typing span{width:5px;height:5px;border-radius:50%;background:var(--mb-muted);animation:mb-bounce 1s infinite}' +
     '.mb-typing span:nth-child(2){animation-delay:.15s}.mb-typing span:nth-child(3){animation-delay:.3s}' +
     '@keyframes mb-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}';
   document.head.appendChild(styleTag);
@@ -128,18 +177,33 @@ export const DEMO_CHAT_SRC = `
   }
   root.classList.add('mb-demo');
   if (SHOW_HEADER) root.classList.add('mb-with-header');
-  // Honour host page dark theme (landing uses <html class="dark">) or the
-  // visitor's OS preference via prefers-color-scheme.
+  // Mirror the HOST page's explicit theme (html.dark). The landing's inline
+  // script already reconciles OS preference into html.dark on boot and keeps
+  // it in sync with the user's light/dark toggle, so we never contradict the
+  // visible page — a light landing always yields a light widget even when
+  // the visitor's OS prefers dark. prefers-color-scheme is ONLY consulted as
+  // a fallback when the host clearly doesn't manage theme itself (no theme
+  // signal at all on <html> and no landing/bridge wiring).
+  function hostManagesTheme() {
+    // Landing injects the bridge via /embed/demo-chat.js which sets
+    // data-show-header="1"; /demo standalone page does not. SHOW_HEADER is
+    // a reliable proxy for "embedded in a theme-managed host".
+    return SHOW_HEADER || document.documentElement.hasAttribute('class');
+  }
   function applyTheme() {
-    var prefersDark = false;
-    try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (_) {}
     var hostDark = document.documentElement.classList.contains('dark');
-    if (prefersDark || hostDark) root.classList.add('mb-dark');
+    var dark = hostDark;
+    if (!hostManagesTheme()) {
+      try {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) dark = true;
+      } catch (_) {}
+    }
+    if (dark) root.classList.add('mb-dark');
     else root.classList.remove('mb-dark');
   }
   applyTheme();
   try {
-    if (window.matchMedia) {
+    if (!hostManagesTheme() && window.matchMedia) {
       var mql = window.matchMedia('(prefers-color-scheme: dark)');
       if (mql.addEventListener) mql.addEventListener('change', applyTheme);
     }

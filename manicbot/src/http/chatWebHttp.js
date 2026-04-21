@@ -29,6 +29,7 @@ import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
 import { dbAll } from '../utils/db.js';
+import { checkAndIncrement } from '../utils/rateLimit.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -46,6 +47,43 @@ function jsonResponse(body, status = 200) {
 
 function jsonError(message, status = 400, extra = {}) {
   return jsonResponse({ ok: false, error: message, ...extra }, status);
+}
+
+function clientIp(request) {
+  return (
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown'
+  );
+}
+
+/**
+ * Per-IP rate limiter for public /chat/* endpoints. Returns a 429 Response
+ * when over the threshold, otherwise null so the caller can proceed.
+ *
+ * Thresholds are sized against expected widget behavior:
+ *   init  — 10/min (page-load only)
+ *   send  — 30/min (~1 msg per 2s)
+ *   poll  — 60/min (widget polls every 3s → 20/min baseline)
+ *
+ * #S11 — prevents flood-based Workers CPU / KV-write exhaustion.
+ */
+async function rateLimitChat(ctx, ip, action, limit, windowSec = 60) {
+  if (!ctx?.db) return null;
+  const rl = await checkAndIncrement(ctx, `chat:${ip}`, action, limit, windowSec);
+  if (!rl.limited) return null;
+  const retryAfter = Math.max(1, rl.retryAfter);
+  return new Response(
+    JSON.stringify({ ok: false, error: 'rate_limited', retryAfter }),
+    {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Retry-After': String(retryAfter),
+        ...CORS_HEADERS,
+      },
+    },
+  );
 }
 
 async function readJson(request) {
@@ -141,19 +179,23 @@ export async function tryChatWeb(request, env, url) {
 
   // ── POST /chat/init ──────────────────────────────────────────────────────
   if (request.method === 'POST' && p === '/chat/init') {
+    if (!env.DB) return jsonError('DB not bound', 500);
+    const ec = envCtx(env);
+    const ip = clientIp(request);
+    const rlRes = await rateLimitChat(ec, ip, 'chat-init', 10, 60);
+    if (rlRes) return rlRes;
+
     const body = await readJson(request);
     const slug = typeof body?.slug === 'string' ? body.slug.trim() : '';
     if (!slug) return jsonError('slug required', 400);
 
-    if (!env.DB) return jsonError('DB not bound', 500);
-
-    const branding = await loadSalonBranding(envCtx(env), slug);
+    const branding = await loadSalonBranding(ec, slug);
     if (!branding) return jsonError('Salon not found or not published', 404);
 
     const sessionId = generateSessionId();
     const chatId = await chatIdFromSession(sessionId);
 
-    void logEvent(envCtx(env), 'chat.web.init', {
+    void logEvent(ec, 'chat.web.init', {
       tenantId: null,
       level: 'info',
       message: `web chat session opened for slug=${slug}`,
@@ -170,6 +212,11 @@ export async function tryChatWeb(request, env, url) {
 
   // ── POST /chat/send ──────────────────────────────────────────────────────
   if (request.method === 'POST' && p === '/chat/send') {
+    if (!env.DB) return jsonError('DB not bound', 500);
+    const ipSend = clientIp(request);
+    const rlSend = await rateLimitChat(envCtx(env), ipSend, 'chat-send', 30, 60);
+    if (rlSend) return rlSend;
+
     const body = await readJson(request);
     const slug = typeof body?.slug === 'string' ? body.slug.trim() : '';
     const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : '';
@@ -187,8 +234,6 @@ export async function tryChatWeb(request, env, url) {
     if (!sessionId || sessionId.length < 16 || sessionId.length > 128) return jsonError('sessionId required', 400);
     if (!/^[a-f0-9]+$/i.test(sessionId)) return jsonError('sessionId malformed', 400);
     if (!text && !callbackData) return jsonError('text or callbackData required', 400);
-
-    if (!env.DB) return jsonError('DB not bound', 500);
 
     const chatId = await chatIdFromSession(sessionId);
 
@@ -229,13 +274,17 @@ export async function tryChatWeb(request, env, url) {
 
   // ── GET /chat/poll ────────────────────────────────────────────────────────
   if (request.method === 'GET' && p === '/chat/poll') {
+    if (!env.DB) return jsonError('DB not bound', 500);
+    const ipPoll = clientIp(request);
+    const rlPoll = await rateLimitChat(envCtx(env), ipPoll, 'chat-poll', 60, 60);
+    if (rlPoll) return rlPoll;
+
     const slug = url.searchParams.get('slug') || '';
     const sessionId = url.searchParams.get('sessionId') || '';
     const sinceTs = parseInt(url.searchParams.get('since') || '0', 10) || 0;
     if (!slug) return jsonError('slug required', 400);
     if (!sessionId || sessionId.length < 16 || sessionId.length > 128) return jsonError('sessionId required', 400);
     if (!/^[a-f0-9]+$/i.test(sessionId)) return jsonError('sessionId malformed', 400);
-    if (!env.DB) return jsonError('DB not bound', 500);
 
     const chatId = await chatIdFromSession(sessionId);
     const built = await buildWebCtxForSlug(env, slug, chatId);

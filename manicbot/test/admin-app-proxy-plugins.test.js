@@ -22,4 +22,13 @@ describe('isAdminAppPath — /plugins', () => {
     expect(isAdminAppPath('/plug')).toBe(false);
     expect(isAdminAppPath('/plugins-other')).toBe(false);
   });
+
+  it('forwards /plugin/:slug (singular runtime-open route) to admin-app', () => {
+    expect(isAdminAppPath('/plugin/google-calendar')).toBe(true);
+    expect(isAdminAppPath('/plugin/no-show-shield')).toBe(true);
+  });
+
+  it('does not collide with unrelated singular paths', () => {
+    expect(isAdminAppPath('/plugin-store')).toBe(false);
+  });
 });

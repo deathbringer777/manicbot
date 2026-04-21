@@ -60,12 +60,22 @@ describe('tryDemoPage', () => {
     expect(res.headers.get('Cache-Control')).toContain('no-cache');
   });
 
-  it('uses env(safe-area-inset-top) on status-bar to clear the Dynamic Island', async () => {
+  it('uses max(env(safe-area-inset-top),56px) on status-bar to clear the Dynamic Island', async () => {
     const { request, url } = makeReq('GET', '/demo');
     const res = tryDemoPage(request, {}, url);
     const html = await res.text();
-    expect(html).toContain('env(safe-area-inset-top');
+    // Desktop browsers set safe-area-inset-top to 0 (not undefined), so a
+    // plain env() fallback never fires. Using max(…,56px) guarantees clearance.
+    expect(html).toContain('max(env(safe-area-inset-top),56px)');
+    expect(html).toContain('padding-top:56px');
     expect(html).toContain('min-height:46px');
+  });
+
+  it('includes a prefers-color-scheme:dark block so the mockup adapts to dark sites', async () => {
+    const { request, url } = makeReq('GET', '/demo');
+    const res = tryDemoPage(request, {}, url);
+    const html = await res.text();
+    expect(html).toContain('prefers-color-scheme:dark');
   });
 
   // #S13 — CSP regression

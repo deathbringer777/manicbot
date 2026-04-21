@@ -34,6 +34,7 @@ export function isAdminAppPath(pathname) {
     '/stripe',
     '/platform-support',
     '/plugins',
+    '/plugin',
   ];
   for (const p of dash) {
     if (pathname === p || pathname.startsWith(p + '/')) return true;

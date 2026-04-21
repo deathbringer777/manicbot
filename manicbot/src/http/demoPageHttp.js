@@ -71,15 +71,22 @@ const HTML = `<!DOCTYPE html>
       display:flex;
       flex-direction:column;
     }
-    /* iphone padding-top 14 + status-bar padding-top 72 = 86px from frame top.
-       Dynamic Island pill bottom is at ~42px. Clearance ~44px — content fully below pill. */
+    /* Dynamic Island pill: top:16 + height:26 = bottom at 42px from frame top.
+       iphone padding-top is 14px, so pill bottom inside screen = 28px.
+       We give status-bar padding-top of max(env(safe-area-inset-top),56px)
+       so desktop (where safe-area-inset-top is 0, not undefined — env fallback
+       does NOT apply) still clears the pill with ~28px breathing room. */
     .status-bar{
       min-height:46px;
       background:#fff;
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      padding: env(safe-area-inset-top, 72px) 22px 8px;
+      padding-top:56px;
+      padding-top:max(env(safe-area-inset-top),56px);
+      padding-right:22px;
+      padding-bottom:8px;
+      padding-left:22px;
       font-size:11px;
       font-weight:700;
       color:#0f172a;
@@ -125,6 +132,33 @@ const HTML = `<!DOCTYPE html>
     }
     @media(min-height:900px){
       .iphone-screen{height:620px}
+    }
+
+    /* Dark mode — match the system theme so the mockup doesn't look broken
+       when the landing page is dark. Phone frame stays dark (same brand),
+       but the iPhone screen, status bar, and chat header flip. */
+    @media(prefers-color-scheme:dark){
+      body{
+        background:linear-gradient(135deg,#1e1b4b 0%,#1e293b 50%,#0c4a6e 100%);
+      }
+      .brand h1{color:#f1f5f9}
+      .brand h1 span{color:#a78bfa}
+      .brand p{color:#94a3b8}
+      .iphone{
+        background:#000;
+        box-shadow:
+          0 0 0 2px #27272a,
+          0 0 0 4px #000,
+          0 40px 100px rgba(0,0,0,.6),
+          inset 0 0 0 1px rgba(255,255,255,.06);
+      }
+      .iphone::before{background:#000}
+      .iphone-screen{background:#0a0a0a}
+      .status-bar{background:#0a0a0a;color:#f1f5f9}
+      .chat-header{background:#0a0a0a;border-bottom-color:#27272a}
+      .chat-header .info strong{color:#f1f5f9}
+      .note{color:#94a3b8}
+      .note strong{color:#a78bfa}
     }
   </style>
 </head>

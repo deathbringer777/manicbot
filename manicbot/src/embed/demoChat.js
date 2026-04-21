@@ -72,16 +72,23 @@ export const DEMO_CHAT_SRC = `
     // position:absolute fills the parent container precisely, so the widget
     // is always fully contained in the iPhone frame regardless of whether the
     // landing page sets an explicit height on the target div.
-    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:#0f172a;overflow:hidden;background:#fff}' +
+    // CSS variables drive light/dark theming. --mb-island-clear reserves space
+    // at the top of the widget so the statusbar sits BELOW the host phone
+    // mockup's Dynamic Island SVG (which sits above the screen with higher
+    // z-index on the landing mockup).
+    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--mb-fg,#0f172a);overflow:hidden;background:var(--mb-bg,#fff);--mb-island-clear:0px}' +
+    // SHOW_HEADER widgets sit inside an iPhone mockup whose Dynamic Island
+    // pill overlaps the screen's top ~32-40px. Push statusbar down to clear it.
+    '.mb-demo.mb-with-header{--mb-island-clear:38px}' +
     // iPhone-style status bar (time + signal/battery)
-    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:6px 14px 2px;font-size:10.5px;font-weight:600;color:#0f172a;flex-shrink:0;background:#fff;position:relative;z-index:3}' +
+    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 6px) 14px 2px;font-size:10.5px;font-weight:600;color:var(--mb-fg,#0f172a);flex-shrink:0;background:var(--mb-bg,#fff);position:relative;z-index:3}' +
     '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center;opacity:.88}' +
     '.mb-statusbar svg{width:14px;height:10px;display:block}' +
     // Header — slightly taller avatar (32px) for logo images to read well
-    '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid rgba(15,23,42,.06);background:#fff;flex-shrink:0;position:relative;z-index:2}' +
+    '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid var(--mb-border,rgba(15,23,42,.06));background:var(--mb-bg,#fff);flex-shrink:0;position:relative;z-index:2}' +
     '.mb-header-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;flex-shrink:0;overflow:hidden}' +
     '.mb-header-meta{display:flex;flex-direction:column;min-width:0;flex:1}' +
-    '.mb-header-name{font-size:12px;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
+    '.mb-header-name{font-size:12px;font-weight:600;color:var(--mb-fg,#0f172a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
     // Status dot uses currentColor so toggling .mb-offline changes both text and dot in one step.
     // transition:color gives a smooth fade when switching between online/offline states.
     '.mb-header-status{font-size:10px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:3px;transition:color .3s}' +
@@ -92,13 +99,15 @@ export const DEMO_CHAT_SRC = `
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
     '.mb-bubble{max-width:86%;padding:6px 10px;border-radius:14px;line-height:1.35;word-wrap:break-word;font-size:11.5px}' +
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot,#f1f5f9);color:var(--mb-bot-text,#0f172a);border-bottom-left-radius:4px}' +
+    // Dark mode — activated by .mb-dark (set by JS when host has html.dark or prefers-color-scheme:dark).
+    '.mb-demo.mb-dark{--mb-bg:#0a0a0a;--mb-fg:#f1f5f9;--mb-border:rgba(255,255,255,.08);--mb-bubble-bot:#1c1c1e;--mb-bot-text:#f1f5f9;--mb-btn-bg:#1c1c1e;--mb-btn-border:#2c2c2e;--mb-btn-hover:#2c2c2e;--mb-composer-border:rgba(255,255,255,.1);--mb-input-bg:#1c1c1e}' +
     '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user,#8b5cf6);color:var(--mb-user-text,#fff);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
     '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
     '.mb-btn{display:block;padding:6px 10px;text-align:center;border:1px solid var(--mb-btn-border,#e2e8f0);background:var(--mb-btn-bg,#fff);color:inherit;border-radius:10px;cursor:pointer;font:inherit;font-size:11px;transition:background .15s;text-decoration:none}' +
     '.mb-btn:hover{background:var(--mb-btn-hover,#f8fafc)}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
-    '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border,rgba(15,23,42,.08));background:#fff;flex-shrink:0}' +
+    '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border,rgba(15,23,42,.08));background:var(--mb-bg,#fff);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border,#e2e8f0);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg,#fff);color:inherit;outline:none}' +
     '.mb-composer input:focus{border-color:var(--mb-bubble-user,#8b5cf6)}' +
     '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user,#8b5cf6);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}' +
@@ -118,6 +127,26 @@ export const DEMO_CHAT_SRC = `
     root.style.position = 'relative';
   }
   root.classList.add('mb-demo');
+  if (SHOW_HEADER) root.classList.add('mb-with-header');
+  // Honour host page dark theme (landing uses <html class="dark">) or the
+  // visitor's OS preference via prefers-color-scheme.
+  function applyTheme() {
+    var prefersDark = false;
+    try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (_) {}
+    var hostDark = document.documentElement.classList.contains('dark');
+    if (prefersDark || hostDark) root.classList.add('mb-dark');
+    else root.classList.remove('mb-dark');
+  }
+  applyTheme();
+  try {
+    if (window.matchMedia) {
+      var mql = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mql.addEventListener) mql.addEventListener('change', applyTheme);
+    }
+    // Watch for host toggling html.dark at runtime (theme switch on landing).
+    var themeObs = new MutationObserver(applyTheme);
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  } catch (_) {}
 
   // Refs to header sub-elements — populated below if SHOW_HEADER is true.
   var headerAvEl = null;

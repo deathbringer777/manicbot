@@ -238,4 +238,29 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     expect(SRC).toMatch(/Ошибка отправки/);
     expect(SRC).toMatch(/Нет соединения/);
   });
+
+  // #S15 — Dynamic Island clearance when embedded in landing iPhone mockup.
+  // Without this, the widget statusbar ("17:39") + header ("Preview Salon")
+  // sit under the mockup's island SVG and get visually clipped.
+  it('reserves Dynamic Island clearance when SHOW_HEADER is active', () => {
+    expect(SRC).toMatch(/--mb-island-clear/);
+    expect(SRC).toMatch(/mb-with-header/);
+    // statusbar uses calc(var(...) + 6px) so padding-top grows by island height
+    expect(SRC).toMatch(/calc\(var\(--mb-island-clear\)/);
+  });
+
+  // #S15 — dark mode: widget honours host <html class="dark"> and OS pref.
+  it('applies dark theme when host has html.dark or prefers-color-scheme:dark', () => {
+    expect(SRC).toMatch(/prefers-color-scheme: dark/);
+    expect(SRC).toMatch(/classList\.contains\(['"]dark['"]\)/);
+    expect(SRC).toMatch(/mb-demo\.mb-dark/);
+    // MutationObserver watches for runtime theme toggles on the landing
+    expect(SRC).toMatch(/MutationObserver/);
+  });
+
+  // CSS variables should drive background/foreground so dark mode flips cleanly.
+  it('uses --mb-bg and --mb-fg variables instead of hardcoded white', () => {
+    expect(SRC).toMatch(/var\(--mb-bg/);
+    expect(SRC).toMatch(/var\(--mb-fg/);
+  });
 });

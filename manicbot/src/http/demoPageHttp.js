@@ -77,7 +77,7 @@ const HTML = `<!DOCTYPE html>
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      padding: env(safe-area-inset-top, 32px) 22px 8px;
+      padding: env(safe-area-inset-top, 56px) 22px 8px;
       font-size:11px;
       font-weight:700;
       color:#0f172a;

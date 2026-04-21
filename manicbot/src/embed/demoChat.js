@@ -42,10 +42,10 @@ export const DEMO_CHAT_SRC = `
           sendError: 'Ошибка отправки. Попробуйте ещё раз.',
           netError: 'Нет соединения. Проверьте интернет.' },
     ua: { placeholder: 'Повідомлення…', online: 'онлайн', send: 'Надіслати',
-          offline: 'немає зв\'язку', reconnecting: 'підключення…',
+          offline: "немає зв'язку", reconnecting: 'підключення…',
           initFailed: 'Не вдалося підключитися. Повторна спроба…',
           sendError: 'Помилка відправки. Спробуйте ще раз.',
-          netError: 'Немає з\'єднання. Перевірте інтернет.' },
+          netError: "Немає з'єднання. Перевірте інтернет." },
     en: { placeholder: 'Message…', online: 'online', send: 'Send',
           offline: 'offline', reconnecting: 'reconnecting…',
           initFailed: 'Connection failed. Retrying…',
@@ -361,9 +361,11 @@ export const DEMO_CHAT_SRC = `
   function sanitizeBotHtml(html, parseMode) {
     if (parseMode !== 'HTML') return escapeHtml(html).replace(/\\n/g, '<br>');
     var escaped = escapeHtml(html);
-    // Allow HTML entities (&amp; &quot; etc.) inside tag attributes so that
-    // <a href="...?a=1&amp;b=2"> is correctly un-escaped rather than shown raw.
-    escaped = escaped.replace(/&lt;(\\/?)(b|strong|i|em|u|s|code|pre|br|a)(\\s(?:[^&]|&(?:amp|quot|lt|gt|apos|#\\d+);)*)?&gt;/gi, function (m) {
+    // #S14 — use character class [/] instead of \\/ to avoid the template
+    // literal → regex-literal escape ambiguity. Allow HTML entities (&amp;
+    // &quot; etc.) inside tag attributes so that <a href="...?a=1&amp;b=2">
+    // is correctly un-escaped rather than shown raw.
+    escaped = escaped.replace(/&lt;([/]?)(b|strong|i|em|u|s|code|pre|br|a)(\\s(?:[^&]|&(?:amp|quot|lt|gt|apos|#\\d+);)*)?&gt;/gi, function (m) {
       return m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
     });
     return escaped.replace(/\\n/g, '<br>');

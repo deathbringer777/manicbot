@@ -10,6 +10,7 @@
  *   6. /embed/demo-chat.js HTTP handler serves the widget JS.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import vm from 'vm';
 import { createMockD1, makeMockKv } from './helpers/mock-db.js';
 import {
   PREVIEW_TENANT_ID,
@@ -61,6 +62,16 @@ describe('ensurePreviewTenantProvisioned', () => {
     const cfg = env.DB._getTable('tenant_config');
     const previewRow = cfg.find(r => r.tenant_id === PREVIEW_TENANT_ID && r.key === 'preview_mode');
     expect(previewRow?.value).toBe('1');
+  });
+
+  it('seeds services with photo URLs', async () => {
+    await fresh.ensurePreviewTenantProvisioned(env);
+    const services = env.DB._getTable('services');
+    for (const svc of services) {
+      const photos = JSON.parse(svc.photos || '[]');
+      expect(photos.length).toBeGreaterThan(0);
+      expect(photos[0]).toMatch(/^https:\/\//);
+    }
   });
 
   it('is idempotent — second call does not duplicate rows', async () => {
@@ -214,6 +225,15 @@ describe('/embed/demo-chat.js handler', () => {
     expect(res.status).toBe(405);
   });
 
+  // #S13 — defense-in-depth CSP header on the JS response
+  it('sets a Content-Security-Policy and X-Content-Type-Options header', async () => {
+    const url = new URL('https://manicbot.com/embed/demo-chat.js');
+    const req = new Request(url, { method: 'GET' });
+    const res = await tryEmbed(req, {}, url);
+    expect(res.headers.get('Content-Security-Policy')).toMatch(/default-src 'self'/);
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
   it('returns null for paths outside /embed/', async () => {
     const url = new URL('https://manicbot.com/chat/init');
     const req = new Request(url, { method: 'GET' });
@@ -243,5 +263,77 @@ describe('DEMO_CHAT_SRC widget source', () => {
 
   it('defaults to preview-landing slug', () => {
     expect(DEMO_CHAT_SRC).toMatch(/preview-landing/);
+  });
+
+  it('is syntactically valid JavaScript (no SyntaxError in output)', () => {
+    // vm.Script parses the source without executing it — catches the Ukrainian
+    // apostrophe escaping bug (\' inside single-quoted string inside template
+    // literal) that caused "SyntaxError: Unexpected identifier 'язку'" in prod.
+    expect(() => new vm.Script(DEMO_CHAT_SRC)).not.toThrow();
+  });
+
+  it('Ukrainian locale does not contain raw single-quote escape sequences', () => {
+    // In a JS template literal \' is consumed by the outer string, leaving a
+    // bare ' that terminates the inner single-quoted string early. Guard against
+    // regression by asserting the output has no \' inside the ua locale block.
+    const uaStart = DEMO_CHAT_SRC.indexOf("ua: {");
+    const uaEnd   = DEMO_CHAT_SRC.indexOf('},', uaStart);
+    const uaBlock = DEMO_CHAT_SRC.slice(uaStart, uaEnd);
+    expect(uaBlock).not.toMatch(/\\'/);
+  });
+
+  it('has offline status indicator', () => {
+    expect(DEMO_CHAT_SRC).toMatch(/_pollFails/);
+    expect(DEMO_CHAT_SRC).toMatch(/setStatus/);
+    expect(DEMO_CHAT_SRC).toMatch(/mb-offline/);
+    expect(DEMO_CHAT_SRC).toMatch(/T\.offline/);
+    expect(DEMO_CHAT_SRC).toMatch(/T\.online/);
+  });
+
+  it('applies salon branding from /chat/init', () => {
+    expect(DEMO_CHAT_SRC).toMatch(/applyBranding/);
+    expect(DEMO_CHAT_SRC).toMatch(/salon\.logo/);
+    expect(DEMO_CHAT_SRC).toMatch(/onerror/);
+    expect(DEMO_CHAT_SRC).toMatch(/currentBranding/);
+  });
+
+  it('has all four required I18N locales', () => {
+    expect(DEMO_CHAT_SRC).toMatch(/\bru\s*:/);
+    expect(DEMO_CHAT_SRC).toMatch(/\bua\s*:/);
+    expect(DEMO_CHAT_SRC).toMatch(/\ben\s*:/);
+    expect(DEMO_CHAT_SRC).toMatch(/\bpl\s*:/);
+  });
+
+  // #S14 — sanitizeBotHtml whitelist regex must match real escaped tags after
+  // the template literal → regex literal pipeline. We extract the function
+  // from the served source and execute it in an isolated VM to verify the
+  // regex actually matches `&lt;b&gt;`, `&lt;/b&gt;`, `&lt;a href="x"&gt;`.
+  it('sanitizeBotHtml restores whitelisted tags from escaped HTML', async () => {
+    const vm = await import('node:vm');
+    // Pull the sanitizeBotHtml + escapeHtml function bodies out of the IIFE
+    const escapeMatch = DEMO_CHAT_SRC.match(/function escapeHtml\([\s\S]*?\n\s\s\}/);
+    const sanitizeMatch = DEMO_CHAT_SRC.match(/function sanitizeBotHtml\([\s\S]*?\n\s\s\}/);
+    expect(escapeMatch).not.toBeNull();
+    expect(sanitizeMatch).not.toBeNull();
+    const script = new vm.Script(`
+      ${escapeMatch[0]}
+      ${sanitizeMatch[0]}
+      ({
+        bare: sanitizeBotHtml('<b>hi</b>', 'HTML'),
+        link: sanitizeBotHtml('<a href="https://x.io/?a=1&b=2">go</a>', 'HTML'),
+        script: sanitizeBotHtml('<script>alert(1)</script>', 'HTML'),
+        plain: sanitizeBotHtml('plain & <bad>', 'plain'),
+      });
+    `);
+    const out = script.runInNewContext({});
+    expect(out.bare).toBe('<b>hi</b>');
+    // <a href="..."> should be unwrapped, not left as &lt;a&gt;
+    expect(out.link).toContain('<a href="');
+    expect(out.link).toContain('>go</a>');
+    // unknown tags must remain escaped (XSS guard)
+    expect(out.script).not.toContain('<script>');
+    expect(out.script).toContain('&lt;script&gt;');
+    // non-HTML mode should not unwrap anything
+    expect(out.plain).toContain('&lt;bad&gt;');
   });
 });

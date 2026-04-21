@@ -71,13 +71,15 @@ const HTML = `<!DOCTYPE html>
       display:flex;
       flex-direction:column;
     }
+    /* iphone padding-top 14 + status-bar padding-top 72 = 86px from frame top.
+       Dynamic Island pill bottom is at ~42px. Clearance ~44px — content fully below pill. */
     .status-bar{
       min-height:46px;
       background:#fff;
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      padding: env(safe-area-inset-top, 56px) 22px 8px;
+      padding: env(safe-area-inset-top, 72px) 22px 8px;
       font-size:11px;
       font-weight:700;
       color:#0f172a;
@@ -87,11 +89,11 @@ const HTML = `<!DOCTYPE html>
     }
     .status-bar .icons{display:flex;gap:5px;align-items:center}
     .status-bar svg{width:14px;height:14px;fill:currentColor}
-    /* Chat app header */
+    /* Chat app header — extra top padding keeps content clear of status-bar below island */
     .chat-header{
       background:#fff;
       border-bottom:1px solid #f1f5f9;
-      padding:8px 14px;
+      padding:10px 14px 8px 14px;
       display:flex;
       align-items:center;
       gap:10px;

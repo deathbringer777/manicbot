@@ -52,7 +52,7 @@ describe("pluginsRouter auth guards", () => {
     const { db } = createDbMock();
     const caller = createCaller(makeUnauthCtx(db) as never);
     await expect(
-      caller.install({ slug: "live-test" }),
+      caller.install({ slug: "google-calendar" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -66,49 +66,48 @@ describe("pluginsRouter auth guards", () => {
 // ─── listCatalog lock-state computation ─────────────────────────────────────
 
 describe("pluginsRouter.listCatalog", () => {
-  it("returns 3 fixture cards for system_admin with correct localization", async () => {
+  it("returns production cards for system_admin with correct localization", async () => {
     const { db } = createDbMock([[], []]); // select for tenant plan (no tenantId), select for installs
     const caller = createCaller(makeAdminCtx(db) as never);
     const cards = await caller.listCatalog({ lang: "en" });
     expect(cards.length).toBeGreaterThanOrEqual(3);
-    const live = cards.find((c) => c.slug === "live-test");
-    expect(live?.name).toBe("Live Test");
-    expect(live?.billingLabel).toBe("Free");
+    const gcal = cards.find((c) => c.slug === "google-calendar");
+    expect(gcal?.name).toBe("Google Calendar");
+    expect(gcal?.billingLabel).toBe("Included in plan");
   });
 
   it("marks coming_soon plugins with lock.kind='coming_soon' for everyone", async () => {
     const { db } = createDbMock([[{ plan: "max" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "ru" });
-    const hello = cards.find((c) => c.slug === "hello-world");
-    expect(hello?.lock.kind).toBe("coming_soon");
+    const noShow = cards.find((c) => c.slug === "no-show-shield");
+    expect(noShow?.lock.kind).toBe("coming_soon");
   });
 
   it("marks plan-locked plugins when tenant plan is insufficient", async () => {
     const { db } = createDbMock([[{ plan: "start" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "ru" });
-    const live = cards.find((c) => c.slug === "live-test");
-    expect(live?.lock.kind).toBe("plan");
+    const gcal = cards.find((c) => c.slug === "google-calendar");
+    expect(gcal?.lock.kind).toBe("plan");
   });
 
-  it("hides platform-only plugins from non-admin viewers entirely", async () => {
-    // New behaviour: server-side filter strips plugins whose availableForRoles
-    // doesn't include the viewer's role, so tenant_owner never sees
-    // platform-test (system_admin-only) in their catalog.
+  it("hides system_admin-only plugins from non-admin viewers entirely", async () => {
+    // Server-side filter strips plugins whose availableForRoles doesn't include
+    // the viewer's role, so tenant_owner never sees gdpr-center (system_admin-only).
     const { db } = createDbMock([[{ plan: "pro" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "ru" });
-    const platform = cards.find((c) => c.slug === "platform-test");
-    expect(platform).toBeUndefined();
+    const gdpr = cards.find((c) => c.slug === "gdpr-center");
+    expect(gdpr).toBeUndefined();
   });
 
   it("falls back to ru when unknown lang is passed", async () => {
     const { db } = createDbMock([[{ plan: "pro" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "xx" as never });
-    const live = cards.find((c) => c.slug === "live-test");
-    expect(live?.tagline).toBe("Fixture для позитивных тестов");
+    const gcal = cards.find((c) => c.slug === "google-calendar");
+    expect(gcal?.tagline).toBe("Синхронизируйте записи с Google Календарём в реальном времени");
   });
 
   it("installedOnly filter returns empty when none installed", async () => {
@@ -122,29 +121,29 @@ describe("pluginsRouter.listCatalog", () => {
 // ─── install happy path ─────────────────────────────────────────────────────
 
 describe("pluginsRouter.install — happy paths", () => {
-  it("tenant_owner installs live-test for their tenant", async () => {
+  it("tenant_owner installs google-calendar for their tenant", async () => {
     const { db, insertCalls } = createDbMock([
       [{ plan: "pro" }], // plan gate lookup
       [],                // existing-install check (no duplicates)
     ]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
-    const r = await caller.install({ slug: "live-test", tenantId: "t_pro" });
+    const r = await caller.install({ slug: "google-calendar", tenantId: "t_pro" });
     expect(r.id).toMatch(/.+/);
-    expect(r.billingState).toBe("not_applicable");
+    expect(r.billingState).toBe("included"); // included_in_plan billing model
     // 1st insert = plugin_installations, 2nd = plugin_events (installed)
     expect(insertCalls.length).toBeGreaterThanOrEqual(2);
     const installRow = insertCalls[0]!.values as Record<string, unknown>;
-    expect(installRow.pluginSlug).toBe("live-test");
+    expect(installRow.pluginSlug).toBe("google-calendar");
     expect(installRow.tenantId).toBe("t_pro");
     expect(installRow.enabled).toBe(1);
     const eventRow = insertCalls[1]!.values as Record<string, unknown>;
     expect(eventRow.event).toBe("installed");
   });
 
-  it("system_admin installs platform-test at platform scope", async () => {
+  it("system_admin installs gdpr-center at platform scope", async () => {
     const { db, insertCalls } = createDbMock([[]]); // no dup check
     const caller = createCaller(makeAdminCtx(db) as never);
-    const r = await caller.install({ slug: "platform-test", tenantId: null });
+    const r = await caller.install({ slug: "gdpr-center", tenantId: null });
     expect(r.id).toMatch(/.+/);
     const installRow = insertCalls[0]!.values as Record<string, unknown>;
     expect(installRow.tenantId).toBe(null);
@@ -158,7 +157,7 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock();
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "hello-world", tenantId: "t_pro" }),
+      caller.install({ slug: "no-show-shield", tenantId: "t_pro" }),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
@@ -166,7 +165,7 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock();
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "platform-test", tenantId: null }),
+      caller.install({ slug: "gdpr-center", tenantId: null }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -174,7 +173,7 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock([[{ plan: "pro" }]]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_mine") as never);
     await expect(
-      caller.install({ slug: "live-test", tenantId: "t_other" }),
+      caller.install({ slug: "google-calendar", tenantId: "t_other" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -183,7 +182,7 @@ describe("pluginsRouter.install — security rejections", () => {
     // of the tenantId hint, so admin's own salon-tenant doesn't break install.
     const { db, insertCalls } = createDbMock([[]]); // dup check returns empty
     const caller = createCaller(makeAdminCtx(db) as never);
-    const r = await caller.install({ slug: "platform-test", tenantId: "t_any" });
+    const r = await caller.install({ slug: "gdpr-center", tenantId: "t_any" });
     expect(r.id).toMatch(/.+/);
     const row = insertCalls[0]!.values as Record<string, unknown>;
     expect(row.tenantId).toBeNull();
@@ -193,7 +192,7 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock();
     const caller = createCaller(makeAdminCtx(db) as never);
     await expect(
-      caller.install({ slug: "live-test", tenantId: null }),
+      caller.install({ slug: "google-calendar", tenantId: null }),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
@@ -201,15 +200,15 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock([[{ plan: "start" }]]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_start") as never);
     await expect(
-      caller.install({ slug: "live-test", tenantId: "t_start" }),
+      caller.install({ slug: "google-calendar", tenantId: "t_start" }),
     ).rejects.toMatchObject({ code: "PAYMENT_REQUIRED" });
   });
 
-  it("rejects role-unavailable plugin (tenant_manager cannot install live-test)", async () => {
+  it("rejects role-unavailable plugin (tenant_manager cannot install google-calendar)", async () => {
     const { db } = createDbMock([[{ plan: "pro" }]]);
     const caller = createCaller(makeTenantManagerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "live-test", tenantId: "t_pro" }),
+      caller.install({ slug: "google-calendar", tenantId: "t_pro" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -230,11 +229,11 @@ describe("pluginsRouter.install — security rejections", () => {
   it("rejects duplicate install (CONFLICT)", async () => {
     const { db } = createDbMock([
       [{ plan: "pro" }],
-      [{ id: "pi_existing", pluginSlug: "live-test", tenantId: "t_pro", enabled: 1 }],
+      [{ id: "pi_existing", pluginSlug: "google-calendar", tenantId: "t_pro", enabled: 1 }],
     ]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "live-test", tenantId: "t_pro" }),
+      caller.install({ slug: "google-calendar", tenantId: "t_pro" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -243,7 +242,7 @@ describe("pluginsRouter.install — security rejections", () => {
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     const huge = { blob: "x".repeat(9 * 1024) };
     await expect(
-      caller.install({ slug: "live-test", tenantId: "t_pro", settings: huge }),
+      caller.install({ slug: "google-calendar", tenantId: "t_pro", settings: huge }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
@@ -261,7 +260,7 @@ describe("pluginsRouter.install — security rejections", () => {
 const ROW_LIVE = {
   id: "pi_1",
   tenantId: "t_pro",
-  pluginSlug: "live-test",
+  pluginSlug: "google-calendar",
   enabled: 1,
   version: "1.0.0",
   installedBy: "w_owner",
@@ -341,21 +340,18 @@ describe("pluginsRouter.uninstall/enable/disable/updateSettings", () => {
 // ─── Master on personal tenant can install ─────────────────────────────────
 
 describe("Personal master can install on their tenant only", () => {
-  it("master on personal tenant CAN install a compatible plugin", async () => {
-    // Add master to availableForRoles via a custom scenario — live-test does
-    // not include master, so we expect FORBIDDEN here, which is correct.
-    // The positive path uses hello-world-like coming_soon → also refused.
-    // We verify the isPersonal check is consulted when role==master:
-    const { db } = createDbMock([
+  it("master on personal tenant can install google-calendar (compatible plugin)", async () => {
+    // google-calendar includes master in availableForRoles; minPlan=pro.
+    // Personal tenant isPersonal=1 allows the master to write to their own tenant.
+    const { db, insertCalls } = createDbMock([
       [{ isPersonal: 1 }],   // assertCanWriteScope personal check
       [{ plan: "pro" }],     // plan lookup
       [],                    // duplicate check
     ]);
     const caller = createCaller(makeMasterCtx(db, "t_personal") as never);
-    // live-test doesn't include master, so: FORBIDDEN after personal check passes
-    await expect(
-      caller.install({ slug: "live-test", tenantId: "t_personal" }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const r = await caller.install({ slug: "google-calendar", tenantId: "t_personal" });
+    expect(r.id).toMatch(/.+/);
+    expect(insertCalls[0]!.values.pluginSlug).toBe("google-calendar");
   });
 
   it("master on non-personal tenant cannot install", async () => {
@@ -364,7 +360,7 @@ describe("Personal master can install on their tenant only", () => {
     ]);
     const caller = createCaller(makeMasterCtx(db, "t_salon") as never);
     await expect(
-      caller.install({ slug: "live-test", tenantId: "t_salon" }),
+      caller.install({ slug: "google-calendar", tenantId: "t_salon" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
@@ -374,8 +370,8 @@ describe("Personal master can install on their tenant only", () => {
 describe("pluginsRouter.getInstalled", () => {
   it("returns platform + tenant rows for a tenant user", async () => {
     const rows = [
-      { ...ROW_LIVE, id: "pi_tenant", tenantId: "t_pro", pluginSlug: "live-test" },
-      { ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "platform-test" },
+      { ...ROW_LIVE, id: "pi_tenant", tenantId: "t_pro", pluginSlug: "google-calendar" },
+      { ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "gdpr-center" },
     ];
     const { db } = createDbMock([rows]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
@@ -385,7 +381,7 @@ describe("pluginsRouter.getInstalled", () => {
   });
 
   it("returns only platform rows for a user with no tenantId", async () => {
-    const rows = [{ ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "platform-test" }];
+    const rows = [{ ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "gdpr-center" }];
     const { db } = createDbMock([rows]);
     const caller = createCaller(makeAdminCtx(db) as never);
     const r = await caller.getInstalled();

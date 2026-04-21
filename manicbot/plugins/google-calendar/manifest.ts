@@ -7,7 +7,7 @@ const manifest: PluginManifest = {
   category: "productivity",
   status: "live",
   scope: "tenant",
-  icon: { name: "CalendarCheck2", tint: "#4285f4" },
+  icon: { name: "GoogleCalendar", tint: "#4285f4" },
   name: {
     ru: "Google Календарь",
     ua: "Google Календар",

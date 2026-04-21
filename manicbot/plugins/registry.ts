@@ -18,11 +18,6 @@ import type { PluginManifest, PluginModule } from "./types";
 
 // ─── Manifest imports ────────────────────────────────────────────────────────
 
-// ── test fixtures (hidden from production catalog via status) ───────────────
-import helloWorldManifest from "./_hello-world/manifest";
-import liveTestManifest from "./_live-test/manifest";
-import platformTestManifest from "./_platform-test/manifest";
-
 // ── system_admin (3) ────────────────────────────────────────────────────────
 import aiAbuseMonitorManifest from "./ai-abuse-monitor/manifest";
 import fraudShieldManifest from "./fraud-shield/manifest";
@@ -70,10 +65,6 @@ import bookingReminderManifest from "./booking-reminder/manifest";
 import messageTemplatesManifest from "./message-templates/manifest";
 
 const RAW_MANIFESTS: readonly PluginManifest[] = [
-  // fixtures
-  helloWorldManifest,
-  liveTestManifest,
-  platformTestManifest,
   // system_admin
   aiAbuseMonitorManifest,
   fraudShieldManifest,

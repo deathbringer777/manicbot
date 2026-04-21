@@ -14,7 +14,7 @@ import { validateAllManifests } from "~/server/plugins/manifestSchema";
 import { PLUGIN_LANGS, type PluginLang } from "@plugins/types";
 
 const manifests = listManifests();
-const realPlugins = manifests.filter((m) => !/^(hello-world|live-test|platform-test)$/.test(m.slug));
+const realPlugins = manifests; // all registered plugins are now production plugins
 
 describe("Seeded catalog — global shape", () => {
   it("at least 26 real plugins are registered", () => {

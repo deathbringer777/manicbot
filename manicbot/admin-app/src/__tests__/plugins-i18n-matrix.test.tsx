@@ -26,9 +26,7 @@ import { renderWithLang } from "./helpers/renderWithLang";
 import { listManifests, PLUGIN_LANGS } from "@plugins/index";
 import type { PluginLang, CatalogCard } from "@plugins/types";
 
-const real = listManifests().filter(
-  (m) => !/^(hello-world|live-test|platform-test)$/.test(m.slug),
-);
+const real = listManifests(); // all registered plugins are now production plugins
 
 function toCard(m: ReturnType<typeof listManifests>[number], lang: PluginLang): CatalogCard {
   return {

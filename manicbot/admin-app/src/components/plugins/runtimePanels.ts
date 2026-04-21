@@ -33,6 +33,7 @@ const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
   "quick-notes": () => import("./runtimes/QuickNotesRuntime"),
   "booking-reminder": () => import("./runtimes/BookingReminderRuntime"),
   "message-templates": () => import("./runtimes/MessageTemplatesRuntime"),
+  "google-calendar": () => import("./runtimes/GoogleCalendarRuntime"),
 };
 
 export function loadRuntime(slug: string): ComponentType<PluginRuntimeProps> | null {

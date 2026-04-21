@@ -13,13 +13,13 @@ describe("plugin registry", () => {
     expect(Object.isFrozen(PLUGINS)).toBe(true);
   });
 
-  it("includes the hello-world fixture", () => {
-    expect(PLUGINS["hello-world"]).toBeDefined();
-    expect(PLUGINS["hello-world"]!.manifest.slug).toBe("hello-world");
+  it("includes the google-calendar plugin", () => {
+    expect(PLUGINS["google-calendar"]).toBeDefined();
+    expect(PLUGINS["google-calendar"]!.manifest.slug).toBe("google-calendar");
   });
 
-  it("getPlugin returns the fixture by slug", () => {
-    const p = getPlugin("hello-world");
+  it("getPlugin returns a known plugin by slug", () => {
+    const p = getPlugin("google-calendar");
     expect(p).not.toBeNull();
     expect(p?.manifest.vendor).toBe("manicbot");
   });

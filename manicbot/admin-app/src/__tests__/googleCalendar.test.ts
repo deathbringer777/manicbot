@@ -127,6 +127,64 @@ describe("googleCalendarRouter", () => {
     expect(Number(dbMock.updateCalls[0]?.values.updatedAt)).toBeGreaterThanOrEqual(before);
   });
 
+  it("getStatus returns { connected: false } when no integration row exists", async () => {
+    const dbMock = createDbMock([[]]);
+    const caller = createCaller({ db: dbMock.db as never, webUser: { id: "w_test", email: "t@t.io", tenantId: "tenant_demo", webRole: "system_admin" }, headers: new Headers() });
+    const res = await caller.getStatus({ tenantId: "tenant_demo" });
+    expect(res).toEqual({ connected: false });
+  });
+
+  it("getStatus maps a row to the compact panel shape", async () => {
+    const dbMock = createDbMock([
+      [{
+        id: "int_9",
+        providerAccountEmail: "salon@example.com",
+        calendarId: "primary",
+        calendarSummary: "Salon",
+        syncEnabled: 1,
+        lastSyncAt: 999,
+        lastSyncStatus: "ok",
+        lastSyncError: null,
+      }],
+    ]);
+    const caller = createCaller({ db: dbMock.db as never, webUser: { id: "w_test", email: "t@t.io", tenantId: "tenant_demo", webRole: "system_admin" }, headers: new Headers() });
+    const res = await caller.getStatus({ tenantId: "tenant_demo" });
+    expect(res).toMatchObject({
+      connected: true,
+      integrationId: "int_9",
+      email: "salon@example.com",
+      calendarSummary: "Salon",
+      syncEnabled: true,
+    });
+  });
+
+  it("createWebConnectUrl proxies to the Worker admin endpoint with Bearer auth", async () => {
+    const prevUrl = process.env.WORKER_URL;
+    const prevKey = process.env.ADMIN_KEY;
+    process.env.WORKER_URL = "https://manicbot.com";
+    process.env.ADMIN_KEY = "test-key";
+
+    const fetchMock = vi.fn(async (_url: string, opts: { headers?: Record<string, string>; body?: string }) => {
+      const authHeader = opts?.headers?.Authorization || opts?.headers?.authorization;
+      expect(authHeader).toBe("Bearer test-key");
+      expect(JSON.parse(opts?.body || "{}")).toMatchObject({ tenantId: "tenant_demo", scope: "tenant" });
+      return new Response(JSON.stringify({ ok: true, connectUrl: "https://manicbot.com/google/connect?session=abc" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock;
+
+    try {
+      const dbMock = createDbMock();
+      const caller = createCaller({ db: dbMock.db as never, webUser: { id: "w_test", email: "t@t.io", tenantId: "tenant_demo", webRole: "system_admin" }, headers: new Headers() });
+      const res = await caller.createWebConnectUrl({ tenantId: "tenant_demo", scope: "tenant" });
+      expect(res.connectUrl).toContain("/google/connect?session=");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (prevUrl === undefined) delete process.env.WORKER_URL; else process.env.WORKER_URL = prevUrl;
+      if (prevKey === undefined) delete process.env.ADMIN_KEY; else process.env.ADMIN_KEY = prevKey;
+    }
+  });
+
   it("disconnect cleans integration-linked records and resets master calendar state", async () => {
     const dbMock = createDbMock([
       [{ id: "int_1", scope: "master", masterChatId: 42 }],

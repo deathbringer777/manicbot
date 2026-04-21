@@ -39,7 +39,12 @@ const manifest: PluginManifest = {
     { key: "calendar.read", scope: "read" },
     { key: "calendar.write", scope: "write", sensitive: true },
   ],
-  capabilities: {},
+  capabilities: {
+    settingsPanel: {
+      componentId: "google-calendar.SettingsPanel",
+      sectionKey: "plugin:google-calendar",
+    },
+  },
   lifecycle: {},
 };
 

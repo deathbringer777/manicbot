@@ -88,6 +88,84 @@ export const googleCalendarRouter = createTRPCRouter({
     }),
 
   /**
+   * Compact status for the plugin SettingsPanel — avoids sending full integration list
+   * when the panel only needs to render connected / disconnected state.
+   */
+  getStatus: protectedProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select({
+          id: googleIntegrations.id,
+          providerAccountEmail: googleIntegrations.providerAccountEmail,
+          calendarId: googleIntegrations.calendarId,
+          calendarSummary: googleIntegrations.calendarSummary,
+          syncEnabled: googleIntegrations.syncEnabled,
+          lastSyncAt: googleIntegrations.lastSyncAt,
+          lastSyncStatus: googleIntegrations.lastSyncStatus,
+          lastSyncError: googleIntegrations.lastSyncError,
+        })
+        .from(googleIntegrations)
+        .where(and(eq(googleIntegrations.tenantId, input.tenantId), eq(googleIntegrations.scope, "tenant")))
+        .orderBy(desc(googleIntegrations.updatedAt))
+        .limit(1);
+      const row = rows[0];
+      if (!row) return { connected: false as const };
+      return {
+        connected: true as const,
+        integrationId: row.id,
+        email: row.providerAccountEmail,
+        calendarId: row.calendarId,
+        calendarSummary: row.calendarSummary,
+        syncEnabled: row.syncEnabled === 1,
+        lastSyncAt: row.lastSyncAt,
+        lastSyncStatus: row.lastSyncStatus,
+        lastSyncError: row.lastSyncError,
+      };
+    }),
+
+  /**
+   * Mint a web-mode OAuth connect URL by proxying to the Worker's
+   * /admin/google/oauth-url endpoint (ADMIN_KEY-gated).
+   */
+  createWebConnectUrl: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string(),
+        scope: z.enum(["tenant", "master"]).default("tenant"),
+        masterChatId: z.number().optional(),
+        returnUrl: z.string().url().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const workerUrl = process.env.WORKER_URL || process.env.APP_BASE_URL || "";
+      const adminKey = process.env.ADMIN_KEY || "";
+      if (!workerUrl || !adminKey) {
+        throw new Error("google_oauth_unconfigured");
+      }
+      const res = await fetch(`${workerUrl.replace(/\/$/, "")}/admin/google/oauth-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminKey}`,
+        },
+        body: JSON.stringify({
+          tenantId: input.tenantId,
+          scope: input.scope,
+          masterChatId: input.masterChatId ?? null,
+          returnUrl: input.returnUrl ?? null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { connectUrl?: string; error?: string };
+      if (!res.ok || !data.connectUrl) {
+        throw new Error(data.error || "failed_to_mint_oauth_url");
+      }
+      return { connectUrl: data.connectUrl };
+    }),
+
+  /**
    * Toggle sync_enabled for an integration.
    */
   toggleSync: protectedProcedure

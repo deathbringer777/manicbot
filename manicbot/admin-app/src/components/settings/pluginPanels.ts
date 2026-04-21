@@ -27,7 +27,10 @@ type PanelLoader = () => Promise<{ default: ComponentType<PluginPanelProps> }>;
  * When a plugin ships a settings UI, add one entry here.
  */
 const PANEL_LOADERS: Record<string, PanelLoader> = {
-  // "sms-reminders.SettingsPanel": () => import("../../../../plugins/sms-reminders/ui/SettingsPanel"),
+  "google-calendar.SettingsPanel": () =>
+    import("../plugins/runtimes/GoogleCalendarRuntime") as Promise<{
+      default: ComponentType<PluginPanelProps>;
+    }>,
 };
 
 /**

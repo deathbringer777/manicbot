@@ -543,6 +543,31 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, email: normalizedEmail, tenantId, role });
   }
 
+  // POST /admin/google/oauth-url — mint a web-mode Google OAuth connect URL for the admin mini-app.
+  // Body: { tenantId, scope?: 'tenant'|'master', masterChatId?, returnUrl? }
+  if (request.method === 'POST' && url.pathname === '/admin/google/oauth-url') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }); }
+    const { tenantId, scope = 'tenant', masterChatId = null, returnUrl = null } = body || {};
+    if (!tenantId) return Response.json({ error: 'tenantId required' }, { status: 400 });
+    if (scope !== 'tenant' && scope !== 'master') {
+      return Response.json({ error: 'scope must be tenant or master' }, { status: 400 });
+    }
+    try {
+      const ec = { ...envCtx(env), ...env, baseUrl: (env.APP_BASE_URL || url.origin).replace(/\/$/, '') };
+      const { createWebOAuthSession } = await import('../services/google-calendar-oauth.js');
+      const result = await createWebOAuthSession(ec, { tenantId, scope, masterChatId, returnUrl });
+      if (!result.ok) return Response.json({ error: result.error }, { status: 400 });
+      void audit(ec, 'google.web_oauth_url', { tenantId, detail: { scope, sessionId: result.sessionId } });
+      return Response.json({ ok: true, connectUrl: result.connectUrl });
+    } catch (e) {
+      console.error('[admin/google/oauth-url]', e?.message);
+      return Response.json({ error: 'Failed to mint OAuth URL' }, { status: 500 });
+    }
+  }
+
   // GET /admin/events?key=ADMIN_KEY&limit=100&type=...&tenantId=...
   if (request.method === 'GET' && url.pathname === '/admin/events') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();

@@ -684,6 +684,35 @@ export async function createGoogleConnectUrl(ctx, { scope = 'master', actorChatI
   return `${getBaseUrl(ctx)}/google/connect?session=${encodeURIComponent(sessionId)}`;
 }
 
+/**
+ * Web-initiated OAuth session (from the admin mini-app, not Telegram).
+ * Differs from `createGoogleConnectUrl` in two ways:
+ *   - session.mode = 'web' — the callback auto-picks the primary calendar and
+ *     redirects back to `returnUrl`, skipping the HTML calendar-picker UI.
+ *   - tenantId is passed explicitly (no bot ctx needed).
+ */
+export async function createWebOAuthSession(ctx, { tenantId, scope = 'tenant', masterChatId = null, returnUrl = null } = {}) {
+  if (!tenantId) return { ok: false, error: 'tenantId required' };
+  if (!hasOAuthConfig(ctx)) return { ok: false, error: 'google_oauth_not_configured' };
+  if (!getBaseUrl(ctx)) return { ok: false, error: 'base_url_not_configured' };
+  const sessionId = randomId(16);
+  await putOAuthSession(ctx, sessionId, {
+    stage: 'oauth',
+    mode: 'web',
+    tenantId,
+    botId: null,
+    scope: scope === 'master' ? 'master' : 'tenant',
+    masterChatId: scope === 'master' ? masterChatId : null,
+    returnUrl: returnUrl || null,
+    createdAt: nowTs(),
+  }, 900);
+  return {
+    ok: true,
+    sessionId,
+    connectUrl: `${getBaseUrl(ctx)}/google/connect?session=${encodeURIComponent(sessionId)}`,
+  };
+}
+
 export async function handleGoogleConnectRequest(ctx, url) {
   const sessionId = url.searchParams.get('session') || '';
   const session = await getOAuthSession(ctx, sessionId);
@@ -762,6 +791,31 @@ export async function handleGoogleCallback(ctx, url) {
   const calendars = await listGoogleCalendars(tokens.access_token);
   const writable = calendars.filter(c => c.accessRole === 'owner' || c.accessRole === 'writer');
   const accountEmail = writable.find(c => c.primary)?.id || writable[0]?.id || null;
+
+  // Web mode: auto-pick the primary (or first writable) calendar and finalize right here,
+  // then redirect back to the admin panel. No intermediate HTML picker.
+  if (session.mode === 'web') {
+    const primary = writable.find(c => c.primary) || writable[0];
+    if (!primary) {
+      await deleteOAuthSession(ctx, sessionId);
+      return redirectToReturn(session.returnUrl, 'no_writable_calendar');
+    }
+    try {
+      await finalizeWebOAuth(ctx, {
+        session,
+        refreshTokenEnc,
+        accountEmail,
+        calendar: primary,
+      });
+    } catch (e) {
+      console.error('[google] web-mode finalize failed:', e?.message);
+      await deleteOAuthSession(ctx, sessionId);
+      return redirectToReturn(session.returnUrl, 'finalize_failed');
+    }
+    await deleteOAuthSession(ctx, sessionId);
+    return redirectToReturn(session.returnUrl, null);
+  }
+
   await putOAuthSession(ctx, sessionId, {
     ...session,
     stage: 'select',
@@ -778,6 +832,75 @@ export async function handleGoogleCallback(ctx, url) {
   return new Response(renderCalendarChoiceHtml(sessionId, accountEmail, writable), {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
+}
+
+function redirectToReturn(returnUrl, errorCode) {
+  const fallback = '/plugin/google-calendar';
+  let target = returnUrl || fallback;
+  try {
+    const u = new URL(target, 'https://placeholder.invalid');
+    if (errorCode) u.searchParams.set('gcal_error', errorCode);
+    else u.searchParams.set('connected', '1');
+    target = u.pathname + (u.search || '') + (u.hash || '');
+    // If returnUrl was absolute, restore origin
+    if (returnUrl && /^https?:\/\//i.test(returnUrl)) {
+      const abs = new URL(returnUrl);
+      abs.search = u.search;
+      target = abs.toString();
+    }
+  } catch {
+    target = fallback + (errorCode ? `?gcal_error=${encodeURIComponent(errorCode)}` : '?connected=1');
+  }
+  return Response.redirect(target, 302);
+}
+
+async function finalizeWebOAuth(ctx, { session, refreshTokenEnc, accountEmail, calendar }) {
+  const tenantCtx = {
+    ...ctx,
+    tenantId: session.tenantId,
+    baseUrl: getBaseUrl(ctx),
+  };
+  await ensureGoogleCalendarSchema(tenantCtx);
+  const integration = await saveGoogleIntegration(tenantCtx, {
+    scope: session.scope,
+    masterChatId: session.scope === 'master' ? session.masterChatId : null,
+    providerAccountEmail: accountEmail || calendar.id,
+    calendarId: calendar.id,
+    calendarSummary: calendar.summaryOverride || calendar.summary || calendar.id,
+    refreshTokenEnc,
+    syncEnabled: true,
+    syncDirection: 'two_way',
+  });
+  let finalIntegration = integration;
+  try {
+    finalIntegration = await startWatchForIntegration(tenantCtx, integration);
+  } catch (e) {
+    await persistIntegrationState(tenantCtx, integration.id, tenantCtx.tenantId, {
+      lastSyncStatus: 'watch_error',
+      lastSyncError: e.message,
+      updatedAt: nowTs(),
+    });
+  }
+  try {
+    await syncGoogleBusyBlocks(tenantCtx, finalIntegration);
+  } catch (e) {
+    await persistIntegrationState(tenantCtx, integration.id, tenantCtx.tenantId, {
+      lastSyncStatus: 'sync_error',
+      lastSyncError: e.message,
+      updatedAt: nowTs(),
+    });
+  }
+  if (session.scope === 'master' && session.masterChatId != null) {
+    const master = await getMaster(tenantCtx, session.masterChatId);
+    if (master) {
+      await saveMaster(tenantCtx, session.masterChatId, {
+        ...master,
+        googleCalendarId: finalIntegration.calendarId,
+        calendarEnabled: true,
+      });
+    }
+  }
+  return finalIntegration;
 }
 
 export async function handleGoogleSelect(ctx, url) {

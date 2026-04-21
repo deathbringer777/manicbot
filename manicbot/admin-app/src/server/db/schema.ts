@@ -810,11 +810,12 @@ export const pluginEvents = sqliteTable("plugin_events", {
   index("idx_plugin_events_created").on(t.createdAt),
 ]);
 
-// ─── Plugin Pins (migration 0036) ──────────────────────────────────────────
+// ─── Plugin Pins (migration 0036, FK added in 0037) ──────────────────────
 // Per-user sidebar shortcuts. Independent of plugin_installations — a user may
 // pin a platform-wide plugin without owning the install row.
+// ON DELETE CASCADE: removing a web_user drops their pins automatically.
 export const pluginPins = sqliteTable("plugin_pins", {
-  webUserId: text("web_user_id").notNull(),
+  webUserId: text("web_user_id").notNull().references(() => webUsers.id, { onDelete: "cascade" }),
   pluginSlug: text("plugin_slug").notNull(),
   pinnedAt: integer("pinned_at").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),

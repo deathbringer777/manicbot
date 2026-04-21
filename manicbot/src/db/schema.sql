@@ -810,13 +810,15 @@ CREATE TABLE IF NOT EXISTS plugin_events (
 CREATE INDEX IF NOT EXISTS idx_plugin_events_inst    ON plugin_events (installation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_plugin_events_created ON plugin_events (created_at);
 
--- Plugin pins (migration 0036) — per-user sidebar shortcuts
+-- Plugin pins (migration 0036, FK added in 0037) — per-user sidebar shortcuts.
+-- ON DELETE CASCADE: deleting a web_user drops their pins automatically.
 CREATE TABLE IF NOT EXISTS plugin_pins (
   web_user_id  TEXT    NOT NULL,
   plugin_slug  TEXT    NOT NULL,
   pinned_at    INTEGER NOT NULL,
   sort_order   INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (web_user_id, plugin_slug)
+  PRIMARY KEY (web_user_id, plugin_slug),
+  FOREIGN KEY (web_user_id) REFERENCES web_users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_plugin_pins_user    ON plugin_pins (web_user_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_plugin_pins_user_at ON plugin_pins (web_user_id, pinned_at);

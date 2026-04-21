@@ -28,6 +28,9 @@ import aiAbuseMonitorManifest from "./ai-abuse-monitor/manifest";
 import fraudShieldManifest from "./fraud-shield/manifest";
 import gdprCenterManifest from "./gdpr-center/manifest";
 
+// ── productivity / integrations ─────────────────────────────────────────────
+import googleCalendarManifest from "./google-calendar/manifest";
+
 // ── tenant_owner (4) ────────────────────────────────────────────────────────
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
 import birthdayCampaignsManifest from "./birthday-campaigns/manifest";
@@ -75,6 +78,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   aiAbuseMonitorManifest,
   fraudShieldManifest,
   gdprCenterManifest,
+  // productivity / integrations
+  googleCalendarManifest,
   // tenant_owner
   loyaltyStampsManifest,
   birthdayCampaignsManifest,

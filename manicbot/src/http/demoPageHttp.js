@@ -72,12 +72,12 @@ const HTML = `<!DOCTYPE html>
       flex-direction:column;
     }
     .status-bar{
-      height:46px;
+      min-height:46px;
       background:#fff;
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      padding:0 22px 8px;
+      padding: env(safe-area-inset-top, 32px) 22px 8px;
       font-size:11px;
       font-weight:700;
       color:#0f172a;

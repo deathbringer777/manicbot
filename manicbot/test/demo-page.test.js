@@ -60,6 +60,14 @@ describe('tryDemoPage', () => {
     expect(res.headers.get('Cache-Control')).toContain('no-cache');
   });
 
+  it('uses env(safe-area-inset-top) on status-bar to clear the Dynamic Island', async () => {
+    const { request, url } = makeReq('GET', '/demo');
+    const res = tryDemoPage(request, {}, url);
+    const html = await res.text();
+    expect(html).toContain('env(safe-area-inset-top');
+    expect(html).toContain('min-height:46px');
+  });
+
   // #S13 — CSP regression
   it('sets a strict Content-Security-Policy header', () => {
     const { request, url } = makeReq('GET', '/demo');

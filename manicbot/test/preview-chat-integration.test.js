@@ -269,7 +269,7 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
   it('drives all chrome colours through --mb-* variables', () => {
     expect(SRC).toMatch(/--mb-bg:#ffffff/);
     expect(SRC).toMatch(/--mb-fg:#1a1a1a/);
-    expect(SRC).toMatch(/--mb-btn-bg:#ffffff/);
+    expect(SRC).toMatch(/--mb-btn-bg:#f8fafc/);
     expect(SRC).toMatch(/--mb-btn-text:#1a1a1a/);
     expect(SRC).toMatch(/--mb-input-placeholder/);
     // Dark palette matches the spec (iOS system surface colours).

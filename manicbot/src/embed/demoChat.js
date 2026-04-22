@@ -90,14 +90,15 @@ export const DEMO_CHAT_SRC = `
       '--mb-statusbar-bg:#ffffff;' +
       '--mb-statusbar-fg:#1a1a1a;' +
       '--mb-header-bg:#ffffff;' +
-      '--mb-bubble-bot:#f1f5f9;' +
+      '--mb-bubble-bot:#eef0f4;' +
+      '--mb-bubble-bot-border:rgba(15,23,42,.05);' +
       '--mb-bot-text:#1a1a1a;' +
       '--mb-bubble-user:#8b5cf6;' +
       '--mb-user-text:#ffffff;' +
-      '--mb-btn-bg:#ffffff;' +
+      '--mb-btn-bg:#f8fafc;' +
       '--mb-btn-text:#1a1a1a;' +
-      '--mb-btn-border:#d0d0d0;' +
-      '--mb-btn-hover:#f5f5f5;' +
+      '--mb-btn-border:#cbd5e1;' +
+      '--mb-btn-hover:#f1f5f9;' +
       '--mb-input-bg:#f5f5f5;' +
       '--mb-input-text:#1a1a1a;' +
       '--mb-input-placeholder:#999999;' +
@@ -117,10 +118,11 @@ export const DEMO_CHAT_SRC = `
       '--mb-statusbar-fg:#ffffff;' +
       '--mb-header-bg:#1c1c1e;' +
       '--mb-bubble-bot:#2c2c2e;' +
+      '--mb-bubble-bot-border:rgba(255,255,255,.04);' +
       '--mb-bot-text:#ffffff;' +
       '--mb-btn-bg:#2c2c2e;' +
       '--mb-btn-text:#ffffff;' +
-      '--mb-btn-border:#48484a;' +
+      '--mb-btn-border:#3a3a3c;' +
       '--mb-btn-hover:#3a3a3c;' +
       '--mb-input-bg:#2c2c2e;' +
       '--mb-input-text:#ffffff;' +
@@ -128,7 +130,7 @@ export const DEMO_CHAT_SRC = `
       '--mb-composer-border:#3a3a3c}' +
     // SHOW_HEADER widgets sit inside an iPhone mockup whose Dynamic Island
     // pill overlaps the screen's top ~32-40px. Push statusbar down to clear it.
-    '.mb-demo.mb-with-header{--mb-island-clear:38px}' +
+    '.mb-demo.mb-with-header{--mb-island-clear:0px}' +
     // iPhone-style status bar (time + signal/battery)
     '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 6px) 14px 2px;font-size:10.5px;font-weight:600;color:var(--mb-statusbar-fg);flex-shrink:0;background:var(--mb-statusbar-bg);position:relative;z-index:3}' +
     '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center;opacity:.88}' +
@@ -145,26 +147,29 @@ export const DEMO_CHAT_SRC = `
     // Feed + bubbles (tighter spacing to fit inside iPhone screen)
     '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch;background:var(--mb-bg)}' +
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
-    '.mb-bubble{max-width:86%;padding:6px 10px;border-radius:14px;line-height:1.35;word-wrap:break-word;font-size:11.5px}' +
-    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
+    '.mb-bubble{max-width:86%;padding:7px 11px;border-radius:16px;line-height:1.4;word-wrap:break-word;font-size:12.5px}' +
+    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border:1px solid var(--mb-bubble-bot-border);border-bottom-left-radius:4px}' +
     '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user);color:var(--mb-user-text);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
     '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
     // Buttons use explicit --mb-btn-text (not color:inherit) so the label
     // stays readable regardless of the surrounding bubble's text colour.
-    '.mb-btn{display:block;padding:6px 10px;text-align:center;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:10px;cursor:pointer;font:inherit;font-size:11px;transition:background .15s;text-decoration:none}' +
+    '.mb-btn{display:block;padding:8px 12px;text-align:center;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:12px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;transition:background .15s,transform .1s;text-decoration:none;box-shadow:0 1px 2px rgba(15,23,42,.04)}' +
+    '.mb-btn:active{transform:scale(.98)}' +
     '.mb-btn:hover{background:var(--mb-btn-hover)}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
     '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
     '.mb-composer input::placeholder{color:var(--mb-input-placeholder)}' +
     '.mb-composer input:focus{border-color:var(--mb-bubble-user)}' +
-    '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user);color:var(--mb-user-text);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}' +
+    '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user);color:var(--mb-user-text);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(139,92,246,.35);transition:transform .1s}' +
+    '.mb-composer button:active{transform:scale(.94)}' +
     '.mb-composer button:disabled{opacity:.4;cursor:not-allowed}' +
     '.mb-typing{align-self:flex-start;padding:5px 9px;border-radius:12px;background:var(--mb-bubble-bot);display:inline-flex;gap:3px}' +
     '.mb-typing span{width:5px;height:5px;border-radius:50%;background:var(--mb-muted);animation:mb-bounce 1s infinite}' +
     '.mb-typing span:nth-child(2){animation-delay:.15s}.mb-typing span:nth-child(3){animation-delay:.3s}' +
-    '@keyframes mb-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}';
+    '@keyframes mb-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}' +
+    '@media(prefers-reduced-motion:reduce){.mb-typing span{animation:none}}';
   document.head.appendChild(styleTag);
 
   // Ensure the container is a positioning context so position:absolute children
@@ -253,6 +258,8 @@ export const DEMO_CHAT_SRC = `
 
   var feed = document.createElement('div');
   feed.className = 'mb-demo-feed';
+  feed.setAttribute('role', 'log');
+  feed.setAttribute('aria-live', 'polite');
   var composer = document.createElement('form');
   composer.className = 'mb-composer';
   composer.innerHTML =

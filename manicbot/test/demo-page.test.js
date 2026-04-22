@@ -60,15 +60,15 @@ describe('tryDemoPage', () => {
     expect(res.headers.get('Cache-Control')).toContain('no-cache');
   });
 
-  it('uses max(env(safe-area-inset-top),56px) on status-bar to clear the Dynamic Island', async () => {
+  it('renders a Dynamic Island element above the status bar', async () => {
     const { request, url } = makeReq('GET', '/demo');
     const res = tryDemoPage(request, {}, url);
     const html = await res.text();
-    // Desktop browsers set safe-area-inset-top to 0 (not undefined), so a
-    // plain env() fallback never fires. Using max(…,56px) guarantees clearance.
-    expect(html).toContain('max(env(safe-area-inset-top),56px)');
-    expect(html).toContain('padding-top:56px');
-    expect(html).toContain('min-height:46px');
+    // The island is positioned absolutely over the top of the screen — it
+    // overlaps the status bar the way it does on a real iPhone 15 Pro.
+    expect(html).toContain('class="island"');
+    expect(html).toMatch(/\.island\{[^}]*position:absolute/);
+    expect(html).toMatch(/\.island\{[^}]*border-radius:20px/);
   });
 
   it('includes a prefers-color-scheme:dark block so the mockup adapts to dark sites', async () => {

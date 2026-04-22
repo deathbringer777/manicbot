@@ -436,6 +436,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor, created_at);
 
 -- Role change requests (web users)
 CREATE TABLE IF NOT EXISTS role_change_requests (
@@ -462,6 +463,7 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   PRIMARY KEY (key, action)
 );
 CREATE INDEX IF NOT EXISTS idx_rl_window ON rate_limits(window_start);
+CREATE INDEX IF NOT EXISTS idx_rl_key_action_window ON rate_limits(key, action, window_start);
 
 -- ── Sprint 2-5 additions (migration 0029) ────────────────────────────────
 

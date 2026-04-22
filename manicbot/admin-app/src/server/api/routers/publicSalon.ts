@@ -2,6 +2,29 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { tenants, services, masters, tenantConfig, bots, reviews } from "~/server/db/schema";
 import { eq, and, like, or, isNotNull, inArray, sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { checkRateLimit } from "~/server/auth/rateLimit";
+
+// Public salon directory: 120 req / 60 s per IP — prevents enumeration & scraping.
+const RL_PUBLIC_MAX = 120;
+const RL_PUBLIC_WINDOW = 60 * 1000;
+
+function clientIp(ctx: { headers?: Headers | null }): string {
+  const h = ctx.headers;
+  if (!h?.get) return "unknown";
+  return h.get("cf-connecting-ip") || h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+async function assertNotRateLimited(
+  ctx: Parameters<typeof checkRateLimit>[0],
+  ip: string,
+  action: string,
+) {
+  const rl = await checkRateLimit(ctx, ip, action, RL_PUBLIC_MAX, RL_PUBLIC_WINDOW);
+  if (!rl.allowed) {
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Rate limit exceeded. Try again soon." });
+  }
+}
 import { hasCyrillic, cyrillicToLatin } from "~/lib/searchNormalize";
 
 /** Build a LIKE condition that covers both Cyrillic input and its Latin transliteration. */
@@ -52,6 +75,8 @@ export const publicSalonRouter = createTRPCRouter({
   getProfile: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ ctx, input }) => {
+      await assertNotRateLimited(ctx.db, clientIp(ctx), "publicSalon.getProfile");
+
       const tenantRows = await ctx.db
         .select()
         .from(tenants)
@@ -211,6 +236,8 @@ export const publicSalonRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
+      await assertNotRateLimited(ctx.db, clientIp(ctx), "publicSalon.search");
+
       const { query, city, lat, lng, radiusKm, page, limit } = input;
       const offset = (page - 1) * limit;
 
@@ -314,6 +341,8 @@ export const publicSalonRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
+      await assertNotRateLimited(ctx.db, clientIp(ctx), "publicSalon.searchMasters");
+
       const { query, city, page, limit } = input;
       const offset = (page - 1) * limit;
 

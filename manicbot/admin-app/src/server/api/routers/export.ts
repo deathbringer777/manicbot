@@ -3,6 +3,7 @@ import { users, appointments, tenants } from "~/server/db/schema";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { PLAN_PRICES_PLN } from "~/lib/money";
+import { writeAudit, ctxIp } from "~/server/security/audit";
 
 function toCSV(headers: string[], rows: (string | number | null | undefined)[][]): string {
   const escape = (v: string | number | null | undefined) => {
@@ -23,6 +24,14 @@ export const exportRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "export.users",
+        tenantId: input.tenantId ?? null,
+        detail: `format=${input.format} tenant=${input.tenantId ?? "ALL"}`,
+        ip: ctxIp(ctx),
+      });
+
       const result = input.tenantId
         ? await ctx.db
             .select()
@@ -60,6 +69,14 @@ export const exportRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "export.appointments",
+        tenantId: input.tenantId ?? null,
+        detail: `format=${input.format} from=${input.dateFrom ?? "-"} to=${input.dateTo ?? "-"}`,
+        ip: ctxIp(ctx),
+      });
+
       const conditions = [];
       if (input.tenantId) conditions.push(eq(appointments.tenantId, input.tenantId));
       if (input.dateFrom) conditions.push(gte(appointments.date, input.dateFrom));
@@ -99,6 +116,13 @@ export const exportRouter = createTRPCRouter({
   revenue: adminProcedure
     .input(z.object({ format: z.enum(["csv", "json"]).default("csv") }))
     .query(async ({ ctx, input }) => {
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "export.revenue",
+        detail: `format=${input.format}`,
+        ip: ctxIp(ctx),
+      });
+
       const allTenants = await ctx.db.select().from(tenants).orderBy(desc(tenants.createdAt));
 
       const rows = allTenants.map((t) => ({

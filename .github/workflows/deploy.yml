@@ -20,8 +20,36 @@ on:
           - manicbot-landing
 
 jobs:
+  # ─── Security scanning ──────────────────────────────────────
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security — Gitleaks + Semgrep
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for gitleaks
+
+      - name: Gitleaks — detect secrets in history
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Semgrep — SAST scan
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/typescript
+            p/nextjs
+            p/jwt
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        # Allow workflow to proceed even without Semgrep token (OSS mode)
+        continue-on-error: ${{ secrets.SEMGREP_APP_TOKEN == '' }}
+
   # ─── Bot: test ──────────────────────────────────────────────
   test:
+    needs: security-scan
     runs-on: ubuntu-latest
     name: Bot — Test
     steps:
@@ -47,9 +75,8 @@ jobs:
         working-directory: manicbot
 
       - name: Security audit (worker deps)
-        run: npm audit --audit-level=high --production || echo "npm audit found high issues — review before next release"
+        run: npm audit --audit-level=high --production
         working-directory: manicbot
-        continue-on-error: true
 
       - name: Admin app — install
         run: npm ci --legacy-peer-deps
@@ -64,9 +91,8 @@ jobs:
         working-directory: manicbot/admin-app
 
       - name: Admin app — security audit
-        run: npm audit --audit-level=high --production || echo "admin-app npm audit found high issues — review before next release"
+        run: npm audit --audit-level=high --production
         working-directory: manicbot/admin-app
-        continue-on-error: true
 
   # ─── Bot: deploy to Cloudflare Workers ──────────────────────
   deploy-bot:
@@ -172,7 +198,12 @@ jobs:
         run: npx next-on-pages
         working-directory: manicbot/admin-app
         env:
-          SKIP_ENV_VALIDATION: true
+          # Supply dummy values so Zod env schema passes at build time (values are
+          # not used at runtime — real secrets come from Cloudflare Pages env vars).
+          NEXTAUTH_SECRET: ci-placeholder-not-used-at-runtime
+          AUTH_SECRET: ci-placeholder-not-used-at-runtime
+          TELEGRAM_BOT_TOKEN: ci-placeholder
+          ADMIN_CHAT_ID: "0"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

@@ -28,6 +28,7 @@ const RL_REGISTER_MAX = 5;
 const RL_RESEND_MAX = 3;
 const RL_VERIFY_MAX = 5;
 const RL_RESET_MAX = 5;
+const RL_EMAIL_CHANGE_MAX = 3; // max email change requests per IP per window
 const RL_LOGIN_IP_MAX = 20; // max login attempts per IP across all accounts
 const RL_LOGIN_IP_WINDOW = 15 * 60 * 1000; // 15 minutes
 
@@ -539,6 +540,14 @@ export const webUsersRouter = createTRPCRouter({
       if (!ctx.webUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
       }
+
+      // Rate limit: max 3 requests per IP per 10 minutes (prevents email flooding)
+      const ip = clientIp(ctx as { headers?: Headers | null });
+      const rl = await checkRateLimit(ctx.db, ip, "email_change", RL_EMAIL_CHANGE_MAX, RL_WINDOW);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." });
+      }
+
       if (!isResendConfigured() || !authPublicBaseUrl()) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Email service not configured" });
       }

@@ -424,6 +424,7 @@ export const auditLog = sqliteTable("audit_log", {
 }, (t) => [
   index("idx_audit_log_tenant").on(t.tenantId, t.createdAt),
   index("idx_audit_log_action").on(t.action, t.createdAt),
+  index("idx_audit_log_actor").on(t.actor, t.createdAt),
 ]);
 
 // ─── Role Change Requests ───────────────────────────────────────────────────
@@ -454,6 +455,7 @@ export const rateLimits = sqliteTable("rate_limits", {
   windowStart: integer("window_start").notNull(),
 }, (t) => [
   index("idx_rl_window").on(t.windowStart),
+  index("idx_rl_key_action_window").on(t.key, t.action, t.windowStart),
 ]);
 
 // ─── Sprint 2-5 additions (migration 0029) ──────────────────────────────────

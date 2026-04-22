@@ -277,7 +277,7 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     expect(SRC).toMatch(/--mb-bg:#1c1c1e/);
     expect(SRC).toMatch(/--mb-btn-bg:#2c2c2e/);
     expect(SRC).toMatch(/--mb-input-text:#ffffff/);
-    expect(SRC).toMatch(/--mb-statusbar-bg:#000000/);
+    expect(SRC).toMatch(/--mb-statusbar-bg:#1c1c1e/);
     // Button text must be explicit (not color:inherit) so the label stays
     // readable when the surrounding bubble's text colour differs.
     expect(SRC).toMatch(/\.mb-btn\{[^}]*color:var\(--mb-btn-text\)/);

@@ -113,7 +113,9 @@ export const DEMO_CHAT_SRC = `
       '--mb-muted:#8e8e93;' +
       '--mb-surface:#2c2c2e;' +
       '--mb-border:#3a3a3c;' +
-      '--mb-statusbar-bg:#000000;' +
+      // Statusbar bg matches the feed surface (not pure black) so the landing's
+      // Dynamic Island pill (true black) stays visibly distinct in dark mode.
+      '--mb-statusbar-bg:#1c1c1e;' +
       '--mb-statusbar-fg:#ffffff;' +
       '--mb-header-bg:#1c1c1e;' +
       '--mb-bubble-bot:#2c2c2e;' +

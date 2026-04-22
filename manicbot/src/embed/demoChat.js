@@ -90,8 +90,7 @@ export const DEMO_CHAT_SRC = `
       '--mb-statusbar-bg:#ffffff;' +
       '--mb-statusbar-fg:#1a1a1a;' +
       '--mb-header-bg:#ffffff;' +
-      '--mb-bubble-bot:#eef0f4;' +
-      '--mb-bubble-bot-border:rgba(15,23,42,.05);' +
+      '--mb-bubble-bot:#e8ebf2;' +
       '--mb-bot-text:#1a1a1a;' +
       '--mb-bubble-user:#8b5cf6;' +
       '--mb-user-text:#ffffff;' +
@@ -118,7 +117,6 @@ export const DEMO_CHAT_SRC = `
       '--mb-statusbar-fg:#ffffff;' +
       '--mb-header-bg:#1c1c1e;' +
       '--mb-bubble-bot:#2c2c2e;' +
-      '--mb-bubble-bot-border:rgba(255,255,255,.04);' +
       '--mb-bot-text:#ffffff;' +
       '--mb-btn-bg:#2c2c2e;' +
       '--mb-btn-text:#ffffff;' +
@@ -130,25 +128,28 @@ export const DEMO_CHAT_SRC = `
       '--mb-composer-border:#3a3a3c}' +
     // SHOW_HEADER widgets sit inside an iPhone mockup whose Dynamic Island
     // pill overlaps the screen's top ~32-40px. Push statusbar down to clear it.
-    '.mb-demo.mb-with-header{--mb-island-clear:0px}' +
+    // The host landing mockup draws a Dynamic Island pill absolutely over the
+    // top of the screen (bottom edge ~41-46px). Statusbar padding must clear
+    // that — 44px + inner 6px = statusbar top at 50px, header just below.
+    '.mb-demo.mb-with-header{--mb-island-clear:44px}' +
     // iPhone-style status bar (time + signal/battery)
-    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 6px) 14px 2px;font-size:10.5px;font-weight:600;color:var(--mb-statusbar-fg);flex-shrink:0;background:var(--mb-statusbar-bg);position:relative;z-index:3}' +
-    '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center;opacity:.88}' +
-    '.mb-statusbar svg{width:14px;height:10px;display:block}' +
-    // Header — slightly taller avatar (32px) for logo images to read well
-    '.mb-header{display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid var(--mb-border);background:var(--mb-header-bg);flex-shrink:0;position:relative;z-index:2}' +
-    '.mb-header-av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:14px;font-weight:700;flex-shrink:0;overflow:hidden}' +
-    '.mb-header-meta{display:flex;flex-direction:column;min-width:0;flex:1}' +
-    '.mb-header-name{font-size:12px;font-weight:600;color:var(--mb-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}' +
+    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 8px) 18px 4px;font-size:12px;font-weight:600;color:var(--mb-statusbar-fg);flex-shrink:0;background:var(--mb-statusbar-bg);position:relative;z-index:3;font-variant-numeric:tabular-nums;letter-spacing:.01em}' +
+    '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center}' +
+    '.mb-statusbar svg{width:15px;height:12px;display:block;fill:currentColor}' +
+    // Header — bigger avatar + tidy status line for landing embed mode.
+    '.mb-header{display:flex;align-items:center;gap:10px;padding:6px 14px 10px;border-bottom:1px solid var(--mb-border);background:var(--mb-header-bg);flex-shrink:0;position:relative;z-index:2}' +
+    '.mb-header-av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:16px;font-weight:700;flex-shrink:0;overflow:hidden;box-shadow:0 2px 6px rgba(139,92,246,.25)}' +
+    '.mb-header-meta{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px}' +
+    '.mb-header-name{font-size:13.5px;font-weight:600;color:var(--mb-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;letter-spacing:-.01em}' +
     // Status dot uses currentColor so toggling .mb-offline changes both text and dot in one step.
-    '.mb-header-status{font-size:10px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:3px;transition:color .3s}' +
-    '.mb-header-status::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}' +
+    '.mb-header-status{font-size:11.5px;color:#22c55e;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;gap:5px;transition:color .3s}' +
+    '.mb-header-status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 0 2px rgba(34,197,94,.2)}' +
     '.mb-header-status.mb-offline{color:var(--mb-muted)}' +
     // Feed + bubbles (tighter spacing to fit inside iPhone screen)
     '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch;background:var(--mb-bg)}' +
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
     '.mb-bubble{max-width:86%;padding:7px 11px;border-radius:16px;line-height:1.4;word-wrap:break-word;font-size:12.5px}' +
-    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border:1px solid var(--mb-bubble-bot-border);border-bottom-left-radius:4px}' +
+    '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
     '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user);color:var(--mb-user-text);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
     '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +

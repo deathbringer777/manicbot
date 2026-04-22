@@ -126,15 +126,14 @@ export const DEMO_CHAT_SRC = `
       '--mb-input-text:#ffffff;' +
       '--mb-input-placeholder:#8e8e93;' +
       '--mb-composer-border:#3a3a3c}' +
-    // SHOW_HEADER widgets sit inside an iPhone mockup whose Dynamic Island
-    // pill overlaps the screen's top ~32-40px. Push statusbar down to clear it.
-    // The host landing mockup draws a Dynamic Island pill absolutely over the
-    // top of the screen (bottom edge ~41-46px). Statusbar padding must clear
-    // that — 44px + inner 6px = statusbar top at 50px, header just below.
-    '.mb-demo.mb-with-header{--mb-island-clear:44px}' +
-    // iPhone-style status bar (time + signal/battery)
-    '.mb-statusbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--mb-island-clear) + 8px) 18px 4px;font-size:12px;font-weight:600;color:var(--mb-statusbar-fg);flex-shrink:0;background:var(--mb-statusbar-bg);position:relative;z-index:3;font-variant-numeric:tabular-nums;letter-spacing:.01em}' +
-    '.mb-statusbar .icons{display:inline-flex;gap:4px;align-items:center}' +
+    // The host landing mockup draws a Dynamic Island pill at top:12px, h:30px
+    // (bottom edge ~42px, center at y~27px). Statusbar uses min-height + align
+    // center so the time sits on the SAME row as the island (left side), icons
+    // on the right side — exactly like a real iPhone. Chat-header then starts
+    // at y~54, safely below the island bottom at 42.
+    '.mb-demo.mb-with-header .mb-statusbar{min-height:54px;align-items:center;padding:0 22px}' +
+    '.mb-statusbar{display:flex;align-items:flex-end;justify-content:space-between;padding:14px 20px 6px;font-size:13px;font-weight:600;color:var(--mb-statusbar-fg);flex-shrink:0;background:var(--mb-statusbar-bg);position:relative;z-index:3;font-variant-numeric:tabular-nums;letter-spacing:.01em}' +
+    '.mb-statusbar .icons{display:inline-flex;gap:5px;align-items:center}' +
     '.mb-statusbar svg{width:15px;height:12px;display:block;fill:currentColor}' +
     // Header — bigger avatar + tidy status line for landing embed mode.
     '.mb-header{display:flex;align-items:center;gap:10px;padding:6px 14px 10px;border-bottom:1px solid var(--mb-border);background:var(--mb-header-bg);flex-shrink:0;position:relative;z-index:2}' +

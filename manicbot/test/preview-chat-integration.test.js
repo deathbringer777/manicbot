@@ -239,14 +239,15 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     expect(SRC).toMatch(/Нет соединения/);
   });
 
-  // #S15 — Dynamic Island clearance when embedded in landing iPhone mockup.
-  // Without this, the widget statusbar ("17:39") + header ("Preview Salon")
-  // sit under the mockup's island SVG and get visually clipped.
-  it('reserves Dynamic Island clearance when SHOW_HEADER is active', () => {
-    expect(SRC).toMatch(/--mb-island-clear/);
+  // #S15 — Dynamic Island layout when embedded in landing iPhone mockup.
+  // Time + icons sit on the SAME row as the island (real-iPhone layout): the
+  // widget's statusbar uses min-height + align:center in mb-with-header mode
+  // so content vertically centers at island center. Chat-header then starts
+  // safely below island bottom.
+  it('aligns statusbar content with the Dynamic Island in SHOW_HEADER mode', () => {
     expect(SRC).toMatch(/mb-with-header/);
-    // statusbar uses calc(var(...) + 6px) so padding-top grows by island height
-    expect(SRC).toMatch(/calc\(var\(--mb-island-clear\)/);
+    expect(SRC).toMatch(/\.mb-demo\.mb-with-header \.mb-statusbar\{[^}]*min-height:54px/);
+    expect(SRC).toMatch(/\.mb-demo\.mb-with-header \.mb-statusbar\{[^}]*align-items:center/);
   });
 
   // #S15 — dark mode follows host html.dark; OS pref is only a fallback when

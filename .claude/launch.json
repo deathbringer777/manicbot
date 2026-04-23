@@ -13,5 +13,17 @@
       "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/ManicBot_Archive/manicbot-analysis && BLOG_INTEGRATED=0 npm run dev -- --port 3001"],
       "port": 3001
     },
+    {
+      "name": "worker",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "export HOME=/Users/vdovin && source /Users/vdovin/.nvm/nvm.sh && cd /Users/vdovin/Desktop/Manicbot_com/manicbot && npx wrangler dev --port 8787 --local"],
+      "port": 8787
+    },
+    {
+      "name": "demo-static",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd /tmp/mb-demo && python3 -m http.server 8900"],
+      "port": 8900
+    }
   ]
 }

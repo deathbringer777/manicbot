@@ -7,12 +7,14 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
 import { hasRuntime } from "~/components/plugins/runtimePanels";
 
-// Mock tRPC — the runtime queries googleCalendar.list and getConnectInfo
+// Mock tRPC — cover every procedure the runtime calls (hooks run
+// unconditionally, so even procedures gated by `enabled:` must be defined).
 vi.mock("~/trpc/react", () => ({
   api: {
     useUtils: () => ({
       googleCalendar: {
         list: { invalidate: () => Promise.resolve() },
+        getStatus: { invalidate: () => Promise.resolve() },
       },
     }),
     googleCalendar: {
@@ -21,6 +23,21 @@ vi.mock("~/trpc/react", () => ({
       },
       getConnectInfo: {
         useQuery: () => ({ data: null, isLoading: false }),
+      },
+      getStatus: {
+        useQuery: () => ({
+          data: null,
+          isLoading: false,
+          isError: false,
+          refetch: () => Promise.resolve({ data: null }),
+        }),
+      },
+      createWebConnectUrl: {
+        useMutation: () => ({
+          mutate: () => {},
+          mutateAsync: () => Promise.resolve({ url: "" }),
+          isPending: false,
+        }),
       },
       toggleSync: {
         useMutation: () => ({ mutate: () => {}, isPending: false }),
@@ -75,9 +92,15 @@ describe("Google Calendar runtime", () => {
     expect(hasRuntime("google-calendar")).toBe(true);
   });
 
-  it("shows 'available to salon owners' warning when tenantId is null", () => {
-    renderRuntime(null);
-    const el = screen.getByTestId("google-calendar-runtime");
-    expect(el.textContent).toContain("salon owners");
+  // When tenantId is null (no salon context yet) the runtime must not crash —
+  // it falls back to a loading spinner while the role context settles.
+  it("renders without crashing when tenantId is null", () => {
+    const { container } = renderRuntime(null);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("renders without crashing when tenantId is present", () => {
+    const { container } = renderRuntime("t_test");
+    expect(container.firstChild).not.toBeNull();
   });
 });

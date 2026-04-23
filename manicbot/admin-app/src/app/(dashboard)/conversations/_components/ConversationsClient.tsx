@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, Loader2, RefreshCw, MessageCircle, Search } from "lucide-react";
+import { MessageSquare, RefreshCw, MessageCircle, Search } from "lucide-react";
+import { EmptyState } from "~/components/ui/EmptyState";
+import { SkeletonCard } from "~/components/ui/Skeleton";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
@@ -157,15 +159,15 @@ export function ConversationsPage() {
       </div>
 
       {convs.isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="animate-spin text-brand-400 h-6 w-6" />
+        <div className="space-y-2.5 mt-2">
+          {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} lines={2} />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <MessageCircle className="h-10 w-10 text-slate-600" />
-          <p className="text-slate-500 text-sm">No conversations found</p>
-          <p className="text-slate-600 text-xs">Messages from clients will appear here</p>
-        </div>
+        <EmptyState
+          icon={MessageCircle}
+          title="No conversations found"
+          description="Messages from clients via Telegram, WhatsApp, and Instagram will appear here"
+        />
       ) : (
         <div className="space-y-2">
           {items.map((conv) => {

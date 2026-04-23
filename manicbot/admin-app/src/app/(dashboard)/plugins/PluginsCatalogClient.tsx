@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Puzzle, Sparkles } from "lucide-react";
+import { Puzzle, Sparkles, Search } from "lucide-react";
+import { EmptyState } from "~/components/ui/EmptyState";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
@@ -125,22 +126,23 @@ export default function PluginsCatalogClient() {
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-5 animate-pulse min-h-[200px]"
+                className="rounded-xl border border-[#e5e7eb] dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-5 min-h-[200px]"
               >
-                <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-white/10" />
-                <div className="mt-4 h-4 w-3/4 rounded bg-slate-200 dark:bg-white/10" />
-                <div className="mt-2 h-3 w-full rounded bg-slate-200 dark:bg-white/5" />
-                <div className="mt-1 h-3 w-5/6 rounded bg-slate-200 dark:bg-white/5" />
-                <div className="mt-4 h-5 w-20 rounded-full bg-slate-200 dark:bg-white/10" />
+                <div className="h-10 w-10 rounded-xl skeleton-shimmer" />
+                <div className="mt-4 h-4 w-3/4 rounded skeleton-shimmer" />
+                <div className="mt-2 h-3 w-full rounded skeleton-shimmer" />
+                <div className="mt-1.5 h-3 w-5/6 rounded skeleton-shimmer" />
+                <div className="mt-5 h-5 w-20 rounded-full skeleton-shimmer" />
               </div>
             ))}
           </div>
         ) : visible.length === 0 ? (
-          <div
-            data-testid="plugins-empty"
-            className="mt-8 h-64 flex items-center justify-center text-sm text-slate-400 rounded-2xl border border-dashed border-slate-200 dark:border-white/10"
-          >
-            {t("plugins.catalog.emptyResult", lang)}
+          <div data-testid="plugins-empty">
+            <EmptyState
+              icon={Search}
+              title={t("plugins.catalog.emptyResult", lang)}
+              description={lang === "ru" ? "Попробуйте изменить фильтры или поисковый запрос" : lang === "ua" ? "Спробуйте змінити фільтри або пошуковий запит" : "Try adjusting your filters or search query"}
+            />
           </div>
         ) : (
           <div

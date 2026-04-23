@@ -2,6 +2,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  /* Brand (purple) — kept for Telegram Mini App */
   --color-brand-50: #f5f3ff;
   --color-brand-100: #ede9fe;
   --color-brand-200: #ddd6fe;
@@ -13,7 +14,28 @@
   --color-brand-800: #4c1d95;
   --color-brand-900: #3b1473;
   --color-brand-950: #2e1065;
-  
+
+  /* Accent (Brevo green) — web admin dashboard */
+  --color-accent-50:  #ecfef6;
+  --color-accent-100: #d0fce9;
+  --color-accent-200: #a3f8d4;
+  --color-accent-300: #6aefc0;
+  --color-accent-400: #34dfa8;
+  --color-accent-500: #0b9b6b;
+  --color-accent-600: #098f61;
+  --color-accent-700: #07714d;
+  --color-accent-800: #065a3e;
+  --color-accent-900: #044530;
+  --color-accent-950: #022318;
+
+  /* Brevo-inspired surface tokens */
+  --color-surface:       #fafaf7;
+  --color-surface-card:  #ffffff;
+  --color-ink:           #1a1a2e;
+  --color-ink-muted:     #6b7280;
+  --color-ink-border:    #e5e7eb;
+  --color-ink-faint:     #f3f4f6;
+
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -61,35 +83,35 @@
     --radius: 0.75rem;
   }
 
-  /* Light mode (for public pages when theme is toggled) */
+  /* Light mode — Brevo-inspired palette */
   :root:not(.dark) {
-    --background: #f8fafc; /* slate-50 */
-    --foreground: #0f172a; /* slate-900 */
+    --background: #fafaf7;
+    --foreground: #1a1a2e;
 
     --card: #ffffff;
-    --card-foreground: #0f172a;
+    --card-foreground: #1a1a2e;
 
     --popover: #ffffff;
-    --popover-foreground: #0f172a;
+    --popover-foreground: #1a1a2e;
 
-    --primary: #7c3aed;
+    --primary: #0b9b6b;
     --primary-foreground: #ffffff;
 
-    --secondary: #f1f5f9; /* slate-100 */
-    --secondary-foreground: #0f172a;
+    --secondary: #f3f4f6;
+    --secondary-foreground: #1a1a2e;
 
-    --muted: #f1f5f9;
-    --muted-foreground: #64748b; /* slate-500 */
+    --muted: #f3f4f6;
+    --muted-foreground: #6b7280;
 
-    --accent: #f1f5f9;
-    --accent-foreground: #0f172a;
+    --accent: #ecfef6;
+    --accent-foreground: #1a1a2e;
 
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
 
-    --border: #e2e8f0; /* slate-200 */
-    --input: #e2e8f0;
-    --ring: #7c3aed;
+    --border: #e5e7eb;
+    --input: #e5e7eb;
+    --ring: #0b9b6b;
   }
 
   body {
@@ -134,6 +156,22 @@
     background: linear-gradient(145deg, rgba(51,65,85,0.45), rgba(30,41,59,0.7));
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+  }
+
+  /* Skeleton shimmer */
+  @keyframes shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  .skeleton-shimmer {
+    background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
+    background-size: 800px 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  :root.dark .skeleton-shimmer,
+  .dark .skeleton-shimmer {
+    background: linear-gradient(90deg, rgba(51,65,85,0.5) 25%, rgba(71,85,105,0.6) 50%, rgba(51,65,85,0.5) 75%);
+    background-size: 800px 100%;
   }
 
   /* Smooth page transitions */

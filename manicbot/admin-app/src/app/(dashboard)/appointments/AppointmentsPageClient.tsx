@@ -3,6 +3,9 @@
 import { useMemo, useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { PageHeader } from "~/components/ui/PageHeader";
+import { EmptyState } from "~/components/ui/EmptyState";
+import { SkeletonCard } from "~/components/ui/Skeleton";
 import {
   Calendar,
   CalendarDays,
@@ -508,14 +511,12 @@ export default function AppointmentsPageClient() {
     <Shell>
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Записи</h1>
-            {viewMode === "list" && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{total} записей</p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between gap-4">
+          <PageHeader
+            title="Appointments"
+            subtitle={viewMode === "list" ? `${total} total` : undefined}
+          />
+          <div className="flex items-center gap-2 pt-1">
             {viewMode === "list" && (
               <button
                 onClick={handleExport}
@@ -662,14 +663,14 @@ export default function AppointmentsPageClient() {
             {/* List */}
             {listLoading ? (
               <div className="space-y-2.5">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="glass-card rounded-2xl p-4 h-24 animate-pulse" />
-                ))}
+                {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} lines={3} />)}
               </div>
             ) : listApts.length === 0 ? (
-              <div className="glass-card rounded-2xl py-16 text-center">
-                <p className="text-slate-500 text-sm">Нет записей</p>
-              </div>
+              <EmptyState
+                icon={Calendar}
+                title="No appointments found"
+                description={statusFilter ? "No appointments match this status filter. Try clearing the filter." : "Appointments will appear here once clients start booking."}
+              />
             ) : (
               <div className="space-y-2.5">
                 {listApts.map((apt) => (

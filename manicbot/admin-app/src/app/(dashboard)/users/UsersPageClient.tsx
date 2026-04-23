@@ -3,11 +3,15 @@
 import { useState, useCallback } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { EmptyState } from "~/components/ui/EmptyState";
+import { PageHeader } from "~/components/ui/PageHeader";
+import { SkeletonCard } from "~/components/ui/Skeleton";
 import {
   Search,
   ShieldAlert,
   UserX,
   UserCheck,
+  Users,
   Shield,
   ShieldOff,
   ChevronLeft,
@@ -225,12 +229,10 @@ export default function UsersPageClient() {
   return (
     <Shell>
       <div className="space-y-4">
-        <header>
-          <h1 className="text-2xl font-extrabold tracking-tight">Users</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {total} уникальных пользователей · отсортировано по имени
-          </p>
-        </header>
+        <PageHeader
+          title="Users"
+          subtitle={isLoading ? "Loading…" : `${total} users · sorted by name`}
+        />
 
         {/* Search */}
         <div className="relative">
@@ -279,14 +281,14 @@ export default function UsersPageClient() {
         {/* Users list */}
         {isLoading ? (
           <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="glass-card rounded-2xl p-4 h-28 animate-pulse" />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} lines={3} />)}
           </div>
         ) : usersList.length === 0 ? (
-          <div className="glass-card rounded-2xl py-16 text-center">
-            <p className="text-slate-500 text-sm">Пользователи не найдены</p>
-          </div>
+          <EmptyState
+            icon={Users}
+            title={search ? "No users found" : "No users yet"}
+            description={search ? `No results for "${search}". Try a different search term.` : "Users will appear here once they start interacting with a bot."}
+          />
         ) : (
           <div className="space-y-2.5">
             {usersList.map((user) => (

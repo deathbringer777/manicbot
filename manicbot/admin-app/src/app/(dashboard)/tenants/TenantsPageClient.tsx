@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { PageHeader } from "~/components/ui/PageHeader";
+import { EmptyState } from "~/components/ui/EmptyState";
+import { SkeletonCard } from "~/components/ui/Skeleton";
 import {
   Users,
   CalendarDays,
@@ -23,6 +26,7 @@ import {
   Check,
   ArrowLeft,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { TestBadge } from "~/components/ui/TestBadge";
 
@@ -188,11 +192,11 @@ export default function TenantsPageClient() {
     <Shell>
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Tenants</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{tenants.length} салонов</p>
-          </div>
+        <div className="flex items-start justify-between gap-4">
+          <PageHeader
+            title="Tenants"
+            subtitle={isLoading ? "Loading…" : `${tenants.length} salon${tenants.length !== 1 ? "s" : ""}`}
+          />
           <div className="flex items-center gap-2">
             <button
               onClick={() => setQoStep(1)}
@@ -214,9 +218,7 @@ export default function TenantsPageClient() {
         {/* Tenants list */}
         {isLoading ? (
           <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="glass-card rounded-2xl p-4 h-24 animate-pulse" />
-            ))}
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} lines={3} />)}
           </div>
         ) : (
           <div className="space-y-3">
@@ -375,12 +377,12 @@ export default function TenantsPageClient() {
             ))}
 
             {tenants.length === 0 && (
-              <div className="glass-card rounded-2xl py-16 text-center">
-                <p className="text-slate-500 text-sm">Нет тенантов</p>
-                <button onClick={() => setShowCreate(true)} className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 bg-brand-500/20 text-brand-400 rounded-xl text-sm font-medium">
-                  <Plus className="w-4 h-4" />Создать первый
-                </button>
-              </div>
+              <EmptyState
+                icon={Building2}
+                title="No tenants yet"
+                description="Salons registered on the platform will appear here."
+                action={{ label: "Create first salon", onClick: () => setShowCreate(true) }}
+              />
             )}
           </div>
         )}

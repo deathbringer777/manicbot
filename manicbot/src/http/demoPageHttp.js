@@ -222,9 +222,13 @@ const HTML = `<!DOCTYPE html>
           0 30px 70px -20px rgba(0,0,0,.75),
           0 15px 30px -15px rgba(0,0,0,.5);
       }
-      .iphone-screen{background:#0a0a0a;box-shadow:inset 0 0 0 1px #000}
-      .status-bar{color:#f1f5f9}
-      .chat-header{border-bottom-color:rgba(255,255,255,.05)}
+      /* Screen bg matches the widget's --mb-bg dark token (#1c1c1e) so there
+         is no colour step between our static chrome and the live chat area. */
+      .iphone-screen{background:#1c1c1e;box-shadow:inset 0 0 0 1px #000}
+      .status-bar{color:#f1f5f9;background:#1c1c1e}
+      /* Remove the separator line — the content flow makes the boundary clear
+         without a visible stroke that reads as a white stripe on dark. */
+      .chat-header{background:#1c1c1e;border-bottom-color:transparent}
       .chat-header .info strong{color:#f1f5f9}
       .phone-wrap::after{display:none}
     }

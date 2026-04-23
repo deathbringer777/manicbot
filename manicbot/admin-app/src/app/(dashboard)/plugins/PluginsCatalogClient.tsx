@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Puzzle, Sparkles } from "lucide-react";
 import { api } from "~/trpc/react";
+import { EmptyState } from "~/components/ui/EmptyState";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -136,11 +137,12 @@ export default function PluginsCatalogClient() {
             ))}
           </div>
         ) : visible.length === 0 ? (
-          <div
-            data-testid="plugins-empty"
-            className="mt-8 h-64 flex items-center justify-center text-sm text-slate-400 rounded-2xl border border-dashed border-slate-200 dark:border-white/10"
-          >
-            {t("plugins.catalog.emptyResult", lang)}
+          <div data-testid="plugins-empty" className="mt-4 rounded-2xl border border-dashed border-[#e5e7eb] dark:border-white/10 overflow-hidden">
+            <EmptyState
+              illustrationVariant="puzzle"
+              title="Плагины не найдены"
+              subtitle={t("plugins.catalog.emptyResult", lang)}
+            />
           </div>
         ) : (
           <div

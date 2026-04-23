@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { EmptyState } from "~/components/ui/EmptyState";
 import {
   Calendar,
   CalendarDays,
@@ -667,8 +668,12 @@ export default function AppointmentsPageClient() {
                 ))}
               </div>
             ) : listApts.length === 0 ? (
-              <div className="glass-card rounded-2xl py-16 text-center">
-                <p className="text-slate-500 text-sm">Нет записей</p>
+              <div className="glass-card rounded-2xl overflow-hidden">
+                <EmptyState
+                  illustrationVariant="calendar"
+                  title="Записей нет"
+                  subtitle="Записи клиентов появятся здесь после их добавления"
+                />
               </div>
             ) : (
               <div className="space-y-2.5">

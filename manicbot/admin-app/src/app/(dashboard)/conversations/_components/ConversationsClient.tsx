@@ -5,6 +5,7 @@ import { MessageSquare, Loader2, RefreshCw, MessageCircle, Search } from "lucide
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
+import { EmptyState } from "~/components/ui/EmptyState";
 
 type ChannelFilter = "all" | "telegram" | "whatsapp" | "instagram";
 type StatusFilter = "open" | "closed" | "all";
@@ -161,11 +162,11 @@ export function ConversationsPage() {
           <Loader2 className="animate-spin text-brand-400 h-6 w-6" />
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <MessageCircle className="h-10 w-10 text-slate-600" />
-          <p className="text-slate-500 text-sm">No conversations found</p>
-          <p className="text-slate-600 text-xs">Messages from clients will appear here</p>
-        </div>
+        <EmptyState
+          illustrationVariant="inbox"
+          title="Сообщений нет"
+          subtitle="Диалоги с клиентами из Telegram, WhatsApp и Instagram появятся здесь"
+        />
       ) : (
         <div className="space-y-2">
           {items.map((conv) => {

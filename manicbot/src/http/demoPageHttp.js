@@ -50,19 +50,28 @@ const HTML = `<!DOCTYPE html>
     .brand h1 span{color:#8b5cf6}
     .brand p{color:#64748b;margin-top:2px;font-size:.95rem;line-height:1.5}
 
-    /* ===== iPhone 15 Pro frame ===== */
+    /* ===== iPhone 15 frame =====
+       Design notes:
+       - The frame is a single flat gradient with ONE outer drop shadow. No white
+         inset highlights — those render as visible light stripes on any dark
+         body background (the previous version's dark-mode bug).
+       - Light mode frame is titanium silver (~#d4d4d8 → #a1a1aa), dark mode is
+         matte space-black (#2a2a2e → #0e0e10). Both colors sit naturally against
+         the body background for their theme.
+       - The black bezel between frame and screen glass is a 1px inset on the
+         screen (intentional — matches the real OLED edge). */
     .phone-wrap{
       position:relative;
       flex-shrink:0;
       padding:0 6px 20px;
     }
     .phone-wrap::after{
-      /* Floor reflection */
+      /* Floor reflection — light mode only */
       content:"";
       position:absolute;
       left:10%;right:10%;bottom:-8px;
       height:24px;
-      background:radial-gradient(ellipse at center, rgba(15,23,42,.28) 0%, transparent 70%);
+      background:radial-gradient(ellipse at center, rgba(15,23,42,.25) 0%, transparent 70%);
       filter:blur(10px);
       z-index:-1;
     }
@@ -71,35 +80,27 @@ const HTML = `<!DOCTYPE html>
       width:300px;
       padding:10px;
       border-radius:54px;
-      background:linear-gradient(145deg,#4a4a4f 0%,#2a2a2e 45%,#1a1a1d 100%);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.05) 0%, rgba(0,0,0,.08) 100%),
+        linear-gradient(145deg, #d4d4d8 0%, #b4b4b9 45%, #8a8a90 100%);
       box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,.08),
-        inset 0 1px 2px rgba(255,255,255,.15),
-        inset 0 -1px 2px rgba(0,0,0,.6),
-        0 1px 0 rgba(255,255,255,.05),
-        0 30px 60px -20px rgba(15,23,42,.45),
-        0 15px 30px -15px rgba(15,23,42,.3);
+        0 30px 60px -20px rgba(15,23,42,.35),
+        0 15px 30px -15px rgba(15,23,42,.2);
     }
-    .iphone::before{
-      /* Frame gloss */
-      content:"";
-      position:absolute;inset:0;
-      border-radius:54px;
-      background:linear-gradient(145deg, rgba(255,255,255,.06), transparent 35%);
-      pointer-events:none;
-      z-index:1;
-    }
-    /* Side buttons */
+    /* Side buttons — subtle rounded rectangles on the correct sides.
+       Mute switch: top-left.  Volume up/down: upper-middle-left.  Power: middle-right.
+       Each is slightly darker than the frame so it reads as a seam, not a stripe. */
     .btn-mute,.btn-vup,.btn-vdn,.btn-pwr{
       position:absolute;
-      background:linear-gradient(90deg,#1a1a1d,#2a2a2e 40%,#2a2a2e 60%,#1a1a1d);
-      border-radius:2px;
+      background:#8a8a90;
+      border-radius:1.5px;
       z-index:0;
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);
     }
     .btn-mute{left:-2px;top:86px;width:3px;height:22px}
     .btn-vup{left:-3px;top:122px;width:4px;height:46px}
     .btn-vdn{left:-3px;top:178px;width:4px;height:46px}
-    .btn-pwr{right:-3px;top:150px;width:4px;height:68px;background:linear-gradient(270deg,#1a1a1d,#2a2a2e 40%,#2a2a2e 60%,#1a1a1d)}
+    .btn-pwr{right:-3px;top:150px;width:4px;height:68px}
 
     .iphone-screen{
       position:relative;
@@ -109,56 +110,78 @@ const HTML = `<!DOCTYPE html>
       height:600px;
       display:flex;
       flex-direction:column;
-      box-shadow:
-        inset 0 0 0 2px #000,
-        inset 0 1px 0 rgba(255,255,255,.08);
+      /* 1px black OLED bezel — the only inset.  No white highlight stripe. */
+      box-shadow:inset 0 0 0 1px #000;
       z-index:2;
     }
 
-    /* Dynamic Island — overlaps the status bar like a real iPhone */
+    /* Dynamic Island — a true capsule (radius:20px on a 102×30 pill), centered
+       at the top of the screen and stacked above the status bar so the two
+       overlap the way they do on a real iPhone 15 Pro. */
     .island{
       position:absolute;
       top:12px;
       left:50%;transform:translateX(-50%);
       width:102px;height:30px;
-      background:#0a0a0a;
+      background:#050505;
       border-radius:20px;
       z-index:30;
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);
     }
     .island::after{
-      /* Camera lens */
+      /* Camera lens — small, glassy, off-center right */
       content:"";
       position:absolute;
-      top:50%;right:8px;transform:translateY(-50%);
-      width:6px;height:6px;border-radius:50%;
-      background:radial-gradient(circle at 30% 30%, #1e3a8a 0%, #0a0a0a 70%);
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);
+      top:50%;right:9px;transform:translateY(-50%);
+      width:7px;height:7px;border-radius:50%;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(96,165,250,.35) 0%, transparent 45%),
+        radial-gradient(circle at 70% 70%, rgba(0,0,0,1) 0%, #0a0a0a 60%);
     }
 
-    /* Status bar — sits behind/beside the island at the top of the screen */
+    /* Status bar — sits at the top, wraps around the Dynamic Island.
+       The Dynamic Island overlaps; padding-top:56px (or the real safe-area
+       inset when embedded on device) reserves enough height for the island. */
     .status-bar{
-      min-height:44px;
+      min-height:46px;
       background:transparent;
       display:flex;
-      align-items:center;
+      align-items:flex-end;
       justify-content:space-between;
-      padding:14px 22px 6px;
-      font-size:13px;
+      padding-top:56px;
+      padding-top:max(env(safe-area-inset-top),56px);
+      padding-right:22px;
+      padding-bottom:8px;
+      padding-left:22px;
+      font-size:15px;
       font-weight:600;
       color:#0f172a;
       flex-shrink:0;
       position:relative;
       z-index:10;
+      letter-spacing:-.2px;
     }
-    .status-bar .time{padding-left:4px;font-variant-numeric:tabular-nums}
-    .status-bar .icons{display:flex;gap:5px;align-items:center;padding-right:4px}
-    .status-bar svg{width:15px;height:12px;fill:currentColor}
+    .status-bar .time{
+      font-variant-numeric:tabular-nums;
+      line-height:1;
+    }
+    .status-bar .icons{
+      display:flex;
+      gap:5px;
+      align-items:center;
+    }
+    .status-bar svg{
+      display:block;
+      fill:currentColor;
+      height:11px;
+    }
+    .status-bar .ico-signal{width:17px}
+    .status-bar .ico-wifi{width:15px}
+    .status-bar .ico-battery{width:25px;height:12px}
 
-    /* Chat app header */
+    /* Chat app header — title + avatar strip directly under the status bar */
     .chat-header{
       background:transparent;
-      padding:8px 14px 10px;
+      padding:6px 14px 10px;
       display:flex;
       align-items:center;
       gap:10px;
@@ -191,7 +214,9 @@ const HTML = `<!DOCTYPE html>
       .iphone-screen{height:640px}
     }
 
-    /* ===== Dark mode ===== */
+    /* ===== Dark mode =====
+       Frame flips to matte space-black; still no white insets so the silhouette
+       blends cleanly against the dark body background. */
     @media(prefers-color-scheme:dark){
       body{
         background:
@@ -205,17 +230,18 @@ const HTML = `<!DOCTYPE html>
       .brand h1 span{color:#a78bfa}
       .brand p{color:#94a3b8}
       .iphone{
-        background:linear-gradient(145deg,#3a3a3f 0%,#1a1a1e 50%,#0a0a0d 100%);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(0,0,0,.25) 100%),
+          linear-gradient(145deg, #2a2a2e 0%, #1a1a1d 50%, #0e0e10 100%);
         box-shadow:
-          inset 0 0 0 1px rgba(255,255,255,.05),
-          inset 0 1px 2px rgba(255,255,255,.08),
-          inset 0 -1px 2px rgba(0,0,0,.8),
-          0 30px 70px -20px rgba(0,0,0,.7),
+          0 30px 70px -20px rgba(0,0,0,.75),
           0 15px 30px -15px rgba(0,0,0,.5);
       }
-      .btn-mute,.btn-vup,.btn-vdn{background:linear-gradient(90deg,#0a0a0d,#1a1a1e 40%,#1a1a1e 60%,#0a0a0d)}
-      .btn-pwr{background:linear-gradient(270deg,#0a0a0d,#1a1a1e 40%,#1a1a1e 60%,#0a0a0d)}
-      .iphone-screen{background:#0a0a0a;box-shadow:inset 0 0 0 2px #000,inset 0 1px 0 rgba(255,255,255,.04)}
+      .btn-mute,.btn-vup,.btn-vdn,.btn-pwr{
+        background:#1a1a1d;
+        box-shadow:inset 0 0 0 1px rgba(0,0,0,.4);
+      }
+      .iphone-screen{background:#0a0a0a;box-shadow:inset 0 0 0 1px #000}
       .status-bar{color:#f1f5f9}
       .chat-header{border-bottom-color:rgba(255,255,255,.05)}
       .chat-header .info strong{color:#f1f5f9}
@@ -241,12 +267,27 @@ const HTML = `<!DOCTYPE html>
         <div class="status-bar">
           <span class="time">9:41</span>
           <div class="icons" aria-hidden="true">
-            <!-- signal bars -->
-            <svg viewBox="0 0 16 12"><rect x="0" y="8" width="3" height="4" rx=".5"/><rect x="4.5" y="5" width="3" height="7" rx=".5"/><rect x="9" y="2" width="3" height="10" rx=".5"/><rect x="13.5" y="0" width="2.5" height="12" rx=".5"/></svg>
-            <!-- wifi -->
-            <svg viewBox="0 0 16 12"><path d="M8 9.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0-4a6 6 0 014.24 1.76l-1.42 1.42A4 4 0 008 7.5a4 4 0 00-2.82 1.18L3.76 7.26A6 6 0 018 5.5zm0-4a10 10 0 017.07 2.93L13.65 5.85A8 8 0 008 3.5a8 8 0 00-5.65 2.35L.93 4.43A10 10 0 018 1.5z"/></svg>
-            <!-- battery -->
-            <svg viewBox="0 0 24 12"><rect x="0" y="1" width="20" height="10" rx="2.5" stroke="currentColor" stroke-width="1" fill="none" opacity=".5"/><rect x="20.5" y="4" width="2" height="4" rx="1" fill="currentColor" opacity=".5"/><rect x="2" y="3" width="16" height="6" rx="1.2" fill="currentColor"/></svg>
+            <!-- Cellular signal: 4 bars, increasing height, all filled (strong signal) -->
+            <svg class="ico-signal" viewBox="0 0 17 11" aria-hidden="true">
+              <rect x="0"  y="7.5" width="3" height="3.5" rx=".7"/>
+              <rect x="4.7" y="5"   width="3" height="6"   rx=".7"/>
+              <rect x="9.4" y="2.5" width="3" height="8.5" rx=".7"/>
+              <rect x="14.1" y="0"  width="3" height="11"  rx=".7"/>
+            </svg>
+            <!-- Wi-Fi: 3 concentric arcs + dot, drawn as filled wedges so the
+                 outline stays crisp at 15px width. -->
+            <svg class="ico-wifi" viewBox="0 0 15 11" aria-hidden="true">
+              <path d="M7.5 8.3a1.35 1.35 0 100 2.7 1.35 1.35 0 000-2.7z"/>
+              <path d="M7.5 4.5a6 6 0 014.26 1.77l-1.42 1.42A4 4 0 007.5 6.5a4 4 0 00-2.83 1.18L3.24 6.27A6 6 0 017.5 4.5z"/>
+              <path d="M7.5 0.5a10 10 0 017.07 2.93L13.15 4.85A8 8 0 007.5 2.5a8 8 0 00-5.65 2.35L.43 3.43A10 10 0 017.5 .5z"/>
+            </svg>
+            <!-- Battery: rounded rect outline (opacity .35), small terminal nub,
+                 solid inner fill at ~80% to suggest "charged". -->
+            <svg class="ico-battery" viewBox="0 0 25 12" aria-hidden="true">
+              <rect x="0.5" y="0.5" width="21" height="11" rx="3" ry="3" fill="none" stroke="currentColor" stroke-width="1" opacity=".35"/>
+              <rect x="22.5" y="4" width="2" height="4" rx=".8" fill="currentColor" opacity=".35"/>
+              <rect x="2" y="2" width="15" height="8" rx="1.5" fill="currentColor"/>
+            </svg>
           </div>
         </div>
         <div class="chat-header">

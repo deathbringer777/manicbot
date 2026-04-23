@@ -70,10 +70,40 @@ export default function DashboardLayout({
   // Loading
   if (roleQuery.isLoading || !roleQuery.data?.role) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-brand-500" />
-          <p className="text-sm text-slate-500">Loading...</p>
+      <div className="flex h-screen w-full bg-[#fafaf7] dark:bg-slate-900">
+        {/* Sidebar skeleton */}
+        <div className="hidden lg:flex flex-col w-64 shrink-0 border-r border-[#e5e7eb] dark:border-white/[0.06] p-4 gap-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-8 w-8 rounded-lg skeleton-shimmer shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3 w-24 rounded skeleton-shimmer" />
+              <div className="h-2.5 w-16 rounded skeleton-shimmer" />
+            </div>
+          </div>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2.5 px-3 py-2">
+              <div className="h-4 w-4 rounded skeleton-shimmer shrink-0" />
+              <div className={`h-3 rounded skeleton-shimmer ${i % 3 === 0 ? "w-20" : i % 3 === 1 ? "w-16" : "w-24"}`} />
+            </div>
+          ))}
+        </div>
+        {/* Content skeleton */}
+        <div className="flex-1 flex flex-col">
+          <div className="h-[60px] border-b border-[#e5e7eb] dark:border-white/[0.06] px-6 flex items-center gap-4">
+            <div className="h-4 w-32 rounded skeleton-shimmer" />
+            <div className="flex-1" />
+            <div className="h-8 w-8 rounded-lg skeleton-shimmer" />
+            <div className="h-8 w-20 rounded-lg skeleton-shimmer" />
+          </div>
+          <div className="p-6 space-y-6">
+            <div className="h-8 w-48 rounded skeleton-shimmer" />
+            <div className="grid grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-24 rounded-xl skeleton-shimmer" />
+              ))}
+            </div>
+            <div className="h-64 rounded-xl skeleton-shimmer" />
+          </div>
         </div>
       </div>
     );

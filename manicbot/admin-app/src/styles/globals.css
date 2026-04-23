@@ -2,8 +2,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Brand (purple) — kept for Telegram Mini App */
-  --color-brand-50: #f5f3ff;
+  /* Brand (purple) — Telegram Mini App */
+  --color-brand-50:  #f5f3ff;
   --color-brand-100: #ede9fe;
   --color-brand-200: #ddd6fe;
   --color-brand-300: #c4b5fd;
@@ -27,6 +27,8 @@
   --color-accent-800: #065a3e;
   --color-accent-900: #044530;
   --color-accent-950: #022318;
+  /* Sidebar active fill — exact Brevo value */
+  --color-accent-active: #e8f5f0;
 
   /* Brevo-inspired surface tokens */
   --color-surface:       #fafaf7;
@@ -50,67 +52,50 @@
     -moz-appearance: textfield;
   }
 
-  /* Dark mode (default for dashboard) */
+  /* Light mode — Brevo-inspired palette (default) */
   :root {
-    --background: #0f172a; /* slate-900 */
-    --foreground: #f8fafc; /* slate-50 */
-
-    --card: #1e293b; /* slate-800 */
-    --card-foreground: #f8fafc;
-
-    --popover: #1e293b;
-    --popover-foreground: #f8fafc;
-
-    --primary: #7c3aed; /* brand-500 */
+    --background: #fafaf7;
+    --foreground: #1a1a2e;
+    --card: #ffffff;
+    --card-foreground: #1a1a2e;
+    --popover: #ffffff;
+    --popover-foreground: #1a1a2e;
+    --primary: #0b9b6b;
     --primary-foreground: #ffffff;
-
-    --secondary: #334155; /* slate-700 */
-    --secondary-foreground: #f8fafc;
-
-    --muted: #334155;
-    --muted-foreground: #94a3b8; /* slate-400 */
-
-    --accent: #334155;
-    --accent-foreground: #f8fafc;
-
-    --destructive: #ef4444; /* red-500 */
+    --secondary: #f3f4f6;
+    --secondary-foreground: #1a1a2e;
+    --muted: #f3f4f6;
+    --muted-foreground: #6b7280;
+    --accent: #ecfef6;
+    --accent-foreground: #1a1a2e;
+    --destructive: #ef4444;
     --destructive-foreground: #ffffff;
-
-    --border: #334155; /* slate-700 */
-    --input: #334155;
-    --ring: #7c3aed;
-
+    --border: #e5e7eb;
+    --input: #e5e7eb;
+    --ring: #0b9b6b;
     --radius: 0.75rem;
   }
 
-  /* Light mode — Brevo-inspired palette */
-  :root:not(.dark) {
-    --background: #fafaf7;
-    --foreground: #1a1a2e;
-
-    --card: #ffffff;
-    --card-foreground: #1a1a2e;
-
-    --popover: #ffffff;
-    --popover-foreground: #1a1a2e;
-
+  /* Dark mode */
+  :root.dark {
+    --background: #0f172a;
+    --foreground: #f8fafc;
+    --card: #1e293b;
+    --card-foreground: #f8fafc;
+    --popover: #1e293b;
+    --popover-foreground: #f8fafc;
     --primary: #0b9b6b;
     --primary-foreground: #ffffff;
-
-    --secondary: #f3f4f6;
-    --secondary-foreground: #1a1a2e;
-
-    --muted: #f3f4f6;
-    --muted-foreground: #6b7280;
-
-    --accent: #ecfef6;
-    --accent-foreground: #1a1a2e;
-
+    --secondary: #334155;
+    --secondary-foreground: #f8fafc;
+    --muted: #334155;
+    --muted-foreground: #94a3b8;
+    --accent: #334155;
+    --accent-foreground: #f8fafc;
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
-
-    --border: #e5e7eb;
-    --input: #e5e7eb;
+    --border: #334155;
+    --input: #334155;
     --ring: #0b9b6b;
   }
 
@@ -130,7 +115,7 @@
     display: none;
   }
 
-  /* Light mode defaults */
+  /* Legacy glass utilities — preserved for existing pages */
   .glass {
     background: rgba(255, 255, 255, 0.75);
     backdrop-filter: blur(16px);
@@ -144,8 +129,6 @@
     border: 1px solid rgba(0, 0, 0, 0.06);
     box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
   }
-
-  /* Dark mode overrides (when .dark is on <html> or any ancestor) */
   :root.dark .glass,
   .dark .glass {
     background: rgba(30, 41, 59, 0.6);
@@ -161,7 +144,7 @@
   /* Skeleton shimmer */
   @keyframes shimmer {
     0%   { background-position: -400px 0; }
-    100% { background-position: 400px 0; }
+    100% { background-position:  400px 0; }
   }
   .skeleton-shimmer {
     background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
@@ -174,7 +157,7 @@
     background-size: 800px 100%;
   }
 
-  /* Smooth page transitions */
+  /* Page transitions */
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -187,7 +170,7 @@
   .animate-slide-up { animation: slideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
 
-/* driver.js tour — must escape WebShell overflow-hidden stacking context */
+/* driver.js tour styling */
 .driver-overlay {
   z-index: 10000 !important;
   position: fixed !important;
@@ -199,8 +182,6 @@
 .driver-active-element {
   z-index: 10000 !important;
 }
-
-/* Temporarily lift overflow clip while tour is running */
 body.driver-tour-active .overflow-hidden {
   overflow: visible !important;
 }

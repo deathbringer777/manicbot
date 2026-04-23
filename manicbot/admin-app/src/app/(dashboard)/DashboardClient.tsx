@@ -4,10 +4,9 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
-import { PageHeader } from "~/components/ui/PageHeader";
-import { KpiCard, KpiCardSkeleton } from "~/components/ui/KpiCard";
 import { Card, CardHeader } from "~/components/ui/Card";
-import { Skeleton } from "~/components/ui/Skeleton";
+import { KpiCard, KpiCardSkeleton } from "~/components/ui/KpiCard";
+import { PageHeader } from "~/components/ui/PageHeader";
 import { OverviewChart } from "~/components/dashboard/OverviewChart";
 import { ReferralSignupCharts } from "~/components/dashboard/ReferralSignupCharts";
 import {
@@ -19,9 +18,10 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  ArrowRight,
+  ArrowUpRight,
   Zap,
-  Activity,
+  UserPlus,
+  BarChart3,
 } from "lucide-react";
 import { formatPlnWhole } from "~/lib/money";
 
@@ -67,37 +67,39 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
   const maxCount = Math.max(1, ...Object.values(dayMap));
 
   return (
-    <Card padding="p-4">
-      <div className="flex items-center justify-between mb-3">
+    <Card padding="p-5">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-accent-500" />
-          <h2 className="text-[13px] font-semibold text-[#1a1a2e] dark:text-white capitalize">{monthLabel}</h2>
+          <h2 className="text-sm font-semibold text-[#1a1a2e] dark:text-white capitalize">{monthLabel}</h2>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setViewDate(new Date(year, month - 1))}
-            className="p-1.5 rounded-lg text-[#9ca3af] dark:text-slate-400 hover:text-[#374151] dark:hover:text-slate-200 hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
+            className="p-1 rounded-lg text-[#9ca3af] hover:text-[#1a1a2e] dark:hover:text-white hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => setViewDate(new Date())}
-            className="px-2 py-0.5 rounded-lg text-[10px] font-medium text-[#9ca3af] dark:text-slate-400 hover:text-[#374151] dark:hover:text-slate-200 hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
+            className="px-2 py-0.5 rounded-lg text-[10px] font-medium text-[#6b7280] hover:text-[#1a1a2e] dark:hover:text-white hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
           >
-            Today
+            today
           </button>
           <button
             onClick={() => setViewDate(new Date(year, month + 1))}
-            className="p-1.5 rounded-lg text-[#9ca3af] dark:text-slate-400 hover:text-[#374151] dark:hover:text-slate-200 hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
+            className="p-1 rounded-lg text-[#9ca3af] hover:text-[#1a1a2e] dark:hover:text-white hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS_SHORT.map((d) => (
-          <div key={d} className="text-center text-[10px] font-medium text-[#9ca3af] py-1">{d}</div>
+          <div key={d} className="text-center text-[10px] font-medium text-[#9ca3af] py-1">
+            {d}
+          </div>
         ))}
       </div>
 
@@ -112,23 +114,23 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
             <a
               key={iso}
               href={`/appointments?date=${iso}`}
-              className={`relative flex flex-col items-center justify-center rounded-lg h-9 text-xs transition-all group ${
+              className={`relative flex flex-col items-center justify-center rounded-lg h-9 text-xs transition-all ${
                 isToday(day)
-                  ? "bg-[#1a1a2e] dark:bg-accent-500 text-white font-bold shadow-sm"
+                  ? "bg-accent-500 text-white font-bold shadow-sm"
                   : count > 0
-                  ? "hover:bg-accent-500/20 text-[#374151] dark:text-slate-200"
-                  : "hover:bg-[#f3f4f6] dark:hover:bg-white/[0.05] text-[#6b7280] dark:text-slate-500"
+                  ? "hover:bg-accent-500/15 text-[#374151] dark:text-slate-200"
+                  : "hover:bg-[#f3f4f6] dark:hover:bg-white/[0.05] text-[#6b7280]"
               }`}
               style={
                 !isToday(day) && count > 0
                   ? { backgroundColor: `rgba(11,155,107,${0.07 + intensity * 0.18})` }
                   : undefined
               }
-              title={count > 0 ? `${count} bookings` : undefined}
+              title={count > 0 ? `${count} appointments` : undefined}
             >
               <span>{day}</span>
               {count > 0 && (
-                <span className={`text-[8px] font-medium leading-none mt-0.5 ${isToday(day) ? "text-white/70" : "text-accent-600 dark:text-accent-400"}`}>
+                <span className={`text-[8px] font-medium leading-none mt-0.5 ${isToday(day) ? "text-white/80" : "text-accent-600"}`}>
                   {count}
                 </span>
               )}
@@ -139,11 +141,11 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
 
       <div className="mt-3 flex items-center gap-3 text-[10px] text-[#9ca3af]">
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-[#1a1a2e] dark:bg-accent-500" />
+          <div className="w-3 h-3 rounded bg-accent-500" />
           <span>Today</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-accent-500/25" />
+          <div className="w-3 h-3 rounded bg-accent-500/20" />
           <span>Bookings</span>
         </div>
       </div>
@@ -151,16 +153,18 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
   );
 }
 
-// ─── Quick Actions ────────────────────────────────────────────────
+// ─── Quick Actions ─────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
-  { href: "/users", label: "View Users", icon: Users },
-  { href: "/tenants", label: "Manage Salons", icon: Building2 },
-  { href: "/appointments", label: "Appointments", icon: CalendarDays },
-  { href: "/billing", label: "Billing", icon: CreditCard },
+  { label: "Add user", icon: UserPlus, href: "/users", color: "text-violet-600 bg-violet-50 dark:bg-violet-500/10 dark:text-violet-400" },
+  { label: "Tenants", icon: Building2, href: "/tenants", color: "text-cyan-600 bg-cyan-50 dark:bg-cyan-500/10 dark:text-cyan-400" },
+  { label: "Bookings", icon: CalendarDays, href: "/appointments", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400" },
+  { label: "Billing", icon: CreditCard, href: "/billing", color: "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400" },
+  { label: "Marketing", icon: Zap, href: "/marketing", color: "text-pink-600 bg-pink-50 dark:bg-pink-500/10 dark:text-pink-400" },
+  { label: "Analytics", icon: BarChart3, href: "/system", color: "text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400" },
 ];
 
-// ─── Main ─────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────
 
 export default function DashboardClient() {
   const [period, setPeriod] = useState(30);
@@ -182,96 +186,115 @@ export default function DashboardClient() {
       <div className="space-y-6 animate-fade-in">
         <PageHeader
           title="Dashboard"
-          subtitle="Platform metrics · live"
+          subtitle="Platform metrics in real time"
         />
 
-        {/* ── KPI Row ── */}
-        {isLoading ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
-              label="Total Users"
-              value={s?.totalUsers ?? 0}
-              icon={Users}
-              iconBg="bg-violet-50 dark:bg-violet-500/15"
-              iconColor="text-violet-600 dark:text-violet-400"
-              href="/users"
-            />
-            <KpiCard
-              label="Salons"
-              value={s?.totalTenants ?? 0}
-              subtext={`${s?.trialingCount ?? 0} trialing`}
-              icon={Building2}
-              iconBg="bg-blue-50 dark:bg-blue-500/15"
-              iconColor="text-blue-600 dark:text-blue-400"
-              href="/tenants"
-            />
-            <KpiCard
-              label="MRR"
-              value={formatPlnWhole(s?.mrr ?? 0)}
-              subtext="estimated · PLN"
-              icon={TrendingUp}
-              iconBg="bg-accent-50 dark:bg-accent-500/15"
-              iconColor="text-accent-600 dark:text-accent-400"
-              href="/billing"
-            />
-            <KpiCard
-              label="Today's Bookings"
-              value={s?.todayAppointments ?? 0}
-              subtext={`${(s?.totalAppointments ?? 0).toLocaleString()} total`}
-              icon={CalendarDays}
-              iconBg="bg-amber-50 dark:bg-amber-500/15"
-              iconColor="text-amber-600 dark:text-amber-400"
-              href="/appointments"
-            />
-          </div>
-        )}
+        {/* Primary KPI row — 4 cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} />)
+          ) : (
+            <>
+              <KpiCard
+                label="Total Clients"
+                value={s?.totalUsers ?? 0}
+                icon={Users}
+                iconBg="bg-violet-50 dark:bg-violet-500/10"
+                iconColor="text-violet-600 dark:text-violet-400"
+                href="/users"
+              />
+              <KpiCard
+                label="Active Salons"
+                value={s?.totalTenants ?? 0}
+                subtext={`${s?.trialingCount ?? 0} trialing`}
+                icon={Building2}
+                iconBg="bg-cyan-50 dark:bg-cyan-500/10"
+                iconColor="text-cyan-600 dark:text-cyan-400"
+                href="/tenants"
+              />
+              <KpiCard
+                label="Revenue MRR"
+                value={formatPlnWhole(s?.mrr ?? 0)}
+                subtext="estimated, PLN"
+                icon={TrendingUp}
+                iconBg="bg-emerald-50 dark:bg-emerald-500/10"
+                iconColor="text-emerald-600 dark:text-emerald-400"
+                href="/billing"
+              />
+              <KpiCard
+                label="Today's Bookings"
+                value={s?.todayAppointments ?? 0}
+                subtext={`${s?.totalAppointments ?? 0} total`}
+                icon={CalendarDays}
+                iconBg="bg-amber-50 dark:bg-amber-500/10"
+                iconColor="text-amber-600 dark:text-amber-400"
+                href="/appointments"
+              />
+            </>
+          )}
+        </div>
 
-        {/* ── Second KPI row: subscriptions + billing ── */}
-        {!isLoading && (
-          <div className="grid grid-cols-2 gap-4">
-            <KpiCard
-              label="Active Subs"
-              value={s?.activeSubscriptions ?? 0}
-              icon={CreditCard}
-              iconBg="bg-emerald-50 dark:bg-emerald-500/15"
-              iconColor="text-emerald-600 dark:text-emerald-400"
-              href="/billing"
-            />
-            <KpiCard
-              label="Total Bookings"
-              value={s?.totalAppointments ?? 0}
-              subtext="all time"
-              icon={Clock}
-              iconBg="bg-pink-50 dark:bg-pink-500/15"
-              iconColor="text-pink-600 dark:text-pink-400"
-              href="/appointments"
-            />
-          </div>
-        )}
-        {isLoading && (
-          <div className="grid grid-cols-2 gap-4">
-            <KpiCardSkeleton /><KpiCardSkeleton />
-          </div>
-        )}
+        {/* Secondary row */}
+        <div className="grid grid-cols-2 gap-4">
+          {isLoading ? (
+            Array.from({ length: 2 }).map((_, i) => <KpiCardSkeleton key={i} />)
+          ) : (
+            <>
+              <KpiCard
+                label="Active Subscriptions"
+                value={s?.activeSubscriptions ?? 0}
+                icon={CreditCard}
+                iconBg="bg-pink-50 dark:bg-pink-500/10"
+                iconColor="text-pink-600 dark:text-pink-400"
+                href="/billing"
+              />
+              <KpiCard
+                label="All-time Bookings"
+                value={s?.totalAppointments ?? 0}
+                icon={Clock}
+                iconBg="bg-blue-50 dark:bg-blue-500/10"
+                iconColor="text-blue-600 dark:text-blue-400"
+                href="/appointments"
+              />
+            </>
+          )}
+        </div>
 
-        {/* ── Chart + Calendar ── */}
+        {/* Quick Actions */}
+        <Card padding="p-5">
+          <CardHeader title="Quick Actions" />
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {QUICK_ACTIONS.map((action) => (
+              <Link
+                key={action.href + action.label}
+                href={action.href}
+                className="flex flex-col items-center gap-2 p-3 rounded-xl border border-[#e5e7eb] dark:border-white/[0.06] hover:border-accent-500/30 hover:bg-accent-500/[0.03] transition-all duration-150 group"
+              >
+                <div className={`h-9 w-9 flex items-center justify-center rounded-xl ${action.color} transition-transform group-hover:scale-110 duration-150`}>
+                  <action.icon className="h-4 w-4" />
+                </div>
+                <span className="text-[11px] font-medium text-[#6b7280] dark:text-slate-400 text-center leading-tight group-hover:text-[#1a1a2e] dark:group-hover:text-white transition-colors">
+                  {action.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </Card>
+
+        {/* Chart + Calendar */}
         <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-          <Card padding="p-4">
+          <Card padding="p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[15px] font-semibold text-[#1a1a2e] dark:text-white">Bookings over time</h2>
-              <div className="flex gap-1">
+              <div className="flex gap-1 p-0.5 rounded-lg bg-[#f3f4f6] dark:bg-white/[0.04]">
                 {PERIODS.map((p) => (
                   <button
                     key={p.days}
                     onClick={() => setPeriod(p.days)}
-                    className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition-colors ${
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                       period === p.days
-                        ? "bg-accent-500/15 text-accent-700 dark:text-accent-400"
-                        : "text-[#6b7280] dark:text-slate-400 hover:bg-[#f3f4f6] dark:hover:bg-slate-800"
+                        ? "bg-white dark:bg-white/10 text-[#1a1a2e] dark:text-white shadow-sm"
+                        : "text-[#6b7280] hover:text-[#1a1a2e] dark:hover:text-slate-200"
                     }`}
                   >
                     {p.label}
@@ -285,12 +308,12 @@ export default function DashboardClient() {
           <MiniCalendar data={chart90 ?? []} />
         </div>
 
-        {/* ── Referral charts ── */}
+        {/* Referral signup charts */}
         {referralLoading ? (
-          <Card padding="p-8">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-4 w-4 rounded-full" />
-              <Skeleton className="h-4 w-48" />
+          <Card padding="p-6">
+            <div className="space-y-3">
+              <div className="h-4 w-48 rounded skeleton-shimmer" />
+              <div className="h-32 w-full rounded-lg skeleton-shimmer" />
             </div>
           </Card>
         ) : (
@@ -299,89 +322,56 @@ export default function DashboardClient() {
             daily={referralStats?.dailySignupBySource ?? []}
             totalLabel={
               referralStats != null
-                ? `${referralStats.totalSignupsInPeriod} signups in ${period}d`
+                ? `Total ${referralStats.totalSignupsInPeriod} signups in ${period}d`
                 : undefined
             }
           />
         )}
 
-        {/* ── Bottom row: Activity + Quick actions ── */}
-        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-          {/* Recent activity */}
-          <Card padding="p-5">
-            <CardHeader
-              title="Recent Activity"
-              action={
-                <Link href="/events" className="flex items-center gap-1 text-[12px] font-medium text-accent-600 dark:text-accent-400 hover:opacity-80">
-                  View all <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              }
-            />
-            <div className="space-y-1">
-              {isLoading
-                ? Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 py-2.5">
-                      <Skeleton className="h-8 w-8 rounded-full shrink-0" />
-                      <div className="flex-1 space-y-1.5">
-                        <Skeleton className="h-3 w-32" />
-                        <Skeleton className="h-2.5 w-48" />
-                      </div>
-                    </div>
-                  ))
-                : (s?.recentActivity ?? []).length === 0
-                ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-center">
-                    <Activity className="h-8 w-8 text-[#d1d5db] dark:text-slate-600 mb-2" />
-                    <p className="text-[13px] text-[#6b7280] dark:text-slate-500">No recent activity</p>
+        {/* Recent activity */}
+        <Card padding="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[15px] font-semibold text-[#1a1a2e] dark:text-white">Recent Activity</h2>
+            <Link
+              href="/events"
+              className="flex items-center gap-1 text-xs text-accent-600 dark:text-accent-400 hover:text-accent-700 font-medium transition-colors"
+            >
+              View all <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="space-y-0">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 py-3 border-b border-[#f3f4f6] dark:border-white/[0.04] last:border-0">
+                  <div className="h-8 w-8 shrink-0 rounded-full skeleton-shimmer" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-32 rounded skeleton-shimmer" />
+                    <div className="h-2.5 w-48 rounded skeleton-shimmer" />
                   </div>
-                )
-                : (s?.recentActivity ?? []).map((a, i) => (
-                    <div
-                      key={a.id + i}
-                      className="flex items-center gap-3 py-2.5 border-b border-[#f3f4f6] dark:border-white/[0.04] last:border-0 rounded-lg px-1 hover:bg-[#fafaf7] dark:hover:bg-white/[0.02] transition-colors"
-                    >
-                      <div className="h-8 w-8 shrink-0 rounded-full bg-accent-500/10 flex items-center justify-center text-accent-600 dark:text-accent-400 text-[11px] font-bold">
-                        {a.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-[#1a1a2e] dark:text-white truncate">{a.name}</p>
-                        <p className="text-[11px] text-[#6b7280] dark:text-slate-500 truncate">{a.action}</p>
-                      </div>
-                      <span className="text-[11px] text-[#9ca3af] dark:text-slate-600 shrink-0 tabular-nums">{a.time}</span>
-                    </div>
-                  ))
-              }
-            </div>
-          </Card>
-
-          {/* Quick actions */}
-          <Card padding="p-5">
-            <CardHeader title="Quick Actions" />
-            <div className="space-y-1.5">
-              {QUICK_ACTIONS.map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#374151] dark:text-slate-300 hover:bg-[#f3f4f6] dark:hover:bg-white/[0.04] hover:text-[#1a1a2e] dark:hover:text-white transition-colors group"
+                  <div className="h-2.5 w-10 rounded skeleton-shimmer shrink-0" />
+                </div>
+              ))
+            ) : (s?.recentActivity ?? []).length === 0 ? (
+              <p className="text-sm text-[#9ca3af] py-8 text-center">No recent activity</p>
+            ) : (
+              (s?.recentActivity ?? []).map((a, i) => (
+                <div
+                  key={a.id + i}
+                  className="flex items-center gap-3 py-2.5 border-b border-[#f3f4f6] dark:border-white/[0.04] last:border-0 px-1 rounded-lg hover:bg-[#f9fafb] dark:hover:bg-white/[0.02] transition-colors"
                 >
-                  <Icon className="h-4 w-4 text-[#9ca3af] dark:text-slate-500 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors shrink-0" />
-                  <span className="flex-1">{label}</span>
-                  <ArrowRight className="h-3.5 w-3.5 text-[#d1d5db] dark:text-slate-600 group-hover:text-[#6b7280] dark:group-hover:text-slate-400 transition-colors" />
-                </Link>
-              ))}
-              <div className="pt-2 mt-2 border-t border-[#f3f4f6] dark:border-white/[0.04]">
-                <Link
-                  href="/plugins"
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-accent-700 dark:text-accent-400 hover:bg-accent-500/8 dark:hover:bg-accent-500/15 transition-colors group"
-                >
-                  <Zap className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">Plugin Marketplace</span>
-                  <ArrowRight className="h-3.5 w-3.5 opacity-60" />
-                </Link>
-              </div>
-            </div>
-          </Card>
-        </div>
+                  <div className="h-8 w-8 shrink-0 rounded-full bg-accent-500/10 flex items-center justify-center text-accent-600 dark:text-accent-400 text-xs font-bold">
+                    {a.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#1a1a2e] dark:text-white truncate">{a.name}</p>
+                    <p className="text-[11px] text-[#9ca3af] truncate">{a.action}</p>
+                  </div>
+                  <span className="text-[11px] text-[#9ca3af] shrink-0 tabular-nums">{a.time}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
       </div>
     </Shell>
   );

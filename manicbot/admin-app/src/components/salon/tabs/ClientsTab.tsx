@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Cake, Check } from "lucide-react";
+import { Loader2, Cake, Check, Users } from "lucide-react";
+import { EmptyState } from "~/components/ui/EmptyState";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -110,7 +111,11 @@ export function ClientsTab({ tenantId }: { tenantId: string }) {
           <ClientRow key={c.chatId} tenantId={tenantId} c={c} />
         ))}
         {clients.data?.length === 0 && (
-          <p className="text-slate-500 text-sm text-center py-8">{t("salon.noClients", lang)}</p>
+          <EmptyState
+            icon={Users}
+            title={t("salon.noClients", lang)}
+            description={lang === "ru" ? "Клиенты появятся после первой записи" : lang === "ua" ? "Клієнти з'являться після першого запису" : "Clients will appear after the first booking"}
+          />
         )}
       </div>
     </div>

@@ -11,13 +11,14 @@
  * verifying the caller owns the tenant. Uses Web Crypto — edge-runtime safe.
  */
 
-export type UploadKind = "logo" | "cover" | "photo" | "portfolio";
+export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo";
 
 const ALLOWED_KINDS: ReadonlySet<UploadKind> = new Set([
   "logo",
   "cover",
   "photo",
   "portfolio",
+  "service_photo",
 ]);
 
 const DEFAULT_TTL_SEC = 300; // 5 minutes

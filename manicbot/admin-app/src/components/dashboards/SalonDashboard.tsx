@@ -30,6 +30,7 @@ import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist"
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 import { TestBadge } from "~/components/ui/TestBadge";
+import { EmptyState } from "~/components/ui/EmptyState";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 
@@ -1698,7 +1699,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 </div>
               );
             })}
-            {mastersList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noMasters", lang)}</p>}
+            {mastersList.data?.length === 0 && (
+              <EmptyState
+                icon={UserCheck}
+                title={t("salon.noMasters", lang)}
+                description={lang === "ru" ? "Добавьте мастера через Telegram или создайте веб-аккаунт" : lang === "ua" ? "Додайте майстра через Telegram або створіть веб-акаунт" : "Add a master via Telegram or create a web account"}
+              />
+            )}
           </div>
         </div>
       )}

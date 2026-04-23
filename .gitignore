@@ -18,3 +18,7 @@ manicbot-blog/dist/
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# Claude Code ephemeral worktrees (each is its own git repo — never commit as submodules)
+.claude/worktrees/
+.claude/settings.local.json

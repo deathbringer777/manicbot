@@ -40,7 +40,7 @@ const BRIDGE_SCRIPT = `<script>
     s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);
     s.setAttribute('data-show-header', '1');
-    s.setAttribute('data-title', 'Preview Salon');
+    s.setAttribute('data-title', 'Manic Bot');
     document.head.appendChild(s);
   }
 

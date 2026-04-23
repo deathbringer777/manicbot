@@ -234,12 +234,8 @@ export const DEMO_CHAT_SRC = `
     statusbar.innerHTML =
       '<span>' + hh + ':' + mm + '</span>' +
       '<span class="icons">' +
-        // signal bars
+        // signal bars only — no wifi, no battery
         '<svg viewBox="0 0 18 10" fill="currentColor"><rect x="0"  y="7" width="3" height="3" rx=".5"/><rect x="5"  y="5" width="3" height="5" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg>' +
-        // wifi
-        '<svg viewBox="0 0 14 10" fill="currentColor"><path d="M7 10a1.3 1.3 0 1 0 0-2.6A1.3 1.3 0 0 0 7 10Zm-3.2-3.1 1.1 1.1A3 3 0 0 1 7 7a3 3 0 0 1 2.1.8l1.1-1.1a4.6 4.6 0 0 0-6.4 0ZM1 4l1.1 1.1a7 7 0 0 1 9.8 0L13 4A8.6 8.6 0 0 0 1 4Z"/></svg>' +
-        // battery
-        '<svg viewBox="0 0 22 10" fill="none" stroke="currentColor" stroke-width="1"><rect x=".5" y=".5" width="18" height="9" rx="2"/><rect x="2" y="2" width="14" height="6" rx="1" fill="currentColor" stroke="none"/><rect x="19.5" y="3.5" width="1.5" height="3" rx=".5" fill="currentColor" stroke="none"/></svg>' +
       '</span>';
     root.appendChild(statusbar);
 

@@ -3,6 +3,7 @@
  * Uses env.BOT_TOKEN (legacy platform bot) + env.ADMIN_CHAT_ID.
  * Silently skips if either is missing so public HTTP endpoints never fail.
  */
+import { log } from './logger.js';
 
 const TG_TIMEOUT_MS = 5000;
 
@@ -22,7 +23,7 @@ async function sendToAdmin(env, text) {
   const token = env.NOTIFY_BOT_TOKEN || env.BOT_TOKEN;
   const chatId = env.NOTIFY_CHAT_ID || env.ADMIN_CHAT_ID;
   if (!token || !chatId) {
-    console.warn('[notifyAdmin] missing NOTIFY_BOT_TOKEN/BOT_TOKEN or chat id — skip');
+    log.warn('utils.notifyAdmin', { message: 'missing NOTIFY_BOT_TOKEN/BOT_TOKEN or chat id — skip' });
     return;
   }
   try {
@@ -39,10 +40,10 @@ async function sendToAdmin(env, text) {
     });
     if (!r.ok) {
       const body = await r.text().catch(() => '');
-      console.error('[notifyAdmin] TG error', r.status, body.slice(0, 200));
+      log.error('utils.notifyAdmin', new Error('TG error'), { status: r.status, body: body.slice(0, 200) });
     }
   } catch (e) {
-    console.error('[notifyAdmin] fetch failed:', e?.message || e);
+    log.error('utils.notifyAdmin', e instanceof Error ? e : new Error(String(e?.message || e)));
   }
 }
 

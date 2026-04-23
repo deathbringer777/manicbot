@@ -1,4 +1,5 @@
 import { timingSafeEqual } from '../utils/security.js';
+import { log } from '../utils/logger.js';
 import { onMsg } from '../handlers/message.js';
 import { onCb } from '../handlers/callback.js';
 import { initServices } from '../services/services.js';
@@ -23,10 +24,10 @@ export async function tryTelegramWebhook(request, ctx, url) {
   // Fail-closed: reject any webhook without a configured secret.
   // Prevents unauthenticated POSTs from forging Telegram updates.
   if (expected == null || String(expected).length < 16) {
-    console.error(
-      '[telegram-webhook] webhook secret missing or too short for bot',
-      ctx.botId || '(legacy)',
-      '— set webhookSecret in D1 bots row and re-register webhook with secret_token.'
+    log.error(
+      'http.telegramWebhook',
+      new Error('webhook secret missing or too short — set webhookSecret in D1 bots row and re-register webhook with secret_token'),
+      { botId: ctx.botId || '(legacy)' }
     );
     return new Response('Webhook not configured', { status: 503 });
   }
@@ -35,7 +36,7 @@ export async function tryTelegramWebhook(request, ctx, url) {
   }
 
   if (!ctx.kv) {
-    console.error('KV MANICBOT not bound');
+    log.error('http.telegramWebhook', new Error('KV MANICBOT not bound'));
     return new Response('OK');
   }
 
@@ -67,7 +68,7 @@ export async function tryTelegramWebhook(request, ctx, url) {
       await onCb(ctx, upd.callback_query);
     }
   } catch (e) {
-    console.error('Webhook error:', e.message, e.stack);
+    log.error('http.telegramWebhook', e instanceof Error ? e : new Error(String(e.message)));
   }
   return new Response('OK');
 }

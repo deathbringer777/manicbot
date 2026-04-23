@@ -1,6 +1,7 @@
 import { nowSec, msToSec } from '../utils/time.js';
 import { getTenantIdByBotId, getTenant, putTenant, putBot } from '../tenant/storage.js';
 import { envCtx } from './envCtx.js';
+import { log } from '../utils/logger.js';
 
 function getDemoBots(env) {
   const bots = [];
@@ -48,7 +49,7 @@ export async function ensureDemoBotsProvisioned(env) {
     return;
   }
 
-  console.log('Self-provisioning demo bots (some missing)...');
+  log.info('http.demoBots', { message: 'Self-provisioning demo bots (some missing)' });
   const { dbRun } = await import('../utils/db.js');
   const TRIAL_SEC = msToSec(7 * 24 * 3600 * 1000);
   const now = nowSec();
@@ -165,8 +166,8 @@ export async function ensureDemoBotsProvisioned(env) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: whUrl, secret_token: b.webhookSecret, allowed_updates: ['message', 'callback_query'] }),
     }).catch(() => {});
-    console.log(`Provisioned: @${b.botUsername} → ${b.tenantId}`);
+    log.info('http.demoBots', { message: 'Provisioned demo bot', botUsername: b.botUsername, tenantId: b.tenantId });
   }
   _demoProvisioned = true;
-  console.log('Demo bots provisioned!');
+  log.info('http.demoBots', { message: 'Demo bots provisioned' });
 }

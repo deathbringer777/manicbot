@@ -16,6 +16,7 @@
 
 import { dbRun } from './db.js';
 import { nowSec } from './time.js';
+import { log } from './logger.js';
 
 /**
  * Record one analytics event.
@@ -39,6 +40,6 @@ export async function recordEvent(ctx, event, properties = {}, opts = {}) {
     );
   } catch (e) {
     // Non-fatal — analytics never block the hot path.
-    if (typeof console !== 'undefined') console.error('[analytics] record failed:', e?.message);
+    log.error('utils.analytics', e instanceof Error ? e : new Error(String(e?.message)));
   }
 }

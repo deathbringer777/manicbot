@@ -23,6 +23,7 @@ import {
 } from '../services/upload.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
+import { log } from '../utils/logger.js';
 
 const CDN_PATH_PREFIX = '/cdn/';
 
@@ -105,7 +106,7 @@ export async function tryUpload(request, env, url) {
     try {
       await env.ASSETS.put(key, bytes, { httpMetadata: { contentType: mime } });
     } catch (e) {
-      console.error('[upload] R2 put failed:', e?.message);
+      log.error('http.upload', e instanceof Error ? e : new Error(String(e?.message)), { action: 'r2_put' });
       return jsonError('Storage write failed', 500);
     }
 

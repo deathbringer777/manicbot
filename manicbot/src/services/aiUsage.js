@@ -10,6 +10,7 @@
  */
 
 import { dbGet, dbRun } from '../utils/db.js';
+import { log } from '../utils/logger.js';
 
 const PLAN_MONTHLY_AI_CAP_CENTS = {
   start: 500,    // $5 / month
@@ -76,7 +77,7 @@ export async function recordAiUsage(ctx, tokensIn, tokensOut, model = 'default')
     );
   } catch (e) {
     // Non-fatal — usage tracking failure shouldn't block AI replies.
-    console.error('[ai-usage] record failed:', e?.message);
+    log.error('services.aiUsage', e instanceof Error ? e : new Error(String(e?.message)));
   }
 }
 

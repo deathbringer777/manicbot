@@ -1,4 +1,5 @@
 import { WORK, MAX_APTS, CLEANUP_AFTER_MS, TIMEZONE } from '../config.js';
+import { log } from '../utils/logger.js';
 import { kvGet, kvPut, kvDel } from '../utils/kv.js';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
@@ -297,7 +298,7 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
 
     if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
       await deleteAppointmentCalendar(ctx, a).catch(e =>
-        console.error('cancelApt calendar delete error:', e.message),
+        log.error('services.appointments', e instanceof Error ? e : new Error(String(e.message)), { action: 'cancelApt_calendar_delete' }),
       );
     }
 
@@ -324,7 +325,7 @@ export async function cancelApt(ctx, id, ownerChatId, adminOverride = false) {
 
   if (a.googleEventId && (a.googleCalendarId || a.googleIntegrationId)) {
     await deleteAppointmentCalendar(ctx, a).catch(e =>
-      console.error('cancelApt calendar delete error:', e.message),
+      log.error('services.appointments', e instanceof Error ? e : new Error(String(e.message)), { action: 'cancelApt_calendar_delete' }),
     );
   }
 

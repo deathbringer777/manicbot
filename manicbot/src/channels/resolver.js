@@ -8,6 +8,7 @@
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { encryptToken } from '../utils/security.js';
 import { decryptToken } from '../utils/security.js';
+import { log } from '../utils/logger.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
 import { getTenant, getBot, getBotIdsByTenantId, getBotToken } from '../tenant/storage.js';
 
@@ -176,17 +177,17 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
     if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) {
       if (encKey) {
         // Encryption key is set but token is plaintext — auto-encrypt it in place and use it
-        console.warn('[resolver] Auto-encrypting plaintext Meta token for tenant:', tenantId);
+        log.warn('channels.resolver', { message: 'Auto-encrypting plaintext Meta token', tenantId });
         const encrypted = await encryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
         if (encrypted) {
           await dbRun(ctx,
             'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ?',
             encrypted, Math.floor(Date.now() / 1000), row.id,
-          ).catch(e => console.error('[resolver] Failed to store encrypted token:', e.message));
+          ).catch(e => log.error('channels.resolver', e instanceof Error ? e : new Error(String(e.message)), { action: 'store_encrypted_token' }));
         }
         token = rawTok; // use the plaintext for this request
       } else {
-        console.error('[resolver] SECURITY: Using plaintext Meta token for tenant:', tenantId, '— set BOT_ENCRYPTION_KEY to encrypt at rest');
+        log.error('channels.resolver', new Error('SECURITY: Using plaintext Meta token — set BOT_ENCRYPTION_KEY to encrypt at rest'), { tenantId });
         token = rawTok;
       }
     }

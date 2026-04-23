@@ -3,6 +3,8 @@
  * Used by Instagram and WhatsApp adapters.
  */
 
+import { log } from '../utils/logger.js';
+
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
 /**
@@ -42,11 +44,11 @@ export async function graphPost(path, token, body, { maxRetries = 2, label = 'gr
       if (res.ok) return { ok: true, data };
       // 429 (rate limit) or 5xx (server error) → retry
       if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
-        console.warn(`[${label}] POST ${path} got ${res.status}, retry ${attempt + 1}/${maxRetries}`);
+        log.warn(`channels.${label}`, { message: `POST ${path} got ${res.status}, retrying`, attempt: attempt + 1, maxRetries });
         await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
         continue;
       }
-      console.error(`[${label}] POST ${path} failed ${res.status}:`, JSON.stringify(data));
+      log.error(`channels.${label}`, new Error(`POST ${path} failed ${res.status}`), { status: res.status });
       // Signal token-dead to caller so they can mark integration needs_reauth.
       return {
         ok: false,
@@ -58,11 +60,11 @@ export async function graphPost(path, token, body, { maxRetries = 2, label = 'gr
       };
     } catch (e) {
       if (attempt < maxRetries) {
-        console.warn(`[${label}] POST ${path} fetch error, retry ${attempt + 1}/${maxRetries}:`, e.message);
+        log.warn(`channels.${label}`, { message: `POST ${path} fetch error, retrying`, attempt: attempt + 1, maxRetries });
         await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
         continue;
       }
-      console.error(`[${label}] fetch error:`, e.message);
+      log.error(`channels.${label}`, e instanceof Error ? e : new Error(String(e.message)));
       return { ok: false, error: e.message };
     }
   }

@@ -19,6 +19,7 @@
 import { nowSec, msToSec } from '../utils/time.js';
 import { getTenant, putTenant } from './storage.js';
 import { envCtx } from '../http/envCtx.js';
+import { log } from '../utils/logger.js';
 
 export const PREVIEW_TENANT_ID = 't_preview_landing';
 export const PREVIEW_TENANT_SLUG = 'preview-landing';
@@ -81,7 +82,7 @@ export async function ensurePreviewTenantProvisioned(env) {
     }
   }
 
-  console.log('[preview-tenant] provisioning', PREVIEW_TENANT_ID, '…');
+  log.info('tenant.preview', { message: 'provisioning preview tenant', tenantId: PREVIEW_TENANT_ID });
   const { dbRun } = await import('../utils/db.js');
   const now = nowSec();
   const TRIAL_SEC = msToSec(7 * 24 * 3600 * 1000);
@@ -128,7 +129,7 @@ export async function ensurePreviewTenantProvisioned(env) {
     ec,
     'UPDATE tenants SET is_test = ? WHERE id = ?',
     1, PREVIEW_TENANT_ID,
-  ).catch(e => console.error('[preview-tenant] is_test flag:', e.message));
+  ).catch(e => log.error('tenant.preview', e instanceof Error ? e : new Error(String(e.message)), { action: 'is_test_flag' }));
 
   // Preview-mode flag: consumed by channels/resolver.js::buildChannelCtx.
   await dbRun(
@@ -170,5 +171,5 @@ export async function ensurePreviewTenantProvisioned(env) {
   }
 
   _previewProvisioned = true;
-  console.log('[preview-tenant] ready:', PREVIEW_TENANT_SLUG);
+  log.info('tenant.preview', { message: 'preview tenant ready', slug: PREVIEW_TENANT_SLUG });
 }

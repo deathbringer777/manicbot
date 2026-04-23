@@ -3,6 +3,7 @@ import { createTRPCRouter, masterProcedure } from "~/server/api/trpc";
 import { appointments, masters, users, services, tenants } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { sanitizeText } from "~/server/security/sanitize";
 
 /** Assert caller is master on a personal (independent) tenant — allows service/config management */
 async function assertPersonalMaster(ctx: any, tenantId: string) {
@@ -182,7 +183,7 @@ export const masterRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
       const setObj: Record<string, unknown> = {};
-      if (input.bio !== undefined) setObj.bio = input.bio || null;
+      if (input.bio !== undefined) setObj.bio = input.bio ? sanitizeText(input.bio, 500) : null;
       if (input.portfolio !== undefined) {
         setObj.portfolio = JSON.stringify(input.portfolio);
         // Keep masters.photo in sync with first portfolio entry for backward compat
@@ -228,10 +229,10 @@ export const masterRouter = createTRPCRouter({
         emoji: input.emoji ?? null,
         duration: input.duration,
         price: input.price,
-        names: input.names,
-        description: input.description ?? null,
+        names: sanitizeText(input.names, 500),
+        description: input.description ? sanitizeText(input.description, 2000) : null,
         photos: input.photos ?? null,
-        promo: input.promo ?? null,
+        promo: input.promo ? sanitizeText(input.promo, 500) : null,
         active: 1,
         hidden: 0,
         sortOrder: 0,
@@ -255,6 +256,9 @@ export const masterRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertPersonalMaster(ctx, input.tenantId);
       const { tenantId, svcId, ...updates } = input;
+      if (updates.names !== undefined) updates.names = sanitizeText(updates.names, 500);
+      if (updates.description !== undefined) updates.description = sanitizeText(updates.description, 2000);
+      if (updates.promo !== undefined) updates.promo = sanitizeText(updates.promo, 500);
       const setObj: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(updates)) {
         if (v !== undefined) setObj[k] = v;

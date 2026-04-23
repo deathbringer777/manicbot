@@ -6,12 +6,23 @@ import type { NextRequest } from "next/server";
  *  1. Route dispatch for Cloudflare Pages + @cloudflare/next-on-pages (unchanged).
  *  2. Security response headers injected on every request.
  *
- * CSP uses 'unsafe-inline' for styles (Tailwind) and scripts while we are on
- * next-on-pages without nonce support. TODO: migrate to nonce-based CSP once
- * server-component nonce forwarding is available on the edge runtime.
+ * CSP uses a per-request cryptographic nonce for inline scripts (replaces
+ * 'unsafe-inline'). The nonce is exposed via the `x-csp-nonce` response header
+ * so that server components and Next.js layouts can read it with `headers()` and
+ * pass it to <Script nonce={nonce}> tags. Style-src keeps 'unsafe-inline' because
+ * Tailwind v4 generates inline styles that cannot be nonced without a full rebuild.
  */
+
+/** Generate a cryptographically random nonce (Base64, 22+ chars). */
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // btoa is available in the Edge runtime
+  return btoa(String.fromCharCode(...bytes));
+}
+
 export function middleware(_request: NextRequest) {
-  const res = NextResponse.next();
+  const nonce = generateNonce();
 
   // ── Content-Security-Policy ──────────────────────────────────────────────
   // Permits:
@@ -23,7 +34,7 @@ export function middleware(_request: NextRequest) {
   //   - <object>, <embed>, <base> overrides, other origins loading as frames
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://js.stripe.com",
+    `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com https://js.stripe.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
@@ -36,7 +47,12 @@ export function middleware(_request: NextRequest) {
     "upgrade-insecure-requests",
   ].join("; ");
 
+  const res = NextResponse.next({
+    request: { headers: new Headers(_request.headers) },
+  });
   res.headers.set("Content-Security-Policy", csp);
+  // Expose nonce to server components via headers() API
+  res.headers.set("x-csp-nonce", nonce);
   res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");

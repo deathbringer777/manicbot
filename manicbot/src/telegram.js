@@ -16,6 +16,7 @@
  * See also: src/channels/whatsapp.js + instagram.js (channel adapters)
  */
 import { API_TIMEOUT_MS } from './config.js';
+import { log } from './utils/logger.js';
 import { extractButtonRows, truncateButtonText, adaptCalendarForMeta } from './channels/ui-renderer.js';
 
 // ── Channel detection ────────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ function logMetaAdapterResult(p, op, channelType) {
   const label = channelType || 'meta';
   return Promise.resolve(p).then(r => {
     if (r && typeof r === 'object' && r.ok === false) {
-      console.error(`[${label}] ${op} failed:`, r.error ?? r.status ?? r);
+      log.error(`telegram.${label}`, new Error(`${op} failed`), { status: r.error ?? r.status });
     }
     return r;
   });
@@ -106,14 +107,14 @@ async function tgApi(ctx, method, body) {
     });
     if (r.status === 429) {
       const retryAfter = r.headers.get('Retry-After') || '?';
-      console.error(`TG 429 rate-limited: ${method}, Retry-After: ${retryAfter}`);
+      log.error('telegram.api', new Error(`TG 429 rate-limited: ${method}`), { retryAfter });
       return { ok: false, description: `Rate limited (retry after ${retryAfter}s)`, error_code: 429 };
     }
     const text = await r.text();
     try { return JSON.parse(text); }
     catch { return { ok: false, description: `Non-JSON response: ${text.slice(0, 200)}` }; }
   } catch (e) {
-    console.error('TG API error:', method, e.message);
+    log.error('telegram.api', e instanceof Error ? e : new Error(String(e.message)), { method });
     return { ok: false, description: e.message };
   } finally {
     clearTimeout(timer);
@@ -147,7 +148,7 @@ export function send(ctx, chatId, text, extra = {}) {
     if (ctx.TG) {
       return tgApi(ctx, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...extra });
     }
-    console.warn('[web] dropping out-of-session send (no TG fallback)', { chatId, tenantId: ctx.tenantId });
+    log.warn('telegram.send', { message: 'dropping out-of-session web send (no TG fallback)', tenantId: ctx.tenantId });
     return Promise.resolve({ ok: false, error: 'no_tg_fallback' });
   }
 
@@ -302,10 +303,10 @@ export async function sendIcs(ctx, chatId, content, fname, caption) {
       fd.append('caption', caption);
       fd.append('parse_mode', 'HTML');
       const r = await fetch(`${ctx.TG}/sendDocument`, { method: 'POST', body: fd });
-      if (!r.ok) console.error('sendIcs HTTP', r.status, await r.text().catch(() => ''));
+      if (!r.ok) log.error('telegram.sendIcs', new Error(`sendIcs HTTP error ${r.status}`), { status: r.status });
       return r;
     } catch (e) {
-      console.error('sendIcs error:', e.message);
+      log.error('telegram.sendIcs', e instanceof Error ? e : new Error(String(e.message)));
       return null;
     }
   }
@@ -331,7 +332,7 @@ export async function sendIcs(ctx, chatId, content, fname, caption) {
       ctx.channel.type,
     );
   } catch (e) {
-    console.error('sendIcs channel error:', e.message);
+    log.error('telegram.sendIcs', e instanceof Error ? e : new Error(String(e.message)), { action: 'channel_send' });
     return send(ctx, chatId, caption);
   }
 }

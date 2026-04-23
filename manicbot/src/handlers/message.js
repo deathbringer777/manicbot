@@ -1,4 +1,5 @@
 import { CB, STEP } from '../config.js';
+import { log } from '../utils/logger.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
@@ -212,7 +213,7 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
   for (const { tag, param } of actions) {
     if (pageActions.includes(tag) || (tag === 'BOOK' && param)) {
       if (!validateActionParams(tag, param)) {
-        console.warn(`[ai] rejected invalid action params: [${tag}:${param}]`);
+        log.warn('handlers.message', { message: 'rejected invalid action params', tag, param });
         continue;
       }
       const ran = await executeAIAction(ctx, cid, realRole, tag, param, from);
@@ -245,11 +246,11 @@ export async function onMsg(ctx, msg) {
 
   const cid = msg.chat.id;
   if (!isValidChatId(cid)) {
-    console.warn('[onMsg] invalid chat id rejected:', { channel: ctx.channel?.type, type: typeof cid, value: String(cid).slice(0, 80), tenantId: ctx.tenantId });
+    log.warn('handlers.message', { message: 'invalid chat id rejected', channel: ctx.channel?.type, type: typeof cid, tenantId: ctx.tenantId });
     return;
   }
   if (ctx.channel?.type) {
-    console.log('[onMsg] channel message accepted:', { channel: ctx.channel.type, cid: String(cid).slice(0, 20), tenantId: ctx.tenantId });
+    log.info('handlers.message', { message: 'channel message accepted', channel: ctx.channel.type, tenantId: ctx.tenantId });
   }
 
   // ─── SECURITY: web channel is hard-locked to the client role ──────────────
@@ -261,9 +262,7 @@ export async function onMsg(ctx, msg) {
   if (ctx.channel?.type === 'web') {
     const rawCmd = (msg.text || '').trim().split(/\s+/, 1)[0] || '';
     if (BLOCKED_WEB_COMMANDS.has(rawCmd) || BLOCKED_WEB_COMMAND_PREFIXES.some((p) => rawCmd.startsWith(p))) {
-      console.warn('[web] SECURITY: blocked privileged command from web session', {
-        cmd: rawCmd, cid: String(cid).slice(0, 20), tenantId: ctx.tenantId,
-      });
+      log.warn('handlers.message', { message: 'SECURITY: blocked privileged command from web session', cmd: rawCmd, tenantId: ctx.tenantId });
       return; // silent drop — don't reveal the command exists
     }
   }
@@ -693,7 +692,7 @@ export async function onMsg(ctx, msg) {
             rawPayload: startPayload.slice(0, 256),
           });
         } catch (e) {
-          console.error('[origins] recordOrigin failed:', e?.message);
+          log.error('handlers.message', e instanceof Error ? e : new Error(String(e?.message)), { action: 'recordOrigin' });
         }
       } else {
         void logEvent(ctx, 'origin.invalid_payload', {
@@ -955,7 +954,7 @@ export async function onMsg(ctx, msg) {
         const data = await r.json();
         webhookSet = data.ok === true;
       } catch (e) {
-        console.error('setWebhook error:', e.message);
+        log.error('handlers.message', e instanceof Error ? e : new Error(String(e.message)), { action: 'setWebhook' });
       }
     }
     const webhookLine = webhookSet
@@ -1116,7 +1115,7 @@ export async function onMsg(ctx, msg) {
     apt.rejectComment = txt.slice(0, 500);
     await updateApt(ctx, st.aptId, { status: 'rejected', rejectComment: txt.slice(0, 500) });
     if (apt.googleEventId) {
-      await deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
+      await deleteAppointmentCalendar(ctx, apt).catch(e => log.error('handlers.message', e instanceof Error ? e : new Error(String(e.message)), { action: 'reject_calendar_delete' }));
     }
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';

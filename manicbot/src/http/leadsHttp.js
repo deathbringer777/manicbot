@@ -9,6 +9,7 @@
  */
 
 import { dbRun, dbGet } from '../utils/db.js';
+import { log } from '../utils/logger.js';
 import { envCtx } from './envCtx.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
@@ -86,7 +87,7 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
         return json({ ok: true, already_submitted: true });
       }
     } catch (e) {
-      console.error('[leads] dedupe count failed:', e?.message);
+      log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'dedupe_count' });
       // fall through — better to accept the lead than to drop it
     }
 
@@ -109,7 +110,7 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
           phone = excluded.phone,
           last_seen_at = excluded.last_seen_at,
           lead_count = marketing_contacts.lead_count + 1
-      `, email, name, phone, now, now).catch((e) => console.error('[leads] contacts upsert failed:', e?.message));
+      `, email, name, phone, now, now).catch((e) => log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'contacts_upsert' }));
       void logEvent(ec, 'lead.received', {
         level: 'info',
         message: `New lead: ${email}`,
@@ -122,9 +123,9 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
         note,
         source: 'landing',
         ip,
-      }).catch((e) => console.error('[leads] notify failed:', e?.message));
+      }).catch((e) => log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'notify' }));
     } catch (e) {
-      console.error('[leads] insert failed:', e?.message);
+      log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'insert' });
       return json({ error: 'db_error' }, 500);
     }
     return json({ ok: true });
@@ -160,7 +161,7 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
         ON CONFLICT(email) DO UPDATE SET locale = excluded.locale
       `, email, locale, now);
     } catch (e) {
-      console.error('[newsletter] insert failed:', e?.message);
+      log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'newsletter_insert' });
       return json({ error: 'db_error' }, 500);
     }
 
@@ -169,7 +170,7 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
     // promises once the response is sent).
     if (isNew) {
       if (ec.resendApiKey && ec.resendFrom) {
-        console.log(`[newsletter] sending welcome email to ${email} (locale=${locale})`);
+        log.info('http.leads', { message: 'sending newsletter welcome email', locale });
         waitUntil(
           sendSubscriberWelcomeEmail({
             resendKey: ec.resendApiKey,
@@ -177,11 +178,11 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
             email,
             locale,
           })
-            .then((ok) => console.log(`[newsletter] welcome email ${ok ? 'sent' : 'FAILED'} for ${email}`))
-            .catch((e) => console.error('[newsletter] welcome email threw:', e?.message)),
+            .then((ok) => ok ? log.info('http.leads', { message: 'newsletter welcome email sent' }) : log.warn('http.leads', { message: 'newsletter welcome email FAILED' }))
+            .catch((e) => log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'newsletter_welcome_email' })),
         );
       } else {
-        console.warn('[newsletter] RESEND_API_KEY or RESEND_FROM missing — skipping welcome email');
+        log.warn('http.leads', { message: 'RESEND_API_KEY or RESEND_FROM missing — skipping welcome email' });
       }
     }
 

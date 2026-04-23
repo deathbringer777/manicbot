@@ -1,3 +1,5 @@
+import { log } from './logger.js';
+
 export async function kvListAll(ctx, opts = {}) {
   const pLen = ctx.prefix.length;
   const prefix = opts.prefix != null ? ctx.prefix + opts.prefix : ctx.prefix;
@@ -14,15 +16,15 @@ export async function kvListAll(ctx, opts = {}) {
 
 export async function kvGet(ctx, k) {
   try { return await ctx.kv.get(ctx.prefix + k, 'json'); }
-  catch (e) { console.error('KV GET fail:', k, e.message); return null; }
+  catch (e) { log.error('utils.kv', e instanceof Error ? e : new Error(String(e.message)), { op: 'GET' }); return null; }
 }
 
 export async function kvPut(ctx, k, v, o) {
   try { await ctx.kv.put(ctx.prefix + k, JSON.stringify(v), o); return true; }
-  catch (e) { console.error('KV PUT fail:', k, e.message); return false; }
+  catch (e) { log.error('utils.kv', e instanceof Error ? e : new Error(String(e.message)), { op: 'PUT' }); return false; }
 }
 
 export async function kvDel(ctx, k) {
   try { await ctx.kv.delete(ctx.prefix + k); }
-  catch (e) { console.error('KV DEL fail:', k, e.message); }
+  catch (e) { log.error('utils.kv', e instanceof Error ? e : new Error(String(e.message)), { op: 'DEL' }); }
 }

@@ -13,6 +13,7 @@
 import { dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { PLAN_LIMITS } from '../billing/config.js';
+import { log } from '../utils/logger.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
@@ -50,12 +51,12 @@ export async function sendTemplateMessage(phoneNumberId, token, to, templateName
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      console.error(`[wa-template] send ${templateName} failed ${res.status}:`, JSON.stringify(data));
+      log.error('channels.whatsappTemplates', new Error(`send ${templateName} failed ${res.status}`), { status: res.status });
       return { ok: false, error: data.error?.message ?? 'unknown' };
     }
     return { ok: true, data };
   } catch (e) {
-    console.error('[wa-template] fetch error:', e.message);
+    log.error('channels.whatsappTemplates', e instanceof Error ? e : new Error(String(e.message)));
     return { ok: false, error: e.message };
   }
 }

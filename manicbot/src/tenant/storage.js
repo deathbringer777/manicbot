@@ -6,6 +6,7 @@
  */
 
 import { encryptToken, decryptToken } from '../utils/security.js';
+import { log } from '../utils/logger.js';
 
 // #S6: HKDF subkey label for Telegram bot tokens stored in KV.
 // Distinct from 'channel-token-v1' (D1 channel_configs) so a leaked label
@@ -112,7 +113,7 @@ export async function putTenant(ctx, tenantId, data) {
     );
     return true;
   } catch (e) {
-    console.error('putTenant:', e.message);
+    log.error('tenant.storage', e instanceof Error ? e : new Error(String(e.message)), { action: 'putTenant' });
     return false;
   }
 }
@@ -146,13 +147,13 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
       if (encryptionKey) {
         const encrypted = await encryptToken(data.botToken, encryptionKey, BOT_TOKEN_LABEL);
         if (!encrypted) {
-          console.error('[putBot] encryption failed — refusing to store plaintext bot token');
+          log.error('tenant.storage', new Error('putBot encryption failed — refusing to store plaintext bot token'), { botId });
           return false;
         }
         await kv.put(BOT_TOKEN_PREFIX + botId, encrypted);
       } else {
         // No encryption key configured — refuse to store tokens in plaintext.
-        console.error('[putBot] BOT_ENCRYPTION_KEY not set — refusing to store plaintext bot token for', botId);
+        log.error('tenant.storage', new Error('BOT_ENCRYPTION_KEY not set — refusing to store plaintext bot token'), { botId });
         return false;
       }
     }
@@ -169,7 +170,7 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
     );
     return true;
   } catch (e) {
-    console.error('putBot:', e.message);
+    log.error('tenant.storage', e instanceof Error ? e : new Error(String(e.message)), { action: 'putBot' });
     return false;
   }
 }

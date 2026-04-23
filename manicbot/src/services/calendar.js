@@ -12,6 +12,8 @@
  *   GOOGLE_SERVICE_ACCOUNT_KEY — JSON key file contents, base64-encoded or raw JSON string.
  */
 
+import { log } from '../utils/logger.js';
+
 const GCAL_API = 'https://www.googleapis.com/calendar/v3';
 const TOKEN_CACHE_KEY = 'gcal:access_token';
 
@@ -178,7 +180,7 @@ export async function deleteCalendarEvent(ctx, calendarId, eventId) {
       },
     );
   } catch (e) {
-    console.error('deleteCalendarEvent error:', e.message);
+    log.error('services.calendar', e instanceof Error ? e : new Error(String(e.message)), { action: 'deleteCalendarEvent' });
   }
 }
 

@@ -1,4 +1,5 @@
 import { verifyMetaSignature, handleHubChallenge } from '../channels/meta-verify.js';
+import { log } from '../utils/logger.js';
 import {
   resolveTenantFromWhatsApp,
   resolveTenantFromInstagram,
@@ -23,7 +24,7 @@ import { claimMetaMessage } from '../utils/dedup.js';
 function scheduleBackground(execCtx, task) {
   const wu = execCtx && typeof execCtx.waitUntil === 'function' ? execCtx.waitUntil.bind(execCtx) : null;
   if (wu) wu(task);
-  else task.catch(e => console.error('[meta] background task:', e?.message || e));
+  else task.catch(e => log.error('http.metaWebhooks', e instanceof Error ? e : new Error(String(e?.message || e)), { action: 'background_task' }));
 }
 
 export async function tryMetaWebhooks(request, env, url, execCtx) {
@@ -35,7 +36,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
     // Fail-fast if META_APP_SECRET is not configured — otherwise any POST passes unverified
     // (verifyMetaSignature would return false without a secret, but we want explicit observability).
     if (!env.META_APP_SECRET) {
-      console.error('[meta-wa] META_APP_SECRET not configured — rejecting webhook');
+      log.error('http.metaWebhooks', new Error('META_APP_SECRET not configured — rejecting WA webhook'));
       return new Response('Meta webhook not configured', { status: 503 });
     }
     const sig = request.headers.get('X-Hub-Signature-256') || '';
@@ -70,7 +71,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               if (!phoneNumberId) continue;
               const resolved = await resolveTenantFromWhatsApp(ec, phoneNumberId);
               if (!resolved) {
-                console.warn('[wa] unresolved phone_number_id:', phoneNumberId);
+                log.warn('http.metaWebhooks', { message: 'unresolved WA phone_number_id' });
                 continue;
               }
               const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'whatsapp', env.BOT_ENCRYPTION_KEY || null);
@@ -85,7 +86,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             }
           }
         } catch (e) {
-          console.error('[wa] process error:', e.message);
+          log.error('http.metaWebhooks', e instanceof Error ? e : new Error(String(e.message)), { channel: 'wa' });
         }
       };
       scheduleBackground(execCtx, processWA());
@@ -100,7 +101,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
   if (request.method === 'POST' && url.pathname === '/webhook/ig') {
     // Fail-fast if META_APP_SECRET is not configured (see wa handler above).
     if (!env.META_APP_SECRET) {
-      console.error('[meta-ig] META_APP_SECRET not configured — rejecting webhook');
+      log.error('http.metaWebhooks', new Error('META_APP_SECRET not configured — rejecting IG webhook'));
       return new Response('Meta webhook not configured', { status: 503 });
     }
     const sig = request.headers.get('X-Hub-Signature-256') || '';
@@ -131,22 +132,22 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
           const entries = parsed.entry ?? [];
           for (const entry of entries) {
             const pageId = entry.id;
-            if (!pageId) { console.warn('[ig] no pageId in entry'); continue; }
+            if (!pageId) { log.warn('http.metaWebhooks', { message: 'no pageId in IG entry' }); continue; }
             const resolved = await resolveTenantFromInstagram(ec, pageId);
             if (!resolved) {
-              console.warn('[ig] unresolved page_id:', pageId);
+              log.warn('http.metaWebhooks', { message: 'unresolved IG page_id' });
               continue;
             }
             const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'instagram', env.BOT_ENCRYPTION_KEY || null);
             if (!channelConfig) {
-              console.warn('[ig] no channelConfig for tenant:', resolved.tenantId);
+              log.warn('http.metaWebhooks', { message: 'no channelConfig for IG tenant', tenantId: resolved.tenantId });
               continue;
             }
             if (!channelConfig.token && env.INSTAGRAM_ACCESS_TOKEN) {
               channelConfig.token = env.INSTAGRAM_ACCESS_TOKEN;
             }
             if (!channelConfig.token) {
-              console.error('[ig] no token for tenant', resolved.tenantId, '— set via POST /admin/ig-token');
+              log.error('http.metaWebhooks', new Error('no IG token for tenant — set via POST /admin/ig-token'), { tenantId: resolved.tenantId });
               continue;
             }
             const adapter = new InstagramAdapter({
@@ -156,7 +157,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             });
             const ctx = await buildChannelCtx(env, resolved.tenantId, channelConfig, adapter);
             if (!ctx) {
-              console.warn('[ig] buildChannelCtx returned null');
+              log.warn('http.metaWebhooks', { message: 'IG buildChannelCtx returned null' });
               continue;
             }
             adapter._ctx = ctx; // give adapter access to db for 24h window check
@@ -174,7 +175,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             }
           }
         } catch (e) {
-          console.error('[ig] process error:', e.message);
+          log.error('http.metaWebhooks', e instanceof Error ? e : new Error(String(e.message)), { channel: 'ig' });
         }
       };
       scheduleBackground(execCtx, processIG());

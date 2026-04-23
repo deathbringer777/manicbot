@@ -10,6 +10,7 @@
  */
 
 import { getRuntimeEnv } from "~/server/runtimeEnv";
+import { log } from "~/server/utils/logger";
 
 const RESEND_API = "https://api.resend.com/emails";
 
@@ -37,7 +38,7 @@ export async function sendResendEmail(opts: {
   const key = getKey();
   const from = getFrom();
   if (!key || !from) {
-    console.error("[resend] RESEND_API_KEY or RESEND_FROM not set — email not sent");
+    log.warn("resend.email", { message: "RESEND_API_KEY or RESEND_FROM not set — email not sent" });
     return { ok: false, error: "resend_not_configured" };
   }
 
@@ -68,15 +69,15 @@ export async function sendResendEmail(opts: {
         typeof data?.message === "string"
           ? data.message
           : `resend_http_${res.status}`;
-      console.error(`[resend] send failed to=${opts.to} status=${res.status} error=${msg} body=${JSON.stringify(data)}`);
+      log.error("resend.email", new Error(msg), { status: res.status });
       return { ok: false, error: msg };
     }
 
-    console.log(`[resend] sent to=${opts.to} id=${data.id ?? "?"} from=${from}`);
+    log.info("resend.email", { messageId: data.id, from });
     return { ok: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : "fetch_failed";
-    console.error(`[resend] fetch error to=${opts.to}: ${message}`);
+    log.error("resend.email", e instanceof Error ? e : new Error(message));
     return { ok: false, error: message };
   }
 }

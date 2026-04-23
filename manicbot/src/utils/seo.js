@@ -7,6 +7,8 @@
  *   - manicbot/src/utils/landing-pages-proxy.js         (legal SPA routes)
  */
 
+import { log } from './logger.js';
+
 export const DEFAULT_SITE_ORIGIN = 'https://manicbot.com';
 
 /**
@@ -165,7 +167,7 @@ export async function generateSitemapResponse(env, origin) {
         });
       }
     } catch (err) {
-      console.warn('[seo] sitemap: failed to load salon slugs', err?.message || err);
+      log.warn('utils.seo', { message: 'sitemap: failed to load salon slugs', error: err?.message || String(err) });
     }
   }
 

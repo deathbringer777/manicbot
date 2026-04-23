@@ -5,6 +5,7 @@ import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "~/env";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
+import { log } from "~/server/utils/logger";
 
 /**
  * Fire-and-forget call to Worker endpoint to trigger notifications + calendar sync.
@@ -14,7 +15,7 @@ async function notifyWorker(action: string, appointmentId: string, tenantId: str
   const workerUrl = env.WORKER_PUBLIC_URL;
   const adminKey = env.ADMIN_KEY;
   if (!workerUrl || !adminKey) {
-    console.warn("[appointments] WORKER_PUBLIC_URL or ADMIN_KEY not set — skipping Worker notification");
+    log.warn("appointments.notifyWorker", { message: "WORKER_PUBLIC_URL or ADMIN_KEY not set — skipping" });
     return;
   }
   try {
@@ -26,10 +27,10 @@ async function notifyWorker(action: string, appointmentId: string, tenantId: str
     });
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
-      console.error(`[appointments] Worker notification failed ${resp.status}:`, text);
+      log.error("appointments.notifyWorker", new Error(`Worker notification failed ${resp.status}`), { body: text });
     }
   } catch (e) {
-    console.error("[appointments] Worker notification error:", (e as Error).message);
+    log.error("appointments.notifyWorker", e instanceof Error ? e : new Error(String(e)));
   }
 }
 
@@ -304,7 +305,7 @@ export const appointmentsRouter = createTRPCRouter({
             firstSource: "manual_dashboard",
           });
         } catch (e) {
-          console.error("[createManual] failed to create client row:", (e as Error).message);
+          log.error("appointments.createManual", e instanceof Error ? e : new Error(String(e)));
         }
       }
       if (!chatId) throw new TRPCError({ code: "BAD_REQUEST", message: "client_resolution_failed" });

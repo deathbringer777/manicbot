@@ -1,4 +1,5 @@
 import { timingSafeEqual } from '../utils/security.js';
+import { log } from '../utils/logger.js';
 import { runMigration } from '../tenant/migration.js';
 import { runSeed } from '../admin/seed.js';
 import { registerBot, createTenant } from '../admin/provisioning.js';
@@ -168,7 +169,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
         results.push({ botId, tenantId, webhook: whRes.ok, webhookUrl: whUrl });
         } catch (botErr) {
           // Rollback: clean up partially-created bot and tenant
-          console.error(`[admin/provision] bot ${botId} failed, rolling back:`, botErr?.message);
+          log.error('http.adminKey', botErr instanceof Error ? botErr : new Error(String(botErr?.message)), { action: 'provision_bot_rollback', botId });
           try {
             await dbRun(ec, 'DELETE FROM bots WHERE bot_id = ?', botId);
             if (createdTenantId) {
@@ -176,7 +177,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
               await dbRun(ec, 'DELETE FROM tenants WHERE id = ?', createdTenantId);
             }
           } catch (rbErr) {
-            console.error(`[admin/provision] rollback failed for bot ${botId}:`, rbErr?.message);
+            log.error('http.adminKey', rbErr instanceof Error ? rbErr : new Error(String(rbErr?.message)), { action: 'provision_rollback_failed', botId });
           }
           results.push({ botId, error: botErr?.message || 'provision_failed' });
         }
@@ -185,7 +186,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       void audit(ec, 'admin.provision', { detail: { count: results.length, botIds: results.map(r => r.botId) } });
       return Response.json({ ok: true, results });
     } catch (e) {
-      console.error('[admin/provision]', e?.message, e?.stack);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'provision' });
       return Response.json({ error: 'Provision failed', code: 'PROVISION_ERROR' }, { status: 400 });
     }
   }
@@ -245,7 +246,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       }
       return Response.json({ url: data.url, sessionId: data.id });
     } catch (e) {
-      console.error('[admin/plugin-addon-checkout]', e?.message);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'plugin_addon_checkout' });
       return Response.json({ error: 'Request failed' }, { status: 400 });
     }
   }
@@ -274,7 +275,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       // #S6: same label as token-manager.js — IG tokens go in channel_configs.
       const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY, 'channel-token-v1');
       if (!encrypted) {
-        console.error('[admin/ig-token] Failed to encrypt IG token for tenant:', tenantId);
+        log.error('http.adminKey', new Error('Failed to encrypt IG token'), { action: 'ig_token', tenantId });
         return Response.json({ error: 'Token encryption failed' }, { status: 500 });
       }
       await dbRun(ec,
@@ -291,7 +292,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
         tenantId,
       });
     } catch (e) {
-      console.error('[admin/ig-token]', e?.message, e?.stack);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_token' });
       return Response.json({ error: 'Request failed', code: 'IG_TOKEN_ERROR' }, { status: 400 });
     }
   }
@@ -354,7 +355,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
         graphMe: { id: meData.id, name: meData.name },
       });
     } catch (e) {
-      console.error('[admin/ig-channel]', e?.message, e?.stack);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_channel' });
       return Response.json({ error: 'Request failed', code: 'IG_CHANNEL_ERROR' }, { status: 400 });
     }
   }
@@ -413,7 +414,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
             await syncAppointmentCalendar(ctx, apt);
             calendarSynced = true;
           } catch (e) {
-            console.error('[appointment-action] calendar sync failed:', e.message);
+            log.error('http.adminKey', e instanceof Error ? e : new Error(String(e.message)), { action: 'appointment_calendar_sync' });
           }
         }
       } else if (action === 'reject') {
@@ -439,7 +440,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
       return Response.json({ ok: true, action, appointmentId, notified, calendarSynced });
     } catch (e) {
-      console.error('[appointment-action]', e?.message, e?.stack);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'appointment_action' });
       return Response.json({ error: 'Action failed', code: 'APPOINTMENT_ACTION_ERROR' }, { status: 500 });
     }
   }
@@ -471,13 +472,13 @@ export async function tryAdminKeyRoutes(request, env, url) {
             const data = await r.json();
             results.push({ botId, tenantId, ok: data.ok, url: whUrl, hasSecret: !!webhookSecret });
           } catch (e) {
-            console.error('[reset-webhooks] setWebhook failed', botId, e?.message);
+            log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'reset_webhooks_setWebhook', botId });
             results.push({ botId, tenantId, error: 'setWebhook failed' });
           }
         }
       }
     } catch (e) {
-      console.error('[reset-webhooks]', e?.message, e?.stack);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'reset_webhooks' });
       return Response.json({ error: 'Reset failed', code: 'RESET_WEBHOOKS_ERROR' }, { status: 500 });
     }
     return Response.json({ ok: true, count: results.length, results });
@@ -534,7 +535,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
            updated_at = excluded.updated_at`
       ).bind(id, normalizedEmail, passwordHash, tenantId, role, now, now).run();
     } catch (e) {
-      console.error('[admin/web-user]', e?.message, e?.stack);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'web_user_upsert' });
       return Response.json({ error: 'Web user upsert failed', code: 'WEB_USER_ERROR' }, { status: 500 });
     }
 
@@ -563,7 +564,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       void audit(ec, 'google.web_oauth_url', { tenantId, detail: { scope, sessionId: result.sessionId } });
       return Response.json({ ok: true, connectUrl: result.connectUrl });
     } catch (e) {
-      console.error('[admin/google/oauth-url]', e?.message);
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'google_oauth_url' });
       return Response.json({ error: 'Failed to mint OAuth URL' }, { status: 500 });
     }
   }

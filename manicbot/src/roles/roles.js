@@ -5,6 +5,7 @@
 
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
+import { log } from '../utils/logger.js';
 
 export const ROLES = {
   SYSTEM_ADMIN: 'system_admin',
@@ -36,7 +37,7 @@ export async function setPlatformRole(ctx, chatId, role) {
     );
     return true;
   } catch (e) {
-    console.error('setPlatformRole:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'setPlatformRole' });
     return false;
   }
 }
@@ -47,7 +48,7 @@ export async function removePlatformRole(ctx, chatId) {
     await dbRun(ctx, 'DELETE FROM platform_roles WHERE chat_id = ?', chatId);
     return true;
   } catch (e) {
-    console.error('removePlatformRole:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'removePlatformRole' });
     return false;
   }
 }
@@ -68,7 +69,7 @@ export async function setTenantRole(ctx, chatId, role) {
     );
     return true;
   } catch (e) {
-    console.error('setTenantRole:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'setTenantRole' });
     return false;
   }
 }
@@ -119,7 +120,7 @@ export async function addSupportAgent(ctx, chatId) {
     );
     return true;
   } catch (e) {
-    console.error('addSupportAgent:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'addSupportAgent' });
     return false;
   }
 }
@@ -130,7 +131,7 @@ export async function removeSupportAgent(ctx, chatId) {
     await dbRun(ctx, "DELETE FROM support_agents WHERE chat_id = ? AND type = 'support'", chatId);
     return true;
   } catch (e) {
-    console.error('removeSupportAgent:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'removeSupportAgent' });
     return false;
   }
 }
@@ -152,7 +153,7 @@ export async function addTechnicalSupportAgent(ctx, chatId) {
     );
     return true;
   } catch (e) {
-    console.error('addTechnicalSupportAgent:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'addTechnicalSupportAgent' });
     return false;
   }
 }
@@ -168,7 +169,7 @@ export async function removeTechnicalSupportAgent(ctx, chatId) {
     await dbRun(ctx, "DELETE FROM support_agents WHERE chat_id = ? AND type = 'support'", chatId);
     return true;
   } catch (e) {
-    console.error('removeTechnicalSupportAgent:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'removeTechnicalSupportAgent' });
     return false;
   }
 }
@@ -196,7 +197,7 @@ export async function addTenantSupportAgent(ctx, chatId) {
     );
     return true;
   } catch (e) {
-    console.error('addTenantSupportAgent:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'addTenantSupportAgent' });
     return false;
   }
 }
@@ -210,7 +211,7 @@ export async function removeTenantSupportAgent(ctx, chatId) {
     );
     return true;
   } catch (e) {
-    console.error('removeTenantSupportAgent:', e.message);
+    log.error('roles', e instanceof Error ? e : new Error(String(e.message)), { action: 'removeTenantSupportAgent' });
     return false;
   }
 }

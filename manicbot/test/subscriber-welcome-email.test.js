@@ -133,10 +133,9 @@ describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {
     });
 
     expect(ok).toBe(false);
+    // Structured logger outputs a single JSON string to console.error
     expect(errSpy).toHaveBeenCalledWith(
-      '[subscriberWelcome] Resend error:',
-      403,
-      expect.stringContaining('not verified'),
+      expect.stringMatching(/"scope":"email\.subscriberWelcome".*"status":403/s),
     );
     errSpy.mockRestore();
   });

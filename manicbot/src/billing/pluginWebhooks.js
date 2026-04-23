@@ -16,6 +16,7 @@
 
 import { dbGet, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
+import { log } from '../utils/logger.js';
 
 async function logPluginEvent(ctx, installationId, event, detail) {
   if (!ctx?.db || !installationId) return;
@@ -25,7 +26,7 @@ async function logPluginEvent(ctx, installationId, event, detail) {
       installationId, event, null, detail ? JSON.stringify(detail) : null, nowSec(),
     );
   } catch (e) {
-    console.error('[plugin-webhook] failed to log event:', e?.message);
+    log.error('billing.pluginWebhooks', e instanceof Error ? e : new Error(String(e?.message)));
   }
 }
 
@@ -54,7 +55,7 @@ async function setInstallationBillingState(ctx, tenantId, slug, newState, extra 
     );
   }
   if (!row) {
-    console.warn('[plugin-webhook] no installation found for slug', slug, 'tenant', tenantId);
+    log.warn('billing.pluginWebhooks', { message: 'no installation found', slug, tenantId });
     return null;
   }
   const assignments = ['billing_state = ?', 'updated_at = ?'];

@@ -1,5 +1,6 @@
 import { randomId, encryptToken, decryptToken } from '../utils/security.js';
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
+import { log } from '../utils/logger.js';
 
 // #S6: HKDF subkey label for Google OAuth refresh tokens.
 // Distinct trust domain from channel/bot tokens — leak in one shouldn't
@@ -64,9 +65,9 @@ const GOOGLE_TOKEN_ENC_MIN_LEN = 32;
 function getTokenEncryptionKey(ctx) {
   const key = ctx?.GOOGLE_TOKEN_ENCRYPTION_KEY || ctx?.BOT_ENCRYPTION_KEY || null;
   if (!key || String(key).length < GOOGLE_TOKEN_ENC_MIN_LEN) {
-    console.error(
-      '[google-oauth] encryption key missing or too short — Google Calendar integration disabled. ' +
-      'Set GOOGLE_TOKEN_ENCRYPTION_KEY (or BOT_ENCRYPTION_KEY) to at least 32 chars.'
+    log.error(
+      'services.googleCalendarOauth',
+      new Error('encryption key missing or too short — Google Calendar integration disabled. Set GOOGLE_TOKEN_ENCRYPTION_KEY (or BOT_ENCRYPTION_KEY) to at least 32 chars.')
     );
     return null;
   }
@@ -286,7 +287,7 @@ async function refreshAccessToken(ctx, integration) {
             data: { integrationId: integration.id, scope: integration.scope },
           });
         } catch (e) {
-          console.error('[google] failed to mark integration disabled:', e?.message);
+          log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e?.message)), { action: 'mark_integration_disabled' });
         }
       }
       throw new Error(data.error_description || data.error || 'Failed to refresh Google access token');
@@ -309,7 +310,7 @@ function trackGcalQuota(tenantId) {
   const count = (_quotaCounters.get(key) || 0) + 1;
   _quotaCounters.set(key, count);
   if (count === GCAL_DAILY_QUOTA_WARN) {
-    console.warn(`[gcal] quota warning: tenant ${tenantId} hit ${GCAL_DAILY_QUOTA_WARN} API calls today`);
+    log.warn('services.googleCalendarOauth', { message: 'gcal quota warning', tenantId, calls: count, threshold: GCAL_DAILY_QUOTA_WARN });
   }
   // Prune old days (keep only today)
   for (const k of _quotaCounters.keys()) {
@@ -778,7 +779,7 @@ export async function handleGoogleCallback(ctx, url) {
   try {
     tokens = await exchangeCodeForTokens(ctx, code);
   } catch (e) {
-    console.error('[google] exchangeCodeForTokens failed:', e.message);
+    log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e.message)), { action: 'exchangeCodeForTokens' });
     return new Response('Google token exchange failed. Please try again.', { status: 500 });
   }
   const key = getTokenEncryptionKey(ctx);
@@ -808,7 +809,7 @@ export async function handleGoogleCallback(ctx, url) {
         calendar: primary,
       });
     } catch (e) {
-      console.error('[google] web-mode finalize failed:', e?.message);
+      log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e?.message)), { action: 'web_mode_finalize' });
       await deleteOAuthSession(ctx, sessionId);
       return redirectToReturn(session.returnUrl, 'finalize_failed');
     }
@@ -988,14 +989,14 @@ export async function handleGoogleWebhook(ctx, request) {
   if (!integration) return new Response('Unknown integration', { status: 404 });
   // Validate the channel ID matches what we registered to prevent spoofed webhooks
   if (integration.watchChannelId && channelId && integration.watchChannelId !== channelId) {
-    console.warn('[gcal] webhook channel ID mismatch:', channelId, 'vs', integration.watchChannelId);
+    log.warn('services.googleCalendarOauth', { message: 'gcal webhook channel ID mismatch', channelId, watchChannelId: integration.watchChannelId });
     return new Response('Channel ID mismatch', { status: 403 });
   }
   if (resourceState && resourceState !== 'sync') {
     try {
       await syncGoogleBusyBlocks(ctx, integration);
     } catch (e) {
-      console.error('[gcal] webhook sync failed:', e.message);
+      log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e.message)), { action: 'webhook_sync' });
     }
   }
   return new Response('OK');
@@ -1042,7 +1043,7 @@ export async function renewExpiringGoogleWatches(ctx) {
       await startWatchForIntegration(ctx, integration);
       renewed++;
     } catch (e) {
-      console.error('[gcal] watch renew failed:', e.message);
+      log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e.message)), { action: 'watch_renew' });
       await persistIntegrationState(ctx, row.id, ctx.tenantId, {
         lastSyncStatus: 'watch_error',
         lastSyncError: e.message,
@@ -1189,7 +1190,7 @@ export async function syncAppointmentCalendar(ctx, apt) {
       apt.googleIntegrationId = target.integration.id;
       return { ok: true, mode: 'oauth', action: 'created' };
     } catch (err) {
-      console.error('[gcal-sync] OAuth calendar operation failed for apt:', apt.id, err.message);
+      log.error('services.googleCalendarOauth', err instanceof Error ? err : new Error(String(err.message)), { action: 'oauth_calendar_op', aptId: apt.id });
       return { ok: false, error: err.message };
     }
   }
@@ -1222,7 +1223,7 @@ export async function syncAppointmentCalendar(ctx, apt) {
     apt.googleIntegrationId = null;
     return { ok: true, mode: 'service_account', action: 'created' };
   } catch (err) {
-    console.error('[gcal-sync] Service account calendar operation failed for apt:', apt.id, err.message);
+    log.error('services.googleCalendarOauth', err instanceof Error ? err : new Error(String(err.message)), { action: 'service_account_calendar_op', aptId: apt.id });
     return { ok: false, error: err.message };
   }
 }
@@ -1239,7 +1240,7 @@ export async function deleteAppointmentCalendar(ctx, apt) {
       await deleteServiceAccountCalendarEvent(ctx, apt.googleCalendarId, apt.googleEventId);
     }
   } catch (e) {
-    console.error('[gcal] delete appointment event failed:', e.message);
+    log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e.message)), { action: 'delete_appointment_event' });
   }
   await clearAppointmentCalendarLink(ctx, apt.id);
   apt.googleEventId = null;

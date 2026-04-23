@@ -12,6 +12,7 @@
  */
 
 import { getRuntimeEnv } from "~/server/runtimeEnv";
+import { log } from "~/server/utils/logger";
 
 const BREVO_EMAIL_API = "https://api.brevo.com/v3/smtp/email";
 const BREVO_SMS_API = "https://api.brevo.com/v3/transactionalSMS/sms";
@@ -65,7 +66,7 @@ export async function sendBrevoEmail(opts: {
   const key = getKey();
   const from = getFrom();
   if (!key || !from) {
-    console.error("[brevo] BREVO_API_KEY or BREVO_FROM not set — email not sent");
+    log.warn("brevo.email", { message: "BREVO_API_KEY or BREVO_FROM not set — email not sent" });
     return { ok: false, error: "brevo_not_configured" };
   }
 
@@ -99,19 +100,15 @@ export async function sendBrevoEmail(opts: {
         typeof data?.message === "string"
           ? data.message
           : `brevo_http_${res.status}`;
-      console.error(
-        `[brevo] email failed to=${opts.to} status=${res.status} error=${msg} body=${JSON.stringify(data)}`,
-      );
+      log.error("brevo.email", new Error(msg), { status: res.status });
       return { ok: false, error: msg };
     }
 
-    console.log(
-      `[brevo] email sent to=${opts.to} id=${data.messageId ?? "?"} from=${sender.email}`,
-    );
+    log.info("brevo.email", { messageId: data.messageId, from: sender.email });
     return { ok: true, messageId: data.messageId };
   } catch (e) {
     const message = e instanceof Error ? e.message : "fetch_failed";
-    console.error(`[brevo] email fetch error to=${opts.to}: ${message}`);
+    log.error("brevo.email", e instanceof Error ? e : new Error(message));
     return { ok: false, error: message };
   }
 }
@@ -130,7 +127,7 @@ export async function sendBrevoSms(opts: {
   const key = getKey();
   const sender = getSmsSender();
   if (!key || !sender) {
-    console.error("[brevo] BREVO_API_KEY or BREVO_SMS_SENDER not set — sms not sent");
+    log.warn("brevo.sms", { message: "BREVO_API_KEY or BREVO_SMS_SENDER not set — sms not sent" });
     return { ok: false, error: "brevo_sms_not_configured" };
   }
 
@@ -162,18 +159,16 @@ export async function sendBrevoSms(opts: {
         typeof data?.message === "string"
           ? data.message
           : `brevo_http_${res.status}`;
-      console.error(
-        `[brevo] sms failed to=${opts.to} status=${res.status} error=${msg} body=${JSON.stringify(data)}`,
-      );
+      log.error("brevo.sms", new Error(msg), { status: res.status });
       return { ok: false, error: msg };
     }
 
     const id = data.messageId != null ? String(data.messageId) : data.reference;
-    console.log(`[brevo] sms sent to=${opts.to} id=${id ?? "?"} sender=${sender}`);
+    log.info("brevo.sms", { messageId: id, sender });
     return { ok: true, messageId: id };
   } catch (e) {
     const message = e instanceof Error ? e.message : "fetch_failed";
-    console.error(`[brevo] sms fetch error to=${opts.to}: ${message}`);
+    log.error("brevo.sms", e instanceof Error ? e : new Error(message));
     return { ok: false, error: message };
   }
 }

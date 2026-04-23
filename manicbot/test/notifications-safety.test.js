@@ -13,15 +13,15 @@ describe('notifications.js — error resilience', () => {
   });
 
   it('notifyAptStaff has catch handler for send failures', () => {
-    expect(code).toContain('notifyAptStaff send failed');
+    expect(code).toContain("notifyAptStaff_send");
   });
 
   it('notifyStaffAptCancelled has catch handler for send failures', () => {
-    expect(code).toContain('notifyStaffAptCancelled send failed');
+    expect(code).toContain("notifyStaffAptCancelled_send");
   });
 
   it('notifyStaffConsultantRequest has try/catch for send', () => {
-    expect(code).toContain('notifyStaffConsultantRequest send failed');
+    expect(code).toContain("notifyStaffConsultantRequest_send");
   });
 
   it('does not use bare Promise.all for notification sends', () => {

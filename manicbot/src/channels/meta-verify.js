@@ -6,6 +6,7 @@
  */
 
 import { timingSafeEqual } from '../utils/security.js';
+import { log } from '../utils/logger.js';
 
 /**
  * Verify the X-Hub-Signature-256 header sent by Meta on POST webhooks.
@@ -39,7 +40,7 @@ export async function verifyMetaSignature(body, signatureHeader, appSecret) {
     // Constant-time comparison
     return timingSafeEqual(hex, expected);
   } catch (e) {
-    console.error('[meta-verify] signature check failed:', e.message);
+    log.error('channels.metaVerify', e instanceof Error ? e : new Error(String(e.message)));
     return false;
   }
 }

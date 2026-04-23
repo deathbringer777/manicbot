@@ -1,4 +1,5 @@
 import { CB, STEP, VALID_LANGS, LOCK_TTL_SEC, MAX_APTS } from '../config.js';
+import { log } from '../utils/logger.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2, safeParseInt } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, warsawToUTC, warsawNow, dateStrForOffset, todayStr } from '../utils/date.js';
@@ -739,7 +740,7 @@ export async function onCb(ctx, cb) {
     await updateApt(ctx, aptId, { masterId });
     // Re-sync calendar if the appointment is already confirmed (master changed → move event)
     if (apt.status === 'confirmed' && canUse(ctx, 'calendar')) {
-      syncAppointmentCalendar(ctx, apt).catch(e => console.error('[gcal] ADM_SET_M re-sync failed:', e.message));
+      syncAppointmentCalendar(ctx, apt).catch(e => log.error('handlers.callback', e instanceof Error ? e : new Error(String(e.message)), { action: 'gcal_re_sync' }));
     }
     // Notify the assigned master
     const mlg = await getLang(ctx, masterId) || 'ru';
@@ -907,7 +908,7 @@ export async function onCb(ctx, cb) {
       try {
         await syncAppointmentCalendar(ctx, apt);
       } catch (e) {
-        console.error('Calendar event sync failed:', e.message);
+        log.error('handlers.callback', e instanceof Error ? e : new Error(String(e.message)), { action: 'calendar_sync' });
       }
     }
     return send(ctx, cid, fill(t(lg, 'mst_apt_confirmed'), { client: escHtml(apt.userName), dt: fmtDT(lg, apt.date, apt.time) }));
@@ -932,7 +933,7 @@ export async function onCb(ctx, cb) {
     apt.status = 'rejected';
     await updateApt(ctx, aptId, { status: 'rejected' });
     if (apt.googleEventId) {
-      await deleteAppointmentCalendar(ctx, apt).catch(e => console.error('reject calendar delete:', e.message));
+      await deleteAppointmentCalendar(ctx, apt).catch(e => log.error('handlers.callback', e instanceof Error ? e : new Error(String(e.message)), { action: 'reject_calendar_delete' }));
     }
     await clearState(ctx, cid);
     const clg = await getLang(ctx, apt.chatId) || 'ru';
@@ -993,7 +994,7 @@ export async function onCb(ctx, cb) {
       try {
         await syncAppointmentCalendar(ctx, apt);
       } catch (e) {
-        console.error('Calendar event sync after counter-offer failed:', e.message);
+        log.error('handlers.callback', e instanceof Error ? e : new Error(String(e.message)), { action: 'counter_offer_calendar_sync' });
       }
     }
     if (apt.confirmedBy) {
@@ -1492,7 +1493,7 @@ export async function onCb(ctx, cb) {
         try {
           await syncAppointmentCalendar(ctx, apt);
         } catch (e) {
-          console.error('[auto-confirm] calendar sync failed:', e?.message);
+          log.error('handlers.callback', e instanceof Error ? e : new Error(String(e?.message)), { action: 'auto_confirm_calendar_sync' });
         }
       }
       return;

@@ -1,5 +1,6 @@
 import { envCtx } from './envCtx.js';
 import { hasCyrillic, cyrillicToLatin } from '../lib/searchNormalize.js';
+import { log } from '../utils/logger.js';
 
 /**
  * Public search API — no auth required.
@@ -62,7 +63,7 @@ export async function trySearchApi(request, env, url) {
         .map((row) => (row.city || '').trim())
         .filter(Boolean);
     } catch (e) {
-      console.error('[search/cities] D1 error:', e?.message);
+      log.error('http.search', e instanceof Error ? e : new Error(String(e?.message)), { action: 'cities' });
     }
 
     return Response.json({ cities }, {
@@ -101,7 +102,7 @@ export async function trySearchApi(request, env, url) {
     const result = await stmt.all();
     rows = result.results || [];
   } catch (e) {
-    console.error('[search/autocomplete] D1 error:', e?.message);
+    log.error('http.search', e instanceof Error ? e : new Error(String(e?.message)), { action: 'autocomplete' });
   }
 
   const salons = rows.map((t) => {

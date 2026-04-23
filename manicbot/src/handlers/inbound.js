@@ -14,6 +14,7 @@ import { dbRunSafe, dbAll } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { randomId } from '../utils/security.js';
 import { getLang, setLang } from '../services/chat.js';
+import { log } from '../utils/logger.js';
 
 const VALID_INBOUND_LANGS = new Set(['ru', 'en', 'ua', 'pl']);
 
@@ -36,7 +37,7 @@ export async function handleInbound(ctx, inbound) {
     if (inbound.channel !== 'telegram') {
       sideEffects.push(
         updateMessageWindow(ctx, inbound).catch(e =>
-          console.error('[inbound] message_window update failed:', e.message)
+          log.error('handlers.inbound', e instanceof Error ? e : new Error(String(e.message)), { action: 'message_window_update' })
         )
       );
     }
@@ -44,19 +45,19 @@ export async function handleInbound(ctx, inbound) {
     // Channel identity: map channel_user_id → internal user if possible
     sideEffects.push(
       upsertChannelIdentity(ctx, inbound).catch(e =>
-        console.error('[inbound] channel_identity upsert failed:', e.message)
+        log.error('handlers.inbound', e instanceof Error ? e : new Error(String(e.message)), { action: 'channel_identity_upsert' })
       )
     );
 
     // Conversation: upsert the conversation row for unified inbox
     sideEffects.push(
       upsertConversation(ctx, inbound).catch(e =>
-        console.error('[inbound] conversation upsert failed:', e.message)
+        log.error('handlers.inbound', e instanceof Error ? e : new Error(String(e.message)), { action: 'conversation_upsert' })
       )
     );
 
     // Await side-effects — fast KV/D1 writes, ensures message_window is persisted before send
-    await Promise.all(sideEffects).catch(e => console.error('[inbound] side-effect batch error:', e.message));
+    await Promise.all(sideEffects).catch(e => log.error('handlers.inbound', e instanceof Error ? e : new Error(String(e.message)), { action: 'side_effect_batch' }));
   }
 
   // Persist the user's preferred language as soon as we know it. The web
@@ -79,7 +80,7 @@ export async function handleInbound(ctx, inbound) {
       }
     }
   } catch (e) {
-    console.error('[inbound] userLang persistence failed:', e?.message);
+    log.error('handlers.inbound', e instanceof Error ? e : new Error(String(e?.message)), { action: 'userLang_persistence' });
   }
 
   // 2. Route to the appropriate handler

@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
+import { sanitizeText, sanitizeHtml } from "~/server/security/sanitize";
 import {
   marketingContacts,
   marketingSegments,
@@ -141,8 +142,8 @@ export const marketingRouter = createTRPCRouter({
       await ctx.db.insert(marketingSegments).values({
         id,
         tenantId: input.tenantId ?? null,
-        name: input.name,
-        description: input.description ?? null,
+        name: sanitizeText(input.name, 120),
+        description: input.description ? sanitizeText(input.description, 500) : null,
         filterJson: input.filterJson,
         contactCount: 0,
         createdAt: t,
@@ -185,10 +186,10 @@ export const marketingRouter = createTRPCRouter({
       await ctx.db.insert(marketingTemplates).values({
         id,
         tenantId: input.tenantId ?? null,
-        name: input.name,
+        name: sanitizeText(input.name, 120),
         channel: input.channel,
-        subject: input.subject ?? null,
-        body: input.body,
+        subject: input.subject ? sanitizeText(input.subject, 500) : null,
+        body: sanitizeHtml(input.body, "marketingHtml"),
         locale: input.locale ?? null,
         createdAt: t,
         updatedAt: t,
@@ -206,9 +207,9 @@ export const marketingRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const patch: Record<string, unknown> = { updatedAt: now() };
-      if (input.name !== undefined) patch.name = input.name;
-      if (input.subject !== undefined) patch.subject = input.subject;
-      if (input.body !== undefined) patch.body = input.body;
+      if (input.name !== undefined) patch.name = sanitizeText(input.name, 120);
+      if (input.subject !== undefined) patch.subject = input.subject ? sanitizeText(input.subject, 500) : input.subject;
+      if (input.body !== undefined) patch.body = sanitizeHtml(input.body, "marketingHtml");
       if (input.locale !== undefined) patch.locale = input.locale;
       await ctx.db.update(marketingTemplates).set(patch).where(eq(marketingTemplates.id, input.id));
       return { ok: true };
@@ -250,7 +251,7 @@ export const marketingRouter = createTRPCRouter({
       const t = now();
       await ctx.db.insert(marketingCampaigns).values({
         id,
-        name: input.name,
+        name: sanitizeText(input.name, 120),
         channel: input.channel,
         segmentId: input.segmentId ?? null,
         templateId: input.templateId ?? null,

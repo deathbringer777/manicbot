@@ -3,6 +3,7 @@
  */
 
 import { getStripeConfig, PLANS, resolvePriceId } from './config.js';
+import { log } from '../utils/logger.js';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 const STRIPE_TIMEOUT_MS = 8000;
@@ -29,7 +30,7 @@ async function stripeRequest(url, opts) {
     const data = await res.json();
     return data;
   } catch (e) {
-    console.error('Stripe request failed:', url, e.message);
+    log.error('billing.stripe', e instanceof Error ? e : new Error(String(e.message)), { url });
     return { error: { message: e.message || 'Network error' } };
   }
 }

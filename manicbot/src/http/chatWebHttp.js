@@ -18,6 +18,7 @@
  */
 
 import { resolveTenantFromSlug, buildChannelCtx } from '../channels/resolver.js';
+import { log } from '../utils/logger.js';
 import {
   WebAdapter,
   chatIdFromSession,
@@ -256,7 +257,7 @@ export async function tryChatWeb(request, env, url) {
     try {
       await handleInbound(ctx, inbound);
     } catch (e) {
-      console.error('[chat-web] handleInbound failed:', e?.message, e?.stack?.slice(0, 300));
+      log.error('http.chatWeb', e instanceof Error ? e : new Error(String(e?.message)), { action: 'handleInbound' });
       void logEvent(envCtx(env), 'chat.web.error', {
         tenantId: ctx.tenantId,
         level: 'error',

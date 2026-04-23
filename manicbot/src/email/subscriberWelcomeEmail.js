@@ -8,6 +8,8 @@
  * Localized ru / uk / en / pl.
  */
 
+import { log } from '../utils/logger.js';
+
 const RESEND_API = 'https://api.resend.com/emails';
 
 const COPY = {
@@ -218,12 +220,12 @@ export async function sendSubscriberWelcomeEmail({ resendKey, fromAddr, email, l
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error('[subscriberWelcome] Resend error:', res.status, body);
+      log.error('email.subscriberWelcome', new Error(`Resend error ${res.status}`), { status: res.status, body: body.slice(0, 200) });
       return false;
     }
     return true;
   } catch (e) {
-    console.error('[subscriberWelcome] send failed:', e?.message);
+    log.error('email.subscriberWelcome', e instanceof Error ? e : new Error(String(e?.message)));
     return false;
   }
 }

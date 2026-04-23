@@ -1,4 +1,5 @@
 import { getAptByIdGlobal } from '../services/appointments.js';
+import { log } from '../utils/logger.js';
 import { getLang } from '../services/chat.js';
 import { makeICS, verifyCalendarSig as verifyCalendarSigSubkey } from '../utils/ics.js';
 import { initServices } from '../services/services.js';
@@ -49,7 +50,7 @@ export async function tryCalendar(request, ctx, url) {
   // Key separation (NIST SP 800-57) prevents key-reuse attacks.
   const secret = ctx.BOT_ENCRYPTION_KEY || '';
   if (!secret || secret.length < ICS_HMAC_MIN_KEY_LEN) {
-    console.error('[calendar] BOT_ENCRYPTION_KEY missing or too short — calendar links disabled');
+    log.error('http.calendar', new Error('BOT_ENCRYPTION_KEY missing or too short — calendar links disabled'));
     return new Response('Calendar links not configured', { status: 503 });
   }
   if (!await verifyCalendarSig(aptId, sig, secret, ts)) {

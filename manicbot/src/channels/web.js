@@ -30,6 +30,7 @@
 import { makeInbound } from './types.js';
 import { nowSec } from '../utils/time.js';
 import { randomId } from '../utils/security.js';
+import { log } from '../utils/logger.js';
 
 /** KV key prefix for out-of-band outbox (async messages). */
 function outboxKey(tenantId, chatId) {
@@ -130,7 +131,7 @@ export class WebAdapter {
         timestamp: Date.now(),
       });
     } catch (e) {
-      console.error('[web] normalize error:', e?.message);
+      log.error('channels.web', e instanceof Error ? e : new Error(String(e?.message)));
       return null;
     }
   }
@@ -155,10 +156,7 @@ export class WebAdapter {
    */
   async send(userId, outbound) {
     if (!this.isActiveRecipient(userId)) {
-      console.warn(
-        '[web] SECURITY: refused send to non-active recipient',
-        { recipient: String(userId), active: this.activeChatId, tenantId: this._ctx?.tenantId },
-      );
+      log.warn('channels.web', { message: 'SECURITY: refused send to non-active recipient', active: this.activeChatId });
       return { ok: false, error: 'not_active_recipient' };
     }
     const normalized = this._buildPublicMessage(outbound);
@@ -177,7 +175,7 @@ export class WebAdapter {
    */
   async edit(userId, msgId, outbound) {
     if (!this.isActiveRecipient(userId)) {
-      console.warn('[web] SECURITY: refused edit to non-active recipient', { recipient: String(userId), active: this.activeChatId });
+      log.warn('channels.web', { message: 'SECURITY: refused edit to non-active recipient', active: this.activeChatId });
       return { ok: false, error: 'not_active_recipient' };
     }
     const normalized = this._buildPublicMessage({ ...outbound, editMessageId: String(msgId) });
@@ -216,7 +214,7 @@ export class WebAdapter {
    */
   async editPhoto(userId, msgId, url, caption, extra = {}) {
     if (!this.isActiveRecipient(userId)) {
-      console.warn('[web] SECURITY: refused editPhoto to non-active recipient', { recipient: String(userId), active: this.activeChatId });
+      log.warn('channels.web', { message: 'SECURITY: refused editPhoto to non-active recipient', active: this.activeChatId });
       return { ok: false, error: 'not_active_recipient' };
     }
     const buttons = extra?.reply_markup?.inline_keyboard ?? null;
@@ -332,7 +330,7 @@ export class WebAdapter {
       if (list.length > OUTBOX_CAP) list = list.slice(-OUTBOX_CAP);
       await kv.put(key, JSON.stringify(list), { expirationTtl: OUTBOX_TTL_SEC });
     } catch (e) {
-      console.error('[web] KV outbox push failed:', e?.message);
+      log.error('channels.web', e instanceof Error ? e : new Error(String(e?.message)), { action: 'kv_outbox_push' });
     }
   }
 

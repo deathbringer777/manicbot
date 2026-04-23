@@ -1,4 +1,5 @@
 import { send, sendIcs } from './telegram.js';
+import { log } from './utils/logger.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, p2 } from './utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from './utils/date.js';
 import { ADDRESS, MAPS_URL, CB } from './config.js';
@@ -23,8 +24,7 @@ export async function notifyAptStaff(ctx, apt, user) {
   }
   if (adminId) recipients.add(adminId);
   if (recipients.size === 0) {
-    console.warn('[notifyAptStaff] No recipients for apt', apt.id, '— tenant:', ctx.tenantId,
-      '. Ensure masters table and tenant_config.admin are populated in D1 after KV migration.');
+    log.warn('notifications', { message: 'No recipients for apt — ensure masters table and tenant_config.admin are populated in D1 after KV migration', aptId: apt.id, tenantId: ctx.tenantId });
   }
   const promises = [];
   for (const rcid of recipients) {
@@ -55,7 +55,7 @@ export async function notifyAptStaff(ctx, apt, user) {
         [{ text: t(lg, 'mst_reject_btn'), callback_data: CB.APT_REJECT + apt.id }],
         [{ text: t(lg, 'mst_counter_btn'), callback_data: CB.APT_COUNTER + apt.id }],
       ]}});
-    })().catch(e => console.error('notifyAptStaff send failed for', rcid, e.message)));
+    })().catch(e => log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyAptStaff_send' })));
   }
   await Promise.allSettled(promises);
 }
@@ -78,7 +78,7 @@ export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
   }
   if (adminId) recipients.add(adminId);
   if (recipients.size === 0) {
-    console.warn('[notifyAptStaffAutoConfirmed] No recipients for apt', apt.id, '— tenant:', ctx.tenantId);
+    log.warn('notifications', { message: 'No recipients for auto-confirmed apt', aptId: apt.id, tenantId: ctx.tenantId });
   }
   const promises = [];
   for (const rcid of recipients) {
@@ -107,7 +107,7 @@ export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
       // No accept/reject — the booking is already confirmed. Master can
       // still cancel from the appointments screen if something is wrong.
       await send(ctx, rcid, reqTxt);
-    })().catch(e => console.error('notifyAptStaffAutoConfirmed send failed for', rcid, e.message)));
+    })().catch(e => log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyAptStaffAutoConfirmed_send' })));
   }
   await Promise.allSettled(promises);
 }
@@ -149,7 +149,7 @@ export async function confirmAllPendingApts(ctx, cid) {
       try {
         await syncAppointmentCalendar(ctx, apt);
       } catch (e) {
-        console.error('[calendar] confirmAllPendingApts sync failed:', e.message);
+        log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'confirmAllPendingApts_calendar_sync' });
       }
     }
 
@@ -184,7 +184,7 @@ export async function notifyStaffAptCancelled(ctx, apt, comment = null) {
         lines.push('', `💬 ${escHtml(String(comment).trim())}`);
       }
       await send(ctx, rcid, lines.join('\n'));
-    })().catch(e => console.error('notifyStaffAptCancelled send failed for', rcid, e.message)));
+    })().catch(e => log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyStaffAptCancelled_send' })));
   }
   await Promise.allSettled(promises);
 }
@@ -208,6 +208,6 @@ export async function notifyStaffConsultantRequest(ctx, clientCid, replyMarkup =
     if (internalNote && internalNote.trim()) {
       msg += '\n\n' + fill(t(rlg, 'ticket_internal_note'), { note: escHtml(internalNote.trim()) });
     }
-    try { await send(ctx, rcid, msg, replyMarkup || {}); } catch (e) { console.error('notifyStaffConsultantRequest send failed for', rcid, e.message); }
+    try { await send(ctx, rcid, msg, replyMarkup || {}); } catch (e) { log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyStaffConsultantRequest_send' }); }
   }
 }

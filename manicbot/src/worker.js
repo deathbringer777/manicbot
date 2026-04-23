@@ -26,6 +26,7 @@ import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { logEvent } from './utils/events.js';
+import { log } from './utils/logger.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
 
 async function proxyToAdminApp(request, env, url) {
@@ -71,7 +72,7 @@ function logWorkerError(label, request, url, error, extra = {}) {
     ...extra,
   };
   if (error?.stack) payload.stack = error.stack;
-  console.error(`[worker] ${label}`, payload);
+  log.error(`worker.${label.replace(/\s+/g, '_')}`, new Error(payload.message), payload);
 }
 
 /** Append standard security headers to any outgoing response. */
@@ -113,7 +114,7 @@ function validateSecurityConfig(env) {
     throw new Error('[SECURITY] BOT_ENCRYPTION_KEY must be at least 32 characters — refusing to start');
   }
   if (!env.BOT_ENCRYPTION_KEY) {
-    console.warn('[SECURITY] BOT_ENCRYPTION_KEY not set — bot/channel tokens will be stored in plaintext and calendar links disabled');
+    log.warn('worker.security', { message: 'BOT_ENCRYPTION_KEY not set — bot/channel tokens will be stored in plaintext and calendar links disabled' });
   }
 
   const metaConfigured = !!(env.META_VERIFY_TOKEN_WA || env.META_VERIFY_TOKEN_IG);
@@ -312,10 +313,7 @@ export default {
       const ctx = env.BOT_TOKEN && env.WEBHOOK_SECRET ? buildLegacyCtx(env) : buildCtx(env);
       _scheduledCtx.waitUntil(handleCron(ctx));
     } catch (e) {
-      console.error('Cron init error:', {
-        message: e?.message || String(e),
-        stack: e?.stack || null,
-      });
+      log.error('worker.cron', e instanceof Error ? e : new Error(String(e?.message || e)), { stack: e?.stack?.slice(0, 300) || null });
       void logEvent(envCtx(env), 'error.cron', { level: 'error', message: e?.message ?? 'Cron init error', data: { stack: e?.stack?.slice(0, 300) } });
     }
   },

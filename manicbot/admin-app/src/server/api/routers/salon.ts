@@ -12,6 +12,9 @@ import { eq, and, desc, sql, ne, like, or, gte, lte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
+import { sanitizeText } from "~/server/security/sanitize";
+import { log } from "~/server/utils/logger";
+import { writeAudit, ctxIp } from "~/server/security/audit";
 
 const tenantIdInput = z.object({ tenantId: z.string() });
 
@@ -200,7 +203,7 @@ export const salonRouter = createTRPCRouter({
         noShow: 1,
         noShowBy: input.noShowBy,
         status: "no_show",
-        cancelReason: input.comment ?? null,
+        cancelReason: input.comment ? sanitizeText(input.comment, 500) : null,
       }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
       return { success: true };
     }),
@@ -219,7 +222,7 @@ export const salonRouter = createTRPCRouter({
         cancelledBy: input.cancelledBy,
         cancelledAt: Math.floor(Date.now() / 1000),
         status: "cancelled",
-        cancelReason: input.comment ?? null,
+        cancelReason: input.comment ? sanitizeText(input.comment, 500) : null,
       }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
       return { success: true };
     }),
@@ -255,6 +258,9 @@ export const salonRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       const { tenantId, svcId, ...updates } = input;
+      if (updates.names !== undefined) updates.names = sanitizeText(updates.names, 500);
+      if (updates.description !== undefined) updates.description = sanitizeText(updates.description, 2000);
+      if (updates.promo !== undefined) updates.promo = sanitizeText(updates.promo, 500);
       // Filter out undefined values
       const setObj: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(updates)) {
@@ -292,10 +298,10 @@ export const salonRouter = createTRPCRouter({
         emoji: input.emoji ?? null,
         duration: input.duration,
         price: input.price,
-        names: input.names,
-        description: input.description ?? null,
+        names: sanitizeText(input.names, 500),
+        description: input.description ? sanitizeText(input.description, 2000) : null,
         photos: input.photos ?? null,
-        promo: input.promo ?? null,
+        promo: input.promo ? sanitizeText(input.promo, 500) : null,
         active: input.active,
         hidden: input.hidden,
         sortOrder: input.sortOrder,
@@ -378,9 +384,9 @@ export const salonRouter = createTRPCRouter({
 
       let existing: Record<string, unknown> = {};
       try { existing = tenantRow[0]!.salon ? JSON.parse(tenantRow[0]!.salon!) : {}; } catch { /* ignore malformed JSON */ }
-      if (input.address !== undefined) existing.address = input.address;
-      if (input.phone !== undefined) existing.phone = input.phone;
-      if (input.workHours !== undefined) existing.workHours = input.workHours;
+      if (input.address !== undefined) existing.address = sanitizeText(input.address, 300);
+      if (input.phone !== undefined) existing.phone = sanitizeText(input.phone, 50);
+      if (input.workHours !== undefined) existing.workHours = sanitizeText(input.workHours, 200);
       if (input.workHoursFrom !== undefined || input.workHoursTo !== undefined) {
         const wh: Record<string, unknown> =
           typeof existing.workHours === "object" && existing.workHours !== null
@@ -392,10 +398,10 @@ export const salonRouter = createTRPCRouter({
       }
 
       const tenantUpdate: Record<string, unknown> = { salon: JSON.stringify(existing) };
-      if (input.name !== undefined) tenantUpdate.name = input.name;
+      if (input.name !== undefined) tenantUpdate.name = sanitizeText(input.name, 200);
       if (input.slug !== undefined) tenantUpdate.slug = input.slug || null;
-      if (input.description !== undefined) tenantUpdate.description = input.description || null;
-      if (input.city !== undefined) tenantUpdate.city = input.city || null;
+      if (input.description !== undefined) tenantUpdate.description = input.description ? sanitizeText(input.description, 1000) : null;
+      if (input.city !== undefined) tenantUpdate.city = input.city ? sanitizeText(input.city, 100) : null;
       if (input.lat !== undefined) tenantUpdate.lat = input.lat;
       if (input.lng !== undefined) tenantUpdate.lng = input.lng;
       if (input.mapsUrl !== undefined) tenantUpdate.mapsUrl = input.mapsUrl || null;
@@ -403,7 +409,7 @@ export const salonRouter = createTRPCRouter({
       if (input.photos !== undefined) tenantUpdate.photos = JSON.stringify(input.photos);
       if (input.logo !== undefined) tenantUpdate.logo = input.logo || null;
       if (input.coverPhoto !== undefined) tenantUpdate.coverPhoto = input.coverPhoto || null;
-      if (input.displayName !== undefined) tenantUpdate.displayName = input.displayName || null;
+      if (input.displayName !== undefined) tenantUpdate.displayName = input.displayName ? sanitizeText(input.displayName, 120) : null;
       if (input.logoR2Key !== undefined) tenantUpdate.logoR2Key = input.logoR2Key || null;
       if (input.coverR2Key !== undefined) tenantUpdate.coverR2Key = input.coverR2Key || null;
       if (input.brandPalette !== undefined) {
@@ -548,10 +554,10 @@ export const salonRouter = createTRPCRouter({
       const setObj: Record<string, unknown> = { status: input.status };
       if (input.status === "cancelled") {
         setObj.cancelled = 1;
-        if (input.cancelReason) setObj.cancelReason = input.cancelReason;
+        if (input.cancelReason) setObj.cancelReason = sanitizeText(input.cancelReason, 500);
       }
       if (input.status === "rejected" && input.rejectComment) {
-        setObj.rejectComment = input.rejectComment;
+        setObj.rejectComment = sanitizeText(input.rejectComment, 500);
       }
       if (input.status === "confirmed") {
         setObj.confirmedBy = null;
@@ -571,7 +577,7 @@ export const salonRouter = createTRPCRouter({
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
           body: JSON.stringify({ action: input.status, appointmentId: input.appointmentId, tenantId: input.tenantId, confirmedBy: setObj.confirmedBy ?? null }),
-        }).catch(e => console.error("[salon] Worker notification error:", e.message));
+        }).catch(e => log.error("salon.workerNotify", e instanceof Error ? e : new Error(String(e))));
       }
 
       return { success: true };
@@ -595,13 +601,20 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: input.chatId,
-        name: input.name,
+        name: sanitizeText(input.name, 200),
       });
       // Also assign tenant_roles entry so master can access the mini-app
       const now = Math.floor(Date.now() / 1000);
       await ctx.db.insert(tenantRoles)
         .values({ tenantId: input.tenantId, chatId: input.chatId, role: "master", createdAt: now })
         .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "role.master.add",
+        tenantId: input.tenantId,
+        detail: `chatId=${input.chatId}`,
+        ip: ctxIp(ctx),
+      });
       return { success: true };
     }),
 
@@ -616,6 +629,13 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.delete(tenantRoles).where(
         and(eq(tenantRoles.tenantId, input.tenantId), eq(tenantRoles.chatId, input.chatId), eq(tenantRoles.role, "master"))
       );
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "role.master.remove",
+        tenantId: input.tenantId,
+        detail: `chatId=${input.chatId}`,
+        ip: ctxIp(ctx),
+      });
       // Clean up web_users record for web-created masters (synthetic chatId >= 10B)
       // Match by reverse-engineering the UUID prefix or simply by tenantId + role + name
       if (input.chatId >= 10_000_000_000) {
@@ -668,6 +688,7 @@ export const salonRouter = createTRPCRouter({
       // Synthetic chatId (same formula as webUsers.register)
       const syntheticChatId = 10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
 
+      const sanitizedName = sanitizeText(input.name, 200);
       // Insert web_users
       await ctx.db.insert(webUsers).values({
         id,
@@ -675,7 +696,7 @@ export const salonRouter = createTRPCRouter({
         passwordHash,
         role: "master",
         tenantId: input.tenantId,
-        name: input.name,
+        name: sanitizedName,
         emailVerified: input.email ? 0 : 1, // generated emails don't need verification
         createdAt: now,
         updatedAt: now,
@@ -685,7 +706,7 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: syntheticChatId,
-        name: input.name,
+        name: sanitizedName,
         active: 1,
         addedAt: now,
       });
@@ -695,6 +716,13 @@ export const salonRouter = createTRPCRouter({
         .values({ tenantId: input.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
         .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
 
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "tenant.master.create",
+        tenantId: input.tenantId,
+        detail: `masterId=${syntheticChatId} webUserId=${id}`,
+        ip: ctxIp(ctx),
+      });
       return { login, password, masterId: syntheticChatId, webUserId: id };
     }),
 

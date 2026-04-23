@@ -10,6 +10,7 @@ import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformSupportLis
 import { showBillingMenu } from './ui/billing.js';
 import { confirmAllPendingApts } from './notifications.js';
 import { setState } from './services/state.js';
+import { log } from './utils/logger.js';
 
 // #S7: Unicode bracket variants that NFKC does NOT fold to ASCII `[]`.
 // Attackers can use these to smuggle action-tag patterns past the sanitizer:
@@ -449,8 +450,8 @@ export async function runWorkersAIViaRESTOne(ctx, accountId, token, modelId, pro
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
-    if (res.status === 429) console.error('Workers AI REST rate limit (429), trying next model');
-    else console.error('Workers AI REST', res.status, await res.text().catch(() => '').slice(0, 200));
+    if (res.status === 429) log.error('ai.rest', new Error('Workers AI REST rate limit (429), trying next model'), { status: 429 });
+    else log.error('ai.rest', new Error(`Workers AI REST error ${res.status}`), { status: res.status, body: await res.text().catch(() => '').slice(0, 200) });
     return null;
   }
   let data;
@@ -507,7 +508,7 @@ export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client',
       const text = await runWorkersAIViaRESTOne(ctx, accountId, token, modelId, promptBody);
       if (text) return text;
     } catch (e) {
-      console.error('Workers AI REST model', modelId, e.message);
+      log.error('ai.rest', e instanceof Error ? e : new Error(String(e.message)), { modelId });
     }
   }
   return null;
@@ -524,12 +525,12 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
       const { checkAiBudget } = await import('./services/aiUsage.js');
       const budget = await checkAiBudget(ctx);
       if (!budget.allowed) {
-        console.warn('[ai] tenant', ctx.tenantId, 'over AI budget:', budget.used, '/', budget.cap, 'cents');
+        log.warn('ai.budget', { message: 'tenant over AI budget', used: budget.used, cap: budget.cap });
         return null;
       }
     } catch (e) {
       // Non-fatal — if budget check fails, allow the call.
-      console.error('[ai] checkAiBudget error:', e?.message);
+      log.error('ai.budget', e instanceof Error ? e : new Error(String(e?.message)));
     }
   }
 
@@ -583,7 +584,7 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
         const text = parseAIResponse(out);
         if (text) return text.slice(0, 1000);
       } catch (e) {
-        console.error('Workers AI binding', modelId, e.message);
+        log.error('ai.binding', e instanceof Error ? e : new Error(String(e.message)), { modelId });
       }
     }
   }

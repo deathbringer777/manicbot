@@ -3,6 +3,7 @@ import { tenants } from "~/server/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import { PLAN_PRICES_PLN } from "~/lib/money";
+import { writeAudit, ctxIp } from "~/server/security/audit";
 
 export const billingRouter = createTRPCRouter({
   getOverview: adminProcedure.query(async ({ ctx }) => {
@@ -66,6 +67,13 @@ export const billingRouter = createTRPCRouter({
         .update(tenants)
         .set({ plan: input.plan, updatedAt: Math.floor(Date.now() / 1000) })
         .where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "billing.updatePlan",
+        tenantId: input.tenantId,
+        detail: `plan=${input.plan}`,
+        ip: ctxIp(ctx),
+      });
       return { success: true };
     }),
 
@@ -84,6 +92,13 @@ export const billingRouter = createTRPCRouter({
           updatedAt: Math.floor(Date.now() / 1000),
         })
         .where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "billing.updateStatus",
+        tenantId: input.tenantId,
+        detail: `status=${input.billingStatus}`,
+        ip: ctxIp(ctx),
+      });
       return { success: true };
     }),
 
@@ -118,6 +133,13 @@ export const billingRouter = createTRPCRouter({
         })
         .where(eq(tenants.id, input.tenantId));
 
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "billing.manualActivate",
+        tenantId: input.tenantId,
+        detail: `plan=${input.plan} periodEnd=${periodEnd}`,
+        ip: ctxIp(ctx),
+      });
       return { success: true, periodEnd };
     }),
 });

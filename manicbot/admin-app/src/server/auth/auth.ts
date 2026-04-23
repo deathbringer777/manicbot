@@ -11,6 +11,7 @@ import { authPublicBaseUrl } from "./authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
 import { sendLoginAlert } from "~/server/email/emailService";
 import { checkRateLimit } from "./rateLimit";
+import { log } from "~/server/utils/logger";
 
 export { authPublicBaseUrl };
 
@@ -124,7 +125,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 updatedAt: now,
               })
               .where(eq(webUsers.id, user.id));
-          } catch (e) { console.error("[auth] failed to increment login attempts:", e); }
+          } catch (e) { log.error("auth.loginAttempts", e instanceof Error ? e : new Error(String(e))); }
           try {
             await db.insert(auditLog).values({
               tenantId: user.tenantId ?? null,
@@ -208,13 +209,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           } else {
             const secret = process.env.AUTH_SECRET;
             if (!secret) {
-              console.error("[auth] Google signIn: AUTH_SECRET missing");
+              log.error("auth.googleSignIn", new Error("AUTH_SECRET missing"));
               return false;
             }
             const p = profile as { sub?: string; given_name?: string; family_name?: string } | null | undefined;
             const sub = p?.sub ?? account.providerAccountId ?? "";
             if (!sub) {
-              console.warn("[auth] Google signIn: missing subject, cannot prefill registration");
+              log.warn("auth.googleSignIn", { message: "missing subject, cannot prefill registration" });
               return false;
             }
             const nameFromParts = [p?.given_name, p?.family_name].filter(Boolean).join(" ").trim();
@@ -229,7 +230,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return base ? `${base}${path}` : path;
           }
         } catch (err) {
-          console.error("[auth] Google signIn DB error — rejecting login:", err);
+          log.error("auth.googleSignIn", err instanceof Error ? err : new Error(String(err)));
           return false;
         }
       }

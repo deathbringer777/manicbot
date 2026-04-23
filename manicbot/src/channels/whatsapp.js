@@ -17,6 +17,7 @@
 import { makeInbound } from './types.js';
 import { nowSec } from '../utils/time.js';
 import { graphPost } from './graph-api.js';
+import { log } from '../utils/logger.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 const MAX_BUTTON_BUTTONS = 3;
@@ -125,7 +126,7 @@ export class WhatsAppAdapter {
         timestamp: ts,
       });
     } catch (e) {
-      console.error('[wa] normalize error:', e.message);
+      log.error('channels.whatsapp', e instanceof Error ? e : new Error(String(e.message)));
       return null;
     }
   }
@@ -322,7 +323,7 @@ export class WhatsAppAdapter {
    */
   async _post(path, body) {
     if (!this._token || !this._phoneNumberId) {
-      console.error('[wa] missing token or phone_number_id');
+      log.error('channels.whatsapp', new Error('missing token or phone_number_id'));
       return { ok: false, error: 'not_configured' };
     }
     return graphPost(path, this._token, body, { label: 'wa' });

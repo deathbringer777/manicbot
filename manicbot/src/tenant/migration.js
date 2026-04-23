@@ -4,6 +4,7 @@
  */
 
 import { getTenant, putTenant, putBot, defaultTenantPayload, defaultBotPayload } from './storage.js';
+import { log } from '../utils/logger.js';
 
 const MIGRATION_FLAG = 'migration:v1:done';
 
@@ -53,7 +54,7 @@ export async function runMigration(kv, env) {
           copied++;
         }
       } catch (e) {
-        console.error('Migration copy fail:', k.name, e.message);
+        log.error('tenant.migration', e instanceof Error ? e : new Error(String(e.message)), { key: k.name });
       }
     }
     cursor = list.list_complete ? undefined : list.cursor;

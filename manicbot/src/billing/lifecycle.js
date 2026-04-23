@@ -13,6 +13,7 @@
 
 import { updateTenantBilling } from './storage.js';
 import { nowSec } from '../utils/time.js';
+import { log } from '../utils/logger.js';
 
 /**
  * Чистая функция: проверяет, истёк ли срок триала или grace-периода.
@@ -56,7 +57,7 @@ export async function checkBillingExpiry(ctx, now = nowSec()) {
     ctx.tenant = { ...ctx.tenant, billingStatus: 'inactive', subscriptionStatus: null };
     return expiry;
   } catch (e) {
-    console.error('checkBillingExpiry error:', e.message);
+    log.error('billing.lifecycle', e instanceof Error ? e : new Error(String(e.message)));
     return null;
   }
 }

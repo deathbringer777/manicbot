@@ -5,6 +5,7 @@
  */
 
 import { dbGet } from '../utils/db.js';
+import { log } from '../utils/logger.js';
 
 const RESEND_API = 'https://api.resend.com/emails';
 
@@ -205,12 +206,12 @@ export async function sendInvoiceEmail(ctx, resendKey, fromAddr, tenantId, invoi
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error('[invoiceEmail] Resend error:', res.status, body);
+      log.error('billing.invoiceEmail', new Error(`Resend error ${res.status}`), { status: res.status, body: body.slice(0, 200) });
       return false;
     }
     return true;
   } catch (e) {
-    console.error('[invoiceEmail] send failed:', e.message);
+    log.error('billing.invoiceEmail', e instanceof Error ? e : new Error(String(e.message)));
     return false;
   }
 }

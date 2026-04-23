@@ -1,4 +1,5 @@
 import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL } from '../config.js';
+import { log } from '../utils/logger.js';
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { svcName, fill, t, p2 } from '../utils/helpers.js';
 import { warsawNow, fmtDT } from '../utils/date.js';
@@ -29,25 +30,25 @@ export async function handleCron(ctx) {
       const igConfig = await getChannelConfig(ctx, ctx.tenantId, 'instagram', ctx.BOT_ENCRYPTION_KEY || null);
       if (igConfig) {
         if (!igConfig.token) {
-          console.error('[cron][ig] tenant', ctx.tenantId, '— token missing or failed to decrypt. Bot cannot send IG messages. Update via POST /admin/ig-token');
+          log.error('handlers.cron', new Error('IG token missing or failed to decrypt — update via POST /admin/ig-token'), { tenantId: ctx.tenantId });
         } else if (isTokenExpiring(igConfig, 10)) {
-          console.warn('[cron][ig] token expiring soon for tenant', ctx.tenantId, '— attempting refresh');
+          log.warn('handlers.cron', { message: 'IG token expiring soon, attempting refresh', tenantId: ctx.tenantId });
           const refreshResult = await refreshInstagramToken(ctx, igConfig.id, ctx.BOT_ENCRYPTION_KEY || null);
           if (refreshResult.ok) {
-            console.log('[cron][ig] token refreshed for tenant', ctx.tenantId);
+            log.info('handlers.cron', { message: 'IG token refreshed', tenantId: ctx.tenantId });
           } else {
-            console.error('[cron][ig] token refresh failed for tenant', ctx.tenantId, ':', refreshResult.error, '— update manually via POST /admin/ig-token');
+            log.error('handlers.cron', new Error('IG token refresh failed — update manually via POST /admin/ig-token'), { tenantId: ctx.tenantId, error: refreshResult.error });
           }
         }
       }
     } catch (e) {
-      console.error('[cron][ig] token health check error:', e.message);
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'ig_token_health_check' });
     }
 
     try {
       await renewExpiringGoogleWatches(ctx);
     } catch (e) {
-      console.error('[gcal] cron watch renew failed:', e.message);
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'gcal_watch_renew' });
     }
 
     // Phase 1: reminders
@@ -108,7 +109,7 @@ export async function handleCron(ctx) {
                     await adapter.send(identity.channel_user_id, { text: reminderText });
                     sent = true;
                   } catch (e) {
-                    console.error('[cron] WA free-form reminder failed:', e.message);
+                    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'wa_freeform_reminder' });
                   }
                 }
               } else if (await canSendTemplate(ctx)) {
@@ -128,7 +129,7 @@ export async function handleCron(ctx) {
                     await trackTemplateUsage(ctx, templateName, 0);
                     sent = true;
                   } catch (e) {
-                    console.error('[cron] WA template reminder failed:', e.message);
+                    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'wa_template_reminder' });
                   }
                 }
               }
@@ -146,7 +147,7 @@ export async function handleCron(ctx) {
                     await adapter.send(identity.channel_user_id, { text: reminderText });
                     sent = true;
                   } catch (e) {
-                    console.error('[cron] IG reminder failed:', e.message);
+                    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'ig_reminder' });
                   }
                 }
               }
@@ -162,7 +163,7 @@ export async function handleCron(ctx) {
           if (do2) await send(ctx, row.chat_id, fill(t(lg, 'rem_2'), vars));
         }
       } catch (e) {
-        console.error(`Cron reminder error for apt ${row.id}:`, e.message);
+        log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'reminder', aptId: row.id });
       }
     }
 
@@ -196,12 +197,12 @@ export async function handleCron(ctx) {
             });
             await markReviewRequested(ctx, apt.id);
           } catch (e) {
-            console.error(`[cron] review request error for apt ${apt.id}:`, e.message);
+            log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'review_request', aptId: apt.id });
           }
         }
       }
     } catch (e) {
-      console.error('[cron] review request phase failed:', e.message);
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'review_request_phase' });
     }
 
     // Phase 2: retry calendar sync with exponential backoff (max 10 per cron run)
@@ -231,7 +232,7 @@ export async function handleCron(ctx) {
             };
             const result = await syncAppointmentCalendar(ctx, apt);
             if (result?.ok) {
-              console.log(`[gcal] cron re-synced apt ${apt.id} (${apt.date} ${apt.time})`);
+              log.info('handlers.cron', { message: 'gcal re-synced apt', aptId: apt.id, date: apt.date, time: apt.time });
               await dbRun(ctx,
                 'UPDATE appointments SET sync_retries = 0, sync_retry_after = NULL, sync_last_error = NULL WHERE id = ? AND tenant_id = ?',
                 apt.id, ctx.tenantId);
@@ -244,9 +245,9 @@ export async function handleCron(ctx) {
                 'UPDATE appointments SET sync_retries = ?, sync_retry_after = ?, sync_last_error = ? WHERE id = ? AND tenant_id = ?',
                 retries, now + backoffMs, (result?.error || 'sync failed').slice(0, 200), apt.id, ctx.tenantId);
               if (retries >= 5) {
-                console.error(`[gcal] sync permanently failed for apt ${apt.id} after ${retries} retries`);
+                log.error('handlers.cron', new Error(`gcal sync permanently failed for apt after ${retries} retries`), { aptId: apt.id });
               } else {
-                console.warn(`[gcal] cron sync failed for apt ${apt.id} (retry ${retries}):`, result?.error);
+                log.warn('handlers.cron', { message: 'gcal cron sync failed', aptId: apt.id, retry: retries, error: result?.error });
               }
             }
           } catch (e) {
@@ -255,11 +256,11 @@ export async function handleCron(ctx) {
             await dbRun(ctx,
               'UPDATE appointments SET sync_retries = ?, sync_retry_after = ?, sync_last_error = ? WHERE id = ? AND tenant_id = ?',
               retries, now + backoffMs, (e.message || 'unknown error').slice(0, 200), row.id, ctx.tenantId).catch(() => {});
-            console.error(`[gcal] cron sync error for apt ${row.id} (retry ${retries}):`, e.message);
+            log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'gcal_sync', aptId: row.id, retry: retries });
           }
         }
       } catch (e) {
-        console.error('[gcal] cron unsynced-apts phase failed:', e.message);
+        log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'gcal_unsynced_apts_phase' });
       }
     }
 
@@ -269,14 +270,14 @@ export async function handleCron(ctx) {
     try {
       await processPostVisitConfirmations(ctx, now);
     } catch (e) {
-      console.error('[cron] post-visit confirmation error:', e?.message);
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'post_visit_confirmation' });
     }
 
     // Phase 2.6: Sprint 4 — auto-promo for birthdays and returning clients.
     try {
       await processBirthdayAndReturningPromos(ctx, now);
     } catch (e) {
-      console.error('[cron] auto-promo error:', e?.message);
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'auto_promo' });
     }
 
     // Phase 3: cleanup expired/cancelled appointments
@@ -296,7 +297,7 @@ export async function handleCron(ctx) {
     const rlCutoff = Math.floor(now / 1000) - 86400;
     await dbRun(ctx, 'DELETE FROM rate_limits WHERE window_start < ?', rlCutoff);
   } catch (e) {
-    console.error('Cron error:', e.message);
+    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)));
   }
 }
 
@@ -468,6 +469,6 @@ async function processBirthdayAndReturningPromos(ctx, nowMs) {
       }
     }
   } catch (e) {
-    console.error('[cron] birthday promo error:', e?.message);
+    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'birthday_promo' });
   }
 }

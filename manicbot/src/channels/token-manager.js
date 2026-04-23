@@ -8,6 +8,7 @@
 import { encryptToken, decryptToken, randomId } from '../utils/security.js';
 import { dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
+import { log } from '../utils/logger.js';
 
 // #S6: HKDF subkey label for channel tokens (TG/IG/WA bot access tokens).
 // Separates this trust domain from google-refresh, calendar-hmac, etc.
@@ -114,12 +115,12 @@ export async function createChannelConfig(ctx, tenantId, channelType, config, pl
   if (!ctx?.db) return null;
   // Refuse to store tokens without an encryption key — prevents plaintext secrets at rest.
   if (!encKey || String(encKey).length < 32) {
-    console.error('[createChannelConfig] encryption key missing or too short — refusing to store token for tenant:', tenantId);
+    log.error('channels.tokenManager', new Error('encryption key missing or too short — refusing to store token'), { tenantId });
     return null;
   }
   const encrypted = await encryptToken(plainToken, encKey, CHANNEL_TOKEN_LABEL);
   if (!encrypted) {
-    console.error('[createChannelConfig] encryption failed for tenant:', tenantId);
+    log.error('channels.tokenManager', new Error('encryption failed'), { tenantId });
     return null;
   }
   const id = randomId(12);

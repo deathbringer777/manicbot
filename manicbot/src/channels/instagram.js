@@ -18,6 +18,7 @@
 import { makeInbound } from './types.js';
 import { isWithinMessageWindow } from '../handlers/inbound.js';
 import { graphPost } from './graph-api.js';
+import { log } from '../utils/logger.js';
 
 /**
  * Parse Worker secret INSTAGRAM_IGNORE_SENDER_IDS (comma/whitespace-separated IGSIDs).
@@ -51,10 +52,7 @@ export class InstagramAdapter {
     this._pageId = cfg.page_id ?? null;
     this._token = ctx.channelConfig?.token ?? null;
     if (this._token && String(this._token).startsWith('IGAA')) {
-      console.warn(
-        '[ig] Token starts with IGAA — Instagram product tokens often cannot call POST /{page-id}/messages. ' +
-          'Use a Facebook Page access token (usually EAA…) for the Page linked to this IG account; save it in Mini App → Channels.',
-      );
+      log.warn('channels.instagram', { message: 'Token starts with IGAA — Instagram product tokens often cannot call POST /{page-id}/messages. Use a Facebook Page access token (usually EAA…) for the Page linked to this IG account; save it in Mini App → Channels.' });
     }
     /** @type {Set<string>} */
     this._ignoreSenderIds = ctx.instagramIgnoreSenderIds instanceof Set
@@ -105,7 +103,7 @@ export class InstagramAdapter {
             }
           }
           if (messaging.message.attachments.length > 1) {
-            console.warn('[ig] normalizeMessaging: received', messaging.message.attachments.length, 'attachments, only first image kept');
+            log.warn('channels.instagram', { message: 'normalizeMessaging: multiple attachments received, only first image kept', count: messaging.message.attachments.length });
           }
         }
         if (messaging.message.quick_reply) {
@@ -129,7 +127,7 @@ export class InstagramAdapter {
         timestamp: ts,
       });
     } catch (e) {
-      console.error('[ig] normalizeMessaging error:', e.message);
+      log.error('channels.instagram', e instanceof Error ? e : new Error(String(e.message)));
       return null;
     }
   }
@@ -162,7 +160,7 @@ export class InstagramAdapter {
     if (this._ctx?.db && this._ctx?.tenantId) {
       const inWindow = await isWithinMessageWindow(this._ctx, 'instagram', String(userId));
       if (!inWindow) {
-        console.warn('[ig] Skipping send to', userId, '— outside 24h message window');
+        log.warn('channels.instagram', { message: 'skipping send — outside 24h message window' });
         return { ok: false, error: 'outside_message_window' };
       }
     }
@@ -294,7 +292,7 @@ export class InstagramAdapter {
    */
   async _post(path, body) {
     if (!this._token || !this._pageId) {
-      console.error('[ig] missing token or page_id');
+      log.error('channels.instagram', new Error('missing token or page_id'));
       return { ok: false, error: 'not_configured' };
     }
     const result = await graphPost(path, this._token, body, { label: 'ig' });
@@ -316,7 +314,7 @@ export class InstagramAdapter {
           data: { code: result.errorCode, type: result.errorType, path },
         });
       } catch (e) {
-        console.error('[ig] failed to mark needs_reauth:', e?.message);
+        log.error('channels.instagram', e instanceof Error ? e : new Error(String(e?.message)));
       }
     }
     return result;

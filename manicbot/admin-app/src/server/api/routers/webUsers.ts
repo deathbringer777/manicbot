@@ -18,6 +18,8 @@ import {
 } from "~/server/email/emailService";
 
 import { checkRateLimit } from "~/server/auth/rateLimit";
+import { log } from "~/server/utils/logger";
+import { writeAudit } from "~/server/security/audit";
 
 /*
  * D1-based rate limiting — durable across Cloudflare edge isolates.
@@ -352,7 +354,7 @@ export const webUsersRouter = createTRPCRouter({
             .set({ verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
             .where(eq(webUsers.id, user.id));
         } catch { /* non-critical */ }
-        console.error(`[webUsers] resendVerificationCode: email send failed for ${email}: ${sent.error}`);
+        log.error("webUsers.resendVerificationCode", new Error(sent.error ?? "email_send_failed"));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: sent.error === "resend_not_configured"
@@ -382,7 +384,7 @@ export const webUsersRouter = createTRPCRouter({
       const canSend = isResendConfigured() && Boolean(base);
 
       if (isResendConfigured() && !base) {
-        console.error("[webUsers] requestPasswordReset: Resend configured but AUTH_URL is empty");
+        log.warn("webUsers.requestPasswordReset", { message: "Resend configured but AUTH_URL is empty" });
       }
 
       const rows = await ctx.db
@@ -417,7 +419,7 @@ export const webUsersRouter = createTRPCRouter({
               updatedAt: now,
             })
             .where(eq(webUsers.id, rows[0]!.id));
-          console.error("[webUsers] requestPasswordReset: Resend failed", sent.error);
+          log.error("webUsers.requestPasswordReset", new Error(sent.error ?? "resend_failed"));
         }
       }
 
@@ -469,6 +471,13 @@ export const webUsersRouter = createTRPCRouter({
         })
         .where(eq(webUsers.id, user.id));
 
+      await writeAudit(ctx.db, {
+        actor: user.email,
+        action: "auth.password.reset",
+        tenantId: user.tenantId ?? null,
+        detail: `userId=${user.id}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
       return { success: true as const };
     }),
 
@@ -514,9 +523,16 @@ export const webUsersRouter = createTRPCRouter({
       if (shouldVerify && verificationCode) {
         const sent = await sendVerificationCodeEmail(email, verificationCode, "en");
         if (!sent.ok) {
-          console.error("[webUsers] create: verification email failed", sent.error);
+          log.error("webUsers.create", new Error(sent.error ?? "verification_email_failed"));
         }
       }
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "admin.user.create",
+        tenantId: input.tenantId ?? null,
+        detail: `email=${email} role=${input.role}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
       return { id, email, verificationRequired: shouldVerify };
     }),
 
@@ -693,6 +709,13 @@ export const webUsersRouter = createTRPCRouter({
         })
         .where(eq(webUsers.email, ctx.webUser.email));
 
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email,
+        action: "auth.password.change",
+        tenantId: ctx.webUser.tenantId ?? null,
+        detail: `userId=${ctx.webUser.id}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
       return { success: true };
     }),
 
@@ -747,6 +770,13 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({ tenantId: tid, updatedAt: now })
         .where(eq(webUsers.id, ctx.webUser.id));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email,
+        action: "tenant.create",
+        tenantId: tid,
+        detail: `role=${webRole} isPersonal=${isPersonal}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
       return { tenantId: tid };
     }),
 
@@ -788,6 +818,13 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({ passwordHash: newHash, updatedAt: now })
         .where(eq(webUsers.id, ctx.webUser.id));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email,
+        action: "auth.password.set_initial",
+        tenantId: ctx.webUser.tenantId ?? null,
+        detail: `userId=${ctx.webUser.id}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
       return { success: true };
     }),
 });

@@ -1,3 +1,5 @@
+import { log } from './logger.js';
+
 /**
  * Persistent audit log — writes to D1 `audit_log` table.
  * Unlike logEvent() (KV ring buffer, 7-day TTL), audit entries are permanent.
@@ -27,6 +29,6 @@ export async function audit(ctx, action, opts = {}) {
       Math.floor(Date.now() / 1000),
     ).run();
   } catch (e) {
-    console.error('[audit] write failed:', e.message);
+    log.error('utils.audit', e instanceof Error ? e : new Error(String(e.message)));
   }
 }

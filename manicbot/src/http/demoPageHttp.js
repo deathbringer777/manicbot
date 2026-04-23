@@ -87,20 +87,7 @@ const HTML = `<!DOCTYPE html>
         0 30px 60px -20px rgba(15,23,42,.35),
         0 15px 30px -15px rgba(15,23,42,.2);
     }
-    /* Side buttons — subtle rounded rectangles on the correct sides.
-       Mute switch: top-left.  Volume up/down: upper-middle-left.  Power: middle-right.
-       Each is slightly darker than the frame so it reads as a seam, not a stripe. */
-    .btn-mute,.btn-vup,.btn-vdn,.btn-pwr{
-      position:absolute;
-      background:#8a8a90;
-      border-radius:1.5px;
-      z-index:0;
-      box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);
-    }
-    .btn-mute{left:-2px;top:86px;width:3px;height:22px}
-    .btn-vup{left:-3px;top:122px;width:4px;height:46px}
-    .btn-vdn{left:-3px;top:178px;width:4px;height:46px}
-    .btn-pwr{right:-3px;top:150px;width:4px;height:68px}
+    .btn-mute,.btn-vup,.btn-vdn,.btn-pwr{display:none}
 
     .iphone-screen{
       position:relative;
@@ -236,10 +223,6 @@ const HTML = `<!DOCTYPE html>
         box-shadow:
           0 30px 70px -20px rgba(0,0,0,.75),
           0 15px 30px -15px rgba(0,0,0,.5);
-      }
-      .btn-mute,.btn-vup,.btn-vdn,.btn-pwr{
-        background:#1a1a1d;
-        box-shadow:inset 0 0 0 1px rgba(0,0,0,.4);
       }
       .iphone-screen{background:#0a0a0a;box-shadow:inset 0 0 0 1px #000}
       .status-bar{color:#f1f5f9}

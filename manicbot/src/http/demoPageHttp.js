@@ -162,8 +162,6 @@ const HTML = `<!DOCTYPE html>
       height:11px;
     }
     .status-bar .ico-signal{width:17px}
-    .status-bar .ico-wifi{width:15px}
-    .status-bar .ico-battery{width:25px;height:12px}
 
     /* Chat app header — title + avatar strip directly under the status bar */
     .chat-header{
@@ -257,26 +255,12 @@ const HTML = `<!DOCTYPE html>
               <rect x="9.4" y="2.5" width="3" height="8.5" rx=".7"/>
               <rect x="14.1" y="0"  width="3" height="11"  rx=".7"/>
             </svg>
-            <!-- Wi-Fi: 3 concentric arcs + dot, drawn as filled wedges so the
-                 outline stays crisp at 15px width. -->
-            <svg class="ico-wifi" viewBox="0 0 15 11" aria-hidden="true">
-              <path d="M7.5 8.3a1.35 1.35 0 100 2.7 1.35 1.35 0 000-2.7z"/>
-              <path d="M7.5 4.5a6 6 0 014.26 1.77l-1.42 1.42A4 4 0 007.5 6.5a4 4 0 00-2.83 1.18L3.24 6.27A6 6 0 017.5 4.5z"/>
-              <path d="M7.5 0.5a10 10 0 017.07 2.93L13.15 4.85A8 8 0 007.5 2.5a8 8 0 00-5.65 2.35L.43 3.43A10 10 0 017.5 .5z"/>
-            </svg>
-            <!-- Battery: rounded rect outline (opacity .35), small terminal nub,
-                 solid inner fill at ~80% to suggest "charged". -->
-            <svg class="ico-battery" viewBox="0 0 25 12" aria-hidden="true">
-              <rect x="0.5" y="0.5" width="21" height="11" rx="3" ry="3" fill="none" stroke="currentColor" stroke-width="1" opacity=".35"/>
-              <rect x="22.5" y="4" width="2" height="4" rx=".8" fill="currentColor" opacity=".35"/>
-              <rect x="2" y="2" width="15" height="8" rx="1.5" fill="currentColor"/>
-            </svg>
           </div>
         </div>
         <div class="chat-header">
           <div class="avatar">💅</div>
           <div class="info">
-            <strong>Preview Salon</strong>
+            <strong>Manic Bot</strong>
             <small>онлайн</small>
           </div>
         </div>

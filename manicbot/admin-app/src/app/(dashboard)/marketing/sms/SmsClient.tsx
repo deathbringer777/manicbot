@@ -9,10 +9,10 @@ export default function SmsClient() {
   const brevo = providersQ.data?.find((p: any) => p.name === "brevo");
 
   return (
-    <MarketingShell title="Marketing • SMS" subtitle="SMS-рассылки — доп. фича тарифа Max">
+    <MarketingShell title="Marketing • SMS" subtitle="SMS broadcast campaigns — Max plan add-on">
       <StubCard
-        title="SMS-кампании"
-        description="Отправка SMS через Brevo Transactional SMS API. Доступно только на тарифе Max с отдельной квотой."
+        title="SMS Campaigns"
+        description="Send targeted SMS messages to your contacts via Brevo Transactional SMS. Available on the Max plan."
       >
         <div className="space-y-3 mt-2">
           <div className="flex items-center gap-2 text-xs">
@@ -27,21 +27,17 @@ export default function SmsClient() {
             </span>
           </div>
 
-          <div className="text-[11px] text-slate-500 leading-relaxed">
-            Для активации задайте <code className="text-slate-300 bg-slate-950 px-1 rounded">BREVO_API_KEY</code> и
-            {" "}<code className="text-slate-300 bg-slate-950 px-1 rounded">BREVO_SMS_SENDER</code> в Cloudflare Pages env vars.
-            Sender — до 11 символов, латиница/цифры.
-          </div>
-
-          <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-3 text-[11px] text-amber-200/80">
-            <b>Биллинг-гейт (Phase 3):</b> SMS доступны только тенантам с планом Max.
-            Квота помесячная, счётчик в <code className="text-amber-100 bg-amber-950/40 px-1 rounded">tenants.sms_quota_used</code>.
-            Отправка блокируется функцией <code className="text-amber-100 bg-amber-950/40 px-1 rounded">canUseSms(tenantId)</code>.
-          </div>
+          {!brevo?.configured?.sms && (
+            <div className="text-[11px] text-slate-500 leading-relaxed">
+              To enable, set <code className="text-slate-300 bg-slate-950 px-1 rounded">BREVO_API_KEY</code> and{" "}
+              <code className="text-slate-300 bg-slate-950 px-1 rounded">BREVO_SMS_SENDER</code> in Cloudflare Pages environment variables.
+            </div>
+          )}
 
           <div className="text-center py-6 text-slate-500">
             <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
-            <div className="text-xs">SMS-кампании будут доступны после активации провайдера</div>
+            <div className="text-sm text-slate-400 font-medium mb-1">SMS sending coming in Phase 2</div>
+            <div className="text-xs text-slate-500">Requires Max plan + Brevo SMS configured</div>
           </div>
         </div>
       </StubCard>

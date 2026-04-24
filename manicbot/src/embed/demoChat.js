@@ -30,11 +30,15 @@ export const DEMO_CHAT_SRC = `
     })();
   if (!scriptEl) return;
   var ORIGIN = new URL(scriptEl.src).origin;
-  var SLUG = scriptEl.dataset.slug || 'preview-landing';
-  var TARGET = scriptEl.dataset.target || '#mb-demo';
-  var LANG = scriptEl.dataset.lang || 'ru';
-  var TITLE = scriptEl.dataset.title || 'Preview Salon';
-  var SHOW_HEADER = scriptEl.dataset.showHeader === '1';
+  // __MB_BRIDGE__ is set by the landing bridge script before injecting this
+  // script tag — provides reliable config even when document.currentScript is
+  // null (Safari with dynamically-appended scripts).
+  var _BR = window.__MB_BRIDGE__ || {};
+  var SLUG = _BR.slug || (scriptEl && scriptEl.dataset.slug) || 'preview-landing';
+  var TARGET = _BR.target || (scriptEl && scriptEl.dataset.target) || '#mb-demo';
+  var LANG = _BR.lang || (scriptEl && scriptEl.dataset.lang) || 'ru';
+  var TITLE = _BR.title || (scriptEl && scriptEl.dataset.title) || 'Manic Bot';
+  var SHOW_HEADER = _BR.showHeader || (scriptEl && scriptEl.dataset.showHeader === '1');
   var I18N = {
     ru: { placeholder: 'Сообщение…', online: 'онлайн', send: 'Отправить',
           offline: 'нет связи', reconnecting: 'подключение…',
@@ -59,7 +63,9 @@ export const DEMO_CHAT_SRC = `
   };
   var T = I18N[LANG] || I18N.ru;
   function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
-  var STORAGE_KEY = 'mb.chat.' + SLUG;
+  // Include lang in the storage key so switching languages starts a fresh
+  // session instead of continuing the old one in the wrong language.
+  var STORAGE_KEY = 'mb.chat.' + SLUG + '.' + LANG;
   var SESSION_TTL_MS = 24 * 60 * 60 * 1000;
   var POLL_MS = 3000;
   var HISTORY_CAP = 200;
@@ -80,7 +86,11 @@ export const DEMO_CHAT_SRC = `
     // overrides the same variables when .mb-dark is applied. Every visual
     // surface/text/border colour resolves through a variable — no stray
     // hardcoded #fff / #000 / slate tokens inside the widget chrome.
-    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;overflow:hidden;' +
+    // translate3d forces a single GPU compositing context for the whole widget.
+    // Without it, iOS Safari promotes the scrollable feed to a separate GPU
+    // layer and renders a 1px seam at the layer boundaries (header/composer)
+    // that flickers during scroll. One shared context = no seam.
+    '.mb-demo{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;font:12px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;overflow:hidden;-webkit-transform:translate3d(0,0,0);transform:translate3d(0,0,0);' +
       '--mb-island-clear:0px;' +
       '--mb-bg:#ffffff;' +
       '--mb-fg:#1a1a1a;' +
@@ -112,7 +122,7 @@ export const DEMO_CHAT_SRC = `
       '--mb-fg:#ffffff;' +
       '--mb-muted:#8e8e93;' +
       '--mb-surface:#2c2c2e;' +
-      '--mb-border:#3a3a3c;' +
+      '--mb-border:#1c1c1e;' +
       // Statusbar bg matches the feed surface (not pure black) so the landing's
       // Dynamic Island pill (true black) stays visibly distinct in dark mode.
       '--mb-statusbar-bg:#1c1c1e;' +
@@ -127,7 +137,7 @@ export const DEMO_CHAT_SRC = `
       '--mb-input-bg:#2c2c2e;' +
       '--mb-input-text:#ffffff;' +
       '--mb-input-placeholder:#8e8e93;' +
-      '--mb-composer-border:#3a3a3c}' +
+      '--mb-composer-border:#1c1c1e}' +
     // The host landing mockup draws a Dynamic Island pill at top:12px, h:30px
     // (bottom edge ~42px, center at y~27px). Statusbar uses min-height + align
     // center so the time sits on the SAME row as the island (left side), icons
@@ -147,7 +157,7 @@ export const DEMO_CHAT_SRC = `
     '.mb-header-status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 0 2px rgba(34,197,94,.2)}' +
     '.mb-header-status.mb-offline{color:var(--mb-muted)}' +
     // Feed + bubbles (tighter spacing to fit inside iPhone screen)
-    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch;background:var(--mb-bg)}' +
+    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;background:var(--mb-bg)}' +
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
     '.mb-bubble{max-width:86%;padding:7px 11px;border-radius:16px;line-height:1.4;word-wrap:break-word;font-size:12.5px}' +
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
@@ -171,7 +181,11 @@ export const DEMO_CHAT_SRC = `
     '.mb-typing span{width:5px;height:5px;border-radius:50%;background:var(--mb-muted);animation:mb-bounce 1s infinite}' +
     '.mb-typing span:nth-child(2){animation-delay:.15s}.mb-typing span:nth-child(3){animation-delay:.3s}' +
     '@keyframes mb-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}' +
-    '@media(prefers-reduced-motion:reduce){.mb-typing span{animation:none}}';
+    '@media(prefers-reduced-motion:reduce){.mb-typing span{animation:none}}' +
+    // Dark mode: remove borders entirely — on OLED screens even a 1px border
+    // matching the background flickers during GPU-composited scroll animations.
+    '.mb-demo.mb-dark .mb-header{border-bottom:none}' +
+    '.mb-demo.mb-dark .mb-composer{border-top:none}';
   document.head.appendChild(styleTag);
 
   // Ensure the container is a positioning context so position:absolute children

@@ -34,8 +34,12 @@ const BRIDGE_SCRIPT = `<script>
   var activated = false;
 
   function loadWidget(targetId) {
+    // Set global config BEFORE appending the script so the widget IIFE can
+    // read it even when document.currentScript is null (Safari dynamic script).
+    window.__MB_BRIDGE__ = { title: 'Manic Bot', slug: SLUG, lang: LANG, target: '#' + targetId, showHeader: true };
     var s = document.createElement('script');
-    s.src = '/embed/demo-chat.js';
+    // ?v=3 cache-busts Safari's memory/disk cache so title + lang fixes propagate immediately.
+    s.src = '/embed/demo-chat.js?v=3';
     s.setAttribute('data-slug', SLUG);
     s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);
@@ -67,7 +71,7 @@ const BRIDGE_SCRIPT = `<script>
 
     var ov = document.createElement('div');
     ov.id = 'mb-target';
-    ov.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:#fff;border-radius:inherit';
+    ov.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:transparent;border-radius:inherit';
     screen.appendChild(ov);
     loadWidget('mb-target');
   }
@@ -175,6 +179,8 @@ export async function tryLanding(request, env, url, force) {
     const html = await res.text();
     const newHeaders = new Headers(res.headers);
     newHeaders.delete('content-length');
+    // Never cache the injected HTML — bridge changes must propagate immediately.
+    newHeaders.set('Cache-Control', 'no-cache');
     const injected = html.includes('</body>')
       ? html.replace('</body>', BRIDGE_SCRIPT + '</body>')
       : html + BRIDGE_SCRIPT;

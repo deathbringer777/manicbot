@@ -8,13 +8,13 @@ export default function TemplatesClient() {
   const listQ = (api as any).marketing.templatesList.useQuery({});
 
   return (
-    <MarketingShell title="Marketing • Templates" subtitle="Шаблоны писем и SMS с переменными">
+    <MarketingShell title="Marketing • Templates" subtitle="Email and SMS templates with merge variables">
       <StubCard
-        title="Шаблоны"
-        description="HTML для email (как в server/email/templates.ts) + plain-text для SMS. Переменные в формате {{name}}, {{salon}}."
+        title="Message Templates"
+        description="Reusable HTML email and plain-text SMS templates. Use {{name}}, {{salon}}, and other merge variables to personalize content."
       >
         {listQ.isLoading ? (
-          <div className="text-xs text-slate-500">Загрузка…</div>
+          <div className="text-xs text-slate-500 py-4 text-center">Loading…</div>
         ) : listQ.data?.length ? (
           <ul className="space-y-1.5 mt-2">
             {listQ.data.map((t: any) => (
@@ -30,7 +30,8 @@ export default function TemplatesClient() {
         ) : (
           <div className="text-center py-8 text-slate-500">
             <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
-            <div className="text-xs">Шаблонов пока нет</div>
+            <div className="text-sm text-slate-400 font-medium mb-1">No templates yet</div>
+            <div className="text-xs text-slate-500">Template creation and editing coming in Phase 2</div>
           </div>
         )}
       </StubCard>

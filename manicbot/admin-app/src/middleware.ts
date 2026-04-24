@@ -7,17 +7,20 @@ import type { NextRequest } from "next/server";
  *  2. Security response headers injected on every request.
  *
  * CSP uses a per-request cryptographic nonce for inline scripts (replaces
- * 'unsafe-inline'). The nonce is exposed via the `x-csp-nonce` response header
- * so that server components and Next.js layouts can read it with `headers()` and
+ * 'unsafe-inline'). The nonce is forwarded to server components via the
+ * `x-csp-nonce` REQUEST header so layouts can read it with `headers()` and
  * pass it to <Script nonce={nonce}> tags. Style-src keeps 'unsafe-inline' because
  * Tailwind v4 generates inline styles that cannot be nonced without a full rebuild.
+ *
+ * NextAuth routes (/api/auth/*) are excluded from this middleware via the matcher
+ * so that CSRF cookies and OAuth state cookies are forwarded unmodified to the
+ * route handler — required for Google OAuth and credentials sign-in to work.
  */
 
 /** Generate a cryptographically random nonce (Base64, 22+ chars). */
 function generateNonce(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  // btoa is available in the Edge runtime
   return btoa(String.fromCharCode(...bytes));
 }
 
@@ -47,11 +50,15 @@ export function middleware(_request: NextRequest) {
     "upgrade-insecure-requests",
   ].join("; ");
 
+  // Forward the nonce to server components via request headers so layouts can
+  // read it with `headers()` and pass it to <Script nonce={nonce}> tags.
+  const requestHeaders = new Headers(_request.headers);
+  requestHeaders.set("x-csp-nonce", nonce);
+
   const res = NextResponse.next({
-    request: { headers: new Headers(_request.headers) },
+    request: { headers: requestHeaders },
   });
   res.headers.set("Content-Security-Policy", csp);
-  // Expose nonce to server components via headers() API
   res.headers.set("x-csp-nonce", nonce);
   res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   res.headers.set("X-Content-Type-Options", "nosniff");
@@ -66,3 +73,16 @@ export function middleware(_request: NextRequest) {
 
   return res;
 }
+
+export const config = {
+  matcher: [
+    /*
+     * Run on all request paths EXCEPT:
+     * - api/auth   NextAuth routes — must not be intercepted; OAuth state and
+     *              CSRF cookies must reach the handler unmodified.
+     * - _next/static, _next/image  Next.js internal assets
+     * - favicon.ico, robots.txt, sitemap.xml  static metadata files
+     */
+    "/((?!api/auth|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml).*)",
+  ],
+};

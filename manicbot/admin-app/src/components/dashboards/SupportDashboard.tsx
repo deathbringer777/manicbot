@@ -6,6 +6,7 @@ import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { relativeTime } from "~/lib/appointments";
 
 const STATUS_STYLES: Record<string, string> = {
   open: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
@@ -22,14 +23,6 @@ const TICKET_BORDER: Record<string, string> = {
 };
 
 type FilterStatus = "all" | "open" | "claimed" | "escalated" | "closed";
-
-function relativeTime(ts: number): string {
-  const diff = Math.floor(Date.now() / 1000) - ts;
-  if (diff < 60) return "только что";
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
-  return `${Math.floor(diff / 86400)} д назад`;
-}
 
 export function SupportDashboard() {
   const { lang } = useLang();

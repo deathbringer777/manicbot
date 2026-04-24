@@ -19,6 +19,7 @@ import {
   List,
   X,
 } from "lucide-react";
+import { STATUS_LABELS } from "~/lib/appointments";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "text-amber-400 bg-amber-500/10 border-amber-500/20",
@@ -28,16 +29,6 @@ const STATUS_COLORS: Record<string, string> = {
   done: "text-brand-400 bg-brand-500/10 border-brand-500/20",
   counter_offer: "text-purple-400 bg-purple-500/10 border-purple-500/20",
   no_show: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Ожидание",
-  confirmed: "Подтверждено",
-  rejected: "Отклонено",
-  cancelled: "Отменено",
-  done: "Выполнено",
-  counter_offer: "Встречное",
-  no_show: "Не пришёл",
 };
 
 const NO_SHOW_LABELS: Record<string, string> = {

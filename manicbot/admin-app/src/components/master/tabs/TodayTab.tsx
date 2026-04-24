@@ -4,6 +4,7 @@ import { CalendarDays, Loader2, UserX, AlertTriangle, Clock, CheckCircle2, XCirc
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { STATUS_LABELS, APT_BORDER } from "~/lib/appointments";
 
 const STATUS_STYLES: Record<string, string> = {
   confirmed: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
@@ -22,22 +23,6 @@ const CANCELLED_BY_LABELS: Record<string, string> = {
   client: "Отменено клиентом",
   master: "Отменено мастером",
   admin: "Отменено админом",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  confirmed: "Подтверждено",
-  pending: "Ожидает",
-  cancelled: "Отменено",
-  no_show: "Не пришёл",
-  done: "Выполнено",
-};
-
-const APT_BORDER: Record<string, string> = {
-  confirmed: "border-l-emerald-500",
-  pending:   "border-l-amber-400",
-  cancelled: "border-l-red-500/40",
-  no_show:   "border-l-orange-500/40",
-  done:      "border-l-brand-500",
 };
 
 function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "client") => void }) {

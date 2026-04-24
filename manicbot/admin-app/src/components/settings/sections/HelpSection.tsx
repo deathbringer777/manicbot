@@ -17,6 +17,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { api } from "~/trpc/react";
+import { relativeTime } from "~/lib/appointments";
 
 const STATUS_STYLES: Record<string, string> = {
   open: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
@@ -24,14 +25,6 @@ const STATUS_STYLES: Record<string, string> = {
   escalated: "bg-red-500/20 text-red-400 border border-red-500/30",
   closed: "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400",
 };
-
-function relativeTime(ts: number): string {
-  const diff = Math.floor(Date.now() / 1000) - ts;
-  if (diff < 60) return "только что";
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
-  return `${Math.floor(diff / 86400)} д назад`;
-}
 
 type View = "list" | "detail" | "create";
 

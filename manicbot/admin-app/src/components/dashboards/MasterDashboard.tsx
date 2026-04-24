@@ -14,6 +14,7 @@ import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { useRole } from "~/components/RoleContext";
+import { STATUS_LABELS, APT_BORDER } from "~/lib/appointments";
 
 type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "services" | "profile";
 
@@ -25,14 +26,6 @@ const STATUS_STYLES: Record<string, string> = {
   done: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  confirmed: "Подтверждено",
-  pending: "Ожидает",
-  cancelled: "Отменено",
-  no_show: "Не пришёл",
-  done: "Выполнено",
-};
-
 const NO_SHOW_LABELS: Record<string, string> = {
   client: "Клиент не пришёл",
   master: "Мастер не пришёл",
@@ -42,14 +35,6 @@ const CANCELLED_BY_LABELS: Record<string, string> = {
   client: "Отменено клиентом",
   master: "Отменено мастером",
   admin: "Отменено админом",
-};
-
-const APT_BORDER: Record<string, string> = {
-  confirmed: "border-l-emerald-500",
-  pending:   "border-l-amber-400",
-  cancelled: "border-l-red-500/40",
-  no_show:   "border-l-orange-500/40",
-  done:      "border-l-brand-500",
 };
 
 type Period = "week" | "month" | "year";

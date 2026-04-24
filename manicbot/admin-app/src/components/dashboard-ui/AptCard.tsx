@@ -2,6 +2,9 @@
 
 import { CheckCircle2, XCircle, UserX, AlertTriangle } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
+import { APT_BORDER } from "~/lib/appointments";
+
+export { APT_BORDER };
 
 export const STATUS_STYLES: Record<string, string> = {
   confirmed: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20",
@@ -10,15 +13,6 @@ export const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-red-500/15 text-red-400 border border-red-500/20",
   no_show: "bg-orange-500/15 text-orange-400 border border-orange-500/20",
   done: "bg-brand-500/15 text-brand-400 border border-brand-500/20",
-};
-
-export const APT_BORDER: Record<string, string> = {
-  confirmed: "border-l-emerald-500",
-  pending:   "border-l-amber-400",
-  cancelled: "border-l-red-500/40",
-  rejected:  "border-l-red-500/40",
-  no_show:   "border-l-orange-500/40",
-  done:      "border-l-brand-500",
 };
 
 const NO_SHOW_LABELS: Record<string, string> = {

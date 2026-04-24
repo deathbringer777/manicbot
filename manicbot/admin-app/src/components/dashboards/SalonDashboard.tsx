@@ -33,11 +33,11 @@ import { TestBadge } from "~/components/ui/TestBadge";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
+import { NAIL_EMOJIS } from "~/lib/appointments";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
-const NAIL_EMOJIS = ['💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧','🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫','🎨','🌷','🪸','🫐','🍒'];
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
 
 function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null; onClose: () => void; tenantId: string; initialData?: ServiceTemplate }) {

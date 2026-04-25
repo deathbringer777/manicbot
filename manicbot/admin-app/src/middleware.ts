@@ -46,7 +46,11 @@ export function middleware(_request: NextRequest) {
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    // Google OAuth: form POST to /api/auth/signin/google returns a 302 to
+    // accounts.google.com — `form-action` covers redirect targets, so the
+    // Google host must be allowed or the browser silently drops the redirect
+    // (button stuck on "Redirecting...").
+    "form-action 'self' https://accounts.google.com",
     "upgrade-insecure-requests",
   ].join("; ");
 

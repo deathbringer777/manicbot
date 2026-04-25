@@ -148,3 +148,55 @@ describe('i18n — section completeness', () => {
     }
   });
 });
+
+describe('i18n — welcome_anon (anonymous-visitor variant)', () => {
+  it('exists in all 4 languages', () => {
+    for (const lang of LANGS) {
+      expect(L[lang].welcome_anon, `${lang}.welcome_anon`).toBeDefined();
+      expect(Array.isArray(L[lang].welcome_anon), `${lang}.welcome_anon is array`).toBe(true);
+      expect(L[lang].welcome_anon.length, `${lang}.welcome_anon length`).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps {s} salon placeholder but drops the {n} name placeholder', () => {
+    for (const lang of LANGS) {
+      const joined = L[lang].welcome_anon.join('\n');
+      expect(joined, `${lang}.welcome_anon should keep {s}`).toMatch(/\{s\}/);
+      expect(joined, `${lang}.welcome_anon must NOT contain {n}`).not.toMatch(/\{n\}/);
+    }
+  });
+
+  it('has the same length as welcome (only the greeting line differs)', () => {
+    for (const lang of LANGS) {
+      expect(
+        L[lang].welcome_anon.length,
+        `${lang}.welcome_anon should have same number of lines as welcome`,
+      ).toBe(L[lang].welcome.length);
+    }
+  });
+
+  it('greeting line keeps a single waving-hand emoji (no doubled 👋)', () => {
+    for (const lang of LANGS) {
+      const joined = L[lang].welcome_anon.join('\n');
+      const waveMatches = joined.match(/👋/g) || [];
+      expect(waveMatches.length, `${lang}.welcome_anon — too many waves`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('does NOT contain the comma+name pattern that would orphan a comma', () => {
+    // The named welcome has e.g. "Привет, <b>{n}</b>!". The anon variant must
+    // not leave a stray comma if {n} were filled with empty string.
+    const orphanCommaPatterns = [
+      /Привет,\s*\*?\*?\s*!/,    // ru
+      /Привіт,\s*\*?\*?\s*!/,    // ua
+      /Hi,\s*\*?\*?\s*!/i,        // en
+      /Cześć,\s*\*?\*?\s*!/,      // pl
+    ];
+    for (const lang of LANGS) {
+      const joined = L[lang].welcome_anon.join('\n');
+      for (const pat of orphanCommaPatterns) {
+        expect(joined.match(pat), `${lang}.welcome_anon should not contain orphan comma`).toBeNull();
+      }
+    }
+  });
+});

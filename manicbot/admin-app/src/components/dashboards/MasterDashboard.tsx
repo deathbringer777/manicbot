@@ -26,24 +26,18 @@ const STATUS_STYLES: Record<string, string> = {
   done: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
 };
 
-const NO_SHOW_LABELS: Record<string, string> = {
-  client: "Клиент не пришёл",
-  master: "Мастер не пришёл",
-};
-
-const CANCELLED_BY_LABELS: Record<string, string> = {
-  client: "Отменено клиентом",
-  master: "Отменено мастером",
-  admin: "Отменено админом",
-};
-
 type Period = "week" | "month" | "year";
 
-const PERIOD_LABELS: Record<Period, string> = {
-  week: "Неделя",
-  month: "Месяц",
-  year: "Год",
-};
+const NO_SHOW_KEYS = {
+  client: "master.noShow.client",
+  master: "master.noShow.master",
+} as const;
+
+const CANCELLED_BY_KEYS = {
+  client: "master.cancelled.client",
+  master: "master.cancelled.master",
+  admin: "master.cancelled.admin",
+} as const;
 
 function getPeriodDates(period: Period): { from: string; to: string } {
   const now = new Date();
@@ -56,6 +50,7 @@ function getPeriodDates(period: Period): { from: string; to: string } {
 }
 
 function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "client") => void }) {
+  const { lang } = useLang();
   const [hh, mm] = (apt.time ?? "00:00").split(":");
   const nameWords = (apt.userName ?? "?").trim().split(/\s+/);
   const initials = nameWords.length >= 2
@@ -63,10 +58,12 @@ function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "c
     : (apt.userName ?? "?").slice(0, 2).toUpperCase();
   const statusKey = apt.noShow ? "no_show" : apt.cancelled ? "cancelled" : apt.status;
   const border = APT_BORDER[statusKey] ?? "border-l-slate-700";
+  const noShowKey = NO_SHOW_KEYS[apt.noShowBy as keyof typeof NO_SHOW_KEYS];
+  const cancelledKey = CANCELLED_BY_KEYS[apt.cancelledBy as keyof typeof CANCELLED_BY_KEYS];
   const statusLabel = statusKey === "no_show"
-    ? (NO_SHOW_LABELS[apt.noShowBy] ?? "Не пришёл")
-    : statusKey === "cancelled" && apt.cancelledBy
-      ? (CANCELLED_BY_LABELS[apt.cancelledBy] ?? STATUS_LABELS[apt.status] ?? apt.status)
+    ? (noShowKey ? t(noShowKey, lang) : t("master.noShow.fallback", lang))
+    : statusKey === "cancelled" && cancelledKey
+      ? t(cancelledKey, lang)
       : (STATUS_LABELS[apt.status] ?? apt.status);
 
   return (
@@ -95,7 +92,7 @@ function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "c
         <div className="flex border-t border-slate-200 dark:border-white/5">
           <button onClick={() => onNoShow(apt.id, "client")}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
-            <UserX className="h-3.5 w-3.5" /> Клиент не пришёл
+            <UserX className="h-3.5 w-3.5" /> {t("master.noShow.client", lang)}
           </button>
         </div>
       )}
@@ -239,7 +236,7 @@ export function MasterDashboard({
       {isTest && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-300/40 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-300">
           <TestBadge />
-          <span>Тестовый аккаунт. Создан seed-test-accounts; не используется реальными клиентами.</span>
+          <span>{t("master.testAccountBanner", lang)}</span>
         </div>
       )}
       {/* Delegation banner — shown when owner or admin is viewing as this master */}
@@ -290,7 +287,7 @@ export function MasterDashboard({
             <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("master.allApts", lang)}</h2>
           </div>
           {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           <div className="space-y-2">
             {schedule.data?.map((a: any) => (
               <AptRow key={a.id} apt={a}
@@ -310,7 +307,7 @@ export function MasterDashboard({
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.myClients", lang)}</h2>
           {clientsList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {clientsList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {clientsList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           <div className="space-y-2">
             {clientsList.data?.map((c: any) => (
               <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
@@ -349,7 +346,7 @@ export function MasterDashboard({
             </div>
           </div>
           {earnings.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {earnings.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {earnings.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           {earnings.data && (
             <div className="space-y-3">
               <div className="glass-card rounded-2xl p-6 text-center">
@@ -489,7 +486,7 @@ export function MasterDashboard({
                 <div className="flex-1">
                   <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{t("master.svcName", lang)}</label>
                   <input value={svcForm.names} onChange={e => setSvcForm({ ...svcForm, names: e.target.value })}
-                    placeholder="Маникюр классический"
+                    placeholder={t("master.svcNamePlaceholder", lang)}
                     className="w-full rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
                 </div>
               </div>
@@ -512,19 +509,19 @@ export function MasterDashboard({
 
               {/* Description */}
               <div>
-                <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">Описание</label>
+                <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{t("common.description", lang)}</label>
                 <textarea value={svcForm.description} onChange={e => setSvcForm({ ...svcForm, description: e.target.value })}
-                  rows={2} placeholder="Коротко о процедуре..."
+                  rows={2} placeholder={t("master.svcDescriptionPlaceholder", lang)}
                   className="w-full resize-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
               </div>
 
               {/* Promo */}
               <div>
                 <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block">
-                  <Tag className="h-3 w-3" /> Промо стикер
+                  <Tag className="h-3 w-3" /> {t("master.promoSticker", lang)}
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"].map(p => (
+                  {["-10%", "-15%", "-20%", t("master.promoPresetHit", lang), t("master.promoPresetNew", lang), t("master.promoPresetDiscount", lang)].map(p => (
                     <button key={p} onClick={() => setSvcForm({ ...svcForm, promo: svcForm.promo === p ? "" : p })}
                       className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                         svcForm.promo === p
@@ -535,7 +532,7 @@ export function MasterDashboard({
                 </div>
                 <div className="flex items-center gap-2">
                   <input value={svcForm.promo} onChange={e => setSvcForm({ ...svcForm, promo: e.target.value })} maxLength={12}
-                    placeholder="Свой текст (-5%, Акция…)"
+                    placeholder={t("master.svcPromoPlaceholder", lang)}
                     className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
                   {svcForm.promo && (
                     <span className="shrink-0 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">{svcForm.promo}</span>
@@ -546,7 +543,7 @@ export function MasterDashboard({
               {/* Photos */}
               <div>
                 <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 flex items-center gap-1.5 block">
-                  <Camera className="h-3 w-3" /> Фото услуги (до 5)
+                  <Camera className="h-3 w-3" /> {t("master.servicePhotos", lang)}
                 </label>
                 <div className="flex gap-2 flex-wrap">
                   {svcForm.photos.map((url, i) => (
@@ -563,7 +560,7 @@ export function MasterDashboard({
                     <button onClick={() => svcFileRef.current?.click()} disabled={svcUploading}
                       className="h-14 w-14 rounded-xl border-2 border-dashed border-slate-300 dark:border-white/15 flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:border-brand-500 hover:text-brand-400 transition-colors disabled:opacity-50">
                       {svcUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                      {!svcUploading && <span className="text-[9px]">Добавить</span>}
+                      {!svcUploading && <span className="text-[9px]">{t("common.add", lang)}</span>}
                     </button>
                   )}
                 </div>
@@ -579,7 +576,7 @@ export function MasterDashboard({
                       const { uploadUrl } = await mintToken.mutateAsync({ tenantId, kind: "service_photo" });
                       const result = await uploadAssetFile(uploadUrl, compressed);
                       setSvcForm(f => f ? { ...f, photos: [...f.photos, result.url].slice(0, 5) } : f);
-                    } catch { alert("Ошибка загрузки фото"); }
+                    } catch { alert(t("master.photoUploadError", lang)); }
                     finally { setSvcUploading(false); e.target.value = ""; }
                   }} />
               </div>
@@ -683,18 +680,18 @@ export function MasterDashboard({
             {profile.data && !bioEdit && canMutate && (
               <button onClick={() => { setBio((profile.data as any).bio ?? ""); setPhoto((profile.data as any).photo ?? ""); setPortfolio(Array.isArray((profile.data as any).portfolio) ? (profile.data as any).portfolio : []); setBioEdit(true); }}
                 className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
-                <Pencil className="h-3.5 w-3.5" />Редактировать
+                <Pencil className="h-3.5 w-3.5" />{t("common.edit", lang)}
               </button>
             )}
             {bioEdit && (
               <button onClick={() => setBioEdit(false)}
                 className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700">
-                <X className="h-3.5 w-3.5" />Отмена
+                <X className="h-3.5 w-3.5" />{t("common.cancel", lang)}
               </button>
             )}
           </div>
           {profile.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {profile.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {profile.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           {profile.data && (
             <div className="glass-card rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-4">
@@ -704,7 +701,7 @@ export function MasterDashboard({
                     : (profile.data.name ?? "M").charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-xl font-bold text-slate-900 dark:text-white">{profile.data.name ?? "Мастер"}</p>
+                  <p className="text-xl font-bold text-slate-900 dark:text-white">{profile.data.name ?? t("master.fallbackName", lang)}</p>
                   <p className="text-xs text-slate-500">ID: {(profile.data as any).chatId}</p>
                   {(profile.data as any).bio && !bioEdit && (
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{(profile.data as any).bio}</p>
@@ -715,14 +712,14 @@ export function MasterDashboard({
               {bioEdit && (
                 <div className="space-y-3 border-t border-slate-200 dark:border-white/5 pt-3">
                   <div>
-                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Описание (bio)</label>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("master.bioLabel", lang)}</label>
                     <textarea value={bio} onChange={(e) => setBio(e.target.value)}
-                      rows={3} maxLength={500} placeholder="Мастер маникюра с 5-летним опытом..."
+                      rows={3} maxLength={500} placeholder={t("master.bioPlaceholder", lang)}
                       className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
                     <p className="text-right text-[10px] text-slate-600">{bio.length}/500</p>
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Портфолио ({portfolio.length})</label>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">{t("master.portfolioLabel", lang)} ({portfolio.length})</label>
                     {portfolio.length > 0 && (
                       <div className="space-y-2 mb-2">
                         {portfolio.map((url, i) => (
@@ -752,7 +749,7 @@ export function MasterDashboard({
                       <button type="button"
                         onClick={() => { const u = newPortfolioUrl.trim(); if (u) { setPortfolio((p) => [...p, u]); setNewPortfolioUrl(""); } }}
                         className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600">
-                        + Добавить
+                        + {t("common.add", lang)}
                       </button>
                     </div>
                   </div>
@@ -761,13 +758,13 @@ export function MasterDashboard({
                     disabled={updateProfile.isPending}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500/20 border border-brand-500/30 px-4 py-2.5 text-sm font-medium text-brand-400 hover:bg-brand-500/30 transition disabled:opacity-50">
                     {updateProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Сохранить профиль
+                    {t("master.saveProfile", lang)}
                   </button>
                 </div>
               )}
               {!bioEdit && (profile.data as any).portfolio?.length > 0 && (
                 <div className="border-t border-slate-200 dark:border-white/5 pt-3">
-                  <p className="text-xs text-slate-500 mb-2">Портфолио ({(profile.data as any).portfolio.length})</p>
+                  <p className="text-xs text-slate-500 mb-2">{t("master.portfolioLabel", lang)} ({(profile.data as any).portfolio.length})</p>
                   <div className="flex flex-wrap gap-2">
                     {(profile.data as any).portfolio.map((url: string, i: number) => (
                       <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />

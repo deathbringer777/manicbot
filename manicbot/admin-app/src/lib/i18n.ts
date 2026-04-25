@@ -340,6 +340,46 @@ const translations = {
   // ── Appointments quick actions ──────────────────────────────────────────────
   "appointments.newBooking":             { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
 
+  // ── Common verbs / labels ───────────────────────────────────────────────────
+  "common.add":                          { ru: "Добавить",      ua: "Додати",          en: "Add",         pl: "Dodaj" },
+  "common.edit":                         { ru: "Редактировать", ua: "Редагувати",      en: "Edit",        pl: "Edytuj" },
+  "common.cancel":                       { ru: "Отмена",        ua: "Скасувати",       en: "Cancel",      pl: "Anuluj" },
+  "common.description":                  { ru: "Описание",      ua: "Опис",            en: "Description", pl: "Opis" },
+  "common.errorLoading":                 { ru: "Ошибка загрузки. Попробуйте обновить.", ua: "Помилка завантаження. Спробуйте оновити.", en: "Loading failed. Please refresh.", pl: "Błąd ładowania. Spróbuj odświeżyć." },
+
+  // ── Salon dashboard tab labels ──────────────────────────────────────────────
+  "salon.tabs.channels":                 { ru: "Каналы",     ua: "Канали",     en: "Channels",  pl: "Kanały" },
+  "salon.tabs.reviews":                  { ru: "Отзывы",     ua: "Відгуки",    en: "Reviews",   pl: "Opinie" },
+  "salon.tabs.analytics":                { ru: "Аналитика",  ua: "Аналітика",  en: "Analytics", pl: "Analityka" },
+  "salon.tabs.promoCodes":               { ru: "Промокоды",  ua: "Промокоди",  en: "Promo codes", pl: "Kody promo" },
+  "salon.tabs.publicProfile":            { ru: "Профиль",    ua: "Профіль",    en: "Profile",   pl: "Profil" },
+  "salon.tabs.staff":                    { ru: "Персонал",   ua: "Персонал",   en: "Staff",     pl: "Personel" },
+
+  // ── Master dashboard — appointment status / period labels ───────────────────
+  "master.noShow.client":                { ru: "Клиент не пришёл", ua: "Клієнт не прийшов", en: "Client no-show", pl: "Klient się nie pojawił" },
+  "master.noShow.master":                { ru: "Мастер не пришёл", ua: "Майстер не прийшов", en: "Master no-show", pl: "Mistrz się nie pojawił" },
+  "master.noShow.fallback":              { ru: "Не пришёл",        ua: "Не прийшов",        en: "No-show",        pl: "Nieobecny" },
+  "master.cancelled.client":             { ru: "Отменено клиентом", ua: "Скасовано клієнтом", en: "Cancelled by client", pl: "Anulowane przez klienta" },
+  "master.cancelled.master":             { ru: "Отменено мастером", ua: "Скасовано майстром", en: "Cancelled by master", pl: "Anulowane przez mistrza" },
+  "master.cancelled.admin":              { ru: "Отменено админом",  ua: "Скасовано адміном",  en: "Cancelled by admin",  pl: "Anulowane przez administratora" },
+
+  // ── Master dashboard — banners / placeholders / forms ──────────────────────
+  "master.testAccountBanner":            { ru: "Тестовый аккаунт. Создан seed-test-accounts; не используется реальными клиентами.", ua: "Тестовий акаунт. Створений seed-test-accounts; не використовується реальними клієнтами.", en: "Test account. Created by seed-test-accounts; not used by real clients.", pl: "Konto testowe. Utworzone przez seed-test-accounts; nie jest używane przez prawdziwych klientów." },
+  "master.fallbackName":                 { ru: "Мастер", ua: "Майстер", en: "Master", pl: "Mistrz" },
+  "master.svcNamePlaceholder":           { ru: "Маникюр классический", ua: "Манікюр класичний", en: "Classic manicure", pl: "Klasyczny manicure" },
+  "master.svcDescriptionPlaceholder":    { ru: "Коротко о процедуре...", ua: "Коротко про процедуру...", en: "A short description...", pl: "Krótki opis..." },
+  "master.promoSticker":                 { ru: "Промо стикер", ua: "Промо-стикер", en: "Promo sticker", pl: "Naklejka promo" },
+  "master.svcPromoPlaceholder":          { ru: "Свой текст (-5%, Акция…)", ua: "Свій текст (-5%, Акція…)", en: "Custom text (-5%, Sale…)", pl: "Własny tekst (-5%, Promocja…)" },
+  "master.servicePhotos":                { ru: "Фото услуги (до 5)", ua: "Фото послуги (до 5)", en: "Service photos (up to 5)", pl: "Zdjęcia usługi (do 5)" },
+  "master.photoUploadError":             { ru: "Ошибка загрузки фото", ua: "Помилка завантаження фото", en: "Photo upload failed", pl: "Błąd przesyłania zdjęcia" },
+  "master.bioLabel":                     { ru: "Описание (bio)", ua: "Опис (bio)", en: "Description (bio)", pl: "Opis (bio)" },
+  "master.bioPlaceholder":               { ru: "Мастер маникюра с 5-летним опытом...", ua: "Майстер манікюру з 5-річним досвідом...", en: "Manicurist with 5 years of experience...", pl: "Manikiurzystka z 5-letnim doświadczeniem..." },
+  "master.portfolioLabel":               { ru: "Портфолио", ua: "Портфоліо", en: "Portfolio", pl: "Portfolio" },
+  "master.saveProfile":                  { ru: "Сохранить профиль", ua: "Зберегти профіль", en: "Save profile", pl: "Zapisz profil" },
+  "master.promoPresetHit":               { ru: "Хит", ua: "Хіт", en: "Top", pl: "Hit" },
+  "master.promoPresetNew":               { ru: "Новинка", ua: "Новинка", en: "New", pl: "Nowość" },
+  "master.promoPresetDiscount":          { ru: "Скидка", ua: "Знижка", en: "Sale", pl: "Promocja" },
+
   // ── Independent master services ──────────────────────────────────────────────
   "master.services":        { ru: "Услуги",        ua: "Послуги",        en: "Services",    pl: "Usługi" },
   "master.noServices":      { ru: "Добавьте услуги, чтобы клиенты могли записаться", ua: "Додайте послуги, щоб клієнти могли записатися", en: "Add services so clients can book", pl: "Dodaj usługi, aby klienci mogli się zapisać" },

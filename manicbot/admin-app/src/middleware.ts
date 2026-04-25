@@ -41,7 +41,7 @@ export function middleware(_request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://api.stripe.com https://*.manicbot.com https://challenges.cloudflare.com",
+    "connect-src 'self' https://api.stripe.com https://*.manicbot.com https://challenges.cloudflare.com https://core.telegram.org https://*.telegram.org",
     "frame-src https://challenges.cloudflare.com https://js.stripe.com",
     "frame-ancestors 'none'",
     "object-src 'none'",

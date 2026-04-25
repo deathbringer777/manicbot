@@ -60,11 +60,11 @@ describe("Responsive classes present", () => {
     expect(el.className).toMatch(/sm:p-5/);
   });
 
-  it("PluginFilters is sticky with backdrop blur", () => {
+  it("PluginFilters renders inline (non-sticky, no backdrop)", () => {
     renderWithLang(<PluginFilters value={{ q: "", category: null, billing: null, installedOnly: false }} onChange={() => {}} />);
     const bar = screen.getByTestId("plugin-filters");
-    expect(bar.className).toMatch(/sticky/);
-    expect(bar.className).toMatch(/backdrop-blur/);
+    expect(bar.className).not.toMatch(/sticky/);
+    expect(bar.className).not.toMatch(/backdrop-blur/);
   });
 });
 

@@ -1459,17 +1459,17 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         ))}
       </div>}
 
-      {/* Floating "+ Новая запись" button — visible on Overview / Appointments / Clients */}
+      {/* Floating "+ New booking" button — visible on Overview / Appointments / Clients */}
       {(tab === "overview" || tab === "appointments" || tab === "clients") && (
         <button
           type="button"
           onClick={() => setManualBookingOpen(true)}
           className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(124,58,237,0.55)] transition hover:scale-105 active:scale-95 sm:bottom-6 sm:right-6 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
           style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
-          aria-label="Новая запись"
+          aria-label={t("appointments.newBooking", lang)}
         >
           <Plus className="h-6 w-6 sm:hidden" />
-          <span className="hidden sm:inline">+ Новая запись</span>
+          <span className="hidden sm:inline">+ {t("appointments.newBooking", lang)}</span>
         </button>
       )}
 

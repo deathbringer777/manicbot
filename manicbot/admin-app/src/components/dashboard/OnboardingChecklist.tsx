@@ -1,21 +1,24 @@
 "use client";
 
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 interface Props {
   tenantId: string;
 }
 
 const STEPS = [
-  { id: "add_service" as const, label: "Добавьте услугу", href: "?tab=services" },
-  { id: "connect_bot" as const, label: "Подключите бота", href: "?tab=channels" },
-  { id: "invite_master" as const, label: "Пригласите мастера", href: "?tab=masters" },
-  { id: "set_schedule" as const, label: "Настройте расписание", href: "?tab=masters" },
-  { id: "share_link" as const, label: "Поделитесь ссылкой", href: "?tab=channels" },
-  { id: "first_booking" as const, label: "Примите первую запись", href: "?tab=appointments" },
+  { id: "add_service" as const,    labelKey: "onboarding.checklist.add_service" as const,    href: "?tab=services" },
+  { id: "connect_bot" as const,    labelKey: "onboarding.checklist.connect_bot" as const,    href: "?tab=channels" },
+  { id: "invite_master" as const,  labelKey: "onboarding.checklist.invite_master" as const,  href: "?tab=masters" },
+  { id: "set_schedule" as const,   labelKey: "onboarding.checklist.set_schedule" as const,   href: "?tab=masters" },
+  { id: "share_link" as const,     labelKey: "onboarding.checklist.share_link" as const,     href: "?tab=channels" },
+  { id: "first_booking" as const,  labelKey: "onboarding.checklist.first_booking" as const,  href: "?tab=appointments" },
 ];
 
 export function OnboardingChecklist({ tenantId }: Props) {
+  const { lang } = useLang();
   const { data, isLoading } = api.onboarding.getStatus.useQuery({ tenantId });
 
   if (isLoading || !data) return null;
@@ -27,7 +30,7 @@ export function OnboardingChecklist({ tenantId }: Props) {
   return (
     <div className="glass-card rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-cyan-500/5 p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Настройте салон за 10 минут</h3>
+        <h3 className="text-sm font-semibold text-white">{t("onboarding.checklist.title", lang)}</h3>
         <span className="text-xs font-mono text-white/60">
           {completed.size}/{STEPS.length}
         </span>
@@ -63,7 +66,7 @@ export function OnboardingChecklist({ tenantId }: Props) {
                   done ? "text-white/40 line-through" : "text-white/80 hover:text-violet-300"
                 }`}
               >
-                {step.label}
+                {t(step.labelKey, lang)}
               </a>
             </li>
           );

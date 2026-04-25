@@ -328,6 +328,18 @@ const translations = {
   "onboarding.masterNameHint":      { ru: "Можно изменить позже в профиле", ua: "Можна змінити пізніше в профілі", en: "You can change this later in your profile", pl: "Możesz to zmienić później w profilu" },
   "onboarding.createWorkspace":     { ru: "Создать кабинет", ua: "Створити кабінет", en: "Create workspace", pl: "Utwórz gabinet" },
 
+  // ── Owner onboarding checklist (dashboard) ──────────────────────────────────
+  "onboarding.checklist.title":          { ru: "Настройте салон за 10 минут",  ua: "Налаштуйте салон за 10 хвилин", en: "Set up your salon in 10 minutes", pl: "Skonfiguruj salon w 10 minut" },
+  "onboarding.checklist.add_service":    { ru: "Добавьте услугу",              ua: "Додайте послугу",               en: "Add a service",                  pl: "Dodaj usługę" },
+  "onboarding.checklist.connect_bot":    { ru: "Подключите бота",              ua: "Підключіть бота",               en: "Connect a bot",                  pl: "Podłącz bota" },
+  "onboarding.checklist.invite_master":  { ru: "Пригласите мастера",           ua: "Запросіть майстра",             en: "Invite a master",                pl: "Zaproś mistrza" },
+  "onboarding.checklist.set_schedule":   { ru: "Настройте расписание",         ua: "Налаштуйте розклад",            en: "Set the schedule",               pl: "Ustaw harmonogram" },
+  "onboarding.checklist.share_link":     { ru: "Поделитесь ссылкой",           ua: "Поділіться посиланням",         en: "Share your link",                pl: "Udostępnij link" },
+  "onboarding.checklist.first_booking":  { ru: "Примите первую запись",        ua: "Прийміть перший запис",         en: "Take your first booking",        pl: "Przyjmij pierwszą rezerwację" },
+
+  // ── Appointments quick actions ──────────────────────────────────────────────
+  "appointments.newBooking":             { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
+
   // ── Independent master services ──────────────────────────────────────────────
   "master.services":        { ru: "Услуги",        ua: "Послуги",        en: "Services",    pl: "Usługi" },
   "master.noServices":      { ru: "Добавьте услуги, чтобы клиенты могли записаться", ua: "Додайте послуги, щоб клієнти могли записатися", en: "Add services so clients can book", pl: "Dodaj usługi, aby klienci mogli się zapisać" },

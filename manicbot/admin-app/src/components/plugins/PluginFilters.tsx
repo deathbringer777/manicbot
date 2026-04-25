@@ -52,10 +52,7 @@ export function PluginFilters({
   const hasActive = !!(value.q || value.category || value.billing || value.installedOnly);
 
   return (
-    <div
-      data-testid="plugin-filters"
-      className="sticky top-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 py-3 backdrop-blur bg-white/80 dark:bg-slate-950/70 border-b border-slate-100 dark:border-white/5"
-    >
+    <div data-testid="plugin-filters">
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">

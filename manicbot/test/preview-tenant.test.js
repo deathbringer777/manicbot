@@ -204,7 +204,7 @@ describe('/embed/demo-chat.js handler', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toMatch(/application\/javascript/);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
-    expect(res.headers.get('Cache-Control')).toMatch(/public/);
+    expect(res.headers.get('Cache-Control')).toMatch(/no-cache/);
     const body = await res.text();
     expect(body).toBe(DEMO_CHAT_SRC);
     expect(body).toMatch(/mb-demo/);

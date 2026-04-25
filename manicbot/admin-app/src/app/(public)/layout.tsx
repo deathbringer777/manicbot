@@ -9,6 +9,12 @@ import {
   websiteJsonLd,
 } from "~/lib/seo";
 
+// Force dynamic rendering so the per-request CSP nonce set by middleware.ts is
+// stamped onto Next.js's streaming RSC inline scripts. Without this, the page
+// is statically prerendered (`x-nextjs-prerender: 1`) and the inline scripts
+// have no nonce — strict CSP then blocks them and the page renders blank.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: {
     default: `${SITE_NAME} — онлайн-запись в nail-салоны`,

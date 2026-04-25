@@ -2,7 +2,6 @@ import "~/styles/globals.css";
 
 import { type Metadata, type Viewport } from "next";
 import { Geist } from "next/font/google";
-import { headers } from "next/headers";
 
 import { Toaster } from "sonner";
 
@@ -83,18 +82,18 @@ const geist = Geist({
   variable: "--font-geist-sans",
 });
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // Read the per-request CSP nonce set by middleware.ts so we can attach it to
-  // any inline <script> we emit. Without this, strict CSP blocks the script.
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="ru" className={`${geist.variable}`} suppressHydrationWarning>
       {/* Blocking script: apply .dark before first paint based on stored preference (avoids flash).
-          Default is dark. Removed on toggle via WebShell which syncs document.documentElement. */}
+          Default is dark. Removed on toggle via WebShell which syncs document.documentElement.
+          Loaded from /theme-init.js (same-origin) so it satisfies strict nonce CSP without
+          requiring a per-request nonce on the inline tag (which would force the entire app
+          to render dynamically and lose static prerendering on public marketing pages). */}
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('manicbot_web_theme')==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}" }} />
+        <script src="/theme-init.js" />
       </head>
       <body className="antialiased min-h-screen selection:bg-brand-500/30">
         <AuthProvider>

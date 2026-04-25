@@ -6,19 +6,28 @@ import type { NextRequest } from "next/server";
  *  1. Route dispatch for Cloudflare Pages + @cloudflare/next-on-pages (unchanged).
  *  2. Security response headers injected on every request.
  *
- * CSP uses a per-request cryptographic nonce for inline scripts (replaces
- * 'unsafe-inline'). The nonce is forwarded to server components via the
- * `x-nonce` REQUEST header so layouts can read it with `headers()` and pass it
- * to <Script nonce={nonce}> tags. The `Content-Security-Policy` itself is ALSO
- * forwarded as a request header so the Next.js renderer parses it and auto-applies
- * the nonce to its streaming RSC inline scripts (`self.__next_f.push(...)`).
- * Without that forward, those framework scripts have no nonce and CSP blocks
- * them — leaving the page blank. Style-src keeps 'unsafe-inline' because Tailwind v4
- * generates inline styles that cannot be nonced without a full rebuild.
+ * CSP strategy is route-aware:
  *
- * NextAuth routes (/api/auth/*) are excluded from this middleware via the matcher
- * so that CSRF cookies and OAuth state cookies are forwarded unmodified to the
- * route handler — required for Google OAuth and credentials sign-in to work.
+ *  • Public marketing/SEO pages (`/search`, `/salon/*`, `/blog`, `/help`,
+ *    `/rules`) are statically prerendered (SSG) at build time. Their HTML is
+ *    served identically across requests, so a per-request nonce can never
+ *    match the inline scripts baked into that HTML — Next.js streams its
+ *    framework state via inline `self.__next_f.push(...)` tags that have no
+ *    nonce attribute on SSG output. For these routes we serve a CSP with
+ *    `'unsafe-inline'` for `script-src` (no nonce). These pages have no
+ *    auth-bearing state, so the XSS surface is minimal.
+ *
+ *  • Everything else (dashboard, auth flows, API routes, salon-bot chat) is
+ *    rendered dynamically per request, so we serve a strict CSP with a
+ *    per-request nonce in `script-src`. Next.js auto-applies the nonce to
+ *    its streaming framework scripts when we forward the CSP on the request
+ *    headers; same-origin static script files (e.g. `/theme-init.js`) match
+ *    `'self'` and don't need a nonce.
+ *
+ * NextAuth routes (`/api/auth/*`) are excluded from this middleware via the
+ * matcher below so that CSRF cookies and OAuth state cookies are forwarded
+ * unmodified to the route handler — required for Google OAuth and credentials
+ * sign-in to work.
  */
 
 /** Generate a cryptographically random nonce (Base64, 22+ chars). */
@@ -28,20 +37,34 @@ function generateNonce(): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-export function middleware(_request: NextRequest) {
-  const nonce = generateNonce();
+/** Routes whose HTML is statically prerendered and therefore can't carry a per-request nonce. */
+function isStaticPublicRoute(pathname: string): boolean {
+  return (
+    pathname === "/search" ||
+    pathname.startsWith("/search/") ||
+    pathname === "/blog" ||
+    pathname.startsWith("/blog/") ||
+    pathname === "/help" ||
+    pathname.startsWith("/help/") ||
+    pathname === "/rules" ||
+    pathname.startsWith("/rules/") ||
+    pathname.startsWith("/salon/")
+  );
+}
+
+export function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const usesNonce = !isStaticPublicRoute(pathname);
+  const nonce = usesNonce ? generateNonce() : "";
 
   // ── Content-Security-Policy ──────────────────────────────────────────────
-  // Permits:
-  //   - same-origin scripts + styles (Tailwind/Next bundles)
-  //   - Cloudflare Turnstile challenge iframe/script
-  //   - Stripe.js for payment form
-  //   - connect-src for tRPC calls and Stripe API
-  // Blocks:
-  //   - <object>, <embed>, <base> overrides, other origins loading as frames
+  const scriptSrc = usesNonce
+    ? `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com https://js.stripe.com`
+    : `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://js.stripe.com`;
+
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com https://js.stripe.com`,
+    scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
@@ -58,21 +81,24 @@ export function middleware(_request: NextRequest) {
     "upgrade-insecure-requests",
   ].join("; ");
 
-  // Forward the nonce to server components via request headers so layouts can
-  // read it with `headers()` and pass it to <Script nonce={nonce}> tags.
-  // Also forward the CSP itself so the Next.js renderer auto-applies the nonce
-  // to its own streaming RSC inline scripts (`self.__next_f.push(...)`).
-  const requestHeaders = new Headers(_request.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("x-csp-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
+  // For nonced (dynamic) routes, forward the nonce + the CSP itself on the
+  // request headers so the Next.js renderer auto-applies the nonce to its own
+  // streaming RSC inline scripts (`self.__next_f.push(...)`).
+  const requestHeaders = new Headers(request.headers);
+  if (usesNonce) {
+    requestHeaders.set("x-nonce", nonce);
+    requestHeaders.set("x-csp-nonce", nonce);
+    requestHeaders.set("Content-Security-Policy", csp);
+  }
 
   const res = NextResponse.next({
     request: { headers: requestHeaders },
   });
   res.headers.set("Content-Security-Policy", csp);
-  res.headers.set("x-nonce", nonce);
-  res.headers.set("x-csp-nonce", nonce);
+  if (usesNonce) {
+    res.headers.set("x-nonce", nonce);
+    res.headers.set("x-csp-nonce", nonce);
+  }
   res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");

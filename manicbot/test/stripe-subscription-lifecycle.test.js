@@ -157,8 +157,12 @@ describe('checkout.session.completed', () => {
     await seedTenant(ctx);
   });
 
-  it('activates tenant and records stripeCustomerId + subscriptionId', async () => {
-    const event = {
+  it('records stripeCustomerId + subscriptionId and defers billing status to subscription.updated', async () => {
+    // checkout.session.completed only stores IDs; billing status is NOT set here.
+    // It is correctly set by the subsequent customer.subscription.updated event
+    // (which Stripe always fires after checkout), allowing trialing vs active to
+    // be determined from the full subscription object rather than assumed 'active'.
+    const checkoutEvent = {
       id: 'evt_checkout_1',
       type: 'checkout.session.completed',
       data: {
@@ -170,16 +174,33 @@ describe('checkout.session.completed', () => {
         },
       },
     };
-    const r = await fire(ctx, event);
+    const r = await fire(ctx, checkoutEvent);
     expect(r).toMatchObject({ ok: true, status: 200 });
 
-    const tenant = await getTenant(ctx, TENANT_ID);
-    expect(tenant.billingStatus).toBe('active');
-    expect(tenant.stripeCustomerId).toBe(CUSTOMER_ID);
-    expect(tenant.stripeSubscriptionId).toBe(SUB_ID);
-    expect(tenant.billingEmail).toBe('owner@salon.com');
-    expect(tenant.trialEndsAt).toBeNull();
-    expect(tenant.graceEndsAt).toBeNull();
+    // After checkout only — IDs recorded, billing status not yet changed
+    const afterCheckout = await getTenant(ctx, TENANT_ID);
+    expect(afterCheckout.stripeCustomerId).toBe(CUSTOMER_ID);
+    expect(afterCheckout.stripeSubscriptionId).toBe(SUB_ID);
+    expect(afterCheckout.billingEmail).toBe('owner@salon.com');
+    expect(afterCheckout.graceEndsAt).toBeNull();
+
+    // Stripe fires customer.subscription.updated immediately after checkout
+    const subUpdatedEvent = {
+      id: 'evt_sub_upd_1',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: SUB_ID, status: 'active',
+          current_period_end: nowSec() + 30 * 86400,
+          cancel_at_period_end: false,
+          customer: CUSTOMER_ID,
+          items: { data: [{ price: { id: 'price_pro_monthly' } }] },
+        },
+      },
+    };
+    await fire(ctx, subUpdatedEvent);
+    const afterSubUpdated = await getTenant(ctx, TENANT_ID);
+    expect(afterSubUpdated.billingStatus).toBe('active');
   });
 
   it('upserts stripe_customers row', async () => {
@@ -633,10 +654,15 @@ describe('Full subscription lifecycle', () => {
     await seedTenant(ctx, { billingStatus: 'trialing' });
     await seedStripeCustomer(ctx, CUSTOMER_ID, TENANT_ID);
 
-    // 1. Checkout completed → active
+    // 1. Checkout completed — records IDs only (billing status deferred to subscription.updated)
     await fire(ctx, {
       id: 'lc_evt_1', type: 'checkout.session.completed',
       data: { object: { customer: CUSTOMER_ID, subscription: SUB_ID, metadata: { tenantId: TENANT_ID } } },
+    });
+    // Stripe fires subscription.updated immediately after checkout with the real status
+    await fire(ctx, {
+      id: 'lc_evt_1b', type: 'customer.subscription.updated',
+      data: { object: { id: SUB_ID, status: 'active', current_period_end: nowSec() + 30 * 86400, cancel_at_period_end: false, customer: CUSTOMER_ID, items: { data: [] } } },
     });
     expect((await getTenant(ctx, TENANT_ID)).billingStatus).toBe('active');
 
@@ -661,6 +687,11 @@ describe('Full subscription lifecycle', () => {
     await fire(ctx, {
       id: 'lc_evt_4', type: 'checkout.session.completed',
       data: { object: { customer: CUSTOMER_ID, subscription: newSubId, metadata: { tenantId: TENANT_ID } } },
+    });
+    // Stripe fires subscription.updated with the new active sub
+    await fire(ctx, {
+      id: 'lc_evt_4b', type: 'customer.subscription.updated',
+      data: { object: { id: newSubId, status: 'active', current_period_end: nowSec() + 30 * 86400, cancel_at_period_end: false, customer: CUSTOMER_ID, items: { data: [] } } },
     });
     const afterResub = await getTenant(ctx, TENANT_ID);
     expect(afterResub.billingStatus).toBe('active');

@@ -816,7 +816,7 @@ export const webUsersRouter = createTRPCRouter({
       const now = Math.floor(Date.now() / 1000);
       await ctx.db
         .update(webUsers)
-        .set({ passwordHash: newHash, updatedAt: now })
+        .set({ passwordHash: newHash, passwordChangedAt: now, updatedAt: now })
         .where(eq(webUsers.id, ctx.webUser.id));
       await writeAudit(ctx.db, {
         actor: ctx.webUser.email,

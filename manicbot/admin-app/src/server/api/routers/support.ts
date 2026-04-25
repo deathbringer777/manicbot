@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { platformTickets, platformTicketMessages } from "~/server/db/schema";
 import { eq, desc, or, like, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -31,7 +31,7 @@ function myTicketsFilter(ctx: any) {
 }
 
 export const supportRouter = createTRPCRouter({
-  getOpenTickets: publicProcedure.query(async ({ ctx }) => {
+  getOpenTickets: protectedProcedure.query(async ({ ctx }) => {
     await assertSupport(ctx);
     return ctx.db.select().from(platformTickets)
       .where(eq(platformTickets.status, "open"))
@@ -39,7 +39,7 @@ export const supportRouter = createTRPCRouter({
       .limit(100);
   }),
 
-  getAllTickets: publicProcedure
+  getAllTickets: protectedProcedure
     .input(z.object({ status: z.string().optional(), q: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       await assertSupport(ctx);
@@ -68,7 +68,7 @@ export const supportRouter = createTRPCRouter({
       return rows;
     }),
 
-  getTicket: publicProcedure
+  getTicket: protectedProcedure
     .input(z.object({ ticketId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertSupport(ctx);
@@ -82,7 +82,7 @@ export const supportRouter = createTRPCRouter({
       return { ticket: ticket[0]!, messages };
     }),
 
-  replyToTicket: publicProcedure
+  replyToTicket: protectedProcedure
     .input(z.object({
       ticketId: z.string(),
       text: z.string().min(1),
@@ -103,7 +103,7 @@ export const supportRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  claimTicket: publicProcedure
+  claimTicket: protectedProcedure
     .input(z.object({ ticketId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertSupport(ctx);
@@ -120,7 +120,7 @@ export const supportRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  closeTicket: publicProcedure
+  closeTicket: protectedProcedure
     .input(z.object({ ticketId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertSupport(ctx);
@@ -130,7 +130,7 @@ export const supportRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  escalateTicket: publicProcedure
+  escalateTicket: protectedProcedure
     .input(z.object({ ticketId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertSupport(ctx);

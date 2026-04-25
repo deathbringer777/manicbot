@@ -171,7 +171,7 @@ async function showHelp(ctx, cid, lg, realRole) {
 async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
   // Gate: AI plan check only for salon staff (master/admin) — clients & platform roles always have AI
   const isPlatformRole = realRole === 'system_admin' || realRole === 'support' || realRole === 'technical_support';
-  const isSalonStaff = realRole === 'tenant_owner' || realRole === 'master' || realRole === 'tenant_owner';
+  const isSalonStaff = realRole === 'tenant_owner' || realRole === 'master';
   const isStaff = isPlatformRole || isSalonStaff;
   if (isSalonStaff && !canUse(ctx, 'ai')) {
     return send(ctx, cid, t(lg, 'feature_ai_unavailable'));
@@ -858,7 +858,7 @@ export async function onMsg(ctx, msg) {
         cancellerRole === 'master' || cancellerRole === 'tenant_owner';
       if (isStaffCanceller) {
         const backCb = cancellerRole === 'system_admin' ? CB.SYSADM_MAIN
-          : (cancellerRole === 'tenant_owner' || cancellerRole === 'tenant_owner') ? CB.ADM_MAIN
+          : cancellerRole === 'tenant_owner' ? CB.ADM_MAIN
           : CB.MST_MAIN;
         await send(ctx, cid, fill(t(lg, 'cancel_ok'), {
           svc: svcName(ctx, lg, apt.svcId), dt: fmtDT(lg, apt.date, apt.time),

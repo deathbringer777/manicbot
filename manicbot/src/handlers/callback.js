@@ -257,7 +257,7 @@ export async function onCb(ctx, cb) {
   if (d === CB.SUPPORT) {
     // Support plan check only for salon staff — clients & platform roles always have support
     const supportRole = await getRole(ctx, cid);
-    const isSalonStaffSupport = supportRole === 'tenant_owner' || supportRole === 'master' || supportRole === 'tenant_owner';
+    const isSalonStaffSupport = supportRole === 'tenant_owner' || supportRole === 'master';
     if (isSalonStaffSupport && !canUse(ctx, 'support_tickets') && !(await isPlatformAdmin(ctx, cid))) {
       return send(ctx, cid, t(lg, 'feature_support_unavailable'));
     }
@@ -1437,10 +1437,10 @@ export async function onCb(ctx, cb) {
       });
     }
 
-    const lockKey = `lock:slot:${st.date}:${st.time}`;
+    const lockKey = `lock:slot:${st.date}:${st.time}:${st.masterId ?? 'any'}`;
     const lockTaken = await kvGet(ctx, lockKey);
     if (lockTaken) {
-      const fallbackSlots = await getSlots(ctx, st.date, st.svcId);
+      const fallbackSlots = await getSlots(ctx, st.date, st.svcId, st.masterId ?? null);
       if (fallbackSlots.length) {
         return send(ctx, cid, t(lg, 'slot_taken'), timeKb(fallbackSlots, lg));
       }
@@ -1448,7 +1448,7 @@ export async function onCb(ctx, cb) {
     }
     await kvPut(ctx, lockKey, 1, { expirationTtl: LOCK_TTL_SEC });
 
-    const slots = await getSlots(ctx, st.date, st.svcId);
+    const slots = await getSlots(ctx, st.date, st.svcId, st.masterId ?? null);
     if (!slots.includes(st.time)) {
       if (slots.length) {
         return send(ctx, cid, t(lg, 'slot_taken'), timeKb(slots, lg));

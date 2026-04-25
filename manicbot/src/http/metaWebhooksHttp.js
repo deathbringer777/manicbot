@@ -143,10 +143,8 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               log.warn('http.metaWebhooks', { message: 'no channelConfig for IG tenant', tenantId: resolved.tenantId });
               continue;
             }
-            if (!channelConfig.token && env.INSTAGRAM_ACCESS_TOKEN) {
-              channelConfig.token = env.INSTAGRAM_ACCESS_TOKEN;
-            }
             if (!channelConfig.token) {
+              log.warn('http.metaWebhooks', { message: 'no IG token for tenant — INSTAGRAM_ACCESS_TOKEN platform fallback removed; set token via POST /admin/ig-token', tenantId: resolved.tenantId });
               log.error('http.metaWebhooks', new Error('no IG token for tenant — set via POST /admin/ig-token'), { tenantId: resolved.tenantId });
               continue;
             }

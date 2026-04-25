@@ -155,10 +155,12 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       const updates = {};
       if (customerId) updates.stripeCustomerId = customerId;
       if (session.subscription) {
+        // Record the subscription ID only. Billing status is intentionally NOT
+        // set here — the customer.subscription.updated event fires immediately
+        // after and correctly maps the actual Stripe status (trialing / active)
+        // via subscriptionToBillingUpdates(). Setting 'active' unconditionally
+        // here would override a trialing subscription status before it's corrected.
         updates.stripeSubscriptionId = session.subscription;
-        updates.billingStatus = 'active';
-        updates.subscriptionStatus = 'active';
-        updates.trialEndsAt = null;
         updates.graceEndsAt = null;
       }
       // Update plan from session metadata (set at checkout creation time)

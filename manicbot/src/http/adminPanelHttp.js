@@ -15,9 +15,8 @@ import { listTenantIds, getTenant } from '../tenant/storage.js';
  */
 export async function tryAdminPanel(request, ctx, url, ADMIN_401) {
   if (url.pathname === '/setup') {
-    if (!timingSafeEqual(url.searchParams.get('key') || '', ctx.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    const authResp = await requireAdmin(request, ctx);
+    if (authResp) return authResp;
     const botId =
       ctx.bot?.botId || (ctx.TG && ctx.TG.includes('/bot') ? ctx.TG.replace(/.*\/bot(\d+).*/, '$1') : null);
     const wh = botId ? `${url.origin}/webhook/${botId}` : `${url.origin}/webhook`;
@@ -63,9 +62,8 @@ export async function tryAdminPanel(request, ctx, url, ADMIN_401) {
   }
 
   if (url.pathname === '/remove-webhook') {
-    if (!timingSafeEqual(url.searchParams.get('key') || '', ctx.ADMIN_KEY)) {
-      return new Response('Forbidden', { status: 403 });
-    }
+    const authResp = await requireAdmin(request, ctx);
+    if (authResp) return authResp;
     return Response.json({ result: await api(ctx, 'deleteWebhook', {}) });
   }
 

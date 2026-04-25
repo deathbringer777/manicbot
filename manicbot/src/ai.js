@@ -323,7 +323,7 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
     case 'REVIEWS': await showReviews(ctx, cid); return true;
     case 'ABOUT': await showAbout(ctx, cid); return true;
   }
-  if (role === 'tenant_owner' || role === 'master' || role === 'tenant_owner' || role === 'system_admin' || role === 'support') {
+  if (role === 'tenant_owner' || role === 'master' || role === 'system_admin' || role === 'support') {
     switch (tag) {
       case 'BILLING': await showBillingMenu(ctx, cid); return true;
     }
@@ -342,7 +342,7 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
   // dashboard can show a pending entry); actual appointment creation lives
   // in the manual booking tRPC procedure which the worker cannot call.
   // This tag serves as a signal to surface a prefilled manual-booking link.
-  if (tag === 'BOOK_FOR_CLIENT' && (role === 'tenant_owner' || role === 'master' || role === 'tenant_owner' || role === 'system_admin')) {
+  if (tag === 'BOOK_FOR_CLIENT' && (role === 'tenant_owner' || role === 'master' || role === 'system_admin')) {
     const parts = (param || '').split(':');
     const svcId = parts[0]?.trim();
     const date = parts[1]?.trim();

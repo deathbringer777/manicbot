@@ -1,6 +1,18 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from "vitest";
 import { renderHook, act, cleanup, waitFor } from "@testing-library/react";
+
+// ── Reliable localStorage stub (happy-dom's native implementation is incomplete) ──
+const _lsStore: Record<string, string> = {};
+const _mockLocalStorage = {
+  getItem: (key: string) => _lsStore[key] ?? null,
+  setItem: (key: string, value: string) => { _lsStore[key] = String(value); },
+  removeItem: (key: string) => { delete _lsStore[key]; },
+  clear: () => { Object.keys(_lsStore).forEach((k) => delete _lsStore[k]); },
+  get length() { return Object.keys(_lsStore).length; },
+  key: (n: number) => Object.keys(_lsStore)[n] ?? null,
+};
+beforeAll(() => { vi.stubGlobal("localStorage", _mockLocalStorage); });
 
 // ── Shared mutable tRPC mock state ──────────────────────────────────────
 let mockPinnedData: string[] = [];
@@ -48,7 +60,7 @@ vi.mock("~/trpc/react", () => ({
 import { usePinnedPlugins, readPinned, writePinned } from "~/lib/plugins/pinnedPlugins";
 
 beforeEach(() => {
-  window.localStorage.clear();
+  _mockLocalStorage.clear();
   mockPinnedData = [];
   mockMutate = () => {};
   mockMutationError = null;

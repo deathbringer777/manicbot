@@ -60,12 +60,12 @@ export async function requireAdmin(request, ctx, opts = {}) {
     } catch { /* malformed */ }
   }
   // Fingerprint even on empty credential — that's still an "attempt".
-  const { credentialFingerprint, checkAndIncrement } = await import('./rateLimit.js');
+  const { credentialFingerprint, checkCount, checkAndIncrement } = await import('./rateLimit.js');
   const fp = await credentialFingerprint(credential);
 
-  // Pre-check: if already over limit, refuse without even comparing the key.
+  // Pre-check (read-only): if already over limit, refuse without comparing the key.
   if (ctx?.db) {
-    const pre = await checkAndIncrement(ctx, `admin-auth:${fp}`, 'check', limit, windowSec);
+    const pre = await checkCount(ctx, `admin-auth:${fp}`, 'fail', limit, windowSec);
     if (pre.limited) {
       return new Response('Too Many Requests', {
         status: 429,
@@ -75,8 +75,14 @@ export async function requireAdmin(request, ctx, opts = {}) {
   }
 
   if (!adminKey) return new Response('Unauthorized', { status: 401, headers: { 'WWW-Authenticate': 'Basic realm="admin"' } });
+
+  // Success path — do NOT increment the failure counter.
   if (checkAdmin(request, adminKey)) return null;
 
+  // Auth failed — increment the failure counter.
+  if (ctx?.db) {
+    await checkAndIncrement(ctx, `admin-auth:${fp}`, 'fail', limit, windowSec);
+  }
   return new Response('Unauthorized', { status: 401, headers: { 'WWW-Authenticate': 'Basic realm="admin"' } });
 }
 

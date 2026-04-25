@@ -13,7 +13,7 @@ function allKey(dateStr) {
 }
 
 function dayIndexKey(date, masterId = null) {
-  return `d:${date}`;
+  return masterId ? `d:${date}:m:${masterId}` : `d:${date}`;
 }
 
 function getAptMasterId(apt) { return apt?.masterId || apt?.master_id || null; }

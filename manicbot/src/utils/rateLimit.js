@@ -51,6 +51,32 @@ export async function checkAndIncrement(ctx, key, action, limit, windowSec) {
 }
 
 /**
+ * Read-only check: returns current state without incrementing the counter.
+ * Use for pre-flight checks before performing the auth comparison.
+ *
+ * @param {{ db: D1Database }} ctx
+ * @param {string} key
+ * @param {string} action
+ * @param {number} limit
+ * @param {number} windowSec
+ * @returns {Promise<{ count: number, limited: boolean, retryAfter: number }>}
+ */
+export async function checkCount(ctx, key, action, limit, windowSec) {
+  if (!ctx?.db) return { count: 0, limited: false, retryAfter: 0 };
+  const now = nowSec();
+  const row = await dbGet(ctx,
+    'SELECT count, window_start FROM rate_limits WHERE key = ? AND action = ?',
+    key, action,
+  );
+  if (!row || (now - row.window_start) >= windowSec) {
+    return { count: 0, limited: false, retryAfter: 0 };
+  }
+  const limited = row.count >= limit;
+  const retryAfter = limited ? Math.max(0, windowSec - (now - row.window_start)) : 0;
+  return { count: row.count, limited, retryAfter };
+}
+
+/**
  * Best-effort cleanup of expired rate-limit rows. Call from cron.
  *
  * @param {{ db: D1Database }} ctx

@@ -145,7 +145,9 @@ describe('POST /admin/web-user — #S1 privilege escalation guard', () => {
     expect(upserts).toHaveLength(0);
   });
 
-  it('accepts ADMIN_KEY via legacy ?key= query string (back-compat)', async () => {
+  it('rejects ADMIN_KEY supplied via ?key= query string (deprecated, removed)', async () => {
+    // The ?key= query-param fallback was removed: key leaked into Cloudflare logs.
+    // Admin endpoints now require Authorization: Bearer only.
     const headers = new Headers({ 'Content-Type': 'application/json' });
     const req = new Request(`https://manicbot.com/admin/web-user?key=${ADMIN_KEY}`, {
       method: 'POST',
@@ -153,7 +155,7 @@ describe('POST /admin/web-user — #S1 privilege escalation guard', () => {
       body: JSON.stringify({ email: 'q@s.com', password: 'hunter2hunter2', role: 'tenant_owner' }),
     });
     const res = await tryAdminKeyRoutes(req, env, new URL(req.url));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it('rejects empty/missing email or password', async () => {

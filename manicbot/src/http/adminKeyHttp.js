@@ -19,19 +19,17 @@ const ALLOWED_CREATE_ROLES = new Set(['tenant_owner', 'support', 'technical_supp
 
 /**
  * Returns true if the admin key matches env.ADMIN_KEY (timing-safe).
- * Checks Authorization: Bearer header first, then falls back to ?key= query param.
- * Prefer Authorization header — query params leak in logs, Referer headers, browser history.
+ * Requires Authorization: Bearer <ADMIN_KEY> header.
+ * The deprecated ?key= query-param fallback has been removed — it leaked the
+ * key into Cloudflare request logs, Referer headers, and browser history.
  */
 function isAdminKeyValid(url, env, request) {
   if (!env.ADMIN_KEY) return false;
-  // Prefer Authorization header
   const authHeader = request?.headers?.get?.('authorization') || '';
   if (authHeader.startsWith('Bearer ')) {
     return timingSafeEqual(authHeader.slice(7), env.ADMIN_KEY);
   }
-  // Fallback to query param (deprecated, for backward compatibility)
-  const key = url.searchParams.get('key') || '';
-  return timingSafeEqual(key, env.ADMIN_KEY);
+  return false;
 }
 
 /** Returns a 403 Forbidden response. */
@@ -418,11 +416,11 @@ export async function tryAdminKeyRoutes(request, env, url) {
           }
         }
       } else if (action === 'reject') {
-        const { getLang } = await import('../utils/lang.js');
+        const { getLang } = await import('../services/chat.js');
         const { send } = await import('../telegram.js');
         const { t, fill } = await import('../i18n/index.js');
-        const { fmtDT } = await import('../utils/time.js');
-        const { svcName } = await import('../services/services.js');
+        const { fmtDT } = await import('../utils/date.js');
+        const { svcName } = await import('../utils/helpers.js');
         const { CB } = await import('../config.js');
         const clg = (await getLang(ctx, apt.chatId)) || 'ru';
         let clientMsg = fill(t(clg, 'apt_rejected'), { svc: svcName(ctx, clg, apt.svcId), dt: fmtDT(clg, apt.date, apt.time) });
@@ -496,7 +494,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
     const { email, password, tenantId = null, role = 'tenant_owner' } = body || {};
     if (!email || !password) return Response.json({ error: 'email and password required' }, { status: 400 });
-    if (password.length < 8) return Response.json({ error: 'password must be at least 8 characters' }, { status: 400 });
+    if (password.length < 12) return Response.json({ error: 'password must be at least 12 characters' }, { status: 400 });
 
     // #S1 fix — privilege escalation: enforce role allowlist.
     // system_admin is intentionally NOT in this set: platform admins are minted via

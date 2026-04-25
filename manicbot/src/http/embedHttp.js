@@ -35,9 +35,11 @@ export async function tryEmbed(request, env, url) {
       status: 200,
       headers: {
         'Content-Type': 'application/javascript; charset=utf-8',
-        // 5 minute cache at the edge / in the browser; source changes ride the
-        // next Worker deploy so a short window keeps it reasonably fresh.
-        'Cache-Control': 'public, max-age=300',
+        // No edge cache: the bridge in landingHttp.js cache-busts via ?v=N
+        // but Cloudflare's edge sometimes ignores query strings on Worker
+        // responses, leaving stale code after a deploy. no-cache forces every
+        // request through the Worker, which is cheap (string concat).
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
         // #S13 — defense-in-depth. CSP on JS responses is not enforced by the
         // browser (applies to HTML docs), but it documents intent and is
         // harmless. The real enforcement lives on the hosting page.

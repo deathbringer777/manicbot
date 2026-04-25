@@ -87,7 +87,7 @@ export async function ensurePreviewTenantProvisioned(env) {
   const now = nowSec();
   const TRIAL_SEC = msToSec(7 * 24 * 3600 * 1000);
 
-  const tenantName = 'Preview Salon';
+  const tenantName = 'Manic Bot';
   await putTenant(ec, PREVIEW_TENANT_ID, {
     id: PREVIEW_TENANT_ID,
     name: tenantName,

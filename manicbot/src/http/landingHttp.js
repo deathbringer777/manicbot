@@ -39,7 +39,7 @@ const BRIDGE_SCRIPT = `<script>
     window.__MB_BRIDGE__ = { title: 'Manic Bot', slug: SLUG, lang: LANG, target: '#' + targetId, showHeader: true };
     var s = document.createElement('script');
     // ?v=3 cache-busts Safari's memory/disk cache so title + lang fixes propagate immediately.
-    s.src = '/embed/demo-chat.js?v=3';
+    s.src = '/embed/demo-chat.js?v=4';
     s.setAttribute('data-slug', SLUG);
     s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);

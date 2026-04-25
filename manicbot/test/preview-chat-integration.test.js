@@ -18,7 +18,7 @@ vi.mock('../src/handlers/inbound.js', () => ({
     if (ctx?.channel?.send) {
       const cid = inbound.channelUserId;
       await ctx.channel.send(Number(cid), {
-        text: 'Добро пожаловать в Preview Salon!',
+        text: 'Добро пожаловать в Manic Bot!',
         buttons: [
           [{ text: 'Записаться', callback_data: 'book' }],
         ],

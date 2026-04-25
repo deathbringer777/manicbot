@@ -1,6 +1,6 @@
 # Landing iPhone Demo → Worker Integration
 
-На лендинге `manicbot.com` уже есть готовый iPhone-макет в hero-секции с приветствием «Добро пожаловать в Preview Salon!» и четырьмя inline-кнопками (Записаться / Каталог работ / Прайс-лист / Мои записи). Этот документ описывает, как превратить статичную разметку в живой чат, завязанный на выделенный preview-тенант.
+На лендинге `manicbot.com` уже есть готовый iPhone-макет в hero-секции с приветствием «Добро пожаловать в Manic Bot!» и четырьмя inline-кнопками (Записаться / Каталог работ / Прайс-лист / Мои записи). Этот документ описывает, как превратить статичную разметку в живой чат, завязанный на выделенный preview-тенант.
 
 Лендинг живёт в отдельном репо `manicbot-analysis` (Vite SPA). Бэкенд (этот репо) уже всё предоставляет — ниже контракт и минимальный JS-слой, который лендинг-дев вставляет внутрь своего `<IPhoneMock>`.
 
@@ -42,8 +42,8 @@ Content-Type: application/json
   "chatId": 3921,                 // int, derived from sessionId
   "salon": {
     "slug": "preview-landing",
-    "name": "Preview Salon",
-    "legalName": "Preview Salon",
+    "name": "Manic Bot",
+    "legalName": "Manic Bot",
     "logo": "https://…",
     "coverPhoto": "https://…",
     "brandPalette": null,

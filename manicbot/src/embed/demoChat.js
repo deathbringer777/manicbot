@@ -157,7 +157,7 @@ export const DEMO_CHAT_SRC = `
     '.mb-header-status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 0 2px rgba(34,197,94,.2)}' +
     '.mb-header-status.mb-offline{color:var(--mb-muted)}' +
     // Feed + bubbles (tighter spacing to fit inside iPhone screen)
-    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 4px;display:flex;flex-direction:column;gap:5px;background:var(--mb-bg)}' +
+    '.mb-demo-feed{flex:1 1 auto;overflow-y:auto;padding:8px 10px 6px;display:flex;flex-direction:column;gap:5px;background:var(--mb-bg)}' +
     '.mb-demo-feed::-webkit-scrollbar{width:0;height:0}' +
     '.mb-bubble{max-width:86%;padding:7px 11px;border-radius:16px;line-height:1.4;word-wrap:break-word;font-size:12.5px}' +
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
@@ -170,7 +170,7 @@ export const DEMO_CHAT_SRC = `
     '.mb-btn:active{transform:scale(.98)}' +
     '.mb-btn:hover{background:var(--mb-btn-hover)}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
-    '.mb-composer{display:flex;gap:6px;padding:6px 8px 8px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
+    '.mb-composer{display:flex;gap:6px;padding:6px 10px 14px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
     '.mb-composer input::placeholder{color:var(--mb-input-placeholder)}' +
     '.mb-composer input:focus{border-color:var(--mb-bubble-user)}' +
@@ -232,6 +232,30 @@ export const DEMO_CHAT_SRC = `
     var themeObs = new MutationObserver(applyTheme);
     themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
   } catch (_) {}
+
+  // Lang change watcher: the Vite LanguageProvider switches language SPA-style
+  // (history.replaceState ?lang= + localStorage). No event fires, no <html lang>
+  // change, and same-tab localStorage writes don't fire 'storage'. Poll URL +
+  // localStorage; on change, drop the old session and full-reload so the
+  // bridge re-fires fresh with the new LANG.
+  function detectLangChange() {
+    try {
+      var q = new URLSearchParams(window.location.search).get('lang');
+      if (q && /^(ru|en|ua|pl)$/.test(q) && q !== LANG) return q;
+      var s = localStorage.getItem('manicbot-locale');
+      if (s && /^(ru|en|ua|pl)$/.test(s) && s !== LANG) return s;
+    } catch (_) {}
+    return null;
+  }
+  function maybeReinit() {
+    var newLang = detectLangChange();
+    if (!newLang) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    location.reload();
+  }
+  setInterval(maybeReinit, 1000);
+  window.addEventListener('storage', maybeReinit);
+  window.addEventListener('popstate', maybeReinit);
 
   // Refs to header sub-elements — populated below if SHOW_HEADER is true.
   var headerAvEl = null;
@@ -308,7 +332,10 @@ export const DEMO_CHAT_SRC = `
   function applyBranding(salon) {
     if (!salon) return;
     currentBranding = salon;
-    if (headerNameEl && salon.name) {
+    // Bridge-supplied title wins over the server's salon.name. Lets us keep
+    // the brand label ("Manic Bot") stable in the demo widget regardless of
+    // what the preview tenant is renamed to in D1 down the line.
+    if (headerNameEl && salon.name && !_BR.title) {
       headerNameEl.textContent = salon.name;
     }
     if (headerAvEl && salon.logo) {

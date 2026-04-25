@@ -132,7 +132,7 @@ describe('preview-mode short-circuits destructive writes', () => {
 
 describe('buildAISystemPrompt preview guardrail', () => {
   const baseCtx = {
-    salonName: 'Preview Salon',
+    salonName: 'Manic Bot',
     address: 'ul. Demo 1',
     phone: '+48 22 000 00 00',
     hoursStr: '10:00–20:00',

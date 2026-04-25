@@ -18,41 +18,35 @@ import type { PluginManifest, PluginModule } from "./types";
 
 // ─── Manifest imports ────────────────────────────────────────────────────────
 
-// ── system_admin (3) ────────────────────────────────────────────────────────
+// ── system_admin ────────────────────────────────────────────────────────────
 import aiAbuseMonitorManifest from "./ai-abuse-monitor/manifest";
-import fraudShieldManifest from "./fraud-shield/manifest";
 import gdprCenterManifest from "./gdpr-center/manifest";
 
 // ── productivity / integrations ─────────────────────────────────────────────
 import googleCalendarManifest from "./google-calendar/manifest";
 
-// ── tenant_owner (4) ────────────────────────────────────────────────────────
+// ── tenant_owner ────────────────────────────────────────────────────────────
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
 import birthdayCampaignsManifest from "./birthday-campaigns/manifest";
-import noShowShieldManifest from "./no-show-shield/manifest";
 import multiLangBotManifest from "./multi-lang-bot/manifest";
 
-// ── tenant_manager (4) ──────────────────────────────────────────────────────
+// ── tenant_manager ──────────────────────────────────────────────────────────
 import shiftPlannerManifest from "./shift-planner/manifest";
 import taskBoardManifest from "./task-board/manifest";
-import inventoryLiteManifest from "./inventory-lite/manifest";
-import dailyCloseManifest from "./daily-close/manifest";
 
-// ── master (5) ──────────────────────────────────────────────────────────────
+// ── master ──────────────────────────────────────────────────────────────────
 import portfolioGalleryManifest from "./portfolio-gallery/manifest";
-import tipJarManifest from "./tip-jar/manifest";
 import clientCrmLiteManifest from "./client-crm-lite/manifest";
 import availabilityShareManifest from "./availability-share/manifest";
 import earningsGoalManifest from "./earnings-goal/manifest";
 
-// ── support / technical_support (5) ─────────────────────────────────────────
+// ── support / technical_support ─────────────────────────────────────────────
 import ticketTemplatesManifest from "./ticket-templates/manifest";
 import escalationPlaybookManifest from "./escalation-playbook/manifest";
 import slaTrackerManifest from "./sla-tracker/manifest";
-import customerHealthScoreManifest from "./customer-health-score/manifest";
 import kbSearchManifest from "./kb-search/manifest";
 
-// ── universal (8) ───────────────────────────────────────────────────────────
+// ── universal ───────────────────────────────────────────────────────────────
 import commandPaletteManifest from "./command-palette/manifest";
 import activityFeedManifest from "./activity-feed/manifest";
 import keyboardShortcutsManifest from "./keyboard-shortcuts/manifest";
@@ -60,30 +54,25 @@ import darkPlusManifest from "./dark-plus/manifest";
 import exportHubManifest from "./export-hub/manifest";
 import quickNotesManifest from "./quick-notes/manifest";
 
-// ── master + tenant_owner (2) ───────────────────────────────────────────────
+// ── master + tenant_owner ───────────────────────────────────────────────────
 import bookingReminderManifest from "./booking-reminder/manifest";
 import messageTemplatesManifest from "./message-templates/manifest";
 
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // system_admin
   aiAbuseMonitorManifest,
-  fraudShieldManifest,
   gdprCenterManifest,
   // productivity / integrations
   googleCalendarManifest,
   // tenant_owner
   loyaltyStampsManifest,
   birthdayCampaignsManifest,
-  noShowShieldManifest,
   multiLangBotManifest,
   // tenant_manager
   shiftPlannerManifest,
   taskBoardManifest,
-  inventoryLiteManifest,
-  dailyCloseManifest,
   // master
   portfolioGalleryManifest,
-  tipJarManifest,
   clientCrmLiteManifest,
   availabilityShareManifest,
   earningsGoalManifest,
@@ -91,7 +80,6 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   ticketTemplatesManifest,
   escalationPlaybookManifest,
   slaTrackerManifest,
-  customerHealthScoreManifest,
   kbSearchManifest,
   // universal
   commandPaletteManifest,

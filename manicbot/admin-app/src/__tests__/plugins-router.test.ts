@@ -76,14 +76,6 @@ describe("pluginsRouter.listCatalog", () => {
     expect(gcal?.billingLabel).toBe("Included in plan");
   });
 
-  it("marks coming_soon plugins with lock.kind='coming_soon' for everyone", async () => {
-    const { db } = createDbMock([[{ plan: "max" }], []]);
-    const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
-    const cards = await caller.listCatalog({ lang: "ru" });
-    const noShow = cards.find((c) => c.slug === "no-show-shield");
-    expect(noShow?.lock.kind).toBe("coming_soon");
-  });
-
   it("marks plan-locked plugins when tenant plan is insufficient", async () => {
     const { db } = createDbMock([[{ plan: "start" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
@@ -153,14 +145,6 @@ describe("pluginsRouter.install — happy paths", () => {
 // ─── install security rejections ────────────────────────────────────────────
 
 describe("pluginsRouter.install — security rejections", () => {
-  it("rejects install of a coming_soon plugin", async () => {
-    const { db } = createDbMock();
-    const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
-    await expect(
-      caller.install({ slug: "no-show-shield", tenantId: "t_pro" }),
-    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
-  });
-
   it("rejects platform install from non-admin", async () => {
     const { db } = createDbMock();
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);

@@ -17,8 +17,8 @@ const manifests = listManifests();
 const realPlugins = manifests; // all registered plugins are now production plugins
 
 describe("Seeded catalog — global shape", () => {
-  it("at least 26 real plugins are registered", () => {
-    expect(realPlugins.length).toBeGreaterThanOrEqual(26);
+  it("at least 20 real plugins are registered", () => {
+    expect(realPlugins.length).toBeGreaterThanOrEqual(20);
   });
 
   it("no duplicate slugs", () => {

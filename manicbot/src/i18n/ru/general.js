@@ -10,6 +10,20 @@ export default {
     '• Файл для Google / Apple календаря',
     '', 'Выбери, что тебя интересует:'
   ],
+  // Used when the visitor's first name is unknown (web demo, missing
+  // Telegram from.first_name). Drops the {n} placeholder so we don't render
+  // a stray waving-hand emoji where a name should be.
+  welcome_anon: [
+    '💅 <b>Добро пожаловать в {s}!</b>',
+    '', 'Привет! 👋',
+    '', 'Я помогу тебе записаться на маникюр быстро и удобно.',
+    '', '🌸 <b>Что я умею:</b>',
+    '• Онлайн-запись 24/7',
+    '• Каталог работ с фото',
+    '• Напоминания о визите',
+    '• Файл для Google / Apple календаря',
+    '', 'Выбери, что тебя интересует:'
+  ],
   lang_set: '✅ Язык установлен: Русский 🇷🇺',
   help: [
     '📖 <b>Помощь</b>', '',

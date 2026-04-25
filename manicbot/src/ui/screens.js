@@ -22,8 +22,15 @@ export async function showWelcome(ctx, cid, name) {
   await clearState(ctx, cid);
   const role = await getRole(ctx, cid);
   const salonName = ctx.tenant?.salon?.name || SALON;
+  // Web/anonymous visitors come in without a real Telegram first_name; the
+  // upstream call sites fall back to '\ud83d\udc4b' as a placeholder. Use the anon
+  // variant of the welcome template so we don't render a stray waving-hand
+  // emoji where the name should sit.
+  const hasRealName = name && name !== '\ud83d\udc4b' && String(name).trim().length > 0;
+  const welcomeKey = hasRealName ? 'welcome' : 'welcome_anon';
+  const nameForFill = hasRealName ? escHtml(name) : '';
   await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
-  await send(ctx, cid, fill(t(lg, 'welcome'), { s: salonName, n: escHtml(name) }), mainKb(lg, role, ctx));
+  await send(ctx, cid, fill(t(lg, welcomeKey), { s: salonName, n: nameForFill }), mainKb(lg, role, ctx));
 }
 
 /**

@@ -41,21 +41,25 @@ export const DEMO_CHAT_SRC = `
   var SHOW_HEADER = _BR.showHeader || (scriptEl && scriptEl.dataset.showHeader === '1');
   var I18N = {
     ru: { placeholder: 'Сообщение…', online: 'онлайн', send: 'Отправить',
+          typing: 'печатает…',
           offline: 'нет связи', reconnecting: 'подключение…',
           initFailed: 'Не удалось подключиться. Повторная попытка…',
           sendError: 'Ошибка отправки. Попробуйте ещё раз.',
           netError: 'Нет соединения. Проверьте интернет.' },
     ua: { placeholder: 'Повідомлення…', online: 'онлайн', send: 'Надіслати',
+          typing: 'друкує…',
           offline: "немає зв'язку", reconnecting: 'підключення…',
           initFailed: 'Не вдалося підключитися. Повторна спроба…',
           sendError: 'Помилка відправки. Спробуйте ще раз.',
           netError: "Немає з'єднання. Перевірте інтернет." },
     en: { placeholder: 'Message…', online: 'online', send: 'Send',
+          typing: 'typing…',
           offline: 'offline', reconnecting: 'reconnecting…',
           initFailed: 'Connection failed. Retrying…',
           sendError: 'Send failed. Please try again.',
           netError: 'No connection. Check your internet.' },
     pl: { placeholder: 'Wiadomość…', online: 'online', send: 'Wyślij',
+          typing: 'pisze…',
           offline: 'brak połączenia', reconnecting: 'łączenie…',
           initFailed: 'Błąd połączenia. Ponowna próba…',
           sendError: 'Błąd wysyłania. Spróbuj ponownie.',
@@ -185,7 +189,52 @@ export const DEMO_CHAT_SRC = `
     // Dark mode: remove borders entirely — on OLED screens even a 1px border
     // matching the background flickers during GPU-composited scroll animations.
     '.mb-demo.mb-dark .mb-header{border-bottom:none}' +
-    '.mb-demo.mb-dark .mb-composer{border-top:none}';
+    '.mb-demo.mb-dark .mb-composer{border-top:none}' +
+    // ─── "Living chat" entrance animations ───────────────────────────────────
+    // The first time the widget is loaded (no persisted session), the welcome
+    // message arrives in 2-3 staged bubbles with a typing indicator between
+    // them — like a real conversation. After the welcome flow, every fresh
+    // bot or user bubble still gets a subtle fade+slide-up entrance.
+    //
+    // Standard easing: cubic-bezier(0.16, 1, 0.3, 1) — Apple's "ease-out-expo"
+    // approximation. Snappy in, settles smoothly. Used app-wide for entrances.
+    '@keyframes mb-bubble-in{0%{opacity:0;transform:translateY(10px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}' +
+    '.mb-bubble.mb-anim-in{animation:mb-bubble-in .42s cubic-bezier(.16,1,.3,1) both;transform-origin:bottom left}' +
+    '.mb-bubble.user.mb-anim-in{transform-origin:bottom right}' +
+    // Buttons in the welcome bubble stagger in one after another (~80ms each)
+    // so the CTA reveal feels deliberate, not a slab dropping in.
+    '@keyframes mb-btn-in{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}' +
+    '.mb-btns.mb-stagger > *{opacity:0;animation:mb-btn-in .34s cubic-bezier(.16,1,.3,1) forwards}' +
+    '.mb-btns.mb-stagger > *:nth-child(1){animation-delay:.06s}' +
+    '.mb-btns.mb-stagger > *:nth-child(2){animation-delay:.16s}' +
+    '.mb-btns.mb-stagger > *:nth-child(3){animation-delay:.26s}' +
+    '.mb-btns.mb-stagger > *:nth-child(4){animation-delay:.36s}' +
+    '.mb-btns.mb-stagger > *:nth-child(5){animation-delay:.46s}' +
+    '.mb-btns.mb-stagger > *:nth-child(6){animation-delay:.56s}' +
+    // Typing dots-bubble fades in (entrance) the same way as a regular bubble.
+    '@keyframes mb-typing-in{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}' +
+    '.mb-typing{animation:mb-typing-in .22s cubic-bezier(.16,1,.3,1) both}' +
+    // Chrome (statusbar + header) fades in on first paint.
+    '@keyframes mb-chrome-in{0%{opacity:0;transform:translateY(-4px)}100%{opacity:1;transform:translateY(0)}}' +
+    '.mb-statusbar{animation:mb-chrome-in .4s cubic-bezier(.16,1,.3,1) both}' +
+    '.mb-header{animation:mb-chrome-in .4s cubic-bezier(.16,1,.3,1) .08s both}' +
+    // Header status — when the bot is "typing" during the welcome flow, the
+    // green online dot becomes a soft pulsing purple dot + label "печатает…".
+    '@keyframes mb-pulse-dot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.7);opacity:.55}}' +
+    '.mb-header-status.mb-typing-state{color:var(--mb-bubble-user)}' +
+    '.mb-header-status.mb-typing-state::before{background:currentColor;box-shadow:0 0 0 2px rgba(139,92,246,.18);animation:mb-pulse-dot 1.2s ease-in-out infinite}' +
+    // Composer is hidden during the welcome flow and fades in once the last
+    // bubble + buttons have settled. Already-persisted sessions never enter
+    // the .mb-init-pending state, so the composer is visible immediately.
+    '.mb-composer{transition:opacity .5s cubic-bezier(.16,1,.3,1),transform .5s cubic-bezier(.16,1,.3,1)}' +
+    '.mb-demo.mb-init-pending .mb-composer{opacity:0;pointer-events:none;transform:translateY(8px)}' +
+    // Respect user preference for reduced motion: kill every entrance keyframe
+    // and present the chat fully assembled. The widget still works; it just
+    // skips the staged animation.
+    '@media(prefers-reduced-motion:reduce){' +
+      '.mb-bubble.mb-anim-in,.mb-btns.mb-stagger>*,.mb-typing,.mb-statusbar,.mb-header,.mb-header-status.mb-typing-state::before,.mb-composer,.mb-demo.mb-init-pending .mb-composer{animation:none !important;transition:none !important}' +
+      '.mb-btns.mb-stagger>*,.mb-demo.mb-init-pending .mb-composer{opacity:1;transform:none;pointer-events:auto}' +
+    '}';
   document.head.appendChild(styleTag);
 
   // Ensure the container is a positioning context so position:absolute children
@@ -396,6 +445,122 @@ export const DEMO_CHAT_SRC = `
     scrollToBottom();
   }
 
+  // ─── "Living chat" welcome animation ──────────────────────────────────────
+  // Goal: a 2.5–3s scripted reveal that feels like a real conversation, not
+  // a slab of text dropping in at once. Plays only on a fresh session (no
+  // localStorage). Gated by prefers-reduced-motion.
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function prefersReducedMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (_) { return false; }
+  }
+
+  // Toggle the header subtitle between "online" (green dot) and "typing…"
+  // (purple pulsing dot) without rebuilding the DOM. Reuses the existing
+  // .mb-header-status element + its ::before dot.
+  function setHeaderTypingState(on) {
+    if (!headerStatusEl) return;
+    if (on) {
+      headerStatusEl.textContent = T.typing || T.online;
+      headerStatusEl.classList.add('mb-typing-state');
+      headerStatusEl.classList.remove('mb-offline');
+    } else {
+      headerStatusEl.textContent = T.online;
+      headerStatusEl.classList.remove('mb-typing-state');
+      headerStatusEl.classList.remove('mb-offline');
+    }
+  }
+
+  // Split the welcome message into at most 3 staged bubbles so we keep the
+  // 3-second budget. Bot replies are typically 4–6 paragraphs separated by
+  // blank lines; we group greeting (first 2) + middle + CTA (last) so the
+  // last bubble carries the buttons.
+  function splitWelcomeForStaging(text) {
+    if (!text) return [''];
+    var paragraphs = String(text).split(/\\n\\s*\\n+/).map(function (p) { return p.trim(); }).filter(Boolean);
+    if (paragraphs.length <= 1) return [text];
+    if (paragraphs.length <= 3) return paragraphs;
+    var first = paragraphs.slice(0, 2).join('\\n\\n');
+    var last = paragraphs[paragraphs.length - 1];
+    var middle = paragraphs.slice(2, paragraphs.length - 1).join('\\n\\n');
+    if (!middle) return [first, last];
+    return [first, middle, last];
+  }
+
+  // Render bot welcome messages as a staged sequence:
+  //   typing 600ms → bubble 1 (animated) → 380ms pause → typing 420ms →
+  //   bubble 2 → pause → typing → bubble 3 (with stagger-animated buttons)
+  // Persists chat state at the end so a refresh restores the conversation
+  // without replaying the animation.
+  async function renderWelcomeFlow(botMessages) {
+    if (prefersReducedMotion()) {
+      botMessages.forEach(function (m) {
+        if (m.ts > lastTs) lastTs = m.ts;
+        messages.push(m);
+        renderBubble(m);
+      });
+      persist();
+      return;
+    }
+
+    // Flatten messages → staged chunks (with metadata about which is last).
+    var allChunks = [];
+    for (var mi = 0; mi < botMessages.length; mi++) {
+      var m = botMessages[mi];
+      var chunks = splitWelcomeForStaging(m.text || '');
+      for (var ci = 0; ci < chunks.length; ci++) {
+        var isLastOfMsg = (ci === chunks.length - 1);
+        var isLastOverall = isLastOfMsg && (mi === botMessages.length - 1);
+        allChunks.push({
+          src: m, text: chunks[ci], idx: ci, isLastOfMsg: isLastOfMsg, isLastOverall: isLastOverall,
+        });
+      }
+    }
+
+    // Initial typing while user "registers" the chrome (~700ms feels right).
+    showTyping();
+    await sleep(700);
+    hideTyping();
+
+    for (var i = 0; i < allChunks.length; i++) {
+      var ch = allChunks[i];
+      var chunkMsg = {
+        role: 'bot',
+        id: ch.src.id + '-c' + ch.idx,
+        ts: ch.src.ts,
+        text: ch.text,
+        parseMode: ch.src.parseMode || 'HTML',
+        // Buttons + photo only ride along on the chunk that is logically
+        // "last" within the source message — keeps the welcome CTA intact.
+        buttons: ch.isLastOfMsg ? ch.src.buttons : null,
+        photo: ch.idx === 0 ? ch.src.photo : null,
+        editMessageId: null,
+      };
+      // Persist the source ts so polling doesn't re-deliver this chunk.
+      if (ch.src.ts > lastTs) lastTs = ch.src.ts;
+      messages.push(chunkMsg);
+      renderBubble(chunkMsg, { animate: true, staggerButtons: ch.isLastOfMsg && !!ch.src.buttons });
+
+      if (!ch.isLastOverall) {
+        // Brief settle, then typing for the next chunk.
+        await sleep(380);
+        showTyping();
+        await sleep(420);
+        hideTyping();
+      } else if (ch.src.buttons && ch.src.buttons.length) {
+        // Last bubble has buttons — wait for them to finish staggering in
+        // before we end the welcome flow + reveal the composer.
+        var totalBtns = ch.src.buttons.reduce(function (n, row) { return n + (row ? row.length : 0); }, 0);
+        await sleep(Math.min(120 + totalBtns * 100, 700));
+      }
+    }
+
+    persist();
+  }
+
   var _initRetries = 0;
   var _initRetryTimer = null;
 
@@ -412,16 +577,39 @@ export const DEMO_CHAT_SRC = `
       });
       return;
     }
+    // Fresh session — play the staged "living chat" welcome animation.
+    root.classList.add('mb-init-pending');
+    setHeaderTypingState(true);
     try {
       var res = await postJson('/chat/init', { slug: SLUG });
       if (!res || !res.ok) throw new Error((res && res.error) || 'init failed');
       sessionId = res.sessionId;
-      // Update header with real salon name + logo from the server response.
       if (res.salon) applyBranding(res.salon);
       _initRetries = 0;
       persist();
-      await sendRaw({ text: '/start', userLang: LANG });
+
+      // Issue /start and let the staged renderer take over the response.
+      // We bypass sendRaw() so the messages aren't rendered immediately.
+      var startRes = await postJson('/chat/send', {
+        slug: SLUG, sessionId: sessionId, userLang: LANG, text: '/start',
+      });
+      if (!startRes || !startRes.ok) throw new Error((startRes && startRes.error) || 'start failed');
+      var botMessages = (startRes.messages || []).map(function (m) {
+        m.role = 'bot';
+        return m;
+      });
+      await renderWelcomeFlow(botMessages);
+
+      setHeaderTypingState(false);
+      root.classList.remove('mb-init-pending');
+      persist();
     } catch (e) {
+      // Init failed — drop the welcome chrome state so the user isn't stuck
+      // on a "typing…" header forever, and reveal the composer for a manual
+      // retry after the showErrorBubble.
+      setHeaderTypingState(false);
+      root.classList.remove('mb-init-pending');
+      hideTyping();
       console.error('[mb-demo] init failed:', e);
       _initRetries++;
       var delay = Math.min(2000 * Math.pow(2, _initRetries - 1), 30000);
@@ -468,7 +656,8 @@ export const DEMO_CHAT_SRC = `
         m.role = 'bot';
         if (m.ts > lastTs) lastTs = m.ts;
         messages.push(m);
-        renderBubble(m);
+        // Fresh bot reply — fade+slide-up entrance for that "alive" feel.
+        renderBubble(m, { animate: true });
       });
       persist();
     } catch (e) {
@@ -489,7 +678,7 @@ export const DEMO_CHAT_SRC = `
       buttons: null, photo: null, editMessageId: null,
     };
     messages.push(msg);
-    renderBubble(msg);
+    renderBubble(msg, { animate: true });
     persist();
   }
 
@@ -519,10 +708,10 @@ export const DEMO_CHAT_SRC = `
     return !hasText && !hasPhoto && !hasButtons;
   }
 
-  function renderBubble(m) {
+  function renderBubble(m, opts) {
     if (m.editMessageId && bubbles.has(m.editMessageId)) {
       var old = bubbles.get(m.editMessageId);
-      var fresh = buildBubbleNode(m);
+      var fresh = buildBubbleNode(m, opts);
       old.replaceWith(fresh);
       bubbles.set(m.id, fresh);
       if (m.id !== m.editMessageId) bubbles.delete(m.editMessageId);
@@ -531,13 +720,14 @@ export const DEMO_CHAT_SRC = `
     }
     if (bubbles.has(m.id)) return;
     if (isEmptyMessage(m)) return;
-    var node = buildBubbleNode(m);
+    var node = buildBubbleNode(m, opts);
+    if (opts && opts.animate) node.classList.add('mb-anim-in');
     bubbles.set(m.id, node);
     feed.appendChild(node);
     scrollToBottom();
   }
 
-  function buildBubbleNode(m) {
+  function buildBubbleNode(m, opts) {
     var div = document.createElement('div');
     div.className = 'mb-bubble ' + (m.role === 'user' ? 'user' : 'bot');
     div.dataset.id = m.id;
@@ -553,7 +743,7 @@ export const DEMO_CHAT_SRC = `
     }
     if (m.buttons && m.buttons.length) {
       var btnWrap = document.createElement('div');
-      btnWrap.className = 'mb-btns';
+      btnWrap.className = 'mb-btns' + (opts && opts.staggerButtons ? ' mb-stagger' : '');
       m.buttons.forEach(function (row) {
         row.forEach(function (b) {
           var btn;
@@ -614,7 +804,7 @@ export const DEMO_CHAT_SRC = `
           m.role = 'bot';
           if (m.ts > lastTs) lastTs = m.ts;
           messages.push(m);
-          renderBubble(m);
+          renderBubble(m, { animate: true });
         });
         persist();
       }

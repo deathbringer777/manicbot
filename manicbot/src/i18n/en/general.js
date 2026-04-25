@@ -8,6 +8,15 @@ export default {
     '• Visit reminders', '• File for Google / Apple Calendar',
     '', 'Choose what interests you:'
   ],
+  welcome_anon: [
+    '💅 <b>Welcome to {s}!</b>',
+    '', 'Hi! 👋',
+    '', 'I\'ll help you book a manicure quickly and conveniently.',
+    '', '🌸 <b>What I can do:</b>',
+    '• Online booking 24/7', '• Portfolio with photos',
+    '• Visit reminders', '• File for Google / Apple Calendar',
+    '', 'Choose what interests you:'
+  ],
   lang_set: '✅ Language set: English 🇬🇧',
   help: [
     '📖 <b>Help</b>', '',

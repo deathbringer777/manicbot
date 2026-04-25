@@ -8,6 +8,15 @@ export default {
     '• Przypomnienia o wizycie', '• Plik do Google / Apple Calendar',
     '', 'Wybierz co Cię interesuje:'
   ],
+  welcome_anon: [
+    '💅 <b>Witamy w {s}!</b>',
+    '', 'Cześć! 👋',
+    '', 'Pomogę Ci umówić się na manicure szybko i wygodnie.',
+    '', '🌸 <b>Co potrafię:</b>',
+    '• Rezerwacja online 24/7', '• Portfolio ze zdjęciami',
+    '• Przypomnienia o wizycie', '• Plik do Google / Apple Calendar',
+    '', 'Wybierz co Cię interesuje:'
+  ],
   lang_set: '✅ Język ustawiony: Polski 🇵🇱',
   help: [
     '📖 <b>Pomoc</b>', '',

@@ -84,7 +84,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
       const result = await uploadAssetFile(uploadUrl, compressed);
       setPhotos(prev => [...prev, result.url].slice(0, 5));
     } catch {
-      alert("Ошибка загрузки фото");
+      alert(t("master.photoUploadError", lang));
     } finally {
       setUploading(false);
     }
@@ -156,17 +156,17 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
 
           {/* Description */}
           <div>
-            <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">Описание</label>
+            <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">{t("common.description", lang)}</label>
             <textarea
               value={description} onChange={e => setDescription(e.target.value)}
-              rows={2} placeholder="Коротко о процедуре..."
+              rows={2} placeholder={t("master.svcDescriptionPlaceholder", lang)}
               className="w-full resize-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
           </div>
 
           {/* Promo */}
           <div>
             <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block">
-              <Tag className="h-3 w-3" /> Промо стикер
+              <Tag className="h-3 w-3" /> {t("master.promoSticker", lang)}
             </label>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {PROMO_PRESETS.map(p => (
@@ -183,7 +183,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
             <div className="flex items-center gap-2">
               <input
                 value={promo} onChange={e => setPromo(e.target.value)} maxLength={12}
-                placeholder="Свой текст (-5%, Акция…)"
+                placeholder={t("master.svcPromoPlaceholder", lang)}
                 className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
               {promo && (
                 <span className="shrink-0 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
@@ -196,7 +196,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
           {/* Photos */}
           <div>
             <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2 flex items-center gap-1.5 block">
-              <Camera className="h-3 w-3" /> Фото услуги (до 5)
+              <Camera className="h-3 w-3" /> {t("master.servicePhotos", lang)}
             </label>
             <div className="flex gap-2 flex-wrap">
               {photos.map((url, i) => (
@@ -216,7 +216,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
                   disabled={uploading}
                   className="h-16 w-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-white/15 flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-brand-500 hover:text-brand-400 transition-colors disabled:opacity-50">
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                  {!uploading && <span className="text-[9px]">Добавить</span>}
+                  {!uploading && <span className="text-[9px]">{t("common.add", lang)}</span>}
                 </button>
               )}
             </div>
@@ -412,7 +412,7 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
             <div className="flex items-center gap-3">
               <Settings className="h-4 w-4 text-slate-500 shrink-0" />
               <div>
-                <p className="text-xs text-slate-500">Отображаемое имя</p>
+                <p className="text-xs text-slate-500">{t("salon.branding.displayName", lang)}</p>
                 <p className="text-sm text-slate-900 dark:text-white">{profile.displayName}</p>
               </div>
             </div>
@@ -448,21 +448,21 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
             <div className="border-t border-slate-200 dark:border-white/5 pt-3 flex gap-3 items-start">
               {profile.logo && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Логотип</p>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.branding.logo", lang)}</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={profile.logo} alt="logo" className="h-14 w-14 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
                 </div>
               )}
               {profile.coverPhoto && (
                 <div className="flex-1">
-                  <p className="text-xs text-slate-500 mb-1">Заглавное фото</p>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.branding.cover", lang)}</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={profile.coverPhoto} alt="cover" className="h-14 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
                 </div>
               )}
               {profile.brandPalette?.primary && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Цвет бренда</p>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.branding.brandColor", lang)}</p>
                   <div
                     className="h-14 w-14 rounded-lg border border-slate-200 dark:border-slate-700"
                     style={{ background: profile.brandPalette.primary }}
@@ -485,10 +485,10 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
       <div className="glass-card rounded-2xl p-4 space-y-3">
         <Input label={t("salon.name", lang)} value={salonName} onChange={setSalonName} />
         <Input
-          label="Отображаемое имя (опционально)"
+          label={t("salon.branding.displayNameOptional", lang)}
           value={displayName}
           onChange={setDisplayName}
-          placeholder="Оставьте пустым, чтобы использовать основное имя"
+          placeholder={t("salon.branding.displayNameHint", lang)}
         />
         <Input label={t("salon.address", lang)} value={address} onChange={setAddress} />
         <Input label={t("salon.phone", lang)} value={phone} onChange={setPhone} />
@@ -498,7 +498,7 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
         </div>
         <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
           <AssetUploadField
-            label="Логотип"
+            label={t("salon.branding.logo", lang)}
             tenantId={tenantId}
             kind="logo"
             value={logo}
@@ -507,10 +507,10 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               setLogoR2Key(key);
             }}
             preview="square"
-            hint="PNG/JPEG/WebP, до 2 MB. Оптимально 512×512."
+            hint={t("salon.branding.logoHint", lang)}
           />
           <AssetUploadField
-            label="Заглавное фото"
+            label={t("salon.branding.cover", lang)}
             tenantId={tenantId}
             kind="cover"
             value={coverPhoto}
@@ -519,10 +519,10 @@ function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile:
               setCoverR2Key(key);
             }}
             preview="cover"
-            hint="PNG/JPEG/WebP, до 2 MB. Оптимально 1600×500."
+            hint={t("salon.branding.coverHint", lang)}
           />
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Цвет бренда</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.branding.brandColor", lang)}</label>
             <div className="flex items-center gap-3">
               <input
                 type="color"
@@ -582,19 +582,18 @@ function AutoConfirmSettings({ tenantId }: { tenantId: string }) {
   });
 
   const channels: Array<{ key: "web" | "telegram" | "whatsapp" | "instagram"; label: string; hint: string }> = [
-    { key: "web",       label: "Веб-чат (manicbot.com / TikTok / соцсети)", hint: "Записи через виджет на странице салона. Рекомендуется ВКЛ — клиенты ждут мгновенного ответа." },
-    { key: "telegram",  label: "Telegram",                                   hint: "Записи через Telegram-бота. По умолчанию ВЫКЛ — мастер видит заявку и подтверждает вручную." },
-    { key: "whatsapp",  label: "WhatsApp",                                   hint: "Записи через WhatsApp Business. По умолчанию ВЫКЛ." },
-    { key: "instagram", label: "Instagram Direct",                           hint: "Записи через Instagram DM. По умолчанию ВЫКЛ." },
+    { key: "web",       label: t("salon.channels.web.label", lang),       hint: t("salon.channels.web.hint", lang) },
+    { key: "telegram",  label: "Telegram",                                  hint: t("salon.channels.telegram.hint", lang) },
+    { key: "whatsapp",  label: "WhatsApp",                                  hint: t("salon.channels.whatsapp.hint", lang) },
+    { key: "instagram", label: t("salon.channels.instagram.label", lang),  hint: t("salon.channels.instagram.hint", lang) },
   ];
 
   return (
     <div className="space-y-4">
-      <SectionHeader title="Автоматическое подтверждение заявок" />
+      <SectionHeader title={t("salon.autoConfirm.title", lang)} />
       <div className="glass-card rounded-2xl p-4 space-y-3">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Если включено — заявки из выбранного канала сразу становятся подтверждёнными
-          без шага одобрения мастером. Мастер всё равно получает уведомление о записи.
+          {t("salon.autoConfirm.body", lang)}
         </p>
         {isLoading ? (
           <div className="flex items-center justify-center py-4">
@@ -658,6 +657,7 @@ function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null 
 }
 
 function PublicProfileEditor({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
   const utils = api.useUtils();
   const profile = api.salon.getSalonProfile.useQuery({ tenantId });
   const servicesList = api.salon.getServices.useQuery({ tenantId });
@@ -718,9 +718,9 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const isReadyToPublish = readinessMissing.length === 0;
 
   const MISSING_LABELS: Record<string, string> = {
-    slug: "URL (slug) для публичной ссылки",
-    name: "Название салона",
-    services: "хотя бы 1 услуга в каталоге",
+    slug: t("salon.publicProfile.slugReq", lang),
+    name: t("salon.publicProfile.nameReq", lang),
+    services: t("salon.publicProfile.servicesReq", lang),
   };
 
   const slugCheck = api.salon.checkSlugAvailable.useQuery(
@@ -730,7 +730,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 
   function validateSlug(v: string) {
     if (v && !/^[a-z0-9-]+$/.test(v)) {
-      setSlugError("Только строчные латинские буквы, цифры и дефис");
+      setSlugError(t("salon.publicProfile.slugError", lang));
       setSlugChecked(null);
       return false;
     }
@@ -777,15 +777,15 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const publicUrl = slug ? `/salon/${slug}` : null;
 
   if (profile.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
-  if (profile.isError) return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>;
+  if (profile.isError) return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>;
 
   return (
     <div className="space-y-5">
       <SectionHeader
-        title="Публичный профиль"
+        title={t("salon.publicProfile.title", lang)}
         action={editing
-          ? <Btn variant="ghost" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" />Отмена</Btn>
-          : <Btn onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />Редактировать</Btn>
+          ? <Btn variant="ghost" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" />{t("common.cancel", lang)}</Btn>
+          : <Btn onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />{t("common.edit", lang)}</Btn>
         }
       />
 
@@ -796,7 +796,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           : <ToggleLeft className="h-6 w-6 text-slate-500 shrink-0" />}
         <div className="flex-1">
           <p className={`text-sm font-semibold ${isPublic ? "text-emerald-300" : "text-slate-500 dark:text-slate-400"}`}>
-            {isPublic ? "Салон виден в каталоге" : "Салон скрыт из каталога"}
+            {isPublic ? t("salon.publicProfile.visibleInCatalog", lang) : t("salon.publicProfile.hiddenFromCatalog", lang)}
           </p>
           {publicUrl && (
             <a href={publicUrl} target="_blank" rel="noopener noreferrer"
@@ -819,7 +819,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             update.mutate({ tenantId, publicActive: newVal });
           }}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${isPublic ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"}`}>
-            {isPublic ? "Скрыть" : "Опубликовать"}
+            {isPublic ? t("salon.publicProfile.hide", lang) : t("salon.publicProfile.publish", lang)}
           </button>
         )}
       </div>
@@ -830,7 +830,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-                Нельзя опубликовать салон — заполните обязательные поля
+                {t("salon.publicProfile.cantPublish", lang)}
               </p>
               <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-red-700/90 dark:text-red-300/90">
                 {publishError.map((k) => (
@@ -842,13 +842,13 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   onClick={() => setEditing(true)}
                   className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
                 >
-                  Редактировать профиль
+                  {t("salon.publicProfile.editProfile", lang)}
                 </button>
                 <button
                   onClick={() => setPublishError(null)}
                   className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-700/70 transition hover:text-red-700 dark:text-red-300/70 dark:hover:text-red-300"
                 >
-                  Закрыть
+                  {t("common.close", lang)}
                 </button>
               </div>
             </div>
@@ -860,9 +860,9 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
         <div className="glass-card rounded-2xl p-4 space-y-3">
           {[
             { label: "URL (slug)", value: data?.slug, icon: Globe },
-            { label: "Город", value: data?.city, icon: MapPin },
-            { label: "Описание", value: data?.description, icon: null },
-            { label: "Координаты", value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
+            { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
+            { label: t("common.description", lang), value: data?.description, icon: null },
+            { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
           ].map(({ label, value, icon: Icon }) => value ? (
             <div key={label} className="flex items-start gap-3">
               {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
@@ -880,7 +880,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           )}
           {photos.length > 0 && (
             <div>
-              <p className="text-xs text-slate-500 mb-2">Галерея ({photos.length})</p>
+              <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>
               <div className="flex flex-wrap gap-2">
                 {photos.map((url, i) => (
                   <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
@@ -891,7 +891,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           {!data?.slug && (
             <p className="text-xs text-amber-400/80 flex items-center gap-1">
               <AlertCircle className="h-3.5 w-3.5" />
-              Задайте slug чтобы получить ссылку на публичный профиль
+              {t("salon.publicProfile.setSlugFirst", lang)}
             </p>
           )}
         </div>
@@ -900,8 +900,8 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
           {/* Toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-900 dark:text-white">Показывать в каталоге</p>
-              <p className="text-xs text-slate-500">Клиенты смогут найти ваш салон через поиск</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">{t("salon.publicProfile.showInCatalog", lang)}</p>
+              <p className="text-xs text-slate-500">{t("salon.publicProfile.findInSearch", lang)}</p>
             </div>
             <button onClick={() => setIsPublic((v) => !v)}
               className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-700"}`}>
@@ -919,7 +919,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
                 {slug && !slugError && (
                   <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
-                    {slugCheck.isLoading ? "..." : slugCheck.data?.available === false ? "❌ Занят" : slugCheck.data?.available ? "✅" : ""}
+                    {slugCheck.isLoading ? "..." : slugCheck.data?.available === false ? `❌ ${t("salon.publicProfile.taken", lang)}` : slugCheck.data?.available ? "✅" : ""}
                   </span>
                 )}
               </div>
@@ -927,35 +927,35 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             </div>
 
             <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Город</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.city", lang)}</label>
               <input value={city} onChange={(e) => setCity(e.target.value)}
                 placeholder="Москва"
                 className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
             </div>
 
             <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Описание</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("common.description", lang)}</label>
               <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                rows={3} placeholder="Расскажите о своём салоне..."
+                rows={3} placeholder={t("salon.publicProfile.descriptionPlaceholder", lang)}
                 className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
             </div>
 
             <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Ссылка Google Maps</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.mapsLabel", lang)}</label>
               <input value={mapsUrl} onChange={(e) => { setMapsUrl(e.target.value); setParsedCoords(parseGoogleMapsUrl(e.target.value)); }}
-                placeholder="https://maps.google.com/...  или  55.7558, 37.6173"
+                placeholder={t("salon.publicProfile.mapsPlaceholder", lang)}
                 className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
               {mapsUrl && parsedCoords && (
-                <p className="text-xs text-emerald-500 mt-1">Координаты: {parsedCoords.lat}, {parsedCoords.lng}</p>
+                <p className="text-xs text-emerald-500 mt-1">{t("salon.publicProfile.coords", lang)}: {parsedCoords.lat}, {parsedCoords.lng}</p>
               )}
               {mapsUrl && !parsedCoords && (
-                <p className="text-xs text-amber-400 mt-1">Не удалось определить координаты. Вставьте ссылку Google Maps или координаты (55.7558, 37.6173)</p>
+                <p className="text-xs text-amber-400 mt-1">{t("salon.publicProfile.coordsBad", lang)}</p>
               )}
             </div>
 
             {/* Photos */}
             <div className="border-t border-slate-200 dark:border-white/5 pt-3">
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Галерея салона ({photos.length})</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">{t("salon.publicProfile.gallery", lang)} ({photos.length})</label>
               {photos.length > 0 && (
                 <div className="space-y-2 mb-3">
                   {photos.map((url, i) => (
@@ -994,7 +994,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                 <button type="button" onClick={addPhoto}
                   className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center gap-1">
                   <Plus className="h-3.5 w-3.5" />
-                  Добавить
+                  {t("common.add", lang)}
                 </button>
               </div>
             </div>
@@ -1002,7 +1002,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 
           <Btn onClick={handleSave} disabled={update.isPending || !!slugError || slugCheck.data?.available === false} className="w-full justify-center py-2.5">
             {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Сохранить публичный профиль
+            {t("salon.publicProfile.savePublic", lang)}
           </Btn>
         </div>
       )}
@@ -1212,7 +1212,7 @@ function SalonBigCalendar({
             </button>
             <button onClick={() => { setViewDate(new Date()); setSelectedDay(null); }}
               className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
-              {lang === "ru" ? "сегодня" : lang === "ua" ? "сьогодні" : "today"}
+              {t("salon.cal.todaySmall", lang)}
             </button>
             <button onClick={() => setViewDate(new Date(year, month + 1))}
               className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
@@ -1280,15 +1280,15 @@ function SalonBigCalendar({
         <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 rounded bg-brand-500/40 ring-1 ring-brand-500/40" />
-            <span>{lang === "ru" ? "Сегодня" : lang === "ua" ? "Сьогодні" : "Today"}</span>
+            <span>{t("salon.cal.today", lang)}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 rounded bg-amber-500/25" />
-            <span>{lang === "ru" ? "Ожидание" : lang === "ua" ? "Очікування" : "Pending"}</span>
+            <span>{t("salon.cal.pending", lang)}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 rounded bg-emerald-500/25" />
-            <span>{lang === "ru" ? "Подтверждено" : lang === "ua" ? "Підтверджено" : "Confirmed"}</span>
+            <span>{t("salon.cal.confirmed", lang)}</span>
           </div>
         </div>
       </div>
@@ -1442,7 +1442,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {isTest && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-300/40 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-300">
           <TestBadge />
-          <span>Тестовый аккаунт. Создан seed-test-accounts; не используется реальными клиентами.</span>
+          <span>{t("master.testAccountBanner", lang)}</span>
         </div>
       )}
       {/* Tab pills — hidden in WebShell (sidebar handles navigation) */}
@@ -1491,7 +1491,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           {overview.isLoading ? (
             <div className="grid grid-cols-2 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
           ) : overview.isError ? (
-            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>
+            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>
           ) : overview.data && (
             <div className="grid grid-cols-2 gap-3">
               {!dashPrefs.hiddenStatCards.includes("todayAppointments") && (
@@ -1515,7 +1515,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               {todayApts.isLoading && (
                 <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
               )}
-              {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+              {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
               {todayApts.data && todayApts.data.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1556,12 +1556,12 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 <button onClick={() => setAptViewMode("calendar")}
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "calendar" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
                   <CalendarDays className="w-3.5 h-3.5" />
-                  {lang === "ru" ? "Календарь" : lang === "ua" ? "Календар" : "Calendar"}
+                  {t("salon.cal.calendar", lang)}
                 </button>
                 <button onClick={() => setAptViewMode("list")}
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "list" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
                   <List className="w-3.5 h-3.5" />
-                  {lang === "ru" ? "Список" : lang === "ua" ? "Список" : "List"}
+                  {t("salon.cal.list", lang)}
                 </button>
               </div>
             </div>
@@ -1584,7 +1584,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           {aptViewMode === "list" && (
             <>
               {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-              {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+              {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
               <div className="space-y-2">
                 {apts.data?.map((a: any) => (
                   <AptCard key={a.id} a={a} lang={lang}
@@ -1607,7 +1607,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               : undefined
           } />
           {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {svcList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {svcList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           <div className="space-y-2">
             {svcList.data?.map((s: any) => {
               let names: Record<string, string> = {};
@@ -1672,7 +1672,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             </div>
           } />
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           <div className="space-y-2">
             {mastersList.data?.map((m: any) => {
               const isWebAccount = m.chatId >= 10_000_000_000;
@@ -1703,7 +1703,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               <EmptyState
                 icon={UserCheck}
                 title={t("salon.noMasters", lang)}
-                description={lang === "ru" ? "Добавьте мастера через Telegram или создайте веб-аккаунт" : lang === "ua" ? "Додайте майстра через Telegram або створіть веб-акаунт" : "Add a master via Telegram or create a web account"}
+                description={t("salon.empty.masters", lang)}
               />
             )}
           </div>
@@ -1798,7 +1798,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "settings" && (
         <>
           {profile.isLoading ? <Loader2 className="animate-spin text-brand-400 mx-auto" /> : profile.isError ? (
-            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>
+            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>
           ) : (
             <SalonSettingsEditor tenantId={tenantId} profile={profile.data} />
           )}

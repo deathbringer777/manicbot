@@ -19,54 +19,62 @@ import {
 } from "lucide-react";
 
 /**
- * Faithful recreation of the Google Calendar icon.
- * Uses the official Google brand palette at a 24×24 viewBox so every
- * pixel is meaningful even at size=22 (plugin cards) or size=32 (detail page).
+ * Pixel-accurate recreation of the Google Calendar app icon (2020+ design).
  *
- *   Blue   #4285F4  – top header bar + "31" numeral
- *   Green  #34A853  – bottom-right quadrant accent
- *   Yellow #FBBC05  – bottom-left quadrant accent
- *   Red    #EA4335  – top-right ring pin knob
+ * Structure (48-unit grid, clipped to rounded square):
+ *   Blue #4285F4     – main background (top-left ¾)
+ *   Dark blue #1967D2 – top-right corner (12×12)
+ *   Yellow #FBBC04   – right strip middle (12×24)
+ *   Dark green #188038 – bottom-left corner (12×12)
+ *   Green #34A853    – bottom-center strip (24×12)
+ *   Red #EA4335      – bottom-right corner (12×12)
+ *   White            – inner box (24×24 centered)
+ *   "31" #4285F4     – bold numeral inside the white box
+ *
+ * Rendered at (size + 20) to match the container size of lucide-based icons.
  */
-function GoogleCalendarLogo({ size }: { size: number }) {
+function GoogleCalendarLogo({ size, className = "" }: { size: number; className?: string }) {
+  const total = size + 20;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
+      viewBox="0 0 48 48"
+      width={total}
+      height={total}
       aria-hidden="true"
+      className={className}
     >
-      {/* Card body */}
-      <rect x="1.5" y="2" width="21" height="21" rx="3" fill="#fff" stroke="#dadce0" strokeWidth="0.75" />
-
-      {/* Blue header */}
-      <rect x="1.5" y="2" width="21" height="6" rx="3" fill="#4285F4" />
-      <rect x="1.5" y="5" width="21" height="3" fill="#4285F4" />
-
-      {/* Ring pins */}
-      <rect x="7"  y="0.5" width="2" height="4" rx="1" fill="#1565C0" />
-      <rect x="15" y="0.5" width="2" height="4" rx="1" fill="#1565C0" />
-
-      {/* Yellow accent – bottom-left */}
-      <path d="M1.5 19 L1.5 20 Q1.5 23 4.5 23 L6 23 L6 19 Z" fill="#FBBC04" />
-
-      {/* Green accent – bottom-right */}
-      <path d="M18 19 L18 23 L19.5 23 Q22.5 23 22.5 20 L22.5 19 Z" fill="#34A853" />
-
-      {/* "31" numeral */}
-      <text
-        x="12"
-        y="19"
-        textAnchor="middle"
-        fontFamily="'Google Sans', 'Roboto', Arial, sans-serif"
-        fontSize="9"
-        fontWeight="700"
-        fill="#4285F4"
-      >31</text>
-
-      {/* Red dot on top-right pin */}
-      <circle cx="21" cy="2.5" r="2" fill="#EA4335" />
+      <defs>
+        <clipPath id="gcal-clip">
+          <rect width="48" height="48" rx="8" />
+        </clipPath>
+      </defs>
+      <g clipPath="url(#gcal-clip)">
+        {/* Blue main background */}
+        <rect width="48" height="48" fill="#4285F4" />
+        {/* Dark blue – top-right corner */}
+        <rect x="36" y="0" width="12" height="12" fill="#1967D2" />
+        {/* Yellow – right strip */}
+        <rect x="36" y="12" width="12" height="24" fill="#FBBC04" />
+        {/* Dark green – bottom-left corner */}
+        <rect x="0" y="36" width="12" height="12" fill="#188038" />
+        {/* Green – bottom-center */}
+        <rect x="12" y="36" width="24" height="12" fill="#34A853" />
+        {/* Red – bottom-right corner */}
+        <rect x="36" y="36" width="12" height="12" fill="#EA4335" />
+        {/* White inner box */}
+        <rect x="12" y="12" width="24" height="24" fill="#fff" />
+        {/* "31" numeral */}
+        <text
+          x="24"
+          y="31"
+          textAnchor="middle"
+          fontFamily="'Google Sans', Arial, sans-serif"
+          fontSize="16"
+          fontWeight="700"
+          fill="#4285F4"
+        >31</text>
+      </g>
     </svg>
   );
 }
@@ -95,20 +103,7 @@ export function PluginIcon({
   className?: string;
 }) {
   if (name === "GoogleCalendar") {
-    return (
-      <div
-        className={`inline-flex items-center justify-center rounded-xl ${className}`}
-        style={{
-          width: size + 20,
-          height: size + 20,
-          backgroundColor: "#fff",
-          border: "1px solid #e8eaed",
-        }}
-        aria-hidden="true"
-      >
-        <GoogleCalendarLogo size={size} />
-      </div>
-    );
+    return <GoogleCalendarLogo size={size} className={className} />;
   }
 
   const Icon = ICONS[name] ?? Puzzle;

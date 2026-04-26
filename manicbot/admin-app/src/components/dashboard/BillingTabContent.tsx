@@ -35,7 +35,7 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
       if (res.url) window.location.href = res.url;
     },
     onError: (e) => {
-      alert(e.message || "Не удалось открыть оплату");
+      alert(e.message || t("billing.openFailed", lang));
       setUpgrading(null);
     },
   });
@@ -54,7 +54,7 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
       {billing.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
       {billing.isError && (
         <div className="glass-card rounded-2xl p-6 text-center">
-          <p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p>
+          <p className="text-red-400">{t("common.errorLoading", lang)}</p>
         </div>
       )}
 
@@ -91,7 +91,7 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
       <div className="glass-card rounded-2xl p-5 space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-            Сменить тариф
+            {t("billing.changePlan", lang)}
           </h3>
           <div className="inline-flex items-center rounded-full border border-slate-200 bg-white p-1 text-xs dark:border-white/10 dark:bg-white/[0.04]">
             <button
@@ -103,7 +103,7 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
                   : "text-slate-600 dark:text-white/60"
               }`}
             >
-              Ежемесячно
+              {t("billing.monthly", lang)}
             </button>
             <button
               type="button"
@@ -114,7 +114,7 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
                   : "text-slate-600 dark:text-white/60"
               }`}
             >
-              Годовая
+              {t("billing.yearly", lang)}
               <span
                 className="pointer-events-none absolute -right-2 -top-2 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white"
                 style={{ background: "linear-gradient(135deg,#e11d48,#f43f5e)" }}
@@ -138,12 +138,12 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
               <div className="mb-2 flex items-baseline justify-between">
                 <span className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">{p}</span>
                 {currentPlan === p && (
-                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400">текущий</span>
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400">{t("billing.current", lang)}</span>
                 )}
               </div>
               <div className="mb-3 font-mono text-2xl font-bold text-slate-900 dark:text-white">
                 {PLAN_PRICES[cycle][p]}
-                <span className="ml-1 text-xs text-slate-500">/мес</span>
+                <span className="ml-1 text-xs text-slate-500">{t("billing.perMonth", lang)}</span>
               </div>
               <button
                 type="button"
@@ -152,14 +152,14 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
                 className="w-full rounded-lg py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
               >
-                {upgrading === p ? "…" : currentPlan === p && cycle === "annual" ? "Перейти на годовой" : "Выбрать"}
+                {upgrading === p ? "…" : currentPlan === p && cycle === "annual" ? t("billing.switchToYearly", lang) : t("billing.choose", lang)}
               </button>
             </div>
           ))}
         </div>
         {cycle === "annual" && (
           <p className="text-[11px] text-slate-500 dark:text-white/40">
-            Оплата раз в год. Скидка 20% от суммы за 12 месяцев.
+            {t("billing.yearlyDiscount", lang)}
           </p>
         )}
       </div>

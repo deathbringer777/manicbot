@@ -48,6 +48,55 @@ const KEYS: TranslationKey[] = [
   "common.description",
   "common.errorLoading",
 
+  // Channels tab (SalonChannelsTab)
+  "channels.copied", "channels.copy", "channels.botConnected", "channels.status",
+  "channels.active", "channels.openBot", "channels.disconnectBotConfirm",
+  "channels.disconnectBot", "channels.botNotConnected", "channels.botToken",
+  "channels.botTokenPlaceholder", "channels.connecting", "channels.connectBot",
+  "channels.igConnected", "channels.igDisconnectConfirm", "channels.disconnectIg",
+  "channels.igAccountId", "channels.igBusinessId", "channels.igNotConnected",
+  "channels.connectIg", "channels.metaContactSupport", "channels.webhookUnavailable",
+  "channels.waConnected", "channels.waDisconnectConfirm", "channels.disconnectWa",
+  "channels.webNotSet", "channels.setupWebInTab", "channels.webProfileTabLink",
+  "channels.webProfile", "channels.published", "channels.hiddenFromCatalog",
+  "channels.open", "channels.profileUrl", "channels.qrCode", "channels.qrHint",
+  "channels.downloadPng", "channels.tabWeb",
+
+  // Charts / referral / billing / asset / tracking
+  "charts.tooltipBookings", "charts.tooltipSignups", "charts.signupsTitle",
+  "charts.noPeriodData", "charts.byDayStack", "charts.noDailySignups",
+  "referral.friends", "referral.other", "referral.unspecified",
+  "billing.openFailed", "billing.changePlan", "billing.monthly",
+  "billing.yearly", "billing.current", "billing.perMonth",
+  "billing.switchToYearly", "billing.choose", "billing.yearlyDiscount",
+  "asset.uploading", "asset.replace", "asset.upload", "asset.remove",
+  "tracking.source", "tracking.channel", "tracking.campaign",
+  "tracking.content", "tracking.connectFirst", "tracking.copy",
+  "tracking.qrCode", "tracking.token",
+
+  // Analytics tab
+  "analytics.title", "analytics.daysShort", "analytics.empty.title",
+  "analytics.empty.text", "analytics.createLink", "analytics.newClients",
+  "analytics.lastNDays", "analytics.daysWord", "analytics.bookings",
+  "analytics.uniqueHint", "analytics.conversion", "analytics.touchToBookHint",
+  "analytics.trafficSources", "analytics.noDataPeriod", "analytics.funnel",
+  "analytics.topCampaigns", "analytics.colSource", "analytics.colCampaign",
+  "analytics.colClients", "analytics.colBookings", "analytics.colConv",
+  "analytics.noCampaigns",
+  "analytics.source.qr", "analytics.source.website", "analytics.source.flyer",
+  "analytics.source.direct", "analytics.source.other",
+
+  // Stamp card + Promo codes (PromoCodesTab)
+  "stamp.title", "stamp.subtitle", "stamp.disable", "stamp.enable",
+  "stamp.visitsRequired", "stamp.rewardType", "stamp.freeService",
+  "stamp.percentOff", "stamp.fixedOff", "stamp.discountPercent",
+  "stamp.discountAmount", "stamp.saving",
+  "promo.requiredFields", "promo.createError", "promo.newTitle",
+  "promo.random", "promo.discountType", "promo.percent", "promo.fixedPln",
+  "promo.value", "promo.validDays", "promo.maxUses", "promo.creating",
+  "promo.create", "promo.activeTitle", "promo.loading", "promo.empty",
+  "promo.expired", "promo.until", "promo.uses", "promo.confirmDelete",
+
   // Salon dashboard tab labels
   "salon.tabs.channels",
   "salon.tabs.reviews",

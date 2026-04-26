@@ -4,6 +4,8 @@ import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
 import { TrendingUp, Target, Users, Loader2, Link2, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t, type Lang } from "~/lib/i18n";
 import { SectionHeader } from "~/components/salon/SalonShared";
 import { TrackingLinksGenerator } from "~/components/salon/TrackingLinksGenerator";
 
@@ -21,26 +23,25 @@ const SOURCE_COLORS: Record<string, string> = {
   other: "#94A3B8",
 };
 
-const SOURCE_LABELS: Record<string, string> = {
-  qr: "QR-код",
-  website: "Сайт",
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  facebook: "Facebook",
-  google_maps: "Google Maps",
-  flyer: "Листовка",
-  sms: "SMS",
-  telegram: "Telegram",
-  direct: "Напрямую",
-  other: "Другое",
-};
-
 function colorFor(source: string): string {
   return SOURCE_COLORS[source] ?? "#94A3B8";
 }
 
-function labelFor(source: string): string {
-  return SOURCE_LABELS[source] ?? source;
+function labelFor(source: string, lang: Lang): string {
+  switch (source) {
+    case "qr": return t("analytics.source.qr", lang);
+    case "website": return t("analytics.source.website", lang);
+    case "flyer": return t("analytics.source.flyer", lang);
+    case "direct": return t("analytics.source.direct", lang);
+    case "other": return t("analytics.source.other", lang);
+    case "instagram": return "Instagram";
+    case "tiktok": return "TikTok";
+    case "facebook": return "Facebook";
+    case "google_maps": return "Google Maps";
+    case "sms": return "SMS";
+    case "telegram": return "Telegram";
+    default: return source;
+  }
 }
 
 function StatBox({
@@ -109,16 +110,16 @@ function FunnelCard({
 }
 
 function AnalyticsEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
+  const { lang } = useLang();
   return (
     <div className="glass-card rounded-2xl p-8 flex flex-col items-center text-center space-y-4">
       <div className="h-14 w-14 rounded-2xl bg-brand-500/10 flex items-center justify-center">
         <BarChart3 className="h-7 w-7 text-brand-400" />
       </div>
       <div className="space-y-1">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">Пока нет данных</h3>
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("analytics.empty.title", lang)}</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
-          Аналитика появится, когда клиенты начнут взаимодействовать с ботом или публичным профилем.
-          Создайте трекинг-ссылку и поделитесь ею, чтобы отслеживать источники привлечения.
+          {t("analytics.empty.text", lang)}
         </p>
       </div>
       <button
@@ -127,7 +128,7 @@ function AnalyticsEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500/15 text-brand-400 text-sm font-medium hover:bg-brand-500/25 transition-colors"
       >
         <Link2 className="h-4 w-4" />
-        Создать трекинг-ссылку
+        {t("analytics.createLink", lang)}
       </button>
     </div>
   );
@@ -142,6 +143,7 @@ export function AnalyticsTab({
   botUsername?: string | null;
   slug?: string | null;
 }) {
+  const { lang } = useLang();
   const [days, setDays] = useState<7 | 30 | 90>(30);
   const [showLinkGen, setShowLinkGen] = useState(false);
 
@@ -159,7 +161,7 @@ export function AnalyticsTab({
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <SectionHeader title="Аналитика" />
+        <SectionHeader title={t("analytics.title", lang)} />
         <div className="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
           {[7, 30, 90].map((d) => (
             <button
@@ -172,7 +174,7 @@ export function AnalyticsTab({
                   : "text-slate-500 dark:text-slate-400"
               }`}
             >
-              {d}д
+              {d}{t("analytics.daysShort", lang)}
             </button>
           ))}
         </div>
@@ -193,19 +195,19 @@ export function AnalyticsTab({
           {/* ── Stat cards ─────────────────────────────────────── */}
           <div className="grid grid-cols-3 gap-3">
             <StatBox
-              label="Новых клиентов"
+              label={t("analytics.newClients", lang)}
               value={totalUsers}
-              hint={`за ${days} дней`}
+              hint={`${t("analytics.lastNDays", lang)} ${days} ${t("analytics.daysWord", lang)}`}
               icon={Users}
             />
             <StatBox
-              label="Записей"
+              label={t("analytics.bookings", lang)}
               value={totalBookings}
-              hint="уникальных"
+              hint={t("analytics.uniqueHint", lang)}
               icon={Target}
             />
             <StatBox
-              label="Конверсия"
+              label={t("analytics.conversion", lang)}
               value={`${
                 funnel.data && (funnel.data.stages[1]?.count ?? 0) > 0
                   ? Math.round(
@@ -213,7 +215,7 @@ export function AnalyticsTab({
                     )
                   : 0
               }%`}
-              hint="касание → бронь"
+              hint={t("analytics.touchToBookHint", lang)}
               icon={TrendingUp}
             />
           </div>
@@ -221,7 +223,7 @@ export function AnalyticsTab({
           {/* ── Acquisition chart ──────────────────────────────── */}
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-              Источники трафика
+              {t("analytics.trafficSources", lang)}
             </h3>
             {acquisition.data && acquisition.data.sources.length > 0 ? (
               <div className="glass-card rounded-2xl p-4">
@@ -251,14 +253,14 @@ export function AnalyticsTab({
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {acquisition.data.sources.map((src) => (
-                      <Bar key={src} dataKey={src} stackId="a" fill={colorFor(src)} name={labelFor(src)} />
+                      <Bar key={src} dataKey={src} stackId="a" fill={colorFor(src)} name={labelFor(src, lang)} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
               <div className="glass-card rounded-2xl p-8 text-center text-sm text-slate-500">
-                Нет данных за выбранный период
+                {t("analytics.noDataPeriod", lang)}
               </div>
             )}
           </div>
@@ -266,7 +268,7 @@ export function AnalyticsTab({
           {/* ── Funnel ─────────────────────────────────────────── */}
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-              Воронка конверсии
+              {t("analytics.funnel", lang)}
             </h3>
             {funnel.data && <FunnelCard stages={funnel.data.stages} />}
           </div>
@@ -274,18 +276,18 @@ export function AnalyticsTab({
           {/* ── Top campaigns ──────────────────────────────────── */}
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-              Топ кампаний
+              {t("analytics.topCampaigns", lang)}
             </h3>
             {topCampaigns.data && topCampaigns.data.campaigns.length > 0 ? (
               <div className="glass-card rounded-2xl overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500">
                     <tr>
-                      <th className="text-left px-3 py-2 font-medium">Источник</th>
-                      <th className="text-left px-3 py-2 font-medium">Кампания</th>
-                      <th className="text-right px-3 py-2 font-medium">Клиенты</th>
-                      <th className="text-right px-3 py-2 font-medium">Брони</th>
-                      <th className="text-right px-3 py-2 font-medium">Конв.</th>
+                      <th className="text-left px-3 py-2 font-medium">{t("analytics.colSource", lang)}</th>
+                      <th className="text-left px-3 py-2 font-medium">{t("analytics.colCampaign", lang)}</th>
+                      <th className="text-right px-3 py-2 font-medium">{t("analytics.colClients", lang)}</th>
+                      <th className="text-right px-3 py-2 font-medium">{t("analytics.colBookings", lang)}</th>
+                      <th className="text-right px-3 py-2 font-medium">{t("analytics.colConv", lang)}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -297,7 +299,7 @@ export function AnalyticsTab({
                               className="h-2 w-2 rounded-full"
                               style={{ background: colorFor(c.source) }}
                             />
-                            {labelFor(c.source)}
+                            {labelFor(c.source, lang)}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-slate-500">{c.campaign ?? "—"}</td>
@@ -313,7 +315,7 @@ export function AnalyticsTab({
               </div>
             ) : (
               <div className="glass-card rounded-2xl p-6 text-center text-sm text-slate-500">
-                Нет данных о кампаниях
+                {t("analytics.noCampaigns", lang)}
               </div>
             )}
           </div>
@@ -328,7 +330,7 @@ export function AnalyticsTab({
           className="flex items-center gap-2 w-full glass-card rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
         >
           <Link2 className="h-4 w-4 text-brand-400" />
-          <span className="flex-1 text-left">Создать трекинг-ссылку</span>
+          <span className="flex-1 text-left">{t("analytics.createLink", lang)}</span>
           {showLinkGen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
         </button>
         {showLinkGen && (

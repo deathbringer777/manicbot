@@ -2,6 +2,8 @@
 
 import { useState, useEffect, type FormEvent } from "react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 interface Props {
   tenantId: string;
@@ -10,6 +12,7 @@ interface Props {
 const DAY_SEC = 86_400;
 
 function StampCardConfig({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
   const cfg = api.stampCard.getConfig.useQuery({ tenantId });
   const utils = api.useUtils();
   const save = api.stampCard.updateConfig.useMutation({
@@ -53,8 +56,8 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
     <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-white">Stamp card (карта лояльности)</h3>
-          <p className="text-xs text-white/50">Каждый N-й визит клиента — в подарок или со скидкой.</p>
+          <h3 className="text-sm font-semibold text-white">{t("stamp.title", lang)}</h3>
+          <p className="text-xs text-white/50">{t("stamp.subtitle", lang)}</p>
         </div>
         <button
           type="button"
@@ -62,7 +65,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
           className={`relative h-6 w-11 rounded-full transition ${
             enabled ? "bg-emerald-500" : "bg-white/20"
           }`}
-          aria-label={enabled ? "Отключить" : "Включить"}
+          aria-label={enabled ? t("stamp.disable", lang) : t("stamp.enable", lang)}
         >
           <span
             className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
@@ -76,7 +79,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
         <div className="space-y-3 border-t border-white/10 pt-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Визитов для награды</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("stamp.visitsRequired", lang)}</label>
               <input
                 type="number"
                 min={2}
@@ -87,22 +90,22 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Тип награды</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("stamp.rewardType", lang)}</label>
               <select
                 value={rewardType}
                 onChange={(e) => onChange(setRewardType, e.target.value as "free_service" | "percent_off" | "fixed_off")}
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
               >
-                <option value="free_service">Бесплатная услуга</option>
-                <option value="percent_off">% скидки</option>
-                <option value="fixed_off">Фикс. скидка (zł)</option>
+                <option value="free_service">{t("stamp.freeService", lang)}</option>
+                <option value="percent_off">{t("stamp.percentOff", lang)}</option>
+                <option value="fixed_off">{t("stamp.fixedOff", lang)}</option>
               </select>
             </div>
           </div>
           {rewardType !== "free_service" && (
             <div>
               <label className="mb-1 block text-xs font-medium text-white/70">
-                {rewardType === "percent_off" ? "Процент скидки" : "Сумма скидки (zł)"}
+                {rewardType === "percent_off" ? t("stamp.discountPercent", lang) : t("stamp.discountAmount", lang)}
               </label>
               <input
                 type="number"
@@ -125,7 +128,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
           className="mt-4 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
         >
-          {save.isPending ? "Сохраняем…" : "Сохранить"}
+          {save.isPending ? t("stamp.saving", lang) : t("common.save", lang)}
         </button>
       )}
     </div>
@@ -133,6 +136,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
 }
 
 export function PromoCodesTab({ tenantId }: Props) {
+  const { lang } = useLang();
   const list = api.promoCodes.list.useQuery({ tenantId, activeOnly: false });
   const utils = api.useUtils();
   const create = api.promoCodes.create.useMutation({
@@ -160,7 +164,7 @@ export function PromoCodesTab({ tenantId }: Props) {
     e.preventDefault();
     setErr(null);
     if (!code.trim() || Number(discountValue) < 1) {
-      setErr("Код и значение скидки обязательны.");
+      setErr(t("promo.requiredFields", lang));
       return;
     }
     const now = Math.floor(Date.now() / 1000);
@@ -176,7 +180,7 @@ export function PromoCodesTab({ tenantId }: Props) {
       maxUsesPerClient: 1,
       kind: "manual",
     }, {
-      onError: (e) => setErr(e.message ?? "Не удалось создать промокод"),
+      onError: (e) => setErr(e.message ?? t("promo.createError", lang)),
       onSuccess: () => {
         setCode("");
         setDiscountValue("10");
@@ -185,6 +189,8 @@ export function PromoCodesTab({ tenantId }: Props) {
     });
   }
 
+  const localeForDate = lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : lang === "ua" ? "uk-UA" : "ru-RU";
+
   return (
     <div className="space-y-6">
       {/* Stamp card config */}
@@ -192,7 +198,7 @@ export function PromoCodesTab({ tenantId }: Props) {
 
       {/* Create form */}
       <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <h3 className="mb-4 text-sm font-semibold text-white">Новый промокод</h3>
+        <h3 className="mb-4 text-sm font-semibold text-white">{t("promo.newTitle", lang)}</h3>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
@@ -207,24 +213,24 @@ export function PromoCodesTab({ tenantId }: Props) {
               onClick={randomCode}
               className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70 transition hover:bg-white/[0.08]"
             >
-              🎲 Случайный
+              🎲 {t("promo.random", lang)}
             </button>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Тип скидки</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.discountType", lang)}</label>
               <select
                 value={discountType}
                 onChange={(e) => setDiscountType(e.target.value as "percent" | "fixed_pln")}
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
               >
-                <option value="percent">Процент</option>
-                <option value="fixed_pln">Фикс (zł)</option>
+                <option value="percent">{t("promo.percent", lang)}</option>
+                <option value="fixed_pln">{t("promo.fixedPln", lang)}</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Значение</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.value", lang)}</label>
               <input
                 type="number"
                 min={1}
@@ -235,7 +241,7 @@ export function PromoCodesTab({ tenantId }: Props) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Срок (дней)</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.validDays", lang)}</label>
               <input
                 type="number"
                 min={1}
@@ -248,7 +254,7 @@ export function PromoCodesTab({ tenantId }: Props) {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-white/70">Лимит использований (необяз.)</label>
+            <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.maxUses", lang)}</label>
             <input
               type="number"
               min={1}
@@ -270,17 +276,17 @@ export function PromoCodesTab({ tenantId }: Props) {
             className="w-full rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90 disabled:opacity-50"
             style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
           >
-            {create.isPending ? "Создаём…" : "Создать промокод"}
+            {create.isPending ? t("promo.creating", lang) : t("promo.create", lang)}
           </button>
         </form>
       </div>
 
       {/* Existing codes list */}
       <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <h3 className="mb-4 text-sm font-semibold text-white">Активные промокоды</h3>
-        {list.isLoading && <p className="text-xs text-white/50">Загрузка…</p>}
+        <h3 className="mb-4 text-sm font-semibold text-white">{t("promo.activeTitle", lang)}</h3>
+        {list.isLoading && <p className="text-xs text-white/50">{t("promo.loading", lang)}</p>}
         {!list.isLoading && (list.data?.length ?? 0) === 0 && (
-          <p className="text-xs text-white/50">Пока ничего нет. Создайте первый промокод выше.</p>
+          <p className="text-xs text-white/50">{t("promo.empty", lang)}</p>
         )}
         <div className="space-y-2">
           {(list.data ?? []).map((p) => {
@@ -299,20 +305,20 @@ export function PromoCodesTab({ tenantId }: Props) {
                     </span>
                     {expired && (
                       <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-medium text-rose-300">
-                        истёк
+                        {t("promo.expired", lang)}
                       </span>
                     )}
                   </div>
                   <p className="mt-0.5 text-xs text-white/55">
                     −{p.discountValue}{p.discountType === "percent" ? "%" : " zł"}
-                    {p.validUntil ? ` · до ${new Date(p.validUntil * 1000).toLocaleDateString("ru")}` : ""}
-                    {p.maxUses ? ` · ${p.maxUses} шт` : ""}
+                    {p.validUntil ? ` · ${t("promo.until", lang)} ${new Date(p.validUntil * 1000).toLocaleDateString(localeForDate)}` : ""}
+                    {p.maxUses ? ` · ${p.maxUses} ${t("promo.uses", lang)}` : ""}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm(`Удалить ${p.code}?`)) {
+                    if (confirm(`${t("promo.confirmDelete", lang)} ${p.code}?`)) {
                       del.mutate({ tenantId, id: p.id });
                     }
                   }}

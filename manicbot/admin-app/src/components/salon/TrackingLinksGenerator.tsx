@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Copy, Download, QrCode, Check, Loader2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 /**
  * Generates tracking links (Telegram deep-link, public profile) with a shared
@@ -20,6 +22,7 @@ export function TrackingLinksGenerator({
   botUsername?: string | null;
   slug?: string | null;
 }) {
+  const { lang } = useLang();
   const [source, setSource] = useState("qr");
   const [medium, setMedium] = useState("");
   const [campaign, setCampaign] = useState("");
@@ -88,25 +91,25 @@ export function TrackingLinksGenerator({
       <div className="glass-card rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Источник *</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.source", lang)} *</label>
             <select
               value={source}
               onChange={(e) => setSource(e.target.value)}
               className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
             >
-              <option value="qr">QR-код</option>
-              <option value="website">Сайт</option>
+              <option value="qr">{t("analytics.source.qr", lang)}</option>
+              <option value="website">{t("analytics.source.website", lang)}</option>
               <option value="instagram">Instagram</option>
               <option value="tiktok">TikTok</option>
               <option value="facebook">Facebook</option>
               <option value="google_maps">Google Maps</option>
-              <option value="flyer">Листовка</option>
+              <option value="flyer">{t("analytics.source.flyer", lang)}</option>
               <option value="sms">SMS</option>
-              <option value="other">Другое</option>
+              <option value="other">{t("analytics.source.other", lang)}</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Канал</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.channel", lang)}</label>
             <input
               value={medium}
               onChange={(e) => setMedium(e.target.value)}
@@ -117,7 +120,7 @@ export function TrackingLinksGenerator({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Кампания</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.campaign", lang)}</label>
             <input
               value={campaign}
               onChange={(e) => setCampaign(e.target.value)}
@@ -126,7 +129,7 @@ export function TrackingLinksGenerator({
             />
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Контент</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.content", lang)}</label>
             <input
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -153,7 +156,7 @@ export function TrackingLinksGenerator({
         <div className="space-y-3">
           {build.data.links.length === 0 && (
             <div className="glass-card rounded-2xl p-4 text-xs text-slate-500">
-              Подключите бота или опубликуйте профиль, чтобы получить трекинг-ссылки.
+              {t("tracking.connectFirst", lang)}
             </div>
           )}
           {build.data.links.map((link) => {
@@ -167,7 +170,7 @@ export function TrackingLinksGenerator({
                       type="button"
                       onClick={() => copy(link.url)}
                       className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500"
-                      aria-label="Копировать"
+                      aria-label={t("tracking.copy", lang)}
                     >
                       {copied === link.url ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
@@ -175,7 +178,7 @@ export function TrackingLinksGenerator({
                       type="button"
                       onClick={() => setShowQr(showQr === qrId ? null : qrId)}
                       className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500"
-                      aria-label="QR-код"
+                      aria-label={t("tracking.qrCode", lang)}
                     >
                       <QrCode className="h-3.5 w-3.5" />
                     </button>
@@ -206,7 +209,7 @@ export function TrackingLinksGenerator({
             );
           })}
           <p className="text-[11px] text-slate-500 dark:text-slate-500 px-1">
-            Токен: <code className="font-mono">{build.data.token}</code> · {build.data.token.length}/64
+            {t("tracking.token", lang)}: <code className="font-mono">{build.data.token}</code> · {build.data.token.length}/64
           </p>
         </div>
       )}

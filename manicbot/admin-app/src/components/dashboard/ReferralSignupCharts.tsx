@@ -11,6 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useLang } from "~/components/LangContext";
+import { t, type Lang } from "~/lib/i18n";
 
 const COLORS: Record<string, string> = {
   google: "#4285F4",
@@ -21,14 +23,17 @@ const COLORS: Record<string, string> = {
   unspecified: "#334155",
 };
 
-const LABELS_RU: Record<string, string> = {
-  google: "Google",
-  instagram: "Instagram",
-  telegram: "Telegram",
-  friends: "Друзья / знакомые",
-  other: "Другое",
-  unspecified: "Не указано",
-};
+function labelFor(source: string, lang: Lang): string {
+  switch (source) {
+    case "google": return "Google";
+    case "instagram": return "Instagram";
+    case "telegram": return "Telegram";
+    case "friends": return t("referral.friends", lang);
+    case "other": return t("referral.other", lang);
+    case "unspecified": return t("referral.unspecified", lang);
+    default: return source;
+  }
+}
 
 const STACK_KEYS = ["google", "instagram", "telegram", "friends", "other", "unspecified"] as const;
 
@@ -47,18 +52,20 @@ export type ReferralSignupChartsProps = {
 };
 
 export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSignupChartsProps) {
+  const { lang } = useLang();
+  const dateLocale = lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : lang === "ua" ? "uk-UA" : "ru-RU";
   const barData = [...bySource]
     .sort((a, b) => b.count - a.count)
     .map((r) => ({
       key: r.source,
-      name: LABELS_RU[r.source] ?? r.source,
+      name: labelFor(r.source, lang),
       value: r.count,
       fill: COLORS[r.source] ?? COLORS.other,
     }));
 
   const dailyChart = daily.map((d) => ({
     ...d,
-    label: new Date(d.date + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" }),
+    label: new Date(d.date + "T12:00:00").toLocaleDateString(dateLocale, { day: "numeric", month: "short" }),
   }));
 
   const hasDaily = dailyChart.some((d) =>
@@ -69,11 +76,11 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
     <div className="grid gap-4 xl:grid-cols-2">
       <div className="glass-card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-white">Регистрации web: откуда узнали</h2>
+          <h2 className="text-sm font-bold text-white">{t("charts.signupsTitle", lang)}</h2>
           {totalLabel && <span className="text-[10px] text-slate-500 tabular-nums">{totalLabel}</span>}
         </div>
         {barData.length === 0 ? (
-          <p className="text-xs text-slate-500 py-8 text-center">Нет данных за выбранный период</p>
+          <p className="text-xs text-slate-500 py-8 text-center">{t("charts.noPeriodData", lang)}</p>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
@@ -97,7 +104,7 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
                 }}
                 itemStyle={{ color: "#f8fafc" }}
                 labelStyle={{ color: "#94a3b8" }}
-                formatter={(value) => [value ?? 0, "Регистрации"]}
+                formatter={(value) => [value ?? 0, t("charts.tooltipSignups", lang)]}
               />
               <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={28}>
                 {barData.map((e) => (
@@ -110,9 +117,9 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
       </div>
 
       <div className="glass-card rounded-2xl p-4">
-        <h2 className="text-sm font-bold text-white mb-3">По дням (стек)</h2>
+        <h2 className="text-sm font-bold text-white mb-3">{t("charts.byDayStack", lang)}</h2>
         {!hasDaily ? (
-          <p className="text-xs text-slate-500 py-8 text-center">Нет регистраций по дням</p>
+          <p className="text-xs text-slate-500 py-8 text-center">{t("charts.noDailySignups", lang)}</p>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={dailyChart} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
@@ -129,7 +136,7 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
               />
               <Legend wrapperStyle={{ fontSize: "10px" }} />
               {STACK_KEYS.map((k) => (
-                <Bar key={k} stackId="signup" dataKey={k} name={LABELS_RU[k]} fill={COLORS[k]} />
+                <Bar key={k} stackId="signup" dataKey={k} name={labelFor(k, lang)} fill={COLORS[k]} />
               ))}
             </BarChart>
           </ResponsiveContainer>

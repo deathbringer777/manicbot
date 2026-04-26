@@ -6,7 +6,7 @@ import { t, type Lang } from "~/lib/i18n";
 import { SERVICE_TEMPLATES, type ServiceTemplate } from "~/lib/serviceTemplates";
 import { Btn } from "~/components/salon/SalonShared";
 
-/** Dropdown: "+ Add" → "Новый" / "Шаблоны" */
+/** Dropdown: "+ Add" -> "New" / "Templates" */
 export function AddServiceDropdown({ lang, onNew, onTemplates }: { lang: Lang; onNew: () => void; onTemplates: () => void }) {
   const [open, setOpen] = useState(false);
   return (

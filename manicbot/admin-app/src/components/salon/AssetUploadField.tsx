@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import {
   resizeImageClientSide,
   uploadAssetFile,
@@ -39,6 +41,7 @@ export function AssetUploadField({
   hint,
   maxDimPx = preview === "square" ? 512 : 1600,
 }: AssetUploadFieldProps) {
+  const { lang } = useLang();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,14 +104,14 @@ export function AssetUploadField({
             className="rounded-xl px-3 py-2 text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-            {busy ? "Загрузка…" : value ? "Заменить" : "Загрузить"}
+            {busy ? t("asset.uploading", lang) : value ? t("asset.replace", lang) : t("asset.upload", lang)}
           </button>
           {value && !busy && (
             <button
               type="button"
               onClick={clear}
               className="rounded-xl px-2 py-2 text-xs text-slate-500 hover:text-red-500 border border-slate-200 dark:border-slate-700"
-              aria-label="Убрать"
+              aria-label={t("asset.remove", lang)}
             >
               <X className="h-3.5 w-3.5" />
             </button>

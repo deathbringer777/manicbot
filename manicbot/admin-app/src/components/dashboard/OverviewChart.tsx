@@ -9,16 +9,20 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 interface Props {
   data?: { date: string; appointments: number }[];
 }
 
 export function OverviewChart({ data = [] }: Props) {
+  const { lang } = useLang();
+  const dateLocale = lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : lang === "ua" ? "uk-UA" : "ru-RU";
   const chartData =
     data.length > 0
       ? data.map((d) => ({
-          name: new Date(d.date).toLocaleDateString("ru-RU", {
+          name: new Date(d.date).toLocaleDateString(dateLocale, {
             day: "numeric",
             month: "short",
           }),
@@ -63,7 +67,7 @@ export function OverviewChart({ data = [] }: Props) {
           }}
           itemStyle={{ color: "#f8fafc" }}
           labelStyle={{ color: "#94a3b8" }}
-          formatter={(value) => [value ?? 0, "Записи"]}
+          formatter={(value) => [value ?? 0, t("charts.tooltipBookings", lang)]}
         />
         <Area
           type="monotone"

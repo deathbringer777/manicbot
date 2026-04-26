@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "~/lib/clientErrorReport";
+
 export default function AuthError({
   error,
   reset,
@@ -7,7 +10,9 @@ export default function AuthError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  console.error("[auth-error]", error);
+  useEffect(() => {
+    reportClientError("auth-error", error);
+  }, [error]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">

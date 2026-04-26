@@ -53,10 +53,41 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+    // Bare `throw new Error("...")` from a procedure becomes an INTERNAL_SERVER_ERROR
+    // with whatever message the dev wrote — including potentially sensitive
+    // details (DB query fragments, user emails, internal IDs, stack frames).
+    // Redact those to a generic message and log the original server-side so
+    // ops can still correlate.
+    //
+    // TRPCError instances are intentional, developer-curated messages that
+    // are safe to surface (e.g. "Password already set", "Email already in use"),
+    // so we pass those through untouched. ZodError validation messages are
+    // safe by construction — those come from the schema definition.
+    let safeMessage = shape.message;
+    let safeData = shape.data;
+    const isExpected = error.cause instanceof ZodError || error.code !== "INTERNAL_SERVER_ERROR";
+    if (!isExpected) {
+      // Log the original cause so operators retain debugging context.
+      try {
+        log.error("trpc.unhandled", error instanceof Error ? error : new Error(String(error)), {
+          path: shape.data?.path,
+          code: shape.code,
+        });
+      } catch { /* logging itself must not throw */ }
+      safeMessage = "Internal server error";
+      // Strip any leaked stack trace / cause text the underlying tRPC build
+      // may have included on the data object. Use Record-spread + delete so
+      // the static type from `shape.data` keeps `stack?` etc. as optional.
+      const sanitized = { ...shape.data } as Record<string, unknown>;
+      delete sanitized.stack;
+      delete sanitized.cause;
+      safeData = sanitized as typeof shape.data;
+    }
     return {
       ...shape,
+      message: safeMessage,
       data: {
-        ...shape.data,
+        ...safeData,
         zodError:
           error.cause instanceof ZodError ? error.cause.flatten() : null,
       },

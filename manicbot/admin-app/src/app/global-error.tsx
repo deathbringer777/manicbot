@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "~/lib/clientErrorReport";
+
 export default function GlobalError({
   error,
   reset,
@@ -7,7 +10,12 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  console.error("[global-error]", error);
+  useEffect(() => {
+    // Surface the crash to ops — without this, every React #300 / runtime
+    // exception lives only in the user's browser console and is invisible
+    // to anyone but the affected user.
+    reportClientError("global-error", error);
+  }, [error]);
 
   return (
     <html lang="ru">

@@ -826,3 +826,25 @@ export const pluginPins = sqliteTable("plugin_pins", {
   index("idx_plugin_pins_user").on(t.webUserId, t.sortOrder),
   index("idx_plugin_pins_user_at").on(t.webUserId, t.pinnedAt),
 ]);
+
+// ─── Error log (migration 0039) ──────────────────────────────────────────
+// Sink for client-side React error boundaries and unhandled tRPC errors.
+// Inserted by /api/error-report (POST from app/global-error.tsx and
+// app/(dashboard)/error.tsx) and by the trpc errorFormatter when wrapping
+// non-TRPCError throws.
+export const errorLog = sqliteTable("error_log", {
+  id: text("id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+  source: text("source").notNull(),
+  message: text("message").notNull(),
+  digest: text("digest"),
+  url: text("url"),
+  userAgent: text("user_agent"),
+  userId: text("user_id"),
+  tenantId: text("tenant_id"),
+  detailJson: text("detail_json"),
+}, (t) => [
+  index("idx_error_log_created_at").on(t.createdAt),
+  index("idx_error_log_source").on(t.source, t.createdAt),
+  index("idx_error_log_user").on(t.userId, t.createdAt),
+]);

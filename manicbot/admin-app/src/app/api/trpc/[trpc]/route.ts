@@ -3,9 +3,9 @@ import { type NextRequest } from "next/server";
 
 export const runtime = "edge";
 
-import { env } from "~/env";
 import { appRouter } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
+import { log } from "~/server/utils/logger";
 
 /**
  * This wraps the `createTRPCContext` helper and provides the required context for the tRPC API when
@@ -23,14 +23,16 @@ const handler = (req: NextRequest) =>
     req,
     router: appRouter,
     createContext: () => createContext(req),
-    onError:
-      env.NODE_ENV === "development"
-        ? ({ path, error }) => {
-            console.error(
-              `❌ tRPC failed on ${path ?? "<no-path>"}: ${error.message}`
-            );
-          }
-        : undefined,
+    // Always log on error — the prior implementation only logged in dev,
+    // which meant production tRPC failures were invisible to ops. The
+    // structured logger redacts/sanitises by configuration; bare console
+    // calls here would also break edge-runtime log routing.
+    onError: ({ path, error }) => {
+      log.error("trpc.handler", error instanceof Error ? error : new Error(String(error)), {
+        path: path ?? "<no-path>",
+        code: error.code,
+      });
+    },
   });
 
 export { handler as GET, handler as POST };

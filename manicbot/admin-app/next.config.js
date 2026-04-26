@@ -7,6 +7,11 @@ import { setupDevPlatform } from "@cloudflare/next-on-pages/next-dev";
 
 /** @type {import("next").NextConfig} */
 const config = {
+  // StrictMode double-invokes effects/state setters in dev to surface
+  // unsafe lifecycle patterns (e.g. setState-after-unmount inside mutation
+  // onSuccess callbacks). Production is a no-op. Without this, the React
+  // #300 from settings/AccountSection slipped past local development.
+  reactStrictMode: true,
   transpilePackages: [],
   async rewrites() {
     return [

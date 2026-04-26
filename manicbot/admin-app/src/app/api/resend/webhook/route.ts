@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "~/server/db";
 import { emailSuppressions } from "~/server/db/schema";
 import { sql } from "drizzle-orm";
+import { log } from "~/server/utils/logger";
 
 export const runtime = "edge";
 
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
             },
           });
       } catch (e) {
-        console.error("[resend-webhook] suppress failed:", addr, (e as Error).message);
+        log.error("resend-webhook.suppress", e instanceof Error ? e : new Error(String((e as Error).message)), { email: addr });
       }
     }
   }

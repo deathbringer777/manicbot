@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "~/lib/clientErrorReport";
+
 export default function PublicError({
   error,
   reset,
@@ -7,7 +10,9 @@ export default function PublicError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  console.error("[public-error]", error);
+  useEffect(() => {
+    reportClientError("public-error", error);
+  }, [error]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">

@@ -824,3 +824,21 @@ CREATE TABLE IF NOT EXISTS plugin_pins (
 );
 CREATE INDEX IF NOT EXISTS idx_plugin_pins_user    ON plugin_pins (web_user_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_plugin_pins_user_at ON plugin_pins (web_user_id, pinned_at);
+
+-- Error log (migration 0039) — sink for client-side React error boundaries
+-- and unhandled tRPC errors. See /api/error-report and trpc.ts errorFormatter.
+CREATE TABLE IF NOT EXISTS error_log (
+  id           TEXT PRIMARY KEY,
+  created_at   INTEGER NOT NULL,
+  source       TEXT NOT NULL,
+  message      TEXT NOT NULL,
+  digest       TEXT,
+  url          TEXT,
+  user_agent   TEXT,
+  user_id      TEXT,
+  tenant_id    TEXT,
+  detail_json  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_error_log_created_at ON error_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_log_source     ON error_log(source, created_at);
+CREATE INDEX IF NOT EXISTS idx_error_log_user       ON error_log(user_id, created_at);

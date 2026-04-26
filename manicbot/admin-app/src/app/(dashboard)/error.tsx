@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "~/lib/clientErrorReport";
+
 export default function DashboardError({
   error,
   reset,
@@ -7,7 +10,9 @@ export default function DashboardError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  console.error("[dashboard-error]", error);
+  useEffect(() => {
+    reportClientError("dashboard-error", error);
+  }, [error]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">

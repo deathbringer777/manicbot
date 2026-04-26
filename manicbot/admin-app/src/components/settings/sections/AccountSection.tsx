@@ -1,13 +1,30 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { User, Mail, Key, CheckCircle, Save, ShieldCheck, ShieldAlert, Loader2, ArrowLeftRight, Clock, Check, XCircle } from "lucide-react";
+import { toast } from "sonner";
+import { signOut } from "next-auth/react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { friendlyRoleName } from "~/lib/roleLabels";
 import type { Lang } from "~/lib/i18n";
+
+/**
+ * Returns true while the component is mounted. Use to guard setState calls
+ * inside async callbacks that may resolve after the component is unmounted —
+ * notably mutation `onSuccess` handlers that trigger a query invalidate which
+ * flips a parent's conditional render branch.
+ */
+function useMountedRef(): React.MutableRefObject<boolean> {
+  const ref = useRef(true);
+  useEffect(() => {
+    ref.current = true;
+    return () => { ref.current = false; };
+  }, []);
+  return ref;
+}
 
 const VERIFY_L: Record<Lang, {
   verified: string;
@@ -151,6 +168,7 @@ export function AccountSection() {
   const utils = api.useUtils();
 
   // Verification code
+  const mounted = useMountedRef();
   const [code, setCode] = useState("");
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifySuccess, setVerifySuccess] = useState(false);
@@ -165,24 +183,29 @@ export function AccountSection() {
         utils.auth.getMyRole.invalidate();
         return;
       }
-      setVerifySuccess(true);
-      setVerifyError(null);
-      setCode("");
+      // Guard setState — emailVerified flip doesn't unmount AccountSection,
+      // but defensive against future refactors that add a conditional wrapper.
+      if (mounted.current) {
+        setVerifySuccess(true);
+        setVerifyError(null);
+        setCode("");
+      }
       utils.auth.getMyRole.invalidate();
     },
     onError: (err: { message?: string }) => {
-      setVerifyError(err.message ?? "Verification failed");
+      if (mounted.current) setVerifyError(err.message ?? "Verification failed");
     },
   }) as { mutate: (args: { email: string; code: string }) => void; isPending: boolean };
 
   const resendMut = (api as any).webUsers.resendVerificationCode.useMutation({
     onSuccess: () => {
+      if (!mounted.current) return;
       setCodeSent(true);
       setResendCooldown(true);
-      setTimeout(() => setResendCooldown(false), 60000);
+      setTimeout(() => { if (mounted.current) setResendCooldown(false); }, 60000);
     },
     onError: (err: { message?: string }) => {
-      setVerifyError(err.message ?? "Failed to send code");
+      if (mounted.current) setVerifyError(err.message ?? "Failed to send code");
     },
   }) as { mutate: (args: { email: string }) => void; isPending: boolean };
 
@@ -193,17 +216,25 @@ export function AccountSection() {
   // Change password
   const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [pwError, setPwError] = useState<string | null>(null);
-  const [pwSuccess, setPwSuccess] = useState(false);
+  // No local pwSuccess — onSuccess uses toast + signOut (see changePasswordMut below).
 
+  // changePassword bumps password_changed_at server-side which marks the
+  // existing JWT stale (#S8 in auth.ts). Show a toast confirming the change,
+  // then sign out so the user re-authenticates with the new credentials.
+  // This is the same security-correct flow most banks/SaaS apps use.
   const changePasswordMut = (api as any).webUsers.changePassword.useMutation({
     onSuccess: () => {
-      setPwSuccess(true);
-      setPwError(null);
-      setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-      setTimeout(() => setPwSuccess(false), 3000);
+      toast.success(t("settings.passwordChangedOk", lang));
+      if (mounted.current) {
+        setPwError(null);
+        setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      }
+      setTimeout(() => {
+        void signOut({ callbackUrl: "/login?reason=password_changed" });
+      }, 700);
     },
     onError: (err: { message?: string }) => {
-      setPwError(err.message ?? t("settings.passwordError", lang));
+      if (mounted.current) setPwError(err.message ?? t("settings.passwordError", lang));
     },
   }) as { mutate: (args: { currentPassword: string; newPassword: string }) => void; isPending: boolean };
 
@@ -601,12 +632,6 @@ export function AccountSection() {
               />
             </div>
             {pwError && <p className="text-xs text-red-400">{pwError}</p>}
-            {pwSuccess && (
-              <p className="text-xs text-emerald-400 flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
-                {t("settings.passwordChangedOk", lang)}
-              </p>
-            )}
             <button
               type="submit"
               disabled={changePasswordMut.isPending}
@@ -675,19 +700,28 @@ function SetInitialPasswordSection() {
   const { lang } = useLang();
   const sl = SET_PW_L[lang];
   const utils = api.useUtils();
+  const mounted = useMountedRef();
   const [form, setForm] = useState({ newPassword: "", confirmPassword: "" });
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
+  // Why no local "success" state here:
+  //   After invalidate(), the role query flips hasPassword=true → the parent
+  //   AccountSection unmounts THIS component (replaces it with the change-password
+  //   form). Calling setState on this component as it unmounts is what produced
+  //   the React #300 we saw in production. Notify via sonner toast (detached
+  //   from component lifecycle); the parent transition handles the rest.
+  //
+  //   We deliberately do NOT signOut here — the server-side mutation does NOT
+  //   bump password_changed_at for the initial-set case (security-neutral op:
+  //   there was no prior password to invalidate from), so the existing JWT
+  //   stays valid and the user keeps working without re-authentication.
   const setPasswordMut = (api as any).webUsers.setInitialPassword.useMutation({
     onSuccess: () => {
-      setSuccess(true);
-      setError(null);
-      setForm({ newPassword: "", confirmPassword: "" });
-      utils.auth.getMyRole.invalidate();
+      toast.success(sl.success);
+      void utils.auth.getMyRole.invalidate();
     },
     onError: (err: { message?: string }) => {
-      setError(err.message ?? "Failed to set password");
+      if (mounted.current) setError(err.message ?? "Failed to set password");
     },
   }) as { mutate: (args: { newPassword: string }) => void; isPending: boolean };
 
@@ -735,12 +769,6 @@ function SetInitialPasswordSection() {
           />
         </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
-        {success && (
-          <p className="text-xs text-emerald-400 flex items-center gap-1">
-            <CheckCircle className="w-3.5 h-3.5" />
-            {sl.success}
-          </p>
-        )}
         <button
           type="submit"
           disabled={setPasswordMut.isPending}

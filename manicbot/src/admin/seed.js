@@ -11,6 +11,7 @@ import { saveServices } from '../services/services.js';
 import { CORRECTION_SVC } from '../config.js';
 import { dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
+import { log } from '../utils/logger.js';
 
 const L = {
   ru: { svc_classic: 'Классический маникюр', svc_gel: 'Гель-лак', svc_pedi: 'Педикюр', svc_ext: 'Наращивание', svc_design: 'Дизайн', svc_combo: 'Маникюр + Педикюр' },
@@ -168,7 +169,7 @@ export async function runSeed(ctx, env, masterUsername = 'dezbringer') {
     await dbRun(ctx, `UPDATE tenants SET slug = 'luxe-manicure', city = 'Варшава', description = ?, public_active = 1, photos = ?, search_text = ? WHERE name = ?`,
       SALON2.aboutDesc, JSON.stringify(s2Photos), s2Search, SALON2.name);
   } catch(e) {
-    console.warn('[seed] Could not set public profile fields:', e?.message);
+    log.warn('admin.seed', { message: 'Could not set public profile fields', error: e?.message });
   }
 
   return { ok: true, log, tenants: [t1, t2], masterAssigned: true, masterChatId, masterUsername: '@' + masterUsername };

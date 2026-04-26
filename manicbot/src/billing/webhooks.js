@@ -122,25 +122,52 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
 
   // Sprint 2: D1-backed idempotency in addition to KV (KV has eventual
   // consistency; D1 gives us durable audit). KV remains for fast path.
-  if (eventId) {
-    if (ctx.db) {
-      try {
-        const existing = await dbGet(ctx, 'SELECT event_id FROM stripe_events WHERE event_id = ?', eventId);
-        if (existing) return { ok: true, status: 200, skipped: true };
-        await dbRun(ctx,
-          'INSERT OR IGNORE INTO stripe_events (event_id, type, received_at) VALUES (?, ?, ?)',
-          eventId, type, nowSec(),
-        );
-      } catch (e) {
-        log.error('stripe-webhook', e, { phase: 'idempotency' });
+  //
+  // Correctness: only treat an event as "already handled" when its
+  // processed_at IS NOT NULL. The previous logic skipped on row existence
+  // alone, which meant: if the row was inserted but processing then crashed,
+  // Stripe's retry hit the SELECT and got "already done" → the event was
+  // lost forever. Now duplicates that haven't completed processing get a
+  // 503 so Stripe keeps retrying until we succeed.
+  if (eventId && ctx.db) {
+    try {
+      const existing = await dbGet(ctx, 'SELECT processed_at FROM stripe_events WHERE event_id = ?', eventId);
+      if (existing) {
+        if (existing.processed_at) {
+          // Successfully processed before — safe to skip.
+          return { ok: true, status: 200, skipped: true };
+        }
+        // Row exists but never reached processed_at → previous attempt
+        // failed mid-flight (or another isolate is currently processing).
+        // 503 tells Stripe to back off and retry; 200 would lose the event.
+        log.warn('stripe-webhook', { message: 'duplicate event with no processed_at — asking Stripe to retry', eventId });
+        return { ok: false, status: 503 };
       }
+      // First time we see this event — record receipt. INSERT OR IGNORE so
+      // a concurrent retry that just lost the SELECT race becomes a no-op
+      // here; one of the two handlers will eventually win the processed_at
+      // UPDATE and the other one's downstream writes are idempotent.
+      await dbRun(ctx,
+        'INSERT OR IGNORE INTO stripe_events (event_id, type, received_at) VALUES (?, ?, ?)',
+        eventId, type, nowSec(),
+      );
+    } catch (e) {
+      // Idempotency layer should never block a webhook — if D1 is briefly
+      // unavailable, fall through to processing. Worst case Stripe retries
+      // a duplicate which downstream code is generally tolerant of (we use
+      // UPSERT-style updates), but log loudly so ops sees DB outages.
+      log.error('stripe-webhook', e, { phase: 'idempotency' });
     }
-    if (kv) {
-      // Namespace-global key: Stripe events are cross-tenant.
-      const seen = await kv.get(STRIPE_EVT_PREFIX + eventId, 'text');
-      if (seen) return { ok: true, status: 200, skipped: true };
-      await kv.put(STRIPE_EVT_PREFIX + eventId, '1', { expirationTtl: EVT_TTL });
+  }
+  if (eventId && kv) {
+    // KV is a secondary fast-path; keep current 7d TTL behaviour but treat
+    // a hit as a strong skip signal too — Stripe-event idempotency at KV
+    // expiry granularity is far better than nothing if D1 is degraded.
+    const seen = await kv.get(STRIPE_EVT_PREFIX + eventId, 'text');
+    if (seen && !ctx.db) {
+      return { ok: true, status: 200, skipped: true };
     }
+    await kv.put(STRIPE_EVT_PREFIX + eventId, '1', { expirationTtl: EVT_TTL });
   }
 
   if (type === 'checkout.session.completed') {
@@ -292,11 +319,16 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     }
   }
 
-  // Mark processed in D1
+  // Mark processed in D1. If this UPDATE fails we'd lose the "we already
+  // succeeded" signal — next retry from Stripe would re-process the event.
+  // Most handlers are idempotent (UPSERT-style) so re-processing is tolerable,
+  // but we log loudly so ops sees the gap.
   if (eventId && ctx.db) {
     try {
       await dbRun(ctx, 'UPDATE stripe_events SET processed_at = ? WHERE event_id = ?', nowSec(), eventId);
-    } catch { /* best-effort */ }
+    } catch (e) {
+      log.error('stripe-webhook', e, { phase: 'mark_processed', eventId });
+    }
   }
 
   return { ok: true, status: 200 };

@@ -366,7 +366,19 @@ export const webUsersRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  /** Request password reset email (public). Same response whether or not the email exists. */
+  /**
+   * Request password reset email (public).
+   *
+   * Anti-enumeration: returns the same shape whether or not the email exists.
+   *
+   * Server config errors (Resend not configured, or configured without
+   * AUTH_URL) throw — those block ALL resets, leak nothing about the user,
+   * and surface in error monitoring instead of silently swallowing the request.
+   *
+   * Runtime Resend failures for an existing user are logged with high
+   * severity (so ops see the bounce/rate-limit) but still return ok:true to
+   * preserve anti-enumeration.
+   */
   requestPasswordReset: publicProcedure
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
@@ -381,10 +393,22 @@ export const webUsersRouter = createTRPCRouter({
 
       const email = input.email.toLowerCase().trim();
       const base = authPublicBaseUrl();
-      const canSend = isResendConfigured() && Boolean(base);
 
-      if (isResendConfigured() && !base) {
-        log.warn("webUsers.requestPasswordReset", { message: "Resend configured but AUTH_URL is empty" });
+      // Server-config gaps: surface loudly. These are NOT anti-enumeration
+      // sensitive — they affect every user equally and indicate ops misconfig.
+      if (!isResendConfigured()) {
+        log.error("webUsers.requestPasswordReset", new Error("RESEND_API_KEY/RESEND_FROM not configured — password reset disabled"));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Email service is temporarily unavailable. Please contact support.",
+        });
+      }
+      if (!base) {
+        log.error("webUsers.requestPasswordReset", new Error("AUTH_URL/NEXTAUTH_URL not configured — reset links cannot be built"));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Email service is temporarily unavailable. Please contact support.",
+        });
       }
 
       const rows = await ctx.db
@@ -393,7 +417,7 @@ export const webUsersRouter = createTRPCRouter({
         .where(eq(webUsers.email, email))
         .limit(1);
 
-      if (rows.length && canSend) {
+      if (rows.length) {
         // Store a SHA-256 hash of the token in DB; send the plain token via email.
         // If the DB leaks, attacker cannot derive the original reset link.
         const resetToken = generateToken();
@@ -411,6 +435,9 @@ export const webUsersRouter = createTRPCRouter({
 
         const sent = await sendPasswordResetEmail(email, resetToken, (rows[0]!.lang ?? "en") as Lang);
         if (!sent.ok) {
+          // Roll the token back so the user can retry without a phantom code.
+          // Anti-enumeration: still return ok:true — but log loudly so ops
+          // see runtime delivery failures (bounce, suppression list, rate limit).
           await ctx.db
             .update(webUsers)
             .set({
@@ -419,7 +446,10 @@ export const webUsersRouter = createTRPCRouter({
               updatedAt: now,
             })
             .where(eq(webUsers.id, rows[0]!.id));
-          log.error("webUsers.requestPasswordReset", new Error(sent.error ?? "resend_failed"));
+          log.error("webUsers.requestPasswordReset", new Error(`resend_delivery_failed: ${sent.error ?? "unknown"}`), {
+            userId: rows[0]!.id,
+            // email intentionally omitted — log aggregator may persist; ops can correlate via userId
+          });
         }
       }
 
@@ -814,9 +844,15 @@ export const webUsersRouter = createTRPCRouter({
       }
       const newHash = await hashPassword(input.newPassword);
       const now = Math.floor(Date.now() / 1000);
+      // NOTE: deliberately NOT bumping password_changed_at here — there was no
+      // prior password, so there are no other sessions whose authentication
+      // basis is invalidated by this change. Keeping the existing JWT valid
+      // lets the user continue without an unnecessary force-logout (which
+      // also cured a React #300 in the settings page caused by mid-render
+      // session invalidation, see AccountSection.SetInitialPasswordSection).
       await ctx.db
         .update(webUsers)
-        .set({ passwordHash: newHash, passwordChangedAt: now, updatedAt: now })
+        .set({ passwordHash: newHash, updatedAt: now })
         .where(eq(webUsers.id, ctx.webUser.id));
       await writeAudit(ctx.db, {
         actor: ctx.webUser.email,

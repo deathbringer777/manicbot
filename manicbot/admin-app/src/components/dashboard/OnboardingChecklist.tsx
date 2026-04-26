@@ -28,15 +28,15 @@ export function OnboardingChecklist({ tenantId }: Props) {
   const progress = completed.size / STEPS.length;
 
   return (
-    <div className="glass-card rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-cyan-500/5 p-5">
+    <div className="glass-card rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/15 to-cyan-500/10 dark:from-violet-500/10 dark:to-cyan-500/5 p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">{t("onboarding.checklist.title", lang)}</h3>
-        <span className="text-xs font-mono text-white/60">
+        <h3 className="text-sm font-semibold text-foreground">{t("onboarding.checklist.title", lang)}</h3>
+        <span className="text-xs font-mono text-muted-foreground">
           {completed.size}/{STEPS.length}
         </span>
       </div>
 
-      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-foreground/10">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
@@ -55,7 +55,7 @@ export function OnboardingChecklist({ tenantId }: Props) {
                 className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition ${
                   done
                     ? "bg-emerald-500/20 text-emerald-400"
-                    : "bg-white/[0.06] text-white/30"
+                    : "bg-foreground/[0.06] text-muted-foreground/50"
                 }`}
               >
                 {done ? "✓" : ""}
@@ -63,7 +63,7 @@ export function OnboardingChecklist({ tenantId }: Props) {
               <a
                 href={step.href}
                 className={`flex-1 transition ${
-                  done ? "text-white/40 line-through" : "text-white/80 hover:text-violet-300"
+                  done ? "text-muted-foreground/60 line-through" : "text-foreground/90 hover:text-violet-600 dark:hover:text-violet-300"
                 }`}
               >
                 {t(step.labelKey, lang)}

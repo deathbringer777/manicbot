@@ -67,7 +67,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
     onSuccess: () => { utils.salon.getServices.invalidate(); onClose(); },
   });
   const createSvc = api.salon.createService.useMutation({
-    onSuccess: () => { utils.salon.getServices.invalidate(); onClose(); },
+    onSuccess: () => { utils.salon.getServices.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); onClose(); },
   });
 
   const isNew = !svc;
@@ -347,7 +347,7 @@ function AddMasterModal({ onClose, tenantId }: { onClose: () => void; tenantId: 
   const [name, setName] = useState("");
 
   const addMaster = api.salon.addMaster.useMutation({
-    onSuccess: () => { utils.salon.getMasters.invalidate(); onClose(); },
+    onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); onClose(); },
   });
 
   return (
@@ -1398,10 +1398,10 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
   });
   const removeMaster = api.salon.removeMaster.useMutation({
-    onSuccess: () => utils.salon.getMasters.invalidate(),
+    onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
   const deleteSvc = api.salon.deleteService.useMutation({
-    onSuccess: () => utils.salon.getServices.invalidate(),
+    onSuccess: () => { utils.salon.getServices.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
 
   const role = useRole().role;

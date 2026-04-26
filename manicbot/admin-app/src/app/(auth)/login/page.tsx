@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, Suspense } from "react";
 import { signIn, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useLang } from "~/components/LangContext";
@@ -14,11 +14,13 @@ import {
 } from "~/components/auth/AuthShell";
 import { authCopy } from "~/components/auth/copy";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const verifiedEmail = searchParams.get("verified") === "1" ? (searchParams.get("email") ?? "") : null;
   const { lang } = useLang();
   const copy = authCopy[lang];
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(verifiedEmail ?? "");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +112,12 @@ export default function LoginPage() {
         </p>
       }
     >
+      {verifiedEmail !== null && (
+        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
+          {copy.login.emailVerified}
+        </p>
+      )}
+
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -207,5 +215,28 @@ export default function LoginPage() {
         </>
       )}
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  const { lang } = useLang();
+  const copy = authCopy[lang];
+  return (
+    <Suspense
+      fallback={
+        <AuthShell
+          eyebrow={copy.login.kicker}
+          title={copy.login.title}
+          description={copy.login.description}
+          panelTitle={copy.login.panelTitle}
+          panelDescription={copy.login.panelDescription}
+          footer={null}
+        >
+          <div />
+        </AuthShell>
+      }
+    >
+      <LoginPageInner />
+    </Suspense>
   );
 }

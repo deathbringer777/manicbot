@@ -122,6 +122,6 @@ export const config = {
      * - _next/static, _next/image  Next.js internal assets
      * - favicon.ico, robots.txt, sitemap.xml  static metadata files
      */
-    "/((?!api/auth|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml).*)",
+    "/((?!api/auth|_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|theme-init\\.js|manifest\\.webmanifest|.*\\.svg|.*\\.png).*)",
   ],
 };

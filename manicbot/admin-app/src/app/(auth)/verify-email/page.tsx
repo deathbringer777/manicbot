@@ -27,8 +27,12 @@ function VerifyEmailInner() {
   const [resendSuccess, setResendSuccess] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const submittingRef = useRef(false);
 
-  const { mutateAsync: verify } = api.webUsers.verifyEmail.useMutation();
+  const verifyMutation = api.webUsers.verifyEmail.useMutation();
+  // Stable ref so useCallback doesn't need to list the mutation in deps
+  const verifyMutationRef = useRef(verifyMutation);
+  verifyMutationRef.current = verifyMutation;
   const { mutateAsync: resend } = api.webUsers.resendVerificationCode.useMutation();
 
   // Resend cooldown timer
@@ -42,28 +46,40 @@ function VerifyEmailInner() {
   const handleVerify = useCallback(
     async (code: string) => {
       if (code.length !== CODE_LENGTH || !email) return;
+      // Guard against concurrent calls (React Strict Mode, fast paste+type races)
+      if (submittingRef.current) return;
+      submittingRef.current = true;
       setState("verifying");
       setErrorMsg("");
       try {
-        const r = await verify({ email, code });
+        const r = await verifyMutationRef.current.mutateAsync({ email, code });
         if (r.alreadyVerified) {
           setState("okAlready");
         } else {
           setState("ok");
         }
-        // Auto-login after successful verification (password stored in sessionStorage by register page)
+        // Auto-login: password stashed in sessionStorage by register page
         let storedPwd = "";
         try {
           storedPwd = sessionStorage.getItem("_vepwd") ?? "";
           sessionStorage.removeItem("_vepwd");
         } catch { /* ignore */ }
+
+        if (!storedPwd) {
+          // No password available (Google OAuth user, or opened in a different tab)
+          setTimeout(() => {
+            router.push(`/login?verified=1&email=${encodeURIComponent(email)}`);
+          }, 1200);
+          return;
+        }
+
         const signInResult = await signIn("credentials", {
           email,
           password: storedPwd,
           redirect: false,
         });
         if (signInResult?.error) {
-          setTimeout(() => router.push("/login"), 1500);
+          setTimeout(() => router.push(`/login?verified=1&email=${encodeURIComponent(email)}`), 1500);
         } else {
           setTimeout(() => {
             router.push("/dashboard");
@@ -83,9 +99,11 @@ function VerifyEmailInner() {
         // Clear digits on error
         setDigits(Array(CODE_LENGTH).fill(""));
         setTimeout(() => inputRefs.current[0]?.focus(), 100);
+      } finally {
+        submittingRef.current = false;
       }
     },
-    [email, verify, router, v],
+    [email, router, v],
   );
 
   const handleChange = (index: number, value: string) => {

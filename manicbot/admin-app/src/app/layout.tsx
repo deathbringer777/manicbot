@@ -35,10 +35,6 @@ export const metadata: Metadata = {
     "booking",
     "beauty salon",
   ],
-  icons: [
-    { rel: "icon", url: "/favicon.ico" },
-    { rel: "apple-touch-icon", url: "/manicbot-mark-ui.png" },
-  ],
   openGraph: {
     type: "website",
     url: SITE_URL,

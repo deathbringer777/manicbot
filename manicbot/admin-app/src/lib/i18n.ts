@@ -651,6 +651,7 @@ const translations = {
   "plugins.lock.comingSoon":  { ru: "Скоро будет доступно",   ua: "Скоро буде доступно",    en: "Coming soon",          pl: "Wkrótce dostępne" },
   "plugins.lock.roleMismatch":{ ru: "Недоступно для вашей роли", ua: "Недоступно для вашої ролі", en: "Not available for your role", pl: "Niedostępne dla Twojej roli" },
   "plugins.lock.plan":        { ru: "Требуется более высокий тариф", ua: "Потрібен вищий тариф", en: "Higher plan required", pl: "Wymagany wyższy plan" },
+  "plugins.lock.planBadge":   { ru: "Тариф",                      ua: "Тариф",                  en: "Plan",                 pl: "Plan" },
   "plugins.lock.platformOnly":{ ru: "Только для администратора платформы", ua: "Лише для адміністратора платформи", en: "Platform admin only", pl: "Tylko administrator platformy" },
   "plugins.card.install":     { ru: "Установить",             ua: "Встановити",             en: "Install",              pl: "Zainstaluj" },
   "plugins.card.open":        { ru: "Открыть",                ua: "Відкрити",               en: "Open",                 pl: "Otwórz" },

@@ -16,7 +16,7 @@ function reasonText(r: PluginLockReason, lang: Lang): string | null {
   if (r.kind === "coming_soon") return t("plugins.lock.comingSoon", lang);
   if (r.kind === "role_mismatch") return t("plugins.lock.roleMismatch", lang);
   if (r.kind === "platform_only") return t("plugins.lock.platformOnly", lang);
-  if (r.kind === "plan") return `${t("plugins.lock.plan", lang)}: ${r.required.toUpperCase()}`;
+  if (r.kind === "plan") return `${t("plugins.lock.planBadge", lang)}: ${r.required.toUpperCase()}`;
   return null;
 }
 
@@ -55,7 +55,7 @@ export function LockedFeatureCard({
     >
       <div className={softenBody ? "opacity-75" : ""}>{children}</div>
       <span
-        className={`absolute top-2 right-2 text-[10px] uppercase tracking-wider font-semibold rounded-full px-2 py-0.5 border shadow-sm pointer-events-none ${badgeClass}`}
+        className={`absolute top-2 right-2 text-[10px] uppercase tracking-wider font-semibold rounded-full px-2 py-0.5 border shadow-sm pointer-events-none whitespace-nowrap ${badgeClass}`}
         role="status"
       >
         {label}

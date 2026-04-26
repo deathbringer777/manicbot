@@ -40,6 +40,7 @@ export const authCopy: Record<
       showPassword: string;
       hidePassword: string;
       forgotPassword: string;
+      emailVerified: string;
     };
     verifyEmail: {
       kicker: string;
@@ -192,6 +193,7 @@ export const authCopy: Record<
       showPassword: "Показать пароль",
       hidePassword: "Скрыть пароль",
       forgotPassword: "Забыли пароль?",
+      emailVerified: "Email подтверждён — войдите своим паролем.",
     },
     verifyEmail: {
       kicker: "Подтверждение email",
@@ -345,6 +347,7 @@ export const authCopy: Record<
       showPassword: "Показати пароль",
       hidePassword: "Сховати пароль",
       forgotPassword: "Забули пароль?",
+      emailVerified: "Email підтверджено — увійдіть своїм паролем.",
     },
     verifyEmail: {
       kicker: "Підтвердження email",
@@ -498,6 +501,7 @@ export const authCopy: Record<
       showPassword: "Show password",
       hidePassword: "Hide password",
       forgotPassword: "Forgot password?",
+      emailVerified: "Email confirmed — sign in with your password.",
     },
     verifyEmail: {
       kicker: "Email verification",
@@ -651,6 +655,7 @@ export const authCopy: Record<
       showPassword: "Pokaż hasło",
       hidePassword: "Ukryj hasło",
       forgotPassword: "Nie pamiętasz hasła?",
+      emailVerified: "Email potwierdzony — zaloguj się swoim hasłem.",
     },
     verifyEmail: {
       kicker: "Weryfikacja email",

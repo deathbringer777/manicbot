@@ -16,6 +16,8 @@ import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from '../ut
 const BRIDGE_SCRIPT = `<script>
 (function () {
   if (document.querySelector('script[src*="/embed/demo-chat.js"]')) return;
+  if (window.__mbBridgeBooted) return;
+  window.__mbBridgeBooted = true;
   var SLUG = 'preview-landing';
   // Pick up locale from the landing (?lang= → localStorage → <html lang> → 'ru').
   // Keeps the widget in sync with the Vite landing's LanguageProvider.

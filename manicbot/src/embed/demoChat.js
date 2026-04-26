@@ -433,7 +433,9 @@ export const DEMO_CHAT_SRC = `
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return r.json();
+    var data = null;
+    try { data = await r.json(); } catch (_) {}
+    return { status: r.status, retryAfter: r.headers.get('Retry-After'), data: data };
   }
 
   function showErrorBubble(text) {
@@ -563,8 +565,36 @@ export const DEMO_CHAT_SRC = `
 
   var _initRetries = 0;
   var _initRetryTimer = null;
+  var _initInFlight = false;
+  var _initStopped = false;
+  var _visibilityRetryPending = false;
+  var MAX_INIT_RETRIES = 3;
+
+  function scheduleInitRetry(delayMs) {
+    if (_initRetryTimer) { clearTimeout(_initRetryTimer); _initRetryTimer = null; }
+    // Background-tab guard: if hidden, defer until the tab is visible again
+    // so we don't burn the rate-limit budget while the user isn't looking.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      if (!_visibilityRetryPending) {
+        _visibilityRetryPending = true;
+        var onVis = function () {
+          if (document.visibilityState !== 'visible') return;
+          document.removeEventListener('visibilitychange', onVis);
+          _visibilityRetryPending = false;
+          if (!_initStopped) init();
+        };
+        document.addEventListener('visibilitychange', onVis);
+      }
+      return;
+    }
+    _initRetryTimer = setTimeout(function () {
+      _initRetryTimer = null;
+      if (!_initStopped) init();
+    }, delayMs);
+  }
 
   async function init() {
+    if (_initInFlight || _initStopped) return;
     var persisted = loadPersisted();
     if (persisted) {
       sessionId = persisted.sessionId;
@@ -577,23 +607,41 @@ export const DEMO_CHAT_SRC = `
       });
       return;
     }
+    _initInFlight = true;
     // Fresh session — play the staged "living chat" welcome animation.
     root.classList.add('mb-init-pending');
     setHeaderTypingState(true);
     try {
-      var res = await postJson('/chat/init', { slug: SLUG });
-      if (!res || !res.ok) throw new Error((res && res.error) || 'init failed');
+      var initResp = await postJson('/chat/init', { slug: SLUG });
+      var res = initResp && initResp.data;
+      if (!res || !res.ok) {
+        var err = new Error((res && res.error) || 'init failed');
+        err.status = initResp && initResp.status;
+        err.retryAfterHeader = initResp && initResp.retryAfter;
+        err.retryAfterBody = res && res.retryAfter;
+        err.errorCode = res && res.error;
+        throw err;
+      }
       sessionId = res.sessionId;
       if (res.salon) applyBranding(res.salon);
       _initRetries = 0;
+      if (_initRetryTimer) { clearTimeout(_initRetryTimer); _initRetryTimer = null; }
       persist();
 
       // Issue /start and let the staged renderer take over the response.
       // We bypass sendRaw() so the messages aren't rendered immediately.
-      var startRes = await postJson('/chat/send', {
+      var startResp = await postJson('/chat/send', {
         slug: SLUG, sessionId: sessionId, userLang: LANG, text: '/start',
       });
-      if (!startRes || !startRes.ok) throw new Error((startRes && startRes.error) || 'start failed');
+      var startRes = startResp && startResp.data;
+      if (!startRes || !startRes.ok) {
+        var serr = new Error((startRes && startRes.error) || 'start failed');
+        serr.status = startResp && startResp.status;
+        serr.retryAfterHeader = startResp && startResp.retryAfter;
+        serr.retryAfterBody = startRes && startRes.retryAfter;
+        serr.errorCode = startRes && startRes.error;
+        throw serr;
+      }
       var botMessages = (startRes.messages || []).map(function (m) {
         m.role = 'bot';
         return m;
@@ -611,15 +659,33 @@ export const DEMO_CHAT_SRC = `
       root.classList.remove('mb-init-pending');
       hideTyping();
       console.error('[mb-demo] init failed:', e);
+
+      var status = e && e.status;
+      var isRateLimited = status === 429 || (e && e.errorCode === 'rate_limited');
+      var isPermanent = status === 400 || status === 404 || status === 410;
       _initRetries++;
-      var delay = Math.min(2000 * Math.pow(2, _initRetries - 1), 30000);
-      if (_initRetries === 1) {
-        showErrorBubble(T.initFailed);
+
+      if (_initRetries === 1) showErrorBubble(T.initFailed);
+
+      if (isPermanent || _initRetries > MAX_INIT_RETRIES) {
+        // Stop retrying. Composer stays usable for manual retry.
+        _initStopped = true;
+        if (_initRetryTimer) { clearTimeout(_initRetryTimer); _initRetryTimer = null; }
+        return;
       }
-      _initRetryTimer = setTimeout(function () {
-        _initRetryTimer = null;
-        init();
-      }, delay);
+
+      var backoff = Math.min(2000 * Math.pow(2, _initRetries - 1), 30000);
+      var delay = backoff;
+      if (isRateLimited) {
+        var raBody = Number(e && e.retryAfterBody) || 0;
+        var raHdr = Number(e && e.retryAfterHeader) || 0;
+        // Server gives seconds; convert to ms. Cap at 60s.
+        var raMs = Math.max(raBody, raHdr) * 1000;
+        delay = Math.min(60000, Math.max(backoff, raMs));
+      }
+      scheduleInitRetry(delay);
+    } finally {
+      _initInFlight = false;
     }
   }
 
@@ -643,9 +709,10 @@ export const DEMO_CHAT_SRC = `
     sendBtn.disabled = true;
     showTyping();
     try {
-      var res = await postJson('/chat/send', Object.assign({
+      var resp = await postJson('/chat/send', Object.assign({
         slug: SLUG, sessionId: sessionId, userLang: LANG,
       }, payload));
+      var res = resp && resp.data;
       hideTyping();
       if (!res || !res.ok) {
         console.warn('[mb-demo] send error:', res);

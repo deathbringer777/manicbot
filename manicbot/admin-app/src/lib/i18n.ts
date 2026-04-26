@@ -566,6 +566,10 @@ const translations = {
   "appointments.manual.note":            { ru: "Комментарий (необяз.)", ua: "Коментар (необов'язково)", en: "Note (optional)", pl: "Notatka (opcjonalnie)" },
   "appointments.manual.create":          { ru: "Создать запись",   ua: "Створити запис",   en: "Create booking", pl: "Utwórz rezerwację" },
   "appointments.manual.creating":        { ru: "Сохраняем…",       ua: "Зберігаємо…",      en: "Saving…",    pl: "Zapisywanie…" },
+  "appointments.manual.today":           { ru: "Сегодня",          ua: "Сьогодні",         en: "Today",      pl: "Dziś" },
+  "appointments.manual.clear":           { ru: "Очистить",         ua: "Очистити",         en: "Clear",      pl: "Wyczyść" },
+  "appointments.manual.now":             { ru: "Сейчас",           ua: "Зараз",            en: "Now",        pl: "Teraz" },
+  "appointments.manual.datePh":          { ru: "дд.мм.гггг",       ua: "дд.мм.рррр",       en: "dd/mm/yyyy", pl: "dd.mm.rrrr" },
 
   // ── Master dashboard — appointment status / period labels ───────────────────
   "master.noShow.client":                { ru: "Клиент не пришёл", ua: "Клієнт не прийшов", en: "Client no-show", pl: "Klient się nie pojawił" },

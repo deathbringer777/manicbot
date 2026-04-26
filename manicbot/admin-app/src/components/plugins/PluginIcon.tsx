@@ -18,21 +18,55 @@ import {
   TrendingUp, AlertTriangle, Lock, CheckCircle2, type LucideIcon,
 } from "lucide-react";
 
+/**
+ * Faithful recreation of the Google Calendar icon.
+ * Uses the official Google brand palette at a 24×24 viewBox so every
+ * pixel is meaningful even at size=22 (plugin cards) or size=32 (detail page).
+ *
+ *   Blue   #4285F4  – top header bar + "31" numeral
+ *   Green  #34A853  – bottom-right quadrant accent
+ *   Yellow #FBBC05  – bottom-left quadrant accent
+ *   Red    #EA4335  – top-right ring pin knob
+ */
 function GoogleCalendarLogo({ size }: { size: number }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 48 48"
+      viewBox="0 0 24 24"
       width={size}
       height={size}
       aria-hidden="true"
     >
-      <rect x="8" y="8" width="32" height="32" rx="4" fill="#fff" stroke="#e8eaed" strokeWidth="1" />
-      <rect x="8" y="8" width="32" height="6" rx="4" fill="#4285f4" />
-      <rect x="8" y="8" width="32" height="2" fill="#4285f4" />
-      <text x="24" y="30" textAnchor="middle" fontFamily="'Google Sans', Arial, sans-serif" fontSize="14" fontWeight="500" fill="#4285f4">31</text>
-      <rect x="14" y="6" width="2" height="6" rx="1" fill="#1a73e8" />
-      <rect x="32" y="6" width="2" height="6" rx="1" fill="#1a73e8" />
+      {/* Card body */}
+      <rect x="1.5" y="2" width="21" height="21" rx="3" fill="#fff" stroke="#dadce0" strokeWidth="0.75" />
+
+      {/* Blue header */}
+      <rect x="1.5" y="2" width="21" height="6" rx="3" fill="#4285F4" />
+      <rect x="1.5" y="5" width="21" height="3" fill="#4285F4" />
+
+      {/* Ring pins */}
+      <rect x="7"  y="0.5" width="2" height="4" rx="1" fill="#1565C0" />
+      <rect x="15" y="0.5" width="2" height="4" rx="1" fill="#1565C0" />
+
+      {/* Yellow accent – bottom-left */}
+      <path d="M1.5 19 L1.5 20 Q1.5 23 4.5 23 L6 23 L6 19 Z" fill="#FBBC04" />
+
+      {/* Green accent – bottom-right */}
+      <path d="M18 19 L18 23 L19.5 23 Q22.5 23 22.5 20 L22.5 19 Z" fill="#34A853" />
+
+      {/* "31" numeral */}
+      <text
+        x="12"
+        y="19"
+        textAnchor="middle"
+        fontFamily="'Google Sans', 'Roboto', Arial, sans-serif"
+        fontSize="9"
+        fontWeight="700"
+        fill="#4285F4"
+      >31</text>
+
+      {/* Red dot on top-right pin */}
+      <circle cx="21" cy="2.5" r="2" fill="#EA4335" />
     </svg>
   );
 }

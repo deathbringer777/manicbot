@@ -365,7 +365,7 @@ export default function TenantsPageClient() {
                         <div className="flex flex-wrap gap-1.5">
                           {detail.services.map((s) => (
                             <span key={s.svcId} className={`px-2 py-0.5 rounded text-[10px] ${s.active ? "bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300" : "bg-slate-100/50 dark:bg-slate-800/50 text-slate-600 line-through"}`}>
-                              {s.emoji} {s.svcId} · {s.price}\u00a0zł
+                              {s.emoji} {s.svcId} · {`${s.price} zł`}
                             </span>
                           ))}
                         </div>

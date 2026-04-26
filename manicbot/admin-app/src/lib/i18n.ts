@@ -355,6 +355,25 @@ const translations = {
   "salon.tabs.publicProfile":            { ru: "Профиль",    ua: "Профіль",    en: "Profile",   pl: "Profil" },
   "salon.tabs.staff":                    { ru: "Персонал",   ua: "Персонал",   en: "Staff",     pl: "Personel" },
 
+  // ── Manual booking modal ────────────────────────────────────────────────────
+  "appointments.manual.title":           { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
+  "appointments.manual.slotConflict":    { ru: "Это время уже занято у выбранного мастера.", ua: "Цей час уже зайнятий у обраного майстра.", en: "This time slot is already booked for the selected master.", pl: "Ten termin jest już zajęty u wybranego mistrza." },
+  "appointments.manual.somethingWrong":  { ru: "Что-то пошло не так", ua: "Щось пішло не так", en: "Something went wrong", pl: "Coś poszło nie tak" },
+  "appointments.manual.fillRequired":    { ru: "Заполните мастера, услугу, дату и время.", ua: "Заповніть майстра, послугу, дату й час.", en: "Pick a master, service, date and time.", pl: "Wybierz mistrza, usługę, datę i czas." },
+  "appointments.manual.pickClient":      { ru: "Выберите клиента или укажите имя и телефон нового.", ua: "Виберіть клієнта або вкажіть ім'я і телефон нового.", en: "Pick a client or enter the new client's name and phone.", pl: "Wybierz klienta lub podaj imię i telefon nowego." },
+  "appointments.manual.client":          { ru: "Клиент",           ua: "Клієнт",           en: "Client",     pl: "Klient" },
+  "appointments.manual.newClient":       { ru: "— новый клиент —", ua: "— новий клієнт —", en: "— new client —", pl: "— nowy klient —" },
+  "appointments.manual.noName":          { ru: "(без имени)",      ua: "(без імені)",      en: "(no name)",  pl: "(bez imienia)" },
+  "appointments.manual.clientNamePh":    { ru: "Имя клиента",      ua: "Ім'я клієнта",     en: "Client name", pl: "Imię klienta" },
+  "appointments.manual.master":          { ru: "Мастер",           ua: "Майстер",          en: "Master",     pl: "Mistrz" },
+  "appointments.manual.pickPlaceholder": { ru: "— выбрать —",      ua: "— вибрати —",      en: "— select —", pl: "— wybierz —" },
+  "appointments.manual.service":         { ru: "Услуга",           ua: "Послуга",          en: "Service",    pl: "Usługa" },
+  "appointments.manual.date":            { ru: "Дата",             ua: "Дата",             en: "Date",       pl: "Data" },
+  "appointments.manual.time":            { ru: "Время",            ua: "Час",              en: "Time",       pl: "Czas" },
+  "appointments.manual.note":            { ru: "Комментарий (необяз.)", ua: "Коментар (необов'язково)", en: "Note (optional)", pl: "Notatka (opcjonalnie)" },
+  "appointments.manual.create":          { ru: "Создать запись",   ua: "Створити запис",   en: "Create booking", pl: "Utwórz rezerwację" },
+  "appointments.manual.creating":        { ru: "Сохраняем…",       ua: "Зберігаємо…",      en: "Saving…",    pl: "Zapisywanie…" },
+
   // ── Master dashboard — appointment status / period labels ───────────────────
   "master.noShow.client":                { ru: "Клиент не пришёл", ua: "Клієнт не прийшов", en: "Client no-show", pl: "Klient się nie pojawił" },
   "master.noShow.master":                { ru: "Мастер не пришёл", ua: "Майстер не прийшов", en: "Master no-show", pl: "Mistrz się nie pojawił" },
@@ -490,7 +509,7 @@ const translations = {
   "cookies.policy":         { ru: "Политика cookies",                                 ua: "Політика cookies",                                 en: "Cookie policy",                                      pl: "Polityka cookies" },
 } as const;
 
-type TranslationKey = keyof typeof translations;
+export type TranslationKey = keyof typeof translations;
 
 export function t(key: TranslationKey, lang: Lang): string {
   return translations[key]?.[lang] ?? translations[key]?.["ru"] ?? key;

@@ -22,6 +22,25 @@ const KEYS: TranslationKey[] = [
   // Appointments quick actions
   "appointments.newBooking",
 
+  // Manual booking modal (PR i18n/ManualBookingModal)
+  "appointments.manual.title",
+  "appointments.manual.slotConflict",
+  "appointments.manual.somethingWrong",
+  "appointments.manual.fillRequired",
+  "appointments.manual.pickClient",
+  "appointments.manual.client",
+  "appointments.manual.newClient",
+  "appointments.manual.noName",
+  "appointments.manual.clientNamePh",
+  "appointments.manual.master",
+  "appointments.manual.pickPlaceholder",
+  "appointments.manual.service",
+  "appointments.manual.date",
+  "appointments.manual.time",
+  "appointments.manual.note",
+  "appointments.manual.create",
+  "appointments.manual.creating",
+
   // Common
   "common.add",
   "common.edit",

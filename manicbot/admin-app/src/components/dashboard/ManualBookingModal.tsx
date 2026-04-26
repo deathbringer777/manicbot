@@ -2,6 +2,8 @@
 
 import { useState, useMemo, type FormEvent } from "react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 interface Props {
   tenantId: string;
@@ -18,6 +20,7 @@ interface Props {
  * as a TRPC CONFLICT error with cause.withAppointmentId.
  */
 export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreated }: Props) {
+  const { lang } = useLang();
   const [masterId, setMasterId] = useState<number | null>(defaultMasterId ?? null);
   const [serviceId, setServiceId] = useState<string>("");
   const [date, setDate] = useState<string>("");
@@ -40,8 +43,8 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
       }
     },
     onError: (e) => {
-      if (e.message === "slot_conflict") setErr("Это время уже занято у выбранного мастера.");
-      else setErr(e.message || "Что-то пошло не так");
+      if (e.message === "slot_conflict") setErr(t("appointments.manual.slotConflict", lang));
+      else setErr(e.message || t("appointments.manual.somethingWrong", lang));
     },
   });
 
@@ -54,12 +57,12 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
     e.preventDefault();
     setErr(null);
     if (!masterId || !serviceId || !date || !time) {
-      setErr("Заполните мастера, услугу, дату и время.");
+      setErr(t("appointments.manual.fillRequired", lang));
       return;
     }
     const useExisting = clientChatId && clientChatId !== "";
     if (!useExisting && (!clientName.trim() || clientPhone.trim().length < 6)) {
-      setErr("Выберите клиента или укажите имя и телефон нового.");
+      setErr(t("appointments.manual.pickClient", lang));
       return;
     }
     create.mutate({
@@ -86,7 +89,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
         style={{ maxHeight: "90vh" }}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Новая запись</h2>
+          <h2 className="text-lg font-semibold text-white">{t("appointments.manual.title", lang)}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -99,16 +102,16 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
 
         <form onSubmit={submit} className="space-y-4 text-sm">
           <div>
-            <label className="mb-1 block text-xs font-medium text-white/70">Клиент</label>
+            <label className="mb-1 block text-xs font-medium text-white/70">{t("appointments.manual.client", lang)}</label>
             <select
               className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none focus:border-violet-400"
               value={clientChatId}
               onChange={(e) => setClientChatId(e.target.value)}
             >
-              <option value="">— новый клиент —</option>
+              <option value="">{t("appointments.manual.newClient", lang)}</option>
               {clientOptions.map((c) => (
                 <option key={c.chatId} value={c.chatId}>
-                  {c.name || "(без имени)"} {c.phone ? `· ${c.phone}` : ""}
+                  {c.name || t("appointments.manual.noName", lang)} {c.phone ? `· ${c.phone}` : ""}
                 </option>
               ))}
             </select>
@@ -118,7 +121,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 type="text"
-                placeholder="Имя клиента"
+                placeholder={t("appointments.manual.clientNamePh", lang)}
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-violet-400"
@@ -135,14 +138,14 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Мастер</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("appointments.manual.master", lang)}</label>
               <select
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none focus:border-violet-400"
                 value={masterId ?? ""}
                 onChange={(e) => setMasterId(Number(e.target.value) || null)}
                 disabled={defaultMasterId != null}
               >
-                <option value="">— выбрать —</option>
+                <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
                 {(masters.data ?? []).map((m) => (
                   <option key={m.chatId} value={m.chatId}>
                     {m.name || `#${m.chatId}`}
@@ -151,20 +154,20 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Услуга</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("appointments.manual.service", lang)}</label>
               <select
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none focus:border-violet-400"
                 value={serviceId}
                 onChange={(e) => setServiceId(e.target.value)}
               >
-                <option value="">— выбрать —</option>
+                <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
                 {(services.data ?? []).map((s) => {
                   const label = typeof s.names === "string"
                     ? (() => { try { const j = JSON.parse(s.names as string); return j.ru || j.en || s.svcId; } catch { return s.svcId; } })()
                     : s.svcId;
                   return (
                     <option key={s.svcId} value={s.svcId}>
-                      {label} · {s.duration}мин · {s.price}
+                      {label} · {s.duration} min · {s.price}
                     </option>
                   );
                 })}
@@ -174,7 +177,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Дата</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("appointments.manual.date", lang)}</label>
               <input
                 type="date"
                 value={date}
@@ -183,7 +186,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">Время</label>
+              <label className="mb-1 block text-xs font-medium text-white/70">{t("appointments.manual.time", lang)}</label>
               <input
                 type="time"
                 value={time}
@@ -194,7 +197,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-white/70">Комментарий (необяз.)</label>
+            <label className="mb-1 block text-xs font-medium text-white/70">{t("appointments.manual.note", lang)}</label>
             <textarea
               rows={2}
               maxLength={500}
@@ -216,7 +219,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
               onClick={onClose}
               className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] py-2.5 text-sm font-medium text-white/80 transition hover:bg-white/[0.08]"
             >
-              Отмена
+              {t("common.cancel", lang)}
             </button>
             <button
               type="submit"
@@ -224,7 +227,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
               className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
             >
-              {create.isPending ? "Сохраняем…" : "Создать запись"}
+              {create.isPending ? t("appointments.manual.creating", lang) : t("appointments.manual.create", lang)}
             </button>
           </div>
         </form>

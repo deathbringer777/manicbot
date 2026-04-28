@@ -223,28 +223,6 @@ export default function SystemPageClient() {
           )}
         </div>
 
-        {/* Stack info */}
-        <div className="glass-card rounded-2xl p-4">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Стек</h2>
-          <div className="grid grid-cols-1 gap-2">
-            {[
-              { label: "Runtime", value: "Cloudflare Workers (Edge)" },
-              { label: "Database", value: "Cloudflare D1 (SQLite)" },
-              { label: "ORM", value: "Drizzle ORM" },
-              { label: "Framework", value: "Next.js 15 (App Router)" },
-              { label: "API", value: "tRPC v11" },
-              { label: "Email", value: "Resend" },
-              { label: "Payments", value: "Stripe" },
-              { label: "Deploy", value: "Cloudflare Pages + Workers" },
-            ].map(({ label, value }) => (
-              <div key={label} className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-white/5 last:border-b-0">
-                <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
-                <span className="text-xs text-slate-700 dark:text-slate-200 font-mono">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* ToS Consent Log */}
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">

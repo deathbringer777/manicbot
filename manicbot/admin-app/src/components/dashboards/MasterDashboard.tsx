@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -179,6 +179,7 @@ export function MasterDashboard({
   const [showSvcEmojiPicker, setShowSvcEmojiPicker] = useState(false);
   const [showSvcTemplates, setShowSvcTemplates] = useState(false);
   const [svcUploading, setSvcUploading] = useState(false);
+  const [svcPhotoError, setSvcPhotoError] = useState<string>("");
   const svcFileRef = useRef<HTMLInputElement>(null);
   const mintToken = api.salon.mintUploadToken.useMutation();
   const createSvc = api.master.createService.useMutation({
@@ -569,17 +570,28 @@ export function MasterDashboard({
                     const file = e.target.files?.[0];
                     if (!file || svcForm.photos.length >= 5) return;
                     const err = validateUploadFile(file);
-                    if (err) { alert(err); return; }
+                    if (err) { setSvcPhotoError(err); return; }
+                    setSvcPhotoError("");
                     setSvcUploading(true);
                     try {
                       const compressed = await resizeImageClientSide(file, 1200, "image/webp", 0.82);
                       const { uploadUrl } = await mintToken.mutateAsync({ tenantId, kind: "service_photo" });
                       const result = await uploadAssetFile(uploadUrl, compressed);
                       setSvcForm(f => f ? { ...f, photos: [...f.photos, result.url].slice(0, 5) } : f);
-                    } catch { alert(t("master.photoUploadError", lang)); }
+                    } catch (e) {
+                      console.error("Service photo upload failed:", e);
+                      setSvcPhotoError(t("master.photoUploadError", lang));
+                    }
                     finally { setSvcUploading(false); e.target.value = ""; }
                   }} />
               </div>
+
+              {svcPhotoError && (
+                <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                  <p className="text-sm text-red-600 dark:text-red-400">{svcPhotoError}</p>
+                </div>
+              )}
 
               <div className="flex gap-2 pt-1">
                 <button

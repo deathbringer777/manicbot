@@ -1358,6 +1358,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
   const [showTemplates, setShowTemplates] = useState(false);
   const [masterModal, setMasterModal] = useState<"telegram" | "create" | null>(null);
+  const [deleteSvcConfirm, setDeleteSvcConfirm] = useState<{ active: boolean; svcId: string | null }>({ active: false, svcId: null });
+  const [removeMasterConfirm, setRemoveMasterConfirm] = useState<{ active: boolean; chatId: string | null }>({ active: false, chatId: null });
 
   function handleAddNew() { setSvcModal({ open: true, svc: null }); }
   function handleAddTemplates() { setShowTemplates(true); }
@@ -1445,6 +1447,54 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
 
   const isTest = useRole().isTest;
+
+  // Delete service confirmation modal
+  const deleteSvcConfirmModal = deleteSvcConfirm.active && (
+    <div role="dialog" aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={() => setDeleteSvcConfirm({ active: false, svcId: null })}>
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("confirm.deleteService", lang)}</h3>
+        <div className="flex gap-2">
+          <button onClick={() => setDeleteSvcConfirm({ active: false, svcId: null })}
+            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+            {t("action.cancel", lang)}
+          </button>
+          <button onClick={() => {
+            if (deleteSvcConfirm.svcId) deleteSvc.mutate({ tenantId, svcId: deleteSvcConfirm.svcId });
+            setDeleteSvcConfirm({ active: false, svcId: null });
+          }}
+            className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors">
+            {t("action.delete", lang)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Remove master confirmation modal
+  const removeMasterConfirmModal = removeMasterConfirm.active && (
+    <div role="dialog" aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={() => setRemoveMasterConfirm({ active: false, chatId: null })}>
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("confirm.removeMaster", lang)}</h3>
+        <div className="flex gap-2">
+          <button onClick={() => setRemoveMasterConfirm({ active: false, chatId: null })}
+            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+            {t("action.cancel", lang)}
+          </button>
+          <button onClick={() => {
+            if (removeMasterConfirm.chatId) removeMaster.mutate({ tenantId, chatId: Number(removeMasterConfirm.chatId) });
+            setRemoveMasterConfirm({ active: false, chatId: null });
+          }}
+            className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors">
+            {t("action.delete", lang)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <Shell navItems={salonNavItems} title={t("salon.title", lang)} subtitle="ManicBot Salon">
@@ -1548,7 +1598,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 </div>
               )}
               {todayApts.data?.length === 0 && (
-                <p className="text-slate-500 text-sm text-center py-4">{t("salon.noApts", lang)}</p>
+                <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />
               )}
             </>
           )}
@@ -1600,7 +1650,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
                     onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
                 ))}
-                {apts.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("salon.noApts", lang)}</p>}
+                {apts.data?.length === 0 && <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />}
               </div>
             </>
           )}
@@ -1652,7 +1702,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                       className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 text-xs hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
                       <Pencil className="h-3 w-3" /> {t("action.edit", lang)}
                     </button>
-                    <button onClick={() => { if (confirm(t("confirm.deleteService", lang))) deleteSvc.mutate({ tenantId, svcId: s.svcId }); }}
+                    <button onClick={() => setDeleteSvcConfirm({ active: true, svcId: s.svcId })}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400/70 text-xs hover:text-red-400 hover:bg-red-500/20 transition-colors">
                       <Trash2 className="h-3 w-3" /> {t("action.delete", lang)}
                     </button>
@@ -1701,7 +1751,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     </div>
                     {!isWebAccount && <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>}
                   </div>
-                  <button onClick={() => { if (confirm(t("confirm.removeMaster", lang))) removeMaster.mutate({ tenantId, chatId: m.chatId }); }}
+                  <button onClick={() => setRemoveMasterConfirm({ active: true, chatId: m.chatId })}
                     className="h-8 w-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -1766,10 +1816,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           {reviewList.isLoading ? (
             <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-24 animate-pulse" />)}</div>
           ) : (reviewList.data?.reviews ?? []).length === 0 ? (
-            <div className="glass-card rounded-2xl py-12 text-center">
-              <Star className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-              <p className="text-sm text-slate-500">No reviews yet</p>
-            </div>
+            <EmptyState icon={Star} title={t("salon.noReviews", lang)} description={t("salon.empty.reviews", lang)} />
           ) : (
             <div className="space-y-2.5">
               {(reviewList.data?.reviews ?? []).map((rev: any) => (
@@ -1821,6 +1868,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} initialData={svcModal.initialData} />}
       {masterModal === "telegram" && <AddMasterModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
       {masterModal === "create" && <CreateMasterAccountModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
+      {manualBookingOpen && <ManualBookingModal onClose={() => setManualBookingOpen(false)} tenantId={tenantId} />}
+      {deleteSvcConfirmModal}
+      {removeMasterConfirmModal}
     </Shell>
   );
 }

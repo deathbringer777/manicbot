@@ -40,6 +40,7 @@ function formatDate(ts: number): string {
 
 export default function LeadsPageClient() {
   const [filter, setFilter] = useState<StatusFilter>("new");
+  const [deleteConfirm, setDeleteConfirm] = useState<{ active: boolean; leadId: number | null }>({ active: false, leadId: null });
   const utils = api.useUtils();
   const listQ = (api as any).leads.list.useQuery({ status: filter, limit: 100, offset: 0 });
   const countsQ = (api as any).leads.counts.useQuery();
@@ -72,6 +73,30 @@ export default function LeadsPageClient() {
   }>;
 
   const counts = (countsQ.data as Record<string, number> | undefined) ?? { new: 0, contacted: 0, closed: 0, all: 0 };
+
+  // Delete lead confirmation modal
+  const deleteConfirmModal = deleteConfirm.active && (
+    <div role="dialog" aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={() => setDeleteConfirm({ active: false, leadId: null })}>
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">Удалить заявку?</h3>
+        <div className="flex gap-2">
+          <button onClick={() => setDeleteConfirm({ active: false, leadId: null })}
+            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+            Отмена
+          </button>
+          <button onClick={() => {
+            if (deleteConfirm.leadId) removeMut.mutate({ id: deleteConfirm.leadId });
+            setDeleteConfirm({ active: false, leadId: null });
+          }}
+            className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors">
+            Удалить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <Shell title="Заявки" subtitle={counts.new ? `${counts.new} новых` : undefined}>
@@ -178,9 +203,7 @@ export default function LeadsPageClient() {
                 </button>
               )}
               <button
-                onClick={() => {
-                  if (window.confirm("Удалить заявку?")) removeMut.mutate({ id: lead.id });
-                }}
+                onClick={() => setDeleteConfirm({ active: true, leadId: lead.id })}
                 disabled={removeMut.isPending}
                 className="flex items-center justify-center gap-1.5 bg-red-600/10 text-red-500 px-3 py-2 text-xs font-semibold rounded-xl transition-all disabled:opacity-60"
               >

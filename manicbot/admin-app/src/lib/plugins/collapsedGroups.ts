@@ -67,4 +67,4 @@ export function useCollapsedGroups(): {
   return { isCollapsed, toggle };
 }
 
-export { readCollapsed, writeCollapsed };
+export { readCollapsed, writeCollapsed, storageKey as collapsedGroupsStorageKey };

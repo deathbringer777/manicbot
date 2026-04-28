@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, X } from "lucide-react";
 import { api } from "~/trpc/react";
 import { SectionHeader } from "~/components/salon/SalonShared";
 import { t, type Lang } from "~/lib/i18n";
@@ -29,13 +29,15 @@ const PLAN_PRICES = {
 export function BillingTabContent({ tenantId, billing, lang }: Props) {
   const [cycle, setCycle] = useState<"monthly" | "annual">("monthly");
   const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string>("");
 
   const checkout = api.salon.createCheckoutSession.useMutation({
     onSuccess: (res) => {
       if (res.url) window.location.href = res.url;
     },
     onError: (e) => {
-      alert(e.message || t("billing.openFailed", lang));
+      console.error("Checkout failed:", e);
+      setBillingError(e.message || t("billing.openFailed", lang));
       setUpgrading(null);
     },
   });
@@ -55,6 +57,16 @@ export function BillingTabContent({ tenantId, billing, lang }: Props) {
       {billing.isError && (
         <div className="glass-card rounded-2xl p-6 text-center">
           <p className="text-red-400">{t("common.errorLoading", lang)}</p>
+        </div>
+      )}
+
+      {billingError && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+          <p className="text-sm text-red-600 dark:text-red-400">{billingError}</p>
+          <button onClick={() => setBillingError("")} className="ml-auto text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 

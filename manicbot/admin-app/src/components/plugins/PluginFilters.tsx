@@ -6,6 +6,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { PLUGIN_CATEGORIES, BILLING_MODELS } from "@plugins/types";
 import type { PluginCategory, BillingModel } from "@plugins/types";
+import { FilterDropdown } from "~/components/ui/FilterDropdown";
 
 export interface FilterValue {
   q: string;
@@ -50,6 +51,18 @@ export function PluginFilters({
   };
 
   const hasActive = !!(value.q || value.category || value.billing || value.installedOnly);
+
+  const categoryOptions = PLUGIN_CATEGORIES.map((c) => ({
+    value: c,
+    label: t(`plugins.cat.${c}` as never, lang),
+    testId: `filter-cat-${c}`,
+  }));
+
+  const billingOptions = BILLING_MODELS.map((m) => ({
+    value: m,
+    label: t(billingKey(m) as never, lang),
+    testId: `filter-billing-${m}`,
+  }));
 
   return (
     <div data-testid="plugin-filters">
@@ -99,49 +112,27 @@ export function PluginFilters({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => onChange({ ...value, category: null })}
-            className={`text-[11px] px-2.5 py-1 rounded-full border ${
-              !value.category
-                ? "bg-brand-500/10 text-brand-600 dark:text-brand-300 border-brand-500/40"
-                : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10"
-            }`}
-          >
-            {t("plugins.filters.all", lang)}
-          </button>
-          {PLUGIN_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              data-testid={`filter-cat-${cat}`}
-              type="button"
-              onClick={() => onChange({ ...value, category: cat })}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                value.category === cat
-                  ? "bg-brand-500/10 text-brand-600 dark:text-brand-300 border-brand-500/40"
-                  : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10"
-              }`}
-            >
-              {t(`plugins.cat.${cat}` as never, lang)}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-white/10" />
-          {BILLING_MODELS.map((m) => (
-            <button
-              key={m}
-              data-testid={`filter-billing-${m}`}
-              type="button"
-              onClick={() => onChange({ ...value, billing: value.billing === m ? null : m })}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                value.billing === m
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/40"
-                  : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10"
-              }`}
-            >
-              {t(billingKey(m) as never, lang)}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <FilterDropdown
+            label={t("plugins.filters.category" as never, lang)}
+            allLabel={t("plugins.filters.all", lang)}
+            options={categoryOptions}
+            value={value.category}
+            onChange={(c) => onChange({ ...value, category: c })}
+            variant="brand"
+            triggerTestId="filter-cat-trigger"
+            className="flex-1 sm:flex-none sm:min-w-[160px]"
+          />
+          <FilterDropdown
+            label={t("plugins.filters.billing" as never, lang)}
+            allLabel={t("plugins.filters.all", lang)}
+            options={billingOptions}
+            value={value.billing}
+            onChange={(b) => onChange({ ...value, billing: b === value.billing ? null : b })}
+            variant="emerald"
+            triggerTestId="filter-billing-trigger"
+            className="flex-1 sm:flex-none sm:min-w-[160px]"
+          />
         </div>
       </div>
     </div>

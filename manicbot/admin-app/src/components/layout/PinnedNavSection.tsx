@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { Pin } from "lucide-react";
+import { Pin, PinOff } from "lucide-react";
 import { listManifests } from "@plugins/index";
 import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
 import { useLang } from "~/components/LangContext";
@@ -26,7 +26,7 @@ export function PinnedNavSection({
   showEmpty?: boolean;
 }) {
   const { lang } = useLang();
-  const { pinned } = usePinnedPlugins();
+  const { pinned, unpin } = usePinnedPlugins();
   const items = useMemo(() => {
     if (!pinned.length) return [];
     const pluginLang: PluginLang = (PLUGIN_LANGS as readonly string[]).includes(lang)
@@ -71,17 +71,30 @@ export function PinnedNavSection({
       )}
       <div className="space-y-0.5">
         {items.map((item) => (
-          <Link
+          <div
             key={item.slug}
-            href={item.href}
-            data-testid="pinned-nav-item"
-            data-slug={item.slug}
-            className={`group flex items-center gap-3 rounded-xl px-3 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.04] hover:text-slate-700 dark:hover:text-slate-200 ${collapsed ? "justify-center px-0" : ""}`}
-            title={collapsed ? item.label : undefined}
+            className={`group relative flex items-center rounded-xl ${collapsed ? "justify-center" : ""}`}
           >
-            <item.Icon className="h-[18px] w-[18px]" style={{ color: item.tint }} />
-            {!collapsed && <span className="text-[13px] truncate">{item.label}</span>}
-          </Link>
+            <Link
+              href={item.href}
+              data-testid="pinned-nav-item"
+              data-slug={item.slug}
+              className={`flex flex-1 items-center gap-3 rounded-xl px-3 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.04] hover:text-slate-700 dark:hover:text-slate-200 ${collapsed ? "justify-center px-0" : "pr-7"}`}
+              title={collapsed ? item.label : undefined}
+            >
+              <item.Icon className="h-[18px] w-[18px] shrink-0" style={{ color: item.tint }} />
+              {!collapsed && <span className="text-[13px] truncate">{item.label}</span>}
+            </Link>
+            {!collapsed && (
+              <button
+                onClick={() => unpin(item.slug)}
+                title={t("plugins.unpin", lang)}
+                className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <PinOff size={12} />
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </div>

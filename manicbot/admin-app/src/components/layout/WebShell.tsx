@@ -226,7 +226,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
           {/* Nav groups */}
           <nav className="flex-1 px-2.5 py-4 space-y-5 overflow-y-auto scrollbar-none">
-            <PinnedNavSection collapsed={collapsed} showEmpty />
+            <PinnedNavSection collapsed={collapsed} />
             {navGroups.map((group) => (
               <CollapsibleNavGroup
                 key={group.id}

@@ -5,17 +5,26 @@
  * localStorage is kept as an optimistic cache so first paint is instant and
  * the sidebar doesn't flash empty. `CustomEvent("manicbot:pinned-changed")`
  * is preserved for any legacy listeners.
+ *
+ * Pins are per-tenant: the localStorage key includes tenantId so different
+ * tenant accounts on the same browser don't share pinned state.
  */
 
 import { useCallback, useEffect } from "react";
 import { api } from "~/trpc/react";
+import { useRole } from "~/components/RoleContext";
 
-const KEY = "manicbot_pinned_plugins";
+const KEY_PREFIX = "manicbot_pinned_plugins";
 
-function readPinned(): string[] {
+/** localStorage key is tenant-scoped to prevent cross-tenant bleed */
+function storageKey(tenantId?: string | null): string {
+  return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
+}
+
+function readPinned(tenantId?: string | null): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(storageKey(tenantId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -25,10 +34,10 @@ function readPinned(): string[] {
   }
 }
 
-function writePinned(list: string[]) {
+function writePinned(list: string[], tenantId?: string | null) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, 20)));
+    window.localStorage.setItem(storageKey(tenantId), JSON.stringify(list.slice(0, 20)));
     window.dispatchEvent(new CustomEvent("manicbot:pinned-changed", { detail: list }));
   } catch {
     // noop
@@ -43,17 +52,19 @@ export function usePinnedPlugins(): {
   toggle: (slug: string) => void;
   error: string | null;
 } {
+  const { tenantId } = useRole();
   const utils = api.useUtils();
   const q = api.plugins.listPinned.useQuery(undefined, {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
-    initialData: () => (typeof window !== "undefined" ? readPinned() : undefined),
+    initialData: () =>
+      typeof window !== "undefined" ? readPinned(tenantId) : undefined,
   });
 
   // Mirror server truth → localStorage for next-paint seed
   useEffect(() => {
-    if (q.data) writePinned(q.data);
-  }, [q.data]);
+    if (q.data) writePinned(q.data, tenantId);
+  }, [q.data, tenantId]);
 
   const toggleMut = api.plugins.togglePin.useMutation({
     onMutate: async ({ slug }) => {
@@ -63,13 +74,13 @@ export function usePinnedPlugins(): {
         ? prev.filter((s) => s !== slug)
         : [slug, ...prev].slice(0, 20);
       utils.plugins.listPinned.setData(undefined, next);
-      writePinned(next);
+      writePinned(next, tenantId);
       return { prev };
     },
     onError: (_err, _v, ctx) => {
       if (ctx?.prev) {
         utils.plugins.listPinned.setData(undefined, ctx.prev);
-        writePinned(ctx.prev);
+        writePinned(ctx.prev, tenantId);
       }
     },
     onSettled: () => {

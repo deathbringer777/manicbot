@@ -818,13 +818,14 @@ export const pluginEvents = sqliteTable("plugin_events", {
 // ON DELETE CASCADE: removing a web_user drops their pins automatically.
 export const pluginPins = sqliteTable("plugin_pins", {
   webUserId: text("web_user_id").notNull().references(() => webUsers.id, { onDelete: "cascade" }),
+  tenantId: text("tenant_id").notNull().default(""),
   pluginSlug: text("plugin_slug").notNull(),
   pinnedAt: integer("pinned_at").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
 }, (t) => [
-  primaryKey({ columns: [t.webUserId, t.pluginSlug] }),
-  index("idx_plugin_pins_user").on(t.webUserId, t.sortOrder),
-  index("idx_plugin_pins_user_at").on(t.webUserId, t.pinnedAt),
+  primaryKey({ columns: [t.webUserId, t.tenantId, t.pluginSlug] }),
+  index("idx_plugin_pins_user").on(t.webUserId, t.tenantId, t.sortOrder),
+  index("idx_plugin_pins_user_at").on(t.webUserId, t.tenantId, t.pinnedAt),
 ]);
 
 // ─── Error log (migration 0039) ──────────────────────────────────────────

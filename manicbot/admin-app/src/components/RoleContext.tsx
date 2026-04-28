@@ -4,7 +4,7 @@ import { createContext, useContext } from "react";
 import type { AppRole } from "~/server/api/routers/auth";
 import type { PermissionKey } from "~/server/api/permissions";
 
-interface RoleContextValue {
+export interface RoleContextValue {
   role: AppRole;
   tenantId: string | null;
   tenantName: string | null;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useRole } from "~/components/RoleContext";
 
 export interface DashboardPrefs {
   hiddenTabs: string[];
@@ -9,7 +10,12 @@ export interface DashboardPrefs {
   defaultTab: string;
 }
 
-const STORAGE_KEY = "manicbot_dashboard_prefs";
+const KEY_PREFIX = "manicbot_dashboard_prefs";
+
+/** Storage key is tenant-scoped to prevent cross-tenant bleed */
+function storageKey(tenantId?: string | null): string {
+  return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
+}
 
 const DEFAULTS: DashboardPrefs = {
   hiddenTabs: [],
@@ -18,10 +24,10 @@ const DEFAULTS: DashboardPrefs = {
   defaultTab: "overview",
 };
 
-function load(): DashboardPrefs {
+function load(tenantId?: string | null): DashboardPrefs {
   if (typeof window === "undefined") return DEFAULTS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(tenantId));
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<DashboardPrefs>;
     return { ...DEFAULTS, ...parsed };
@@ -30,20 +36,26 @@ function load(): DashboardPrefs {
   }
 }
 
-function save(prefs: DashboardPrefs) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+function save(prefs: DashboardPrefs, tenantId?: string | null) {
+  localStorage.setItem(storageKey(tenantId), JSON.stringify(prefs));
 }
 
 export function useDashboardPrefs() {
-  const [prefs, setPrefsState] = useState<DashboardPrefs>(load);
+  const { tenantId } = useRole();
+  const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId));
+
+  // Re-load when tenant switches (same browser, multiple tenant accounts)
+  useEffect(() => {
+    setPrefsState(load(tenantId));
+  }, [tenantId]);
 
   const update = useCallback((patch: Partial<DashboardPrefs>) => {
     setPrefsState((prev) => {
       const next = { ...prev, ...patch };
-      save(next);
+      save(next, tenantId);
       return next;
     });
-  }, []);
+  }, [tenantId]);
 
   const toggleTab = useCallback((tab: string) => {
     setPrefsState((prev) => {
@@ -53,10 +65,10 @@ export function useDashboardPrefs() {
       // If hiding the default tab, reset default to overview
       const defaultTab = hidden.includes(prev.defaultTab) ? "overview" : prev.defaultTab;
       const next = { ...prev, hiddenTabs: hidden, defaultTab };
-      save(next);
+      save(next, tenantId);
       return next;
     });
-  }, []);
+  }, [tenantId]);
 
   const toggleStatCard = useCallback((card: string) => {
     setPrefsState((prev) => {
@@ -64,10 +76,10 @@ export function useDashboardPrefs() {
         ? prev.hiddenStatCards.filter((c) => c !== card)
         : [...prev.hiddenStatCards, card];
       const next = { ...prev, hiddenStatCards: hidden };
-      save(next);
+      save(next, tenantId);
       return next;
     });
-  }, []);
+  }, [tenantId]);
 
   const setShowTodayApts = useCallback((show: boolean) => {
     update({ showTodayApts: show });
@@ -79,3 +91,6 @@ export function useDashboardPrefs() {
 
   return { prefs, toggleTab, toggleStatCard, setShowTodayApts, setDefaultTab };
 }
+
+// Pure helpers for testing / server-side seeding
+export { load as loadDashboardPrefs, save as saveDashboardPrefs, storageKey as dashboardPrefsKey };

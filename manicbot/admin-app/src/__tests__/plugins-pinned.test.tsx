@@ -14,6 +14,12 @@ const _mockLocalStorage = {
 };
 beforeAll(() => { vi.stubGlobal("localStorage", _mockLocalStorage); });
 
+// ── Mock useRole so tenantId is configurable per test ───────────────────────
+let mockTenantId: string | null = "tenant_default";
+vi.mock("~/components/RoleContext", () => ({
+  useRole: () => ({ tenantId: mockTenantId }),
+}));
+
 // ── Shared mutable tRPC mock state ──────────────────────────────────────
 let mockPinnedData: string[] = [];
 let mockMutate: (v: { slug: string }) => void = () => {};
@@ -64,11 +70,12 @@ beforeEach(() => {
   mockPinnedData = [];
   mockMutate = () => {};
   mockMutationError = null;
+  mockTenantId = "tenant_default";
 });
 
 afterEach(() => cleanup());
 
-describe("pinned storage helpers (legacy localStorage cache)", () => {
+describe("pinned storage helpers (tenant-scoped localStorage cache)", () => {
   it("readPinned returns [] for empty", () => {
     expect(readPinned()).toEqual([]);
   });
@@ -84,27 +91,77 @@ describe("pinned storage helpers (legacy localStorage cache)", () => {
     window.localStorage.setItem("manicbot_pinned_plugins", JSON.stringify(Array.from({ length: 30 }, (_, i) => `p${i}`)));
     expect(readPinned()).toHaveLength(20);
   });
-  it("writePinned persists + fires CustomEvent", () => {
+  it("writePinned persists + fires CustomEvent (global key)", () => {
     writePinned(["sms"]);
     expect(JSON.parse(window.localStorage.getItem("manicbot_pinned_plugins")!)).toEqual(["sms"]);
+  });
+  it("writePinned with tenantId uses scoped key", () => {
+    writePinned(["sms"], "t_salon");
+    expect(JSON.parse(window.localStorage.getItem("manicbot_pinned_plugins_t_salon")!)).toEqual(["sms"]);
+    expect(window.localStorage.getItem("manicbot_pinned_plugins")).toBeNull();
+  });
+  it("readPinned with tenantId reads scoped key", () => {
+    window.localStorage.setItem("manicbot_pinned_plugins_t_abc", JSON.stringify(["notes"]));
+    expect(readPinned("t_abc")).toEqual(["notes"]);
+    expect(readPinned()).toEqual([]);
+  });
+});
+
+describe("cross-tenant isolation — localStorage", () => {
+  it("pins written for tenant A are not visible from tenant B", () => {
+    writePinned(["sms", "quick-notes"], "tenant_A");
+    writePinned(["google-calendar"], "tenant_B");
+
+    expect(readPinned("tenant_A")).toEqual(["sms", "quick-notes"]);
+    expect(readPinned("tenant_B")).toEqual(["google-calendar"]);
+    expect(readPinned("tenant_B")).not.toContain("sms");
+    expect(readPinned("tenant_A")).not.toContain("google-calendar");
+  });
+
+  it("usePinnedPlugins mirrors server data to the correct tenant-scoped key", async () => {
+    mockTenantId = "tenant_X";
+    mockPinnedData = ["quick-notes"];
+    renderHook(() => usePinnedPlugins());
+    await waitFor(() => {
+      const key = "manicbot_pinned_plugins_tenant_X";
+      const stored = JSON.parse(window.localStorage.getItem(key) ?? "[]") as string[];
+      expect(stored).toContain("quick-notes");
+      // The global (non-scoped) key must remain untouched
+      expect(window.localStorage.getItem("manicbot_pinned_plugins")).toBeNull();
+    });
+  });
+
+  it("switching tenantId reads from a different localStorage bucket", async () => {
+    // Seed two buckets
+    window.localStorage.setItem("manicbot_pinned_plugins_tenant_A", JSON.stringify(["sms"]));
+    window.localStorage.setItem("manicbot_pinned_plugins_tenant_B", JSON.stringify(["google-calendar"]));
+
+    mockTenantId = "tenant_A";
+    expect(readPinned(mockTenantId)).toContain("sms");
+    expect(readPinned(mockTenantId)).not.toContain("google-calendar");
+
+    mockTenantId = "tenant_B";
+    expect(readPinned(mockTenantId)).toContain("google-calendar");
+    expect(readPinned(mockTenantId)).not.toContain("sms");
   });
 });
 
 describe("usePinnedPlugins — server-backed (mocked tRPC)", () => {
   it("reads from tRPC query, not localStorage", () => {
-    window.localStorage.setItem("manicbot_pinned_plugins", JSON.stringify(["from-local"]));
+    mockTenantId = "tenant_A";
+    window.localStorage.setItem("manicbot_pinned_plugins_tenant_A", JSON.stringify(["from-local"]));
     mockPinnedData = ["from-server"];
     const { result } = renderHook(() => usePinnedPlugins());
     expect(result.current.pinned).toEqual(["from-server"]);
   });
 
   it("mirrors server truth to localStorage for next-paint seeding", async () => {
+    mockTenantId = "tenant_A";
     mockPinnedData = ["quick-notes"];
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
-      expect(JSON.parse(window.localStorage.getItem("manicbot_pinned_plugins") ?? "[]")).toEqual([
-        "quick-notes",
-      ]);
+      const key = "manicbot_pinned_plugins_tenant_A";
+      expect(JSON.parse(window.localStorage.getItem(key) ?? "[]")).toEqual(["quick-notes"]);
     });
   });
 

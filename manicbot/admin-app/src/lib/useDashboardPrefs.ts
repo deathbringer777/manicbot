@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRole } from "~/components/RoleContext";
 
 export interface DashboardPrefs {
   hiddenTabs: string[];
@@ -9,7 +10,7 @@ export interface DashboardPrefs {
   defaultTab: string;
 }
 
-const STORAGE_KEY = "manicbot_dashboard_prefs";
+const KEY_PREFIX = "manicbot_dashboard_prefs";
 
 const DEFAULTS: DashboardPrefs = {
   hiddenTabs: [],
@@ -18,10 +19,14 @@ const DEFAULTS: DashboardPrefs = {
   defaultTab: "overview",
 };
 
-function load(): DashboardPrefs {
+function storageKey(tenantId?: string | null): string {
+  return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
+}
+
+function load(key: string): DashboardPrefs {
   if (typeof window === "undefined") return DEFAULTS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<DashboardPrefs>;
     return { ...DEFAULTS, ...parsed };
@@ -30,20 +35,22 @@ function load(): DashboardPrefs {
   }
 }
 
-function save(prefs: DashboardPrefs) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+function save(prefs: DashboardPrefs, key: string) {
+  localStorage.setItem(key, JSON.stringify(prefs));
 }
 
 export function useDashboardPrefs() {
-  const [prefs, setPrefsState] = useState<DashboardPrefs>(load);
+  const { tenantId } = useRole();
+  const key = storageKey(tenantId);
+  const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(key));
 
   const update = useCallback((patch: Partial<DashboardPrefs>) => {
     setPrefsState((prev) => {
       const next = { ...prev, ...patch };
-      save(next);
+      save(next, key);
       return next;
     });
-  }, []);
+  }, [key]);
 
   const toggleTab = useCallback((tab: string) => {
     setPrefsState((prev) => {
@@ -53,10 +60,10 @@ export function useDashboardPrefs() {
       // If hiding the default tab, reset default to overview
       const defaultTab = hidden.includes(prev.defaultTab) ? "overview" : prev.defaultTab;
       const next = { ...prev, hiddenTabs: hidden, defaultTab };
-      save(next);
+      save(next, key);
       return next;
     });
-  }, []);
+  }, [key]);
 
   const toggleStatCard = useCallback((card: string) => {
     setPrefsState((prev) => {
@@ -64,10 +71,10 @@ export function useDashboardPrefs() {
         ? prev.hiddenStatCards.filter((c) => c !== card)
         : [...prev.hiddenStatCards, card];
       const next = { ...prev, hiddenStatCards: hidden };
-      save(next);
+      save(next, key);
       return next;
     });
-  }, []);
+  }, [key]);
 
   const setShowTodayApts = useCallback((show: boolean) => {
     update({ showTodayApts: show });

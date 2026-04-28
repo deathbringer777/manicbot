@@ -28,7 +28,6 @@ import googleCalendarManifest from "./google-calendar/manifest";
 // ── tenant_owner ────────────────────────────────────────────────────────────
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
 import birthdayCampaignsManifest from "./birthday-campaigns/manifest";
-import multiLangBotManifest from "./multi-lang-bot/manifest";
 
 // ── tenant_manager ──────────────────────────────────────────────────────────
 import shiftPlannerManifest from "./shift-planner/manifest";
@@ -67,7 +66,6 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
   birthdayCampaignsManifest,
-  multiLangBotManifest,
   // tenant_manager
   shiftPlannerManifest,
   taskBoardManifest,

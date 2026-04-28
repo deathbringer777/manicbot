@@ -9,6 +9,8 @@ import { Download, FileText, Users, CalendarDays, Receipt } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { toast } from "~/lib/toast";
+import { readPinned } from "~/lib/plugins/pinnedPlugins";
+import { collapsedGroupsStorageKey } from "~/lib/plugins/collapsedGroups";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 const LABELS = {
@@ -54,7 +56,7 @@ function download(filename: string, content: string) {
 }
 
 export default function ExportHubRuntime({ installationId }: PluginRuntimeProps) {
-  const { role } = useRole();
+  const { role, tenantId } = useRole();
   const { lang } = useLang();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -67,8 +69,7 @@ export default function ExportHubRuntime({ installationId }: PluginRuntimeProps)
       role: "any",
       filename: "pinned-plugins.csv",
       build: () => {
-        const raw = localStorage.getItem("manicbot_pinned_plugins");
-        const list = raw ? (JSON.parse(raw) as string[]) : [];
+        const list = readPinned(tenantId);
         return [["slug"], ...list.map((s) => [s])];
       },
     },
@@ -103,7 +104,12 @@ export default function ExportHubRuntime({ installationId }: PluginRuntimeProps)
       filename: "ui-settings.csv",
       build: () => {
         const rows: string[][] = [["key", "value"]];
-        const keys = ["manicbot_web_theme", "manicbot_lang", "manicbot_pinned_plugins", "manicbot_nav_collapsed_groups"];
+        const keys = [
+          "manicbot_web_theme",
+          "manicbot_lang",
+          `manicbot_pinned_plugins_${tenantId ?? ""}`,
+          collapsedGroupsStorageKey(tenantId),
+        ];
         for (const k of keys) {
           const v = localStorage.getItem(k);
           if (v !== null) rows.push([k, v]);

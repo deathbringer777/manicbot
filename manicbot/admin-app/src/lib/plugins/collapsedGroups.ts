@@ -1,6 +1,6 @@
 /**
  * LocalStorage-backed nav group collapse state (Shopify-style collapsible sections).
- * Storage key is per-tenant so collapsing groups in salon A doesn't affect salon B.
+ * Keys are tenant-scoped so different tenants in the same browser don't share state.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { useRole } from "~/components/RoleContext";
 
 const KEY_PREFIX = "manicbot_nav_collapsed_groups";
 
+/** Storage key is tenant-scoped to prevent cross-tenant bleed */
 function storageKey(tenantId?: string | null): string {
   return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
 }
@@ -66,4 +67,4 @@ export function useCollapsedGroups(): {
   return { isCollapsed, toggle };
 }
 
-export { readCollapsed, writeCollapsed, storageKey as collapsedGroupsStorageKey };
+export { readCollapsed, writeCollapsed };

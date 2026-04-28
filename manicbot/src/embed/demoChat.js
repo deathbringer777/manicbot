@@ -227,7 +227,7 @@ export const DEMO_CHAT_SRC = `
     // bubble + buttons have settled. Already-persisted sessions never enter
     // the .mb-init-pending state, so the composer is visible immediately.
     '.mb-composer{transition:opacity .5s cubic-bezier(.16,1,.3,1),transform .5s cubic-bezier(.16,1,.3,1)}' +
-    '.mb-demo.mb-init-pending .mb-composer{opacity:0;pointer-events:none;transform:translateY(8px)}' +
+    '.mb-demo.mb-init-pending .mb-composer{pointer-events:none}' +
     // Respect user preference for reduced motion: kill every entrance keyframe
     // and present the chat fully assembled. The widget still works; it just
     // skips the staged animation.

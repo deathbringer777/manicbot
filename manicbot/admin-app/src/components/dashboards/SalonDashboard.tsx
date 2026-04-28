@@ -60,6 +60,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
   });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const mintToken = api.salon.mintUploadToken.useMutation();
@@ -76,15 +77,17 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
   async function handlePhotoFile(file: File) {
     if (photos.length >= 5) return;
     const err = validateUploadFile(file);
-    if (err) { alert(err); return; }
+    if (err) { setPhotoError(err); return; }
+    setPhotoError("");
     setUploading(true);
     try {
       const compressed = await resizeImageClientSide(file, 1200, "image/webp", 0.82);
       const { uploadUrl } = await mintToken.mutateAsync({ tenantId, kind: "service_photo" });
       const result = await uploadAssetFile(uploadUrl, compressed);
       setPhotos(prev => [...prev, result.url].slice(0, 5));
-    } catch {
-      alert(t("master.photoUploadError", lang));
+    } catch (e) {
+      console.error("Photo upload failed:", e);
+      setPhotoError(t("master.photoUploadError", lang));
     } finally {
       setUploading(false);
     }
@@ -222,6 +225,12 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
             </div>
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) { void handlePhotoFile(f); } e.target.value = ""; }} />
+            {photoError && (
+              <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                <p className="text-sm text-red-600 dark:text-red-400">{photoError}</p>
+              </div>
+            )}
           </div>
 
           {/* Active toggle */}

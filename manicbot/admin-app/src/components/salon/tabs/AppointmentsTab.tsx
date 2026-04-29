@@ -24,7 +24,7 @@ export function AppointmentsTab({ tenantId }: { tenantId: string }) {
         <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("salon.appointments", lang)}</h2>
       </div>
       {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-      {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+      {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
       <div className="space-y-2">
         {apts.data?.map((a: any) => (
           <AptCard key={a.id} a={a} lang={lang}

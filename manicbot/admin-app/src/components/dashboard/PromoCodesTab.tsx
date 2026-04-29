@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 
 interface Props {
   tenantId: string;
@@ -53,17 +54,17 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="glass-card rounded-2xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-white">{t("stamp.title", lang)}</h3>
-          <p className="text-xs text-white/50">{t("stamp.subtitle", lang)}</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("stamp.title", lang)}</h3>
+          <p className="text-xs text-slate-500 dark:text-white/50">{t("stamp.subtitle", lang)}</p>
         </div>
         <button
           type="button"
           onClick={() => onChange(setEnabled, !enabled)}
           className={`relative h-6 w-11 rounded-full transition ${
-            enabled ? "bg-emerald-500" : "bg-white/20"
+            enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-white/20"
           }`}
           aria-label={enabled ? t("stamp.disable", lang) : t("stamp.enable", lang)}
         >
@@ -76,25 +77,25 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
       </div>
 
       {enabled && (
-        <div className="space-y-3 border-t border-white/10 pt-4">
+        <div className="space-y-3 border-t border-slate-200 dark:border-white/10 pt-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">{t("stamp.visitsRequired", lang)}</label>
+              <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">{t("stamp.visitsRequired", lang)}</label>
               <input
                 type="number"
                 min={2}
                 max={30}
                 value={visitsRequired}
                 onChange={(e) => onChange(setVisitsRequired, Math.max(2, Math.min(30, Number(e.target.value) || 5)))}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-violet-400"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">{t("stamp.rewardType", lang)}</label>
+              <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">{t("stamp.rewardType", lang)}</label>
               <select
                 value={rewardType}
                 onChange={(e) => onChange(setRewardType, e.target.value as "free_service" | "percent_off" | "fixed_off")}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-violet-400"
               >
                 <option value="free_service">{t("stamp.freeService", lang)}</option>
                 <option value="percent_off">{t("stamp.percentOff", lang)}</option>
@@ -104,7 +105,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
           </div>
           {rewardType !== "free_service" && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">
+              <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">
                 {rewardType === "percent_off" ? t("stamp.discountPercent", lang) : t("stamp.discountAmount", lang)}
               </label>
               <input
@@ -113,7 +114,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
                 max={10000}
                 value={rewardValue}
                 onChange={(e) => onChange(setRewardValue, e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-violet-400"
               />
             </div>
           )}
@@ -152,6 +153,7 @@ export function PromoCodesTab({ tenantId }: Props) {
   const [validDays, setValidDays] = useState<string>("30");
   const [maxUses, setMaxUses] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: number; code: string } | null>(null);
 
   function randomCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -197,8 +199,8 @@ export function PromoCodesTab({ tenantId }: Props) {
       <StampCardConfig tenantId={tenantId} />
 
       {/* Create form */}
-      <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <h3 className="mb-4 text-sm font-semibold text-white">{t("promo.newTitle", lang)}</h3>
+      <div className="glass-card rounded-2xl p-5">
+        <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">{t("promo.newTitle", lang)}</h3>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
@@ -206,12 +208,12 @@ export function PromoCodesTab({ tenantId }: Props) {
               placeholder="CODE"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-violet-400"
+              className="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 font-mono text-sm text-slate-900 dark:text-white outline-none placeholder:text-slate-400 dark:placeholder:text-white/30 focus:border-violet-400"
             />
             <button
               type="button"
               onClick={randomCode}
-              className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70 transition hover:bg-white/[0.08]"
+              className="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-xs text-slate-700 dark:text-white/70 transition hover:bg-slate-50 dark:hover:bg-white/[0.08]"
             >
               🎲 {t("promo.random", lang)}
             </button>
@@ -219,42 +221,42 @@ export function PromoCodesTab({ tenantId }: Props) {
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.discountType", lang)}</label>
+              <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">{t("promo.discountType", lang)}</label>
               <select
                 value={discountType}
                 onChange={(e) => setDiscountType(e.target.value as "percent" | "fixed_pln")}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-violet-400"
               >
                 <option value="percent">{t("promo.percent", lang)}</option>
                 <option value="fixed_pln">{t("promo.fixedPln", lang)}</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.value", lang)}</label>
+              <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">{t("promo.value", lang)}</label>
               <input
                 type="number"
                 min={1}
                 max={10000}
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-violet-400"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.validDays", lang)}</label>
+              <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">{t("promo.validDays", lang)}</label>
               <input
                 type="number"
                 min={1}
                 max={365}
                 value={validDays}
                 onChange={(e) => setValidDays(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-violet-400"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-white/70">{t("promo.maxUses", lang)}</label>
+            <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-white/70">{t("promo.maxUses", lang)}</label>
             <input
               type="number"
               min={1}
@@ -262,12 +264,12 @@ export function PromoCodesTab({ tenantId }: Props) {
               placeholder="∞"
               value={maxUses}
               onChange={(e) => setMaxUses(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-violet-400"
+              className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-2 text-sm text-slate-900 dark:text-white outline-none placeholder:text-slate-400 dark:placeholder:text-white/30 focus:border-violet-400"
             />
           </div>
 
           {err && (
-            <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300">{err}</p>
+            <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-700 dark:text-rose-300">{err}</p>
           )}
 
           <button
@@ -282,11 +284,11 @@ export function PromoCodesTab({ tenantId }: Props) {
       </div>
 
       {/* Existing codes list */}
-      <div className="glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <h3 className="mb-4 text-sm font-semibold text-white">{t("promo.activeTitle", lang)}</h3>
-        {list.isLoading && <p className="text-xs text-white/50">{t("promo.loading", lang)}</p>}
+      <div className="glass-card rounded-2xl p-5">
+        <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">{t("promo.activeTitle", lang)}</h3>
+        {list.isLoading && <p className="text-xs text-slate-500 dark:text-white/50">{t("promo.loading", lang)}</p>}
         {!list.isLoading && (list.data?.length ?? 0) === 0 && (
-          <p className="text-xs text-white/50">{t("promo.empty", lang)}</p>
+          <p className="text-xs text-slate-500 dark:text-white/50">{t("promo.empty", lang)}</p>
         )}
         <div className="space-y-2">
           {(list.data ?? []).map((p) => {
@@ -295,21 +297,21 @@ export function PromoCodesTab({ tenantId }: Props) {
             return (
               <div
                 key={p.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3"
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-semibold text-white">{p.code}</span>
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/60">
+                    <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">{p.code}</span>
+                    <span className="rounded-full bg-slate-100 dark:bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-600 dark:text-white/60">
                       {p.kind}
                     </span>
                     {expired && (
-                      <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-medium text-rose-300">
+                      <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
                         {t("promo.expired", lang)}
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-white/55">
+                  <p className="mt-0.5 text-xs text-slate-600 dark:text-white/55">
                     −{p.discountValue}{p.discountType === "percent" ? "%" : " zł"}
                     {p.validUntil ? ` · ${t("promo.until", lang)} ${new Date(p.validUntil * 1000).toLocaleDateString(localeForDate)}` : ""}
                     {p.maxUses ? ` · ${p.maxUses} ${t("promo.uses", lang)}` : ""}
@@ -317,12 +319,8 @@ export function PromoCodesTab({ tenantId }: Props) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (confirm(`${t("promo.confirmDelete", lang)} ${p.code}?`)) {
-                      del.mutate({ tenantId, id: p.id });
-                    }
-                  }}
-                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/60 transition hover:bg-rose-500/10 hover:text-rose-300"
+                  onClick={() => setPendingDelete({ id: p.id, code: p.code })}
+                  className="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-3 py-1.5 text-xs text-slate-600 dark:text-white/60 transition hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300"
                 >
                   ✕
                 </button>
@@ -331,6 +329,22 @@ export function PromoCodesTab({ tenantId }: Props) {
           })}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        tone="danger"
+        title={`${t("promo.confirmDelete", lang)} ${pendingDelete?.code ?? ""}?`}
+        description={t("common.deleteConfirmDesc", lang)}
+        confirmLabel={t("common.delete", lang)}
+        busy={del.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          del.mutate({ tenantId, id: pendingDelete.id }, {
+            onSettled: () => setPendingDelete(null),
+          });
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Power, Trash2, Loader2 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { toast } from "~/lib/toast";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { getPlugin } from "@plugins/index";
 import type { PluginLang } from "@plugins/types";
 import { PLUGIN_LANGS } from "@plugins/types";
@@ -33,11 +35,13 @@ export function PluginSettingsSection({ slug }: { slug: string }) {
     },
     onError: (err) => toast.error(err.message),
   });
+  const [confirmUninstall, setConfirmUninstall] = useState(false);
   const uninstallMut = api.plugins.uninstall.useMutation({
     onSuccess: () => {
       toast.success(t("plugins.uninstall.success", lang));
       utils.plugins.getInstalled.invalidate();
       utils.plugins.listCatalog.invalidate();
+      setConfirmUninstall(false);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -101,10 +105,7 @@ export function PluginSettingsSection({ slug }: { slug: string }) {
           <button
             type="button"
             disabled={uninstallMut.isPending}
-            onClick={() => {
-              if (!confirm(t("plugins.uninstall.confirm", lang))) return;
-              uninstallMut.mutate({ installationId: installation.id });
-            }}
+            onClick={() => setConfirmUninstall(true)}
             data-testid="plugin-settings-uninstall"
             className="px-3 py-1.5 text-xs rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 inline-flex items-center gap-1.5"
           >
@@ -125,6 +126,16 @@ export function PluginSettingsSection({ slug }: { slug: string }) {
           {plugin.manifest.description[pluginLang]}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmUninstall}
+        tone="danger"
+        title={t("plugins.uninstall.confirm", lang)}
+        confirmLabel={t("plugins.settings.uninstall", lang)}
+        busy={uninstallMut.isPending}
+        onConfirm={() => uninstallMut.mutate({ installationId: installation.id })}
+        onCancel={() => setConfirmUninstall(false)}
+      />
     </div>
   );
 }

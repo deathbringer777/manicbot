@@ -20,11 +20,11 @@ export default function AutomationsClient() {
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
           {PLANNED_AUTOMATIONS.map(({ icon: Icon, label, desc }) => (
-            <div key={label} className="rounded-lg bg-slate-950/40 border border-slate-800 px-3 py-2.5 opacity-60">
+            <div key={label} className="rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 px-3 py-2.5 opacity-80 dark:opacity-60">
               <div className="flex items-start gap-2">
-                <Icon className="h-4 w-4 text-violet-400 mt-0.5 shrink-0" />
+                <Icon className="h-4 w-4 text-violet-500 dark:text-violet-400 mt-0.5 shrink-0" />
                 <div>
-                  <div className="text-xs font-semibold text-slate-100">{label}</div>
+                  <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">{label}</div>
                   <div className="text-[10px] text-slate-500 mt-0.5">{desc}</div>
                 </div>
               </div>

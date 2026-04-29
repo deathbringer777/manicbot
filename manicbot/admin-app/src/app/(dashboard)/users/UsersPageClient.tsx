@@ -339,13 +339,13 @@ export default function UsersPageClient() {
           onClick={() => setRoleModal(null)}
         >
           <div
-            className="bg-slate-900 border border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-white">Управление ролью</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Управление ролью</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {roleModal.name}
                   {roleModal.username && (
                     <span className="ml-1">{roleModal.username}</span>
@@ -363,13 +363,13 @@ export default function UsersPageClient() {
               </div>
               <button
                 onClick={() => setRoleModal(null)}
-                className="p-2 rounded-xl bg-slate-800 text-slate-400"
+                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-[11px] text-slate-500 mb-2">
+            <p className="text-[11px] text-slate-500 dark:text-slate-500 mb-2">
               Роль админа платформы только у владельца (ADMIN_CHAT_ID). Здесь — только поддержка.
             </p>
             <div className="space-y-2">
@@ -383,15 +383,15 @@ export default function UsersPageClient() {
                   key={key}
                   onClick={() => setRoleMut.mutate({ chatId: roleModal.id, role: key })}
                   disabled={setRoleMut.isPending}
-                  className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-slate-800 active:bg-slate-700 text-sm text-white disabled:opacity-50"
+                  className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-slate-100 dark:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-sm text-slate-900 dark:text-white disabled:opacity-50"
                 >
                   <Shield className="w-4 h-4 text-brand-400 shrink-0" />
                   <span>
                     Назначить{" "}
-                    <span className="font-bold text-brand-400">{label}</span>
+                    <span className="font-bold text-brand-500 dark:text-brand-400">{label}</span>
                   </span>
                   {roleModal.role === key && (
-                    <span className="ml-auto text-[10px] text-brand-400 font-bold">ТЕКУЩАЯ</span>
+                    <span className="ml-auto text-[10px] text-brand-500 dark:text-brand-400 font-bold">ТЕКУЩАЯ</span>
                   )}
                 </button>
               ))}
@@ -400,7 +400,7 @@ export default function UsersPageClient() {
                 <button
                   onClick={() => removeRoleMut.mutate({ chatId: roleModal.id })}
                   disabled={removeRoleMut.isPending}
-                  className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-red-500/10 active:bg-red-500/20 text-sm text-red-400 disabled:opacity-50"
+                  className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-red-500/10 active:bg-red-500/20 text-sm text-red-600 dark:text-red-400 disabled:opacity-50"
                 >
                   <ShieldOff className="w-4 h-4 shrink-0" />
                   Снять роль

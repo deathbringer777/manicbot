@@ -46,28 +46,28 @@ export default function ProvidersClient() {
             const hc = lastCheck[p.name];
             const status = hc?.status ?? p.db?.healthStatus ?? "unknown";
             const badge =
-              status === "ok" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-              : status === "not_configured" ? "bg-slate-700/40 text-slate-400 border-slate-700"
-              : status === "degraded" ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-              : status === "down" ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-              : "bg-slate-700/40 text-slate-500 border-slate-700";
+              status === "ok" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+              : status === "not_configured" ? "bg-slate-200 dark:bg-slate-700/40 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700"
+              : status === "degraded" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+              : status === "down" ? "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
+              : "bg-slate-200 dark:bg-slate-700/40 text-slate-600 dark:text-slate-500 border-slate-300 dark:border-slate-700";
 
             return (
-              <div key={p.name} className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div key={p.name} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-base font-semibold text-slate-100 capitalize">{p.name}</h3>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 capitalize">{p.name}</h3>
                       <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${badge}`}>
                         {status}
                       </span>
                       {p.db?.enabled ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-violet-500/15 text-violet-300 border border-violet-500/30">enabled</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30">enabled</span>
                       ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-800 text-slate-500 border border-slate-700">dormant</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">dormant</span>
                       )}
                       {p.db?.isDefault && (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-sky-500/15 text-sky-300 border border-sky-500/30">default</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">default</span>
                       )}
                     </div>
                     <div className="text-[11px] text-slate-500">
@@ -76,15 +76,15 @@ export default function ProvidersClient() {
                       {p.channels.includes("sms") && ` • sms: ${p.configured.sms ? "✓" : "✗"}`}
                     </div>
                     {hc?.detail && (
-                      <div className="text-[11px] text-slate-400 mt-1">{hc.detail}</div>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">{hc.detail}</div>
                     )}
                     {hc?.account && (
-                      <div className="text-[11px] text-slate-400 mt-1">
-                        account: <span className="font-mono text-slate-300">{hc.account}</span>
-                        {hc.plan && <> · plan: <span className="text-slate-300">{hc.plan}</span></>}
+                      <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                        account: <span className="font-mono text-slate-700 dark:text-slate-300">{hc.account}</span>
+                        {hc.plan && <> · plan: <span className="text-slate-700 dark:text-slate-300">{hc.plan}</span></>}
                       </div>
                     )}
-                    <div className="text-[10px] text-slate-600 mt-1">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-600 mt-1">
                       last check: {fmtDate(p.db?.lastCheckAt)}
                     </div>
                   </div>
@@ -93,7 +93,7 @@ export default function ProvidersClient() {
                     <button
                       onClick={() => checkMut.mutate({ name: p.name })}
                       disabled={checkMut.isPending}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
                     >
                       <Activity className="h-3.5 w-3.5" />
                       Проверить
@@ -103,8 +103,8 @@ export default function ProvidersClient() {
                       disabled={toggleMut.isPending}
                       className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md border transition-colors disabled:opacity-50 ${
                         p.db?.enabled
-                          ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30"
-                          : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                          : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
                       }`}
                     >
                       {p.db?.enabled ? <ZapOff className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
@@ -116,12 +116,12 @@ export default function ProvidersClient() {
             );
           })}
 
-          <div className="text-[11px] text-slate-500 rounded-lg border border-dashed border-slate-800 bg-slate-900/30 p-3">
+          <div className="text-[11px] text-slate-500 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-3">
             <b>Env vars (Cloudflare Pages):</b><br/>
-            <code className="text-slate-300">BREVO_API_KEY</code> — Brevo API ключ (xkeysib-…)<br/>
-            <code className="text-slate-300">BREVO_FROM</code> — отправитель email (<code>ManicBot &lt;noreply@manicbot.com&gt;</code>)<br/>
-            <code className="text-slate-300">BREVO_SMS_SENDER</code> — SMS sender ID (до 11 символов)<br/>
-            <code className="text-slate-300">RESEND_API_KEY</code>, <code className="text-slate-300">RESEND_FROM</code> — активны для транзакционных писем
+            <code className="text-slate-700 dark:text-slate-300">BREVO_API_KEY</code> — Brevo API ключ (xkeysib-…)<br/>
+            <code className="text-slate-700 dark:text-slate-300">BREVO_FROM</code> — отправитель email (<code>ManicBot &lt;noreply@manicbot.com&gt;</code>)<br/>
+            <code className="text-slate-700 dark:text-slate-300">BREVO_SMS_SENDER</code> — SMS sender ID (до 11 символов)<br/>
+            <code className="text-slate-700 dark:text-slate-300">RESEND_API_KEY</code>, <code className="text-slate-700 dark:text-slate-300">RESEND_FROM</code> — активны для транзакционных писем
           </div>
         </div>
       )}

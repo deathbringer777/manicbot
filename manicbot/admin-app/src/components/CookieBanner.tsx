@@ -68,7 +68,7 @@ export function CookieBanner() {
       aria-labelledby="mb-admin-cookie-title"
       aria-describedby="mb-admin-cookie-body"
       className={[
-        "fixed inset-x-0 bottom-0 z-50",
+        "fixed inset-x-0 bottom-0 z-[55]",
         "transition-all duration-500 ease-out",
         mounted ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 pointer-events-none",
       ].join(" ")}

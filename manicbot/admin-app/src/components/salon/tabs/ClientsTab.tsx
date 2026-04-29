@@ -103,7 +103,7 @@ export function ClientsTab({ tenantId }: { tenantId: string }) {
       {clients.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
       {clients.isError && (
         <div className="glass-card rounded-2xl p-6 text-center">
-          <p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p>
+          <p className="text-red-400">{t("common.errorLoading", lang)}</p>
         </div>
       )}
       <div className="space-y-2">

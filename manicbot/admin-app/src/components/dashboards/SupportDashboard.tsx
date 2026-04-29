@@ -85,7 +85,7 @@ export function SupportDashboard() {
           </div>
 
           {ticketDetail.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {ticketDetail.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+          {ticketDetail.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
 
           {ticketDetail.data && (
             <>
@@ -242,7 +242,7 @@ export function SupportDashboard() {
         {allTickets.isLoading && (
           <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
         )}
-        {allTickets.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+        {allTickets.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
 
         <div data-tour="support-list" className="space-y-2">
           {allTickets.data?.map((ticket: any) => {

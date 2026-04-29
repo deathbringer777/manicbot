@@ -232,7 +232,7 @@ export default function RoleRequestsPageClient() {
         {/* Review modal (bottom sheet style) */}
         {reviewingId && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setReviewingId(null)}>
-            <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   {reviewDecision === "approved" ? "Одобрить запрос" : "Отклонить запрос"}

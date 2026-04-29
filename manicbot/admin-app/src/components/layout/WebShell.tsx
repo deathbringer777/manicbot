@@ -376,7 +376,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-purple-500/[0.05] blur-[120px]" />
             </div>
             <div className="min-h-full flex flex-col">
-              <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-8 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
+              <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
                 {children}
               </div>
             </div>

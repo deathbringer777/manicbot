@@ -87,7 +87,7 @@ export function TodayTab({ tenantId, masterId, canMutate = true }: {
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("common.today", lang)}</h2>
       {today.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-      {today.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+      {today.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
 
       {!today.isLoading && today.data && (() => {
         const apts = today.data as any[];

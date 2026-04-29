@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { UserPlus, Trash2, ShieldCheck, KeyRound, Loader2, X, CheckCircle, AlertCircle, Clock } from "lucide-react";
 import { api } from "~/trpc/react";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import {
   TENANT_PERMISSION_KEYS,
   TENANT_MANAGER_DEFAULT,
@@ -146,9 +149,11 @@ function MemberRow({
   };
   onElevationRequired: (info: { elevationId: string; targetEmail: string; permissions: PermissionKey[] }) => void;
 }) {
+  const { lang } = useLang();
   const utils = api.useUtils();
   const [selected, setSelected] = useState<Set<PermissionKey>>(new Set(member.permissions));
   const [error, setError] = useState<string | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
 
   const update = api.tenantStaff.updatePermissions.useMutation({
     onSuccess: (res) => {
@@ -165,7 +170,10 @@ function MemberRow({
     onError: (e) => setError(e.message),
   });
   const revoke = api.tenantStaff.revokeMember.useMutation({
-    onSuccess: () => utils.tenantStaff.listMembers.invalidate(),
+    onSuccess: () => {
+      utils.tenantStaff.listMembers.invalidate();
+      setConfirmRevoke(false);
+    },
   });
 
   function toggle(p: PermissionKey) {
@@ -198,15 +206,23 @@ function MemberRow({
           <p className="truncate text-[11px] text-slate-500">{member.email}</p>
         </div>
         <button
-          onClick={() => {
-            if (confirm(`Отозвать доступ у ${member.email}?`)) revoke.mutate({ tenantId, webUserId: member.id });
-          }}
+          onClick={() => setConfirmRevoke(true)}
           className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
           title="Отозвать"
         >
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmRevoke}
+        tone="danger"
+        title={`Отозвать доступ у ${member.email}?`}
+        description={t("common.deleteConfirmDesc", lang)}
+        confirmLabel={t("common.delete", lang)}
+        busy={revoke.isPending}
+        onConfirm={() => revoke.mutate({ tenantId, webUserId: member.id })}
+        onCancel={() => setConfirmRevoke(false)}
+      />
 
       <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
         {TENANT_PERMISSION_KEYS.map((p) => {
@@ -281,52 +297,52 @@ function InviteMemberModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-5 max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-bold text-white">Пригласить администратора</h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-500 hover:bg-white/5 hover:text-white">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Пригласить администратора</h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </header>
 
         {!tempPassword ? (
           <>
-            <p className="mb-4 text-xs text-slate-400">
+            <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
               Администратору придёт письмо с кодом подтверждения. По умолчанию — ограниченные
               права (записи + чат). Сильные права можно выдать позже с подтверждением по email.
             </p>
 
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-slate-400">Email</span>
+                <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Email</span>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="staff@example.com"
                   autoFocus
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-slate-400">Имя (опц.)</span>
+                <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Имя (опц.)</span>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Имя сотрудника"
                 />
               </label>
             </div>
 
-            {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+            {error && <p className="mt-3 text-xs text-red-500 dark:text-red-400">{error}</p>}
 
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={onClose}
-                className="rounded-xl bg-slate-800 px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                className="rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               >
                 Отмена
               </button>
@@ -341,7 +357,7 @@ function InviteMemberModal({
                     lang: "ru",
                   });
                 }}
-                className="flex items-center gap-1.5 rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/30 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-500/30 disabled:opacity-40"
               >
                 {invite.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
                 Пригласить
@@ -351,19 +367,19 @@ function InviteMemberModal({
         ) : (
           <>
             <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
-              <p className="text-xs font-medium text-emerald-300">Приглашение отправлено</p>
-              <p className="mt-1 text-xs text-emerald-200/80">
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Приглашение отправлено</p>
+              <p className="mt-1 text-xs text-emerald-700/90 dark:text-emerald-200/80">
                 На {email} отправлено письмо с 6-значным кодом. Временный пароль ниже — передайте его сотруднику
                 любым безопасным способом (не по email).
               </p>
             </div>
-            <div className="rounded-xl bg-slate-800 p-3 font-mono text-sm text-white">
+            <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-3 font-mono text-sm text-slate-900 dark:text-white">
               {tempPassword}
             </div>
             <div className="mt-4 flex justify-end">
               <button
                 onClick={onInvited}
-                className="rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/30"
+                className="rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-500/30"
               >
                 Готово
               </button>
@@ -398,25 +414,25 @@ function ElevationDialog({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900 p-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-white dark:bg-slate-900 p-5 max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
         <header className="mb-3 flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-amber-400" />
-          <h3 className="text-base font-bold text-white">Подтвердите расширение прав</h3>
+          <KeyRound className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Подтвердите расширение прав</h3>
         </header>
-        <p className="mb-3 text-xs text-slate-400">
-          Вы предоставляете <b className="text-amber-300">чувствительные права</b> пользователю{" "}
-          <b className="text-white">{targetEmail}</b>:
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+          Вы предоставляете <b className="text-amber-700 dark:text-amber-300">чувствительные права</b> пользователю{" "}
+          <b className="text-slate-900 dark:text-white">{targetEmail}</b>:
         </p>
-        <ul className="mb-4 rounded-xl bg-slate-800 p-3 text-xs text-slate-300">
+        <ul className="mb-4 rounded-xl bg-slate-50 dark:bg-slate-800 p-3 text-xs text-slate-700 dark:text-slate-300">
           {permissions.map((p) => (
             <li key={p} className="flex items-center gap-1.5">
-              <KeyRound className="h-3 w-3 text-amber-400 shrink-0" />
+              <KeyRound className="h-3 w-3 text-amber-500 dark:text-amber-400 shrink-0" />
               {PERMISSION_LABELS[p]}
             </li>
           ))}
         </ul>
-        <p className="mb-3 text-xs text-slate-400">
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
           На вашу почту отправлен 6-значный код. Введите его ниже, чтобы подтвердить.
         </p>
         <input
@@ -426,15 +442,15 @@ function ElevationDialog({
           maxLength={6}
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-3 text-center font-mono text-2xl tracking-widest text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 px-3 py-3 text-center font-mono text-2xl tracking-widest text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
           placeholder="• • • • • •"
           autoFocus
         />
-        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-red-500 dark:text-red-400">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-xl bg-slate-800 px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+            className="rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           >
             Отмена
           </button>

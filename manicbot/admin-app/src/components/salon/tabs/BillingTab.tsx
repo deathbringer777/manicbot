@@ -14,7 +14,7 @@ export function BillingTab({ tenantId }: { tenantId: string }) {
     <div className="space-y-4">
       <SectionHeader title={t("salon.billingTitle", lang)} />
       {billing.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-      {billing.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">Ошибка загрузки. Попробуйте обновить.</p></div>}
+      {billing.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
       {billing.data && (
         <div className="glass-card rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">

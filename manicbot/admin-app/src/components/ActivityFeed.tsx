@@ -46,7 +46,7 @@ export function ActivityFeed() {
         onClick={() => setOpen(true)}
         data-testid="activity-feed-toggle"
         aria-label="Activity feed"
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 w-10 h-10 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center border border-slate-700 hover:bg-slate-800"
+        className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-[45] w-10 h-10 rounded-full bg-white dark:bg-slate-900 text-slate-700 dark:text-white shadow-lg flex items-center justify-center border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
       >
         <ActivityIcon size={16} />
       </button>
@@ -54,7 +54,7 @@ export function ActivityFeed() {
         <aside
           data-testid="activity-feed-drawer"
           role="complementary"
-          className="fixed top-0 right-0 h-full w-full sm:w-96 z-50 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-white/10 shadow-2xl flex flex-col"
+          className="fixed top-0 right-0 h-full w-full sm:w-96 z-[55] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-white/10 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
         >
           <header className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-white/10">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-2">

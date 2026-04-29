@@ -18,6 +18,15 @@ const translations = {
   "common.noData":          { ru: "Нет данных",   ua: "Немає даних",    en: "No data",    pl: "Brak danych" },
   "common.send":            { ru: "Отправить",    ua: "Надіслати",      en: "Send",       pl: "Wyślij" },
   "common.today":           { ru: "Сегодня",      ua: "Сьогодні",       en: "Today",      pl: "Dziś" },
+  "common.cancel":          { ru: "Отмена",        ua: "Скасувати",      en: "Cancel",     pl: "Anuluj" },
+  "common.delete":          { ru: "Удалить",       ua: "Видалити",       en: "Delete",     pl: "Usuń" },
+  "common.confirm":         { ru: "Подтвердить",   ua: "Підтвердити",    en: "Confirm",    pl: "Potwierdź" },
+  "common.yes":             { ru: "Да",            ua: "Так",            en: "Yes",        pl: "Tak" },
+  "common.no":              { ru: "Нет",           ua: "Ні",             en: "No",         pl: "Nie" },
+  "common.ok":              { ru: "ОК",            ua: "ОК",             en: "OK",         pl: "OK" },
+  "common.next":            { ru: "Далее",         ua: "Далі",           en: "Next",       pl: "Dalej" },
+  "common.deleteConfirm":   { ru: "Удалить?",      ua: "Видалити?",      en: "Delete?",    pl: "Usunąć?" },
+  "common.deleteConfirmDesc": { ru: "Это действие нельзя отменить.", ua: "Цю дію не можна скасувати.", en: "This action can't be undone.", pl: "Tej akcji nie można cofnąć." },
 
   // ── Status labels ──────────────────────────────────────────────────────────
   "status.confirmed":       { ru: "Подтверждено", ua: "Підтверджено",   en: "Confirmed",  pl: "Potwierdzone" },
@@ -344,9 +353,10 @@ const translations = {
   "appointments.newBooking":             { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
 
   // ── Common verbs / labels ───────────────────────────────────────────────────
+  // (`common.cancel` is already defined above — keeping it deduplicated stops
+  // TS1117 errors from object-literal duplicate keys.)
   "common.add":                          { ru: "Добавить",      ua: "Додати",          en: "Add",         pl: "Dodaj" },
   "common.edit":                         { ru: "Редактировать", ua: "Редагувати",      en: "Edit",        pl: "Edytuj" },
-  "common.cancel":                       { ru: "Отмена",        ua: "Скасувати",       en: "Cancel",      pl: "Anuluj" },
   "common.description":                  { ru: "Описание",      ua: "Опис",            en: "Description", pl: "Opis" },
   "common.errorLoading":                 { ru: "Ошибка загрузки. Попробуйте обновить.", ua: "Помилка завантаження. Спробуйте оновити.", en: "Loading failed. Please refresh.", pl: "Błąd ładowania. Spróbuj odświeżyć." },
 

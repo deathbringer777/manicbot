@@ -14,6 +14,7 @@ import { t } from "~/lib/i18n";
 import { toast } from "~/lib/toast";
 import { PluginIcon } from "~/components/plugins/PluginIcon";
 import { InstallConfirmModal } from "~/components/plugins/InstallConfirmModal";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { usePinnedPlugins } from "~/lib/plugins/pinnedPlugins";
 import { hasRuntime } from "~/components/plugins/runtimePanels";
 import { getPlugin } from "@plugins/index";
@@ -35,6 +36,7 @@ export default function PluginDetailClient() {
   const { lang } = useLang();
   const { role } = useRole();
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmUninstall, setConfirmUninstall] = useState(false);
   const { isPinned, toggle: togglePin } = usePinnedPlugins();
 
   const catalogQ = api.plugins.listCatalog.useQuery({ lang });
@@ -48,6 +50,7 @@ export default function PluginDetailClient() {
       toast.success(t("plugins.uninstall.success", lang));
       utils.plugins.listCatalog.invalidate();
       utils.plugins.getInstalled.invalidate();
+      setConfirmUninstall(false);
     },
     onError: (err) => toast.error(t("plugins.install.error", lang), err.message),
   });
@@ -202,10 +205,7 @@ export default function PluginDetailClient() {
               <button
                 type="button"
                 disabled={uninstallMut.isPending}
-                onClick={() => {
-                  if (!confirm(t("plugins.uninstall.confirm", lang))) return;
-                  uninstallMut.mutate({ installationId: card.installationId! });
-                }}
+                onClick={() => setConfirmUninstall(true)}
                 className="px-3 py-1.5 text-xs rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 inline-flex items-center gap-1.5"
                 data-testid="plugin-detail-uninstall"
               >
@@ -315,6 +315,16 @@ export default function PluginDetailClient() {
         card={card}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmUninstall}
+        tone="danger"
+        title={t("plugins.uninstall.confirm", lang)}
+        confirmLabel={t("plugins.settings.uninstall", lang)}
+        busy={uninstallMut.isPending}
+        onConfirm={() => uninstallMut.mutate({ installationId: card.installationId! })}
+        onCancel={() => setConfirmUninstall(false)}
       />
     </div>
   );

@@ -702,13 +702,15 @@ export const salonRouter = createTRPCRouter({
         updatedAt: now,
       });
 
-      // Insert masters
+      // Insert masters — bind to the just-created webUser so that S-01/S-03
+      // authorization works for invited multi-master tenants out of the box.
       await ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: syntheticChatId,
         name: sanitizedName,
         active: 1,
         addedAt: now,
+        webUserId: id,
       });
 
       // Assign tenant_roles

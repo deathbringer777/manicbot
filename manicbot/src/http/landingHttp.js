@@ -61,8 +61,6 @@ const BRIDGE_SCRIPT = `<script>
     if (activated) return;
     activated = true;
     var h = screen.offsetHeight, w = screen.offsetWidth;
-    console.log('[mb-bridge] screen element', screen.tagName, w+'x'+h, screen.id||screen.className.toString().slice(0,60));
-
     // Clear existing static mockup content so it doesn't bleed through.
     screen.innerHTML = '';
     // Positioning context + clip so the widget stays inside the phone frame.
@@ -105,13 +103,11 @@ const BRIDGE_SCRIPT = `<script>
       if (score > bestScore) { bestScore = score; best = c; }
     }
     if (best) {
-      console.log('[mb-bridge] screen found', best.tagName, best.offsetWidth+'x'+best.offsetHeight, 'radius='+getComputedStyle(best).borderRadius);
       mountOnScreen(best);
     } else {
       // Last-resort fallback: build our own screen inside the frame, sized
       // to the real iPhone bezel ratios (~5% sides, ~9% top for notch, ~4%
       // bottom for home bar).
-      console.log('[mb-bridge] no screen found — creating overlay inside frame');
       if (activated) return; activated = true;
       if (getComputedStyle(frame).position === 'static') frame.style.position = 'relative';
       var scr = document.createElement('div');
@@ -136,7 +132,6 @@ const BRIDGE_SCRIPT = `<script>
       if (parseFloat(st.borderRadius) < 26) continue;
       var rgb = parseRgb(st.backgroundColor);
       if (!isDark(rgb)) continue;
-      console.log('[mb-bridge] phone frame found', el.tagName, w+'x'+h, 'radius='+st.borderRadius, el.id||el.className.toString().slice(0,60));
       mountOnFrame(el);
       return true;
     }

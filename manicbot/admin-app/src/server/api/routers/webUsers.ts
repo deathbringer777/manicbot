@@ -67,7 +67,15 @@ export const webUsersRouter = createTRPCRouter({
   /** Decode Google OAuth prefill token (public). */
   googlePrefillPreview: publicProcedure
     .input(z.object({ token: z.string().min(1).max(8000) }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      // #S-16 — rate-limit per IP. Token verification is HMAC-cheap, but
+      // unrestricted requests are a fingerprinting / brute-force oracle and
+      // give a way to amplify DoS via large token payloads (8KB max).
+      const ip = clientIp(ctx as { headers?: Headers | null });
+      const rl = await checkRateLimit(ctx.db, ip, "google_prefill", 30, RL_WINDOW);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." });
+      }
       const secret = process.env.AUTH_SECRET;
       if (!secret) return { ok: false as const };
       const payload = await verifyGooglePrefillToken(secret, input.token);
@@ -177,6 +185,10 @@ export const webUsersRouter = createTRPCRouter({
             name: (input.name ?? email.split("@")[0] ?? "Master").trim(),
             active: 1,
             addedAt: now,
+            // #S-01 — bind to the just-created webUser so getMyRole and
+            // master-router authorization work without relying on the
+            // personal-tenant fallback.
+            webUserId: id,
           });
         }
       }

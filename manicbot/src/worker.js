@@ -75,15 +75,47 @@ function logWorkerError(label, request, url, error, extra = {}) {
   log.error(`worker.${label.replace(/\s+/g, '_')}`, new Error(payload.message), payload);
 }
 
-/** Append standard security headers to any outgoing response. */
+/**
+ * Append standard security headers to any outgoing response.
+ *
+ * #S-08 — the previous CSP set only `frame-ancestors 'none'`, leaving
+ * inline-script and 3rd-party connect surfaces wide open. This default is
+ * applied to every Worker-served response (HTML admin panel, /setup wizard,
+ * landing proxy fall-throughs, etc.). The admin-app on Pages installs its
+ * own per-request nonce CSP via middleware.ts; this header is the floor
+ * for everything else served directly by the Worker.
+ */
 function addSecurityHeaders(resp) {
   const h = new Headers(resp.headers);
   h.set('X-Content-Type-Options', 'nosniff');
   h.set('X-Frame-Options', 'DENY');
   h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self), usb=()');
+  h.set('Cross-Origin-Opener-Policy', 'same-origin');
   if (!h.has('Content-Security-Policy')) {
-    h.set('Content-Security-Policy', "frame-ancestors 'none'");
+    // Strict default. The Worker mostly serves: the embed widget script,
+    // small HTML admin pages (/setup, /admin/*), Stripe success page,
+    // calendar .ics files. Inline scripts in those pages have to be moved
+    // to external files or attribute-event-free. Telegram & Stripe iframes
+    // are intentionally allowed.
+    h.set(
+      'Content-Security-Policy',
+      [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://api.stripe.com https://api.telegram.org https://core.telegram.org https://*.telegram.org https://challenges.cloudflare.com",
+        "frame-src https://js.stripe.com https://challenges.cloudflare.com",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self' https://accounts.google.com https://checkout.stripe.com",
+        "upgrade-insecure-requests",
+      ].join('; '),
+    );
   }
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }

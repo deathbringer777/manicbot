@@ -23,6 +23,56 @@ async function assertMaster(ctx: any, tenantId: string) {
   throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
 }
 
+/**
+ * #S-01 — close master IDOR.
+ *
+ * For role === "master": the caller may only target their OWN master row.
+ * The binding lives in `masters.web_user_id` (migration 0043). Personal
+ * tenants are auto-resolved (1:1) for legacy rows where the column is NULL.
+ *
+ * For role === "tenant_owner" or "system_admin": any master in the tenant.
+ *
+ * Throws FORBIDDEN if no binding can be proven safely.
+ */
+async function assertCallerIsMaster(ctx: any, tenantId: string, masterId: number) {
+  await assertMaster(ctx, tenantId);
+  const role = ctx.webUser?.webRole;
+  if (role === "system_admin" || role === "tenant_owner") return;
+  if (role !== "master") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
+  }
+
+  // Authoritative: row pinned to this web user.
+  const [boundRow] = await ctx.db
+    .select({ chatId: masters.chatId })
+    .from(masters)
+    .where(and(
+      eq(masters.tenantId, tenantId),
+      eq(masters.webUserId, ctx.webUser.id),
+      eq(masters.active, 1),
+    ))
+    .limit(1);
+  if (boundRow) {
+    if (boundRow.chatId !== masterId) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
+    }
+    return;
+  }
+
+  // Personal-tenant fallback: exactly one master in the tenant => caller IS that master.
+  const [t] = await ctx.db.select({ isPersonal: tenants.isPersonal }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  if (t?.isPersonal) {
+    const personalRows = await ctx.db
+      .select({ chatId: masters.chatId })
+      .from(masters)
+      .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
+      .limit(2);
+    if (personalRows.length === 1 && personalRows[0]!.chatId === masterId) return;
+  }
+
+  throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
+}
+
 export const masterRouter = createTRPCRouter({
   getMastersForOwner: masterProcedure
     .input(z.object({ tenantId: z.string() }))
@@ -45,11 +95,13 @@ export const masterRouter = createTRPCRouter({
       allowDelegation: z.number().min(0).max(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Only the master themselves can change this setting (not the owner, not the admin)
+      // Only the master themselves can change this setting (not the owner, not the admin).
+      // #S-01: enforce that input.masterId IS the caller's own master row.
       if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
       if (ctx.webUser.webRole !== "master" || ctx.webUser.tenantId !== input.tenantId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only the master can change delegation setting" });
       }
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       await ctx.db.update(masters)
         .set({ allowDelegation: input.allowDelegation })
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
@@ -60,7 +112,7 @@ export const masterRouter = createTRPCRouter({
   getMySchedule: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const today = new Date().toISOString().slice(0, 10);
       return ctx.db.select().from(appointments)
         .where(and(
@@ -79,7 +131,7 @@ export const masterRouter = createTRPCRouter({
       dateTo: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const rows = await ctx.db.select().from(appointments)
         .where(and(
           eq(appointments.tenantId, input.tenantId),
@@ -100,7 +152,7 @@ export const masterRouter = createTRPCRouter({
       dateTo: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const rows = await ctx.db.select().from(appointments)
         .where(and(
           eq(appointments.tenantId, input.tenantId),
@@ -119,7 +171,7 @@ export const masterRouter = createTRPCRouter({
   getMyClients: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const apts = await ctx.db.select().from(appointments)
         .where(and(
           eq(appointments.tenantId, input.tenantId),
@@ -150,6 +202,20 @@ export const masterRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
+      // #S-01: a master may only mark THEIR OWN appointments as no-show.
+      // tenant_owner / system_admin keep blanket access.
+      if (ctx.webUser?.webRole === "master") {
+        const [apt] = await ctx.db
+          .select({ masterId: appointments.masterId })
+          .from(appointments)
+          .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+          .limit(1);
+        if (!apt) throw new TRPCError({ code: "NOT_FOUND", message: "Appointment not found" });
+        if (apt.masterId == null) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Unassigned appointment — only the salon owner can mark it" });
+        }
+        await assertCallerIsMaster(ctx, input.tenantId, apt.masterId);
+      }
       await ctx.db.update(appointments).set({
         noShow: 1,
         noShowBy: input.noShowBy,
@@ -161,7 +227,7 @@ export const masterRouter = createTRPCRouter({
   getMyProfile: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))
     .query(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const row = await ctx.db.select().from(masters)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)))
         .limit(1);
@@ -181,7 +247,7 @@ export const masterRouter = createTRPCRouter({
       portfolio: z.array(z.string()).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const setObj: Record<string, unknown> = {};
       if (input.bio !== undefined) setObj.bio = input.bio ? sanitizeText(input.bio, 500) : null;
       if (input.portfolio !== undefined) {
@@ -290,7 +356,7 @@ export const masterRouter = createTRPCRouter({
       onVacation: z.number().min(0).max(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertMaster(ctx, input.tenantId);
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const setObj: Record<string, unknown> = {};
       if (input.workHours !== undefined) setObj.workHours = input.workHours;
       if (input.workDays !== undefined) setObj.workDays = input.workDays;

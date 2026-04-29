@@ -78,14 +78,21 @@ const ALLOWED_ATTRS: Record<Profile, Record<string, string[]>> = {
     img: ["src", "alt", "width", "height"],
   },
   marketingHtml: {
+    // #S-06 — `style` attribute removed from every element. The regex
+    // sanitizer cannot validate CSS payloads safely (think `background:
+    // url(...)`, `expression(...)` legacy IE quirks, `@import` smuggling),
+    // and email clients strip most inline styles anyway. Senders must use
+    // attribute-based controls (`align`, `width`, etc.) — those are still
+    // allowed here. When we move to DOMPurify on a Node runtime, `style`
+    // can come back with a strict CSS allowlist.
     a: ["href", "title", "target", "rel"],
-    img: ["src", "alt", "width", "height", "style"],
-    td: ["colspan", "rowspan", "align", "valign", "style"],
-    th: ["colspan", "rowspan", "align", "valign", "style"],
-    div: ["class", "style"],
-    span: ["class", "style"],
-    p: ["style"],
-    table: ["border", "cellpadding", "cellspacing", "style"],
+    img: ["src", "alt", "width", "height"],
+    td: ["colspan", "rowspan", "align", "valign", "width", "height"],
+    th: ["colspan", "rowspan", "align", "valign", "width", "height"],
+    div: ["class"],
+    span: ["class"],
+    p: [],
+    table: ["border", "cellpadding", "cellspacing", "width", "align"],
   },
 };
 

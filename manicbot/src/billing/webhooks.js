@@ -74,6 +74,25 @@ async function resolveTenantIdByCustomer(ctx, customerId) {
   return row?.tenant_id || null;
 }
 
+/**
+ * #S-07 — verify a tenantId pulled out of Stripe metadata actually maps to
+ * a row in `tenants`. Without this check, a misconfigured (or hostile)
+ * checkout session could push billing state at an arbitrary tenant id.
+ *
+ * Returns true if the tenant exists; false otherwise. We log the rejection
+ * loudly so ops can see metadata drift / spoofing attempts.
+ */
+async function tenantExists(ctx, tenantId) {
+  if (!tenantId || !ctx?.db) return false;
+  try {
+    const row = await dbGet(ctx, 'SELECT id FROM tenants WHERE id = ? LIMIT 1', tenantId);
+    return !!row?.id;
+  } catch (e) {
+    log.error('stripe-webhook', e, { phase: 'tenant_exists_lookup', tenantId });
+    return false;
+  }
+}
+
 /** Derive plan key (start/pro/max) from subscription metadata or price metadata. */
 function resolvePlanFromSub(sub) {
   // 1. Prefer subscription metadata[plan] set at checkout time
@@ -178,7 +197,12 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     catch (e) { log.error('plugin-webhook', e, { event: 'addon_checkout' }); }
     const tenantId = session?.metadata?.tenantId;
     const customerId = session?.customer;
-    if (tenantId) {
+    // #S-07 — validate the tenantId from session metadata exists. Stripe
+    // metadata is set at checkout creation time but is otherwise opaque to
+    // Stripe — a bug or a spoofed session could set a non-existent id.
+    if (tenantId && !(await tenantExists(ctx, tenantId))) {
+      log.warn('stripe-webhook', { message: 'checkout.session.completed for unknown tenantId — ignoring', tenantId, eventId, customerId });
+    } else if (tenantId) {
       const updates = {};
       if (customerId) updates.stripeCustomerId = customerId;
       if (session.subscription) {
@@ -211,6 +235,13 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     }
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
     let tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(ctx, customerId);
+    // #S-07 — same metadata-existence guard as checkout.session.completed.
+    // resolveTenantIdByCustomer reads from our own `stripe_customers` so its
+    // result is implicitly trusted; it's the metadata branch we have to gate.
+    if (tenantId && sub.metadata?.tenantId && !(await tenantExists(ctx, tenantId))) {
+      log.warn('stripe-webhook', { message: 'subscription event for unknown tenantId metadata — ignoring', tenantId, eventId, customerId, type });
+      tenantId = null;
+    }
     if (tenantId) {
       const updates = subscriptionToBillingUpdates(sub);
       if (type === 'customer.subscription.deleted') {

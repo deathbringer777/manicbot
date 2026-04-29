@@ -208,7 +208,11 @@ export async function onCb(ctx, cb) {
         },
       ).catch(() => {});
     }
-    // Stamp-card increment on a confirmed visit (Sprint 4)
+    // Stamp-card increment on a confirmed visit (Sprint 4).
+    // #N-02 — failures here MUST NOT block the rest of the callback flow
+    // (the visit is already confirmed) but they used to be swallowed
+    // silently, hiding loyalty-program drift. Log them via the structured
+    // logger so they show up in dashboards / error_log.
     if (isOk && apt.chat_id) {
       try {
         const cfg = await _dbGet(ctx,
@@ -222,9 +226,12 @@ export async function onCb(ctx, cb) {
             ON CONFLICT(tenant_id, client_id) DO UPDATE SET
               visits_completed = visits_completed + 1,
               last_visit_at = excluded.last_visit_at
-          `, ctx.tenantId, String(apt.chat_id), now).catch(() => {});
+          `, ctx.tenantId, String(apt.chat_id), now)
+            .catch((e) => log.warn('callback.stampCard', { phase: 'increment', tenantId: ctx.tenantId, aptId, message: e?.message || String(e) }));
         }
-      } catch { /* best-effort */ }
+      } catch (e) {
+        log.warn('callback.stampCard', { phase: 'config_lookup', tenantId: ctx.tenantId, aptId, message: e?.message || String(e) });
+      }
     }
     return send(ctx, cid, isOk ? '✅ Визит отмечен выполненным.' : '❌ Визит отмечен как no-show.');
   }

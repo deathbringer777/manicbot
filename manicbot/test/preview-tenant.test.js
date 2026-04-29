@@ -323,6 +323,12 @@ describe('DEMO_CHAT_SRC widget source', () => {
         link: sanitizeBotHtml('<a href="https://x.io/?a=1&b=2">go</a>', 'HTML'),
         script: sanitizeBotHtml('<script>alert(1)</script>', 'HTML'),
         plain: sanitizeBotHtml('plain & <bad>', 'plain'),
+        jsHref: sanitizeBotHtml('<a href="javascript:alert(1)">click</a>', 'HTML'),
+        dataHref: sanitizeBotHtml('<a href="data:text/html,<script>alert(1)</script>">click</a>', 'HTML'),
+        vbHref: sanitizeBotHtml('<a href="vbscript:msgbox(1)">click</a>', 'HTML'),
+        whitespaceJs: sanitizeBotHtml('<a href="  javascript:alert(1)">click</a>', 'HTML'),
+        mailto: sanitizeBotHtml('<a href="mailto:hi@x.io">mail</a>', 'HTML'),
+        tel: sanitizeBotHtml('<a href="tel:+48123456789">call</a>', 'HTML'),
       });
     `);
     const out = script.runInNewContext({});
@@ -335,5 +341,20 @@ describe('DEMO_CHAT_SRC widget source', () => {
     expect(out.script).toContain('&lt;script&gt;');
     // non-HTML mode should not unwrap anything
     expect(out.plain).toContain('&lt;bad&gt;');
+    // #S-15 — unsafe href protocols MUST be neutralised to "#"
+    expect(out.jsHref).not.toContain('javascript:');
+    expect(out.jsHref).toContain('href="#"');
+    expect(out.dataHref).not.toContain('data:text/html');
+    expect(out.dataHref).toContain('href="#"');
+    expect(out.vbHref).not.toContain('vbscript:');
+    expect(out.vbHref).toContain('href="#"');
+    expect(out.whitespaceJs).not.toContain('javascript:');
+    expect(out.whitespaceJs).toContain('href="#"');
+    // Safe protocols must be preserved
+    expect(out.mailto).toContain('href="mailto:hi@x.io"');
+    expect(out.tel).toContain('href="tel:+48123456789"');
+    // External anchors should carry safe rel + target
+    expect(out.link).toContain('rel="noopener noreferrer nofollow"');
+    expect(out.link).toContain('target="_blank"');
   });
 });

@@ -17,8 +17,10 @@ LANDING_URL = "https://manicbot-landing.pages.dev"
 # GitHub Actions deploys with --project-name=admin-app → https://admin-app.pages.dev
 # If you use a custom domain or another Pages project name, set ADMIN_APP_URL in the Worker dashboard.
 ADMIN_APP_URL = "https://admin-app-3nc.pages.dev"
-# Optional: when D1 is bound, set to "1" to reject legacy POST /webhook (no botId) — use POST /webhook/{botId} only.
-# REQUIRE_WEBHOOK_BOT_ID = "1"
+# #O-01 — D1 is bound in production, so legacy POST /webhook (no botId) must
+# be rejected. All connected bots use POST /webhook/{botId}. The legacy path
+# was only relevant during initial migration from KV-only single-bot mode.
+REQUIRE_WEBHOOK_BOT_ID = "1"
 
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID

@@ -109,7 +109,12 @@ export const masters = sqliteTable("masters", {
   photo: text("photo"),
   portfolio: text("portfolio"),
   allowDelegation: integer("allow_delegation").notNull().default(0),
-}, (t) => [index("idx_master_tenant").on(t.tenantId)]);
+  webUserId: text("web_user_id"),
+}, (t) => [
+  index("idx_master_tenant").on(t.tenantId),
+  index("idx_master_web_user_id").on(t.webUserId),
+  index("idx_master_tenant_web_user").on(t.tenantId, t.webUserId),
+]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {
   tenantId: text("tenant_id").notNull(),

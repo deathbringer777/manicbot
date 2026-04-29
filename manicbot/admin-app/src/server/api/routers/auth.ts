@@ -91,12 +91,31 @@ export const authRouter = createTRPCRouter({
       } catch { /* non-critical */ }
       if (role === "master") {
         try {
-          const [masterRow] = await ctx.db
+          // Authoritative: bind via web_user_id (added in migration 0043).
+          const [boundRow] = await ctx.db
             .select({ chatId: masters.chatId })
             .from(masters)
-            .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
+            .where(and(
+              eq(masters.tenantId, tenantId),
+              eq(masters.webUserId, ctx.webUser.id),
+              eq(masters.active, 1),
+            ))
             .limit(1);
-          if (masterRow) masterId = masterRow.chatId;
+          if (boundRow) {
+            masterId = boundRow.chatId;
+          } else if (isPersonalTenant) {
+            // Legacy personal-tenant fallback: a personal tenant has exactly
+            // one master, so it's safe to resolve without a binding column.
+            // If multiple rows somehow exist we abstain rather than guess.
+            const personalRows = await ctx.db
+              .select({ chatId: masters.chatId })
+              .from(masters)
+              .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
+              .limit(2);
+            if (personalRows.length === 1) masterId = personalRows[0]!.chatId;
+          }
+          // Multi-master tenants without a binding row: leave masterId=null.
+          // The UI then forces re-onboarding instead of leaking another master's data.
         } catch { /* non-critical */ }
       }
     }

@@ -761,7 +761,23 @@ export const DEMO_CHAT_SRC = `
     // &quot; etc.) inside tag attributes so that <a href="...?a=1&amp;b=2">
     // is correctly un-escaped rather than shown raw.
     escaped = escaped.replace(/&lt;([/]?)(b|strong|i|em|u|s|code|pre|br|a)(\\s(?:[^&]|&(?:amp|quot|lt|gt|apos|#\\d+);)*)?&gt;/gi, function (m) {
-      return m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+      var unescaped = m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+      // #S-15 — anchor sanitization runs in two passes so that pathological
+      // hrefs containing inner ">" (e.g. data:text/html,<script>...) cannot
+      // hide unsafe protocols inside a non-greedy tag split. Pass 1 rewrites
+      // any unsafe href value to "#" across the whole string. Pass 2 finds
+      // the opening <a tag and adds rel/target if absent.
+      unescaped = unescaped.replace(/\\bhref\\s*=\\s*("([^"]*)"|'([^']*)')/gi, function (full, _quoted, dq, sq) {
+        var v = (dq != null ? dq : (sq || '')).trim();
+        return /^(https?:\\/\\/|mailto:|tel:)/i.test(v) ? full : 'href="#"';
+      });
+      unescaped = unescaped.replace(/(<a\\b[^>]*?)(\\s*\\/?>)/i, function (_full, head, tail) {
+        var extra = '';
+        if (!/\\brel\\s*=/i.test(head)) extra += ' rel="noopener noreferrer nofollow"';
+        if (!/\\btarget\\s*=/i.test(head)) extra += ' target="_blank"';
+        return head + extra + tail;
+      });
+      return unescaped;
     });
     return escaped.replace(/\\n/g, '<br>');
   }

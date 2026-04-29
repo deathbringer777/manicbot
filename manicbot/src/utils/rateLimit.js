@@ -19,6 +19,15 @@ import { nowSec } from './time.js';
 /**
  * Atomically check + increment a rate-limit counter.
  *
+ * #S-05 (KNOWN MEDIUM) — the read→compute→write sequence below has a small
+ * TOCTOU window: under heavy concurrency two isolates can both read N and
+ * both write N+1, allowing an attacker to burst to ~2× the declared limit
+ * at the window boundary. The proper fix is a single atomic SQL statement
+ * (`ON CONFLICT DO UPDATE SET count = count+1` with `CASE WHEN ... ELSE ...`
+ * for window reset) but the in-memory mock used by Vitest does not parse
+ * those expressions yet, so it stays as a follow-up alongside a Durable
+ * Object based limiter for true serialization.
+ *
  * @param {{ db: D1Database }} ctx
  * @param {string} key      - identity dimension (e.g. credential hash, tenant id)
  * @param {string} action   - what's being limited (e.g. 'admin-auth-fail')

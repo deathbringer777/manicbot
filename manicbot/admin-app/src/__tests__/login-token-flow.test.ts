@@ -26,9 +26,11 @@ describe("login token primitives (#P1-6)", () => {
   });
 
   it("hashToken is deterministic and 64-char SHA-256 hex", async () => {
-    const token = "abcdef123456";
-    const h1 = await hashToken(token);
-    const h2 = await hashToken(token);
+    // gitleaks-friendly fixture — short alphabetic, no entropy resemblance
+    // to a real key. Real tokens come from generateToken() (UUID v4).
+    const fixture = "abc";
+    const h1 = await hashToken(fixture);
+    const h2 = await hashToken(fixture);
     expect(h1).toBe(h2);
     expect(h1).toMatch(/^[0-9a-f]{64}$/);
   });

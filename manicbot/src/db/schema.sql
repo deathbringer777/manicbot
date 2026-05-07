@@ -42,6 +42,10 @@ CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_chat ON appointments(tenant_id, chat_id);
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_status ON appointments(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_ts ON appointments(tenant_id, ts);
+-- 0044: prevents double-booking of the same active slot.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_apt_unique_active_slot
+  ON appointments(tenant_id, COALESCE(master_id, -1), date, time)
+  WHERE cancelled = 0;
 
 CREATE TABLE IF NOT EXISTS users (
   tenant_id TEXT NOT NULL,
@@ -282,12 +286,27 @@ CREATE TABLE IF NOT EXISTS channel_configs (
   token_expires_at INTEGER,
   webhook_verify_token TEXT,
   active INTEGER NOT NULL DEFAULT 1,
+  page_id TEXT,
+  phone_number_id TEXT,
+  ig_business_id TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cc_tenant ON channel_configs(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_cc_type ON channel_configs(channel_type);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cc_tenant_type ON channel_configs(tenant_id, channel_type);
+CREATE INDEX IF NOT EXISTS idx_cc_page_id ON channel_configs(channel_type, page_id);
+CREATE INDEX IF NOT EXISTS idx_cc_phone ON channel_configs(channel_type, phone_number_id);
+CREATE INDEX IF NOT EXISTS idx_cc_ig_biz ON channel_configs(channel_type, ig_business_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cc_unique_page_id
+  ON channel_configs(channel_type, page_id)
+  WHERE page_id IS NOT NULL AND active = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cc_unique_phone
+  ON channel_configs(channel_type, phone_number_id)
+  WHERE phone_number_id IS NOT NULL AND active = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cc_unique_ig_biz
+  ON channel_configs(channel_type, ig_business_id)
+  WHERE ig_business_id IS NOT NULL AND active = 1;
 
 -- Cross-channel user identity mapping
 CREATE TABLE IF NOT EXISTS channel_identities (
@@ -401,11 +420,14 @@ CREATE TABLE IF NOT EXISTS web_users (
   last_login_at INTEGER,
   password_changed_at INTEGER NOT NULL DEFAULT 0,
   sessions_invalidated_at INTEGER NOT NULL DEFAULT 0,
+  login_token_hash TEXT,
+  login_token_expires_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_web_user_email ON web_users(email);
 CREATE INDEX IF NOT EXISTS idx_web_user_tenant ON web_users(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_web_users_login_token ON web_users(login_token_hash);
 
 -- Reviews & ratings
 CREATE TABLE IF NOT EXISTS reviews (

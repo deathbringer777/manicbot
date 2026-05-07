@@ -30,16 +30,52 @@ async function logPluginEvent(ctx, installationId, event, detail) {
   }
 }
 
-async function setInstallationBillingState(ctx, tenantId, slug, newState, extra = {}) {
-  if (!ctx?.db) return null;
-  // Scope priority: tenant-specific install first; fall back to platform-wide.
-  const conditions = [];
-  const params = [slug];
-  if (tenantId) {
-    conditions.push('plugin_slug = ? AND tenant_id = ?');
-    params.splice(1, 0, slug);
-    params.push(tenantId);
+/**
+ * Resolve the authoritative tenantId for a Stripe webhook event.
+ *
+ * #P1-7 — never trust webhook metadata without cross-checking. The Stripe
+ * customer is the strongest identity we have; we link customer_id → tenant_id
+ * via the stripe_customers table at checkout creation time. If the webhook
+ * metadata names a different tenant than the customer's owner, that is a hard
+ * tampering signal — log and refuse the mutation.
+ *
+ * Returns the verified tenantId, or null if the addon should not be applied.
+ */
+async function resolveAddonTenant(ctx, metaTenantId, customerId, slug) {
+  if (!ctx?.db) return metaTenantId ?? null;
+  if (!customerId) {
+    // Caller has no Stripe customer to anchor against — fall back to metadata
+    // (which is at least set by us at checkout creation time) but only if the
+    // tenant exists in our own table. Otherwise we'd accept arbitrary ids.
+    if (!metaTenantId) return null;
+    const t = await dbGet(ctx, 'SELECT id FROM tenants WHERE id = ? LIMIT 1', metaTenantId);
+    return t?.id ?? null;
   }
+  const owner = await dbGet(ctx,
+    'SELECT tenant_id FROM stripe_customers WHERE customer_id = ?', customerId);
+  if (owner?.tenant_id) {
+    if (metaTenantId && owner.tenant_id !== metaTenantId) {
+      log.error('billing.pluginWebhooks',
+        new Error('plugin webhook metadata.tenantId does not match stripe_customers.tenant_id — refusing'),
+        { slug, customerId, metaTenantId, ownerTenantId: owner.tenant_id });
+      return null;
+    }
+    return owner.tenant_id;
+  }
+  // Customer not in stripe_customers (orphan). If metadata is provided, only
+  // accept it when it maps to a real tenant; otherwise no-op.
+  if (metaTenantId) {
+    const t = await dbGet(ctx, 'SELECT id FROM tenants WHERE id = ? LIMIT 1', metaTenantId);
+    return t?.id ?? null;
+  }
+  return null;
+}
+
+async function setInstallationBillingState(ctx, metaTenantId, customerId, slug, newState, extra = {}) {
+  if (!ctx?.db) return null;
+  const tenantId = await resolveAddonTenant(ctx, metaTenantId, customerId, slug);
+  // No verified tenant ⇒ silently no-op rather than mutate a guessed row.
+  // Keep platform-wide installs working: they explicitly carry tenantId === null.
   // Try tenant install first.
   let row = null;
   if (tenantId) {
@@ -84,13 +120,16 @@ async function setInstallationBillingState(ctx, tenantId, slug, newState, extra 
  */
 export async function handleAddonCheckoutCompleted(ctx, session) {
   const slug = session?.metadata?.plugin_slug;
-  const tenantId = session?.metadata?.tenantId ?? null;
+  const metaTenantId = session?.metadata?.tenantId ?? null;
+  const customerId = typeof session?.customer === 'string'
+    ? session.customer
+    : session?.customer?.id ?? null;
   if (!slug) return { handled: false };
   const intent = session.payment_intent
     ? (typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent.id)
     : null;
-  const id = await setInstallationBillingState(ctx, tenantId, slug, 'paid', { paymentIntentId: intent });
-  return { handled: true, installationId: id };
+  const id = await setInstallationBillingState(ctx, metaTenantId, customerId, slug, 'paid', { paymentIntentId: intent });
+  return { handled: id != null, installationId: id };
 }
 
 /**
@@ -100,14 +139,17 @@ export async function handleAddonCheckoutCompleted(ctx, session) {
  */
 export async function handleAddonInvoicePaid(ctx, invoice) {
   const lines = invoice?.lines?.data ?? [];
+  const customerId = typeof invoice?.customer === 'string'
+    ? invoice.customer
+    : invoice?.customer?.id ?? null;
   let touched = 0;
   for (const line of lines) {
     const slug = line?.price?.metadata?.plugin_slug;
     if (!slug) continue;
-    const tenantId = line?.price?.metadata?.tenantId || invoice?.metadata?.tenantId || null;
+    const metaTenantId = line?.price?.metadata?.tenantId || invoice?.metadata?.tenantId || null;
     const subItemId = line?.subscription_item || null;
-    await setInstallationBillingState(ctx, tenantId, slug, 'paid', { subscriptionItemId: subItemId });
-    touched += 1;
+    const id = await setInstallationBillingState(ctx, metaTenantId, customerId, slug, 'paid', { subscriptionItemId: subItemId });
+    if (id) touched += 1;
   }
   return { handled: touched > 0, touched };
 }
@@ -118,13 +160,16 @@ export async function handleAddonInvoicePaid(ctx, invoice) {
  */
 export async function handleAddonInvoiceFailed(ctx, invoice) {
   const lines = invoice?.lines?.data ?? [];
+  const customerId = typeof invoice?.customer === 'string'
+    ? invoice.customer
+    : invoice?.customer?.id ?? null;
   let touched = 0;
   for (const line of lines) {
     const slug = line?.price?.metadata?.plugin_slug;
     if (!slug) continue;
-    const tenantId = line?.price?.metadata?.tenantId || invoice?.metadata?.tenantId || null;
-    await setInstallationBillingState(ctx, tenantId, slug, 'past_due');
-    touched += 1;
+    const metaTenantId = line?.price?.metadata?.tenantId || invoice?.metadata?.tenantId || null;
+    const id = await setInstallationBillingState(ctx, metaTenantId, customerId, slug, 'past_due');
+    if (id) touched += 1;
   }
   return { handled: touched > 0, touched };
 }
@@ -135,16 +180,19 @@ export async function handleAddonInvoiceFailed(ctx, invoice) {
  */
 export async function handleAddonSubscriptionCanceled(ctx, sub) {
   const items = sub?.items?.data ?? [];
+  const customerId = typeof sub?.customer === 'string'
+    ? sub.customer
+    : sub?.customer?.id ?? null;
   let touched = 0;
   for (const item of items) {
     const slug = item?.price?.metadata?.plugin_slug;
     if (!slug) continue;
-    const tenantId = item?.price?.metadata?.tenantId || sub?.metadata?.tenantId || null;
-    await setInstallationBillingState(ctx, tenantId, slug, 'canceled');
-    touched += 1;
+    const metaTenantId = item?.price?.metadata?.tenantId || sub?.metadata?.tenantId || null;
+    const id = await setInstallationBillingState(ctx, metaTenantId, customerId, slug, 'canceled');
+    if (id) touched += 1;
   }
   return { handled: touched > 0, touched };
 }
 
 // Exported for tests only.
-export { setInstallationBillingState, logPluginEvent };
+export { setInstallationBillingState, logPluginEvent, resolveAddonTenant };

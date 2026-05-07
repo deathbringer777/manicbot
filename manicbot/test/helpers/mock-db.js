@@ -265,18 +265,63 @@ export function createMockD1() {
           return { success: true };
         }
         if (isUpsert) {
-          const pkMatch = sql.match(/ON\s+CONFLICT\s*\(([^)]+)\)/i);
+          // Balanced parenthesised group so `(tenant_id, COALESCE(master_id, -1), date)`
+          // captures everything up to the matching close. The simple `[^)]+` pattern stops
+          // at the first `)` and feeds the rest of the clause back as a stray column name.
+          const pkMatch = sql.match(/ON\s+CONFLICT\s*\(((?:[^()]|\([^()]*\))+)\)/i);
           if (pkMatch) {
-            const pkCols = pkMatch[1].split(',').map(c => c.trim());
-            const existingIdx = table.findIndex(r =>
-              pkCols.every(pk => r[pk] === row[pk]),
-            );
+            // Split top-level commas (not commas inside `(...)`).
+            const pkSpecs = pkMatch[1]
+              .split(/,(?![^(]*\))/)
+              .map(c => c.trim());
+            // Translate each spec into a row-extractor:
+            //   `tenant_id`                  → r => r.tenant_id
+            //   `COALESCE(master_id, -1)`    → r => r.master_id ?? -1
+            //   anything else                → constant null (ignored)
+            const extractors = pkSpecs
+              .map(spec => {
+                if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(spec)) {
+                  return r => r[spec];
+                }
+                const cm = spec.match(/^COALESCE\(\s*(\w+)\s*,\s*(-?\d+)\s*\)$/i);
+                if (cm) {
+                  const col = cm[1];
+                  const fallback = parseInt(cm[2], 10);
+                  return r => (r[col] == null ? fallback : r[col]);
+                }
+                return null;
+              })
+              .filter(Boolean);
+            // Optional partial-index filter: ON CONFLICT (...) WHERE <col> = <num> DO ...
+            // Need a balanced-paren match because the conflict spec may contain
+            // function calls like COALESCE(master_id, -1).
+            const whereMatch = sql.match(/WHERE\s+(\w+)\s*=\s*(-?\d+)\s+DO/i);
+            const partialFilter = whereMatch
+              ? (r => {
+                  const col = whereMatch[1];
+                  const want = parseInt(whereMatch[2], 10);
+                  const got = r[col];
+                  if (got == null) return want === 0; // SQLite default for INTEGER NOT NULL DEFAULT 0
+                  return got === want;
+                })
+              : (() => true);
+            const existingIdx = extractors.length
+              ? table.findIndex(r =>
+                  partialFilter(r) && extractors.every(fn => fn(r) === fn(row)))
+              : -1;
             if (existingIdx >= 0) {
-              const updateMatch = sql.match(/DO\s+UPDATE\s+SET\s+(.+?)$/i);
+              // Use [\s\S] so a multi-line SET clause is captured whole.
+              // Strip linebreaks afterwards to make the per-clause regexes
+              // line-agnostic.
+              const updateMatch = sql.match(/DO\s+UPDATE\s+SET\s+([\s\S]+)$/i);
               if (updateMatch) {
-                const updates = updateMatch[1].split(',').map(s => s.trim());
+                const setBody = updateMatch[1].replace(/\s+/g, ' ');
+                // Split top-level commas only — CASE WHEN clauses are
+                // collapsed to a single line above.
+                const updates = setBody.split(/,(?![^(]*\))/).map(s => s.trim());
                 let uIdx = parsed.cols.length;
                 for (const u of updates) {
+                  // 1) col = excluded.col  OR  col = ?
                   const eqMatch = u.match(/^(\w+)\s*=\s*(?:excluded\.(\w+)|\?)$/);
                   if (eqMatch) {
                     if (eqMatch[2]) {
@@ -284,10 +329,29 @@ export function createMockD1() {
                     } else {
                       table[existingIdx][eqMatch[1]] = params[uIdx++];
                     }
+                    continue;
+                  }
+                  // 2) col = CASE WHEN <a> = excluded.<a> THEN col + N ELSE M END
+                  //    Used by checkRateLimit to roll the counter atomically.
+                  const caseMatch = u.match(
+                    /^(\w+)\s*=\s*CASE\s+WHEN\s+(\w+)\s*=\s*excluded\.(\w+)\s+THEN\s+(\w+)\s*\+\s*(-?\d+)\s+ELSE\s+(-?\d+)\s+END$/i,
+                  );
+                  if (caseMatch) {
+                    const [, target, predCol, predExcl, addBase, deltaStr, elseStr] = caseMatch;
+                    const sameWindow = table[existingIdx][predCol] === row[predExcl];
+                    const delta = parseInt(deltaStr, 10);
+                    const elseVal = parseInt(elseStr, 10);
+                    if (sameWindow) {
+                      table[existingIdx][target] = (table[existingIdx][addBase] ?? 0) + delta;
+                    } else {
+                      table[existingIdx][target] = elseVal;
+                    }
+                    continue;
                   }
                 }
               }
-              return { success: true };
+              // DO NOTHING — leave existing row untouched and skip insert.
+              return { success: true, meta: { changes: 0 } };
             }
           }
         }

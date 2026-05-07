@@ -24,15 +24,20 @@ async function assertMaster(ctx: any, tenantId: string) {
 }
 
 /**
- * #S-01 — close master IDOR.
+ * #S-01 / #P0-4 — close master IDOR.
  *
  * For role === "master": the caller may only target their OWN master row.
- * The binding lives in `masters.web_user_id` (migration 0043). Personal
- * tenants are auto-resolved (1:1) for legacy rows where the column is NULL.
+ * The binding lives in `masters.web_user_id` (migration 0043). Migration
+ * 0046 backfills web_user_id for legacy personal-tenant rows so this lookup
+ * is now authoritative.
  *
  * For role === "tenant_owner" or "system_admin": any master in the tenant.
  *
- * Throws FORBIDDEN if no binding can be proven safely.
+ * Throws FORBIDDEN if no binding can be proven. The previous count-based
+ * fallback for personal tenants was removed (race condition: a second master
+ * being added would silently widen the hole). If a personal master shows up
+ * here without web_user_id set, the owner needs to rebind via the dashboard
+ * — false-negative is preferable to false-positive in a security guard.
  */
 async function assertCallerIsMaster(ctx: any, tenantId: string, masterId: number) {
   await assertMaster(ctx, tenantId);
@@ -52,25 +57,12 @@ async function assertCallerIsMaster(ctx: any, tenantId: string, masterId: number
       eq(masters.active, 1),
     ))
     .limit(1);
-  if (boundRow) {
-    if (boundRow.chatId !== masterId) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
-    }
-    return;
+  if (!boundRow) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
   }
-
-  // Personal-tenant fallback: exactly one master in the tenant => caller IS that master.
-  const [t] = await ctx.db.select({ isPersonal: tenants.isPersonal }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-  if (t?.isPersonal) {
-    const personalRows = await ctx.db
-      .select({ chatId: masters.chatId })
-      .from(masters)
-      .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
-      .limit(2);
-    if (personalRows.length === 1 && personalRows[0]!.chatId === masterId) return;
+  if (boundRow.chatId !== masterId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
   }
-
-  throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
 }
 
 export const masterRouter = createTRPCRouter({

@@ -88,6 +88,25 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json(result);
   }
 
+  // #P1-5 — re-encrypt all token blobs after BOT_ENCRYPTION_KEY rotation.
+  // Reads each row with the new key and falls back to BOT_ENCRYPTION_KEY_OLD;
+  // any blob that decrypted via the old key is re-encrypted with the new one.
+  // Idempotent — call repeatedly until all tables report `ok: 0`.
+  // See scripts/rotate-bot-encryption-key.js (rotateEncryptionKeyPass) for
+  // the detailed operator playbook.
+  if (request.method === 'POST' && url.pathname === '/admin/rotate-encryption-key') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const { rotateEncryptionKeyPass } = await import('../../scripts/rotate-bot-encryption-key.js');
+    const ec = envCtx(env);
+    ec.BOT_ENCRYPTION_KEY = env.BOT_ENCRYPTION_KEY;
+    ec.BOT_ENCRYPTION_KEY_OLD = env.BOT_ENCRYPTION_KEY_OLD || null;
+    ec.MANICBOT = env.MANICBOT;
+    const result = await rotateEncryptionKeyPass(ec);
+    if (result?.error) return Response.json(result, { status: 400 });
+    return Response.json(result);
+  }
+
   if (request.method === 'POST' && url.pathname === '/admin/provision') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     const ec = envCtx(env);
@@ -345,6 +364,15 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
       const { createChannelConfig } = await import('../channels/token-manager.js');
       const channelConfigId = await createChannelConfig(ec, resolvedTenantId, 'instagram', config, token, env.BOT_ENCRYPTION_KEY);
+      if (!channelConfigId) {
+        // createChannelConfig returns null on encryption failure or UNIQUE
+        // collision (#P1-4). The collision case means another tenant already
+        // owns the same page_id / instagram_business_id; surface 409.
+        return Response.json({
+          error: 'IG channel registration failed — page_id may already be claimed by another tenant',
+          code: 'IG_CHANNEL_DUPLICATE_OR_ENC_FAIL',
+        }, { status: 409 });
+      }
 
       return Response.json({
         ok: true,

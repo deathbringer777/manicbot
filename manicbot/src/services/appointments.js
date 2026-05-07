@@ -147,6 +147,14 @@ export async function loadDayAppointments(ctx, date, masterId = null) {
   return rows.map(aptRowToDoc);
 }
 
+/**
+ * SLOT_TAKEN sentinel — returned by saveApt() when the partial UNIQUE index
+ * idx_apt_unique_active_slot (migration 0044) rejects the INSERT because
+ * another client just booked the same (tenant, master, date, time) tuple.
+ * Callers MUST check this before treating the value as a normal apt doc.
+ */
+export const SLOT_TAKEN = Object.freeze({ slotTaken: true });
+
 export async function saveApt(ctx, apt) {
   // Preview-mode short-circuit: landing demo tenant must not write real
   // appointments. Return a synthetic doc so the confirmation UI still renders
@@ -197,6 +205,31 @@ export async function saveApt(ctx, apt) {
       kvPut(ctx, `ua:${apt.chatId}`, ul),
       addToIndexes(ctx, apt),
     ]);
+
+    // Best-effort race detection (KV has no atomic UNIQUE). If another
+    // appointment now occupies the same slot, undo our write and report
+    // the conflict.
+    const masterKey = apt.masterId ?? null;
+    const sameDay = await loadDayAppointments(ctx, apt.date, masterKey);
+    const others = sameDay.filter(a =>
+      a.id !== id &&
+      a.time === apt.time &&
+      (a.masterId ?? null) === masterKey,
+    );
+    if (others.length) {
+      // Pick a deterministic winner — earliest `createdAt`, tiebreak by id.
+      const winner = [...others, apt].sort((a, b) =>
+        (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : 1),
+      )[0];
+      if (winner.id !== id) {
+        await Promise.all([
+          kvDel(ctx, `ap:${id}`),
+          kvPut(ctx, `ua:${apt.chatId}`, ul.filter(x => x !== id)),
+          removeFromIndexes(ctx, apt),
+        ]);
+        return SLOT_TAKEN;
+      }
+    }
     return apt;
   }
 
@@ -219,14 +252,34 @@ export async function saveApt(ctx, apt) {
   apt.rejectComment = null;
   apt.cancelReason = null;
 
-  await dbRun(ctx,
-    `INSERT INTO appointments (id, tenant_id, chat_id, svc_id, date, time, ts, status, master_id, user_name, user_phone, user_tg, confirmed_by, counter_time, counter_comment, reject_comment, cancel_reason, cancelled, rem_h24, rem_h2, google_event_id, google_calendar_id, google_integration_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
-    id, ctx.tenantId, apt.chatId, apt.svcId, apt.date, apt.time, apt.ts,
-    'pending', apt.masterId, apt.userName || null, apt.userPhone || null, apt.userTg || null,
-    null, null, null, null, null,
-    null, null, null, apt.createdAt,
-  );
+  // Atomic INSERT relying on idx_apt_unique_active_slot (migration 0044).
+  // ON CONFLICT DO NOTHING — when a concurrent isolate just booked the same
+  // active slot, this INSERT becomes a no-op and changes() returns 0, which
+  // we surface as SLOT_TAKEN. This closes the TOCTOU window between the KV
+  // lock check, getSlots(), and the historical bare INSERT.
+  let result;
+  try {
+    result = await dbRun(ctx,
+      `INSERT INTO appointments (id, tenant_id, chat_id, svc_id, date, time, ts, status, master_id, user_name, user_phone, user_tg, confirmed_by, counter_time, counter_comment, reject_comment, cancel_reason, cancelled, rem_h24, rem_h2, google_event_id, google_calendar_id, google_integration_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id, COALESCE(master_id, -1), date, time) WHERE cancelled = 0 DO NOTHING`,
+      id, ctx.tenantId, apt.chatId, apt.svcId, apt.date, apt.time, apt.ts,
+      'pending', apt.masterId, apt.userName || null, apt.userPhone || null, apt.userTg || null,
+      null, null, null, null, null,
+      null, null, null, apt.createdAt,
+    );
+  } catch (e) {
+    // Defense-in-depth: pre-0044 deployments without the unique index will
+    // throw on duplicate INSERT only if some other constraint trips. Catch
+    // SQLite UNIQUE violations explicitly so we surface SLOT_TAKEN instead
+    // of a 500.
+    const msg = String(e?.message || '');
+    if (/UNIQUE constraint failed/i.test(msg)) return SLOT_TAKEN;
+    throw e;
+  }
+  // D1 returns { meta: { changes } }; some test mocks expose `.changes` directly.
+  const changes = result?.meta?.changes ?? result?.changes ?? 1;
+  if (changes === 0) return SLOT_TAKEN;
   return apt;
 }
 

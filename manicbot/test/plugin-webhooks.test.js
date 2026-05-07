@@ -15,10 +15,17 @@ import {
 
 // ─── Minimal D1 mock that serves the exact SELECT/UPDATE/INSERT this file uses ─
 
-function makeCtx(initialInstallations = []) {
+function makeCtx(initialInstallations = [], opts = {}) {
   const installations = [...initialInstallations];
   const events = [];
   const queries = [];
+  // #P1-7 — resolveAddonTenant looks up stripe_customers (customer_id →
+  // tenant_id) and tenants (tenant existence). Tests can seed both.
+  const stripeCustomers = opts.stripeCustomers ?? []; // [{ customer_id, tenant_id }]
+  const tenants = opts.tenants ?? installations
+    .map((i) => i.tenant_id)
+    .filter((t) => t)
+    .map((id) => ({ id }));
 
   const db = {
     prepare(sql) {
@@ -30,6 +37,18 @@ function makeCtx(initialInstallations = []) {
         },
         async first() {
           queries.push({ kind: 'first', sql, params });
+          // SELECT tenant_id FROM stripe_customers WHERE customer_id = ?
+          if (/stripe_customers.*customer_id = \?/i.test(sql)) {
+            const [cid] = params;
+            const row = stripeCustomers.find((s) => s.customer_id === cid);
+            return row ? { tenant_id: row.tenant_id } : null;
+          }
+          // SELECT id FROM tenants WHERE id = ? LIMIT 1
+          if (/FROM tenants WHERE id = \?/i.test(sql)) {
+            const [tid] = params;
+            const row = tenants.find((t) => t.id === tid);
+            return row ? { id: row.id } : null;
+          }
           // SELECT id FROM plugin_installations WHERE plugin_slug = ? AND tenant_id = ?
           if (/plugin_installations.*plugin_slug = \?.*tenant_id = \?/i.test(sql)) {
             const [slug, tenantId] = params;
@@ -120,6 +139,61 @@ describe('handleAddonCheckoutCompleted — one-time purchase', () => {
     const r = await handleAddonCheckoutCompleted(ctx, {
       metadata: { plugin_slug: 'shared-addon' },
     });
+    // Platform-wide install: no tenantId metadata, no customer. With
+    // #P1-7 resolveAddonTenant returns null and the lookup falls through
+    // to `tenant_id IS NULL` which matches the platform install row.
+    expect(r.handled).toBe(true);
+    expect(state.installations[0].billing_state).toBe('paid');
+  });
+
+  it('rejects unknown tenantId without a stripe_customers anchor', async () => {
+    // #P1-7 — bare metadata.tenantId that doesn't exist in `tenants` MUST
+    // be ignored: this is the prime injection vector closed by the change.
+    const { ctx, state } = makeCtx([
+      { id: 'pi_t1', tenant_id: 't_real', plugin_slug: 'sms-reminders', billing_state: 'trialing' },
+    ], { tenants: [{ id: 't_real' }] });
+    const r = await handleAddonCheckoutCompleted(ctx, {
+      metadata: { plugin_slug: 'sms-reminders', tenantId: 't_spoof' },
+    });
+    expect(r.handled).toBe(false);
+    expect(state.installations[0].billing_state).toBe('trialing');
+  });
+
+  it('rejects when metadata.tenantId conflicts with stripe_customers owner', async () => {
+    // Attacker crafts a session for customer cus_t1 (owned by t_1) but with
+    // metadata.tenantId = t_2. Should refuse the mutation entirely.
+    const { ctx, state } = makeCtx(
+      [
+        { id: 'pi_t1', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'trialing' },
+        { id: 'pi_t2', tenant_id: 't_2', plugin_slug: 'sms-reminders', billing_state: 'trialing' },
+      ],
+      { stripeCustomers: [{ customer_id: 'cus_t1', tenant_id: 't_1' }] },
+    );
+    const r = await handleAddonCheckoutCompleted(ctx, {
+      metadata: { plugin_slug: 'sms-reminders', tenantId: 't_2' },
+      customer: 'cus_t1',
+      payment_intent: 'pi_x',
+    });
+    expect(r.handled).toBe(false);
+    // Critically: t_1 install must NOT have been mutated either.
+    expect(state.installations.find((i) => i.tenant_id === 't_1').billing_state).toBe('trialing');
+    expect(state.installations.find((i) => i.tenant_id === 't_2').billing_state).toBe('trialing');
+  });
+
+  it('uses platform install when customer anchors to a known tenant', async () => {
+    const { ctx, state } = makeCtx(
+      [{ id: 'pi_plat', tenant_id: null, plugin_slug: 'shared-addon', billing_state: 'trialing' }],
+      {
+        stripeCustomers: [{ customer_id: 'cus_anchor', tenant_id: 't_owner' }],
+        tenants: [{ id: 't_owner' }],
+      },
+    );
+    const r = await handleAddonCheckoutCompleted(ctx, {
+      metadata: { plugin_slug: 'shared-addon' },
+      customer: 'cus_anchor',
+    });
+    // resolveAddonTenant returns 't_owner', no install for that tenant, falls
+    // back to the platform-wide row.
     expect(r.handled).toBe(true);
     expect(state.installations[0].billing_state).toBe('paid');
   });
@@ -131,6 +205,7 @@ describe('handleAddonInvoicePaid — subscription item', () => {
       { id: 'pi_sms', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'trialing' },
     ]);
     const invoice = {
+      customer: 'cus_t1',
       lines: {
         data: [
           {
@@ -144,11 +219,21 @@ describe('handleAddonInvoicePaid — subscription item', () => {
         ],
       },
     };
-    const r = await handleAddonInvoicePaid(ctx, invoice);
+    // Anchor the customer to t_1 so resolveAddonTenant accepts the metadata.
+    ctx.__seedStripeCustomer = (cid, tid) => {
+      // unused — we'll re-create ctx with seeded customers
+    };
+    const { ctx: ctx2, state: state2 } = makeCtx(
+      [{ id: 'pi_sms', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'trialing' }],
+      { stripeCustomers: [{ customer_id: 'cus_t1', tenant_id: 't_1' }] },
+    );
+    const r = await handleAddonInvoicePaid(ctx2, invoice);
     expect(r.handled).toBe(true);
     expect(r.touched).toBe(1);
-    expect(state.installations[0].billing_state).toBe('paid');
-    expect(state.installations[0].stripe_subscription_item_id).toBe('si_abc');
+    expect(state2.installations[0].billing_state).toBe('paid');
+    expect(state2.installations[0].stripe_subscription_item_id).toBe('si_abc');
+    // Silence unused-var lint for the original ctx/state placeholders.
+    void ctx; void state;
   });
 
   it('no-op when no lines carry plugin_slug', async () => {
@@ -160,10 +245,12 @@ describe('handleAddonInvoicePaid — subscription item', () => {
 
 describe('handleAddonInvoiceFailed', () => {
   it('flips billing_state to past_due', async () => {
-    const { ctx, state } = makeCtx([
-      { id: 'pi_sms', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'paid' },
-    ]);
+    const { ctx, state } = makeCtx(
+      [{ id: 'pi_sms', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'paid' }],
+      { stripeCustomers: [{ customer_id: 'cus_t1', tenant_id: 't_1' }] },
+    );
     const invoice = {
+      customer: 'cus_t1',
       lines: {
         data: [
           { price: { metadata: { plugin_slug: 'sms-reminders', tenantId: 't_1' } } },
@@ -178,11 +265,15 @@ describe('handleAddonInvoiceFailed', () => {
 
 describe('handleAddonSubscriptionCanceled', () => {
   it('flips every plugin item in the subscription to canceled', async () => {
-    const { ctx, state } = makeCtx([
-      { id: 'pi_a', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'paid' },
-      { id: 'pi_b', tenant_id: 't_1', plugin_slug: 'no-show-shield', billing_state: 'paid' },
-    ]);
+    const { ctx, state } = makeCtx(
+      [
+        { id: 'pi_a', tenant_id: 't_1', plugin_slug: 'sms-reminders', billing_state: 'paid' },
+        { id: 'pi_b', tenant_id: 't_1', plugin_slug: 'no-show-shield', billing_state: 'paid' },
+      ],
+      { stripeCustomers: [{ customer_id: 'cus_t1', tenant_id: 't_1' }] },
+    );
     const sub = {
+      customer: 'cus_t1',
       metadata: { tenantId: 't_1' },
       items: {
         data: [
@@ -208,11 +299,13 @@ describe('handleAddonSubscriptionCanceled', () => {
 
 describe('Audit trail', () => {
   it('writes a plugin_events row on every billing_state_changed', async () => {
-    const { ctx, state } = makeCtx([
-      { id: 'pi_x', tenant_id: 't_1', plugin_slug: 'test', billing_state: 'trialing' },
-    ]);
+    const { ctx, state } = makeCtx(
+      [{ id: 'pi_x', tenant_id: 't_1', plugin_slug: 'test', billing_state: 'trialing' }],
+      { stripeCustomers: [{ customer_id: 'cus_t1', tenant_id: 't_1' }] },
+    );
     await handleAddonCheckoutCompleted(ctx, {
       metadata: { plugin_slug: 'test', tenantId: 't_1' },
+      customer: 'cus_t1',
       payment_intent: 'pi_ab',
     });
     expect(state.events).toHaveLength(1);

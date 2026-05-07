@@ -29,6 +29,7 @@ export default {
   ai_short_use_panel: '👆 Message too short. Use the menu buttons.',
   ai_unavailable_use_panel: '🤖 AI temporarily unavailable. Use the panel buttons.',
   rate_limit: '⏳ Too many requests. Please wait a moment.',
+  session_expired: '⌛ Session timed out — let’s start over. Open the menu with /start.',
   client_blocked: '🚫 Access to the bot is restricted.',
   role_granted_master: '👨‍🎨 You have been assigned the role of <b>Specialist</b>. Use /master to access the panel.',
   role_granted_owner: '👑 You have been assigned the role of <b>Salon</b>. Use /master to manage.',

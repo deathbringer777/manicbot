@@ -223,6 +223,35 @@ export async function decryptToken(encryptedStr, keyStr, label) {
   }
 }
 
+/**
+ * #P1-5 — decrypt using the active key with a transparent fallback to a
+ * previous (rotating-out) key.
+ *
+ * Returns `{ plain, usedOldKey }`. Callers that detect `usedOldKey === true`
+ * SHOULD re-encrypt with the active key and persist (lazy migration).
+ *
+ * Operational flow:
+ *   1. Set BOT_ENCRYPTION_KEY_OLD = <current active key>
+ *   2. Set BOT_ENCRYPTION_KEY     = <new key>
+ *   3. POST /admin/rotate-encryption-key — re-encrypts all D1+KV blobs
+ *   4. After success, unset BOT_ENCRYPTION_KEY_OLD
+ *
+ * @param {string} encryptedStr
+ * @param {string} primaryKey   - active BOT_ENCRYPTION_KEY (must be ≥32 chars)
+ * @param {string|null} oldKey  - previous key (BOT_ENCRYPTION_KEY_OLD, may be null)
+ * @param {string} [label]
+ * @returns {Promise<{ plain: string|null, usedOldKey: boolean }>}
+ */
+export async function decryptTokenWithFallback(encryptedStr, primaryKey, oldKey, label) {
+  const primary = await decryptToken(encryptedStr, primaryKey, label);
+  if (primary != null) return { plain: primary, usedOldKey: false };
+  if (!oldKey || oldKey === primaryKey || String(oldKey).length < 32) {
+    return { plain: null, usedOldKey: false };
+  }
+  const fallback = await decryptToken(encryptedStr, oldKey, label);
+  return { plain: fallback, usedOldKey: fallback != null };
+}
+
 export function randomId(byteLength = 8) {
   return Array.from(crypto.getRandomValues(new Uint8Array(byteLength)), b => b.toString(36)).join('').slice(0, byteLength * 2);
 }

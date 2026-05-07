@@ -2,12 +2,13 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { getDb } from "~/server/db";
 import { webUsers, auditLog } from "~/server/db/schema";
 import { verifyPassword, hashPassword, needsRehash } from "./password";
 import { signGooglePrefillToken } from "./googlePrefillToken";
 import { authPublicBaseUrl } from "./authBaseUrl";
+import { hashToken, timingSafeEqualHex } from "./tokens";
 import { isResendConfigured } from "~/server/email/resend";
 import { sendLoginAlert } from "~/server/email/emailService";
 import { checkRateLimit } from "./rateLimit";
@@ -59,13 +60,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        // #P1-6 — one-time post-verification login token. Mutually exclusive
+        // with `password`: when present, we look it up against
+        // web_users.login_token_hash and consume on first use. Replaces the
+        // pre-existing sessionStorage password stash on the verify-email
+        // page so the password never lives in JS-accessible storage.
+        loginToken: { label: "LoginToken", type: "text" },
       },
       async authorize(credentials, request) {
         const parsed = z
           .object({
             email: z.string().email(),
-            password: z.string().min(1),
+            password: z.string().min(1).optional(),
+            loginToken: z.string().min(1).optional(),
           })
+          .refine((d) => !!d.password || !!d.loginToken, { message: "password or loginToken required" })
           .safeParse(credentials);
         if (!parsed.success) return null;
 
@@ -73,6 +82,67 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const db = getDb();
         const ip = getClientIp(request?.headers);
         const now = Math.floor(Date.now() / 1000);
+
+        // #P1-6 — login-token branch: single-use, 5-minute TTL token issued
+        // by webUsers.verifyEmail. Looked up by SHA-256(token), checked for
+        // expiry, then consumed atomically (clear hash + expires_at).
+        if (parsed.data.loginToken) {
+          const tokenHash = await hashToken(parsed.data.loginToken);
+          const tRows = await db
+            .select()
+            .from(webUsers)
+            .where(and(
+              eq(webUsers.email, email),
+              eq(webUsers.loginTokenHash, tokenHash),
+              gte(webUsers.loginTokenExpiresAt, now),
+            ))
+            .limit(1);
+          const tUser = tRows[0];
+          if (!tUser) {
+            try {
+              await db.insert(auditLog).values({
+                tenantId: null,
+                actor: email,
+                action: "login_failed",
+                detail: JSON.stringify({ reason: "bad_login_token" }),
+                ip,
+                createdAt: now,
+              });
+            } catch { /* non-critical */ }
+            return null;
+          }
+          // Defence-in-depth: constant-time hash compare even though the
+          // SQL eq() already enforced equality. Costs nothing in practice
+          // and preserves the contract documented on hashToken.
+          if (!timingSafeEqualHex(tokenHash, tUser.loginTokenHash ?? "")) return null;
+          // Single-use: consume immediately so a replay can't reuse the
+          // same token if intercepted.
+          try {
+            await db
+              .update(webUsers)
+              .set({
+                loginTokenHash: null,
+                loginTokenExpiresAt: null,
+                lastLoginIp: ip,
+                lastLoginAt: now,
+                updatedAt: now,
+              })
+              .where(eq(webUsers.id, tUser.id));
+          } catch { /* non-critical */ }
+          return {
+            id: tUser.id,
+            email: tUser.email,
+            tenantId: tUser.tenantId ?? null,
+            webRole: tUser.role,
+            isEmailVerified: !!tUser.emailVerified,
+          };
+        }
+
+        // From here on we are in the password branch. The refined parser
+        // guarantees `password` is set when `loginToken` is not, but TS
+        // sees it as optional — assert and bail out defensively.
+        const passwordInput = parsed.data.password;
+        if (!passwordInput) return null;
 
         // IP-based rate limiting (D1-backed) — blocks credential stuffing across accounts
         const ipRl = await checkRateLimit(db, ip, "login", 20, 15 * 60 * 1000);
@@ -111,7 +181,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           );
         }
 
-        const valid = await verifyPassword(parsed.data.password, user.passwordHash);
+        const valid = await verifyPassword(passwordInput, user.passwordHash);
 
         if (!valid) {
           const newAttempts = (user.loginAttempts ?? 0) + 1;
@@ -145,7 +215,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         let newPasswordHash: string | null = null;
         if (needsRehash(user.passwordHash)) {
           try {
-            newPasswordHash = await hashPassword(parsed.data.password);
+            newPasswordHash = await hashPassword(passwordInput);
           } catch { /* non-critical — continue with old hash */ }
         }
         try {

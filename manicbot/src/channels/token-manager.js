@@ -126,15 +126,39 @@ export async function createChannelConfig(ctx, tenantId, channelType, config, pl
   const id = randomId(12);
   const now = nowSec();
 
-  await dbRun(ctx,
-    `INSERT OR REPLACE INTO channel_configs
-      (id, tenant_id, channel_type, config, token_encrypted, webhook_verify_token, active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-    id, tenantId, channelType,
-    JSON.stringify(config),
-    encrypted,
-    webhookVerifyToken,
-    now, now,
-  );
+  // #P1-4 — denormalize the keys we use as webhook discriminators into typed
+  // columns. Migration 0045 enforces partial UNIQUE indexes on
+  // (channel_type, page_id), (channel_type, phone_number_id),
+  // (channel_type, ig_business_id) for active rows; if any of these collide
+  // with an existing tenant the INSERT throws a UNIQUE violation, which we
+  // turn into a structured null so the caller can surface 409.
+  const pageId         = config?.page_id != null ? String(config.page_id) : null;
+  const phoneNumberId  = config?.phone_number_id != null ? String(config.phone_number_id) : null;
+  const igBusinessId   = config?.instagram_business_id != null ? String(config.instagram_business_id) : null;
+
+  try {
+    await dbRun(ctx,
+      `INSERT OR REPLACE INTO channel_configs
+        (id, tenant_id, channel_type, config, token_encrypted, webhook_verify_token, active,
+         page_id, phone_number_id, ig_business_id,
+         created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+      id, tenantId, channelType,
+      JSON.stringify(config),
+      encrypted,
+      webhookVerifyToken,
+      pageId, phoneNumberId, igBusinessId,
+      now, now,
+    );
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (/UNIQUE constraint failed/i.test(msg)) {
+      log.error('channels.tokenManager',
+        new Error('duplicate channel registration — another tenant already owns this page/phone/business id'),
+        { tenantId, channelType, pageId, phoneNumberId, igBusinessId });
+      return null;
+    }
+    throw e;
+  }
   return id;
 }

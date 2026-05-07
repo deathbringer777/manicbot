@@ -155,7 +155,10 @@ export default function RegisterPage() {
         });
 
         if (registration.verificationRequired) {
-          try { sessionStorage.setItem("_vepwd", password); } catch { /* ignore */ }
+          // #P1-6 — never stash the password in sessionStorage. The verify-email
+          // page exchanges a server-issued one-time login token for a session
+          // (see webUsers.verifyEmail and the credentials provider), so the
+          // plaintext password no longer lives in JS-accessible storage.
           router.push(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
           return;
         }

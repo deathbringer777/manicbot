@@ -24,6 +24,12 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     name: Security — Gitleaks + Semgrep
+    # Gitleaks-action needs `pull-requests: read` to list PR commits when
+    # event is pull_request. Default GITHUB_TOKEN is read-only on contents,
+    # so without this block the action 403s and downstream jobs skip.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:

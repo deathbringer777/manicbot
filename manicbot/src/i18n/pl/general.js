@@ -29,6 +29,7 @@ export default {
   ai_short_use_panel: '👆 Wiadomość zbyt krótka. Użyj przycisków menu.',
   ai_unavailable_use_panel: '🤖 AI tymczasowo niedostępne. Użyj przycisków panelu.',
   rate_limit: '⏳ Zbyt wiele zapytań. Poczekaj chwilę.',
+  session_expired: '⌛ Sesja wygasła — zacznijmy od nowa. Otwórz menu poleceniem /start.',
   client_blocked: '🚫 Dostęp ograniczony.',
   role_granted_master: '👨‍🎨 Przyznano Ci rolę <b>Mistrza</b>. Użyj /master, aby uzyskać dostęp do panelu.',
   role_granted_owner: '👑 Przyznano Ci rolę <b>Salon</b>. Użyj /master do zarządzania.',

@@ -48,6 +48,47 @@ describe('Stripe webhook signature', () => {
     expect(upper).not.toBe(signature);
     expect(await verifyStripeSignature(payload, upper, secret)).toBe(true);
   });
+
+  // #P0-2 — replay tolerance was tightened from ±300s to ±120s. The signature
+  // verifier must reject forged-but-valid signatures whose `t=` falls outside
+  // the new window so an attacker who captures a webhook payload can't replay
+  // it minutes later.
+  async function signWithCustomTimestamp(payload, secret, timestamp) {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw', encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+    );
+    const signedPayload = timestamp + '.' + payload;
+    const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(signedPayload));
+    const v1 = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `t=${timestamp},v1=${v1}`;
+  }
+
+  it('rejects timestamps older than 120s (replay defence) (#P0-2)', async () => {
+    const payload = '{"id":"evt_replay"}';
+    const secret = 'whsec_t1';
+    const oldTs = Math.floor(Date.now() / 1000) - 121;
+    const sig = await signWithCustomTimestamp(payload, secret, oldTs);
+    expect(await verifyStripeSignature(payload, sig, secret)).toBe(false);
+  });
+
+  it('accepts timestamps inside the 120s window', async () => {
+    const payload = '{"id":"evt_fresh"}';
+    const secret = 'whsec_t1';
+    // 119s old — just inside the new tolerance.
+    const ts = Math.floor(Date.now() / 1000) - 119;
+    const sig = await signWithCustomTimestamp(payload, secret, ts);
+    expect(await verifyStripeSignature(payload, sig, secret)).toBe(true);
+  });
+
+  it('rejects far-future timestamps (clock skew defence)', async () => {
+    const payload = '{"id":"evt_future"}';
+    const secret = 'whsec_t1';
+    const futureTs = Math.floor(Date.now() / 1000) + 200;
+    const sig = await signWithCustomTimestamp(payload, secret, futureTs);
+    expect(await verifyStripeSignature(payload, sig, secret)).toBe(false);
+  });
 });
 
 describe('handleStripeWebhook (D1)', () => {

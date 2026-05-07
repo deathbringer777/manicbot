@@ -58,15 +58,15 @@ function VerifyEmailInner() {
         } else {
           setState("ok");
         }
-        // Auto-login: password stashed in sessionStorage by register page
-        let storedPwd = "";
-        try {
-          storedPwd = sessionStorage.getItem("_vepwd") ?? "";
-          sessionStorage.removeItem("_vepwd");
-        } catch { /* ignore */ }
+        // #P1-6 — auto-login via one-time server token (replaces sessionStorage
+        // password stash). The token lives in `r.loginToken`, is single-use,
+        // and the credentials provider consumes it on first match. Tokens are
+        // only issued on a fresh verification — if the user is already
+        // verified (e.g. opened the link twice) we just route to /login.
+        const oneTimeToken: string | undefined = (r as { loginToken?: string }).loginToken;
 
-        if (!storedPwd) {
-          // No password available (Google OAuth user, or opened in a different tab)
+        if (!oneTimeToken) {
+          // Already-verified path or Google OAuth user — no token issued.
           setTimeout(() => {
             router.push(`/login?verified=1&email=${encodeURIComponent(email)}`);
           }, 1200);
@@ -75,7 +75,7 @@ function VerifyEmailInner() {
 
         const signInResult = await signIn("credentials", {
           email,
-          password: storedPwd,
+          loginToken: oneTimeToken,
           redirect: false,
         });
         if (signInResult?.error) {

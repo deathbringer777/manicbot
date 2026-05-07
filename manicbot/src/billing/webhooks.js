@@ -20,8 +20,12 @@ import {
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
-// Stripe recommends ±5 minute tolerance for webhook timestamp validation (replay prevention).
-const STRIPE_TIMESTAMP_TOLERANCE_SEC = 300;
+// #P0-2 — replay tolerance window. Stripe's published guidance is ±300s but
+// we tighten to ±120s as defence-in-depth. Combined with the D1 event-id
+// dedup (stripe_events.processed_at), this leaves an attacker at most a
+// 4-minute window to replay a captured signed payload before the timestamp
+// check rejects it. Real webhook clocks are usually within ±10s of UTC.
+const STRIPE_TIMESTAMP_TOLERANCE_SEC = 120;
 
 /** Constant-time compare for lowercase hex (Stripe v1); no Node-only APIs. */
 function timingSafeEqualLowerHex(expectedLowerHex, receivedRawHex) {
@@ -191,18 +195,24 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
 
   if (type === 'checkout.session.completed') {
     const session = body.data?.object;
-    // Plugin add-on one-time purchase — handled first; returns silently if
-    // session carries no plugin_slug metadata.
-    try { await handleAddonCheckoutCompleted(ctx, session); }
-    catch (e) { log.error('plugin-webhook', e, { event: 'addon_checkout' }); }
     const tenantId = session?.metadata?.tenantId;
     const customerId = session?.customer;
-    // #S-07 — validate the tenantId from session metadata exists. Stripe
-    // metadata is set at checkout creation time but is otherwise opaque to
-    // Stripe — a bug or a spoofed session could set a non-existent id.
-    if (tenantId && !(await tenantExists(ctx, tenantId))) {
+    // #S-07 / #P0-2 — validate the tenantId from session metadata exists
+    // BEFORE running plugin handlers. The previous order let an addon flip
+    // billing_state for an unrelated tenant if the metadata was spoofed.
+    // Stripe metadata is set at checkout creation time but is otherwise
+    // opaque to Stripe — a bug or a hostile session could set a stray id.
+    const validTenant = tenantId ? await tenantExists(ctx, tenantId) : false;
+    if (tenantId && !validTenant) {
       log.warn('stripe-webhook', { message: 'checkout.session.completed for unknown tenantId — ignoring', tenantId, eventId, customerId });
-    } else if (tenantId) {
+    } else {
+      // Plugin add-on one-time purchase — runs only after tenant validation
+      // (or when the session carries no tenantId metadata, in which case the
+      // addon handler will resolve via stripe_customers — see #P1-7).
+      try { await handleAddonCheckoutCompleted(ctx, session); }
+      catch (e) { log.error('plugin-webhook', e, { event: 'addon_checkout' }); }
+    }
+    if (tenantId && validTenant) {
       const updates = {};
       if (customerId) updates.stripeCustomerId = customerId;
       if (session.subscription) {

@@ -63,13 +63,21 @@ export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
   if (!ctx?.db || !phoneNumberId) return null;
   const needle = channelIdString(phoneNumberId);
   if (!needle) return null;
-  // Use json_extract for indexed lookup instead of full table scan
+  // #P1-4 — primary path uses the denormalized phone_number_id column with
+  // its partial UNIQUE index (migration 0045). Falls back to json_extract for
+  // pre-0045 rows that haven't been re-saved through createChannelConfig yet.
   const rows = await dbAll(ctx,
-    "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1 AND json_extract(config, '$.phone_number_id') = ? LIMIT 1",
+    "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1 AND phone_number_id = ? LIMIT 1",
     needle,
   );
   if (rows.length) return { tenantId: rows[0].tenant_id, channelConfig: rows[0] };
-  // Fallback: full scan for configs with mismatched types (string vs number)
+  // Legacy fallback: json_extract across pre-0045 rows.
+  const legacy = await dbAll(ctx,
+    "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1 AND phone_number_id IS NULL AND json_extract(config, '$.phone_number_id') = ? LIMIT 1",
+    needle,
+  );
+  if (legacy.length) return { tenantId: legacy[0].tenant_id, channelConfig: legacy[0] };
+  // Final fallback: full scan for type-mismatched JSON values (e.g. number vs string).
   const allRows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'whatsapp' AND active = 1",
   );
@@ -96,13 +104,19 @@ export async function resolveTenantFromWhatsApp(ctx, phoneNumberId) {
 export async function resolveTenantFromInstagram(ctx, igPageId) {
   if (!ctx?.db || igPageId == null || igPageId === '') return null;
   const needle = String(igPageId);
-  // Fast path: json_extract on page_id (most common match field)
-  const rows = await dbAll(ctx,
-    "SELECT * FROM channel_configs WHERE channel_type = 'instagram' AND active = 1 AND json_extract(config, '$.page_id') = ? LIMIT 1",
-    needle,
+  // #P1-4 — primary path uses the denormalized page_id / ig_business_id
+  // columns with partial UNIQUE indexes (migration 0045). The Meta entry.id
+  // can match either field, so we try both.
+  const fast = await dbAll(ctx,
+    `SELECT * FROM channel_configs
+       WHERE channel_type = 'instagram' AND active = 1
+         AND (page_id = ? OR ig_business_id = ?)
+       LIMIT 1`,
+    needle, needle,
   );
-  if (rows.length) return { tenantId: rows[0].tenant_id, channelConfig: rows[0] };
-  // Fallback: full scan checking ig_account_id / instagram_business_id
+  if (fast.length) return { tenantId: fast[0].tenant_id, channelConfig: fast[0] };
+  // Legacy fallback: full scan checking page_id / ig_account_id /
+  // instagram_business_id from the JSON config (pre-0045 rows).
   const allRows = await dbAll(ctx,
     "SELECT * FROM channel_configs WHERE channel_type = 'instagram' AND active = 1",
   );

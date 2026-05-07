@@ -9,7 +9,7 @@ import { getState, setState, clearState, checkRateLimit } from '../services/stat
 import { getLang, setLang } from '../services/chat.js';
 import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMaster, saveMaster, deleteMaster, blockUser, unblockUser, listMasters, isPlatformAdmin, getRole, isRegComplete } from '../services/users.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos, getAutoConfirm } from '../services/services.js';
-import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt, getAptById, updateApt } from '../services/appointments.js';
+import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt, SLOT_TAKEN, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, resetHumanRequestCount, buildTicketInternalNote } from '../services/tickets.js';
 import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, notifyAptStaffAutoConfirmed, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
@@ -1478,6 +1478,14 @@ export async function onCb(ctx, cb) {
       masterId: st.masterId || null,
     });
 
+    if (apt === SLOT_TAKEN) {
+      // Lost the race: the partial UNIQUE index (migration 0044) rejected our
+      // INSERT because another isolate booked this slot first. Re-render the
+      // current free slots so the user can pick a different time.
+      const fresh = await getSlots(ctx, st.date, st.svcId, st.masterId ?? null);
+      if (fresh.length) return send(ctx, cid, t(lg, 'slot_taken'), timeKb(fresh, lg));
+      return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, st.date) }), calKb(lg, 0));
+    }
     if (!apt) {
       return send(ctx, cid, fill(t(lg, 'book_limit'), { n: String(MAX_APTS) }), mainKb(lg));
     }

@@ -262,12 +262,18 @@ export const channelConfigs = sqliteTable("channel_configs", {
   tokenExpiresAt: integer("token_expires_at"),
   webhookVerifyToken: text("webhook_verify_token"),
   active: integer("active").notNull().default(1),
+  pageId: text("page_id"),
+  phoneNumberId: text("phone_number_id"),
+  igBusinessId: text("ig_business_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [
   index("idx_cc_tenant").on(t.tenantId),
   index("idx_cc_type").on(t.channelType),
   uniqueIndex("idx_cc_tenant_type").on(t.tenantId, t.channelType),
+  index("idx_cc_page_id").on(t.channelType, t.pageId),
+  index("idx_cc_phone").on(t.channelType, t.phoneNumberId),
+  index("idx_cc_ig_biz").on(t.channelType, t.igBusinessId),
 ]);
 
 export const channelIdentities = sqliteTable("channel_identities", {
@@ -387,11 +393,15 @@ export const webUsers = sqliteTable("web_users", {
   lastLoginAt: integer("last_login_at"),
   passwordChangedAt: integer("password_changed_at").notNull().default(0),
   sessionsInvalidatedAt: integer("sessions_invalidated_at").notNull().default(0),
+  /** SHA-256 of one-time post-verify login token (migration 0047). */
+  loginTokenHash: text("login_token_hash"),
+  loginTokenExpiresAt: integer("login_token_expires_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [
   uniqueIndex("idx_web_user_email").on(t.email),
   index("idx_web_user_tenant").on(t.tenantId),
+  index("idx_web_users_login_token").on(t.loginTokenHash),
 ]);
 
 // ─── Reviews & Ratings ──────────────────────────────────────────────────────

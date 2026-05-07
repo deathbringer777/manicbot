@@ -1,0 +1,34 @@
+# Gitleaks configuration — extends defaults with project-specific allowlists.
+#
+# Scope: only test fixtures that the `generic-api-key` heuristic flags by
+# entropy. We never store real credentials in the tree — production secrets
+# live in Cloudflare secret storage and `wrangler secret put`. CI's role here
+# is to catch *new* leaks, not to rage on hex-looking constants in tests.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and historical false positives"
+
+# Path-based allowlist: vitest test files. Tokens here are deterministic
+# fixtures driving hashToken/encryptToken, not real credentials. The regex
+# is matched against repo-relative paths.
+paths = [
+  '''(^|/)test/.*\.(js|ts|mjs|cjs)$''',
+  '''(^|/)__tests__/.*\.(js|ts|mjs|cjs)$''',
+  '''(^|/)tests/.*\.(js|ts|mjs|cjs)$''',
+]
+
+# Surgical regex allowlist — keeps the safety net intact for everything else
+# but waives the historical 12-char hex literal in login-token-flow.test.ts
+# (commit 17af5f1, replaced with "abc" in bca6631 but still in PR diff range).
+regexes = [
+  '''abcdef123456''',
+]
+
+# Whole-commit allowlist for the historical finding so the PR diff scan
+# doesn't re-flag a fixture we've already replaced.
+commits = [
+  "17af5f1820d8b2af67d05aeaa47ce0a57d12215c",
+]

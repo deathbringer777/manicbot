@@ -33,6 +33,11 @@ const RL_RESET_MAX = 5;
 const RL_EMAIL_CHANGE_MAX = 3; // max email change requests per IP per window
 const RL_LOGIN_IP_MAX = 20; // max login attempts per IP across all accounts
 const RL_LOGIN_IP_WINDOW = 15 * 60 * 1000; // 15 minutes
+/**
+ * #P1-6 — TTL for one-time post-verification login tokens. Short window
+ * keeps the exchange surface small; the token is single-use anyway.
+ */
+const LOGIN_TOKEN_TTL_SEC = 5 * 60;
 
 /**
  * Generate a 6-digit email verification code using crypto.getRandomValues
@@ -304,9 +309,24 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
       }
 
+      // #P1-6 — issue a one-time login token alongside the email verification.
+      // The client exchanges this token (single-use, 5-minute TTL) via the
+      // NextAuth credentials provider so the password never has to traverse
+      // sessionStorage. The token is hashed at rest and consumed on first use.
+      const loginToken = generateToken();
+      const loginTokenHash = await hashToken(loginToken);
+      const loginTokenExpiresAt = now + LOGIN_TOKEN_TTL_SEC;
+
       await ctx.db
         .update(webUsers)
-        .set({ emailVerified: 1, verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
+        .set({
+          emailVerified: 1,
+          verificationToken: null,
+          verificationTokenExpiresAt: null,
+          loginTokenHash,
+          loginTokenExpiresAt,
+          updatedAt: now,
+        })
         .where(eq(webUsers.id, user.id));
 
       try {
@@ -323,7 +343,7 @@ export const webUsersRouter = createTRPCRouter({
       // Non-blocking welcome email
       sendWelcomeEmail(user.email, user.name ?? null, (user.lang ?? "en") as Lang).catch(() => {});
 
-      return { success: true };
+      return { success: true, loginToken, loginTokenExpiresAt };
     }),
 
   /** Resend verification code. */

@@ -316,25 +316,35 @@ export const appointmentsRouter = createTRPCRouter({
       const [y, mo, d] = input.date.split("-").map(Number);
       const startTs = Math.floor(Date.UTC(y!, mo! - 1, d!, h!, m!) / 1000);
 
-      await ctx.db.insert(appointments).values({
-        id: aptId,
-        tenantId: input.tenantId,
-        chatId,
-        svcId: input.serviceId,
-        date: input.date,
-        time: input.time,
-        ts: startTs,
-        status: "confirmed",
-        masterId: input.masterId,
-        userName: input.clientName ?? null,
-        userPhone: input.clientPhone ?? null,
-        confirmedBy: null,
-        cancelled: 0,
-        noShow: 0,
-        remH24: 0,
-        remH2: 0,
-        createdAt: now,
-      });
+      try {
+        await ctx.db.insert(appointments).values({
+          id: aptId,
+          tenantId: input.tenantId,
+          chatId,
+          svcId: input.serviceId,
+          date: input.date,
+          time: input.time,
+          ts: startTs,
+          status: "confirmed",
+          masterId: input.masterId,
+          userName: input.clientName ?? null,
+          userPhone: input.clientPhone ?? null,
+          confirmedBy: null,
+          cancelled: 0,
+          noShow: 0,
+          remH24: 0,
+          remH2: 0,
+          createdAt: now,
+        });
+      } catch (e) {
+        // Race: a concurrent booking just claimed this slot. The partial
+        // UNIQUE index idx_apt_unique_active_slot (migration 0044) caught
+        // the duplicate. Surface as 409 so the dashboard can re-fetch slots.
+        if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? ""))) {
+          throw new TRPCError({ code: "CONFLICT", message: "slot_conflict" });
+        }
+        throw e;
+      }
 
       // Analytics event (best-effort via raw D1 binding — Drizzle doesn't
       // export .execute() on this DB variant).

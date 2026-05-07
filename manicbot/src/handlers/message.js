@@ -278,6 +278,15 @@ export async function onMsg(ctx, msg) {
   const st = await getState(ctx, cid);
   const lg = (await getLang(ctx, cid)) || 'ru';
 
+  // #P1-3 — explicit notice when the multi-step booking/registration session
+  // lapsed between turns. Without this the user typed e.g. their phone and
+  // got the welcome menu back with no explanation; now they at least see
+  // why we forgot the conversation. We continue with `st = { step: 'idle' }`
+  // so the message itself is processed as a fresh entry point.
+  if (st._expired) {
+    await send(ctx, cid, t(lg, 'session_expired')).catch(() => {});
+  }
+
   if (await isBlocked(ctx, cid)) return send(ctx, cid, t(lg, 'client_blocked'));
 
   // Inactive/canceled billing: block staff access, let clients through freely

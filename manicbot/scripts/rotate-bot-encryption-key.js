@@ -15,7 +15,7 @@
  * Returns per-table counts of rows re-encrypted.
  */
 
-import { encryptToken, decryptToken } from '../src/utils/security.js';
+import { encryptToken, decryptToken, decryptTokenWithFallback } from '../src/utils/security.js';
 import { dbAll, dbRun } from '../src/utils/db.js';
 
 /** Sweep channel_configs.token_encrypted → label 'channel-token-v1'. */
@@ -105,6 +105,117 @@ export async function sweepKeyRotation(ctx) {
     sweepChannelTokens(ctx, key),
     sweepGoogleTokens(ctx, key),
     sweepKvBotTokens(ctx, key),
+  ]);
+  return { channels, google, botTokens, timestamp: Date.now() };
+}
+
+// ─── #P1-5 — re-encryption pass when rotating BOT_ENCRYPTION_KEY itself ──────
+//
+// `sweepKeyRotation` upgrades the wire format (legacy → v1$). It does NOT
+// help when you change the master key value. The functions below cover that
+// case: read with the OLD key as fallback, re-encrypt with the NEW key.
+//
+// Operational flow:
+//   1. wrangler secret put BOT_ENCRYPTION_KEY_OLD < (current key)
+//   2. wrangler secret put BOT_ENCRYPTION_KEY     < (new key)
+//   3. POST /admin/rotate-encryption-key — repeat until each table → 0 remaining
+//   4. wrangler secret delete BOT_ENCRYPTION_KEY_OLD
+
+async function reencChannelTokens(ctx, primaryKey, oldKey) {
+  const rows = await dbAll(ctx, `
+    SELECT id, token_encrypted FROM channel_configs
+    WHERE token_encrypted IS NOT NULL
+    LIMIT 50
+  `);
+  let ok = 0, fail = 0, skipped = 0;
+  for (const row of rows) {
+    try {
+      const { plain, usedOldKey } = await decryptTokenWithFallback(
+        row.token_encrypted, primaryKey, oldKey, 'channel-token-v1');
+      if (plain == null) { fail++; continue; }
+      if (!usedOldKey) { skipped++; continue; } // already on new key
+      const reEnc = await encryptToken(plain, primaryKey, 'channel-token-v1');
+      if (!reEnc) { fail++; continue; }
+      await dbRun(ctx,
+        'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ?',
+        reEnc, Math.floor(Date.now() / 1000), row.id);
+      ok++;
+    } catch { fail++; }
+  }
+  return { table: 'channel_configs', ok, fail, skipped, scanned: rows.length };
+}
+
+async function reencGoogleTokens(ctx, primaryKey, oldKey) {
+  const rows = await dbAll(ctx, `
+    SELECT id, refresh_token_enc FROM google_integrations
+    WHERE refresh_token_enc IS NOT NULL
+    LIMIT 50
+  `);
+  let ok = 0, fail = 0, skipped = 0;
+  for (const row of rows) {
+    try {
+      const { plain, usedOldKey } = await decryptTokenWithFallback(
+        row.refresh_token_enc, primaryKey, oldKey, 'google-refresh-v1');
+      if (plain == null) { fail++; continue; }
+      if (!usedOldKey) { skipped++; continue; }
+      const reEnc = await encryptToken(plain, primaryKey, 'google-refresh-v1');
+      if (!reEnc) { fail++; continue; }
+      await dbRun(ctx,
+        'UPDATE google_integrations SET refresh_token_enc = ?, updated_at = ? WHERE id = ?',
+        reEnc, Math.floor(Date.now() / 1000), row.id);
+      ok++;
+    } catch { fail++; }
+  }
+  return { table: 'google_integrations', ok, fail, skipped, scanned: rows.length };
+}
+
+async function reencKvBotTokens(env, primaryKey, oldKey) {
+  if (!env?.MANICBOT?.list) return { table: 'kv:bottoken', ok: 0, fail: 0, skipped: 0, scanned: 0 };
+  const kv = env.MANICBOT;
+  const list = await kv.list({ prefix: 'bottoken:', limit: 100 });
+  let ok = 0, fail = 0, skipped = 0;
+  for (const k of list.keys) {
+    try {
+      const val = await kv.get(k.name, 'text');
+      if (!val) { fail++; continue; }
+      // Skip raw TG tokens which are stored as-is by the legacy provisioning path.
+      if (val.includes(':') && val.match(/^\d+:[A-Za-z0-9_-]+$/)) { skipped++; continue; }
+      const { plain, usedOldKey } = await decryptTokenWithFallback(val, primaryKey, oldKey, 'bot-token-v1');
+      if (plain == null) { fail++; continue; }
+      if (!usedOldKey) { skipped++; continue; }
+      const reEnc = await encryptToken(plain, primaryKey, 'bot-token-v1');
+      if (!reEnc) { fail++; continue; }
+      await kv.put(k.name, reEnc);
+      ok++;
+    } catch { fail++; }
+  }
+  return { table: 'kv:bottoken', ok, fail, skipped, scanned: list.keys.length };
+}
+
+/**
+ * One pass of the BOT_ENCRYPTION_KEY rotation. Idempotent — call repeatedly
+ * until every table returns `ok === 0` and the OLD key can be removed.
+ *
+ * Requires both BOT_ENCRYPTION_KEY (active, ≥32 chars) and
+ * BOT_ENCRYPTION_KEY_OLD (previous, ≥32 chars) on `ctx`. Returns an error
+ * payload otherwise.
+ */
+export async function rotateEncryptionKeyPass(ctx) {
+  const primaryKey = ctx?.BOT_ENCRYPTION_KEY;
+  const oldKey = ctx?.BOT_ENCRYPTION_KEY_OLD;
+  if (!primaryKey || primaryKey.length < 32) {
+    return { error: 'BOT_ENCRYPTION_KEY missing or too short' };
+  }
+  if (!oldKey || oldKey.length < 32) {
+    return { error: 'BOT_ENCRYPTION_KEY_OLD missing or too short — set it before rotating' };
+  }
+  if (primaryKey === oldKey) {
+    return { error: 'BOT_ENCRYPTION_KEY equals BOT_ENCRYPTION_KEY_OLD — nothing to rotate' };
+  }
+  const [channels, google, botTokens] = await Promise.all([
+    reencChannelTokens(ctx, primaryKey, oldKey),
+    reencGoogleTokens(ctx, primaryKey, oldKey),
+    reencKvBotTokens(ctx, primaryKey, oldKey),
   ]);
   return { channels, google, botTokens, timestamp: Date.now() };
 }

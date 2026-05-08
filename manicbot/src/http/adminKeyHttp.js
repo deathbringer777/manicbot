@@ -108,15 +108,87 @@ export async function tryAdminKeyRoutes(request, env, url) {
   }
 
   // #S6: Migrate bot tokens from KV to D1 bots.token_encrypted column.
-  // One-time operation. Copies encrypted tokens from KV bottoken:{botId} to D1,
-  // then removes them from KV. D1 reads take precedence; KV fallback handles
-  // bots registered before migration completes.
+  //
+  // Two modes (selected via `?mode=`):
+  //   - mode=migrate (default) — copies KV bottoken:{botId} blobs into D1 for
+  //     any row where token_encrypted IS NULL, then deletes them from KV.
+  //     One-shot, safe to re-run (skips already-migrated rows).
+  //   - mode=verify — read-only audit: walks every D1 bots row and tries to
+  //     decrypt the token with the active key (with BOT_ENCRYPTION_KEY_OLD
+  //     fallback). Reports per-row status. Use after a deploy or key rotation
+  //     to confirm every bot can still resolve its token before users notice.
+  //     Returns { ok, summary, rows: [{ botId, fmt, decryptOk, usedOldKey, error }] }.
   if (request.method === 'POST' && url.pathname === '/admin/migrate-bot-tokens') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
-    if (!env.DB || !env.MANICBOT) return new Response('DB or KV not bound', { status: 500 });
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
     const ec = envCtx(env);
     ec.BOT_ENCRYPTION_KEY = env.BOT_ENCRYPTION_KEY;
+    ec.BOT_ENCRYPTION_KEY_OLD = env.BOT_ENCRYPTION_KEY_OLD || null;
     ec.MANICBOT = env.MANICBOT;
+
+    const mode = url.searchParams.get('mode') || 'migrate';
+
+    if (mode === 'verify') {
+      try {
+        const { dbAll } = await import('../utils/db.js');
+        const { decryptTokenWithFallback } = await import('../utils/security.js');
+        const BOT_TOKEN_LABEL = 'bot-token-v1';
+        const rows = await dbAll(ec, 'SELECT bot_id, tenant_id, bot_username, active, token_encrypted FROM bots');
+        const summary = { total: rows.length, ok: 0, plaintext: 0, decryptOk: 0, usedOldKey: 0, decryptFailed: 0, missing: 0, inactive: 0 };
+        const out = [];
+        for (const r of rows) {
+          if (r.active === 0) summary.inactive++;
+          if (!r.token_encrypted) {
+            summary.missing++;
+            out.push({ botId: r.bot_id, tenantId: r.tenant_id, botUsername: r.bot_username, active: r.active === 1, fmt: 'NULL', decryptOk: false, error: 'token_encrypted_null' });
+            continue;
+          }
+          const raw = r.token_encrypted;
+          if (raw.includes(':')) {
+            summary.plaintext++;
+            summary.ok++;
+            out.push({ botId: r.bot_id, tenantId: r.tenant_id, botUsername: r.bot_username, active: r.active === 1, fmt: 'plaintext', decryptOk: true, usedOldKey: false });
+            continue;
+          }
+          const fmt = raw.startsWith('v1$') ? 'v1' : 'legacy';
+          if (!env.BOT_ENCRYPTION_KEY) {
+            summary.decryptFailed++;
+            out.push({ botId: r.bot_id, tenantId: r.tenant_id, botUsername: r.bot_username, active: r.active === 1, fmt, decryptOk: false, error: 'BOT_ENCRYPTION_KEY_unset' });
+            continue;
+          }
+          let result;
+          try {
+            result = await decryptTokenWithFallback(raw, env.BOT_ENCRYPTION_KEY, env.BOT_ENCRYPTION_KEY_OLD || null, BOT_TOKEN_LABEL);
+          } catch (e) {
+            summary.decryptFailed++;
+            out.push({ botId: r.bot_id, tenantId: r.tenant_id, botUsername: r.bot_username, active: r.active === 1, fmt, decryptOk: false, error: `decrypt_threw: ${e?.message ?? 'unknown'}` });
+            continue;
+          }
+          if (result.plain == null) {
+            summary.decryptFailed++;
+            out.push({ botId: r.bot_id, tenantId: r.tenant_id, botUsername: r.bot_username, active: r.active === 1, fmt, decryptOk: false, error: 'decrypt_returned_null' });
+            continue;
+          }
+          summary.decryptOk++;
+          summary.ok++;
+          if (result.usedOldKey) summary.usedOldKey++;
+          // Don't leak the plaintext token to the response.
+          out.push({ botId: r.bot_id, tenantId: r.tenant_id, botUsername: r.bot_username, active: r.active === 1, fmt, decryptOk: true, usedOldKey: result.usedOldKey });
+        }
+        void logEvent(ec, 'admin.migrate_bot_tokens.verify', {
+          level: summary.decryptFailed > 0 ? 'error' : 'info',
+          message: `Verify: ${summary.ok}/${summary.total} ok, ${summary.decryptFailed} decrypt failed, ${summary.missing} missing, ${summary.usedOldKey} used old key`,
+          data: summary,
+        });
+        return Response.json({ ok: true, mode: 'verify', summary, rows: out });
+      } catch (err) {
+        log.error('http.adminKey', err instanceof Error ? err : new Error(String(err?.message)), { action: 'migrate_bot_tokens_verify' });
+        return Response.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+      }
+    }
+
+    // Default: mode=migrate (one-shot KV→D1 copy).
+    if (!env.MANICBOT) return new Response('KV not bound', { status: 500 });
     const kv = env.MANICBOT;
 
     try {
@@ -153,6 +225,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
       return Response.json({
         ok: true,
+        mode: 'migrate',
         migratedCount,
         totalBots: botsToMigrate.length
       });

@@ -305,11 +305,11 @@ export function MasterSwitcherInline() {
         onClick={() => setOpen(o => !o)}
         className={`flex w-full items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
           isViewingMaster
-            ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-300"
-            : "bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+            ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-300"
+            : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-slate-200"
         }`}
       >
-        <Scissors className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+        <Scissors className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
         <span className="flex-1 text-left truncate">
           {isViewingMaster ? activeMasterName : t("masterSwitch.viewAs", lang)}
         </span>
@@ -319,25 +319,25 @@ export function MasterSwitcherInline() {
             tabIndex={0}
             onClick={e => { e.stopPropagation(); setPreviewMaster(null); setOpen(false); }}
             onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); setPreviewMaster(null); setOpen(false); } }}
-            className="shrink-0 flex h-5 w-5 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white cursor-pointer"
+            className="shrink-0 flex h-5 w-5 items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-600 hover:text-slate-900 cursor-pointer dark:bg-white/10 dark:hover:bg-white/20 dark:text-slate-400 dark:hover:text-white"
           >
             <X className="h-3 w-3" />
           </span>
         )}
-        <ChevronDown className={`h-3 w-3 text-slate-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3 w-3 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl shadow-black/60 backdrop-blur-xl">
-            <p className="px-2 pb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95 dark:shadow-black/60">
+            <p className="px-2 pb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">
               {t("masterSwitch.title", lang)}
             </p>
             {mastersQuery.isLoading ? (
-              <div className="h-8 animate-pulse rounded-xl bg-slate-800 mx-1" />
+              <div className="h-8 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800 mx-1" />
             ) : !mastersQuery.data?.length ? (
-              <p className="px-3 py-2 text-xs text-slate-500">{t("masterSwitch.none", lang)}</p>
+              <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-500">{t("masterSwitch.none", lang)}</p>
             ) : (
               mastersQuery.data.map((m: any) => (
                 <button
@@ -345,21 +345,21 @@ export function MasterSwitcherInline() {
                   onClick={() => { setPreviewMaster(m.chatId); setOpen(false); }}
                   className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
                     previewMasterId === m.chatId
-                      ? "bg-white/10 text-white"
-                      : "text-slate-400 hover:bg-white/5 hover:text-white"
+                      ? "bg-slate-100 text-slate-900 dark:bg-white/10 dark:text-white"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white"
                   }`}
                 >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-[11px] font-bold text-emerald-400 shrink-0">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-[11px] font-bold text-emerald-700 shrink-0 dark:bg-emerald-500/20 dark:text-emerald-400">
                     {(m.name ?? "M").charAt(0).toUpperCase()}
                   </div>
                   <span className="flex-1 text-xs font-medium truncate">{m.name ?? `#${m.chatId}`}</span>
                   {m.allowDelegation ? (
-                    <Unlock className="h-3 w-3 text-emerald-400 shrink-0" />
+                    <Unlock className="h-3 w-3 text-emerald-500 shrink-0 dark:text-emerald-400" />
                   ) : (
-                    <Lock className="h-3 w-3 text-slate-600 shrink-0" />
+                    <Lock className="h-3 w-3 text-slate-400 shrink-0 dark:text-slate-600" />
                   )}
                   {previewMasterId === m.chatId && (
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 dark:bg-emerald-400" />
                   )}
                 </button>
               ))
@@ -367,7 +367,7 @@ export function MasterSwitcherInline() {
             {isViewingMaster && (
               <button
                 onClick={() => { setPreviewMaster(null); setOpen(false); }}
-                className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/15"
+                className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:hover:bg-emerald-500/15"
               >
                 <X className="h-3.5 w-3.5" /> {t("masterSwitch.exit", lang)}
               </button>

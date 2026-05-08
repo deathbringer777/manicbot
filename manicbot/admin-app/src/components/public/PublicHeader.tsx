@@ -74,7 +74,7 @@ export function PublicHeader() {
           href="/blog"
           className="hidden sm:inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-white/60 dark:hover:text-white"
         >
-          {lang === "ru" || lang === "ua" ? "Блог" : "Blog"}
+          {t("common.blog", lang)}
         </Link>
 
         {/* Right controls — theme + lang always visible. Login hidden on mobile chat. */}
@@ -95,10 +95,10 @@ export function PublicHeader() {
           <Link
             href="/login"
             className={`${hideOnMobileChatFlex} items-center gap-1.5 rounded-xl border border-violet-300/50 bg-[linear-gradient(135deg,rgba(124,58,237,0.06),rgba(6,182,212,0.06))] px-2.5 py-2 text-xs font-semibold text-violet-700 transition-all duration-300 hover:scale-[1.04] hover:border-violet-400 hover:shadow-[0_4px_20px_-6px_rgba(124,58,237,0.3)] sm:px-3.5 dark:border-violet-400/20 dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.12),rgba(6,182,212,0.1))] dark:text-violet-200 dark:hover:border-violet-400/40 dark:hover:shadow-[0_4px_20px_-6px_rgba(124,58,237,0.35)]`}
-            aria-label="Войти"
+            aria-label={t("common.login", lang)}
           >
             <LogIn className="h-4 w-4 shrink-0" />
-            <span className="hidden sm:inline">Войти</span>
+            <span className="hidden sm:inline">{t("common.login", lang)}</span>
           </Link>
         </div>
       </div>

@@ -26,6 +26,7 @@ async function assertNotRateLimited(
   }
 }
 import { hasCyrillic, cyrillicToLatin } from "~/lib/searchNormalize";
+import { POPULAR_CITIES } from "~/lib/popularCities";
 
 /** Build a LIKE condition that covers both Cyrillic input and its Latin transliteration. */
 function searchLike(col: Parameters<typeof like>[0], raw: string) {
@@ -393,15 +394,16 @@ export const publicSalonRouter = createTRPCRouter({
       return { items, hasMore, page };
     }),
 
-  /** List distinct cities that have public salons (for search autocomplete). */
-  getCities: publicProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db
-      .selectDistinct({ city: tenants.city })
-      .from(tenants)
-      .where(and(eq(tenants.publicActive, 1), isNotNull(tenants.city)))
-      .orderBy(tenants.city)
-      .limit(100);
-    return rows.map((r) => r.city).filter(Boolean) as string[];
+  /**
+   * Pinned popular cities shown on the landing dropdown and on /search.
+   *
+   * The platform currently operates in Poland only — we deliberately do
+   * NOT query the tenants table here. Querying would surface legacy /
+   * test-account rows (e.g. "Київ") that contradict the marketing
+   * promise. Keep in sync with `manicbot/src/lib/popularCities.js`.
+   */
+  getCities: publicProcedure.query(async () => {
+    return [...POPULAR_CITIES];
   }),
 
   /** Autocomplete: returns top 5 salon suggestions + matched blog articles for the search dropdown. */

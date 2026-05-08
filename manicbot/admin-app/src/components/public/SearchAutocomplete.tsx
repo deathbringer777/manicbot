@@ -176,23 +176,18 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
                 {t("search.popularCities", lang)}
               </p>
               {popularCities.slice(0, 8).map((city) => (
-                <button
+                <Link
                   key={city}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setValue(city);
-                    setOpen(false);
-                    if (onSearch) onSearch(city);
-                    else router.push(`/search?q=${encodeURIComponent(city)}`);
-                  }}
+                  href={`/search?city=${encodeURIComponent(city)}`}
+                  prefetch={false}
+                  onClick={() => setOpen(false)}
                   className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/70"
                 >
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                     <MapPin className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                   </div>
                   <span className="text-sm text-slate-700 dark:text-slate-300">{city}</span>
-                </button>
+                </Link>
               ))}
             </div>
           )}

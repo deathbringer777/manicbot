@@ -153,9 +153,10 @@ function SearchPageContent() {
   const { lang } = useLang();
   const searchParams = useSearchParams();
   const urlQ = searchParams.get("q") ?? "";
+  const urlCity = searchParams.get("city") ?? "";
 
   const [query, setQuery] = useState(urlQ);
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState(urlCity);
   const [activeChips, setActiveChips] = useState<string[]>([]);
   const [lat, setLat] = useState<number | undefined>();
   const [lng, setLng] = useState<number | undefined>();
@@ -163,10 +164,14 @@ function SearchPageContent() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
 
-  // Sync URL param on mount
+  // Sync URL params on mount / change so popular-city links pre-fill the
+  // city filter and so deep-links from outside remain bookmarkable.
   useEffect(() => {
     if (urlQ) setQuery(urlQ);
   }, [urlQ]);
+  useEffect(() => {
+    if (urlCity) setCity(urlCity);
+  }, [urlCity]);
 
   const fullQuery = [query, ...activeChips].filter(Boolean).join(" ");
 

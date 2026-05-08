@@ -27,6 +27,8 @@ const translations = {
   "common.next":            { ru: "Далее",         ua: "Далі",           en: "Next",       pl: "Dalej" },
   "common.deleteConfirm":   { ru: "Удалить?",      ua: "Видалити?",      en: "Delete?",    pl: "Usunąć?" },
   "common.deleteConfirmDesc": { ru: "Это действие нельзя отменить.", ua: "Цю дію не можна скасувати.", en: "This action can't be undone.", pl: "Tej akcji nie można cofnąć." },
+  "common.login":           { ru: "Войти",         ua: "Увійти",         en: "Sign in",    pl: "Zaloguj" },
+  "common.blog":            { ru: "Блог",          ua: "Блог",           en: "Blog",       pl: "Blog" },
 
   // ── Status labels ──────────────────────────────────────────────────────────
   "status.confirmed":       { ru: "Подтверждено", ua: "Підтверджено",   en: "Confirmed",  pl: "Potwierdzone" },

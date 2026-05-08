@@ -105,7 +105,7 @@ export function middleware(request: NextRequest) {
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=(self), usb=()",
+    "camera=(), microphone=(), geolocation=(self), payment=(self), usb=()",
   );
   res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
   res.headers.set("Cross-Origin-Resource-Policy", "same-origin");

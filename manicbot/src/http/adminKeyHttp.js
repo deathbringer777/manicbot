@@ -107,6 +107,71 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json(result);
   }
 
+  // #S6: Migrate bot tokens from KV to D1 bots.token_encrypted column.
+  // One-time operation. Copies encrypted tokens from KV bottoken:{botId} to D1,
+  // then removes them from KV. D1 reads take precedence; KV fallback handles
+  // bots registered before migration completes.
+  if (request.method === 'POST' && url.pathname === '/admin/migrate-bot-tokens') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB || !env.MANICBOT) return new Response('DB or KV not bound', { status: 500 });
+    const ec = envCtx(env);
+    ec.BOT_ENCRYPTION_KEY = env.BOT_ENCRYPTION_KEY;
+    ec.MANICBOT = env.MANICBOT;
+    const kv = env.MANICBOT;
+
+    try {
+      const { dbAll, dbRun } = await import('../utils/db.js');
+
+      // Find all bots without token_encrypted in D1.
+      const botsToMigrate = await dbAll(ec, 'SELECT bot_id FROM bots WHERE token_encrypted IS NULL');
+      const migratedCount = { success: 0, failed: 0, notInKv: 0 };
+
+      for (const botRow of botsToMigrate) {
+        const botId = botRow.bot_id;
+        try {
+          // Try to fetch token from KV.
+          const kvToken = await kv.get(`bottoken:${botId}`, 'text');
+          if (!kvToken) {
+            migratedCount.notInKv++;
+            continue;
+          }
+
+          // Write to D1.
+          await dbRun(ec, 'UPDATE bots SET token_encrypted = ? WHERE bot_id = ?', kvToken, botId);
+          migratedCount.success++;
+
+          // Delete from KV after successful D1 write.
+          await kv.delete(`bottoken:${botId}`);
+        } catch (botErr) {
+          log.error('http.adminKey', botErr instanceof Error ? botErr : new Error(String(botErr?.message)), {
+            action: 'migrate_bot_tokens_failed',
+            botId
+          });
+          migratedCount.failed++;
+        }
+      }
+
+      void logEvent(ec, 'admin.migrate_bot_tokens', {
+        level: 'info',
+        message: `Migrated ${migratedCount.success} bot tokens from KV to D1 (${migratedCount.failed} failed, ${migratedCount.notInKv} not in KV)`
+      });
+
+      return Response.json({
+        ok: true,
+        migratedCount,
+        totalBots: botsToMigrate.length
+      });
+    } catch (err) {
+      log.error('http.adminKey', err instanceof Error ? err : new Error(String(err?.message)), {
+        action: 'migrate_bot_tokens'
+      });
+      return Response.json({
+        ok: false,
+        error: err instanceof Error ? err.message : String(err)
+      }, { status: 500 });
+    }
+  }
+
   if (request.method === 'POST' && url.pathname === '/admin/provision') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     const ec = envCtx(env);

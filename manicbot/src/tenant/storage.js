@@ -143,28 +143,33 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
   if (!ctx?.db || !botId) return false;
   try {
     const kv = ctx.kv || ctx.globalKv;
-    if (data.botToken && kv) {
-      if (encryptionKey) {
-        const encrypted = await encryptToken(data.botToken, encryptionKey, BOT_TOKEN_LABEL);
-        if (!encrypted) {
-          log.error('tenant.storage', new Error('putBot encryption failed — refusing to store plaintext bot token'), { botId });
-          return false;
-        }
-        await kv.put(BOT_TOKEN_PREFIX + botId, encrypted);
-      } else {
+    let tokenEncrypted = null;
+    if (data.botToken) {
+      if (!encryptionKey) {
         // No encryption key configured — refuse to store tokens in plaintext.
         log.error('tenant.storage', new Error('BOT_ENCRYPTION_KEY not set — refusing to store plaintext bot token'), { botId });
         return false;
       }
+      const encrypted = await encryptToken(data.botToken, encryptionKey, BOT_TOKEN_LABEL);
+      if (!encrypted) {
+        log.error('tenant.storage', new Error('putBot encryption failed — refusing to store plaintext bot token'), { botId });
+        return false;
+      }
+      tokenEncrypted = encrypted;
+      // Belt-and-suspenders: also write to KV until KV binding is removed.
+      if (kv) {
+        await kv.put(BOT_TOKEN_PREFIX + botId, encrypted);
+      }
     }
     await dbRun(ctx,
-      `INSERT OR REPLACE INTO bots (bot_id, tenant_id, bot_username, webhook_secret, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO bots (bot_id, tenant_id, bot_username, webhook_secret, active, token_encrypted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       botId,
       data.tenantId || null,
       data.botUsername || null,
       data.webhookSecret || '',
       data.active === false ? 0 : 1,
+      tokenEncrypted,
       data.createdAt || nowSec(),
       data.updatedAt || nowSec(),
     );
@@ -177,9 +182,22 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
 
 export async function getBotToken(ctx, botId, encryptionKey = null) {
   if (!botId) return null;
-  const kv = ctx?.kv || ctx?.globalKv;
-  if (!kv) return null;
   try {
+    // D1-first: read token_encrypted from bots table (migration target).
+    if (ctx?.db) {
+      const row = await dbGet(ctx, 'SELECT token_encrypted FROM bots WHERE bot_id = ?', botId);
+      if (row?.token_encrypted) {
+        const raw = row.token_encrypted;
+        // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.
+        if (encryptionKey && !raw.includes(':')) {
+          return await decryptToken(raw, encryptionKey, BOT_TOKEN_LABEL);
+        }
+        return raw;
+      }
+    }
+    // Fall back to KV for bots not yet migrated to D1.
+    const kv = ctx?.kv || ctx?.globalKv;
+    if (!kv) return null;
     const raw = await kv.get(BOT_TOKEN_PREFIX + botId, 'text');
     if (!raw) return null;
     // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.

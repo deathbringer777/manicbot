@@ -1,22 +1,21 @@
 /**
  * Tenant and bot registry storage — D1 backed.
  * - tenants table → tenant documents
- * - bots table → bot metadata (token stays in KV encrypted)
- * - KV bottoken:{botId} → encrypted bot token (stays for security)
+ * - bots table → bot metadata + token_encrypted (AES-GCM, label bot-token-v1)
+ *
+ * Bot tokens migrated from KV to D1 on 2026-05-08. KV binding removed.
  */
 
 import { encryptToken, decryptToken } from '../utils/security.js';
 import { log } from '../utils/logger.js';
 
-// #S6: HKDF subkey label for Telegram bot tokens stored in KV.
+// #S6: HKDF subkey label for Telegram bot tokens stored in D1.
 // Distinct from 'channel-token-v1' (D1 channel_configs) so a leaked label
 // derivation in one storage tier doesn't compromise the other.
 const BOT_TOKEN_LABEL = 'bot-token-v1';
 import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { SALON, ADDRESS, PHONE, MAPS_URL, INSTAGRAM_URL, WORK, DEFAULT_SVC, DEFAULT_PHOTOS, DEFAULT_ABOUT_PHOTOS } from '../config.js';
-
-const BOT_TOKEN_PREFIX = 'bottoken:';
 
 function tenantRowToDoc(row) {
   if (!row) return null;
@@ -142,7 +141,6 @@ export async function getTenantIdByBotId(ctx, botId) {
 export async function putBot(ctx, botId, data, encryptionKey = null) {
   if (!ctx?.db || !botId) return false;
   try {
-    const kv = ctx.kv || ctx.globalKv;
     let tokenEncrypted = null;
     if (data.botToken) {
       if (!encryptionKey) {
@@ -156,10 +154,6 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
         return false;
       }
       tokenEncrypted = encrypted;
-      // Belt-and-suspenders: also write to KV until KV binding is removed.
-      if (kv) {
-        await kv.put(BOT_TOKEN_PREFIX + botId, encrypted);
-      }
     }
     await dbRun(ctx,
       `INSERT OR REPLACE INTO bots (bot_id, tenant_id, bot_username, webhook_secret, active, token_encrypted, created_at, updated_at)
@@ -183,23 +177,11 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
 export async function getBotToken(ctx, botId, encryptionKey = null) {
   if (!botId) return null;
   try {
-    // D1-first: read token_encrypted from bots table (migration target).
-    if (ctx?.db) {
-      const row = await dbGet(ctx, 'SELECT token_encrypted FROM bots WHERE bot_id = ?', botId);
-      if (row?.token_encrypted) {
-        const raw = row.token_encrypted;
-        // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.
-        if (encryptionKey && !raw.includes(':')) {
-          return await decryptToken(raw, encryptionKey, BOT_TOKEN_LABEL);
-        }
-        return raw;
-      }
-    }
-    // Fall back to KV for bots not yet migrated to D1.
-    const kv = ctx?.kv || ctx?.globalKv;
-    if (!kv) return null;
-    const raw = await kv.get(BOT_TOKEN_PREFIX + botId, 'text');
-    if (!raw) return null;
+    // D1 is the sole source of truth for bot tokens (migration complete 2026-05-08).
+    if (!ctx?.db) return null;
+    const row = await dbGet(ctx, 'SELECT token_encrypted FROM bots WHERE bot_id = ?', botId);
+    if (!row?.token_encrypted) return null;
+    const raw = row.token_encrypted;
     // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.
     if (encryptionKey && !raw.includes(':')) {
       return await decryptToken(raw, encryptionKey, BOT_TOKEN_LABEL);

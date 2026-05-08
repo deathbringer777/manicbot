@@ -113,7 +113,7 @@ function addSecurityHeaders(resp) {
   h.set('X-Frame-Options', 'DENY');
   h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self), usb=()');
+  h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self), usb=()');
   h.set('Cross-Origin-Opener-Policy', 'same-origin');
   if (!h.has('Content-Security-Policy')) {
     // Strict default. The Worker mostly serves: the embed widget script,

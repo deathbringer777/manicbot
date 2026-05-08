@@ -1,5 +1,6 @@
 import { envCtx } from './envCtx.js';
 import { hasCyrillic, cyrillicToLatin } from '../lib/searchNormalize.js';
+import { POPULAR_CITIES } from '../lib/popularCities.js';
 import { log } from '../utils/logger.js';
 
 /**
@@ -39,34 +40,10 @@ export async function trySearchApi(request, env, url) {
   }
 
   if (!isAutocomplete) {
-    const ec = envCtx(env);
-    if (!ec.db) {
-      return Response.json({ cities: [] }, {
-        headers: corsHeaders(),
-      });
-    }
-
-    let cities = [];
-    try {
-      const stmt = ec.db.prepare(
-        `SELECT MIN(city) AS city, COUNT(*) AS total
-           FROM tenants
-          WHERE public_active = 1
-            AND city IS NOT NULL
-            AND TRIM(city) <> ''
-          GROUP BY LOWER(TRIM(city))
-          ORDER BY total DESC, LOWER(MIN(city)) ASC
-          LIMIT 8`
-      );
-      const result = await stmt.all();
-      cities = (result.results || [])
-        .map((row) => (row.city || '').trim())
-        .filter(Boolean);
-    } catch (e) {
-      log.error('http.search', e instanceof Error ? e : new Error(String(e?.message)), { action: 'cities' });
-    }
-
-    return Response.json({ cities }, {
+    // The platform currently operates in Poland only. We deliberately do
+    // NOT query the tenants table — legacy / test rows (e.g. "Київ") would
+    // pollute the pinned chips and contradict the marketing surface.
+    return Response.json({ cities: POPULAR_CITIES }, {
       headers: corsHeaders(),
     });
   }

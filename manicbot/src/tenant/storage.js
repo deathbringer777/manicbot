@@ -6,8 +6,9 @@
  * Bot tokens migrated from KV to D1 on 2026-05-08. KV binding removed.
  */
 
-import { encryptToken, decryptToken } from '../utils/security.js';
+import { encryptToken, decryptToken, decryptTokenWithFallback } from '../utils/security.js';
 import { log } from '../utils/logger.js';
+import { logEvent } from '../utils/events.js';
 
 // #S6: HKDF subkey label for Telegram bot tokens stored in D1.
 // Distinct from 'channel-token-v1' (D1 channel_configs) so a leaked label
@@ -174,22 +175,70 @@ export async function putBot(ctx, botId, data, encryptionKey = null) {
   }
 }
 
+/**
+ * Resolve a bot's plaintext Telegram token from D1.
+ *
+ * Failure modes (each emits log.error + a `bot.token.*` event so silent breakage
+ * is impossible — this regressed once already, see test/bot-token-failure-modes.test.js):
+ *   - bot row missing                          → null  (no event, normal for unknown bots)
+ *   - token_encrypted column NULL              → null  + event `bot.token.missing`
+ *   - encrypted blob (no ':') with no key set  → null  + event `bot.token.key_missing`
+ *   - encrypted blob fails to decrypt          → null  + event `bot.token.decrypt_failed`
+ *   - blob decrypts only with old key (rotation) → plaintext, event `bot.token.used_old_key`
+ *
+ * Why the old-key fallback: an in-flight BOT_ENCRYPTION_KEY rotation must not
+ * dark-screen prod. Set `ctx.BOT_ENCRYPTION_KEY_OLD` (mirror of the secret) and
+ * decryptTokenWithFallback transparently retries with the previous key.
+ */
 export async function getBotToken(ctx, botId, encryptionKey = null) {
   if (!botId) return null;
+  if (!ctx?.db) return null;
+  let row;
   try {
-    // D1 is the sole source of truth for bot tokens (migration complete 2026-05-08).
-    if (!ctx?.db) return null;
-    const row = await dbGet(ctx, 'SELECT token_encrypted FROM bots WHERE bot_id = ?', botId);
-    if (!row?.token_encrypted) return null;
-    const raw = row.token_encrypted;
-    // Encrypted tokens are pure base64 (no ':'); plaintext Telegram tokens always contain ':'.
-    if (encryptionKey && !raw.includes(':')) {
-      return await decryptToken(raw, encryptionKey, BOT_TOKEN_LABEL);
-    }
-    return raw;
-  } catch {
+    row = await dbGet(ctx, 'SELECT token_encrypted FROM bots WHERE bot_id = ?', botId);
+  } catch (e) {
+    log.error('tenant.storage', e instanceof Error ? e : new Error(String(e?.message ?? e)), { action: 'getBotToken_dbGet', botId });
     return null;
   }
+  if (!row) return null; // bot row missing — not a token issue, caller will return null
+  if (!row.token_encrypted) {
+    log.error('tenant.storage', new Error('getBotToken: token_encrypted is NULL'), { botId, reason: 'token_missing' });
+    void logEvent(ctx, 'bot.token.missing', { level: 'error', botId, message: `Bot ${botId} has no token_encrypted in D1 — re-onboard or run /admin/migrate-bot-tokens` });
+    return null;
+  }
+  const raw = row.token_encrypted;
+  // Plaintext Telegram tokens are formatted `botId:secret` and always contain ':'.
+  // Encrypted blobs are base64 (legacy) or `v1$<base64>` (HKDF) — neither contains ':'.
+  if (raw.includes(':')) return raw;
+
+  // From here, blob is encrypted. We MUST have a usable key, otherwise refuse —
+  // returning the blob as a "token" produced the old prod silence (Telegram URL
+  // became `bot<base64>` → 401 → no reply → ✓✓ delivered with no answer).
+  if (!encryptionKey || String(encryptionKey).length < 32) {
+    log.error('tenant.storage', new Error('getBotToken: encrypted blob present but no usable BOT_ENCRYPTION_KEY'), { botId, reason: 'encryption_key_missing' });
+    void logEvent(ctx, 'bot.token.key_missing', { level: 'error', botId, message: `Bot ${botId} has encrypted token but BOT_ENCRYPTION_KEY is unset/short` });
+    return null;
+  }
+
+  const oldKey = ctx?.BOT_ENCRYPTION_KEY_OLD || null;
+  let result;
+  try {
+    result = await decryptTokenWithFallback(raw, encryptionKey, oldKey, BOT_TOKEN_LABEL);
+  } catch (e) {
+    log.error('tenant.storage', e instanceof Error ? e : new Error(String(e?.message ?? e)), { action: 'getBotToken_decrypt', botId });
+    void logEvent(ctx, 'bot.token.decrypt_failed', { level: 'error', botId, message: `Decrypt threw for bot ${botId}: ${e?.message ?? 'unknown'}` });
+    return null;
+  }
+  if (result.plain == null) {
+    log.error('tenant.storage', new Error('getBotToken: decrypt returned null (wrong key, label mismatch, or corrupt blob)'), { botId, reason: 'decrypt_failed' });
+    void logEvent(ctx, 'bot.token.decrypt_failed', { level: 'error', botId, message: `Decrypt failed for bot ${botId} — check BOT_ENCRYPTION_KEY rotation status` });
+    return null;
+  }
+  if (result.usedOldKey) {
+    log.warn('tenant.storage', { message: 'getBotToken decrypted with BOT_ENCRYPTION_KEY_OLD — schedule re-encrypt via /admin/rotate-encryption-key', botId });
+    void logEvent(ctx, 'bot.token.used_old_key', { level: 'warn', botId, message: `Bot ${botId} token decrypted via old key — re-encrypt pending` });
+  }
+  return result.plain;
 }
 
 export function defaultTenantPayload(botId, env) {

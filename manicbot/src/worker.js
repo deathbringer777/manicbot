@@ -55,13 +55,35 @@ async function proxyToAdminApp(request, env, url) {
   });
 }
 
-function disallowLegacyWebhook(env, request, url) {
-  return (
-    env.REQUIRE_WEBHOOK_BOT_ID === '1' &&
-    env.DB &&
-    request.method === 'POST' &&
-    url.pathname === '/webhook'
-  );
+/**
+ * Decide whether the legacy single-bot fallback ctx is forbidden for this request.
+ *
+ * Forbidden when:
+ *   - REQUIRE_WEBHOOK_BOT_ID=1 AND DB is bound (multi-tenant mode is enforced), AND
+ *   - request is POST, AND
+ *   - path is `/webhook` (legacy single-bot — must use `/webhook/{botId}`), OR
+ *   - path is `/webhook/{botId}` for a Telegram bot that we failed to resolve.
+ *     The `/webhook/{botId}` case is the silent-bug regression: pre-fix, the
+ *     worker fell back to legacy ctx (env.WEBHOOK_SECRET) which never matches
+ *     Telegram's per-bot secret_token → 403 forever, ✓✓-no-reply on the user
+ *     side. Now we refuse legacy fallback for that path so the worker returns
+ *     a loud 404 + log event instead of silently mismatching secrets.
+ *
+ * NOT forbidden:
+ *   - `/webhook/wa` and `/webhook/ig` are Meta channels (handled earlier in
+ *     `tryMetaWebhooks`); legacy fallback for them is harmless because Meta
+ *     paths don't reach this code path post-resolution.
+ *
+ * Exported so test/webhook-resolution-cascade.test.js can verify path matching
+ * without driving the full worker.fetch.
+ */
+export function disallowLegacyWebhook(env, request, url) {
+  if (env.REQUIRE_WEBHOOK_BOT_ID !== '1' || !env.DB) return false;
+  if (request.method !== 'POST') return false;
+  if (url.pathname === '/webhook') return true;
+  const m = url.pathname.match(/^\/webhook\/([^/]+)$/);
+  if (m && m[1] !== 'wa' && m[1] !== 'ig') return true;
+  return false;
 }
 
 function logWorkerError(label, request, url, error, extra = {}) {
@@ -265,7 +287,17 @@ export default {
     }
     if (!ctx) {
       if (disallowLegacyWebhook(env, request, url)) {
-        return new Response('Legacy /webhook disabled; use /webhook/{botId}', { status: 403 });
+        if (url.pathname === '/webhook') {
+          return new Response('Legacy /webhook disabled; use /webhook/{botId}', { status: 403 });
+        }
+        // /webhook/{botId} that we couldn't resolve — emit an event so this
+        // P0 (bot silent on prod) can never recur silently.
+        void logEvent(envCtx(env), 'webhook.bot_unresolved', {
+          level: 'error',
+          message: `Telegram webhook hit ${url.pathname} but bot could not be resolved (token decrypt failed, bot inactive, or row missing)`,
+          data: { path: url.pathname },
+        });
+        return new Response('Bot not found or token unresolvable', { status: 404 });
       }
       return new Response('Not Found', { status: 404 });
     }

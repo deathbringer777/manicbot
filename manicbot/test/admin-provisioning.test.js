@@ -29,16 +29,23 @@ describe('admin provisioning (D1)', () => {
     expect(tenant.plan).toBe('pro');
   });
 
-  it('registerBot → bot in D1 + token (encrypted) in KV', async () => {
+  it('registerBot → bot in D1 + token (encrypted) in D1', async () => {
     const result = await registerBot(ctx, '123:abc_token', null, 'wh_secret', ENC_KEY);
     expect(result.ok).toBe(true);
     expect(result.botId).toBe('123');
     const tid = await getTenantIdByBotId(ctx, '123');
     expect(tid).toBeNull();
-    const storedToken = await ctx.kv.get('bottoken:123', 'text');
-    // Token must be stored encrypted, not as plaintext
-    expect(storedToken).not.toBe('123:abc_token');
-    expect(storedToken).toBeTruthy();
+    // Token must be stored encrypted in D1, not in KV
+    const row = await ctx.db
+      .prepare('SELECT token_encrypted FROM bots WHERE bot_id = ?')
+      .bind('123')
+      .first();
+    expect(row).toBeTruthy();
+    expect(row.token_encrypted).toBeTruthy();
+    expect(row.token_encrypted).not.toBe('123:abc_token'); // encrypted, not plaintext
+    // KV must NOT have the token (D1-only storage)
+    const kvVal = await ctx.kv.get('bottoken:123', 'text');
+    expect(kvVal).toBeNull();
   });
 
   it('registerBot with tenantId → bot bound to tenant', async () => {

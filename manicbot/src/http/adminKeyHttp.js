@@ -129,18 +129,13 @@ export async function tryAdminKeyRoutes(request, env, url) {
       for (const botRow of botsToMigrate) {
         const botId = botRow.bot_id;
         try {
-          // Try to fetch token from KV.
           const kvToken = await kv.get(`bottoken:${botId}`, 'text');
           if (!kvToken) {
             migratedCount.notInKv++;
             continue;
           }
-
-          // Write to D1.
           await dbRun(ec, 'UPDATE bots SET token_encrypted = ? WHERE bot_id = ?', kvToken, botId);
           migratedCount.success++;
-
-          // Delete from KV after successful D1 write.
           await kv.delete(`bottoken:${botId}`);
         } catch (botErr) {
           log.error('http.adminKey', botErr instanceof Error ? botErr : new Error(String(botErr?.message)), {

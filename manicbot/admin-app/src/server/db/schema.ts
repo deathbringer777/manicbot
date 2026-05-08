@@ -46,7 +46,6 @@ export const bots = sqliteTable("bots", {
   tenantId: text("tenant_id"),
   botUsername: text("bot_username"),
   webhookSecret: text("webhook_secret"),
-  tokenEncrypted: text("token_encrypted"),
   active: integer("active").notNull().default(1),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),

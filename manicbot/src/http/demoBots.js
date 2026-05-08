@@ -156,7 +156,7 @@ export async function ensureDemoBotsProvisioned(env) {
       active: true,
       createdAt: now,
       updatedAt: now,
-    });
+    }, env.BOT_ENCRYPTION_KEY || null);
     if (env.ADMIN_CHAT_ID) {
       await dbRun(ec, "INSERT OR REPLACE INTO tenant_config (tenant_id, key, value) VALUES (?, 'admin', ?)", b.tenantId, env.ADMIN_CHAT_ID);
     }

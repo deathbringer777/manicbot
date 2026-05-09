@@ -162,9 +162,10 @@ export async function saveApt(ctx, apt) {
   // tenant_config.preview_mode and by src/tenant/previewTenant.js.
   if (ctx?.previewMode) {
     const rnd = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(36)).join('').slice(0, 8);
-    return {
+    const id = `demo_${rnd}`;
+    const demoApt = {
       ...apt,
-      id: `demo_${rnd}`,
+      id,
       masterId: apt.masterId || null,
       status: 'pending',
       createdAt: nowSec(),
@@ -176,6 +177,21 @@ export async function saveApt(ctx, apt) {
       cancelReason: null,
       previewOnly: true,
     };
+    // Cache demo apt + its service spec in the un-prefixed KV namespace so the
+    // calendar HTTP handler (which runs in a separate ctx, no tenant prefix)
+    // can serve a signed `.ics` for it. 24h TTL — matches the calendar link
+    // freshness window in calendarHttp.js.
+    const gkv = ctx.globalKv || ctx.kv;
+    if (gkv && typeof gkv.put === 'function') {
+      const svcSnap = ctx.svc?.find(s => s.id === apt.svcId) || null;
+      const cached = { apt: demoApt, svc: svcSnap, lang: apt.lang || ctx.lang || 'pl' };
+      try {
+        await gkv.put(`mb_demo_apt:${id}`, JSON.stringify(cached), { expirationTtl: 86400 });
+      } catch (e) {
+        log.error('services.appointments', e instanceof Error ? e : new Error(String(e?.message)), { action: 'demo_apt_cache_put' });
+      }
+    }
+    return demoApt;
   }
 
   if (!ctx?.db || !ctx?.tenantId) {

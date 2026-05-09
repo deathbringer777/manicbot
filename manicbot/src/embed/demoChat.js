@@ -16,6 +16,62 @@
  * Talks to `/chat/init`, `/chat/send`, `/chat/poll` on the script's origin.
  * Shape of the bubble messages is documented in `LANDING_DEMO_INTEGRATION.md`.
  */
+
+/**
+ * Detect a photo-navigation row inside a bot message's `buttons`.
+ *
+ * In the real Telegram bot, photo carousels render as `[◀️] [n / m] [▶️]`
+ * inline buttons (see `src/ui/keyboards.js#catPhotoKb / aboutPhotoKb`). The
+ * landing demo widget — running inside an iPhone mockup — should render
+ * those as a native carousel (overlay arrows + dots) instead of literal
+ * Telegram buttons. This helper finds the nav row so `buildBubbleNode` can
+ * suppress it and draw the carousel UI on the photo itself.
+ *
+ * Pure function exported so unit tests can call it without a DOM. The IIFE
+ * source string interpolates this via `Function.prototype.toString` so the
+ * browser and the test share a single implementation.
+ *
+ * @param {object} m  bot message — `{ photo, buttons: [[{ text, callback_data, url? }]] }`
+ * @returns {{ rowIndex: number, prevBtn: object|null, nextBtn: object|null, current: number, total: number } | null}
+ */
+export function detectPhotoNav(m) {
+  if (!m || !m.photo || !m.buttons || !m.buttons.length) return null;
+  for (var rIdx = 0; rIdx < m.buttons.length; rIdx++) {
+    var row = m.buttons[rIdx];
+    if (!row || row.length < 1 || row.length > 3) continue;
+    var prevBtn = null, nextBtn = null, current = 0, total = 0;
+    var qualifies = true, hasNavSignal = false;
+    for (var bi = 0; bi < row.length; bi++) {
+      var b = row[bi];
+      if (!b || b.url) { qualifies = false; break; }
+      var txt = String(b.text == null ? '' : b.text).trim();
+      var cb = String(b.callback_data == null ? '' : b.callback_data);
+      var counterMatch = txt.match(/^(\d+)\s*\/\s*(\d+)$/);
+      var firstChar = txt.length ? txt.charCodeAt(0) : 0;
+      var isLeftArrow = (firstChar === 0x25C0) && txt.length <= 2;
+      var isRightArrow = (firstChar === 0x25B6) && txt.length <= 2;
+      var isPhotoCb = /^(cat_photo|about_photo):/.test(cb);
+      if (counterMatch) {
+        current = parseInt(counterMatch[1], 10);
+        total = parseInt(counterMatch[2], 10);
+        hasNavSignal = true;
+      } else if (isLeftArrow || (isPhotoCb && !prevBtn && bi === 0 && row.length > 1)) {
+        prevBtn = b;
+        hasNavSignal = true;
+      } else if (isRightArrow || (isPhotoCb && bi === row.length - 1 && row.length > 1 && !nextBtn)) {
+        nextBtn = b;
+        hasNavSignal = true;
+      } else {
+        qualifies = false;
+        break;
+      }
+    }
+    if (!qualifies || !hasNavSignal) continue;
+    return { rowIndex: rIdx, prevBtn: prevBtn, nextBtn: nextBtn, current: current, total: total };
+  }
+  return null;
+}
+
 export const DEMO_CHAT_SRC = `
 (function () {
   // document.currentScript is null for async/defer scripts — fall back to
@@ -189,6 +245,30 @@ export const DEMO_CHAT_SRC = `
     '.mb-btn:hover{border-color:var(--mb-btn-hover-border);background:var(--mb-btn-hover);box-shadow:0 2px 6px rgba(15,23,42,.06)}' +
     // Multi-button rows (nav arrows, pagination): chips share row evenly.
     '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn{flex:1 1 auto;min-width:38px}' +
+    // Photo carousel — replaces the Telegram-style [◀️] [n/m] [▶️] nav row
+    // with a native iPhone-style overlay (chevron arrows on hover/focus +
+    // pill-shaped dots indicator). Tapping the chevrons / dots dispatches
+    // the same cat_photo: / about_photo: callbacks the suppressed nav row
+    // would have, so the underlying carousel logic in the bot is unchanged.
+    '.mb-photo{position:relative;margin:-1px 0 4px;border-radius:8px;overflow:hidden;line-height:0;background:rgba(0,0,0,.04)}' +
+    '.mb-photo img{margin:0;border-radius:0;width:100%;height:auto;max-width:100%;display:block}' +
+    '.mb-photo-nav{position:absolute;top:50%;width:28px;height:28px;margin-top:-14px;padding:0;border:0;border-radius:999px;background:rgba(20,20,24,.45);color:#fff;font-size:14px;line-height:1;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);opacity:0;transition:opacity .18s ease,background-color .15s ease,transform .12s ease;z-index:1}' +
+    '.mb-photo:hover .mb-photo-nav,.mb-photo:focus-within .mb-photo-nav{opacity:1}' +
+    '.mb-photo-nav:hover{background:rgba(20,20,24,.7)}' +
+    '.mb-photo-nav:active{transform:scale(.94)}' +
+    '.mb-photo-prev{left:8px}' +
+    '.mb-photo-next{right:8px}' +
+    // Touch devices have no hover — keep arrows softly visible so they're
+    // discoverable. Real iPhone Photos apps use the same pattern.
+    '@media (hover:none){.mb-photo-nav{opacity:.85}}' +
+    '.mb-photo-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:4px;pointer-events:none;z-index:1}' +
+    // 8×8 visible dot inside a 16×16 hit-target via a transparent border;
+    // background-clip:padding-box keeps the paint to the inner content area
+    // so the dot stays small while the click region is comfortable on touch.
+    '.mb-photo-dot{pointer-events:auto;width:8px;height:8px;border:4px solid transparent;background-clip:padding-box;background-color:rgba(255,255,255,.6);border-radius:999px;cursor:pointer;padding:0;box-sizing:content-box;transition:width .2s cubic-bezier(.16,1,.3,1),background-color .15s ease;font-size:0;line-height:0;-webkit-appearance:none;appearance:none}' +
+    '.mb-photo-dot.is-active{width:16px;background-color:#fff}' +
+    '.mb-photo-dot:focus-visible{outline:2px solid var(--mb-bubble-user);outline-offset:2px}' +
+    '@media (prefers-reduced-motion:reduce){.mb-photo-nav,.mb-photo-dot{transition:none}}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
     '.mb-composer{display:flex;gap:6px;padding:6px 10px 14px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
@@ -798,31 +878,103 @@ export const DEMO_CHAT_SRC = `
     scrollToBottom();
   }
 
+  // Inlined from manicbot/src/embed/demoChat.js — single source of truth for
+  // photo-nav detection, also unit-tested directly via the named export.
+  ${detectPhotoNav.toString()}
+
   function buildBubbleNode(m, opts) {
     var div = document.createElement('div');
     div.className = 'mb-bubble ' + (m.role === 'user' ? 'user' : 'bot');
     div.dataset.id = m.id;
+
+    var nav = detectPhotoNav(m);
+    var skipRowIdx = nav ? nav.rowIndex : -1;
+
     if (m.photo) {
+      var photoWrap = document.createElement('div');
+      photoWrap.className = 'mb-photo';
       var img = document.createElement('img');
       img.src = m.photo; img.alt = ''; img.loading = 'lazy';
-      div.appendChild(img);
+      photoWrap.appendChild(img);
+
+      if (nav) {
+        if (nav.prevBtn) {
+          var prevEl = document.createElement('button');
+          prevEl.type = 'button';
+          prevEl.className = 'mb-photo-nav mb-photo-prev';
+          prevEl.setAttribute('aria-label', 'Previous photo');
+          prevEl.innerHTML = '&#10094;';
+          (function (pb) {
+            prevEl.addEventListener('click', function (ev) {
+              ev.preventDefault();
+              if (pb.callback_data) sendRaw({ callbackData: pb.callback_data, messageId: m.id });
+            });
+          })(nav.prevBtn);
+          photoWrap.appendChild(prevEl);
+        }
+        if (nav.nextBtn) {
+          var nextEl = document.createElement('button');
+          nextEl.type = 'button';
+          nextEl.className = 'mb-photo-nav mb-photo-next';
+          nextEl.setAttribute('aria-label', 'Next photo');
+          nextEl.innerHTML = '&#10095;';
+          (function (nb) {
+            nextEl.addEventListener('click', function (ev) {
+              ev.preventDefault();
+              if (nb.callback_data) sendRaw({ callbackData: nb.callback_data, messageId: m.id });
+            });
+          })(nav.nextBtn);
+          photoWrap.appendChild(nextEl);
+        }
+        if (nav.total > 1) {
+          var dotsWrap = document.createElement('div');
+          dotsWrap.className = 'mb-photo-dots';
+          var refCb = (nav.prevBtn && nav.prevBtn.callback_data) ||
+            (nav.nextBtn && nav.nextBtn.callback_data) || '';
+          // Strip the trailing 0-based index so we can rebuild the callback
+          // for an arbitrary dot. Falls back to null if the source callback
+          // doesn't end in a digit (defensive — dots stay decorative then).
+          var cbBase = /[0-9]+$/.test(refCb) ? refCb.replace(/[0-9]+$/, '') : null;
+          for (var di = 0; di < nav.total; di++) {
+            var dot = document.createElement('button');
+            dot.type = 'button';
+            dot.className = 'mb-photo-dot' + (di === nav.current - 1 ? ' is-active' : '');
+            dot.setAttribute('aria-label', 'Photo ' + (di + 1) + ' of ' + nav.total);
+            dot.dataset.idx = String(di);
+            (function (idx) {
+              dot.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                if (cbBase != null && idx !== nav.current - 1) {
+                  sendRaw({ callbackData: cbBase + idx, messageId: m.id });
+                }
+              });
+            })(di);
+            dotsWrap.appendChild(dot);
+          }
+          photoWrap.appendChild(dotsWrap);
+        }
+      }
+
+      div.appendChild(photoWrap);
     }
+
     if (m.text) {
       var textWrap = document.createElement('div');
       textWrap.innerHTML = m.role === 'user' ? escapeHtml(m.text) : sanitizeBotHtml(m.text, m.parseMode);
       div.appendChild(textWrap);
     }
+
     if (m.buttons && m.buttons.length) {
       var btnWrap = document.createElement('div');
       btnWrap.className = 'mb-btns' + (opts && opts.staggerButtons ? ' mb-stagger' : '');
       // Map Telegram-row groupings to web-native chip layout:
       //   • Multi-button rows (◀ 2/2 ▶) → one .mb-btn-row (inline flex).
       //   • Runs of consecutive single-button rows (8 date pickers from
-      //     the bot) → coalesced into ONE .mb-btn-row.mb-btn-row-grid that
-      //     wraps. That makes a date list read as a calendar grid
-      //     instead of a stack of Telegram inline-keyboard pills.
+      //     the bot) → coalesced into ONE .mb-btn-row.mb-btn-row-grid.
+      //   • Rows at skipRowIdx (carousel nav row, rendered as overlay) skipped.
       var i = 0;
       var rows = m.buttons;
+      var hasAny = false;
       function makeBtn(b) {
         var btn;
         if (b.url) {
@@ -844,27 +996,27 @@ export const DEMO_CHAT_SRC = `
       }
       while (i < rows.length) {
         var row = rows[i];
-        if (!row || !row.length) { i++; continue; }
-        // Coalesce a run of single-button rows into one wrap-grid (≥2 in a row).
-        if (row.length === 1 && i + 1 < rows.length && rows[i + 1] && rows[i + 1].length === 1) {
+        if (!row || !row.length || i === skipRowIdx) { i++; continue; }
+        if (row.length === 1 && i + 1 < rows.length && rows[i + 1] && rows[i + 1].length === 1 && (i + 1) !== skipRowIdx) {
           var grid = document.createElement('div');
           grid.className = 'mb-btn-row mb-btn-row-grid';
-          while (i < rows.length && rows[i] && rows[i].length === 1) {
+          while (i < rows.length && rows[i] && rows[i].length === 1 && i !== skipRowIdx) {
             grid.appendChild(makeBtn(rows[i][0]));
             i++;
           }
           btnWrap.appendChild(grid);
+          hasAny = true;
           continue;
         }
-        // Otherwise: one row = one inline-flex container.
         var rowEl = document.createElement('div');
         rowEl.className = 'mb-btn-row';
         if (row.length === 1) rowEl.classList.add('mb-btn-row-solo');
         row.forEach(function (b) { rowEl.appendChild(makeBtn(b)); });
         btnWrap.appendChild(rowEl);
+        hasAny = true;
         i++;
       }
-      div.appendChild(btnWrap);
+      if (hasAny) div.appendChild(btnWrap);
     }
     return div;
   }

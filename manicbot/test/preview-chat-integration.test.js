@@ -281,5 +281,10 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     // Button text must be explicit (not color:inherit) so the label stays
     // readable when the surrounding bubble's text colour differs.
     expect(SRC).toMatch(/\.mb-btn\{[^}]*color:var\(--mb-btn-text\)/);
+    // Row layout: flex-wrap rows for multi-button; CSS Grid for date pickers.
+    expect(SRC).toMatch(/\.mb-btn-row\{display:flex;flex-wrap:wrap/);
+    expect(SRC).toMatch(/\.mb-btn-row-grid\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(54px,1fr\)\)/);
+    // Coalescing logic: only short-text solo rows get merged into grid.
+    expect(SRC).toMatch(/GRID_CHAR_LIMIT/);
   });
 });

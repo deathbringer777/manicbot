@@ -167,12 +167,16 @@ export const DEMO_CHAT_SRC = `
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
     '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user);color:var(--mb-user-text);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
-    '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
+    '.mb-btns{display:flex;flex-direction:column;gap:5px;margin-top:6px}' +
+    '.mb-btn-row{display:flex;flex-wrap:wrap;gap:5px}' +
+    '.mb-btn-row-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:5px}' +
+    '.mb-btn-row-grid .mb-btn{width:100%;min-width:0;padding:7px 4px;font-variant-numeric:tabular-nums}' +
     // Buttons use explicit --mb-btn-text (not color:inherit) so the label
     // stays readable regardless of the surrounding bubble's text colour.
-    '.mb-btn{display:block;padding:8px 12px;text-align:center;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:12px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;transition:background .15s,transform .1s;text-decoration:none;box-shadow:0 1px 2px rgba(15,23,42,.04)}' +
-    '.mb-btn:active{transform:scale(.98)}' +
-    '.mb-btn:hover{background:var(--mb-btn-hover)}' +
+    '.mb-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 13px;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:10px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;letter-spacing:-.005em;transition:border-color .15s,background .15s,transform .12s;text-decoration:none;box-shadow:0 1px 2px rgba(15,23,42,.03);white-space:nowrap}' +
+    '.mb-btn-row:not(.mb-btn-row-grid) .mb-btn{flex:1 1 auto;min-width:0;white-space:normal;text-align:center}' +
+    '.mb-btn:active{transform:scale(.97)}' +
+    '.mb-btn:hover{background:var(--mb-btn-hover);border-color:var(--mb-btn-hover-border,var(--mb-btn-border))}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
     '.mb-composer{display:flex;gap:6px;padding:6px 10px 14px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
@@ -827,7 +831,12 @@ export const DEMO_CHAT_SRC = `
     if (m.buttons && m.buttons.length) {
       var btnWrap = document.createElement('div');
       btnWrap.className = 'mb-btns' + (opts && opts.staggerButtons ? ' mb-stagger' : '');
+      // Build row elements, then coalesce short-text solo rows into grids.
+      var rowEls = [];
       m.buttons.forEach(function (row) {
+        var rowDiv = document.createElement('div');
+        rowDiv.className = 'mb-btn-row';
+        var maxLen = 0;
         row.forEach(function (b) {
           var btn;
           if (b.url) {
@@ -839,15 +848,42 @@ export const DEMO_CHAT_SRC = `
           }
           btn.className = 'mb-btn';
           btn.textContent = b.text;
+          if (b.text && b.text.length > maxLen) maxLen = b.text.length;
           if (b.callback_data) {
             btn.addEventListener('click', function (ev) {
               ev.preventDefault();
               sendRaw({ callbackData: b.callback_data, messageId: m.id });
             });
           }
-          btnWrap.appendChild(btn);
+          rowDiv.appendChild(btn);
         });
+        rowEls.push({ el: rowDiv, count: row.length, maxLen: maxLen });
       });
+      // Coalesce runs of solo rows with short text into a single grid container.
+      // Short = 6 chars max (dates "10", times "14:00", etc.).
+      var GRID_CHAR_LIMIT = 6;
+      var i = 0;
+      while (i < rowEls.length) {
+        var r = rowEls[i];
+        if (r.count === 1 && r.maxLen <= GRID_CHAR_LIMIT) {
+          var runStart = i;
+          while (i < rowEls.length && rowEls[i].count === 1 && rowEls[i].maxLen <= GRID_CHAR_LIMIT) i++;
+          if (i - runStart >= 2) {
+            var grid = document.createElement('div');
+            grid.className = 'mb-btn-row mb-btn-row-grid';
+            for (var j = runStart; j < i; j++) {
+              var child = rowEls[j].el.firstChild;
+              if (child) grid.appendChild(child);
+            }
+            btnWrap.appendChild(grid);
+          } else {
+            btnWrap.appendChild(rowEls[runStart].el);
+          }
+        } else {
+          btnWrap.appendChild(r.el);
+          i++;
+        }
+      }
       div.appendChild(btnWrap);
     }
     return div;

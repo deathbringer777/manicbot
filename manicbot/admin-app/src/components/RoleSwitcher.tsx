@@ -119,7 +119,7 @@ export function RoleSwitcher() {
                   onChange={e => setSelectedTenantId(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs"
                 >
-                  <option value="">— выбрать —</option>
+                  <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
                   {tenants.data?.map((tn: any) => (
                     <option key={tn.id} value={tn.id}>{tn.name}</option>
                   ))}

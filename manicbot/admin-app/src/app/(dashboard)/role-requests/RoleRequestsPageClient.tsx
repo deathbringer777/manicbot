@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { useLang } from "~/components/LangContext";
+import { t, type Lang } from "~/lib/i18n";
 import {
   ArrowLeftRight,
   Check,
@@ -15,30 +17,32 @@ import {
 
 type StatusFilter = "pending" | "approved" | "denied" | "all";
 
-const STATUS_TABS: { key: StatusFilter; label: string; color: string }[] = [
-  { key: "pending", label: "Ожидают", color: "amber" },
-  { key: "approved", label: "Одобрены", color: "emerald" },
-  { key: "denied", label: "Отклонены", color: "red" },
-  { key: "all", label: "Все", color: "slate" },
+const getStatusTabs = (lang: Lang): { key: StatusFilter; label: string; color: string }[] => [
+  { key: "pending", label: t("gmRoleReq.statusPending", lang), color: "amber" },
+  { key: "approved", label: t("gmRoleReq.statusApproved", lang), color: "emerald" },
+  { key: "denied", label: t("gmRoleReq.statusDenied", lang), color: "red" },
+  { key: "all", label: t("gmRoleReq.statusAll", lang), color: "slate" },
 ];
 
 function StatusBadge({ status }: { status: string }) {
+  const { lang } = useLang();
   if (status === "pending")
-    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 uppercase">ожидает</span>;
+    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 uppercase">{t("gmRoleReq.badgePending", lang)}</span>;
   if (status === "approved")
-    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 uppercase">одобрен</span>;
+    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 uppercase">{t("gmRoleReq.badgeApproved", lang)}</span>;
   if (status === "denied")
-    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 uppercase">отклонён</span>;
+    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 uppercase">{t("gmRoleReq.badgeDenied", lang)}</span>;
   return null;
 }
 
 function RoleBadge({ role }: { role: string }) {
+  const { lang } = useLang();
   const labels: Record<string, string> = {
-    tenant_owner: "Владелец",
-    master: "Мастер",
-    support: "Поддержка",
-    technical_support: "Техподдержка",
-    system_admin: "Админ",
+    tenant_owner: t("gmRoleReq.roleOwner", lang),
+    master: t("gmRoleReq.roleMaster", lang),
+    support: t("gmRoleReq.roleSupport", lang),
+    technical_support: t("gmRoleReq.roleTechSupport", lang),
+    system_admin: t("gmRoleReq.roleAdmin", lang),
   };
   const colors: Record<string, string> = {
     tenant_owner: "bg-cyan-500/20 text-cyan-400",
@@ -65,6 +69,8 @@ function formatDate(ts: number): string {
 }
 
 export default function RoleRequestsPageClient() {
+  const { lang } = useLang();
+  const STATUS_TABS = getStatusTabs(lang);
   const [filter, setFilter] = useState<StatusFilter>("pending");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewDecision, setReviewDecision] = useState<"approved" | "denied">("approved");
@@ -108,8 +114,8 @@ export default function RoleRequestsPageClient() {
 
   return (
     <Shell
-      title="Запросы на смену роли"
-      subtitle={pendingCount ? `${pendingCount} ожидают` : undefined}
+      title={t("gmRoleReq.titleFull", lang)}
+      subtitle={pendingCount ? `${pendingCount} ${t("gmRoleReq.subtitlePending", lang)}` : undefined}
     >
       <div className="space-y-4">
         {/* Filter tabs */}
@@ -144,7 +150,7 @@ export default function RoleRequestsPageClient() {
         {/* Empty state */}
         {!isLoading && rows.length === 0 && (
           <div className="text-center py-12 text-slate-500 dark:text-slate-400 text-sm">
-            Нет запросов
+            {t("gmRoleReq.noReqs", lang)}
           </div>
         )}
 
@@ -183,7 +189,7 @@ export default function RoleRequestsPageClient() {
             {/* Reason */}
             {req.reason && (
               <div className="bg-slate-50 dark:bg-slate-900/70 rounded-xl p-3 border border-slate-200 dark:border-slate-700/50">
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Причина</p>
+                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">{t("gmRoleReq.reason", lang)}</p>
                 <p className="text-sm text-slate-700 dark:text-slate-300">{req.reason}</p>
               </div>
             )}
@@ -191,7 +197,7 @@ export default function RoleRequestsPageClient() {
             {/* Admin note (for reviewed requests) */}
             {req.adminNote && req.status !== "pending" && (
               <div className="bg-slate-50 dark:bg-slate-900/70 rounded-xl p-3 border-l-3 border-violet-500">
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">Комментарий администратора</p>
+                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">{t("gmRoleReq.adminComment", lang)}</p>
                 <p className="text-sm text-slate-700 dark:text-slate-300">{req.adminNote}</p>
               </div>
             )}
@@ -202,7 +208,7 @@ export default function RoleRequestsPageClient() {
               {formatDate(req.createdAt)}
               {req.reviewedAt && (
                 <span className="ml-2">
-                  · Рассмотрен: {formatDate(req.reviewedAt)}
+                  · {t("gmRoleReq.reviewed", lang)} {formatDate(req.reviewedAt)}
                 </span>
               )}
             </div>
@@ -215,14 +221,14 @@ export default function RoleRequestsPageClient() {
                   className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 active:bg-emerald-500 text-white px-3 py-2 text-xs font-semibold rounded-xl transition-all"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  Одобрить
+                  {t("gmRoleReq.approveBtn", lang)}
                 </button>
                 <button
                   onClick={() => { setReviewingId(req.id); setReviewDecision("denied"); setAdminNote(""); }}
                   className="flex-1 flex items-center justify-center gap-1.5 bg-red-600 active:bg-red-500 text-white px-3 py-2 text-xs font-semibold rounded-xl transition-all"
                 >
                   <X className="w-3.5 h-3.5" />
-                  Отклонить
+                  {t("gmRoleReq.rejectBtn", lang)}
                 </button>
               </div>
             )}
@@ -235,7 +241,7 @@ export default function RoleRequestsPageClient() {
             <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {reviewDecision === "approved" ? "Одобрить запрос" : "Отклонить запрос"}
+                  {reviewDecision === "approved" ? t("gmRoleReq.approveTitle", lang) : t("gmRoleReq.rejectTitle", lang)}
                 </h3>
                 <button
                   onClick={() => setReviewingId(null)}
@@ -248,19 +254,19 @@ export default function RoleRequestsPageClient() {
               {reviewDecision === "approved" && (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                   <p className="text-xs text-amber-400 font-medium">
-                    Роль пользователя будет изменена немедленно. Все данные (записи, услуги) сохранятся.
+                    {t("gmRoleReq.warning", lang)}
                   </p>
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                  Комментарий (необязательно)
+                  {t("gmRoleReq.commentOptional", lang)}
                 </label>
                 <textarea
                   value={adminNote}
                   onChange={(e) => setAdminNote(e.target.value)}
-                  placeholder="Добавить комментарий..."
+                  placeholder={t("gmRoleReq.commentPh", lang)}
                   maxLength={500}
                   rows={3}
                   className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 text-slate-900 dark:text-white resize-none"
@@ -272,7 +278,7 @@ export default function RoleRequestsPageClient() {
                   onClick={() => setReviewingId(null)}
                   className="flex-1 px-4 py-2.5 border border-slate-200 dark:border-slate-600/60 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-xl hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
                 >
-                  Отмена
+                  {t("gmRoleReq.cancel", lang)}
                 </button>
                 <button
                   onClick={handleReview}
@@ -288,12 +294,12 @@ export default function RoleRequestsPageClient() {
                   ) : reviewDecision === "approved" ? (
                     <>
                       <Check className="w-4 h-4" />
-                      Подтвердить
+                      {t("gmRoleReq.confirm", lang)}
                     </>
                   ) : (
                     <>
                       <X className="w-4 h-4" />
-                      Отклонить
+                      {t("gmRoleReq.reject", lang)}
                     </>
                   )}
                 </button>

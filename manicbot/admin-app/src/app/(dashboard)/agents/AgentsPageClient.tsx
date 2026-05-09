@@ -4,36 +4,43 @@ import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { Headphones, Wrench, Shield, Plus, Trash2, X, UserCog } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t, type Lang } from "~/lib/i18n";
 
 type AgentType = "support" | "technical_support";
-
-const AGENT_TYPES: { key: AgentType; label: string; desc: string; icon: React.ElementType; color: string }[] = [
-  {
-    key: "support",
-    label: "Поддержка",
-    desc: "Может отвечать на обращения клиентов в Live Chat",
-    icon: Headphones,
-    color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  },
-  {
-    key: "technical_support",
-    label: "Техподдержка",
-    desc: "Доступ к техническим вопросам от владельцев салонов",
-    icon: Wrench,
-    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  },
-];
 
 const TAB_ICONS: Record<AgentType, React.ReactNode> = {
   support: <Headphones className="h-4 w-4" />,
   technical_support: <Wrench className="h-4 w-4" />,
 };
 
+function getAgentTypes(lang: Lang): { key: AgentType; label: string; desc: string; icon: React.ElementType; color: string }[] {
+  return [
+    {
+      key: "support",
+      label: t("gmAgents.supportLabel", lang),
+      desc: t("gmAgents.supportDesc", lang),
+      icon: Headphones,
+      color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+    },
+    {
+      key: "technical_support",
+      label: t("gmAgents.techSupportLabel", lang),
+      desc: t("gmAgents.techSupportDesc", lang),
+      icon: Wrench,
+      color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    },
+  ];
+}
+
 export default function AgentsPageClient() {
+  const { lang } = useLang();
   const [activeTab, setActiveTab] = useState<AgentType>("support");
   const [showAdd, setShowAdd] = useState(false);
   const [addChatId, setAddChatId] = useState("");
   const [addType, setAddType] = useState<AgentType>("support");
+
+  const AGENT_TYPES = getAgentTypes(lang);
 
   const utils = api.useUtils();
   const { data, isLoading } = api.provisioning.listAgents.useQuery(undefined, {
@@ -61,7 +68,7 @@ export default function AgentsPageClient() {
     : 0;
   const legacyAdmins: AgentInfo[] = data?.platformAdmins ?? [];
 
-  const activeType = AGENT_TYPES.find((t) => t.key === activeTab)!;
+  const activeType = AGENT_TYPES.find((tt) => tt.key === activeTab)!;
   const activeList = getListForType(activeTab);
 
   return (
@@ -70,10 +77,10 @@ export default function AgentsPageClient() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Агенты</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight">{t("gmAgents.titleHeader", lang)}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {totalCount} агентов поддержки
-              {legacyAdmins.length > 0 ? ` · ${legacyAdmins.length} устаревших записей system_admin в БД` : ""}
+              {totalCount} {t("gmAgents.subtitleSuffix", lang)}
+              {legacyAdmins.length > 0 ? ` · ${legacyAdmins.length} ${t("gmAgents.legacyAdminsSuffix", lang)}` : ""}
             </p>
           </div>
           <button
@@ -81,7 +88,7 @@ export default function AgentsPageClient() {
             className="flex items-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl shadow-lg shadow-brand-500/20"
           >
             <Plus className="w-4 h-4" />
-            Добавить
+            {t("gmAgents.addPrefix", lang)}
           </button>
         </div>
 
@@ -90,10 +97,9 @@ export default function AgentsPageClient() {
           <div className="flex items-start gap-3">
             <UserCog className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold text-slate-900 dark:text-white">Платформенные роли</p>
+              <p className="text-xs font-semibold text-slate-900 dark:text-white">{t("gmAgents.platformRoles", lang)}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Админ платформы только вы (через ADMIN_CHAT_ID). Здесь — support и техподдержка, как /grant_support в боте.
-                Владельцы салонов — в разделе Tenants.
+                {t("gmAgents.platformInfo", lang)}
               </p>
             </div>
           </div>
@@ -164,7 +170,7 @@ export default function AgentsPageClient() {
               </div>
             ) : (
               <div className="px-4 py-6 text-center text-xs text-slate-500">
-                Нет агентов этого типа
+                {t("gmAgents.noAgentsOfType", lang)}
               </div>
             )}
 
@@ -175,7 +181,7 @@ export default function AgentsPageClient() {
                 className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 active:bg-slate-200 dark:active:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs font-medium"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Добавить {activeType.label.toLowerCase()}
+                {t("gmAgents.addPrefix", lang)} {activeType.label.toLowerCase()}
               </button>
             </div>
           </div>
@@ -187,9 +193,9 @@ export default function AgentsPageClient() {
             <div className="px-4 py-3 flex items-center gap-3 border-b border-border/30 bg-amber-500/5">
               <Shield className="w-4 h-4 text-amber-400 shrink-0" />
               <div>
-                <p className="text-sm font-bold text-slate-900 dark:text-white">Устаревшие записи system_admin</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{t("gmAgents.legacyAdminsTitle", lang)}</p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Назначение через API отключено. Удалите строки, чтобы очистить БД (ваш ADMIN_CHAT_ID удалить нельзя).
+                  {t("gmAgents.legacyAdminsDesc", lang)}
                 </p>
               </div>
             </div>
@@ -222,7 +228,7 @@ export default function AgentsPageClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Добавить агента</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("gmAgents.addAgent", lang)}</h3>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
             </div>
 
@@ -237,11 +243,11 @@ export default function AgentsPageClient() {
                   autoFocus
                   className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:border-brand-500/60 font-mono"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">Числовой ID пользователя в Telegram (не username)</p>
+                <p className="text-[10px] text-slate-500 mt-1">{t("gmAgents.tgIdHint", lang)}</p>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-2">Тип роли</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-2">{t("gmAgents.roleType", lang)}</label>
                 <div className="space-y-2">
                   {AGENT_TYPES.map(({ key, label, desc, icon: Icon, color }) => (
                     <button
@@ -266,7 +272,7 @@ export default function AgentsPageClient() {
                 disabled={!addChatId || addMut.isPending}
                 className="w-full py-3.5 rounded-2xl bg-brand-600 text-white font-semibold text-sm active:bg-brand-500 disabled:opacity-50"
               >
-                {addMut.isPending ? "Добавляю..." : "Добавить агента"}
+                {addMut.isPending ? t("gmAgents.adding", lang) : t("gmAgents.addAgent", lang)}
               </button>
             </div>
           </div>

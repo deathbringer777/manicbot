@@ -15,6 +15,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatPlnWhole, PLAN_PRICES_PLN } from "~/lib/money";
+import { useLang } from "~/components/LangContext";
+import { t, localeFor } from "~/lib/i18n";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20",
@@ -39,14 +41,16 @@ function downloadCSV(data: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function fmtDate(ts: number | null | undefined): string {
-  if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleDateString("ru-RU");
-}
-
 type ModalType = { type: "plan" | "status" | "activate"; tenantId: string; tenantName: string } | null;
 
 export default function BillingPageClient() {
+  const { lang } = useLang();
+  const locale = localeFor(lang);
+  const fmtDate = (ts: number | null | undefined): string => {
+    if (!ts) return t("common.dash", lang);
+    return new Date(ts * 1000).toLocaleDateString(locale);
+  };
+
   const [expanded, setExpanded] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalType>(null);
   const [modalPlan, setModalPlan] = useState<"start" | "pro" | "max">("pro");
@@ -91,8 +95,8 @@ export default function BillingPageClient() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Billing</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Подписки и финансы</p>
+            <h1 className="text-2xl font-extrabold tracking-tight">{t("gmBilling.title", lang)}</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t("gmBilling.subtitle", lang)}</p>
           </div>
           <button
             onClick={handleExport}
@@ -115,19 +119,19 @@ export default function BillingPageClient() {
             <div className="glass-card rounded-2xl p-4 col-span-2 flex items-center gap-4">
               <TrendingUp className="w-6 h-6 text-emerald-400 shrink-0" />
               <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">MRR (расчётный, PLN)</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t("gmBilling.mrrLabel", lang)}</p>
                 <p className="text-3xl font-extrabold text-slate-900 dark:text-white">{formatPlnWhole(m?.mrr ?? 0)}</p>
               </div>
             </div>
             <div className="glass-card rounded-2xl p-4 text-center">
               <CheckCircle className="w-5 h-5 text-brand-400 mx-auto mb-1.5" />
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{m?.activeSubscribers ?? 0}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">Активных</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{t("gmBilling.activeCount", lang)}</p>
             </div>
             <div className="glass-card rounded-2xl p-4 text-center">
               <Clock className="w-5 h-5 text-amber-400 mx-auto mb-1.5" />
               <p className="text-2xl font-bold text-slate-900 dark:text-white">{m?.trialing ?? 0}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">На триале</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{t("gmBilling.trialingCount", lang)}</p>
             </div>
           </div>
         )}
@@ -135,7 +139,7 @@ export default function BillingPageClient() {
         {/* Plan breakdown */}
         {m?.planBreakdown && Object.keys(m.planBreakdown).length > 0 && (
           <div className="glass-card rounded-2xl p-4">
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-3">Планы (активные)</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-3">{t("gmBilling.plansActive", lang)}</p>
             <div className="flex gap-3">
               {Object.entries(m.planBreakdown).map(([plan, count]) => (
                 <div key={plan} className="flex-1 text-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl p-3">
@@ -151,86 +155,86 @@ export default function BillingPageClient() {
 
         {/* Tenants list */}
         <div className="space-y-2.5">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Все тенанты</p>
-          {tenants.map((t) => (
-            <div key={t.id} className="glass-card rounded-2xl overflow-hidden">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t("gmBilling.allTenants", lang)}</p>
+          {tenants.map((tenant) => (
+            <div key={tenant.id} className="glass-card rounded-2xl overflow-hidden">
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{t.name}</p>
-                    {t.email && (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{t.email}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{tenant.name}</p>
+                    {tenant.email && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{tenant.email}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span
                       className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase ${
-                        STATUS_COLORS[t.billingStatus] ?? STATUS_COLORS.inactive
+                        STATUS_COLORS[tenant.billingStatus] ?? STATUS_COLORS.inactive
                       }`}
                     >
-                      {t.billingStatus}
+                      {tenant.billingStatus}
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                        PLAN_COLORS[t.plan] ?? PLAN_COLORS.start
+                        PLAN_COLORS[tenant.plan] ?? PLAN_COLORS.start
                       }`}
                     >
-                      {t.plan}
+                      {tenant.plan}
                     </span>
                     <button
-                      onClick={() => setExpanded(expanded === t.id ? null : t.id)}
+                      onClick={() => setExpanded(expanded === tenant.id ? null : tenant.id)}
                       className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-slate-600 dark:text-slate-300"
                     >
-                      {expanded === t.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      {expanded === tenant.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-border/30">
-                  <span className="text-[10px] font-mono text-slate-600 truncate flex-1">{t.id}</span>
+                  <span className="text-[10px] font-mono text-slate-600 truncate flex-1">{tenant.id}</span>
                   <span className="text-sm font-bold text-slate-900 dark:text-white shrink-0 ml-2">
-                    {t.monthlyRevenue > 0 ? `${formatPlnWhole(t.monthlyRevenue)}/мес` : "—"}
+                    {tenant.monthlyRevenue > 0 ? `${formatPlnWhole(tenant.monthlyRevenue)}${t("gmBilling.perMonthShort", lang)}` : t("common.dash", lang)}
                   </span>
                 </div>
               </div>
 
               {/* Expanded billing details + actions */}
-              {expanded === t.id && (
+              {expanded === tenant.id && (
                 <div className="border-t border-border/50 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
                   {/* Billing details */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                    <div className="text-slate-500 dark:text-slate-400">Триал до</div>
-                    <div className="text-slate-700 dark:text-slate-300 text-right">{fmtDate(t.trialEndsAt)}</div>
-                    <div className="text-slate-500 dark:text-slate-400">Период до</div>
-                    <div className="text-slate-700 dark:text-slate-300 text-right">{fmtDate(t.currentPeriodEnd)}</div>
-                    <div className="text-slate-500 dark:text-slate-400">Stripe Customer</div>
-                    <div className="text-slate-700 dark:text-slate-300 text-right font-mono text-[10px] truncate">{t.stripeCustomerId ?? "—"}</div>
-                    <div className="text-slate-500 dark:text-slate-400">Stripe Sub</div>
-                    <div className="text-slate-700 dark:text-slate-300 text-right font-mono text-[10px] truncate">{t.stripeSubscriptionId ?? "—"}</div>
-                    <div className="text-slate-500 dark:text-slate-400">Отмена в конце периода</div>
-                    <div className="text-slate-700 dark:text-slate-300 text-right">{t.cancelAtPeriodEnd ? "Да" : "Нет"}</div>
+                    <div className="text-slate-500 dark:text-slate-400">{t("gmBilling.trialUntil", lang)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-right">{fmtDate(tenant.trialEndsAt)}</div>
+                    <div className="text-slate-500 dark:text-slate-400">{t("gmBilling.periodUntil", lang)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-right">{fmtDate(tenant.currentPeriodEnd)}</div>
+                    <div className="text-slate-500 dark:text-slate-400">{t("gmBilling.stripeCustomer", lang)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-right font-mono text-[10px] truncate">{tenant.stripeCustomerId ?? t("common.dash", lang)}</div>
+                    <div className="text-slate-500 dark:text-slate-400">{t("gmBilling.stripeSub", lang)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-right font-mono text-[10px] truncate">{tenant.stripeSubscriptionId ?? t("common.dash", lang)}</div>
+                    <div className="text-slate-500 dark:text-slate-400">{t("gmBilling.cancelAtPeriodEnd", lang)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-right">{tenant.cancelAtPeriodEnd ? t("common.yes", lang) : t("common.no", lang)}</div>
                   </div>
 
                   {/* Action buttons */}
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
-                      onClick={() => openModal("plan", t)}
+                      onClick={() => openModal("plan", tenant)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-brand-500/20 bg-brand-500/10 text-brand-400 text-xs font-medium active:bg-brand-500/20"
                     >
-                      Сменить план
+                      {t("gmBilling.changePlan", lang)}
                     </button>
                     <button
-                      onClick={() => openModal("status", t)}
+                      onClick={() => openModal("status", tenant)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600/30 bg-slate-100/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 text-xs font-medium active:bg-slate-100 dark:active:bg-slate-700/50"
                     >
-                      Сменить статус
+                      {t("gmBilling.changeStatus", lang)}
                     </button>
                     <button
-                      onClick={() => openModal("activate", t)}
+                      onClick={() => openModal("activate", tenant)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs font-medium active:bg-emerald-500/20"
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      Ручная активация
+                      {t("gmBilling.manualActivate", lang)}
                     </button>
                   </div>
                 </div>
@@ -240,7 +244,7 @@ export default function BillingPageClient() {
 
           {tenants.length === 0 && !isLoading && (
             <div className="glass-card rounded-2xl py-12 text-center">
-              <p className="text-slate-500 text-sm">Нет данных</p>
+              <p className="text-slate-500 text-sm">{t("common.noData", lang)}</p>
             </div>
           )}
         </div>
@@ -252,7 +256,7 @@ export default function BillingPageClient() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Сменить план</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("gmBilling.changePlan", lang)}</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{modal.tenantName}</p>
               </div>
               <button onClick={() => setModal(null)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
@@ -268,7 +272,7 @@ export default function BillingPageClient() {
                     }`}
                   >
                     <div>{p}</div>
-                    <div className="text-[10px] font-normal mt-0.5 normal-case">{PLAN_PRICES_PLN[p]} zł/мес</div>
+                    <div className="text-[10px] font-normal mt-0.5 normal-case">{PLAN_PRICES_PLN[p]} zł{t("gmBilling.perMonthShort", lang)}</div>
                   </button>
                 ))}
               </div>
@@ -277,7 +281,7 @@ export default function BillingPageClient() {
                 disabled={updatePlanMut.isPending}
                 className="w-full py-3.5 rounded-2xl bg-brand-600 text-white font-semibold text-sm active:bg-brand-500 disabled:opacity-50 mt-2"
               >
-                {updatePlanMut.isPending ? "..." : "Сменить план"}
+                {updatePlanMut.isPending ? "..." : t("gmBilling.changePlan", lang)}
               </button>
             </div>
           </div>
@@ -290,7 +294,7 @@ export default function BillingPageClient() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Сменить статус</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("gmBilling.changeStatus", lang)}</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{modal.tenantName}</p>
               </div>
               <button onClick={() => setModal(null)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
@@ -316,7 +320,7 @@ export default function BillingPageClient() {
                 disabled={updateStatusMut.isPending}
                 className="w-full py-3.5 rounded-2xl bg-brand-600 text-white font-semibold text-sm active:bg-brand-500 disabled:opacity-50 mt-2"
               >
-                {updateStatusMut.isPending ? "..." : "Сменить статус"}
+                {updateStatusMut.isPending ? "..." : t("gmBilling.changeStatus", lang)}
               </button>
             </div>
           </div>
@@ -329,14 +333,14 @@ export default function BillingPageClient() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Ручная активация</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("gmBilling.manualActivate", lang)}</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{modal.tenantName}</p>
               </div>
               <button onClick={() => setModal(null)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Тарифный план</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">{t("gmBilling.tariffPlan", lang)}</label>
                 <div className="flex gap-2">
                   {(["start", "pro", "max"] as const).map((p) => (
                     <button
@@ -352,7 +356,7 @@ export default function BillingPageClient() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Кол-во месяцев</label>
+                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">{t("gmBilling.monthsCount", lang)}</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
@@ -369,13 +373,13 @@ export default function BillingPageClient() {
               {/* Calculated summary */}
               <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50 rounded-xl p-3 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 dark:text-slate-400">Активен до</span>
+                  <span className="text-slate-500 dark:text-slate-400">{t("gmBilling.activeUntil", lang)}</span>
                   <span className="text-slate-700 dark:text-slate-300 font-medium">
-                    {new Date(Date.now() + modalMonths * 30 * 24 * 3600 * 1000).toLocaleDateString("ru-RU")}
+                    {new Date(Date.now() + modalMonths * 30 * 24 * 3600 * 1000).toLocaleDateString(locale)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 dark:text-slate-400">Итого</span>
+                  <span className="text-slate-500 dark:text-slate-400">{t("gmBilling.total", lang)}</span>
                   <span className="text-emerald-400 font-bold">
                     {formatPlnWhole((PLAN_PRICES_PLN[modalPlan] ?? 0) * modalMonths)}
                   </span>
@@ -394,9 +398,9 @@ export default function BillingPageClient() {
                 className="w-full py-3.5 rounded-2xl bg-emerald-600 text-white font-semibold text-sm active:bg-emerald-500 disabled:opacity-50 mt-2"
               >
                 {manualActivateMut.isPending ? (
-                  <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Активация...</span>
+                  <span className="flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{t("gmBilling.activating", lang)}</span>
                 ) : (
-                  "Активировать"
+                  t("gmBilling.activate", lang)
                 )}
               </button>
             </div>

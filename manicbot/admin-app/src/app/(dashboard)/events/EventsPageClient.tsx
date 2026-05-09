@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { useLang } from "~/components/LangContext";
+import { t, type Lang } from "~/lib/i18n";
 import { RefreshCw, Trash2, AlertCircle, AlertTriangle, Info, Filter, X, Search, Wrench } from "lucide-react";
 
 type EventLevel = "info" | "warn" | "error";
@@ -106,14 +108,16 @@ function EventRow({ event }: { event: AdminEvent }) {
 
 const TYPE_PRESETS = ["booking", "webhook", "stripe", "auth", "error", "channel"];
 
-const LEVEL_FILTERS = [
-  { value: "" as const, label: "Все", cls: "text-slate-500 border-slate-200 dark:border-slate-700/50 bg-slate-100 dark:bg-slate-800/50 hover:border-slate-600" },
-  { value: "error" as const, label: "Ошибки", cls: "text-red-400 border-red-500/40 bg-red-500/10 hover:bg-red-500/20" },
-  { value: "warn" as const, label: "Предупрежд.", cls: "text-amber-400 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20" },
-  { value: "info" as const, label: "Инфо", cls: "text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600/50 bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700/50" },
-] as const;
+const getLevelFilters = (lang: Lang) => [
+  { value: "" as const, label: t("gmEvents.filterAll", lang), cls: "text-slate-500 border-slate-200 dark:border-slate-700/50 bg-slate-100 dark:bg-slate-800/50 hover:border-slate-600" },
+  { value: "error" as const, label: t("gmEvents.filterErrors", lang), cls: "text-red-400 border-red-500/40 bg-red-500/10 hover:bg-red-500/20" },
+  { value: "warn" as const, label: t("gmEvents.filterWarns", lang), cls: "text-amber-400 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20" },
+  { value: "info" as const, label: t("gmEvents.filterInfo", lang), cls: "text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600/50 bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700/50" },
+];
 
 export default function EventsPageClient() {
+  const { lang } = useLang();
+  const LEVEL_FILTERS = getLevelFilters(lang);
   const [typeFilter, setTypeFilter] = useState("");
   const [tenantFilter, setTenantFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState<"" | EventLevel>("");
@@ -170,26 +174,26 @@ export default function EventsPageClient() {
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Event Log</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Поток событий платформы · обновляется каждые 10с
+              {t("gmEvents.subtitleFull", lang)}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => void refetch()}
               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              title="Обновить"
+              title={t("gmEvents.refreshTitle", lang)}
             >
               <RefreshCw className={`w-4 h-4 text-slate-500 dark:text-slate-400 ${isFetching ? "animate-spin" : ""}`} />
             </button>
             {clearPending ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-red-400">Удалить все?</span>
+                <span className="text-xs text-red-400">{t("gmEvents.deleteAll", lang)}</span>
                 <button
                   onClick={() => clearMut.mutate()}
                   disabled={clearMut.isPending}
                   className="px-3 py-1.5 rounded-xl bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30 hover:bg-red-500/30 transition-colors"
                 >
-                  Да
+                  {t("gmEvents.confirmYes", lang)}
                 </button>
                 <button
                   onClick={() => setClearPending(false)}
@@ -203,7 +207,7 @@ export default function EventsPageClient() {
                 onClick={() => setClearPending(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-red-900/30 text-slate-500 dark:text-slate-400 hover:text-red-400 text-xs font-medium transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Очистить
+                <Trash2 className="w-3.5 h-3.5" /> {t("gmEvents.clearBtn", lang)}
               </button>
             )}
           </div>
@@ -214,7 +218,7 @@ export default function EventsPageClient() {
           <div className="grid grid-cols-4 gap-2">
             <div className="glass-card rounded-xl p-3 text-center">
               <div className="text-lg font-bold text-slate-200">{stats.total}</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Всего</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{t("gmEvents.totalLabel", lang)}</div>
             </div>
             <button
               onClick={() => setLevelFilter(levelFilter === "error" ? "" : "error")}
@@ -223,7 +227,7 @@ export default function EventsPageClient() {
               <div className={`text-lg font-bold ${stats.errors > 0 ? "text-red-400" : "text-slate-500"}`}>
                 {stats.errors}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Ошибок</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{t("gmEvents.errorsLabel", lang)}</div>
             </button>
             <button
               onClick={() => setLevelFilter(levelFilter === "warn" ? "" : "warn")}
@@ -232,11 +236,11 @@ export default function EventsPageClient() {
               <div className={`text-lg font-bold ${stats.warns > 0 ? "text-amber-400" : "text-slate-500"}`}>
                 {stats.warns}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Предупрежд.</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{t("gmEvents.warnsLabel", lang)}</div>
             </button>
             <div className="glass-card rounded-xl p-3 text-center">
               <div className="text-lg font-bold text-slate-400">{stats.infos}</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Инфо</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{t("gmEvents.infoLabel", lang)}</div>
             </div>
           </div>
         )}
@@ -291,7 +295,7 @@ export default function EventsPageClient() {
                 type="text"
                 value={textSearch}
                 onChange={(e) => setTextSearch(e.target.value)}
-                placeholder="Поиск в логах..."
+                placeholder={t("gmEvents.searchPh", lang)}
                 className="pl-7 pr-3 py-1.5 w-36 sm:w-48 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white placeholder-slate-600"
               />
             </div>
@@ -313,7 +317,7 @@ export default function EventsPageClient() {
                 setTextSearch("");
               }}
               className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              title="Сбросить фильтры"
+              title={t("gmEvents.resetFiltersTitle", lang)}
             >
               <X className="w-3 h-3 text-slate-500 dark:text-slate-400" />
             </button>
@@ -336,8 +340,8 @@ export default function EventsPageClient() {
           ) : events.length === 0 ? (
             hasAnyFilter ? (
               <div className="py-16 text-center">
-                <p className="text-sm text-slate-500">Нет событий</p>
-                <p className="text-[11px] text-slate-600 mt-1">Попробуйте изменить фильтры</p>
+                <p className="text-sm text-slate-500">{t("gmEvents.noEvents", lang)}</p>
+                <p className="text-[11px] text-slate-600 mt-1">{t("gmEvents.tryChangeFilters", lang)}</p>
               </div>
             ) : (
               <div className="p-6 space-y-4">
@@ -387,14 +391,14 @@ export default function EventsPageClient() {
             <div>
               <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-800/50 bg-white dark:bg-slate-900/30">
                 <span className="text-[10px] text-slate-600 font-medium">
-                  {events.length} событи{events.length === 1 ? "е" : "й"}
+                  {events.length} {events.length === 1 ? t("gmEvents.eventSuffixOne", lang) : t("gmEvents.eventsSuffix", lang)}
                   {allEvents.length !== events.length && (
-                    <span className="text-slate-700"> / {allEvents.length} всего</span>
+                    <span className="text-slate-700"> / {allEvents.length} {t("gmEvents.totalSuffix", lang)}</span>
                   )}
                 </span>
                 {isFetching && (
                   <span className="text-[10px] text-brand-500/70 flex items-center gap-1">
-                    <RefreshCw className="w-2.5 h-2.5 animate-spin" /> обновляется...
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" /> {t("gmEvents.refreshing", lang)}
                   </span>
                 )}
               </div>

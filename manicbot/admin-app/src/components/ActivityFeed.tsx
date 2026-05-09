@@ -10,11 +10,13 @@ import { Bell, X, Activity as ActivityIcon } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { useRole } from "~/components/RoleContext";
-import { t } from "~/lib/i18n";
+import { t, type Lang } from "~/lib/i18n";
 
-function timeAgo(ts: number, lang: string): string {
+function timeAgo(ts: number, lang: Lang): string {
   const diff = Date.now() / 1000 - ts;
-  if (diff < 60) return lang === "en" ? `${Math.round(diff)}s` : `${Math.round(diff)}с`;
+  // Short forms (s/m/h/d) are universally understood; localize the seconds suffix only.
+  const sSuffix = lang === "ru" ? "с" : lang === "ua" ? "с" : lang === "pl" ? "s" : "s";
+  if (diff < 60) return `${Math.round(diff)}${sSuffix}`;
   if (diff < 3600) return `${Math.round(diff / 60)}m`;
   if (diff < 86400) return `${Math.round(diff / 3600)}h`;
   return `${Math.round(diff / 86400)}d`;
@@ -58,7 +60,7 @@ export function ActivityFeed() {
         >
           <header className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-white/10">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-2">
-              <Bell size={14} /> Activity
+              <Bell size={14} /> {t("activityFeed.title", lang)}
             </h2>
             <button
               type="button"
@@ -76,7 +78,7 @@ export function ActivityFeed() {
                 ? (raw as Array<Record<string, unknown>>)
                 : ((raw as { events?: Array<Record<string, unknown>> })?.events ?? []);
               if (eventsQ.isLoading) return <div className="p-6 text-xs text-slate-400">…</div>;
-              if (list.length === 0) return <div className="p-6 text-xs text-slate-400">{t("plugins.catalog.emptyResult", lang)}</div>;
+              if (list.length === 0) return <div className="p-6 text-xs text-slate-400">{t("activityFeed.empty", lang)}</div>;
               return (
                 <ul className="divide-y divide-slate-100 dark:divide-white/5">
                   {list.map((ev, idx) => {

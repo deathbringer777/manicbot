@@ -20,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 import { STATUS_LABELS } from "~/lib/appointments";
+import { useLang } from "~/components/LangContext";
+import { t, localeFor, type Lang } from "~/lib/i18n";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "text-amber-400 bg-amber-500/10 border-amber-500/20",
@@ -31,27 +33,33 @@ const STATUS_COLORS: Record<string, string> = {
   no_show: "text-orange-400 bg-orange-500/10 border-orange-500/20",
 };
 
-const NO_SHOW_LABELS: Record<string, string> = {
-  client: "Клиент не пришёл",
-  master: "Мастер не пришёл",
-};
+function getNoShowLabels(lang: Lang): Record<string, string> {
+  return {
+    client: t("gmAppts.noShowClient", lang),
+    master: t("gmAppts.noShowMaster", lang),
+  };
+}
 
-const CANCELLED_BY_LABELS: Record<string, string> = {
-  client: "Клиент",
-  master: "Мастер",
-  admin: "Админ",
-  system: "Система",
-};
+function getCancelledByLabels(lang: Lang): Record<string, string> {
+  return {
+    client: t("gmAppts.byClient", lang),
+    master: t("gmAppts.byMaster", lang),
+    admin: t("gmAppts.byAdmin", lang),
+    system: t("gmAppts.bySystem", lang),
+  };
+}
 
-const STATUS_FILTERS = [
-  { key: "", label: "Все" },
-  { key: "pending", label: "Ожидание" },
-  { key: "confirmed", label: "✓ Подтв." },
-  { key: "done", label: "Готово" },
-  { key: "cancelled", label: "Отмена" },
-  { key: "no_show", label: "Не пришёл" },
-  { key: "rejected", label: "Отклон." },
-];
+function getStatusFilters(lang: Lang) {
+  return [
+    { key: "", label: t("gmAppts.statusAll", lang) },
+    { key: "pending", label: t("gmAppts.statusPending", lang) },
+    { key: "confirmed", label: t("gmAppts.statusConfirmed", lang) },
+    { key: "done", label: t("gmAppts.statusDone", lang) },
+    { key: "cancelled", label: t("gmAppts.statusCancelled", lang) },
+    { key: "no_show", label: t("gmAppts.statusNoShow", lang) },
+    { key: "rejected", label: t("gmAppts.statusRejected", lang) },
+  ];
+}
 
 const WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
@@ -115,11 +123,14 @@ function AptCard({
   onReject: () => void;
   isPending: boolean;
 }) {
+  const { lang } = useLang();
+  const noShowLabels = getNoShowLabels(lang);
+  const cancelledByLabels = getCancelledByLabels(lang);
   const statusKey = apt.noShow ? "no_show" : apt.cancelled ? "cancelled" : apt.status;
   const statusLabel = statusKey === "no_show"
-    ? (NO_SHOW_LABELS[apt.noShowBy ?? ""] ?? "Не пришёл")
+    ? (noShowLabels[apt.noShowBy ?? ""] ?? t("gmAppts.noShowDefault", lang))
     : statusKey === "cancelled" && apt.cancelledBy
-      ? `${STATUS_LABELS[statusKey]} (${CANCELLED_BY_LABELS[apt.cancelledBy] ?? apt.cancelledBy})`
+      ? `${STATUS_LABELS[statusKey]} (${cancelledByLabels[apt.cancelledBy] ?? apt.cancelledBy})`
       : (STATUS_LABELS[statusKey] ?? statusKey);
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -160,7 +171,7 @@ function AptCard({
               className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/15 active:bg-emerald-500/30 rounded-lg text-emerald-400 text-xs font-medium transition-colors disabled:opacity-50"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              Ок
+              {t("gmAppts.confirmYes", lang)}
             </button>
             <button
               onClick={onReject}
@@ -168,7 +179,7 @@ function AptCard({
               className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/15 active:bg-red-500/30 rounded-lg text-red-400 text-xs font-medium transition-colors disabled:opacity-50"
             >
               <XCircle className="w-3.5 h-3.5" />
-              Нет
+              {t("gmAppts.confirmNo", lang)}
             </button>
           </div>
         )}
@@ -198,6 +209,7 @@ function BigCalendar({
   setSelectedDay: (iso: string | null) => void;
   isLoading: boolean;
 }) {
+  const { lang } = useLang();
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
@@ -228,7 +240,7 @@ function BigCalendar({
     return m;
   }, [apts]);
 
-  const monthLabel = viewDate.toLocaleString("ru-RU", { month: "long", year: "numeric" });
+  const monthLabel = viewDate.toLocaleString(localeFor(lang), { month: "long", year: "numeric" });
 
   return (
     <div className="glass-card rounded-2xl p-3">
@@ -252,7 +264,7 @@ function BigCalendar({
             onClick={() => { setViewDate(new Date()); setSelectedDay(null); }}
             className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors"
           >
-            сегодня
+            {t("gmAppts.todaySmall", lang)}
           </button>
           <button
             onClick={() => setViewDate(new Date(year, month + 1))}
@@ -351,15 +363,15 @@ function BigCalendar({
       <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
         <div className="flex items-center gap-1">
           <div className="w-2.5 h-2.5 rounded bg-brand-500/40 ring-1 ring-brand-500/40" />
-          <span>Сегодня</span>
+          <span>{t("gmAppts.todayCap", lang)}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2.5 h-2.5 rounded bg-amber-500/25" />
-          <span>Ожидание</span>
+          <span>{t("gmAppts.statusPending", lang)}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2.5 h-2.5 rounded bg-emerald-500/25" />
-          <span>Подтверждено</span>
+          <span>{t("gmAppts.legendConfirmed", lang)}</span>
         </div>
       </div>
     </div>
@@ -383,7 +395,8 @@ function SelectedDayPanel({
   onReject: (id: string) => void;
   mutPending: boolean;
 }) {
-  const label = new Date(iso + "T12:00:00").toLocaleDateString("ru-RU", {
+  const { lang } = useLang();
+  const label = new Date(iso + "T12:00:00").toLocaleDateString(localeFor(lang), {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -395,7 +408,7 @@ function SelectedDayPanel({
         <div>
           <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">{label}</p>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {apts.length} {apts.length === 1 ? "запись" : apts.length < 5 ? "записи" : "записей"}
+            {apts.length} {apts.length === 1 ? t("gmAppts.aptOne", lang) : apts.length < 5 ? t("gmAppts.aptFew", lang) : t("gmAppts.aptMany", lang)}
           </p>
         </div>
         <button
@@ -407,7 +420,7 @@ function SelectedDayPanel({
       </div>
 
       {apts.length === 0 ? (
-        <p className="text-sm text-slate-500 py-4 text-center">Нет записей</p>
+        <p className="text-sm text-slate-500 py-4 text-center">{t("gmAppts.noApts", lang)}</p>
       ) : (
         <div className="space-y-2.5">
           {apts
@@ -431,6 +444,8 @@ function SelectedDayPanel({
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 export default function AppointmentsPageClient() {
+  const { lang } = useLang();
+  const STATUS_FILTERS = getStatusFilters(lang);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
 
   // Calendar state
@@ -528,7 +543,7 @@ export default function AppointmentsPageClient() {
                 }`}
               >
                 <CalendarDays className="w-3.5 h-3.5" />
-                Календарь
+                {t("gmAppts.calendarBtn", lang)}
               </button>
               <button
                 onClick={() => setViewMode("list")}
@@ -539,7 +554,7 @@ export default function AppointmentsPageClient() {
                 }`}
               >
                 <List className="w-3.5 h-3.5" />
-                Список
+                {t("gmAppts.listBtn", lang)}
               </button>
             </div>
           </div>
@@ -576,11 +591,11 @@ export default function AppointmentsPageClient() {
             {/* Stats pills */}
             <div className="grid grid-cols-5 gap-1.5">
               {[
-                { label: "Всего", value: s?.total ?? 0, color: "text-slate-900 dark:text-white" },
-                { label: "Сегодня", value: s?.today ?? 0, color: "text-brand-400" },
-                { label: "Ожидание", value: s?.pending ?? 0, color: "text-amber-400" },
-                { label: "Подтверждено", value: s?.confirmed ?? 0, color: "text-emerald-400" },
-                { label: "Отменено", value: s?.cancelled ?? 0, color: "text-slate-500 dark:text-slate-400" },
+                { label: t("gmAppts.statTotal", lang), value: s?.total ?? 0, color: "text-slate-900 dark:text-white" },
+                { label: t("gmAppts.statToday", lang), value: s?.today ?? 0, color: "text-brand-400" },
+                { label: t("gmAppts.statPending", lang), value: s?.pending ?? 0, color: "text-amber-400" },
+                { label: t("gmAppts.statConfirmed", lang), value: s?.confirmed ?? 0, color: "text-emerald-400" },
+                { label: t("gmAppts.statCancelled", lang), value: s?.cancelled ?? 0, color: "text-slate-500 dark:text-slate-400" },
               ].map((stat) => (
                 <div key={stat.label} className="glass-card rounded-xl p-2.5 text-center">
                   <div className={`text-lg font-extrabold ${stat.color}`}>{stat.value}</div>
@@ -616,15 +631,15 @@ export default function AppointmentsPageClient() {
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
-              {dateFrom || dateTo ? `${dateFrom || "..."} — ${dateTo || "..."}` : "Фильтр по дате"}
+              {dateFrom || dateTo ? `${dateFrom || "..."} — ${dateTo || "..."}` : t("gmAppts.dateFilter", lang)}
             </button>
 
             {showDateFilter && (
               <div className="glass-card rounded-2xl p-4 space-y-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Диапазон дат</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t("gmAppts.dateRange", lang)}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">От</label>
+                    <label className="text-[10px] text-slate-500 block mb-1">{t("gmAppts.from", lang)}</label>
                     <input
                       type="date"
                       value={dateFrom}
@@ -633,7 +648,7 @@ export default function AppointmentsPageClient() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">До</label>
+                    <label className="text-[10px] text-slate-500 block mb-1">{t("gmAppts.to", lang)}</label>
                     <input
                       type="date"
                       value={dateTo}
@@ -646,7 +661,7 @@ export default function AppointmentsPageClient() {
                   onClick={() => { setDateFrom(""); setDateTo(""); setOffset(0); setShowDateFilter(false); }}
                   className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
                 >
-                  Сбросить даты
+                  {t("gmAppts.resetDates", lang)}
                 </button>
               </div>
             )}
@@ -680,7 +695,7 @@ export default function AppointmentsPageClient() {
             {total > LIMIT && (
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {offset + 1}–{Math.min(offset + LIMIT, total)} из {total}
+                  {offset + 1}–{Math.min(offset + LIMIT, total)} {t("gmAppts.ofPagination", lang)} {total}
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -689,14 +704,14 @@ export default function AppointmentsPageClient() {
                     className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    Назад
+                    {t("gmAppts.prev", lang)}
                   </button>
                   <button
                     onClick={() => setOffset(offset + LIMIT)}
                     disabled={offset + LIMIT >= total}
                     className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
                   >
-                    Вперёд
+                    {t("gmAppts.next", lang)}
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>

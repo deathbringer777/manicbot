@@ -24,6 +24,8 @@ import {
   Activity,
 } from "lucide-react";
 import { formatPlnWhole } from "~/lib/money";
+import { useLang } from "~/components/LangContext";
+import { t, localeFor, type Lang } from "~/lib/i18n";
 
 // ─── Period switcher ──────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ const PERIODS = [
 
 const WEEKDAYS_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-function MiniCalendar({ data }: { data: { date: string; appointments: number }[] }) {
+function MiniCalendar({ data, lang }: { data: { date: string; appointments: number }[]; lang: Lang }) {
   const [viewDate, setViewDate] = useState(() => new Date());
 
   const dayMap = useMemo(() => {
@@ -63,7 +65,7 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
   const fmtISO = (day: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-  const monthLabel = viewDate.toLocaleString("default", { month: "long", year: "numeric" });
+  const monthLabel = viewDate.toLocaleString(localeFor(lang), { month: "long", year: "numeric" });
   const maxCount = Math.max(1, ...Object.values(dayMap));
 
   return (
@@ -84,7 +86,7 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
             onClick={() => setViewDate(new Date())}
             className="px-2 py-0.5 rounded-lg text-[10px] font-medium text-[#9ca3af] dark:text-slate-400 hover:text-[#374151] dark:hover:text-slate-200 hover:bg-[#f3f4f6] dark:hover:bg-white/[0.06] transition-colors"
           >
-            Today
+            {t("gmHome.todayBtn", lang)}
           </button>
           <button
             onClick={() => setViewDate(new Date(year, month + 1))}
@@ -140,30 +142,29 @@ function MiniCalendar({ data }: { data: { date: string; appointments: number }[]
       <div className="mt-3 flex items-center gap-3 text-[10px] text-[#9ca3af]">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded bg-[#1a1a2e] dark:bg-accent-500" />
-          <span>Today</span>
+          <span>{t("gmHome.todayLegend", lang)}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded bg-accent-500/25" />
-          <span>Bookings</span>
+          <span>{t("gmHome.bookingsLegend", lang)}</span>
         </div>
       </div>
     </Card>
   );
 }
 
-// ─── Quick Actions ────────────────────────────────────────────────
-
-const QUICK_ACTIONS = [
-  { href: "/users", label: "View Users", icon: Users },
-  { href: "/tenants", label: "Manage Salons", icon: Building2 },
-  { href: "/appointments", label: "Appointments", icon: CalendarDays },
-  { href: "/billing", label: "Billing", icon: CreditCard },
-];
-
 // ─── Main ─────────────────────────────────────────────────────────
 
 export default function DashboardClient() {
+  const { lang } = useLang();
   const [period, setPeriod] = useState(30);
+
+  const QUICK_ACTIONS = [
+    { href: "/users", label: t("gmHome.viewUsers", lang), icon: Users },
+    { href: "/tenants", label: t("gmHome.manageSalons", lang), icon: Building2 },
+    { href: "/appointments", label: t("gmHome.appointmentsLink", lang), icon: CalendarDays },
+    { href: "/billing", label: t("gmHome.billingLink", lang), icon: CreditCard },
+  ];
 
   const { data: stats, isLoading } = api.metrics.getDashboardStats.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -181,8 +182,8 @@ export default function DashboardClient() {
     <Shell>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
-          title="Dashboard"
-          subtitle="Platform metrics · live"
+          title={t("gmHome.title", lang)}
+          subtitle={t("gmHome.subtitle", lang)}
         />
 
         {/* ── KPI Row ── */}
@@ -193,7 +194,7 @@ export default function DashboardClient() {
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
-              label="Total Users"
+              label={t("gmHome.totalUsers", lang)}
               value={s?.totalUsers ?? 0}
               icon={Users}
               iconBg="bg-violet-50 dark:bg-violet-500/15"
@@ -201,27 +202,27 @@ export default function DashboardClient() {
               href="/users"
             />
             <KpiCard
-              label="Salons"
+              label={t("gmHome.salons", lang)}
               value={s?.totalTenants ?? 0}
-              subtext={`${s?.trialingCount ?? 0} trialing`}
+              subtext={`${s?.trialingCount ?? 0} ${t("gmHome.trialing", lang)}`}
               icon={Building2}
               iconBg="bg-blue-50 dark:bg-blue-500/15"
               iconColor="text-blue-600 dark:text-blue-400"
               href="/tenants"
             />
             <KpiCard
-              label="MRR"
+              label={t("gmHome.mrr", lang)}
               value={formatPlnWhole(s?.mrr ?? 0)}
-              subtext="estimated · PLN"
+              subtext={t("gmHome.estimatedPLN", lang)}
               icon={TrendingUp}
               iconBg="bg-accent-50 dark:bg-accent-500/15"
               iconColor="text-accent-600 dark:text-accent-400"
               href="/billing"
             />
             <KpiCard
-              label="Today's Bookings"
+              label={t("gmHome.todayBookings", lang)}
               value={s?.todayAppointments ?? 0}
-              subtext={`${(s?.totalAppointments ?? 0).toLocaleString()} total`}
+              subtext={`${(s?.totalAppointments ?? 0).toLocaleString(localeFor(lang))} ${t("gmHome.totalSuffix", lang)}`}
               icon={CalendarDays}
               iconBg="bg-amber-50 dark:bg-amber-500/15"
               iconColor="text-amber-600 dark:text-amber-400"
@@ -234,7 +235,7 @@ export default function DashboardClient() {
         {!isLoading && (
           <div className="grid grid-cols-2 gap-4">
             <KpiCard
-              label="Active Subs"
+              label={t("gmHome.activeSubs", lang)}
               value={s?.activeSubscriptions ?? 0}
               icon={CreditCard}
               iconBg="bg-emerald-50 dark:bg-emerald-500/15"
@@ -242,9 +243,9 @@ export default function DashboardClient() {
               href="/billing"
             />
             <KpiCard
-              label="Total Bookings"
+              label={t("gmHome.totalBookings", lang)}
               value={s?.totalAppointments ?? 0}
-              subtext="all time"
+              subtext={t("gmHome.allTime", lang)}
               icon={Clock}
               iconBg="bg-pink-50 dark:bg-pink-500/15"
               iconColor="text-pink-600 dark:text-pink-400"
@@ -262,7 +263,7 @@ export default function DashboardClient() {
         <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
           <Card padding="p-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[15px] font-semibold text-[#1a1a2e] dark:text-white">Bookings over time</h2>
+              <h2 className="text-[15px] font-semibold text-[#1a1a2e] dark:text-white">{t("gmHome.bookingsOverTime", lang)}</h2>
               <div className="flex gap-1">
                 {PERIODS.map((p) => (
                   <button
@@ -282,7 +283,7 @@ export default function DashboardClient() {
             <OverviewChart data={chart ?? []} />
           </Card>
 
-          <MiniCalendar data={chart90 ?? []} />
+          <MiniCalendar data={chart90 ?? []} lang={lang} />
         </div>
 
         {/* ── Referral charts ── */}
@@ -299,7 +300,7 @@ export default function DashboardClient() {
             daily={referralStats?.dailySignupBySource ?? []}
             totalLabel={
               referralStats != null
-                ? `${referralStats.totalSignupsInPeriod} signups in ${period}d`
+                ? `${referralStats.totalSignupsInPeriod} ${t("gmHome.signupsInPeriod", lang)} ${period}${t("gmHome.daysShort", lang)}`
                 : undefined
             }
           />
@@ -310,10 +311,10 @@ export default function DashboardClient() {
           {/* Recent activity */}
           <Card padding="p-5">
             <CardHeader
-              title="Recent Activity"
+              title={t("gmHome.recentActivity", lang)}
               action={
                 <Link href="/events" className="flex items-center gap-1 text-[12px] font-medium text-accent-600 dark:text-accent-400 hover:opacity-80">
-                  View all <ArrowRight className="h-3.5 w-3.5" />
+                  {t("gmHome.viewAll", lang)} <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               }
             />
@@ -332,7 +333,7 @@ export default function DashboardClient() {
                 ? (
                   <div className="flex flex-col items-center justify-center py-10 text-center">
                     <Activity className="h-8 w-8 text-[#d1d5db] dark:text-slate-600 mb-2" />
-                    <p className="text-[13px] text-[#6b7280] dark:text-slate-500">No recent activity</p>
+                    <p className="text-[13px] text-[#6b7280] dark:text-slate-500">{t("gmHome.noRecentActivity", lang)}</p>
                   </div>
                 )
                 : (s?.recentActivity ?? []).map((a, i) => (
@@ -356,7 +357,7 @@ export default function DashboardClient() {
 
           {/* Quick actions */}
           <Card padding="p-5">
-            <CardHeader title="Quick Actions" />
+            <CardHeader title={t("gmHome.quickActions", lang)} />
             <div className="space-y-1.5">
               {QUICK_ACTIONS.map(({ href, label, icon: Icon }) => (
                 <Link
@@ -375,7 +376,7 @@ export default function DashboardClient() {
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-accent-700 dark:text-accent-400 hover:bg-accent-500/8 dark:hover:bg-accent-500/15 transition-colors group"
                 >
                   <Zap className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">Plugin Marketplace</span>
+                  <span className="flex-1">{t("gmHome.pluginMarketplace", lang)}</span>
                   <ArrowRight className="h-3.5 w-3.5 opacity-60" />
                 </Link>
               </div>

@@ -303,7 +303,20 @@ export const DEMO_CHAT_SRC = `
   function detectLangChange() {
     try {
       var q = new URLSearchParams(window.location.search).get('lang');
-      if (q && /^(ru|en|ua|pl)$/.test(q) && q !== LANG) return q;
+      if (q && /^(ru|en|ua|pl)$/.test(q)) {
+        // URL is authoritative when present. Do NOT consult localStorage —
+        // a stale "manicbot-locale" (set by the landing on a previous visit)
+        // could otherwise disagree with the URL and trigger an infinite
+        // reload loop (URL=ru, LS=pl → reload → URL still ru, LS still pl
+        // → reload again …). Sync LS to URL so the next no-?lang visit
+        // sticks to the choice the user just made.
+        if (q !== LANG) return q;
+        try {
+          var cur = localStorage.getItem('manicbot-locale');
+          if (cur !== LANG) localStorage.setItem('manicbot-locale', LANG);
+        } catch (_) {}
+        return null;
+      }
       var s = localStorage.getItem('manicbot-locale');
       if (s && /^(ru|en|ua|pl)$/.test(s) && s !== LANG) return s;
     } catch (_) {}
@@ -313,6 +326,9 @@ export const DEMO_CHAT_SRC = `
     var newLang = detectLangChange();
     if (!newLang) return;
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    // Sync the locale store BEFORE reload so the post-reload pass doesn't
+    // immediately re-trigger this branch and refresh forever.
+    try { localStorage.setItem('manicbot-locale', newLang); } catch (_) {}
     location.reload();
   }
   setInterval(maybeReinit, 1000);

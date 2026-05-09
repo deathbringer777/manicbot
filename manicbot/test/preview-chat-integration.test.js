@@ -207,6 +207,21 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     SRC = mod.DEMO_CHAT_SRC;
   });
 
+  // Regression: when localStorage `manicbot-locale` was set to a different
+  // value than the URL's ?lang, detectLangChange used to return the LS value
+  // and trigger location.reload() every 1s — the page reloaded forever
+  // because reload didn't reconcile LS with URL. URL must be authoritative.
+  it('detectLangChange treats URL ?lang as authoritative over stale localStorage', () => {
+    // URL-present branch: only return when URL ≠ LANG; LS is ignored.
+    expect(SRC).toMatch(/URL is authoritative when present/);
+    // After the URL-only branch decides "no change", LS gets synced to LANG
+    // so the next pass doesn't ping-pong.
+    expect(SRC).toMatch(/localStorage\.setItem\('manicbot-locale', LANG\)/);
+    // maybeReinit pre-syncs the new lang to LS BEFORE reload() so the
+    // post-reload pass doesn't re-trigger the same branch.
+    expect(SRC).toMatch(/localStorage\.setItem\('manicbot-locale', newLang\)/);
+  });
+
   it('has a querySelector fallback for document.currentScript', () => {
     expect(SRC).toMatch(/document\.currentScript/);
     expect(SRC).toMatch(/querySelector.*script\[src\]/);

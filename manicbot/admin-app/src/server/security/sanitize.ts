@@ -11,14 +11,22 @@
  *   - "salonBio"      — richer marketing copy (headings, lists, links)
  *   - "marketingHtml" — broadest set used in email templates; still no scripts
  *
- * Implementation notes:
- *   We use a manual regex-based stripper that is safe in both Node and
- *   Cloudflare Workers edge runtimes (no DOM / JSDOM dependency).
- *   For production-grade projects with a Node runtime, swap this with
- *   isomorphic-dompurify once it is supported on Workers.
+ * Implementation notes (#M4):
+ *   We use `sanitize-html` (battle-tested, parser-based) for the actual
+ *   tag/attribute filtering. The previous in-house regex stripper handled
+ *   the main vectors but was vulnerable to mutation-XSS payloads that abuse
+ *   loose tag matching (e.g. `<i\nmg src=x onerror=alert(1)>`). A real HTML
+ *   parser eliminates that whole class of bugs.
+ *
+ *   `sanitize-html` is pure JS (htmlparser2 under the hood, no DOM/JSDOM
+ *   dependency) so it runs on the Cloudflare Pages edge runtime that powers
+ *   admin-app. The escapeHtml / stripHtml / sanitizeAiOutput helpers below
+ *   are kept as-is (they don't need a parser).
  *
  * @see https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+ * @see https://github.com/apostrophecms/sanitize-html
  */
+import sanitizeHtmlLib from "sanitize-html";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -70,7 +78,10 @@ const ALLOWED_TAGS: Record<Profile, Set<string>> = {
 const ALLOWED_ATTRS: Record<Profile, Record<string, string[]>> = {
   text: {},
   chat: {
-    a: ["href", "title"],
+    // `rel` is in the allowlist because transformTags below always injects
+    // `rel="noopener noreferrer"` on outbound links — without it sanitize-html
+    // would strip the very attribute we just added.
+    a: ["href", "title", "rel"],
     span: ["class"],
   },
   salonBio: {
@@ -96,74 +107,68 @@ const ALLOWED_ATTRS: Record<Profile, Record<string, string[]>> = {
   },
 };
 
-// ─── Tag + attribute stripper (no DOM required) ──────────────────────────────
+// ─── Tag + attribute stripper (sanitize-html, parser-based) ──────────────────
+
+const SAFE_SCHEMES = ["http", "https", "mailto", "tel"] as const;
+
+/**
+ * Build a sanitize-html options object from one of our Profile entries.
+ * `allowedAttributes` mirrors the per-tag allowlist we defined above; the
+ * library will drop everything else.
+ */
+function buildOptions(profile: Profile): sanitizeHtmlLib.IOptions {
+  const allowedTags = Array.from(ALLOWED_TAGS[profile]);
+  const allowedAttributes: Record<string, string[]> = {};
+  for (const [tag, attrs] of Object.entries(ALLOWED_ATTRS[profile])) {
+    if (attrs.length > 0) allowedAttributes[tag] = [...attrs];
+  }
+  return {
+    allowedTags,
+    allowedAttributes,
+    allowedSchemes: [...SAFE_SCHEMES],
+    allowedSchemesByTag: {
+      a: [...SAFE_SCHEMES],
+      img: ["http", "https"],
+    },
+    allowedSchemesAppliedToAttributes: ["href", "src", "cite"],
+    // Force noopener+noreferrer on external links — same behaviour as the
+    // legacy regex sanitizer, but the library applies it deterministically.
+    transformTags: {
+      a: (tagName, attribs) => {
+        if (attribs.href) {
+          const href = String(attribs.href).trim();
+          if (!/^(https?:\/\/|mailto:|tel:)/i.test(href)) {
+            // Drop unsafe schemes — sanitize-html will also reject these via
+            // allowedSchemes, but be explicit so a misconfigured profile
+            // doesn't accidentally let one through.
+            return { tagName: "span", attribs: {} };
+          }
+        }
+        const next: Record<string, string> = { ...attribs };
+        if (next.href && !next.rel) next.rel = "noopener noreferrer";
+        return { tagName, attribs: next };
+      },
+    },
+    // Strip ALL CSS — neutralises `style="background:url(...)"` and friends.
+    // #S-06 — `style` was already excluded from `allowedAttributes` per profile,
+    // but disabling style processing entirely eliminates any future regression
+    // if a maintainer adds it back without thinking through CSS injection.
+    allowedStyles: {},
+    // Disallow ALL script-related content explicitly — defence in depth on top
+    // of the tag allowlist.
+    disallowedTagsMode: "discard" as const,
+    enforceHtmlBoundary: true,
+  };
+}
 
 /**
  * Strip tags not in the allowlist and remove dangerous attributes.
- * This is a best-effort defence-in-depth filter.  For a production deployment
- * facing complex HTML, replace with DOMPurify on a Node runtime.
+ * Backed by `sanitize-html` (htmlparser2 under the hood) so mutation-XSS
+ * payloads that depend on loose regex parsing cannot bypass the filter.
  */
 export function sanitizeHtml(input: string, profile: Profile): string {
   if (profile === "text") return escapeHtml(stripHtml(input));
-
-  const allowedTags = ALLOWED_TAGS[profile];
-  const allowedAttrs = ALLOWED_ATTRS[profile];
-
-  // 1. Remove script / style / template / iframe blocks entirely (incl. content)
-  let out = input
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<template[\s\S]*?<\/template>/gi, "")
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
-    .replace(/<object[\s\S]*?<\/object>/gi, "")
-    .replace(/<embed[^>]*>/gi, "")
-    .replace(/<link[^>]*>/gi, "")
-    .replace(/<meta[^>]*>/gi, "");
-
-  // 2. Strip event-handler attributes (on*) and javascript: hrefs globally
-  out = out.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "");
-  out = out.replace(/(href|src|action)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, "$1=$2#$2");
-  out = out.replace(/(href|src|action)\s*=\s*(['"])\s*data:[^'"]*\2/gi, "$1=$2#$2");
-
-  // 3. Process each remaining tag — capture the closing slash separately.
-  //    Group 1: closing slash (if present)
-  //    Group 2: tag name
-  //    Group 3: attribute string (only present on opening tags)
-  out = out.replace(/<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:\s[^>]*)?)\s*\/?>/g, (_match, closingSlash: string, tagName: string, attrStr: string) => {
-    const lower = tagName.toLowerCase();
-    if (!allowedTags.has(lower)) return ""; // strip disallowed tags
-
-    // Closing tags get no attributes
-    if (closingSlash === "/") return `</${lower}>`;
-
-    // Rebuild allowed attributes only (opening tags)
-    const permittedAttrs: string[] = (allowedAttrs[lower] ?? []);
-    let cleanAttrs = "";
-
-    if (permittedAttrs.length > 0 && attrStr) {
-      const attrPairs = [...attrStr.matchAll(/(\w[\w-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+)))?/g)];
-      for (const [, name, dq, sq, bare] of attrPairs) {
-        const attrName = name?.toLowerCase();
-        if (!attrName || !permittedAttrs.includes(attrName)) continue;
-        const val = dq ?? sq ?? bare ?? "";
-        // Sanitise href / src / action values
-        const sanitisedVal = (attrName === "href" || attrName === "src" || attrName === "action")
-          ? safeHref(val)
-          : val;
-        cleanAttrs += ` ${attrName}="${escapeHtml(sanitisedVal)}"`;
-      }
-      // Force rel="noopener noreferrer" on external links
-      if (lower === "a" && cleanAttrs.includes("href=")) {
-        if (!cleanAttrs.includes("rel=")) {
-          cleanAttrs += ' rel="noopener noreferrer"';
-        }
-      }
-    }
-
-    return `<${lower}${cleanAttrs}>`;
-  });
-
-  return out;
+  return sanitizeHtmlLib(input, buildOptions(profile));
 }
 
 /**

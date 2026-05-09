@@ -148,3 +148,62 @@ describe("sanitizeAiOutput", () => {
     expect(out).toContain("(BOOK:2024-01-15)");
   });
 });
+
+// ─── #M4 — mutation-XSS coverage (parser-based sanitizer) ─────────────────────
+//
+// These vectors exploit loose tag matching in regex sanitizers. The
+// previous in-house implementation handled most simple cases but left a long
+// tail open. Parser-based sanitize-html catches them by construction.
+
+describe("sanitizeHtml — mutation-XSS vectors (#M4)", () => {
+  it("strips <iframe> with src=javascript: even with mixed-case", () => {
+    const out = sanitizeHtml('<IfRaMe Src="JaVaScRiPt:alert(1)"></IfRaMe>', "marketingHtml");
+    expect(out.toLowerCase()).not.toContain("javascript");
+    expect(out.toLowerCase()).not.toContain("<iframe");
+  });
+
+  it("strips <svg onload=alert(1)>", () => {
+    const out = sanitizeHtml('<svg onload="alert(1)"><circle/></svg>', "marketingHtml");
+    expect(out).not.toMatch(/onload/i);
+    expect(out).not.toContain("<svg");
+  });
+
+  it("strips <math> with hostile xmlns href", () => {
+    const out = sanitizeHtml('<math><mtext><a xlink:href="javascript:alert(1)">x</a></mtext></math>', "marketingHtml");
+    expect(out.toLowerCase()).not.toContain("javascript");
+  });
+
+  it("strips <object data=javascript:>", () => {
+    const out = sanitizeHtml('<object data="javascript:alert(1)"></object>', "marketingHtml");
+    expect(out).not.toContain("<object");
+    expect(out.toLowerCase()).not.toContain("javascript");
+  });
+
+  it("blocks `style` attribute on every tag (CSS injection)", () => {
+    const out = sanitizeHtml('<p style="background:url(javascript:alert(1))">x</p>', "marketingHtml");
+    expect(out).not.toMatch(/style=/i);
+    expect(out.toLowerCase()).not.toContain("javascript");
+  });
+
+  it("blocks event handlers when written with extra whitespace and newlines", () => {
+    const out = sanitizeHtml('<a href="https://x.test"\n   onclick =\n  "evil()" >x</a>', "salonBio");
+    expect(out).not.toMatch(/onclick/i);
+  });
+
+  it("does not let unknown vendor schemes through", () => {
+    const out = sanitizeHtml('<a href="vbscript:msgbox(1)">x</a>', "salonBio");
+    expect(out).not.toMatch(/vbscript/i);
+  });
+
+  it("strips <script> even when split across attributes (htmlparser robustness)", () => {
+    const out = sanitizeHtml('<scr<script>ipt>alert(1)</scr</script>ipt>', "marketingHtml");
+    // After parsing, no functional <script> tag remains
+    expect(out).not.toMatch(/<\s*script/i);
+  });
+
+  it("preserves benign emoji + Cyrillic content", () => {
+    const out = sanitizeHtml("<p>Привіт 👋 <strong>як справи?</strong></p>", "salonBio");
+    expect(out).toContain("Привіт 👋");
+    expect(out).toContain("<strong>як справи?</strong>");
+  });
+});

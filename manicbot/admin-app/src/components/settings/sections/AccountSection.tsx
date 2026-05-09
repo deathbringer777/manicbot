@@ -248,27 +248,52 @@ export function AccountSection() {
     changePasswordMut.mutate({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
   };
 
-  // Change email
+  // Change email — two-step flow (#N1): request → code-confirm
   const [emailForm, setEmailForm] = useState({ newEmail: "" });
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailSuccess, setEmailSuccess] = useState(false);
+  const [emailRequested, setEmailRequested] = useState(false);
+  const [emailChangeSuccess, setEmailChangeSuccess] = useState(false);
+  const [emailChangeCode, setEmailChangeCode] = useState("");
 
   const changeEmailMut = (api as any).webUsers.requestEmailChange.useMutation({
     onSuccess: () => {
-      setEmailSuccess(true);
+      setEmailRequested(true);
       setEmailError(null);
-      setEmailForm({ newEmail: "" });
-      setTimeout(() => setEmailSuccess(false), 5000);
     },
     onError: (err: { message?: string }) => {
       setEmailError(err.message ?? t("settings.emailChangeError", lang));
     },
   }) as { mutate: (args: { newEmail: string }) => void; isPending: boolean };
 
+  const confirmEmailMut = (api as any).webUsers.confirmEmailChange.useMutation({
+    onSuccess: () => {
+      setEmailChangeSuccess(true);
+      setEmailError(null);
+      // Email change bumps password_changed_at, so JWT will be rejected on
+      // next session check. Sign out to refresh.
+      setTimeout(() => {
+        void signOut({ callbackUrl: "/login?reason=email_changed" });
+      }, 1500);
+    },
+    onError: (err: { message?: string }) => {
+      setEmailError(err.message ?? t("settings.emailChangeError", lang));
+    },
+  }) as { mutate: (args: { code: string }) => void; isPending: boolean };
+
   const handleChangeEmail = (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
     changeEmailMut.mutate({ newEmail: emailForm.newEmail });
+  };
+
+  const handleConfirmEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailError(null);
+    if (!/^\d{6}$/.test(emailChangeCode)) {
+      setEmailError(t("settings.invalidCode", lang));
+      return;
+    }
+    confirmEmailMut.mutate({ code: emailChangeCode });
   };
 
   // Role change request
@@ -537,42 +562,87 @@ export function AccountSection() {
         </section>
       )}
 
-      {/* Change email */}
+      {/* Change email — two-step flow (#N1) */}
       <section className="glass-card rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-4">
           <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changeEmail", lang)}</h2>
         </div>
-        <form onSubmit={handleChangeEmail} className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-              {t("settings.newEmail", lang)}
-            </label>
-            <input
-              type="email"
-              value={emailForm.newEmail}
-              onChange={(e) => setEmailForm({ newEmail: e.target.value })}
-              placeholder="new@example.com"
-              className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-              required
-            />
-          </div>
-          {emailError && <p className="text-xs text-red-400">{emailError}</p>}
-          {emailSuccess && (
+        {!emailRequested ? (
+          <form onSubmit={handleChangeEmail} className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                {t("settings.newEmail", lang)}
+              </label>
+              <input
+                type="email"
+                value={emailForm.newEmail}
+                onChange={(e) => setEmailForm({ newEmail: e.target.value })}
+                placeholder="new@example.com"
+                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
+                required
+              />
+            </div>
+            {emailError && <p className="text-xs text-red-400">{emailError}</p>}
+            <button
+              type="submit"
+              disabled={changeEmailMut.isPending}
+              className="w-full flex items-center justify-center gap-1.5 bg-cyan-600 active:bg-cyan-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-70 mt-1"
+            >
+              <Mail className="w-4 h-4" />
+              {changeEmailMut.isPending ? t("settings.saving", lang) : t("settings.changeEmailBtn", lang)}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleConfirmEmail} className="space-y-3">
             <p className="text-xs text-emerald-400 flex items-center gap-1">
               <CheckCircle className="w-3.5 h-3.5" />
               {t("settings.emailChangeSent", lang)}
             </p>
-          )}
-          <button
-            type="submit"
-            disabled={changeEmailMut.isPending}
-            className="w-full flex items-center justify-center gap-1.5 bg-cyan-600 active:bg-cyan-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-70 mt-1"
-          >
-            <Mail className="w-4 h-4" />
-            {changeEmailMut.isPending ? t("settings.saving", lang) : t("settings.changeEmailBtn", lang)}
-          </button>
-        </form>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                {t("settings.codeFromEmail", lang)}
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={emailChangeCode}
+                onChange={(e) => setEmailChangeCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white tracking-[0.5em] text-center font-mono"
+                required
+              />
+            </div>
+            {emailError && <p className="text-xs text-red-400">{emailError}</p>}
+            {emailChangeSuccess && (
+              <p className="text-xs text-emerald-400 flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                {t("settings.emailChangeSuccess", lang)}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={confirmEmailMut.isPending || emailChangeCode.length !== 6}
+              className="w-full flex items-center justify-center gap-1.5 bg-cyan-600 active:bg-cyan-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-70 mt-1"
+            >
+              {confirmEmailMut.isPending ? t("settings.saving", lang) : t("settings.confirmEmailBtn", lang)}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmailRequested(false);
+                setEmailChangeCode("");
+                setEmailError(null);
+              }}
+              className="w-full text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            >
+              {t("settings.cancel", lang)}
+            </button>
+          </form>
+        )}
       </section>
 
       {/* Set or Change password */}

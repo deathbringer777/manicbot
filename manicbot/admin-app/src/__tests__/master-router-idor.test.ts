@@ -100,4 +100,118 @@ describe("masterRouter IDOR guard (#P0-4)", () => {
       caller.updateDelegation({ tenantId: "t_x", masterId: 1, allowDelegation: 1 }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  // ── Read-side IDOR coverage (regression for the data-leak surface) ──────
+  //
+  // Each procedure follows the same shape: assertCallerIsMaster issues one
+  // SELECT against masters; on success the data query runs.
+  //   - mismatch (boundRow.chatId !== input.masterId)  → FORBIDDEN, no data fetch
+  //   - missing binding (web_user_id NULL)             → FORBIDDEN, no data fetch
+  //   - matching binding                               → returns data
+
+  describe("getMySchedule", () => {
+    it("master can read their own schedule", async () => {
+      const { db } = createDbMock([[{ chatId: 100 }], [{ id: 1, masterId: 100 }]]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      const r = await caller.getMySchedule({ tenantId: "t_personal_alice", masterId: 100 });
+      expect(r).toEqual([{ id: 1, masterId: 100 }]);
+    });
+
+    it("master CANNOT read another master's schedule (within-tenant IDOR)", async () => {
+      const { db } = createDbMock([[{ chatId: 100 }]]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      await expect(
+        caller.getMySchedule({ tenantId: "t_personal_alice", masterId: 200 }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("master without web_user_id binding gets FORBIDDEN", async () => {
+      const { db } = createDbMock([[]]);
+      const ctx = makeMasterCtx(db, "t_legacy");
+      const caller = createCaller(ctx as never);
+      await expect(
+        caller.getMySchedule({ tenantId: "t_legacy", masterId: 1 }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+  });
+
+  describe("getMyAppointments", () => {
+    it("master can read their own appointment history", async () => {
+      const { db } = createDbMock([[{ chatId: 100 }], [{ id: 1, masterId: 100 }]]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      const r = await caller.getMyAppointments({ tenantId: "t_personal_alice", masterId: 100 });
+      expect(r).toEqual([{ id: 1, masterId: 100 }]);
+    });
+
+    it("master CANNOT read another master's appointment history", async () => {
+      const { db } = createDbMock([[{ chatId: 100 }]]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      await expect(
+        caller.getMyAppointments({ tenantId: "t_personal_alice", masterId: 200 }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+  });
+
+  describe("getMyEarnings", () => {
+    it("master can read their own earnings", async () => {
+      // 3 selects: bound row, appointments, services
+      const { db } = createDbMock([
+        [{ chatId: 100 }],
+        [{ id: 1, svcId: "svc1", status: "confirmed" }],
+        [{ svcId: "svc1", price: 50 }],
+      ]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      const r = await caller.getMyEarnings({ tenantId: "t_personal_alice", masterId: 100 });
+      expect(r).toEqual({ total: 50, count: 1 });
+    });
+
+    it("master CANNOT read another master's earnings", async () => {
+      const { db } = createDbMock([[{ chatId: 100 }]]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      await expect(
+        caller.getMyEarnings({ tenantId: "t_personal_alice", masterId: 200 }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+  });
+
+  describe("getMyClients", () => {
+    it("master CANNOT read another master's client list", async () => {
+      const { db } = createDbMock([[{ chatId: 100 }]]);
+      const ctx = makeMasterCtx(db, "t_personal_alice");
+      const caller = createCaller(ctx as never);
+      await expect(
+        caller.getMyClients({ tenantId: "t_personal_alice", masterId: 200 }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+  });
+
+  // ── tenant_owner / system_admin bypass (by design) ───────────────────────
+  // These roles legitimately need cross-master visibility within their tenant.
+
+  describe("tenant_owner cross-master read (legitimate)", () => {
+    it("tenant_owner reads any master's schedule in their own tenant", async () => {
+      // assertCallerIsMaster short-circuits for tenant_owner — no boundRow query.
+      // Only the data query runs.
+      const { db } = createDbMock([[{ id: 1, masterId: 200 }]]);
+      const ctx = {
+        db,
+        webUser: {
+          id: "w_owner",
+          email: "owner@test.com",
+          tenantId: "t_personal_alice",
+          webRole: "tenant_owner",
+        },
+        headers: new Headers(),
+      };
+      const caller = createCaller(ctx as never);
+      const r = await caller.getMySchedule({ tenantId: "t_personal_alice", masterId: 200 });
+      expect(r).toEqual([{ id: 1, masterId: 200 }]);
+    });
+  });
 });

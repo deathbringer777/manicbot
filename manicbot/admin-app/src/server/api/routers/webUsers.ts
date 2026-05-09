@@ -12,9 +12,9 @@ import { isResendConfigured } from "~/server/email/resend";
 import {
   sendVerificationEmail,
   sendVerificationCodeEmail,
-  sendPasswordResetEmail,
+  sendPasswordResetCodeEmail,
   sendWelcomeEmail,
-  sendEmailChangeVerification,
+  sendEmailChangeCodeVerification,
 } from "~/server/email/emailService";
 
 import { checkRateLimit } from "~/server/auth/rateLimit";
@@ -30,6 +30,13 @@ const RL_REGISTER_MAX = 5;
 const RL_RESEND_MAX = 3;
 const RL_VERIFY_MAX = 5;
 const RL_RESET_MAX = 5;
+/**
+ * #N6 — per-email rate limit on requestPasswordReset. The pre-existing
+ * per-IP limit (RL_RESET_MAX) does nothing against an attacker rotating IPs
+ * (Tor / botnet / cheap residential proxies). 3 reset emails per address per
+ * 10 min is enough for legitimate retry but blocks mailbox-flooding abuse.
+ */
+const RL_RESET_PER_EMAIL_MAX = 3;
 const RL_EMAIL_CHANGE_MAX = 3; // max email change requests per IP per window
 const RL_LOGIN_IP_MAX = 20; // max login attempts per IP across all accounts
 const RL_LOGIN_IP_WINDOW = 15 * 60 * 1000; // 15 minutes
@@ -411,32 +418,42 @@ export const webUsersRouter = createTRPCRouter({
    * severity (so ops see the bounce/rate-limit) but still return ok:true to
    * preserve anti-enumeration.
    */
+  /**
+   * #N1 — request a password reset code. Anti-enumeration: always returns
+   * `ok: true`. If the email is registered, mints a 6-digit code (CSPRNG),
+   * stores its SHA-256 hash with a 1h TTL, and emails the code to the user.
+   * The code is what the user types into the reset form — no URL, no leakage.
+   */
   requestPasswordReset: publicProcedure
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
       const ip = clientIp(ctx as { headers?: Headers | null });
-      const rl = await checkRateLimit(ctx.db, ip, "password_reset", RL_RESET_MAX, RL_WINDOW);
-      if (!rl.allowed) {
+      const email = input.email.toLowerCase().trim();
+
+      // Two rate limits, both must allow:
+      //  1. per-IP: blocks single attacker on one network from spraying many emails
+      //  2. per-email (#N6): blocks attacker rotating IPs (Tor / proxy farm) from
+      //     hammering a single target's mailbox or burning through their reset codes
+      const rlIp = await checkRateLimit(ctx.db, ip, "password_reset", RL_RESET_MAX, RL_WINDOW);
+      if (!rlIp.allowed) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many attempts. Try again later.",
+        });
+      }
+      const rlEmail = await checkRateLimit(ctx.db, email, "password_reset_email", RL_RESET_PER_EMAIL_MAX, RL_WINDOW);
+      if (!rlEmail.allowed) {
+        // Same generic message — does not leak whether the address is registered.
         throw new TRPCError({
           code: "TOO_MANY_REQUESTS",
           message: "Too many attempts. Try again later.",
         });
       }
 
-      const email = input.email.toLowerCase().trim();
-      const base = authPublicBaseUrl();
-
-      // Server-config gaps: surface loudly. These are NOT anti-enumeration
-      // sensitive — they affect every user equally and indicate ops misconfig.
+      // Server-config gap: surface loudly. Not anti-enumeration sensitive —
+      // affects every user equally and indicates ops misconfig.
       if (!isResendConfigured()) {
         log.error("webUsers.requestPasswordReset", new Error("RESEND_API_KEY/RESEND_FROM not configured — password reset disabled"));
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Email service is temporarily unavailable. Please contact support.",
-        });
-      }
-      if (!base) {
-        log.error("webUsers.requestPasswordReset", new Error("AUTH_URL/NEXTAUTH_URL not configured — reset links cannot be built"));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Email service is temporarily unavailable. Please contact support.",
@@ -450,24 +467,25 @@ export const webUsersRouter = createTRPCRouter({
         .limit(1);
 
       if (rows.length) {
-        // Store a SHA-256 hash of the token in DB; send the plain token via email.
-        // If the DB leaks, attacker cannot derive the original reset link.
-        const resetToken = generateToken();
-        const resetTokenHash = await hashToken(resetToken);
+        // Mint a 6-digit code (same primitive as verifyEmail) and store its
+        // SHA-256 hash. The plaintext code travels only via email; the DB
+        // never holds it directly.
+        const code = generateVerificationCode();
+        const codeHash = await hashToken(code);
         const now = Math.floor(Date.now() / 1000);
         const expiresAt = now + 3600; // 1 hour
         await ctx.db
           .update(webUsers)
           .set({
-            passwordResetToken: resetTokenHash,
+            passwordResetToken: codeHash,
             passwordResetExpiresAt: expiresAt,
             updatedAt: now,
           })
           .where(eq(webUsers.id, rows[0]!.id));
 
-        const sent = await sendPasswordResetEmail(email, resetToken, (rows[0]!.lang ?? "en") as Lang);
+        const sent = await sendPasswordResetCodeEmail(email, code, (rows[0]!.lang ?? "en") as Lang);
         if (!sent.ok) {
-          // Roll the token back so the user can retry without a phantom code.
+          // Roll the code back so the user can retry without a phantom record.
           // Anti-enumeration: still return ok:true — but log loudly so ops
           // see runtime delivery failures (bounce, suppression list, rate limit).
           await ctx.db
@@ -488,35 +506,59 @@ export const webUsersRouter = createTRPCRouter({
       return { ok: true as const };
     }),
 
-  /** Complete password reset with token from email (public). */
+  /**
+   * #N1 — complete password reset with email + 6-digit code. The code is
+   * compared against the stored hash via timingSafeEqualHex; the code is
+   * single-use (cleared on success) and TTL-bound to 1h.
+   *
+   * Anti-enumeration: the same generic error message is returned for
+   *   - email not registered
+   *   - code mismatch
+   *   - code expired
+   * so an attacker cannot tell which condition fired.
+   */
   resetPassword: publicProcedure
     .input(
       z.object({
-        token: z.string().min(1),
+        email: z.string().email(),
+        code: z.string().length(6),
         newPassword: z.string().min(12, "Минимум 12 символов"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Lookup by hash of the supplied token (tokens are hashed at rest).
-      const tokenHash = await hashToken(input.token);
+      const ip = clientIp(ctx as { headers?: Headers | null });
+      // Rate limit by IP to slow code-guessing across many email targets.
+      const rl = await checkRateLimit(ctx.db, ip, "password_reset_complete", RL_RESET_MAX, RL_WINDOW);
+      if (!rl.allowed) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many attempts. Try again later.",
+        });
+      }
+
+      const email = input.email.toLowerCase().trim();
+      const generic = new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Invalid or expired reset code",
+      });
+
       const rows = await ctx.db
         .select()
         .from(webUsers)
-        .where(eq(webUsers.passwordResetToken, tokenHash))
+        .where(eq(webUsers.email, email))
         .limit(1);
-      if (!rows.length) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Invalid or expired reset link",
-        });
-      }
+      if (!rows.length) throw generic;
       const user = rows[0]!;
+      if (!user.passwordResetToken) throw generic;
+
       const now = Math.floor(Date.now() / 1000);
       if (!user.passwordResetExpiresAt || now > user.passwordResetExpiresAt) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Invalid or expired reset link",
-        });
+        throw generic;
+      }
+
+      const inputHash = await hashToken(input.code);
+      if (!timingSafeEqualHex(inputHash, user.passwordResetToken)) {
+        throw generic;
       }
 
       const newHash = await hashPassword(input.newPassword);
@@ -538,7 +580,7 @@ export const webUsersRouter = createTRPCRouter({
         action: "auth.password.reset",
         tenantId: user.tenantId ?? null,
         detail: `userId=${user.id}`,
-        ip: clientIp(ctx as { headers?: Headers | null }),
+        ip,
       });
       return { success: true as const };
     }),
@@ -611,7 +653,12 @@ export const webUsersRouter = createTRPCRouter({
     return rows;
   }),
 
-  /** Request email change — sends verification to NEW email. */
+  /**
+   * #N1 — Request email change. Mints a 6-digit code (CSPRNG), stores its
+   * SHA-256 hash with a 1h TTL, and sends the code to the NEW address. The
+   * caller must have an active session (protected) so the row is identified
+   * by `ctx.webUser.id` rather than by the token, narrowing the TOCTOU window.
+   */
   requestEmailChange: protectedProcedure
     .input(z.object({ newEmail: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
@@ -626,7 +673,7 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." });
       }
 
-      if (!isResendConfigured() || !authPublicBaseUrl()) {
+      if (!isResendConfigured()) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Email service not configured" });
       }
 
@@ -644,34 +691,33 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
       }
 
-      // Store hash in DB, send plain token via email (see tokens.ts rationale).
-      const token = generateToken();
-      const tokenHash = await hashToken(token);
+      const code = generateVerificationCode();
+      const codeHash = await hashToken(code);
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + 3600; // 1 hour
 
       const [me] = await ctx.db
         .select({ lang: webUsers.lang })
         .from(webUsers)
-        .where(eq(webUsers.email, ctx.webUser.email))
+        .where(eq(webUsers.id, ctx.webUser.id))
         .limit(1);
 
       await ctx.db
         .update(webUsers)
         .set({
           newEmail,
-          emailChangeToken: tokenHash,
+          emailChangeToken: codeHash,
           emailChangeTokenExpiresAt: expiresAt,
           updatedAt: now,
         })
-        .where(eq(webUsers.email, ctx.webUser.email));
+        .where(eq(webUsers.id, ctx.webUser.id));
 
-      const sent = await sendEmailChangeVerification(newEmail, token, newEmail, (me?.lang ?? "en") as Lang);
+      const sent = await sendEmailChangeCodeVerification(newEmail, code, newEmail, (me?.lang ?? "en") as Lang);
       if (!sent.ok) {
         await ctx.db
           .update(webUsers)
           .set({ newEmail: null, emailChangeToken: null, emailChangeTokenExpiresAt: null, updatedAt: now })
-          .where(eq(webUsers.email, ctx.webUser.email));
+          .where(eq(webUsers.id, ctx.webUser.id));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: `Could not send verification email: ${sent.error}`,
@@ -681,45 +727,77 @@ export const webUsersRouter = createTRPCRouter({
       return { ok: true as const };
     }),
 
-  /** Confirm email change with token (public — user clicks link from email). */
-  confirmEmailChange: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
+  /**
+   * #N1 — Confirm email change with the 6-digit code from the new address.
+   * The mutation is now `protectedProcedure` (requires an active session) so
+   * the row is identified by `ctx.webUser.id` rather than by token lookup —
+   * this closes the TOCTOU window where the legacy flow re-checked email
+   * uniqueness in a separate query, then UPDATEd; concurrent confirms could
+   * both pass the check. With direct id-based UPDATE, the only race is on
+   * the `email` UNIQUE constraint at the DB level, which we surface as
+   * CONFLICT to the caller.
+   */
+  confirmEmailChange: protectedProcedure
+    .input(z.object({ code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
-      const tokenHash = await hashToken(input.token);
+      if (!ctx.webUser) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
+      }
+
+      const ip = clientIp(ctx as { headers?: Headers | null });
+      const rl = await checkRateLimit(ctx.db, ip, "email_change_confirm", RL_VERIFY_MAX, RL_WINDOW);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many attempts. Try again later." });
+      }
+
       const rows = await ctx.db
         .select()
         .from(webUsers)
-        .where(eq(webUsers.emailChangeToken, tokenHash))
+        .where(eq(webUsers.id, ctx.webUser.id))
         .limit(1);
       if (!rows.length) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired link" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
       }
       const user = rows[0]!;
       const now = Math.floor(Date.now() / 1000);
-      if (!user.emailChangeTokenExpiresAt || now > user.emailChangeTokenExpiresAt || !user.newEmail) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired link" });
+
+      if (
+        !user.emailChangeToken ||
+        !user.emailChangeTokenExpiresAt ||
+        now > user.emailChangeTokenExpiresAt ||
+        !user.newEmail
+      ) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
       }
 
-      // Check the new email hasn't been taken since the request
-      const taken = await ctx.db
-        .select({ id: webUsers.id })
-        .from(webUsers)
-        .where(eq(webUsers.email, user.newEmail))
-        .limit(1);
-      if (taken.length > 0) {
-        throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
+      const inputHash = await hashToken(input.code);
+      if (!timingSafeEqualHex(inputHash, user.emailChangeToken)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
       }
 
-      await ctx.db
-        .update(webUsers)
-        .set({
-          email: user.newEmail,
-          newEmail: null,
-          emailChangeToken: null,
-          emailChangeTokenExpiresAt: null,
-          updatedAt: now,
-        })
-        .where(eq(webUsers.id, user.id));
+      // Single id-scoped UPDATE. The DB-level UNIQUE INDEX
+      // `idx_web_user_email` (see schema.sql line 429) catches the race where
+      // the target email was claimed between requestEmailChange and confirm.
+      try {
+        await ctx.db
+          .update(webUsers)
+          .set({
+            email: user.newEmail,
+            newEmail: null,
+            emailChangeToken: null,
+            emailChangeTokenExpiresAt: null,
+            // #S8: bump password_changed_at so existing JWTs are rejected on next session check.
+            passwordChangedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(webUsers.id, user.id));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/UNIQUE|already exists|constraint/i.test(msg)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
+        }
+        throw err;
+      }
 
       return { success: true as const };
     }),

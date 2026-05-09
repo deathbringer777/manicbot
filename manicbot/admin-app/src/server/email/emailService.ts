@@ -10,8 +10,10 @@ import {
   verificationEmailHtml,
   verificationCodeEmailHtml,
   passwordResetEmailHtml,
+  passwordResetCodeEmailHtml,
   welcomeEmailHtml,
   emailChangeEmailHtml,
+  emailChangeCodeEmailHtml,
   loginAlertEmailHtml,
   roleRequestAdminEmailHtml,
   roleRequestDecisionEmailHtml,
@@ -24,7 +26,7 @@ function baseUrl(): string {
   return authPublicBaseUrl() || "";
 }
 
-/** Registration: 8-digit verification code. */
+/** Registration: 6-digit verification code (CSPRNG, 15-min TTL). */
 export async function sendVerificationCodeEmail(
   to: string,
   code: string,
@@ -53,7 +55,11 @@ export async function sendVerificationEmail(
   });
 }
 
-/** Password reset link. */
+/**
+ * #N1 — DEPRECATED. URL-token password reset email. Kept temporarily for any
+ * straggling caller; will be removed once all in-flight tokens expire (1h).
+ * New code MUST use `sendPasswordResetCodeEmail` (6-digit code, no URL).
+ */
 export async function sendPasswordResetEmail(
   to: string,
   token: string,
@@ -65,6 +71,24 @@ export async function sendPasswordResetEmail(
     to,
     subject: copy.passwordReset.subject,
     html: passwordResetEmailHtml(url, lang),
+  });
+}
+
+/**
+ * Password reset via 6-digit code. Mirror of `sendVerificationCodeEmail`.
+ * Email body contains the code; user types it into the reset form. Eliminates
+ * the URL-based leakage path (Referer headers, MTA logs, browser history).
+ */
+export async function sendPasswordResetCodeEmail(
+  to: string,
+  code: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const copy = getEmailCopy(lang);
+  return sendResendEmail({
+    to,
+    subject: copy.passwordResetCode.subject,
+    html: passwordResetCodeEmailHtml(code, lang),
   });
 }
 
@@ -83,7 +107,11 @@ export async function sendWelcomeEmail(
   });
 }
 
-/** Email change: verification sent to the NEW address. */
+/**
+ * #N1 — DEPRECATED. URL-token email-change verification. Kept temporarily for
+ * straggling callers; will be removed once all in-flight tokens expire (1h).
+ * New code MUST use `sendEmailChangeCodeVerification` (6-digit code, no URL).
+ */
 export async function sendEmailChangeVerification(
   to: string,
   token: string,
@@ -96,6 +124,24 @@ export async function sendEmailChangeVerification(
     to,
     subject: copy.emailChange.subject,
     html: emailChangeEmailHtml(url, newEmail, lang),
+  });
+}
+
+/**
+ * Email-change verification via 6-digit code. Body contains the code; user
+ * types it into the settings dialog. Eliminates URL leakage path.
+ */
+export async function sendEmailChangeCodeVerification(
+  to: string,
+  code: string,
+  newEmail: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const copy = getEmailCopy(lang);
+  return sendResendEmail({
+    to,
+    subject: copy.emailChangeCode.subject,
+    html: emailChangeCodeEmailHtml(code, newEmail, lang),
   });
 }
 

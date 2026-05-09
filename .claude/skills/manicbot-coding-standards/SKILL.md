@@ -38,6 +38,77 @@ Rule: a one-file change must include a one-paragraph summary of what else in the
 
 ---
 
+## Parallel Documentation Awareness (Continuous Reading)
+
+While coding, Claude MUST continuously read project instructions and documentation IN PARALLEL with implementation. This is not a one-time pre-flight check — it is an ongoing discipline throughout the entire task.
+
+### What to Read Continuously
+
+While working on any task, keep these documents in active context and re-read the relevant sections whenever the work touches their domain:
+
+1. **`CLAUDE.md` / `AGENTS.md`** — canonical architecture reference. Re-read the relevant subsection BEFORE writing any module that fits its scope.
+2. **`SECURITY_FINDINGS.md`** — open security items. If the code being changed lives near an open finding, READ that finding first.
+3. **`manicbot/plugins/AUTHORING.md`** + **`SECURITY.md`** — read whenever touching plugin code, manifests, or the registry.
+4. **`PROVIDERS.md`** (email) — read when touching email transport.
+5. **`TEST_ACCOUNTS.md`** — read when adding/changing seed scripts or test fixtures.
+6. **`README.md`** + any README inside the directory being edited — read on entry into a new directory.
+7. **Audit reports** (`FULL_REVIEW_AUDIT_*.md`, `DESIGN_MARKETING_REPORT.md`) — consult when the user references audit findings.
+8. **The migration file directly preceding the current one** — read before writing a new migration to maintain naming and structural consistency.
+
+### How to Read in Parallel
+
+- When opening a file to edit, ALSO open the closest README, the relevant section of `CLAUDE.md`, and any `*.md` inside the same directory.
+- When writing a test, ALSO read the existing tests in the same file and at least one neighboring `.test` file to match conventions.
+- When adding a tRPC procedure, ALSO read the corresponding `permissions.ts` / `tenantAccess.ts` / `platformRoles.ts` to confirm the right guard is being used.
+- When working on a plugin, ALSO read `plugins/registry.ts`, `plugins/types.ts`, and the manifest of an existing similar plugin.
+
+### Update Documentation as You Go
+
+If during coding Claude discovers that an instruction file is **stale, wrong, or missing information** about the area being changed, Claude MUST update that documentation file as part of the same task. Do not defer "doc fixes" to a separate step.
+
+Examples:
+- New env var introduced → update `.dev.vars.example` AND mention it in `CLAUDE.md` env section.
+- New role added → update `platformRoles.ts` doc comment AND the role table in `CLAUDE.md`.
+- New plugin lifecycle hook → update `AUTHORING.md`.
+- New migration adds a table → update the table list in `CLAUDE.md`.
+
+---
+
+## Documentation Update Protocol (After Tests, Before Deploy)
+
+Documentation updates are a MANDATORY step in the workflow, sequenced like this:
+
+```
+1. Plan
+2. Write tests (backend) / write code (frontend)
+3. Implement
+4. Run full test suite — all green
+5. ⬇ DOCUMENTATION UPDATE STEP ⬇
+6. Pre-deploy checklist
+7. Deploy
+```
+
+### What Must Be Updated After Tests Pass, Before Deploy
+
+After tests pass and BEFORE the deploy step, Claude MUST review and update (when relevant):
+
+- **`CLAUDE.md` / `AGENTS.md`** — if architecture, request flow, role model, or table count changed.
+- **`SECURITY_FINDINGS.md`** — if a finding was resolved (mark it RESOLVED with date + commit), or a new one introduced (add it with severity).
+- **`README.md`** (root and per-package) — if commands, env vars, setup steps, or features changed.
+- **`.dev.vars.example`** + **`admin-app/.env.example`** — if any new env var was added or renamed.
+- **`schema.sql`** comment header — if migrations changed table count.
+- **Plugin docs** (`AUTHORING.md`) — if plugin contract surface changed.
+- **Inline JSDoc on exported functions** — if signatures or behavior changed.
+- **The migration file's leading comment** — describe what the migration does and why, in English.
+
+### Documentation Update Output
+
+When Claude finishes a task, the final response must include a section titled **"Documentation Updated"** listing every doc file touched, with a one-line description of what changed in each. If no docs needed updating, explicitly state: `Documentation Updated: none required (verified)`.
+
+This is non-negotiable. Skipping the doc-update step is treated as the task being incomplete.
+
+---
+
 ## Backend: Test-Driven Development (TDD)
 
 For ANY backend code (Worker, tRPC routers, Drizzle queries, services, handlers, plugins server-side):
@@ -54,17 +125,31 @@ For frontend (React components, UI-only changes), TDD is NOT required. Tests wel
 
 ## Pre-Deploy Checklist (Mandatory)
 
-Code is NOT done until ALL of these pass:
+Code is NOT done until ALL of these pass, IN THIS ORDER:
 
+**Stage A — Tests:**
 - [ ] All new logic has tests in the appropriate test file
 - [ ] `npm test` passes in both `manicbot/` and `admin-app/`
 - [ ] `npm run check-schema` passes (Drizzle schema ↔ `schema.sql` parity)
 - [ ] `npm run typecheck` passes in `admin-app/`
+
+**Stage B — Documentation Update (after tests, before deploy):**
+- [ ] `CLAUDE.md` / `AGENTS.md` reviewed and updated if architecture changed
+- [ ] `SECURITY_FINDINGS.md` updated if a finding was resolved or introduced
+- [ ] `README.md` updated if setup/commands/features changed
+- [ ] `.dev.vars.example` + `admin-app/.env.example` updated if env vars changed
+- [ ] Inline JSDoc updated on changed exports
+- [ ] Migration files have an English comment header describing intent
+- [ ] Final response includes a `Documentation Updated:` section listing every doc touched
+
+**Stage C — Code Quality:**
 - [ ] No new `as any` casts introduced (especially in admin-app)
 - [ ] Any AI-input-handling code calls `sanitizeUserInput` before reaching the LLM
 - [ ] Tenant-scoped queries include `tenant_id` in WHERE clause
-- [ ] Secrets are NOT committed; new secrets added to `.dev.vars.example` and documented
-- [ ] Migrations follow next sequential number (currently last is `0048`; the gap at `0040/0041` is known and we continue forward)
+- [ ] Secrets are NOT committed
+- [ ] Migrations follow next sequential number (last is `0048`; the gap at `0040/0041` is known and we continue forward)
+
+Skipping any stage means the task is not complete.
 
 ---
 

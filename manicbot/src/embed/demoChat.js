@@ -108,10 +108,11 @@ export const DEMO_CHAT_SRC = `
       '--mb-bot-text:#1a1a1a;' +
       '--mb-bubble-user:#8b5cf6;' +
       '--mb-user-text:#ffffff;' +
-      '--mb-btn-bg:#f8fafc;' +
-      '--mb-btn-text:#1a1a1a;' +
-      '--mb-btn-border:#cbd5e1;' +
-      '--mb-btn-hover:#f1f5f9;' +
+      '--mb-btn-bg:#ffffff;' +
+      '--mb-btn-text:#0f172a;' +
+      '--mb-btn-border:rgba(15,23,42,0.10);' +
+      '--mb-btn-hover:#f8fafc;' +
+      '--mb-btn-hover-border:rgba(15,23,42,0.22);' +
       '--mb-input-bg:#f5f5f5;' +
       '--mb-input-text:#1a1a1a;' +
       '--mb-input-placeholder:#999999;' +
@@ -134,10 +135,11 @@ export const DEMO_CHAT_SRC = `
       '--mb-header-bg:#1c1c1e;' +
       '--mb-bubble-bot:#2c2c2e;' +
       '--mb-bot-text:#ffffff;' +
-      '--mb-btn-bg:#2c2c2e;' +
+      '--mb-btn-bg:rgba(255,255,255,0.04);' +
       '--mb-btn-text:#ffffff;' +
-      '--mb-btn-border:#3a3a3c;' +
-      '--mb-btn-hover:#3a3a3c;' +
+      '--mb-btn-border:rgba(255,255,255,0.10);' +
+      '--mb-btn-hover:rgba(255,255,255,0.07);' +
+      '--mb-btn-hover-border:rgba(255,255,255,0.22);' +
       '--mb-input-bg:#2c2c2e;' +
       '--mb-input-text:#ffffff;' +
       '--mb-input-placeholder:#8e8e93;' +
@@ -167,12 +169,22 @@ export const DEMO_CHAT_SRC = `
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
     '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user);color:var(--mb-user-text);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
-    '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
+    // Buttons — web-native chip layout. Rows mirror the bot's groupings:
+    // multi-button rows (e.g. ◀ 2/2 ▶) sit inline; single-button rows (e.g.
+    // a stack of date numbers) wrap as a chip-grid via flex-wrap so 8 dates
+    // read as a date picker, not 8 stacked Telegram pills.
+    '.mb-btns{display:flex;flex-direction:column;gap:6px;margin-top:8px}' +
+    '.mb-btn-row{display:flex;flex-wrap:wrap;gap:5px}' +
+    // When the bubble holds many consecutive solo rows, let the .mb-btn-row
+    // wrap-merge by relying on each chip to size to content. Solo-rows still
+    // appear as their own flex container so spacing stays even.
     // Buttons use explicit --mb-btn-text (not color:inherit) so the label
     // stays readable regardless of the surrounding bubble's text colour.
-    '.mb-btn{display:block;padding:8px 12px;text-align:center;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:12px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;transition:background .15s,transform .1s;text-decoration:none;box-shadow:0 1px 2px rgba(15,23,42,.04)}' +
-    '.mb-btn:active{transform:scale(.98)}' +
-    '.mb-btn:hover{background:var(--mb-btn-hover)}' +
+    '.mb-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6.5px 11px;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:9px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;letter-spacing:-.005em;transition:border-color .15s ease,background .15s ease,transform .12s ease,box-shadow .15s ease;text-decoration:none;box-shadow:0 1px 0 rgba(15,23,42,.02);white-space:nowrap}' +
+    '.mb-btn:active{transform:translateY(1px);box-shadow:none}' +
+    '.mb-btn:hover{border-color:var(--mb-btn-hover-border);background:var(--mb-btn-hover);box-shadow:0 2px 6px rgba(15,23,42,.06)}' +
+    // Multi-button rows (nav arrows, pagination): chips share row evenly.
+    '.mb-btn-row:not(.mb-btn-row-solo) .mb-btn{flex:1 1 auto;min-width:38px}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
     '.mb-composer{display:flex;gap:6px;padding:6px 10px 14px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
@@ -827,7 +839,15 @@ export const DEMO_CHAT_SRC = `
     if (m.buttons && m.buttons.length) {
       var btnWrap = document.createElement('div');
       btnWrap.className = 'mb-btns' + (opts && opts.staggerButtons ? ' mb-stagger' : '');
+      // Wrap each Telegram-style row in a horizontal flex container — preserves
+      // the bot's row grouping (e.g. nav rows: ◀ N/M ▶) while letting many
+      // single-button rows (date pickers) flow as a wrapping chip-grid that
+      // reads as a web app, not a Telegram inline keyboard.
       m.buttons.forEach(function (row) {
+        if (!row || !row.length) return;
+        var rowEl = document.createElement('div');
+        rowEl.className = 'mb-btn-row';
+        if (row.length === 1) rowEl.classList.add('mb-btn-row-solo');
         row.forEach(function (b) {
           var btn;
           if (b.url) {
@@ -845,8 +865,9 @@ export const DEMO_CHAT_SRC = `
               sendRaw({ callbackData: b.callback_data, messageId: m.id });
             });
           }
-          btnWrap.appendChild(btn);
+          rowEl.appendChild(btn);
         });
+        btnWrap.appendChild(rowEl);
       });
       div.appendChild(btnWrap);
     }

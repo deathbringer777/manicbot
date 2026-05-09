@@ -270,12 +270,19 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
   it('drives all chrome colours through --mb-* variables', () => {
     expect(SRC).toMatch(/--mb-bg:#ffffff/);
     expect(SRC).toMatch(/--mb-fg:#1a1a1a/);
-    expect(SRC).toMatch(/--mb-btn-bg:#f8fafc/);
-    expect(SRC).toMatch(/--mb-btn-text:#1a1a1a/);
+    // Web-native chip palette: white surface + slate-10 hairline border in
+    // light mode; translucent-white surface + 10% border in dark. Hover-border
+    // token must exist so chips can lift on hover without a bg-swap flash.
+    expect(SRC).toMatch(/--mb-btn-bg:#ffffff/);
+    expect(SRC).toMatch(/--mb-btn-text:#0f172a/);
+    expect(SRC).toMatch(/--mb-btn-border:rgba\(15,23,42,0\.10\)/);
+    expect(SRC).toMatch(/--mb-btn-hover-border:rgba\(15,23,42,0\.22\)/);
     expect(SRC).toMatch(/--mb-input-placeholder/);
     // Dark palette matches the spec (iOS system surface colours).
     expect(SRC).toMatch(/--mb-bg:#1c1c1e/);
-    expect(SRC).toMatch(/--mb-btn-bg:#2c2c2e/);
+    expect(SRC).toMatch(/--mb-btn-bg:rgba\(255,255,255,0\.04\)/);
+    expect(SRC).toMatch(/--mb-btn-border:rgba\(255,255,255,0\.10\)/);
+    expect(SRC).toMatch(/--mb-btn-hover-border:rgba\(255,255,255,0\.22\)/);
     expect(SRC).toMatch(/--mb-input-text:#ffffff/);
     expect(SRC).toMatch(/--mb-statusbar-bg:#1c1c1e/);
     // Button text must be explicit (not color:inherit) so the label stays

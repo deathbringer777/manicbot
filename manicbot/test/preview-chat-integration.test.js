@@ -288,5 +288,11 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     // Button text must be explicit (not color:inherit) so the label stays
     // readable when the surrounding bubble's text colour differs.
     expect(SRC).toMatch(/\.mb-btn\{[^}]*color:var\(--mb-btn-text\)/);
+    // Web-native chip layout: rows wrap; consecutive solo-rows are coalesced
+    // server-side into `.mb-btn-row-grid` (CSS Grid) so date pickers read as
+    // a 4-column calendar grid, not a stack of inline-keyboard pills.
+    expect(SRC).toMatch(/\.mb-btn-row\{display:flex;flex-wrap:wrap/);
+    expect(SRC).toMatch(/\.mb-btn-row-grid\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(54px,1fr\)\)/);
+    expect(SRC).toMatch(/mb-btn-row-grid/);
   });
 });

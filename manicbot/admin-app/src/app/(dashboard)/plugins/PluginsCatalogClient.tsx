@@ -136,7 +136,7 @@ export default function PluginsCatalogClient() {
             <EmptyState
               icon={Search}
               title={t("plugins.catalog.emptyResult", lang)}
-              description={lang === "ru" ? "Попробуйте изменить фильтры или поисковый запрос" : lang === "ua" ? "Спробуйте змінити фільтри або пошуковий запит" : "Try adjusting your filters or search query"}
+              description={t("gmPlugins.tryAdjusting", lang)}
             />
           </div>
         ) : (

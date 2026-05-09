@@ -7,6 +7,8 @@ import {
   ScrollText, CheckCircle2, XCircle, Globe, Headphones,
   CreditCard, Mail, Bot, MessageSquare,
 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 function EnvBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -26,6 +28,7 @@ function EnvBadge({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export default function SystemPageClient() {
+  const { lang } = useLang();
   const {
     data: health,
     isLoading: hLoading,
@@ -50,8 +53,8 @@ export default function SystemPageClient() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">System</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Состояние D1, сервисов и инфраструктуры</p>
+            <h1 className="text-2xl font-extrabold tracking-tight">{t("gmSystem.title", lang)}</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t("gmSystem.subtitleFull", lang)}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -97,7 +100,7 @@ export default function SystemPageClient() {
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <Activity className="w-4 h-4 text-purple-400" />
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Всего строк</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("gmSystem.totalRows", lang)}</p>
             </div>
             {tLoading ? (
               <div className="h-7 animate-pulse bg-slate-200 dark:bg-slate-800/30 rounded" />
@@ -113,7 +116,7 @@ export default function SystemPageClient() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Env vars */}
           <div className="glass-card rounded-2xl p-4">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Переменные окружения</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">{t("gmSystem.envVars", lang)}</h2>
             {eLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -134,7 +137,7 @@ export default function SystemPageClient() {
 
           {/* Connected services */}
           <div className="glass-card rounded-2xl p-4">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Подключённые сервисы</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">{t("gmSystem.connectedServices", lang)}</h2>
             {eLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -145,7 +148,7 @@ export default function SystemPageClient() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <Bot className="w-3.5 h-3.5 text-sky-400" /> Telegram боты
+                    <Bot className="w-3.5 h-3.5 text-sky-400" /> {t("gmSystem.telegramBots", lang)}
                   </span>
                   <span className="text-xs font-bold text-slate-900 dark:text-white">{envStatus?.channelCounts?.telegram ?? 0}</span>
                 </div>
@@ -163,13 +166,13 @@ export default function SystemPageClient() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <Headphones className="w-3.5 h-3.5 text-blue-400" /> Агенты поддержки
+                    <Headphones className="w-3.5 h-3.5 text-blue-400" /> {t("gmSystem.supportAgents", lang)}
                   </span>
                   <span className="text-xs font-bold text-slate-900 dark:text-white">{envStatus?.agentCount ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <CreditCard className="w-3.5 h-3.5 text-amber-400" /> Web-пользователи
+                    <CreditCard className="w-3.5 h-3.5 text-amber-400" /> {t("gmSystem.webUsers", lang)}
                   </span>
                   <span className="text-xs font-bold text-slate-900 dark:text-white">{envStatus?.webUserCount ?? 0}</span>
                 </div>
@@ -181,7 +184,7 @@ export default function SystemPageClient() {
         {/* Table stats */}
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-white/5">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Таблицы D1</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("gmSystem.d1Tables", lang)}</h2>
           </div>
           {tLoading ? (
             <div className="p-4 space-y-2">
@@ -191,15 +194,15 @@ export default function SystemPageClient() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-white/5">
-              {(tableStats?.tables ?? []).map((t) => {
+              {(tableStats?.tables ?? []).map((row) => {
                 const pct =
                   tableStats && tableStats.totalRows > 0
-                    ? Math.round((t.rows / tableStats.totalRows) * 100)
+                    ? Math.round((row.rows / tableStats.totalRows) * 100)
                     : 0;
                 return (
-                  <div key={t.table} className="flex items-center gap-3 px-4 py-3">
+                  <div key={row.table} className="flex items-center gap-3 px-4 py-3">
                     <span className="text-xs font-mono text-slate-500 dark:text-slate-400 w-36 shrink-0 truncate">
-                      {t.table}
+                      {row.table}
                     </span>
                     <div className="flex-1">
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5">
@@ -210,10 +213,10 @@ export default function SystemPageClient() {
                       </div>
                     </div>
                     <span className="text-sm font-bold text-slate-900 dark:text-white w-14 text-right shrink-0">
-                      {t.rows === -1 ? (
+                      {row.rows === -1 ? (
                         <span className="text-red-400 text-xs">err</span>
                       ) : (
-                        t.rows.toLocaleString()
+                        row.rows.toLocaleString()
                       )}
                     </span>
                   </div>

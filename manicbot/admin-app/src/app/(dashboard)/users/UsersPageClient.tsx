@@ -19,6 +19,8 @@ import {
   X,
   Building2,
 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 type Filter = "all" | "banned";
 type AssignablePlatformRole = "support" | "technical_support";
@@ -37,16 +39,17 @@ type UserItem = {
 };
 
 function RoleBadge({ role }: { role: string }) {
+  const { lang } = useLang();
   if (role === "system_admin")
     return (
       <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 uppercase">
-        админ
+        {t("gmUsers.roleAdminBadge", lang)}
       </span>
     );
   if (role === "technical_support")
     return (
       <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 uppercase">
-        техподдержка
+        {t("gmUsers.roleTechSupportBadge", lang)}
       </span>
     );
   if (role === "support")
@@ -82,6 +85,7 @@ function UserCard({
   onRole: () => void;
   isPending: boolean;
 }) {
+  const { lang } = useLang();
   return (
     <div className="glass-card rounded-2xl p-4">
       {/* Top: avatar + info + status */}
@@ -144,7 +148,7 @@ function UserCard({
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 rounded-xl text-slate-700 dark:text-slate-300 text-xs font-medium transition-colors disabled:opacity-50"
         >
           <ShieldAlert className="w-3.5 h-3.5" />
-          Роль
+          {t("gmUsers.roleColumn", lang)}
         </button>
 
         {user.isBanned ? (
@@ -154,7 +158,7 @@ function UserCard({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 active:bg-emerald-500/25 rounded-xl text-emerald-400 text-xs font-medium transition-colors disabled:opacity-50"
           >
             <UserCheck className="w-3.5 h-3.5" />
-            Разбан
+            {t("gmUsers.unban", lang)}
           </button>
         ) : (
           <button
@@ -163,7 +167,7 @@ function UserCard({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/15 active:bg-red-500/25 rounded-xl text-red-400 text-xs font-medium transition-colors disabled:opacity-50"
           >
             <UserX className="w-3.5 h-3.5" />
-            Бан
+            {t("gmUsers.ban", lang)}
           </button>
         )}
       </div>
@@ -172,6 +176,7 @@ function UserCard({
 }
 
 export default function UsersPageClient() {
+  const { lang } = useLang();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [offset, setOffset] = useState(0);
@@ -230,8 +235,8 @@ export default function UsersPageClient() {
     <Shell>
       <div className="space-y-4">
         <PageHeader
-          title="Users"
-          subtitle={isLoading ? "Loading…" : `${total} users · sorted by name`}
+          title={t("gmUsers.title", lang)}
+          subtitle={isLoading ? t("gmTenants.loading", lang) : `${total} ${t("gmUsers.usersWordCountSuffix", lang)}`}
         />
 
         {/* Search */}
@@ -241,7 +246,7 @@ export default function UsersPageClient() {
             type="text"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Имя, @username, ID или телефон..."
+            placeholder={t("gmUsers.searchUsersPh", lang)}
             className="w-full bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/60 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/30 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
         </div>
@@ -250,8 +255,8 @@ export default function UsersPageClient() {
         <div className="flex gap-2">
           {(
             [
-              { key: "all", label: "Все" },
-              { key: "banned", label: "Banned" },
+              { key: "all", label: t("gmUsers.filterAll", lang) },
+              { key: "banned", label: t("gmUsers.filterBanned", lang) },
             ] as { key: Filter; label: string }[]
           ).map(({ key, label }) => (
             <button
@@ -272,9 +277,9 @@ export default function UsersPageClient() {
         <div className="flex items-start gap-2 bg-slate-100 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-200 dark:border-slate-700/30">
           <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Пользователи сгруппированы по Telegram ID. Значки{" "}
+            {t("gmUsers.groupedHint", lang)}{" "}
             <span className="font-mono bg-slate-200 dark:bg-slate-700/60 px-1 rounded text-[9px]">salon</span>{" "}
-            показывают в каких салонах зарегистрирован пользователь.
+            {t("gmUsers.groupedHintTail", lang)}
           </p>
         </div>
 
@@ -308,7 +313,7 @@ export default function UsersPageClient() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-1">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              Стр. {currentPage}/{totalPages} · {total} пользователей
+              {t("gmUsers.pageOf", lang)} {currentPage}/{totalPages} · {total} {t("gmUsers.usersWordCountSuffix", lang)}
             </span>
             <div className="flex gap-2">
               <button
@@ -317,14 +322,14 @@ export default function UsersPageClient() {
                 className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Назад
+                {t("gmUsers.prev", lang)}
               </button>
               <button
                 onClick={() => setOffset(offset + LIMIT)}
                 disabled={offset + LIMIT >= total}
                 className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
               >
-                Вперёд
+                {t("gmUsers.next", lang)}
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -344,7 +349,7 @@ export default function UsersPageClient() {
           >
             <div className="flex items-start justify-between mb-5">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Управление ролью</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("gmUsers.manageRole", lang)}</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {roleModal.name}
                   {roleModal.username && (
@@ -370,13 +375,13 @@ export default function UsersPageClient() {
             </div>
 
             <p className="text-[11px] text-slate-500 dark:text-slate-500 mb-2">
-              Роль админа платформы только у владельца (ADMIN_CHAT_ID). Здесь — только поддержка.
+              {t("gmUsers.adminInfo", lang)}
             </p>
             <div className="space-y-2">
               {(
                 [
-                  { key: "support" as const, label: "Поддержка (support)" },
-                  { key: "technical_support" as const, label: "Техподдержка" },
+                  { key: "support" as const, label: t("gmUsers.roleSupportLabel", lang) },
+                  { key: "technical_support" as const, label: t("gmUsers.roleTechSupportLabel", lang) },
                 ] as { key: AssignablePlatformRole; label: string }[]
               ).map(({ key, label }) => (
                 <button
@@ -387,11 +392,11 @@ export default function UsersPageClient() {
                 >
                   <Shield className="w-4 h-4 text-brand-400 shrink-0" />
                   <span>
-                    Назначить{" "}
+                    {t("gmUsers.assignAs", lang)}{" "}
                     <span className="font-bold text-brand-500 dark:text-brand-400">{label}</span>
                   </span>
                   {roleModal.role === key && (
-                    <span className="ml-auto text-[10px] text-brand-500 dark:text-brand-400 font-bold">ТЕКУЩАЯ</span>
+                    <span className="ml-auto text-[10px] text-brand-500 dark:text-brand-400 font-bold">{t("gmUsers.currentRole", lang)}</span>
                   )}
                 </button>
               ))}
@@ -403,7 +408,7 @@ export default function UsersPageClient() {
                   className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-red-500/10 active:bg-red-500/20 text-sm text-red-600 dark:text-red-400 disabled:opacity-50"
                 >
                   <ShieldOff className="w-4 h-4 shrink-0" />
-                  Снять роль
+                  {t("gmUsers.removeRole", lang)}
                 </button>
               )}
             </div>
@@ -412,7 +417,7 @@ export default function UsersPageClient() {
               onClick={() => setRoleModal(null)}
               className="mt-3 w-full py-3 text-sm text-slate-500"
             >
-              Отмена
+              {t("common.cancel", lang)}
             </button>
           </div>
         </div>

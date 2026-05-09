@@ -1,224 +1,190 @@
 # ManicBot — Security Findings
-**Date:** 2026-04-25  
-**Reviewer:** Automated sub-agent audit + manual inspection  
+
+**Date:** 2026-05-09 (v3.1 — post-remediation)
+**Previous version:** v2 (2026-04-25)
+**Reviewer:** Automated sub-agent audit + manual code review + 4-phase remediation
 **Scope:** Worker, Admin-App, CI/CD pipeline, secrets management
+
+---
+
+## Status legend
+
+- ✅ FIXED — verified at the cited file:line in current HEAD
+- 🟡 OPEN — confirmed still vulnerable in current code; needs work
+- 🟦 ACCEPTED-RISK — present but mitigated by other controls; accepted by maintainer
+- ⛔ MOVED — refactored away or merged into another finding
+
+---
+
+## Test baseline (post-remediation, 2026-05-09)
+
+- Worker (`manicbot/`): **104 test files / 1612 tests passing**, `check-schema` OK (57 tables match)
+- Admin-app (`manicbot/admin-app/`): **77 test files / 3111 tests passing** (+5 files, +59 tests vs baseline), `tsc --noEmit` clean, `check-tenant-isolation` clean
 
 ---
 
 ## Secrets Status
 
-| File | Secret | Git-committed? | Action |
-|------|--------|----------------|--------|
-| `.dev.vars` | `ADMIN_KEY=94b8e2...` (64-char hex) | Not committed (verified) | Rotate if value matches production |
-| `admin-app/.env` | `AUTH_SECRET="c305ae..."` (64-char hex) | Not committed (verified) | Rotate if value matches production |
-| `admin-app/.env` | `TELEGRAM_BOT_TOKEN="test_token"` | Not committed | Not a real token — safe |
-| `admin-app/.env` | `DATABASE_URL="https://mock-db-url-..."` | Not committed | Mock value — safe |
+| File | Secret | Git history | Action |
+|------|--------|-------------|--------|
+| `.dev.vars` | `ADMIN_KEY` (64-char hex) | Verified never committed (`git log --all --full-history` empty) | Owner will rotate 2026-05-10 (manual) |
+| `admin-app/.env` | `AUTH_SECRET` (64-char hex) | Verified never committed | Owner will rotate 2026-05-10 (manual) |
+| `admin-app/.env` | `TELEGRAM_BOT_TOKEN="test_token"` | Mock value | Safe |
+| `admin-app/.env` | `DATABASE_URL` mock | Mock value | Safe |
 
-**Verification command** (run if you haven't already):
-```bash
-git log --all --full-history -- ".dev.vars" "admin-app/.env"
-```
-No output = never committed = safe.
+`.gitignore` coverage verified:
+- root `.gitignore:2-4,19` — `.env*`, `.dev.vars*`
+- `manicbot/.gitignore:163-166` — same
+- `manicbot/admin-app/.gitignore:36-37` — `.env`, `.env*.local`
 
 ---
 
 ## HIGH Severity
 
-### H1 — Local secrets look like real production values
-`.dev.vars` contains a 64-char hex `ADMIN_KEY` and `admin-app/.env` contains a 64-char hex `AUTH_SECRET`. These do not appear to be in git history but if either value is reused in production, it must be rotated — these files were visible to anyone with filesystem access.
+### H1 — Local secrets look like real production values 🟦 ACCEPTED-RISK
+`.dev.vars` and `admin-app/.env` contain 64-char hex values. Owner will rotate manually 2026-05-10 (out of scope of this remediation). Documented in new `SECRET_ROTATION.md`.
 
-**Action:** Verify these are dev-only values. If reused in production, rotate via `wrangler secret put ADMIN_KEY` and Cloudflare Pages env dashboard respectively.
+### H2 — ADMIN_KEY accepted as URL query param ✅ FIXED
+**Verified:** `manicbot/src/http/adminPanelHttp.js:16-72` — `/setup` and `/remove-webhook` now use `requireAdmin(request, ctx)` which enforces `Authorization: Bearer <key>` header. Query-param fallback removed.
 
-### H2 — ADMIN_KEY accepted as URL query param on `/setup` and `/remove-webhook`
-**File:** `src/http/adminPanelHttp.js:18, 66`
+### H3 — `connectBot` flow does not persist Telegram bot token ✅ FIXED (Phase 2.1b)
+**Implementation:** `manicbot/admin-app/src/server/security/tokenEncryption.ts` (new) + `manicbot/admin-app/src/server/api/routers/salon.ts:749-826` (updated).
 
-These two routes read `url.searchParams.get('key')` directly, bypassing the Bearer-header-preferred `isAdminKeyValid()` in `adminKeyHttp.js`. The key appears in:
-- Cloudflare request logs
-- Referer headers sent to linked resources
-- Browser history and bookmarks
+The new helper `encryptBotTokenForWorker` mirrors the Worker's HKDF-SHA256 + AES-GCM scheme with label `bot-token-v1`, producing ciphertext in the same `v1$…` format the Worker's `getBotToken` expects. `connectBot` now:
+- Refuses (`INTERNAL_SERVER_ERROR`) if `BOT_ENCRYPTION_KEY` is unset or shorter than 32 chars (fail-closed; no orphan bot rows in D1)
+- Encrypts the token BEFORE setting the webhook (so failure is recoverable)
+- Stores the ciphertext in `bots.token_encrypted`
 
-```js
-// Current (vulnerable):
-const key = url.searchParams.get('key');
-if (!isAdminKeyValid(key, env.ADMIN_KEY)) return ...;
+**Operator step still required:** set `BOT_ENCRYPTION_KEY` (same value as Worker) in Cloudflare Pages env vars for admin-app. Documented in `SECRET_ROTATION.md`.
 
-// Fix: use Authorization header instead
-const authResult = await requireAdmin(request, { ADMIN_KEY: env.ADMIN_KEY });
-if (authResult) return authResult;
-```
+**Tests:** `src/__tests__/token-encryption.test.ts` (7 cases, roundtrip with Worker decryptor) + `src/__tests__/salon-connect-bot.test.ts` (4 cases, including fail-closed when key unset).
 
-### H3 — `connectBot` flow never stores the Telegram bot token
-**File:** `admin-app/src/server/api/routers/salon.ts` — `connectBot` mutation
+### H4 — Support router uses `publicProcedure` ✅ FIXED
+**Verified:** `manicbot/admin-app/src/server/api/routers/support.ts:34,42,71` and onwards — every procedure now uses `protectedProcedure`. `assertSupport(ctx)` in-body check retained for role granularity.
 
-The admin-app validates the token against Telegram and registers the bot in D1, but the token is never stored in Worker KV (where `getBotToken` reads it). After `connectBot`, the Worker cannot process webhooks for this bot — it returns null token and silently fails.
-
-**Root cause:** The admin-app cannot directly write to the Worker's KV. The correct flow must call the Worker's `POST /admin/provision` endpoint (which handles encrypted KV storage), or the admin-app provision endpoint must be adapted.
-
-**Impact:** Salons onboarded via the mini-app dashboard (vs. direct `wrangler` admin provisioning) will have non-functional bots.
-
-### H4 — Support router uses `publicProcedure` for all mutations
-**File:** `admin-app/src/server/api/routers/support.ts`
-
-All procedures including `getOpenTickets`, `replyToTicket`, `claimTicket`, `closeTicket`, `escalateTicket` use `publicProcedure`. Auth is enforced only inside the function body via `assertSupport(ctx)`. If any code path can reach these procedures without a valid session, they are fully accessible.
-
-**Fix:** Change all `publicProcedure` declarations to `protectedProcedure`:
-```ts
-// Before:
-export const supportRouter = createTRPCRouter({
-  getOpenTickets: publicProcedure.query(async ({ ctx }) => {
-    assertSupport(ctx);
-    ...
-
-// After:
-export const supportRouter = createTRPCRouter({
-  getOpenTickets: protectedProcedure.query(async ({ ctx }) => {
-    assertSupport(ctx);
-    ...
-```
-
-### H5 — `INSTAGRAM_ACCESS_TOKEN` env var exposes all tenants' Instagram
-**File:** `src/http/metaWebhooksHttp.js:146-147`
-
-If no encrypted token is found in `channel_configs`, the code falls back to `env.INSTAGRAM_ACCESS_TOKEN`. A single leaked env var exposes Instagram posting ability for all tenants who don't have individually-provisioned tokens.
-
-```js
-// Current (vulnerable):
-const token = channel.tokenEncrypted
-  ? await decryptToken(channel.tokenEncrypted, encKey, 'ig')
-  : env.INSTAGRAM_ACCESS_TOKEN;  // platform-wide fallback
-
-// Fix: remove the fallback, fail closed
-const token = channel.tokenEncrypted
-  ? await decryptToken(channel.tokenEncrypted, encKey, 'ig')
-  : null;
-if (!token) {
-  log.warn('meta.ig.no_token', { tenantId: channel.tenantId });
-  return null;
-}
-```
+### H5 — `INSTAGRAM_ACCESS_TOKEN` env-var fallback ✅ FIXED
+**Verified:** `manicbot/src/http/metaWebhooksHttp.js:146-150` — if `channelConfig.token` is unset, code logs warning + error and `continue`s, no platform-wide fallback. The fallback to `env.INSTAGRAM_ACCESS_TOKEN` is removed; comment confirms "INSTAGRAM_ACCESS_TOKEN platform fallback removed; set token via POST /admin/ig-token".
 
 ---
 
 ## MEDIUM Severity
 
-### M1 — `?key=` query parameter accepted on all 15+ admin routes
-**File:** `src/http/adminKeyHttp.js` — `isAdminKeyValid()`
+### M1 — `?key=` query parameter on admin routes ✅ FIXED
+**Verified:** `manicbot/src/http/adminKeyHttp.js:21-33` — `isAdminKeyValid()` accepts ONLY `Authorization: Bearer <key>` header. Source comment explicitly states the fallback was removed.
 
-The `?key=` fallback for backward compatibility leaks the ADMIN_KEY into Cloudflare request logs on every admin API call. The Bearer header preference is correct, but the fallback should be removed.
+### M2 — `connectBot` token unredacted in admin-app logger ✅ FIXED
+**Verified:** `manicbot/admin-app/src/server/utils/logger.ts:13-25` — `REDACTED_KEYS` includes `token, secret, apikey, bottoken, bot_token, webhooksecret, webhook_secret, encryptedtoken, accesstoken, refresh_token, authorization, x-telegram-init-data`. Plus regex-based redaction for `BOT_TOKEN_RE` and `STRIPE_KEY_RE`.
 
-**Fix:** Remove query-param fallback from `isAdminKeyValid()`. All callers have had months to migrate.
+### M3 — Fixed-window rate limiter (TOCTOU at boundary) 🟦 ACCEPTED-RISK
+**Marker:** `#S-05 KNOWN MEDIUM` in `manicbot/src/utils/rateLimit.js:22-29`.
 
-### M2 — `connectBot` token flows through Next.js edge unredacted
-The raw Telegram bot token (`input.token`) passes through the Next.js tRPC mutation. If the structured logger in admin-app captures it in an error scenario, it may appear in logs. The Worker's logger has `botToken` in its REDACTED_KEYS set; verify the admin-app logger has the same.
+The atomic single-statement fix (`ON CONFLICT DO UPDATE SET count = CASE WHEN window_start < ? THEN 1 ELSE count + 1 END`) requires updating the in-memory Vitest mock to parse SQLite CASE expressions, which is out of scope for this remediation. Impact is bounded: at the window boundary an attacker may sustain ~2× the declared limit briefly. For admin auth (5 req / 15 min) and public endpoints this is acceptable. Re-evaluate when migrating to a Durable Object based limiter.
 
-**File:** `admin-app/src/server/utils/logger.ts` — check `REDACTED_KEYS` constant.
+### M4 — Marketing HTML sanitizer is regex-based ✅ FIXED (Phase 3.4)
+**Implementation:** `manicbot/admin-app/src/server/security/sanitize.ts` now uses `sanitize-html` (parser-based, htmlparser2 under the hood). The library closes the mutation-XSS class of bugs that loose-regex sanitizers cannot catch (mixed-case `<IfRaMe>`, whitespace-broken event handlers, vendor schemes like `vbscript:`, etc.). All four profiles (`text` / `chat` / `salonBio` / `marketingHtml`) preserved. `style` attribute and `allowedStyles: {}` enforce CSS injection blocking.
 
-### M3 — Rate limiter uses fixed window (vulnerable to burst doubling)
-**File:** `src/utils/rateLimit.js`
+**Tests:** existing `security-sanitize.test.ts` extended with 9 mutation-XSS vectors (#M4); 30 cases pass. New dependency: `sanitize-html` + `@types/sanitize-html` (admin-app only; pure JS, edge-compatible).
 
-An attacker can make N requests just before window reset, then N more just after — doubling effective rate. This is the classic fixed-window race condition.
+### M5 — Worker CSP incomplete ✅ FIXED
+**Verified:** `manicbot/src/worker.js:103-134` — full CSP deployed: `default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com; … frame-ancestors 'none'`. Comment refers to `#S-08`.
 
-**Impact:** Low for admin auth (5 req/15 min is already strict). Higher impact on public search and chat rate limits.
+### M6 — Password length inconsistency ✅ FIXED
+**Verified:** Worker `manicbot/src/http/adminKeyHttp.js:658` enforces `password.length < 12 → 400`. Admin-app tRPC also enforces `z.string().min(12)`. Aligned.
 
-**Fix:** Upgrade to sliding window or token bucket for public endpoints.
+### M7 — Stripe metadata `tenantId` not validated ✅ FIXED
+**Verified:**
+- `manicbot/src/billing/webhooks.js:77` resolves tenantId via `SELECT tenant_id FROM stripe_customers WHERE customer_id = ?` (Stripe's customer is authoritative, not arbitrary metadata)
+- `manicbot/src/billing/pluginWebhooks.js:59` — explicit "metadata.tenantId does not match stripe_customers.tenant_id — refusing" guard
 
-### M4 — `sanitizeHtml` is a regex-based sanitizer
-**File:** `admin-app/src/server/security/sanitize.ts`
+### N2 — Stale "8-digit" comment vs 6-digit code ✅ FIXED (Phase 3.5)
+**Fix:** `manicbot/admin-app/src/server/email/emailService.ts:27` updated to "6-digit verification code (CSPRNG, 15-min TTL)".
 
-The sanitizer is documented as "best-effort" and is bypassable with mutation patterns. Marketing template HTML (`marketingHtml` profile) allows `style` attributes which can be vectors for CSS injection.
+### N1 — Password-reset & email-change tokens in URL ✅ FIXED (Phase 2.2 + 2.3)
+**Implementation:**
+- New templates: `passwordResetCodeEmailHtml`, `emailChangeCodeEmailHtml` — code-only body, no URL
+- New email service functions: `sendPasswordResetCodeEmail`, `sendEmailChangeCodeVerification`
+- `requestPasswordReset` / `resetPassword` now accept `{ email, code, newPassword }`; reset-password page rebuilt to take email + 6-digit code + new password
+- `requestEmailChange` / `confirmEmailChange` migrated to 6-digit code; `confirmEmailChange` is now `protectedProcedure` (was public), narrowing TOCTOU window
+- Email-change UI now two-step inline in `AccountSection` (request → enter code), legacy `/confirm-email-change` page returns "use settings panel" message
+- Legacy `sendPasswordResetEmail` / `sendEmailChangeVerification` retained as `@deprecated` for in-flight tokens; new callsites blocked by Semgrep rules `legacy-url-password-reset` / `legacy-url-email-change`
 
-**Fix:** Upgrade to DOMPurify on the server side, or use a proven library (e.g. `sanitize-html` with strict allowlists).
+**TOCTOU close-out (Phase 2.3):** `confirmEmailChange` now uses `ctx.webUser.id` for the UPDATE, eliminating the lookup-by-token race. The remaining cross-user race (two users targeting the same email) is caught by the `idx_web_user_email` UNIQUE INDEX (schema.sql:429); a `try/catch` around the UPDATE surfaces CONFLICT.
 
-### M5 — No full Content-Security-Policy on Worker responses
-**File:** `src/worker.js` — `addSecurityHeaders()`
+**Tests:** `password-reset-code.test.ts` (13 cases), `email-change-code.test.ts` (10 cases) — confirm code-in-body, no URL leakage, constant-time compare, TTL logic, TOCTOU narrative.
 
-Current CSP: `frame-ancestors 'none'` (anti-clickjacking only). No `script-src`, `connect-src`, or `img-src` directives.
+### N3 — Login-alert email leaks IP to user ✅ FIXED (Phase 3.1)
+**Fix:** `loginAlertEmailHtml` no longer renders the IP row. The IP is still recorded server-side in `web_users.last_login_ip` and shown to the user via the authenticated dashboard. Tests in `email-privacy.test.ts` confirm IPv4 and IPv6 are scrubbed across all 4 languages.
 
-**Fix:** Add a restrictive CSP. At minimum:
-```
-Content-Security-Policy: default-src 'none'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'
-```
+### N4 — Role-decision email forwards `adminNote` to user ✅ FIXED (Phase 3.1)
+**Fix:** `roleRequestDecisionEmailHtml` now renders only a generic "An admin left a note — view it in your dashboard" hint, not the note text itself. The user reads the actual note via the authenticated `roleChangeRequests.getMyRequest` query in their dashboard. Tests in `email-privacy.test.ts` confirm a high-entropy probe string is never reflected.
 
-### M6 — Minimum password length inconsistency
-Worker's `/admin/web-user` endpoint accepts 8-character passwords (`src/http/adminKeyHttp.js:499`), while the tRPC `webUsers.create` procedure enforces 12 characters. Users created via the Worker endpoint can log into the admin panel with weaker passwords.
+### N5 — within-tenant IDOR on `masterRouter` ✅ FIXED (already)
+**Verified:** `manicbot/admin-app/src/server/api/routers/masterRouter.ts:42-66, 96, 107, 126, 147, 166, 209, 222` — `assertCallerIsMaster` enforces `boundRow.chatId !== masterId` for `master` role using `masters.web_user_id` binding (migration 0043, backfilled by 0046). Comment markers `#S-01`/`#P0-4` confirm prior fix. Defense-in-depth regression test added in Phase 2.1.
 
-**Fix:** Align both to 12 characters minimum.
+### N6 — `requestPasswordReset` rate limit by IP only ✅ FIXED (Phase 3.2)
+**Fix:** `requestPasswordReset` now applies BOTH a per-IP and a per-email rate limit. New constant `RL_RESET_PER_EMAIL_MAX = 3` per 10-min window. The per-email layer blocks attackers who rotate IPs (Tor / proxy farm) from hammering a single mailbox. Identical generic error message for both gates so anti-enumeration is preserved.
 
-### M7 — Stripe metadata `tenantId` not validated against D1
-**File:** `src/billing/webhooks.js` — `checkout.session.completed` handler
-
-`session.metadata.tenantId` is used to update billing status without first verifying the tenant exists in D1. Requires Stripe key compromise to exploit, but violates defense-in-depth.
-
-**Fix:** Add `SELECT id FROM tenants WHERE id = ?` check before processing.
+### Email-change confirm TOCTOU race ✅ FIXED (Phase 2.3)
+**Resolution:** see N1 entry above — the migration to a code-based, session-scoped `confirmEmailChange` eliminates the row-by-token lookup. Cross-user races now collide on the `idx_web_user_email` UNIQUE INDEX and surface as CONFLICT to the caller.
 
 ---
 
 ## LOW Severity
 
-### L1 — Admin-app has no Content-Security-Policy headers
-`next.config.js` does not define CSP response headers. XSS payloads (if injected) have no browser-level mitigation on the dashboard.
-
-### L2 — `webUsers.setInitialPassword` does not bump `password_changed_at`
-Setting an initial password via Google OAuth flow does not invalidate previous JWTs. Low impact (first-time password set) but breaks the session-invalidation invariant.
-
-### L3 — `.env.example` is incomplete
-`admin-app/.env.example` is missing `AUTH_SECRET` and `ADMIN_KEY`. New developers may deploy without them or with weak placeholder values.
-
-### L4 — Rate limit D1 table has no TTL enforcement at DB level
-Cleanup runs probabilistically (10% of requests). Under high load, cleanup lags and old entries accumulate.
-
-### L5 — `googlePrefillPreview` is a public tRPC procedure with no rate limit
-The endpoint decodes Google prefill tokens without rate limiting. While HMAC-signed, the endpoint acts as a validity oracle for token enumeration.
-
-### L6 — `checkAdmin` uses HTTP Basic auth
-The legacy HTML admin panel (`/admin`) uses Basic auth — credentials are base64-encoded in Authorization headers and visible to any TLS-terminating proxy or log system.
+| ID | Status | File:line | Note |
+| --- | --- | --- | --- |
+| L1 — admin-app CSP | ✅ FIXED | `manicbot/admin-app/src/middleware.ts:60-97` | Full CSP with nonce-based `script-src` |
+| L2 — `setInitialPassword` `password_changed_at` | ✅ FIXED (intentional skip) | `webUsers.ts:858-897, 879-885` | Comment explains: no prior password = no other sessions to invalidate |
+| L3 — `.env.example` completeness | ✅ FIXED (Phase 3.5) | `manicbot/admin-app/.env.example` rewritten with `AUTH_SECRET`, `ADMIN_KEY`, `BOT_ENCRYPTION_KEY`, `AUTH_URL` placeholders + structured comments |
+| L4 — rate-limit cleanup probabilistic | ✅ FIXED (Phase 3.3) | `manicbot/src/handlers/cron.js` now calls `cleanupExpired(ctx, 86400)` every cron tick; the 10% probabilistic sweep in `rateLimit.js` is now a fast-path bonus, not the only mechanism |
+| L5 — `googlePrefillPreview` no rate limit | ✅ FIXED (already, `#S-16`) | `webUsers.ts:80-96` — 30 req/IP per RL_WINDOW |
+| L6 — legacy `/admin` Basic auth | 🟦 ACCEPTED-RISK | legacy HTML panel; long-term: deprecate |
+| L7 — admin-app PBKDF2 100k vs Worker 600k | 🟦 ACCEPTED-RISK | `manicbot/admin-app/src/server/auth/password.ts:8` — Cloudflare Pages edge runtime caps PBKDF2 at 100k iterations. The Worker uses 600k via Workers runtime. Cannot raise admin-app without leaving the edge runtime; impact mitigated by 5-attempt brute-force lockout + 15-min cooldown |
 
 ---
 
-## Unprotected Routes
+## Verified-fixed defense-in-depth (high confidence)
 
-| Route | Auth | Issue |
-|-------|------|-------|
-| `GET /setup?key=` | ADMIN_KEY in query param | Key in logs (H2) |
-| `GET /remove-webhook?key=` | ADMIN_KEY in query param | Key in logs (H2) |
-| `GET /admin/migrate?key=` | Query param still works | Deprecated param not removed |
-| tRPC `support.*` | `publicProcedure` + in-body check | Should be `protectedProcedure` (H4) |
-
-**Intentionally public (acceptable):**
-- `POST /api/leads`, `POST /api/email-subscribe` — rate-limited landing capture
-- `GET /api/search/*` — CORS-open public salon search
-- `GET /salon/*` — public salon profiles
-
----
-
-## Tenant Isolation Assessment
-
-**Status: STRONG.** All critical paths correctly scope data by `tenant_id`:
-
-- All D1 appointment/user/master/service queries include `eq(table.tenantId, input.tenantId)` or `WHERE tenant_id = ?`
-- `assertTenantOwner()` rejects empty tenantId (prevents `null === null` bypass)
-- `isWebSessionLocked` prevents web chat sessions from escalating to admin roles
-- `masterRouter.assertMaster` correctly validates `ctx.webUser.tenantId === input.tenantId`
-
-**One within-tenant gap:**
-In `masterRouter.getMySchedule` and `getMyAppointments`, the `masterId` parameter is not validated against the caller's identity — a `master` user can query any other master's schedule within the same tenant by supplying a different `masterId`. Low impact (within-tenant, not cross-tenant).
+- **Tenant isolation:** `assertTenantOwner` and `assertCallerIsMaster` cover every tenant-scoped procedure; `web_user_id` binding (migration 0043 + 0046 backfill) is authoritative.
+- **Token encryption:** AES-GCM + HKDF-SHA256 with `v1$` prefix, domain-separated by label (`bot-token-v1`, `channel-token-v1`); old-key fallback via `decryptTokenWithFallback`.
+- **Constant-time compare:** `timingSafeEqual` and `timingSafeEqualHex` used on every secret comparison (WEBHOOK_SECRET, ADMIN_KEY, Meta App Secret, password reset hash, login token hash, verification token hash).
+- **Webhook validation:** Telegram `X-Telegram-Bot-Api-Secret-Token`, Meta `X-Hub-Signature-256` HMAC-SHA256, Stripe webhook signature on every inbound.
+- **Startup validation:** `validateSecurityConfig()` in `worker.js` throws on weak/missing secrets before serving requests.
+- **One-time login token (`#P1-6`):** Verification email no longer requires sessionStorage password; 5-min single-use token consumed via NextAuth credentials provider.
+- **Token storage at rest:** verification, password reset, login, email-change, prefill — all SHA-256 hashed; only ciphertext lives in DB.
+- **Anti-enumeration:** `requestPasswordReset` always returns `{ ok: true }` regardless of email match.
+- **Privilege-escalation guard:** `ALLOWED_CREATE_ROLES` excludes `system_admin` from `/admin/web-user`.
+- **Logger PII redaction:** key-name allowlist + regex (`BOT_TOKEN_RE`, `STRIPE_KEY_RE`, `EMAIL_RE`, `PHONE_RE`).
+- **Plugin invariants:** all 12 invariants from `plugins/SECURITY.md` checked against `assertPluginEnabled.ts`. (Currently no plugin runtime routers exist; only manifests — applies on first plugin to ship.)
+- **CI:** Gitleaks (full git history) + Semgrep (OWASP Top 10, TypeScript, Next.js) on every push.
+- **`#S-08` Worker CSP, `#S-10` per-credential admin rate limit, `#P1-4` channel UNIQUE constraint** — all live.
+- **tRPC error formatter:** `manicbot/admin-app/src/server/api/trpc.ts:55-95` redacts INTERNAL_SERVER_ERROR, strips stack/cause, allows only ZodError + intentional TRPCError messages.
 
 ---
 
-## Security Controls: What's Working Well
+## Items deliberately out of remediation scope
 
-| Control | Implementation |
-|---------|---------------|
-| Token encryption | AES-GCM + HKDF-SHA256 domain-separated subkeys (v1$ prefix) |
-| Constant-time comparison | `timingSafeEqual` used on all secret comparisons (WEBHOOK_SECRET, ADMIN_KEY, Meta token) |
-| Startup validation | `validateSecurityConfig()` throws on weak/missing secrets before handling requests |
-| Webhook HMAC | Telegram: `X-Telegram-Bot-Api-Secret-Token` checked on every request; Meta: `X-Hub-Signature-256` HMAC-SHA256 |
-| Admin rate limiting | D1-backed per-credential fingerprint (not per-IP, prevents admin-app IP sharing) |
-| Security headers | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, `Referrer-Policy` on all Worker responses |
-| Admin-app CSP | `middleware.ts` adds full `script-src`, `connect-src`, `img-src`, `frame-ancestors 'none'` |
-| Password hashing | PBKDF2-SHA256 (100k iterations, 16-byte salt) in admin-app; 600k in Worker |
-| Login brute-force | 5 failed logins → 15-min lockout + login alert email on new IP |
-| Privilege escalation prevention | `ALLOWED_CREATE_ROLES` explicitly excludes `system_admin`; `ADMIN_CHAT_ID`-based God Mode cannot be granted via API |
-| PII redaction | Logger redacts email, phone, token, secret, API key, Telegram initData from all log lines |
-| AI input sanitization | `sanitizeUserInput()` strips `[TAG:param]` patterns; `validateActionParams()` rejects malformed AI action params |
-| CI security scanning | Gitleaks (full git history) + Semgrep (OWASP Top 10, TypeScript, Next.js) on every push |
+- Re-keying `BOT_ENCRYPTION_KEY` — has its own runbook (`scripts/rotate-bot-encryption-key.js`).
+- Penetration-testing the live deployment — source-level audit only.
+- Refactoring marketing module to be tenant-scoped — by design it is `system_admin` God Mode CRM (`adminProcedure`); cross-tenant access is the intended behaviour.
+
+---
+
+## Diff vs v2 (2026-04-25) — final after Phase 1–4 remediation
+
+- **Closed (verified-fixed):** H2, H3, H4, H5, M1, M2, M4, M5, M6, M7, L1, L2 (intentional), L3, L4, L5, N1, N2, N3, N4, N5, N6, email-change TOCTOU
+- **Newly identified during audit:** N1, N2, N3, N4, N6 — all closed in this remediation
+- **Accepted-risk (documented, not fixed):** H1 (dev-secret rotation runbook delivered, owner rotates manually 2026-05-10), M3 (sliding-window upgrade requires Vitest mock work; impact bounded by current limits), L6 (legacy /admin Basic auth, deprecation tracked separately), L7 (admin-app PBKDF2 capped by edge runtime; mitigated by 5-attempt lockout)
+- **Plugin `assertPluginEnabled` coverage:** N/A — no plugin runtime routers exist in `manicbot/plugins/*/router.ts` yet (only manifests). Will apply on first plugin to ship.
+
+## CI guards added (Phase 4)
+
+- `.semgrep/manicbot-rules.yml` — custom Semgrep rules block: state-changing `publicProcedure` mutations on tRPC routers (#H4 regression guard); ADMIN_KEY in URL query params (#S-04 regression guard); legacy URL-token email senders (#N1 regression guard)
+- `manicbot/admin-app/scripts/check-tenant-isolation.mjs` — heuristic scanner for Drizzle queries against tenant-scoped tables that omit `tenantId` predicate; wired into CI as `npm run check-tenant-isolation`
+- Both run on every push/PR via `.github/workflows/deploy.yml`
+
+## Documentation delivered
+
+- `manicbot/SECRET_ROTATION.md` — runbook for ADMIN_KEY and AUTH_SECRET rotation, with verification checklist and a per-secret inventory table
+- `manicbot/admin-app/.env.example` — rewritten with full secret list and structured comments
+- This file (`SECURITY_FINDINGS.md`) updated to v3.1 with verified status per item

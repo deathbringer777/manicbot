@@ -3,7 +3,7 @@
 import { Suspense, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, KeySquare } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { api } from "~/trpc/react";
 import {
@@ -18,8 +18,10 @@ function ResetPasswordInner() {
   const copy = authCopy[lang];
   const r = copy.resetPassword;
   const searchParams = useSearchParams();
-  const token = searchParams.get("token")?.trim() ?? "";
+  const prefilledEmail = searchParams.get("email")?.trim().toLowerCase() ?? "";
 
+  const [email, setEmail] = useState(prefilledEmail);
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -30,35 +32,19 @@ function ResetPasswordInner() {
 
   const mutation = api.webUsers.resetPassword.useMutation();
 
-  if (!token) {
-    return (
-      <AuthShell
-        eyebrow={r.kicker}
-        title={r.title}
-        description={r.description}
-        panelTitle={r.panelTitle}
-        panelDescription={r.panelDescription}
-        footer={
-          <p className="text-center text-sm">
-            <Link
-              href="/login"
-              className="font-medium text-cyan-700 transition hover:text-slate-900 dark:text-cyan-200 dark:hover:text-white"
-            >
-              {r.goLogin}
-            </Link>
-          </p>
-        }
-      >
-        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-          {r.missingToken}
-        </p>
-      </AuthShell>
-    );
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCode = code.trim();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setError(copy.shared.emailInvalid);
+      return;
+    }
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setError(r.invalidCode);
+      return;
+    }
     if (password.length < 12) {
       setError(r.passwordHint);
       return;
@@ -69,7 +55,7 @@ function ResetPasswordInner() {
     }
     startTransition(async () => {
       try {
-        await mutation.mutateAsync({ token, newPassword: password });
+        await mutation.mutateAsync({ email: cleanEmail, code: cleanCode, newPassword: password });
         setSuccess(true);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "";
@@ -102,6 +88,43 @@ function ResetPasswordInner() {
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              {r.email}
+            </label>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="salon@example.com"
+                className={authFieldWithIconsClassName}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              {r.code}
+            </label>
+            <div className="relative">
+              <KeySquare className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder={r.codePlaceholder}
+                className={authFieldWithIconsClassName}
+              />
+            </div>
+          </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
               {r.newPassword}{" "}

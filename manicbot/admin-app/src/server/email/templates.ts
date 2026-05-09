@@ -11,8 +11,10 @@ const emailCopy: Record<Lang, {
   verification: { subject: string; heading: string; body: string; cta: string; ignore: string };
   verificationCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string; copied: string };
   passwordReset: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
+  passwordResetCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
   welcome: { subject: string; heading: string; body: string; cta: string };
   emailChange: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
+  emailChangeCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
   loginAlert: { subject: string; heading: string; body: string; ip: string; time: string; warning: string };
   roleRequestAdmin: { subject: string; heading: string; body: string; from: string; to: string; reason: string; cta: string };
   roleRequestDecision: {
@@ -48,6 +50,14 @@ const emailCopy: Record<Lang, {
       ignore: "Если вы не запрашивали сброс, проигнорируйте это письмо.",
       expires: "Ссылка действует 1 час.",
     },
+    passwordResetCode: {
+      subject: "Код для сброса пароля — ManicBot",
+      heading: "Сброс пароля",
+      body: "Введите этот код в ManicBot, чтобы установить новый пароль:",
+      expires: "Код действителен 1 час.",
+      ignore: "Если вы не запрашивали сброс, проигнорируйте это письмо.",
+      copy: "Нажмите на код, чтобы выделить",
+    },
     welcome: {
       subject: "Добро пожаловать в ManicBot!",
       heading: "Добро пожаловать!",
@@ -61,6 +71,14 @@ const emailCopy: Record<Lang, {
       cta: "Подтвердить новый email",
       ignore: "Если вы не запрашивали смену, проигнорируйте это письмо.",
       expires: "Ссылка действует 1 час.",
+    },
+    emailChangeCode: {
+      subject: "Код подтверждения нового email — ManicBot",
+      heading: "Смена email",
+      body: "Введите этот код в ManicBot, чтобы подтвердить новый email:",
+      expires: "Код действителен 1 час.",
+      ignore: "Если вы не запрашивали смену, проигнорируйте это письмо.",
+      copy: "Нажмите на код, чтобы выделить",
     },
     loginAlert: {
       subject: "Вход с нового устройства — ManicBot",
@@ -86,7 +104,7 @@ const emailCopy: Record<Lang, {
       deniedHeading: "Запрос отклонён",
       approvedBody: "Ваш запрос на смену роли одобрен. Новая роль вступила в силу.",
       deniedBody: "К сожалению, ваш запрос на смену роли был отклонён.",
-      note: "Комментарий администратора",
+      note: "Администратор оставил комментарий — посмотрите его в кабинете.",
       cta: "Перейти в кабинет",
     },
     footer: "ManicBot.com — платформа для салонов красоты",
@@ -116,6 +134,14 @@ const emailCopy: Record<Lang, {
       ignore: "Якщо ви не запитували скидання, проігноруйте цей лист.",
       expires: "Посилання дійсне 1 годину.",
     },
+    passwordResetCode: {
+      subject: "Код для скидання пароля — ManicBot",
+      heading: "Скидання пароля",
+      body: "Введіть цей код у ManicBot, щоб встановити новий пароль:",
+      expires: "Код дійсний 1 годину.",
+      ignore: "Якщо ви не запитували скидання, проігноруйте цей лист.",
+      copy: "Натисніть на код, щоб виділити",
+    },
     welcome: {
       subject: "Ласкаво просимо до ManicBot!",
       heading: "Ласкаво просимо!",
@@ -129,6 +155,14 @@ const emailCopy: Record<Lang, {
       cta: "Підтвердити новий email",
       ignore: "Якщо ви не запитували зміну, проігноруйте цей лист.",
       expires: "Посилання дійсне 1 годину.",
+    },
+    emailChangeCode: {
+      subject: "Код підтвердження нового email — ManicBot",
+      heading: "Зміна email",
+      body: "Введіть цей код у ManicBot, щоб підтвердити новий email:",
+      expires: "Код дійсний 1 годину.",
+      ignore: "Якщо ви не запитували зміну, проігноруйте цей лист.",
+      copy: "Натисніть на код, щоб виділити",
     },
     loginAlert: {
       subject: "Вхід з нового пристрою — ManicBot",
@@ -154,7 +188,7 @@ const emailCopy: Record<Lang, {
       deniedHeading: "Запит відхилено",
       approvedBody: "Ваш запит на зміну ролі схвалено. Нова роль набула чинності.",
       deniedBody: "На жаль, ваш запит на зміну ролі було відхилено.",
-      note: "Коментар адміністратора",
+      note: "Адміністратор залишив коментар — перегляньте його в кабінеті.",
       cta: "Перейти до кабінету",
     },
     footer: "ManicBot.com — платформа для салонів краси",
@@ -184,6 +218,14 @@ const emailCopy: Record<Lang, {
       ignore: "If you didn't request this, ignore this email.",
       expires: "This link expires in 1 hour.",
     },
+    passwordResetCode: {
+      subject: "Password reset code — ManicBot",
+      heading: "Reset your password",
+      body: "Enter this code in ManicBot to set a new password:",
+      expires: "This code expires in 1 hour.",
+      ignore: "If you didn't request this, ignore this email.",
+      copy: "Click the code to select it",
+    },
     welcome: {
       subject: "Welcome to ManicBot!",
       heading: "Welcome!",
@@ -197,6 +239,14 @@ const emailCopy: Record<Lang, {
       cta: "Confirm new email",
       ignore: "If you didn't request this, ignore this email.",
       expires: "This link expires in 1 hour.",
+    },
+    emailChangeCode: {
+      subject: "Email change code — ManicBot",
+      heading: "Email change",
+      body: "Enter this code in ManicBot to confirm your new email:",
+      expires: "This code expires in 1 hour.",
+      ignore: "If you didn't request this, ignore this email.",
+      copy: "Click the code to select it",
     },
     loginAlert: {
       subject: "New login detected — ManicBot",
@@ -222,7 +272,7 @@ const emailCopy: Record<Lang, {
       deniedHeading: "Request Denied",
       approvedBody: "Your role change request has been approved. Your new role is now active.",
       deniedBody: "Unfortunately, your role change request has been denied.",
-      note: "Admin note",
+      note: "An admin left a note — view it in your dashboard.",
       cta: "Go to dashboard",
     },
     footer: "ManicBot.com — beauty salon platform",
@@ -252,6 +302,14 @@ const emailCopy: Record<Lang, {
       ignore: "Jeśli nie prosiłeś o reset, zignoruj tę wiadomość.",
       expires: "Link ważny 1 godzinę.",
     },
+    passwordResetCode: {
+      subject: "Kod resetowania hasła — ManicBot",
+      heading: "Resetowanie hasła",
+      body: "Wpisz ten kod w ManicBot, aby ustawić nowe hasło:",
+      expires: "Kod ważny 1 godzinę.",
+      ignore: "Jeśli nie prosiłeś o reset, zignoruj tę wiadomość.",
+      copy: "Kliknij kod, aby go zaznaczyć",
+    },
     welcome: {
       subject: "Witamy w ManicBot!",
       heading: "Witamy!",
@@ -265,6 +323,14 @@ const emailCopy: Record<Lang, {
       cta: "Potwierdź nowy email",
       ignore: "Jeśli nie prosiłeś o zmianę, zignoruj tę wiadomość.",
       expires: "Link ważny 1 godzinę.",
+    },
+    emailChangeCode: {
+      subject: "Kod potwierdzenia nowego emaila — ManicBot",
+      heading: "Zmiana emaila",
+      body: "Wpisz ten kod w ManicBot, aby potwierdzić nowy email:",
+      expires: "Kod ważny 1 godzinę.",
+      ignore: "Jeśli nie prosiłeś o zmianę, zignoruj tę wiadomość.",
+      copy: "Kliknij kod, aby go zaznaczyć",
     },
     loginAlert: {
       subject: "Nowe logowanie — ManicBot",
@@ -290,7 +356,7 @@ const emailCopy: Record<Lang, {
       deniedHeading: "Prośba odrzucona",
       approvedBody: "Twoja prośba o zmianę roli została zatwierdzona. Nowa rola jest aktywna.",
       deniedBody: "Niestety, Twoja prośba o zmianę roli została odrzucona.",
-      note: "Komentarz administratora",
+      note: "Administrator zostawił komentarz — sprawdź go w panelu.",
       cta: "Przejdź do panelu",
     },
     footer: "ManicBot.com — platforma dla salonów kosmetycznych",
@@ -378,6 +444,23 @@ export function passwordResetEmailHtml(resetUrl: string, lang: Lang): string {
   );
 }
 
+/**
+ * #N1 — code-based password reset email. Replaces the URL-based variant so
+ * tokens never appear in Referer headers, MTA logs, or browser history.
+ */
+export function passwordResetCodeEmailHtml(code: string, lang: Lang): string {
+  const c = getEmailCopy(lang).passwordResetCode;
+  const codeBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${code}</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
+  </div>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + codeBlock + muted(c.expires) + muted(c.ignore),
+    getEmailCopy(lang).footer,
+  );
+}
+
 export function welcomeEmailHtml(name: string | null, dashboardUrl: string, lang: Lang): string {
   const c = getEmailCopy(lang).welcome;
   const greeting = name ? c.heading.replace("!", `, ${name}!`) : c.heading;
@@ -401,13 +484,42 @@ export function emailChangeEmailHtml(confirmUrl: string, newEmail: string, lang:
   );
 }
 
-export function loginAlertEmailHtml(ip: string, time: string, lang: Lang): string {
+/**
+ * #N1 — code-based email-change confirmation. Replaces the URL variant so the
+ * confirmation token never appears in Referer headers, MTA logs, or browser
+ * history.
+ */
+export function emailChangeCodeEmailHtml(code: string, newEmail: string, lang: Lang): string {
+  const c = getEmailCopy(lang).emailChangeCode;
+  const codeBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${code}</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
+  </div>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) +
+    paragraph(`<strong>${newEmail}</strong>`, "#e2e8f0") +
+    codeBlock +
+    muted(c.expires) +
+    muted(c.ignore),
+    getEmailCopy(lang).footer,
+  );
+}
+
+/**
+ * #N3 — login alert email no longer embeds the raw client IP. Original
+ * design leaked rough geolocation + travel patterns to anyone with email
+ * inbox access (especially shared / forwarded mailboxes). The full IP and
+ * timestamp are still recorded server-side in `web_users.last_login_ip`
+ * and `last_login_at`; users can review their own login history in the
+ * settings panel.
+ */
+export function loginAlertEmailHtml(_ip: string, time: string, lang: Lang): string {
   const c = getEmailCopy(lang).loginAlert;
   return baseLayout(
     c.heading,
     paragraph(c.body) +
     `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
-      <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.ip}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);font-family:monospace;">${ip}</td></tr>
       <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.time}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;">${time}</td></tr>
     </table>` +
     paragraph(`<strong style="color:#f87171;">${c.warning}</strong>`),
@@ -444,6 +556,18 @@ export function roleRequestAdminEmailHtml(
   );
 }
 
+/**
+ * #N4 — role-decision email no longer embeds `adminNote` in plaintext. Admin
+ * notes are intended as internal commentary and may include security
+ * concerns or personal observations that should not be forwarded to the
+ * user (or to whoever they CC). When a note exists, we surface a generic
+ * "additional details available in your dashboard" hint and link the user
+ * to the dashboard, where the authenticated `roleChangeRequests.getMyRequest`
+ * query exposes the note only to the requester.
+ *
+ * The legacy `adminNote` parameter is still accepted for backwards-compat
+ * with callsites; the value is consumed only as a boolean signal.
+ */
 export function roleRequestDecisionEmailHtml(
   decision: "approved" | "denied",
   oldRole: string,
@@ -458,15 +582,14 @@ export function roleRequestDecisionEmailHtml(
   const roleInfo = decision === "approved"
     ? paragraph(`${oldRole} → <strong style="color:#a78bfa;">${newRole}</strong>`, "#e2e8f0")
     : "";
-  const noteBlock = adminNote
+  const noteHint = adminNote
     ? `<div style="margin:16px 0;padding:12px 16px;background-color:#1e293b;border-radius:10px;border-left:3px solid #7c3aed;">
-        <p style="margin:0 0 4px;font-size:11px;color:#94a3b8;">${c.note}</p>
-        <p style="margin:0;font-size:14px;color:#e2e8f0;">${adminNote}</p>
+        <p style="margin:0;font-size:13px;color:#94a3b8;">${c.note}</p>
       </div>`
     : "";
   return baseLayout(
     heading,
-    paragraph(body) + roleInfo + noteBlock + ctaButton(dashboardUrl, c.cta),
+    paragraph(body) + roleInfo + noteHint + ctaButton(dashboardUrl, c.cta),
     getEmailCopy(lang).footer,
   );
 }

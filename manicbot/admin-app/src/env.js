@@ -11,6 +11,12 @@ export const env = createEnv({
     WORKER_PUBLIC_URL: z.string().optional(),
     /** Worker ADMIN_KEY — for calling internal Worker APIs (appointment-action, etc.) */
     ADMIN_KEY: z.string().optional(),
+    /**
+     * AES-GCM master key for encrypting bot tokens stored in D1 `bots.token_encrypted`
+     * (#H3 — admin-app `connectBot`). MUST be the same value as the Worker secret of
+     * the same name, otherwise the Worker cannot decrypt tokens written from the UI.
+     */
+    BOT_ENCRYPTION_KEY: z.string().optional(),
     /** Shared secret used to sign short-lived upload tokens (must match Worker UPLOAD_TOKEN_SECRET) */
     UPLOAD_TOKEN_SECRET: z.string().optional(),
     /** Должны совпадать с секретами Worker META_VERIFY_TOKEN_WA / META_VERIFY_TOKEN_IG */
@@ -46,6 +52,7 @@ export const env = createEnv({
     AUTH_SECRET: process.env.AUTH_SECRET,
     WORKER_PUBLIC_URL: process.env.WORKER_PUBLIC_URL,
     ADMIN_KEY: process.env.ADMIN_KEY,
+    BOT_ENCRYPTION_KEY: process.env.BOT_ENCRYPTION_KEY,
     UPLOAD_TOKEN_SECRET: process.env.UPLOAD_TOKEN_SECRET,
     META_VERIFY_TOKEN_WA: process.env.META_VERIFY_TOKEN_WA,
     META_VERIFY_TOKEN_IG: process.env.META_VERIFY_TOKEN_IG,

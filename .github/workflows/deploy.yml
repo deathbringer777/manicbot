@@ -48,6 +48,7 @@ jobs:
             p/typescript
             p/nextjs
             p/jwt
+            .semgrep/manicbot-rules.yml
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         # Allow workflow to proceed even without Semgrep token (OSS mode)
@@ -90,6 +91,10 @@ jobs:
 
       - name: Admin app — typecheck
         run: npm run typecheck
+        working-directory: manicbot/admin-app
+
+      - name: Admin app — tenant-isolation scanner (#Phase4)
+        run: npm run check-tenant-isolation
         working-directory: manicbot/admin-app
 
       - name: Admin app — test

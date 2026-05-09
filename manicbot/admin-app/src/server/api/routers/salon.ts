@@ -13,6 +13,7 @@ import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
 import { sanitizeText } from "~/server/security/sanitize";
+import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { log } from "~/server/utils/logger";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 
@@ -766,6 +767,17 @@ export const salonRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
+      // #H3 — fail closed if BOT_ENCRYPTION_KEY is unset. Without it the encrypted
+      // token cannot be persisted, and the Worker would silently 401 every webhook.
+      // Better to refuse onboarding than to leave a bricked bot row in D1.
+      if (!env.BOT_ENCRYPTION_KEY || env.BOT_ENCRYPTION_KEY.length < 32) {
+        log.error("salon.connectBot", new Error("BOT_ENCRYPTION_KEY not configured (≥32 chars required) — refusing to register bot without encryption"));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Bot registration is temporarily unavailable. Please contact support.",
+        });
+      }
+
       // Check no existing bot
       const existing = await ctx.db
         .select({ botId: bots.botId })
@@ -803,6 +815,15 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "CONFLICT", message: "This bot is already connected to another salon." });
       }
 
+      // Encrypt the token BEFORE making any external mutations. If encryption
+      // fails (unexpected — guarded above), we don't want to register a webhook
+      // pointing at a bot we can't service.
+      const tokenEncrypted = await encryptBotTokenForWorker(input.token, env.BOT_ENCRYPTION_KEY);
+      if (!tokenEncrypted) {
+        log.error("salon.connectBot", new Error("encryptBotTokenForWorker returned null despite BOT_ENCRYPTION_KEY being present"));
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Token encryption failed. Please contact support." });
+      }
+
       // Set webhook
       const webhookUrl = `https://manicbot.com/webhook/${botId}`;
       try {
@@ -811,11 +832,13 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to set webhook: ${err.message}` });
       }
 
-      // Register bot in D1
+      // Register bot in D1 with the encrypted token so the Worker can resolve
+      // it via getBotToken on inbound webhook traffic.
       await ctx.db.insert(bots).values({
         botId,
         tenantId: input.tenantId,
         botUsername: botInfo.username ?? null,
+        tokenEncrypted,
         webhookSecret,
         active: 1,
         createdAt: now,

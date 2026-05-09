@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Mail } from "lucide-react";
+import { Mail, ArrowRight } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { api } from "~/trpc/react";
 import {
@@ -60,9 +60,17 @@ export default function ForgotPasswordPage() {
       }
     >
       {done ? (
-        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
-          {f.done}
-        </p>
+        <div className="space-y-3">
+          <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
+            {f.done}
+          </p>
+          <Link
+            href={`/reset-password?email=${encodeURIComponent(email.trim().toLowerCase())}`}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100 dark:hover:bg-cyan-500/20"
+          >
+            {copy.resetPassword.submit} <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>

@@ -24,7 +24,7 @@
 
 ### `POST /chat/init`
 
-Инициирует сессию (sessionId живёт в `localStorage` лендинга, переживает релоад).
+Инициирует сессию. `sessionId` живёт **только в памяти страницы** — каждая перезагрузка стартует новую сессию (это превью; намеренно не сохраняем переписку между визитами, чтобы вернувшийся посетитель видел welcome-анимацию, а не середину чужого бронирования).
 
 ```http
 POST /chat/init
@@ -111,12 +111,11 @@ type InlineBtn = {
 
 ## Минимальный JS-слой (vanilla, для `manicbot-analysis`)
 
-Вставить внутрь существующего iPhone-компонента вместо статичной разметки. ~60 строк без зависимостей.
+Вставить внутрь существующего iPhone-компонента вместо статичной разметки. ~50 строк без зависимостей. **Намеренно не сохраняем сессию между перезагрузками — это превью.**
 
 ```js
 const ORIGIN = 'https://manicbot.com';
 const SLUG = 'preview-landing';
-const STORAGE_KEY = `mb.chat.${SLUG}`;
 
 async function postJson(path, body) {
   const r = await fetch(ORIGIN + path, {
@@ -127,17 +126,15 @@ async function postJson(path, body) {
   return r.json();
 }
 
-let session = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-let lastTs = session?.lastTs || 0;
+// Session lives only in memory: every page reload starts fresh.
+let session = null;
+let lastTs = 0;
 
 async function init(lang = 'ru') {
-  if (!session) {
-    const res = await postJson('/chat/init', { slug: SLUG });
-    if (!res.ok) throw new Error(res.error);
-    session = { sessionId: res.sessionId, lastTs: 0 };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    await send({ text: '/start', userLang: lang });
-  }
+  const res = await postJson('/chat/init', { slug: SLUG });
+  if (!res.ok) throw new Error(res.error);
+  session = { sessionId: res.sessionId };
+  await send({ text: '/start', userLang: lang });
 }
 
 async function send({ text, callbackData, messageId, userLang = 'ru' }) {
@@ -151,8 +148,6 @@ async function send({ text, callbackData, messageId, userLang = 'ru' }) {
     if (m.ts > lastTs) lastTs = m.ts;
     render(m);
   }
-  session.lastTs = lastTs;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 }
 
 function render(m) {

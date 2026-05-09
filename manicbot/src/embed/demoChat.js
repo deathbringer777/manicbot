@@ -67,10 +67,13 @@ export const DEMO_CHAT_SRC = `
   };
   var T = I18N[LANG] || I18N.ru;
   function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
-  // Include lang in the storage key so switching languages starts a fresh
-  // session instead of continuing the old one in the wrong language.
+  // Preview is throwaway by design: every reload starts a brand-new chat so
+  // returning visitors see the welcome animation and clean booking funnel,
+  // not stale state from hours ago. STORAGE_KEY is kept ONLY to evict any
+  // legacy-version localStorage entries that returning visitors still carry.
   var STORAGE_KEY = 'mb.chat.' + SLUG + '.' + LANG;
-  var SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+  // One-time sweep on script load — drops the v1 persisted session if present.
+  try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
   var POLL_MS = 3000;
   var HISTORY_CAP = 200;
 
@@ -191,10 +194,10 @@ export const DEMO_CHAT_SRC = `
     '.mb-demo.mb-dark .mb-header{border-bottom:none}' +
     '.mb-demo.mb-dark .mb-composer{border-top:none}' +
     // ─── "Living chat" entrance animations ───────────────────────────────────
-    // The first time the widget is loaded (no persisted session), the welcome
-    // message arrives in 2-3 staged bubbles with a typing indicator between
-    // them — like a real conversation. After the welcome flow, every fresh
-    // bot or user bubble still gets a subtle fade+slide-up entrance.
+    // The widget never persists state, so every page load runs the welcome:
+    // 2-3 staged bubbles with a typing indicator between them — like a real
+    // conversation. After the welcome flow, every fresh bot or user bubble
+    // still gets a subtle fade+slide-up entrance.
     //
     // Standard easing: cubic-bezier(0.16, 1, 0.3, 1) — Apple's "ease-out-expo"
     // approximation. Snappy in, settles smoothly. Used app-wide for entrances.
@@ -224,8 +227,7 @@ export const DEMO_CHAT_SRC = `
     '.mb-header-status.mb-typing-state{color:var(--mb-bubble-user)}' +
     '.mb-header-status.mb-typing-state::before{background:currentColor;box-shadow:0 0 0 2px rgba(139,92,246,.18);animation:mb-pulse-dot 1.2s ease-in-out infinite}' +
     // Composer is hidden during the welcome flow and fades in once the last
-    // bubble + buttons have settled. Already-persisted sessions never enter
-    // the .mb-init-pending state, so the composer is visible immediately.
+    // bubble + buttons have settled.
     '.mb-composer{transition:opacity .5s cubic-bezier(.16,1,.3,1),transform .5s cubic-bezier(.16,1,.3,1)}' +
     '.mb-demo.mb-init-pending .mb-composer{pointer-events:none}' +
     // Respect user preference for reduced motion: kill every entrance keyframe
@@ -377,7 +379,7 @@ export const DEMO_CHAT_SRC = `
   }
 
   // Apply salon branding from /chat/init response: update avatar logo + display name.
-  // Safe to call multiple times; persisted branding is restored on page reload.
+  // Safe to call multiple times; called once per page load (no persistence).
   function applyBranding(salon) {
     if (!salon) return;
     currentBranding = salon;
@@ -402,31 +404,6 @@ export const DEMO_CHAT_SRC = `
     }
   }
 
-  function loadPersisted() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      var p = JSON.parse(raw);
-      if (!p || !p.sessionId) return null;
-      // Discard sessions older than SESSION_TTL_MS so visitors start fresh.
-      if (p.savedAt && (Date.now() - p.savedAt) > SESSION_TTL_MS) {
-        localStorage.removeItem(STORAGE_KEY);
-        return null;
-      }
-      return p;
-    } catch (_) { return null; }
-  }
-  function persist() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        sessionId: sessionId, lastTs: lastTs,
-        messages: messages.slice(-HISTORY_CAP),
-        branding: currentBranding,
-        savedAt: Date.now(),
-      }));
-    } catch (_) {}
-  }
-
   async function postJson(path, body) {
     var r = await fetch(ORIGIN + path, {
       method: 'POST',
@@ -449,8 +426,8 @@ export const DEMO_CHAT_SRC = `
 
   // ─── "Living chat" welcome animation ──────────────────────────────────────
   // Goal: a 2.5–3s scripted reveal that feels like a real conversation, not
-  // a slab of text dropping in at once. Plays only on a fresh session (no
-  // localStorage). Gated by prefers-reduced-motion.
+  // a slab of text dropping in at once. Plays on every page load (the demo
+  // never persists state). Gated by prefers-reduced-motion.
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
@@ -504,7 +481,6 @@ export const DEMO_CHAT_SRC = `
         messages.push(m);
         renderBubble(m);
       });
-      persist();
       return;
     }
 
@@ -559,8 +535,6 @@ export const DEMO_CHAT_SRC = `
         await sleep(Math.min(120 + totalBtns * 100, 700));
       }
     }
-
-    persist();
   }
 
   var _initRetries = 0;
@@ -595,20 +569,9 @@ export const DEMO_CHAT_SRC = `
 
   async function init() {
     if (_initInFlight || _initStopped) return;
-    var persisted = loadPersisted();
-    if (persisted) {
-      sessionId = persisted.sessionId;
-      lastTs = persisted.lastTs || 0;
-      // Restore salon branding so the avatar/name are correct without a network call.
-      if (persisted.branding) applyBranding(persisted.branding);
-      (persisted.messages || []).forEach(function (m) {
-        messages.push(m);
-        renderBubble(m);
-      });
-      return;
-    }
     _initInFlight = true;
-    // Fresh session — play the staged "living chat" welcome animation.
+    // Always a fresh session — preview never persists, so each load plays
+    // the staged "living chat" welcome animation from scratch.
     root.classList.add('mb-init-pending');
     setHeaderTypingState(true);
     try {
@@ -626,7 +589,6 @@ export const DEMO_CHAT_SRC = `
       if (res.salon) applyBranding(res.salon);
       _initRetries = 0;
       if (_initRetryTimer) { clearTimeout(_initRetryTimer); _initRetryTimer = null; }
-      persist();
 
       // Issue /start and let the staged renderer take over the response.
       // We bypass sendRaw() so the messages aren't rendered immediately.
@@ -650,7 +612,6 @@ export const DEMO_CHAT_SRC = `
 
       setHeaderTypingState(false);
       root.classList.remove('mb-init-pending');
-      persist();
     } catch (e) {
       // Init failed — drop the welcome chrome state so the user isn't stuck
       // on a "typing…" header forever, and reveal the composer for a manual
@@ -726,7 +687,6 @@ export const DEMO_CHAT_SRC = `
         // Fresh bot reply — fade+slide-up entrance for that "alive" feel.
         renderBubble(m, { animate: true });
       });
-      persist();
     } catch (e) {
       hideTyping();
       console.error('[mb-demo] send failed:', e);
@@ -746,7 +706,6 @@ export const DEMO_CHAT_SRC = `
     };
     messages.push(msg);
     renderBubble(msg, { animate: true });
-    persist();
   }
 
   function escapeHtml(s) {
@@ -889,7 +848,6 @@ export const DEMO_CHAT_SRC = `
           messages.push(m);
           renderBubble(m, { animate: true });
         });
-        persist();
       }
     } catch (_) {
       _pollFails++;

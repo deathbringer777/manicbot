@@ -336,6 +336,162 @@ describe("CalendarLeftRail", () => {
     });
   });
 
+  // ── Status filter section ─────────────────────────────────────────
+  describe("Status filter section", () => {
+    it("renders one toggle per status when hiddenStatuses + handler are passed", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          hiddenStatuses={new Set()}
+          toggleStatusVisible={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.getByTestId("rail-status-filter")).toBeTruthy();
+      const toggles = screen.getAllByTestId("rail-status-toggle");
+      const statuses = toggles.map((t) => t.getAttribute("data-status"));
+      expect(statuses).toEqual(["pending", "confirmed", "cancelled", "no_show", "done"]);
+      expect(toggles.every((t) => t.getAttribute("data-visible") === "1")).toBe(true);
+    });
+
+    it("hides toggle visually when status is in hiddenStatuses", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          hiddenStatuses={new Set(["cancelled"]) as Set<any>}
+          toggleStatusVisible={() => undefined}
+        />,
+        "en",
+      );
+      const toggles = screen.getAllByTestId("rail-status-toggle");
+      const cancelled = toggles.find((t) => t.getAttribute("data-status") === "cancelled");
+      const confirmed = toggles.find((t) => t.getAttribute("data-status") === "confirmed");
+      expect(cancelled?.getAttribute("data-visible")).toBe("0");
+      expect(confirmed?.getAttribute("data-visible")).toBe("1");
+    });
+
+    it("clicking a status toggle calls toggleStatusVisible with the status key", () => {
+      const toggleStatusVisible = vi.fn();
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          hiddenStatuses={new Set()}
+          toggleStatusVisible={toggleStatusVisible}
+        />,
+        "en",
+      );
+      const toggles = screen.getAllByTestId("rail-status-toggle");
+      const pending = toggles.find((t) => t.getAttribute("data-status") === "pending");
+      fireEvent.click(pending!);
+      expect(toggleStatusVisible).toHaveBeenCalledWith("pending");
+    });
+
+    it("Show all link only appears when at least one status is hidden", () => {
+      const { rerender } = renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          hiddenStatuses={new Set()}
+          toggleStatusVisible={() => undefined}
+          showAllStatuses={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-show-all-statuses")).toBeNull();
+      rerender(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          hiddenStatuses={new Set(["pending"]) as Set<any>}
+          toggleStatusVisible={() => undefined}
+          showAllStatuses={() => undefined}
+        />,
+      );
+      expect(screen.getByTestId("rail-show-all-statuses")).toBeTruthy();
+    });
+
+    it("does NOT render Status filter when no handler passed", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-status-filter")).toBeNull();
+    });
+  });
+
+  // ── Service filter section ────────────────────────────────────────
+  describe("Service filter section", () => {
+    const services = [
+      { svcId: "manicure_classic", name: "Classic manicure", count: 3 },
+      { svcId: "gel_polish", name: "Gel polish", count: 5 },
+      { svcId: "pedicure_spa", name: "Pedicure spa" },
+    ];
+
+    it("renders one toggle per service", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          services={services}
+          hiddenServiceIds={new Set()}
+          toggleServiceVisible={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.getByTestId("rail-service-filter")).toBeTruthy();
+      const toggles = screen.getAllByTestId("rail-service-toggle");
+      expect(toggles.length).toBe(3);
+      expect(toggles[0]?.getAttribute("data-service-id")).toBe("manicure_classic");
+    });
+
+    it("does NOT render when services list is empty", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          services={[]}
+          hiddenServiceIds={new Set()}
+          toggleServiceVisible={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-service-filter")).toBeNull();
+    });
+
+    it("clicking a service toggle calls toggleServiceVisible with the svcId", () => {
+      const toggleServiceVisible = vi.fn();
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          services={services}
+          hiddenServiceIds={new Set()}
+          toggleServiceVisible={toggleServiceVisible}
+        />,
+        "en",
+      );
+      const toggles = screen.getAllByTestId("rail-service-toggle");
+      const gel = toggles.find((t) => t.getAttribute("data-service-id") === "gel_polish");
+      fireEvent.click(gel!);
+      expect(toggleServiceVisible).toHaveBeenCalledWith("gel_polish");
+    });
+  });
+
   it("renders Mon-anchored weekday header (Monday in column 0)", () => {
     renderWithLang(
       <CalendarLeftRail

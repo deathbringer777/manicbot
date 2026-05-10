@@ -1446,7 +1446,48 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // read from the same source. localStorage-backed so the owner's
   // preference survives reloads.
   const masterVis = useMasterVisibility();
-  const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
+  // Calendar/agenda filter state — local to the appointments tab. Status
+  // filter persists on page reload via localStorage so the user's choice
+  // survives refresh; service filter is session-local since the service
+  // catalog can change.
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("manicbot_apt_hidden_statuses");
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set<string>(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleStatusHidden = (s: string) => {
+    setHiddenStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      try { window.localStorage.setItem("manicbot_apt_hidden_statuses", JSON.stringify(Array.from(next))); } catch { /* noop */ }
+      return next;
+    });
+  };
+  const showAllStatuses = () => {
+    setHiddenStatuses(new Set());
+    try { window.localStorage.setItem("manicbot_apt_hidden_statuses", "[]"); } catch { /* noop */ }
+  };
+  const [hiddenServiceIds, setHiddenServiceIds] = useState<Set<string>>(new Set());
+  const toggleServiceHidden = (svcId: string) => {
+    setHiddenServiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(svcId)) next.delete(svcId);
+      else next.add(svcId);
+      return next;
+    });
+  };
+  const showAllServices = () => setHiddenServiceIds(new Set());
+  // Services list is needed in the appointments tab too — we use it both
+  // for the rail filter and to look up service display names in the
+  // agenda/list rows.
+  const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
@@ -1660,10 +1701,63 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       )}
 
       {/* ── APPOINTMENTS ── */}
-      {tab === "appointments" && (
+      {tab === "appointments" && (() => {
+        // ── Service catalog → rail items + name lookup ────────────────
+        const svcRows = (svcList.data ?? []) as Array<{ svcId: string; names?: string | null; active?: number }>;
+        const parseSvcName = (raw: string | null | undefined, fallback: string): string => {
+          if (!raw) return fallback;
+          const trimmed = raw.trim();
+          if (!trimmed) return fallback;
+          if (trimmed.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(trimmed) as Record<string, string>;
+              return parsed[lang] ?? parsed.en ?? parsed.ru ?? Object.values(parsed)[0] ?? fallback;
+            } catch {
+              return trimmed;
+            }
+          }
+          return trimmed;
+        };
+        const serviceNames: Record<string, string> = {};
+        const serviceRailItems = svcRows
+          .filter((s) => s.active !== 0)
+          .map((s) => {
+            const name = parseSvcName(s.names ?? null, s.svcId);
+            serviceNames[s.svcId] = name;
+            return { svcId: s.svcId, name };
+          });
+
+        // ── Apply filters to whichever apt set we're rendering ────────
+        const filterApt = (a: any): boolean => {
+          const status = a.noShow
+            ? "no_show"
+            : a.cancelled || a.status === "cancelled" || a.status === "rejected"
+              ? "cancelled"
+              : a.status === "done"
+                ? "done"
+                : a.status === "confirmed"
+                  ? "confirmed"
+                  : "pending";
+          if (hiddenStatuses.has(status)) return false;
+          if (a.svcId && hiddenServiceIds.has(a.svcId)) return false;
+          if (a.masterId != null && masterVis.hiddenMasterIds.has(Number(a.masterId))) return false;
+          return true;
+        };
+        const filtersActive =
+          hiddenStatuses.size > 0 ||
+          hiddenServiceIds.size > 0 ||
+          masterVis.hiddenMasterIds.size > 0;
+
+        const aptsFiltered = (apts.data ?? []).filter(filterApt);
+        const dayAptsFiltered = (dayApts.data ?? []).filter(filterApt);
+        const weekAptsFiltered = (weekApts.data ?? []).filter(filterApt);
+        const calAptsFiltered = (calApts.data ?? []).filter(filterApt);
+
+        return (
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Left rail — mini-month + my calendars + auto-confirm + jump-by-week.
-              GCal/Booksy-parity vertical stack. Desktop only. */}
+          {/* Left rail — mini-month + my calendars + status / services filters
+              + auto-confirm + jump-by-week. GCal/Booksy-parity vertical stack.
+              Desktop only. */}
           <CalendarLeftRail
             selectedDate={calViewDate}
             setSelectedDate={setCalViewDate}
@@ -1675,13 +1769,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             hiddenMasterIds={masterVis.hiddenMasterIds}
             toggleMasterVisible={masterVis.toggleMasterVisible}
             showAllMasters={masterVis.showAllMasters}
+            hiddenStatuses={hiddenStatuses as Set<any>}
+            toggleStatusVisible={(s) => toggleStatusHidden(s)}
+            showAllStatuses={showAllStatuses}
+            services={serviceRailItems}
+            hiddenServiceIds={hiddenServiceIds}
+            toggleServiceVisible={toggleServiceHidden}
+            showAllServices={showAllServices}
             autoConfirm={autoConfirmQuery.data}
             autoConfirmLoading={autoConfirmMut.isPending}
             setAutoConfirm={(channel, enabled) =>
               autoConfirmMut.mutate({ tenantId, channel, enabled })
             }
           />
-
           {/* Main column — header + view */}
           <div className="flex-1 min-w-0 space-y-3">
           <div className="flex items-center justify-between">
@@ -1729,7 +1829,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "calendar" && (
             <SalonBigCalendar
-              apts={calApts.data ?? []}
+              apts={calAptsFiltered}
               viewDate={calViewDate}
               setViewDate={setCalViewDate}
               selectedDay={selectedDay}
@@ -1745,7 +1845,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             <SalonDayView
               date={calViewDate}
               setDate={setCalViewDate}
-              apts={dayApts.data ?? []}
+              apts={dayAptsFiltered}
               masters={(mastersList.data ?? []) as any}
               isLoading={dayApts.isLoading || mastersList.isLoading}
               lang={lang}
@@ -1761,7 +1861,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             <SalonWeekView
               date={calViewDate}
               setDate={setCalViewDate}
-              apts={weekApts.data ?? []}
+              apts={weekAptsFiltered}
               masters={(mastersList.data ?? []) as any}
               isLoading={weekApts.isLoading || mastersList.isLoading}
               lang={lang}
@@ -1772,11 +1872,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "agenda" && (
             <SalonAgendaView
-              apts={apts.data ?? []}
+              apts={aptsFiltered}
               isLoading={apts.isLoading}
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+              masters={(mastersList.data ?? []).map((m: any) => ({ chatId: m.chatId, name: m.name }))}
+              serviceNames={serviceNames}
+              filtersActive={filtersActive && (apts.data?.length ?? 0) > 0}
             />
           )}
 
@@ -1785,18 +1888,22 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
               {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
               <div className="space-y-2">
-                {apts.data?.map((a: any) => (
+                {aptsFiltered.map((a: any) => (
                   <AptCard key={a.id} a={a} lang={lang}
                     onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
                     onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
                 ))}
-                {apts.data?.length === 0 && <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />}
+                {aptsFiltered.length === 0 && (apts.data?.length ?? 0) > 0 && filtersActive && (
+                  <EmptyState icon={CalendarDays} title={t("salon.agenda.allFiltered", lang)} description={t("salon.agenda.allFilteredHint", lang)} />
+                )}
+                {(apts.data?.length ?? 0) === 0 && <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />}
               </div>
             </>
           )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── SERVICES ── */}
       {tab === "services" && (

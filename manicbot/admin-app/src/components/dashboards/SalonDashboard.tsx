@@ -15,6 +15,9 @@ import { Shell, type NavItem } from "~/components/layout/Shell";
 import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
+import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
+import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
+import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1269,12 +1272,15 @@ function SalonBigCalendar({
                 <div className="flex flex-col gap-0.5 w-full">
                   {visible.map((a: any) => {
                     const sk = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
+                    // Per-status chip colors with explicit light-theme variants
+                    // so Month grid is readable on the white surface (the
+                    // text-*-300 tones are barely visible without dark:).
                     const chipColor =
-                      sk === "pending" ? "bg-amber-500/20 text-amber-300"
-                      : sk === "confirmed" ? "bg-emerald-500/20 text-emerald-300"
-                      : sk === "done" ? "bg-brand-500/20 text-brand-300"
-                      : sk === "no_show" ? "bg-orange-500/20 text-orange-300"
-                      : "bg-slate-700/40 text-slate-400";
+                      sk === "pending" ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                      : sk === "confirmed" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      : sk === "done" ? "bg-brand-500/20 text-brand-700 dark:text-brand-300"
+                      : sk === "no_show" ? "bg-orange-500/20 text-orange-700 dark:text-orange-300"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-700/40 dark:text-slate-400";
                     return (
                       <div key={a.id} className={`text-[9px] leading-tight rounded px-1 py-0.5 truncate font-medium ${chipColor}`}>
                         {a.time} {a.userName ?? a.userTg ?? ""}
@@ -1550,18 +1556,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         ))}
       </div>}
 
-      {/* Floating "+ New booking" button — visible on Overview / Appointments / Clients */}
+      {/* Floating quick-add menu — visible on Overview / Appointments / Clients.
+          Booksy-parity: New booking + (soon) Time reservation + (soon) Time off. */}
       {(tab === "overview" || tab === "appointments" || tab === "clients") && (
-        <button
-          type="button"
-          onClick={() => setManualBookingOpen(true)}
-          className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(124,58,237,0.55)] transition hover:scale-105 active:scale-95 sm:bottom-6 sm:right-6 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
-          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
-          aria-label={t("appointments.newBooking", lang)}
-        >
-          <Plus className="h-6 w-6 sm:hidden" />
-          <span className="hidden sm:inline">+ {t("appointments.newBooking", lang)}</span>
-        </button>
+        <QuickAddFab
+          lang={lang}
+          onNewBooking={() => setManualBookingOpen(true)}
+        />
       )}
 
       {manualBookingOpen && (
@@ -1579,6 +1580,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
+          {overview.data?.profileCompleteness && (
+            <ProfileCompletenessCard
+              lang={lang}
+              signals={overview.data.profileCompleteness}
+              onJumpToTab={(target) => setTab(target as Tab)}
+            />
+          )}
           {overview.isLoading ? (
             <div className="grid grid-cols-2 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
           ) : overview.isError ? (
@@ -1639,7 +1647,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── APPOINTMENTS ── */}
       {tab === "appointments" && (
-        <div className="space-y-3">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Left rail — mini-month + Jump By Week (desktop only). */}
+          <CalendarLeftRail
+            selectedDate={calViewDate}
+            setSelectedDate={setCalViewDate}
+            lang={lang}
+          />
+
+          {/* Main column — header + view */}
+          <div className="flex-1 min-w-0 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
             <div className="flex items-center gap-2">
@@ -1747,6 +1764,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               </div>
             </>
           )}
+          </div>
         </div>
       )}
 

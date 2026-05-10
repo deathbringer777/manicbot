@@ -418,7 +418,14 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               <div
                 data-tour="web-content"
                 className={`relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto w-full flex-1 ${
-                  pathname.startsWith("/settings") ? "max-w-none" : "max-w-7xl"
+                  // Full-width pages: settings + the appointments calendar.
+                  // The calendar needs every horizontal pixel for the
+                  // master-column grid + left rail (matches Booksy / GCal
+                  // layouts at desktop sizes).
+                  pathname.startsWith("/settings") ||
+                  (pathname.startsWith("/dashboard") && searchParams?.get("tab") === "appointments")
+                    ? "max-w-none"
+                    : "max-w-7xl"
                 }`}
               >
                 {children}

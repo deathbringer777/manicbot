@@ -310,6 +310,85 @@ describe("SalonDayView", () => {
     expect(screen.getByTestId("day-view-show-all-masters")).toBeTruthy();
   });
 
+  it("renders striped non-working hours overlay for masters with a work window", () => {
+    // Anna works Mon–Sat 09:00–19:00, no Sun. Testing on Sun 2026-05-10 →
+    // her column is fully closed, so a single hatching block spans the
+    // whole body height.
+    const annaSundayClosed = [
+      { chatId: 100, name: "Anna", workHours: '{"mon":"09:00-19:00","tue":"09:00-19:00","wed":"09:00-19:00","thu":"09:00-19:00","fri":"09:00-19:00","sat":"10:00-18:00"}' },
+    ];
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")} // Sunday
+        setDate={() => undefined}
+        apts={[]}
+        masters={annaSundayClosed}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const overlays = screen.getAllByTestId("day-view-non-working");
+    // Closed all day → exactly one overlay block.
+    expect(overlays.length).toBe(1);
+  });
+
+  it("renders TWO hatching blocks (above + below) when master works a partial window", () => {
+    // Anna works 09:00–18:00 on Mon — hatching above 09:00 and below 18:00.
+    const annaMonPartial = [
+      { chatId: 100, name: "Anna", workHours: '{"mon":"09:00-18:00"}' },
+    ];
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-04T12:00:00")} // Monday
+        setDate={() => undefined}
+        apts={[]}
+        masters={annaMonPartial}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const overlays = screen.getAllByTestId("day-view-non-working");
+    // 08:00–09:00 (top) + 18:00–22:00 (bottom) = 2 blocks.
+    expect(overlays.length).toBe(2);
+  });
+
+  it("does NOT render hatching when work_hours is missing or null", () => {
+    const noHours = [{ chatId: 100, name: "Anna", workHours: null }];
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-04T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={noHours}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.queryAllByTestId("day-view-non-working").length).toBe(0);
+  });
+
+  it("supports the legacy {from, to} global work_hours shape", () => {
+    // Numeric from/to (legacy), e.g. open 10–18.
+    const legacy = [{ chatId: 100, name: "Anna", workHours: '{"from":10,"to":18}' }];
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-04T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={legacy}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const overlays = screen.getAllByTestId("day-view-non-working");
+    // 08:00–10:00 (top) + 18:00–22:00 (bottom) = 2 blocks.
+    expect(overlays.length).toBe(2);
+  });
+
   it("groups multiple appointments under the same master column", () => {
     renderWithLang(
       <SalonDayView

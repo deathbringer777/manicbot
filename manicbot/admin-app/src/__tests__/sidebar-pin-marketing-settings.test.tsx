@@ -94,14 +94,17 @@ describe("WebShell — pinned plugins live below the nav groups", () => {
 });
 
 describe("WebShell — Settings pages use the full content width", () => {
-  it("content wrapper is pathname-aware (max-w-none on /settings)", () => {
-    expect(WEBSHELL_SRC).toMatch(
-      /pathname\.startsWith\(["']\/settings["']\)\s*\?\s*["']max-w-none["']\s*:\s*["']max-w-7xl["']/,
-    );
+  it("content wrapper checks for /settings to drop the gutter", () => {
+    // The condition can be a single startsWith or a multi-clause OR (after
+    // adding /dashboard?tab=appointments). Just pin the marker tokens.
+    expect(WEBSHELL_SRC).toMatch(/pathname\.startsWith\(["']\/settings["']\)/);
+    expect(WEBSHELL_SRC).toMatch(/["']max-w-none["']/);
+    expect(WEBSHELL_SRC).toMatch(/["']max-w-7xl["']/);
   });
 
-  it("the regular non-settings route keeps the existing max-w-7xl gutter", () => {
-    // Make sure we did not accidentally drop max-w-7xl for everything.
-    expect(WEBSHELL_SRC).toMatch(/max-w-7xl/);
+  it("appointments tab also drops the gutter so the calendar grid spans full width", () => {
+    // Calendar full-width was added together with the left rail.
+    expect(WEBSHELL_SRC).toMatch(/searchParams[\s\S]{0,60}["']tab["']/);
+    expect(WEBSHELL_SRC).toMatch(/["']appointments["']/);
   });
 });

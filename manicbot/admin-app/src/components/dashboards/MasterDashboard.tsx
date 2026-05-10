@@ -206,6 +206,9 @@ export function MasterDashboard({
   const updateDelegation = api.master.updateDelegation.useMutation({
     onSuccess: () => { utils.master.getMyProfile.invalidate(); },
   });
+  const updateCalendarVisibility = api.master.updateCalendarVisibility.useMutation({
+    onSuccess: () => { utils.master.getMyProfile.invalidate(); },
+  });
   const markNoShowMut = api.master.markNoShow.useMutation({
     onSuccess: () => { today.refetch(); schedule.refetch(); },
   });
@@ -854,6 +857,47 @@ export function MasterDashboard({
                   : <><Lock className="h-3.5 w-3.5" /> {t("delegation.disabled", lang)}</>
                 }
               </p>
+            </div>
+          )}
+
+          {/* Calendar visibility — master-owned setting (migration 0049). */}
+          {/* Salon owner always sees regardless. Personal-tenant masters skip this (no peers). */}
+          {!isPersonal && !isDelegating && profile.data && (
+            <div className="glass-card rounded-2xl p-4 space-y-3" data-testid="master-calendar-visibility">
+              <div>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                  {t("master.calendar.visibility.title", lang)}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {t("master.calendar.visibility.desc", lang)}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {(["salon_only", "salon_and_peers"] as const).map((opt) => {
+                  const current = ((profile.data as any).calendarVisibility as string | undefined) ?? "salon_only";
+                  const isActive = current === opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      data-testid={`calendar-visibility-${opt}`}
+                      data-active={isActive ? "1" : "0"}
+                      onClick={() => updateCalendarVisibility.mutate({ tenantId, masterId, visibility: opt })}
+                      disabled={updateCalendarVisibility.isPending || isActive}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all ${
+                        isActive
+                          ? "border-brand-500/40 bg-brand-500/10 text-brand-700 dark:text-brand-300"
+                          : "border-slate-200 dark:border-white/10 bg-white/40 dark:bg-white/[0.02] text-slate-700 dark:text-slate-300 hover:border-brand-500/30"
+                      }`}
+                    >
+                      <span className="text-xs font-medium">
+                        {t(`master.calendar.visibility.${opt === "salon_and_peers" ? "peers" : "salonOnly"}` as any, lang)}
+                      </span>
+                      {isActive && <span className="h-2 w-2 rounded-full bg-brand-500" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

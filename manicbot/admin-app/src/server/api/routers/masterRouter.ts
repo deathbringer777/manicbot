@@ -100,6 +100,51 @@ export const masterRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  /**
+   * Master-owned setting (migration 0049). Controls peer-to-peer calendar
+   * visibility within the tenant. The salon owner always sees all masters'
+   * calendars regardless of this value (enforced elsewhere).
+   *
+   * Role gating:
+   *   - master:        may set their OWN row only (IDOR-guarded).
+   *   - tenant_owner:  rejected. Masters own this toggle by design.
+   *   - system_admin:  may set any row (support escalation path).
+   */
+  updateCalendarVisibility: masterProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number(),
+      visibility: z.enum(["private", "salon_only", "salon_and_peers"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const role = ctx.webUser.webRole;
+      if (role !== "master" && role !== "system_admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the master themselves can change calendar visibility",
+        });
+      }
+      // For master role: enforce same-tenant + own-row binding (IDOR).
+      // system_admin skips both gates.
+      if (role === "master") {
+        if (ctx.webUser.tenantId !== input.tenantId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only the master themselves can change calendar visibility",
+          });
+        }
+        await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      }
+      await ctx.db.update(masters)
+        .set({ calendarVisibility: input.visibility })
+        .where(and(
+          eq(masters.tenantId, input.tenantId),
+          eq(masters.chatId, input.masterId),
+        ));
+      return { success: true };
+    }),
+
 
   getMySchedule: masterProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.number() }))

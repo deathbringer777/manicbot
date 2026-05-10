@@ -5,13 +5,14 @@ import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
-  Loader2, Plus, Pencil, Trash2, Save, X, List,
+  Loader2, Plus, Pencil, Trash2, Save, X, List, AlignLeft,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
 } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
+import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1352,7 +1353,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
   }, [resolvedSalonTab, inWeb, forceTab]);
-  const [aptViewMode, setAptViewMode] = useState<"calendar" | "list">("calendar");
+  const [aptViewMode, setAptViewMode] = useState<"calendar" | "list" | "agenda">("calendar");
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
@@ -1381,7 +1382,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
   const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
-  const apts = api.salon.getAppointments.useQuery({ tenantId }, { enabled: tab === "appointments" && aptViewMode === "list" });
+  const apts = api.salon.getAppointments.useQuery({ tenantId }, { enabled: tab === "appointments" && (aptViewMode === "list" || aptViewMode === "agenda") });
 
   // Calendar data: full month
   const calYear = calViewDate.getFullYear();
@@ -1611,13 +1612,24 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
             <div className="flex items-center gap-2">
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5">
+              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5" data-testid="apt-view-mode-switcher">
                 <button onClick={() => setAptViewMode("calendar")}
+                  data-testid="apt-view-mode-calendar"
+                  data-active={aptViewMode === "calendar" ? "1" : "0"}
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "calendar" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
                   <CalendarDays className="w-3.5 h-3.5" />
                   {t("salon.cal.calendar", lang)}
                 </button>
+                <button onClick={() => setAptViewMode("agenda")}
+                  data-testid="apt-view-mode-agenda"
+                  data-active={aptViewMode === "agenda" ? "1" : "0"}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "agenda" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
+                  <AlignLeft className="w-3.5 h-3.5" />
+                  {t("salon.cal.agenda", lang)}
+                </button>
                 <button onClick={() => setAptViewMode("list")}
+                  data-testid="apt-view-mode-list"
+                  data-active={aptViewMode === "list" ? "1" : "0"}
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "list" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
                   <List className="w-3.5 h-3.5" />
                   {t("salon.cal.list", lang)}
@@ -1634,6 +1646,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               selectedDay={selectedDay}
               setSelectedDay={setSelectedDay}
               isLoading={calApts.isFetching}
+              lang={lang}
+              onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+              onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+            />
+          )}
+
+          {aptViewMode === "agenda" && (
+            <SalonAgendaView
+              apts={apts.data ?? []}
+              isLoading={apts.isLoading}
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}

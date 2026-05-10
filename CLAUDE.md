@@ -90,6 +90,7 @@ Recent migrations:
 - `0033_is_test_flag.sql` — `is_test` column on `tenants` (synthetic accounts created by `npm run seed:test-accounts`; surfaced in `auth.getMyRole.isTest`, `publicSalon.search`, `tenants.getAll({ test })`, and a yellow `TEST` badge in the admin/public UI). Roster lives in [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
 - `0034_tenant_manager.sql` — `tenant_member_permissions`, `tenant_action_requests`, `permission_elevation_codes` for the `tenant_manager` role.
 - `0035_plugins.sql` — `plugin_installations` (install rows, platform- or tenant-scoped) and `plugin_events` (immutable audit trail). Powers the Plugin Marketplace — see [Plugin Marketplace](#plugin-marketplace) below.
+- `0049_master_calendar_visibility.sql` — `calendar_visibility` column on `masters` (`'private' | 'salon_only' | 'salon_and_peers'`, default `salon_only`). Master-owned setting that governs peer-to-peer calendar sharing within a tenant. Salon owner visibility is unaffected (always sees, enforced by tRPC guards). Toggle UI lives in `MasterDashboard` profile tab; tRPC mutation `master.updateCalendarVisibility` rejects writes from `tenant_owner` (master owns the toggle by design); `system_admin` may override for support escalation. Note: 0036–0048 are existing migrations; 0040/0041 gap is intentional.
 
 ---
 
@@ -121,7 +122,7 @@ Billing models: `free | included_in_plan (→ canUse) | paid_addon_monthly | pai
 
 Lock precedence (catalog UI): `coming_soon` > `role_mismatch` > `platform_only` > `plan` > `none`.
 
-Seed catalog: 30 first-party plugins across 6 role buckets (5 universal) — see `manicbot/plugins/registry.ts`.
+Seed catalog: 22 first-party plugins across 6 role buckets — see `manicbot/plugins/registry.ts`.
 
 ---
 

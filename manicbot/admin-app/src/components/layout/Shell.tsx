@@ -8,6 +8,7 @@ import {
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
   X, Scissors, HeadphonesIcon, Globe, MessageSquare,
   Lock, Unlock, Radio, ArrowLeftRight, Megaphone,
+  Maximize2, Minimize2, Sun, Moon,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -444,6 +445,103 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
   );
 }
 
+// ─── Theme + Fullscreen hooks (desktop top bar) ──────────────────
+const THEME_STORAGE_KEY = "manicbot_web_theme";
+
+/**
+ * Toggle the dashboard theme by flipping `.dark` on <html> and persisting
+ * to localStorage. Mirrors the public PublicThemeProvider key so both
+ * surfaces stay in sync.
+ */
+function useDashboardTheme(): { isDark: boolean; toggle: () => void } {
+  const [isDark, setIsDark] = useState(true);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    setIsDark(document.documentElement.classList.contains("dark"));
+  }, []);
+  const toggle = () => {
+    if (typeof document === "undefined") return;
+    const next = !document.documentElement.classList.contains("dark");
+    document.documentElement.classList.toggle("dark", next);
+    document.documentElement.style.colorScheme = next ? "dark" : "light";
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light");
+    } catch {
+      /* ignore */
+    }
+    setIsDark(next);
+  };
+  return { isDark, toggle };
+}
+
+/**
+ * Browser Fullscreen API wrapper. Fullscreen mode is essential for the
+ * "salon OS" experience (e.g., dashboard on a reception desk iPad).
+ */
+function useFullscreen(): { isFullscreen: boolean; toggle: () => void } {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  const toggle = () => {
+    if (typeof document === "undefined") return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+    } else {
+      document.documentElement.requestFullscreen().catch(() => undefined);
+    }
+  };
+  return { isFullscreen, toggle };
+}
+
+/**
+ * Desktop-only top bar: page title + theme toggle + fullscreen toggle.
+ * Mobile keeps its own header (the existing one).
+ */
+function DashboardTopBar({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { isDark, toggle: toggleTheme } = useDashboardTheme();
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const { lang } = useLang();
+
+  return (
+    <header
+      data-testid="dashboard-top-bar"
+      className="hidden md:flex items-center gap-3 px-6 py-3 border-b border-slate-200 dark:border-white/5 bg-white/80 dark:bg-slate-950/60 backdrop-blur-lg sticky top-0 z-30"
+    >
+      <div className="min-w-0 flex-1">
+        <h1 className="text-sm font-semibold text-slate-900 dark:text-white truncate">{title}</h1>
+        {subtitle && <p className="text-[11px] text-slate-500 truncate">{subtitle}</p>}
+      </div>
+
+      <button
+        type="button"
+        onClick={toggleTheme}
+        title={isDark ? t("topbar.lightMode", lang) : t("topbar.darkMode", lang)}
+        aria-label={isDark ? t("topbar.lightMode", lang) : t("topbar.darkMode", lang)}
+        data-testid="topbar-theme-toggle"
+        className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors"
+      >
+        {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
+
+      <button
+        type="button"
+        onClick={toggleFullscreen}
+        title={isFullscreen ? t("topbar.exitFullscreen", lang) : t("topbar.enterFullscreen", lang)}
+        aria-label={isFullscreen ? t("topbar.exitFullscreen", lang) : t("topbar.enterFullscreen", lang)}
+        aria-pressed={isFullscreen}
+        data-testid="topbar-fullscreen-toggle"
+        className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors"
+      >
+        {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+      </button>
+    </header>
+  );
+}
+
 // ─── Shell Component ─────────────────────────────────────────────
 interface ShellProps {
   children: React.ReactNode;
@@ -540,6 +638,9 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
       {/* ── Main Content ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Desktop Top Bar (sticky, with fullscreen + theme toggle) */}
+        <DashboardTopBar title={displayTitle} subtitle={subtitle} />
+
         {/* Mobile Header */}
         <header className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/5 bg-white/95 dark:bg-slate-950/80 backdrop-blur-lg sticky top-0 z-40">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 shrink-0">

@@ -871,3 +871,22 @@ CREATE TABLE IF NOT EXISTS error_log (
 CREATE INDEX IF NOT EXISTS idx_error_log_created_at ON error_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_error_log_source     ON error_log(source, created_at);
 CREATE INDEX IF NOT EXISTS idx_error_log_user       ON error_log(user_id, created_at);
+
+-- ─── Cookie consent audit trail (migration 0049) ─────────────────────────
+-- APPEND-ONLY. Each banner decision (Accept All / Only Necessary / future
+-- per-category) inserts a row. The application never UPDATEs or DELETEs.
+-- See migrations/0049_cookie_consent_log.sql for full rationale.
+CREATE TABLE IF NOT EXISTS cookie_consent_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  anonymous_id  TEXT NOT NULL,
+  web_user_id   TEXT,
+  categories    TEXT NOT NULL,
+  policy_version TEXT NOT NULL,
+  source        TEXT,
+  ip            TEXT,
+  user_agent    TEXT,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cookie_consent_anon    ON cookie_consent_log(anonymous_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_cookie_consent_user    ON cookie_consent_log(web_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_cookie_consent_created ON cookie_consent_log(created_at);

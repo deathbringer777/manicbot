@@ -867,3 +867,24 @@ export const errorLog = sqliteTable("error_log", {
   index("idx_error_log_source").on(t.source, t.createdAt),
   index("idx_error_log_user").on(t.userId, t.createdAt),
 ]);
+
+// ─── Cookie consent log (migration 0049) ─────────────────────────────────
+// APPEND-ONLY audit trail of cookie banner decisions. The application never
+// UPDATEs or DELETEs. Tracking activation MUST consult this table — never the
+// localStorage cache alone — so a tampered client cannot enable analytics.
+// Distinct from `marketing_consent_log` (email/SMS opt-ins keyed by contact_id).
+export const cookieConsentLog = sqliteTable("cookie_consent_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  anonymousId: text("anonymous_id").notNull(),
+  webUserId: text("web_user_id"),
+  categories: text("categories").notNull(),
+  policyVersion: text("policy_version").notNull(),
+  source: text("source"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_cookie_consent_anon").on(t.anonymousId, t.createdAt),
+  index("idx_cookie_consent_user").on(t.webUserId, t.createdAt),
+  index("idx_cookie_consent_created").on(t.createdAt),
+]);

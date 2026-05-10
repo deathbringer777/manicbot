@@ -29,6 +29,7 @@ import { marketingRouter } from "~/server/api/routers/marketing";
 import { tenantStaffRouter } from "~/server/api/routers/tenantStaff";
 import { pluginsRouter } from "~/server/api/routers/plugins";
 import { searchRouter } from "~/server/api/routers/search";
+import { consentRouter } from "~/server/api/routers/consent";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -61,6 +62,7 @@ export const appRouter = createTRPCRouter({
   tenantStaff: tenantStaffRouter,
   plugins: pluginsRouter,
   search: searchRouter,
+  consent: consentRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -211,10 +211,28 @@ jobs:
           TELEGRAM_BOT_TOKEN: ci-placeholder
           ADMIN_CHAT_ID: "0"
 
+      # Cloudflare's pages-deploy API rejected our last squash-merge with
+      # "Invalid commit message, it must be a valid UTF-8 string
+      # [code: 8000111]". Wrangler auto-forwards the full multi-paragraph
+      # commit body, which routinely exceeds whatever cap the API enforces
+      # (and embedded em-dashes / smart quotes don't help). Build a
+      # deterministic ASCII-only short label from the subject line + SHA
+      # and pass it explicitly so the API never sees the long body.
+      - name: Build short commit message for Cloudflare
+        id: cf_commit
+        run: |
+          subj=$(git log -1 --pretty=%s)
+          sha=$(git log -1 --pretty=%h)
+          # Strip non-ASCII (Cyrillic, em-dashes, smart quotes, emoji) and
+          # double quotes / backticks that would break the shell-forwarded
+          # arg, then truncate to 120 chars.
+          ascii=$(printf "%s" "$subj" | LC_ALL=C tr -cd 'A-Za-z0-9 _.,:;!?+*/()@#=<>\-' | head -c 120)
+          echo "msg=${ascii} (${sha})" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: manicbot/admin-app
-          command: pages deploy .vercel/output/static --project-name=admin-app --commit-dirty=true
+          command: pages deploy .vercel/output/static --project-name=admin-app --commit-dirty=true --commit-message="${{ steps.cf_commit.outputs.msg }}"

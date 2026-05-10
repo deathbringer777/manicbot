@@ -80,12 +80,16 @@ describe("salonRouter", () => {
         { cancelled: 0, date: "2026-04-08" },
         { cancelled: 1, date: "2026-04-08" }, // cancelled — excluded
       ];
-      const masters = [{ id: "m1" }, { id: "m2" }];
+      const masters = [
+        { id: "m1", active: 1 },
+        { id: "m2", active: 1 },
+      ];
       const tickets = [{ id: "tkt_1", open: 1 }];
-      const tenant = [{ plan: "pro", billingStatus: "active" }];
+      const tenant = [{ plan: "pro", billingStatus: "active", name: "Test" }];
+      const servicesRows: unknown[] = [];
 
-      // getOverview: Promise.all([apts, masters, tickets, tenant])
-      const dbMock = createDbMock([apts, masters, tickets, tenant]);
+      // getOverview: Promise.all([apts, masters, tickets, tenant, services])
+      const dbMock = createDbMock([apts, masters, tickets, tenant, servicesRows]);
       const caller = ownerCaller(dbMock.db);
 
       const result = await caller.getOverview({ tenantId: TENANT });
@@ -98,13 +102,47 @@ describe("salonRouter", () => {
     });
 
     it("returns plan=start and billingStatus=trialing when tenant row is missing", async () => {
-      const dbMock = createDbMock([[], [], [], []]);
+      const dbMock = createDbMock([[], [], [], [], []]);
       const caller = ownerCaller(dbMock.db);
 
       const result = await caller.getOverview({ tenantId: TENANT });
 
       expect(result.plan).toBe("start");
       expect(result.billingStatus).toBe("trialing");
+    });
+
+    it("returns profileCompleteness signals from tenant + counts", async () => {
+      const apts: unknown[] = [];
+      const masters = [{ id: "m1", active: 1 }];
+      const tickets: unknown[] = [];
+      const tenant = [{
+        plan: "pro",
+        billingStatus: "active",
+        name: "Salon",
+        description: "Best salon",
+        city: "Warsaw",
+        logo: "logo.png",
+        coverPhoto: null,
+        publicActive: 1,
+      }];
+      const servicesRows = [
+        { svcId: "s1", active: 1 },
+        { svcId: "s2", active: 1 },
+        { svcId: "s3", active: 0 }, // hidden — should not count
+      ];
+
+      const dbMock = createDbMock([apts, masters, tickets, tenant, servicesRows]);
+      const caller = ownerCaller(dbMock.db);
+      const result = await caller.getOverview({ tenantId: TENANT });
+
+      expect(result.profileCompleteness.hasName).toBe(true);
+      expect(result.profileCompleteness.hasDescription).toBe(true);
+      expect(result.profileCompleteness.hasCity).toBe(true);
+      expect(result.profileCompleteness.hasLogo).toBe(true);
+      expect(result.profileCompleteness.hasCoverPhoto).toBe(false);
+      expect(result.profileCompleteness.publicActive).toBe(true);
+      expect(result.profileCompleteness.servicesCount).toBe(2); // active=1 only
+      expect(result.profileCompleteness.mastersCount).toBe(1);
     });
   });
 

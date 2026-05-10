@@ -16,6 +16,7 @@ import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
+import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1575,6 +1576,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
+          {overview.data?.profileCompleteness && (
+            <ProfileCompletenessCard
+              lang={lang}
+              signals={overview.data.profileCompleteness}
+              onJumpToTab={(target) => setTab(target as Tab)}
+            />
+          )}
           {overview.isLoading ? (
             <div className="grid grid-cols-2 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
           ) : overview.isError ? (

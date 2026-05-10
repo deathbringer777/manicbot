@@ -23,22 +23,37 @@ export const salonRouter = createTRPCRouter({
     await assertTenantOwner(ctx, input.tenantId);
     const today = new Date().toISOString().slice(0, 10);
 
-    const [aptRows, masterRows, ticketRows, tenantRow] = await Promise.all([
+    const [aptRows, masterRows, ticketRows, tenantRow, serviceRows] = await Promise.all([
       ctx.db.select().from(appointments)
         .where(and(eq(appointments.tenantId, input.tenantId), eq(appointments.date, today))),
       ctx.db.select().from(masters).where(eq(masters.tenantId, input.tenantId)),
       ctx.db.select().from(localTickets)
         .where(and(eq(localTickets.tenantId, input.tenantId), eq(localTickets.open, 1))),
       ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1),
+      ctx.db.select().from(services).where(eq(services.tenantId, input.tenantId)),
     ]);
 
     const todayApts = aptRows.filter((a) => !a.cancelled);
+    const t = tenantRow[0];
     return {
       todayAppointments: todayApts.length,
-      activeMasters: masterRows.length,
+      activeMasters: masterRows.filter((m: any) => m.active === 1).length,
       openTickets: ticketRows.length,
-      plan: tenantRow[0]?.plan ?? "start",
-      billingStatus: tenantRow[0]?.billingStatus ?? "trialing",
+      plan: t?.plan ?? "start",
+      billingStatus: t?.billingStatus ?? "trialing",
+      // ── Profile completeness signals (consumed by ProfileCompletenessCard).
+      //    Booleans are deliberate so the UI can show specific nudges for
+      //    missing fields without re-fetching the full salon profile.
+      profileCompleteness: {
+        hasName: !!t?.name,
+        hasDescription: !!t?.description,
+        hasCity: !!t?.city,
+        hasLogo: !!t?.logo,
+        hasCoverPhoto: !!t?.coverPhoto,
+        publicActive: t?.publicActive === 1,
+        servicesCount: serviceRows.filter((s: any) => s.active === 1).length,
+        mastersCount: masterRows.filter((m: any) => m.active === 1).length,
+      },
     };
   }),
 

@@ -456,12 +456,12 @@ export function SalonDayView({
         >
           <div className="flex" style={{ minWidth: 80 + masterColumns.length * 180 }}>
             {/* Hour scale */}
-            <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/5">
-              <div className="h-12 border-b border-slate-200 dark:border-white/5" />
+            <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
+              <div className="h-12 border-b border-slate-200 dark:border-white/10" />
               {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
                 <div
                   key={h}
-                  className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-100 dark:border-white/5"
+                  className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-200 dark:border-white/10"
                   style={{ height: HOUR_HEIGHT }}
                 >
                   <span className="relative -top-1.5">{pad(h)}:00</span>
@@ -474,12 +474,12 @@ export function SalonDayView({
               {masterColumns.map(({ master, tone, apts: list }, idx) => (
                 <div
                   key={master.chatId}
-                  className="flex-1 min-w-[180px] border-r border-slate-100 dark:border-white/5 last:border-r-0 relative"
+                  className="flex-1 min-w-[180px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative"
                   data-testid="day-view-master-column"
                   data-master-id={master.chatId}
                 >
                   {/* Header */}
-                  <div className="h-12 flex items-center gap-2 px-3 border-b border-slate-200 dark:border-white/5 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm">
+                  <div className="h-12 flex items-center gap-2 px-3 border-b border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm">
                     <span
                       className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
                       style={{ background: tone.text }}
@@ -491,23 +491,15 @@ export function SalonDayView({
                     </span>
                   </div>
 
-                  {/* Body — hour-rule lines + non-working hatching */}
+                  {/* Body — Google-Calendar-style ruled grid (solid hour lines
+                      + dashed half-hour lines) + flat non-working tint */}
                   <div
                     className="relative"
                     style={{ height: TOTAL_HOURS * HOUR_HEIGHT }}
                     data-testid="day-view-column-body"
                   >
-                    {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
-                      <div
-                        key={i}
-                        className="border-b border-slate-100 dark:border-white/[0.04] absolute left-0 right-0"
-                        style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
-                      />
-                    ))}
-
-                    {/* Non-working hours hatching — drawn behind appointments
-                        so explicit overrides (apt scheduled outside the
-                        master's window) still pop visually. Skipped for the
+                    {/* Non-working hours — flat darker tint (rendered first,
+                        below grid lines + appointments). Skipped for the
                         synthetic Unassigned column. */}
                     {(() => {
                       if (master.chatId === -1) return null;
@@ -518,17 +510,14 @@ export function SalonDayView({
                       if (range === null) return null;
                       const dayStart = HOUR_START * 60;
                       const dayEnd = HOUR_END * 60;
-                      const hatchClass = "absolute left-0 right-0 pointer-events-none";
-                      const hatchStyle: React.CSSProperties = {
-                        backgroundImage:
-                          "repeating-linear-gradient(-45deg, rgba(148,163,184,0.12), rgba(148,163,184,0.12) 4px, transparent 4px, transparent 10px)",
-                      };
+                      const tintClass =
+                        "absolute left-0 right-0 pointer-events-none bg-slate-100/60 dark:bg-slate-950/40";
                       if ("closed" in range) {
                         return (
                           <div
                             data-testid="day-view-non-working"
-                            className={hatchClass}
-                            style={{ top: 0, height: TOTAL_HOURS * HOUR_HEIGHT, ...hatchStyle }}
+                            className={tintClass}
+                            style={{ top: 0, height: TOTAL_HOURS * HOUR_HEIGHT }}
                           />
                         );
                       }
@@ -542,20 +531,41 @@ export function SalonDayView({
                           {beforeHeight > 0 && (
                             <div
                               data-testid="day-view-non-working"
-                              className={hatchClass}
-                              style={{ top: 0, height: beforeHeight, ...hatchStyle }}
+                              className={tintClass}
+                              style={{ top: 0, height: beforeHeight }}
                             />
                           )}
                           {afterHeight > 0 && (
                             <div
                               data-testid="day-view-non-working"
-                              className={hatchClass}
-                              style={{ top: afterTop, height: afterHeight, ...hatchStyle }}
+                              className={tintClass}
+                              style={{ top: afterTop, height: afterHeight }}
                             />
                           )}
                         </>
                       );
                     })()}
+
+                    {/* Grid lines — solid at every hour, dashed at every
+                        half-hour. Drawn over the non-working tint so the
+                        ruled-paper effect stays visible everywhere. */}
+                    {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
+                      <div key={`h-${i}`}>
+                        {/* Solid hour line — skip the very first to avoid
+                            doubling the column-header bottom border. */}
+                        {i > 0 && (
+                          <div
+                            className="absolute left-0 right-0 border-t border-slate-200 dark:border-white/[0.08] pointer-events-none"
+                            style={{ top: i * HOUR_HEIGHT }}
+                          />
+                        )}
+                        {/* Dashed half-hour line */}
+                        <div
+                          className="absolute left-0 right-0 border-t border-dashed border-slate-100 dark:border-white/[0.04] pointer-events-none"
+                          style={{ top: i * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                        />
+                      </div>
+                    ))}
 
                     {/* Appointment blocks */}
                     {list.map((a) => {

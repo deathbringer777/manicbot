@@ -35,6 +35,10 @@ export function isAdminAppPath(pathname) {
     '/platform-support',
     '/plugins',
     '/plugin',
+    '/marketing',
+    '/leads',
+    '/inbox',
+    '/role-requests',
   ];
   for (const p of dash) {
     if (pathname === p || pathname.startsWith(p + '/')) return true;

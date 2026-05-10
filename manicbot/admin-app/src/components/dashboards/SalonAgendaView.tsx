@@ -390,8 +390,11 @@ export function SalonAgendaView({
             <div>
               {upcoming.map((g) => (
                 <div key={g.iso} data-day={g.iso}>
-                  <h4 className="text-[11px] font-bold text-slate-900 dark:text-white capitalize px-3 py-2 bg-slate-50 dark:bg-white/[0.03] border-y border-slate-100 dark:border-white/[0.04]">
-                    {formatDayLabel(g.iso, lang)}
+                  <h4 className="flex items-center gap-2 text-[11px] font-bold text-slate-900 dark:text-white capitalize px-3 py-2 bg-slate-50/80 dark:bg-white/[0.03] border-y border-slate-100 dark:border-white/[0.04]">
+                    <span className="truncate">{formatDayLabel(g.iso, lang)}</span>
+                    <span className="text-[9px] font-semibold tabular-nums text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-white/[0.06]">
+                      {g.apts.length}
+                    </span>
                   </h4>
                   <div className="px-1 py-1 space-y-px">{g.apts.map(renderRow)}</div>
                 </div>
@@ -408,8 +411,11 @@ export function SalonAgendaView({
             <div>
               {past.map((g) => (
                 <div key={g.iso} data-day={g.iso}>
-                  <h4 className="text-[11px] font-bold text-slate-900 dark:text-white capitalize px-3 py-2 bg-slate-50 dark:bg-white/[0.03] border-y border-slate-100 dark:border-white/[0.04]">
-                    {formatDayLabel(g.iso, lang)}
+                  <h4 className="flex items-center gap-2 text-[11px] font-bold text-slate-900 dark:text-white capitalize px-3 py-2 bg-slate-50/80 dark:bg-white/[0.03] border-y border-slate-100 dark:border-white/[0.04]">
+                    <span className="truncate">{formatDayLabel(g.iso, lang)}</span>
+                    <span className="text-[9px] font-semibold tabular-nums text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-white/[0.06]">
+                      {g.apts.length}
+                    </span>
                   </h4>
                   <div className="px-1 py-1 space-y-px">{g.apts.map(renderRow)}</div>
                 </div>

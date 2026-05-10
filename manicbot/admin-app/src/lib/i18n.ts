@@ -478,6 +478,7 @@ const translations = {
   "salon.cal.upcoming":                  { ru: "Ближайшие", ua: "Найближчі", en: "Upcoming", pl: "Nadchodzące" },
   "salon.cal.past":                      { ru: "Прошедшие", ua: "Минулі", en: "Past", pl: "Poprzednie" },
   "salon.cal.noUpcoming":                { ru: "Нет предстоящих записей", ua: "Немає майбутніх записів", en: "No upcoming appointments", pl: "Brak nadchodzących wizyt" },
+  "salon.cal.more":                      { ru: "ещё", ua: "ще", en: "more", pl: "więcej" },
 
   "topbar.darkMode":                     { ru: "Тёмная тема", ua: "Темна тема", en: "Dark mode", pl: "Ciemny motyw" },
   "topbar.lightMode":                    { ru: "Светлая тема", ua: "Світла тема", en: "Light mode", pl: "Jasny motyw" },

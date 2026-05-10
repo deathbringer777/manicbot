@@ -30,7 +30,7 @@
  */
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors, Zap, Rocket } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
@@ -269,7 +269,8 @@ export function CalendarLeftRail({
       {masters && masters.length > 0 && hiddenMasterIds && toggleMasterVisible && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-my-calendars">
           <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <Users className="h-3 w-3" />
               {t("salon.day.myCalendars", lang)}
             </p>
             {hiddenMasterIds.size > 0 && showAllMasters && (
@@ -335,7 +336,8 @@ export function CalendarLeftRail({
       {hiddenStatuses && toggleStatusVisible && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-status-filter">
           <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <Filter className="h-3 w-3" />
               {t("salon.rail.statusFilter", lang)}
             </p>
             {hiddenStatuses.size > 0 && showAllStatuses && (
@@ -397,7 +399,8 @@ export function CalendarLeftRail({
       {services && services.length > 0 && hiddenServiceIds && toggleServiceVisible && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-service-filter">
           <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <Scissors className="h-3 w-3" />
               {t("salon.rail.serviceFilter", lang)}
             </p>
             {hiddenServiceIds.size > 0 && showAllServices && (
@@ -460,7 +463,8 @@ export function CalendarLeftRail({
           the dashboard but in a compact rail-friendly layout. */}
       {autoConfirm && setAutoConfirm && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-auto-confirm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 flex items-center gap-1.5">
+            <Zap className="h-3 w-3" />
             {t("salon.autoConfirm.title", lang)}
           </p>
           <p className="text-[10px] text-slate-500 dark:text-slate-500 mb-2 leading-snug">
@@ -515,7 +519,8 @@ export function CalendarLeftRail({
 
       {/* Jump By Week chips — Booksy-parity */}
       <section className="glass-card rounded-2xl p-3" data-testid="jump-by-week">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1.5">
+          <Rocket className="h-3 w-3" />
           {t("salon.rail.jumpByWeek", lang)}
         </p>
         <div className="grid grid-cols-6 gap-1 mb-1.5">

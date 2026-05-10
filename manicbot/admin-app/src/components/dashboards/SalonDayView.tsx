@@ -77,6 +77,15 @@ interface Props {
   lang: Lang;
   onAction?: (id: number | string, status: "confirmed" | "cancelled" | "rejected") => void;
   onNoShow?: (id: number | string, noShowBy: "client" | "master") => void;
+  /**
+   * Master-visibility filter. When the parent owns the state (e.g. shares
+   * it with CalendarLeftRail), pass the Set + toggle in. When omitted,
+   * the view falls back to its own internal localStorage-backed state
+   * + an inline horizontal rail for backwards compatibility.
+   */
+  hiddenMasterIds?: Set<number>;
+  toggleMasterVisible?: (chatId: number) => void;
+  showAllMasters?: () => void;
 }
 
 function pad(n: number): string {
@@ -195,6 +204,9 @@ export function SalonDayView({
   lang,
   onAction,
   onNoShow,
+  hiddenMasterIds: hiddenMasterIdsProp,
+  toggleMasterVisible: toggleMasterVisibleProp,
+  showAllMasters: showAllMastersProp,
 }: Props) {
   const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
@@ -202,11 +214,12 @@ export function SalonDayView({
   const isToday = isoDate === todayIso;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
-  // My Calendars rail — per-master visibility, persisted to localStorage so
-  // the choice survives reloads. Default: every master visible. The set
-  // stores chatIds that are HIDDEN (so a fresh master added later renders
-  // by default).
-  const [hiddenMasterIds, setHiddenMasterIds] = useState<Set<number>>(() => {
+  // Master-visibility state. Source-of-truth precedence:
+  //   1. props from the parent (CalendarLeftRail shares the same hook),
+  //   2. fallback internal state for legacy callers that don't pass props.
+  // The internal fallback persists to localStorage under the same key so
+  // a future external owner inherits the saved choice.
+  const [internalHidden, setInternalHidden] = useState<Set<number>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
       const raw = localStorage.getItem(VISIBLE_MASTERS_KEY);
@@ -217,27 +230,35 @@ export function SalonDayView({
       return new Set();
     }
   });
-  const toggleMasterVisible = (chatId: number) => {
-    setHiddenMasterIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(chatId)) next.delete(chatId);
-      else next.add(chatId);
+  const hiddenMasterIds = hiddenMasterIdsProp ?? internalHidden;
+  const toggleMasterVisible =
+    toggleMasterVisibleProp ??
+    ((chatId: number) => {
+      setInternalHidden((prev) => {
+        const next = new Set(prev);
+        if (next.has(chatId)) next.delete(chatId);
+        else next.add(chatId);
+        try {
+          localStorage.setItem(VISIBLE_MASTERS_KEY, JSON.stringify(Array.from(next)));
+        } catch {
+          /* noop */
+        }
+        return next;
+      });
+    });
+  const showAllMasters =
+    showAllMastersProp ??
+    (() => {
+      setInternalHidden(new Set());
       try {
-        localStorage.setItem(VISIBLE_MASTERS_KEY, JSON.stringify(Array.from(next)));
+        localStorage.setItem(VISIBLE_MASTERS_KEY, "[]");
       } catch {
         /* noop */
       }
-      return next;
     });
-  };
-  const showAllMasters = () => {
-    setHiddenMasterIds(new Set());
-    try {
-      localStorage.setItem(VISIBLE_MASTERS_KEY, "[]");
-    } catch {
-      /* noop */
-    }
-  };
+  // Hide the inline horizontal rail when the parent owns the state — it
+  // means there's a `CalendarLeftRail` rendering its own master section.
+  const showInlineRail = hiddenMasterIdsProp === undefined;
 
   // Auto-scroll to current time when viewing today (delayed so layout settles).
   useEffect(() => {
@@ -365,10 +386,10 @@ export function SalonDayView({
         </div>
       </div>
 
-      {/* My Calendars rail — per-master visibility toggle. Hidden when
-          there are no masters (empty-state takes over) and on screens
-          narrow enough that the inline column header avatars are clearer. */}
-      {allMasterColumns.length > 0 && (
+      {/* My Calendars rail — per-master visibility toggle.
+          Inline rail rendered ONLY when the parent doesn't already render
+          its own (e.g. via CalendarLeftRail). Backwards-compat fallback. */}
+      {showInlineRail && allMasterColumns.length > 0 && (
         <div
           className="glass-card rounded-2xl p-3 hidden sm:flex items-center gap-2 flex-wrap"
           data-testid="day-view-master-rail"

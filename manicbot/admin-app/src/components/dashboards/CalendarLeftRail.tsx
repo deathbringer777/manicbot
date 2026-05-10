@@ -1,28 +1,64 @@
 "use client";
 
 /**
- * CalendarLeftRail — Booksy / Google Calendar style left rail next to
+ * CalendarLeftRail — Google Calendar / Booksy style left rail next to
  * Day / Week / Month / Agenda views.
  *
  *   ┌─ May 2026 ──── ‹ › ┐
  *   │ M T W T F S S      │
- *   │     1 2 3          │
- *   │ 4 5 6 7 8 9 ●10    │  ← today highlighted, click → jumps the view
- *   │ 11 …                │
- *   ├──────────────────  ┤
- *   │ Jump By Week        │
- *   │ +1 +2 +3 +4 +5 +6   │
- *   │ -1 -2 -3 -4 -5 -6   │
+ *   │ 4 5 6 7 8 9 ●10    │  ← today highlighted; click → jumps view
+ *   ├────────────────────┤
+ *   │ My calendars       │
+ *   │ ☑ Anna  🟣 👁       │
+ *   │ ☑ Olga  🟢 👁       │
+ *   │ ☐ Petr  🔵 ✕       │
+ *   ├────────────────────┤
+ *   │ Auto-confirm       │
+ *   │ Web         [ON]   │
+ *   │ Telegram    [OFF]  │
+ *   │ ...                │
+ *   ├────────────────────┤
+ *   │ Jump By Week       │
+ *   │ +1 +2 +3 +4 +5 +6  │
+ *   │ -1 -2 -3 -4 -5 -6  │
  *   └────────────────────┘
  *
- * Stateless — owns no date itself; reads `selectedDate` from props and
- * fires `setSelectedDate(d)` when the user clicks a day or a Jump-By-Week
- * chip. The day-grid views own the canonical date.
+ * The rail is stateless w.r.t. selectedDate (parent owns) but does
+ * forward master-visibility + auto-confirm controls. When a `masters`
+ * list is supplied, the "My calendars" section renders. When
+ * `autoConfirm` settings are supplied, the auto-confirm block renders.
  */
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
+
+/** Brand-derived palette — must match SalonDayView/SalonWeekView so the
+ *  same master gets the same color in the rail and the grid. */
+const MASTER_PALETTE = [
+  { dot: "#7c3aed", bg: "rgba(124,58,237,0.15)" },
+  { dot: "#0b9b6b", bg: "rgba(11,155,107,0.15)" },
+  { dot: "#0891b2", bg: "rgba(6,182,212,0.15)" },
+  { dot: "#ec4899", bg: "rgba(244,114,182,0.15)" },
+  { dot: "#d97706", bg: "rgba(245,158,11,0.15)" },
+  { dot: "#2563eb", bg: "rgba(59,130,246,0.15)" },
+  { dot: "#9333ea", bg: "rgba(168,85,247,0.15)" },
+  { dot: "#0d9488", bg: "rgba(20,184,166,0.15)" },
+] as const;
+
+export type AutoConfirmChannel = "web" | "telegram" | "whatsapp" | "instagram";
+
+export interface MasterRailItem {
+  chatId: number;
+  name: string | null;
+}
+
+export interface AutoConfirmState {
+  web: boolean;
+  telegram: boolean;
+  whatsapp: boolean;
+  instagram: boolean;
+}
 
 interface Props {
   selectedDate: Date;
@@ -31,6 +67,17 @@ interface Props {
   /** Optional anchor month (defaults to selectedDate's month). */
   viewMonth?: Date;
   setViewMonth?: (d: Date) => void;
+
+  /** ── My Calendars section ─────────────────────────────────────── */
+  masters?: MasterRailItem[];
+  hiddenMasterIds?: Set<number>;
+  toggleMasterVisible?: (chatId: number) => void;
+  showAllMasters?: () => void;
+
+  /** ── Auto-confirm section ─────────────────────────────────────── */
+  autoConfirm?: AutoConfirmState;
+  autoConfirmLoading?: boolean;
+  setAutoConfirm?: (channel: AutoConfirmChannel, enabled: boolean) => void;
 }
 
 function pad(n: number): string {
@@ -54,6 +101,13 @@ export function CalendarLeftRail({
   lang,
   viewMonth: viewMonthProp,
   setViewMonth: setViewMonthProp,
+  masters,
+  hiddenMasterIds,
+  toggleMasterVisible,
+  showAllMasters,
+  autoConfirm,
+  autoConfirmLoading,
+  setAutoConfirm,
 }: Props) {
   const viewMonth = viewMonthProp ?? selectedDate;
   // Local month nav uses an internal callback if the parent didn't supply one.
@@ -172,6 +226,128 @@ export function CalendarLeftRail({
           })}
         </div>
       </section>
+
+      {/* My Calendars — vertical list of master toggles, GCal-parity */}
+      {masters && masters.length > 0 && hiddenMasterIds && toggleMasterVisible && (
+        <section className="glass-card rounded-2xl p-3" data-testid="rail-my-calendars">
+          <header className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {t("salon.day.myCalendars", lang)}
+            </p>
+            {hiddenMasterIds.size > 0 && showAllMasters && (
+              <button
+                type="button"
+                onClick={showAllMasters}
+                data-testid="rail-show-all-masters"
+                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
+              >
+                {t("salon.day.showAll", lang)}
+              </button>
+            )}
+          </header>
+          <ul className="space-y-0.5">
+            {masters.map((m, idx) => {
+              const tone = MASTER_PALETTE[idx % MASTER_PALETTE.length]!;
+              const visible = !hiddenMasterIds.has(m.chatId);
+              return (
+                <li key={m.chatId}>
+                  <button
+                    type="button"
+                    onClick={() => toggleMasterVisible(m.chatId)}
+                    data-testid="rail-master-toggle"
+                    data-master-id={m.chatId}
+                    data-visible={visible ? "1" : "0"}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                      visible
+                        ? "hover:bg-slate-100 dark:hover:bg-white/[0.04]"
+                        : "opacity-50 hover:opacity-80"
+                    }`}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-sm shrink-0 border"
+                      style={{
+                        background: visible ? tone.dot : "transparent",
+                        borderColor: tone.dot,
+                      }}
+                    />
+                    <span
+                      className={`flex-1 text-[11px] font-medium truncate text-left ${
+                        visible
+                          ? "text-slate-700 dark:text-slate-200"
+                          : "text-slate-400 dark:text-slate-500 line-through"
+                      }`}
+                    >
+                      {m.name ?? `#${m.chatId}`}
+                    </span>
+                    {visible ? (
+                      <Eye className="h-3 w-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                    ) : (
+                      <EyeOff className="h-3 w-3 text-slate-300 dark:text-slate-600 shrink-0" />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* Auto-confirm — channel toggles. Mirrors AutoConfirmSettings on
+          the dashboard but in a compact rail-friendly layout. */}
+      {autoConfirm && setAutoConfirm && (
+        <section className="glass-card rounded-2xl p-3" data-testid="rail-auto-confirm">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+            {t("salon.autoConfirm.title", lang)}
+          </p>
+          <p className="text-[10px] text-slate-500 dark:text-slate-500 mb-2 leading-snug">
+            {t("salon.rail.autoConfirmHint", lang)}
+          </p>
+          <ul className="space-y-1">
+            {(["web", "telegram", "whatsapp", "instagram"] as const).map((ch) => {
+              const enabled = autoConfirm[ch];
+              const channelLabel =
+                ch === "web"
+                  ? t("salon.channels.web.label", lang)
+                  : ch === "instagram"
+                    ? t("salon.channels.instagram.label", lang)
+                    : ch === "telegram"
+                      ? "Telegram"
+                      : "WhatsApp";
+              return (
+                <li
+                  key={ch}
+                  className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors"
+                  data-testid="rail-auto-confirm-row"
+                  data-channel={ch}
+                  data-enabled={enabled ? "1" : "0"}
+                >
+                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-200 truncate">
+                    {channelLabel}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    disabled={!!autoConfirmLoading}
+                    onClick={() => setAutoConfirm(ch, !enabled)}
+                    data-testid="rail-auto-confirm-toggle"
+                    data-channel={ch}
+                    className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                      enabled ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
+                    } ${autoConfirmLoading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${
+                        enabled ? "translate-x-3.5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Jump By Week chips — Booksy-parity */}
       <section className="glass-card rounded-2xl p-3" data-testid="jump-by-week">

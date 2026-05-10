@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
-  Loader2, Plus, Pencil, Trash2, Save, X, List, AlignLeft,
+  Loader2, Plus, Pencil, Trash2, Save, X, List, AlignLeft, Columns3,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
 } from "lucide-react";
@@ -13,6 +13,7 @@ import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/li
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
+import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1353,7 +1354,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
   }, [resolvedSalonTab, inWeb, forceTab]);
-  const [aptViewMode, setAptViewMode] = useState<"calendar" | "list" | "agenda">("calendar");
+  const [aptViewMode, setAptViewMode] = useState<"day" | "calendar" | "list" | "agenda">("day");
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
@@ -1394,7 +1395,15 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { tenantId, dateFrom: calDateFrom, dateTo: calDateTo, limit: 300 },
     { enabled: tab === "appointments" && aptViewMode === "calendar" },
   );
-  const mastersList = api.salon.getMasters.useQuery({ tenantId }, { enabled: tab === "masters" });
+  // Day view: single-date fetch + masters list (also enabled outside masters tab).
+  const dayApts = api.salon.getAppointments.useQuery(
+    { tenantId, date: fmtISO(calViewDate.getFullYear(), calViewDate.getMonth(), calViewDate.getDate()) },
+    { enabled: tab === "appointments" && aptViewMode === "day" },
+  );
+  const mastersList = api.salon.getMasters.useQuery(
+    { tenantId },
+    { enabled: tab === "masters" || (tab === "appointments" && aptViewMode === "day") },
+  );
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
@@ -1613,6 +1622,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
             <div className="flex items-center gap-2">
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5" data-testid="apt-view-mode-switcher">
+                <button onClick={() => setAptViewMode("day")}
+                  data-testid="apt-view-mode-day"
+                  data-active={aptViewMode === "day" ? "1" : "0"}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "day" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
+                  <Columns3 className="w-3.5 h-3.5" />
+                  {t("salon.cal.day", lang)}
+                </button>
                 <button onClick={() => setAptViewMode("calendar")}
                   data-testid="apt-view-mode-calendar"
                   data-active={aptViewMode === "calendar" ? "1" : "0"}
@@ -1646,6 +1662,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               selectedDay={selectedDay}
               setSelectedDay={setSelectedDay}
               isLoading={calApts.isFetching}
+              lang={lang}
+              onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+              onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+            />
+          )}
+
+          {aptViewMode === "day" && (
+            <SalonDayView
+              date={calViewDate}
+              setDate={setCalViewDate}
+              apts={dayApts.data ?? []}
+              masters={(mastersList.data ?? []) as any}
+              isLoading={dayApts.isLoading || mastersList.isLoading}
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}

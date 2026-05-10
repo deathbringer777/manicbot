@@ -1,0 +1,255 @@
+// @vitest-environment happy-dom
+/**
+ * SalonDayView — single-day hour grid with master columns (per §12.1 of
+ * the Booksy comparison plan). Pins the layout contract:
+ *
+ *   - 8:00–22:00 hour scale.
+ *   - One column per active master + an "Unassigned" column when at least
+ *     one appointment has masterId === null.
+ *   - Day navigation buttons (prev / today / next) with stable testids.
+ *   - Empty state when there are no masters.
+ *   - Current-time red line is rendered on today, hidden on other dates.
+ *   - Each appointment is positioned absolutely with top derived from
+ *     start time (8:00 = 0, 9:00 = HOUR_HEIGHT, etc.).
+ */
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { cleanup, screen } from "@testing-library/react";
+
+vi.mock("~/lib/appointments", () => ({
+  APT_BORDER: {
+    confirmed: "border-l-emerald-500",
+    pending: "border-l-amber-500",
+    cancelled: "border-l-red-500",
+    no_show: "border-l-orange-500",
+    done: "border-l-brand-500",
+  },
+  STATUS_LABELS: {
+    confirmed: "Confirmed",
+    pending: "Pending",
+    cancelled: "Cancelled",
+    no_show: "No-show",
+    done: "Done",
+  },
+}));
+
+import { SalonDayView } from "~/components/dashboards/SalonDayView";
+import { renderWithLang } from "./helpers/renderWithLang";
+
+const FIXED_NOW = new Date("2026-05-10T13:30:00");
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FIXED_NOW);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+const masters = [
+  { chatId: 100, name: "Anna" },
+  { chatId: 200, name: "Olga" },
+  { chatId: 300, name: "Petr" },
+];
+
+function apt(overrides: Record<string, any> = {}) {
+  return {
+    id: 1,
+    date: "2026-05-10",
+    time: "10:00",
+    status: "confirmed",
+    duration: 60,
+    masterId: 100,
+    userName: "Client",
+    chatId: 999,
+    svcId: "manicure",
+    ...overrides,
+  };
+}
+
+describe("SalonDayView", () => {
+  it("renders one column per active master", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const cols = screen.getAllByTestId("day-view-master-column");
+    expect(cols.length).toBe(3);
+    expect(cols[0]?.getAttribute("data-master-id")).toBe("100");
+    expect(cols[1]?.getAttribute("data-master-id")).toBe("200");
+    expect(cols[2]?.getAttribute("data-master-id")).toBe("300");
+  });
+
+  it("renders an Unassigned column when an appointment has no masterId", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[apt({ id: 1, masterId: null, time: "11:00" })]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const cols = screen.getAllByTestId("day-view-master-column");
+    expect(cols.length).toBe(4);
+    expect(cols[3]?.getAttribute("data-master-id")).toBe("-1"); // synthetic id for unassigned
+  });
+
+  it("does NOT render an Unassigned column when all appointments are assigned", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[apt({ id: 1, masterId: 100 })]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const cols = screen.getAllByTestId("day-view-master-column");
+    expect(cols.length).toBe(3);
+    expect(cols.every((c) => c.getAttribute("data-master-id") !== "-1")).toBe(true);
+  });
+
+  it("filters appointments to the visible date only", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[
+          apt({ id: 1, date: "2026-05-10", time: "10:00", masterId: 100 }),
+          apt({ id: 2, date: "2026-05-11", time: "10:00", masterId: 100 }), // out of range
+        ]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const events = screen.getAllByTestId("day-view-event");
+    expect(events.length).toBe(1);
+    expect(events[0]?.getAttribute("data-apt-id")).toBe("1");
+  });
+
+  it("positions an appointment block at the correct top offset", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[apt({ id: 1, time: "10:00", duration: 60, masterId: 100 })]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const block = screen.getByTestId("day-view-event");
+    // 10:00 minus 8:00 start = 2 hours × 56px = 112px top offset.
+    expect(block.style.top).toBe("112px");
+    expect(block.style.height).toBe("56px");
+  });
+
+  it("renders the current-time line on today", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.queryByTestId("day-view-now-line")).toBeTruthy();
+  });
+
+  it("does NOT render the current-time line on a different date", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-12T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.queryByTestId("day-view-now-line")).toBeNull();
+  });
+
+  it("shows empty state when no masters are passed in", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={[]}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.getByTestId("day-view-empty")).toBeTruthy();
+    expect(screen.queryAllByTestId("day-view-master-column").length).toBe(0);
+  });
+
+  it("date navigation buttons trigger setDate with the right delta", () => {
+    const setDate = vi.fn();
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={setDate}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const prev = screen.getByTestId("day-view-prev");
+    const next = screen.getByTestId("day-view-next");
+    const today = screen.getByTestId("day-view-today");
+    prev.click();
+    expect((setDate.mock.calls[0]?.[0] as Date).toISOString().slice(0, 10)).toBe("2026-05-09");
+    next.click();
+    expect((setDate.mock.calls[1]?.[0] as Date).toISOString().slice(0, 10)).toBe("2026-05-11");
+    today.click();
+    expect((setDate.mock.calls[2]?.[0] as Date).toISOString().slice(0, 10)).toBe("2026-05-10");
+  });
+
+  it("groups multiple appointments under the same master column", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[
+          apt({ id: 1, time: "09:00", masterId: 100 }),
+          apt({ id: 2, time: "11:00", masterId: 100 }),
+          apt({ id: 3, time: "10:00", masterId: 200 }),
+        ]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const cols = screen.getAllByTestId("day-view-master-column");
+    const annaCol = cols.find((c) => c.getAttribute("data-master-id") === "100");
+    const olgaCol = cols.find((c) => c.getAttribute("data-master-id") === "200");
+    expect(annaCol?.querySelectorAll("[data-testid='day-view-event']").length).toBe(2);
+    expect(olgaCol?.querySelectorAll("[data-testid='day-view-event']").length).toBe(1);
+  });
+});

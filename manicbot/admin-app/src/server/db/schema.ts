@@ -111,10 +111,12 @@ export const masters = sqliteTable("masters", {
   portfolio: text("portfolio"),
   allowDelegation: integer("allow_delegation").notNull().default(0),
   webUserId: text("web_user_id"),
+  calendarVisibility: text("calendar_visibility").notNull().default("salon_only"),
 }, (t) => [
   index("idx_master_tenant").on(t.tenantId),
   index("idx_master_web_user_id").on(t.webUserId),
   index("idx_master_tenant_web_user").on(t.tenantId, t.webUserId),
+  index("idx_masters_calendar_visibility").on(t.tenantId, t.calendarVisibility),
 ]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {

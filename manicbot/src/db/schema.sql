@@ -105,10 +105,12 @@ CREATE TABLE IF NOT EXISTS masters (
   portfolio TEXT,
   allow_delegation INTEGER NOT NULL DEFAULT 0,
   web_user_id TEXT,
+  calendar_visibility TEXT NOT NULL DEFAULT 'salon_only',
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_master_web_user_id ON masters(web_user_id);
 CREATE INDEX IF NOT EXISTS idx_master_tenant_web_user ON masters(tenant_id, web_user_id);
+CREATE INDEX IF NOT EXISTS idx_masters_calendar_visibility ON masters(tenant_id, calendar_visibility);
 
 CREATE TABLE IF NOT EXISTS tenant_roles (
   tenant_id TEXT NOT NULL,

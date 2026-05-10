@@ -416,10 +416,25 @@ const translations = {
 
   "salon.cal.calendar":                  { ru: "Календарь", ua: "Календар", en: "Calendar", pl: "Kalendarz" },
   "salon.cal.list":                      { ru: "Список", ua: "Список", en: "List", pl: "Lista" },
+  "salon.cal.agenda":                    { ru: "Агенда", ua: "Агенда", en: "Agenda", pl: "Agenda" },
   "salon.cal.todaySmall":                { ru: "сегодня", ua: "сьогодні", en: "today", pl: "dziś" },
   "salon.cal.today":                     { ru: "Сегодня", ua: "Сьогодні", en: "Today", pl: "Dziś" },
   "salon.cal.pending":                   { ru: "Ожидание", ua: "Очікування", en: "Pending", pl: "Oczekuje" },
   "salon.cal.confirmed":                 { ru: "Подтверждено", ua: "Підтверджено", en: "Confirmed", pl: "Potwierdzone" },
+  "salon.cal.upcoming":                  { ru: "Ближайшие", ua: "Найближчі", en: "Upcoming", pl: "Nadchodzące" },
+  "salon.cal.past":                      { ru: "Прошедшие", ua: "Минулі", en: "Past", pl: "Poprzednie" },
+  "salon.cal.noUpcoming":                { ru: "Нет предстоящих записей", ua: "Немає майбутніх записів", en: "No upcoming appointments", pl: "Brak nadchodzących wizyt" },
+
+  "topbar.darkMode":                     { ru: "Тёмная тема", ua: "Темна тема", en: "Dark mode", pl: "Ciemny motyw" },
+  "topbar.lightMode":                    { ru: "Светлая тема", ua: "Світла тема", en: "Light mode", pl: "Jasny motyw" },
+  "topbar.enterFullscreen":              { ru: "Полноэкранный режим", ua: "Повноекранний режим", en: "Enter fullscreen", pl: "Pełny ekran" },
+  "topbar.exitFullscreen":               { ru: "Выйти из полноэкранного", ua: "Вийти з повноекранного", en: "Exit fullscreen", pl: "Wyjdź z pełnego ekranu" },
+
+  "master.calendar.visibility.title":    { ru: "Видимость календаря", ua: "Видимість календаря", en: "Calendar visibility", pl: "Widoczność kalendarza" },
+  "master.calendar.visibility.desc":     { ru: "Кто может видеть твой график помимо владельца салона", ua: "Хто може бачити твій графік, крім власника салону", en: "Who can see your schedule besides the salon owner", pl: "Kto widzi twój grafik poza właścicielem salonu" },
+  "master.calendar.visibility.salonOnly":{ ru: "Только владелец салона", ua: "Лише власник салону", en: "Salon owner only", pl: "Tylko właściciel salonu" },
+  "master.calendar.visibility.peers":    { ru: "Команда салона видит мой график", ua: "Команда салону бачить мій графік", en: "Salon team can see my schedule", pl: "Zespół salonu widzi mój grafik" },
+  "master.calendar.visibility.private":  { ru: "Только я", ua: "Лише я", en: "Only me", pl: "Tylko ja" },
   "salon.empty.masters":                 { ru: "Добавьте мастера через Telegram или создайте веб-аккаунт", ua: "Додайте майстра через Telegram або створіть веб-акаунт", en: "Add a master via Telegram or create a web account", pl: "Dodaj mistrza przez Telegram lub utwórz konto web" },
 
   // ── Channels tab ────────────────────────────────────────────────────────────

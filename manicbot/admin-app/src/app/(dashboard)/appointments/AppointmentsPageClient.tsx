@@ -1,69 +1,62 @@
 "use client";
 
+/**
+ * Platform-level Appointments page (God Mode).
+ *
+ * Renders the same 5-view calendar as the salon dashboard
+ * (`/dashboard?tab=appointments`) — Day / Week / Calendar / Agenda / List —
+ * but scoped to the platform-wide `appointments.getAll` feed instead of a
+ * single tenant.
+ *
+ * "Calendar columns" become tenants instead of masters: each appointment's
+ * `tenantId` is hashed to a stable numeric `chatId` that the row-typed
+ * `MasterRow` of SalonDayView / SalonWeekView / CalendarLeftRail / MonthCalendar
+ * expects. No backend changes — purely a client-side adapter.
+ */
+
 import { useMemo, useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { EmptyState } from "~/components/ui/EmptyState";
-import { SkeletonCard } from "~/components/ui/Skeleton";
 import {
-  Calendar,
   CalendarDays,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Download,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
+  AlignLeft,
+  Columns3,
+  CalendarRange,
   List,
-  X,
+  Download,
 } from "lucide-react";
-import { STATUS_LABELS } from "~/lib/appointments";
 import { useLang } from "~/components/LangContext";
-import { t, localeFor, type Lang } from "~/lib/i18n";
+import { t } from "~/lib/i18n";
+import { SalonDayView } from "~/components/dashboards/SalonDayView";
+import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
+import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
+import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  confirmed: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  rejected: "text-red-400 bg-red-500/10 border-red-500/20",
-  cancelled: "text-slate-400 bg-slate-700/30 border-slate-600/20",
-  done: "text-brand-400 bg-brand-500/10 border-brand-500/20",
-  counter_offer: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-  no_show: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-};
+type AptViewMode = "day" | "week" | "calendar" | "agenda" | "list";
 
-function getNoShowLabels(lang: Lang): Record<string, string> {
-  return {
-    client: t("gmAppts.noShowClient", lang),
-    master: t("gmAppts.noShowMaster", lang),
-  };
+/**
+ * Stable djb2-style hash: tenant string id → positive integer.
+ *
+ * `MasterRow.chatId` is typed as `number` so platform-wide tenants need a
+ * numeric handle to flow through SalonDayView/Week/MonthCalendar's master-
+ * column grouping. Collisions are tolerable: false matches at the column
+ * level still render a sensible group, and the underlying API key
+ * (`tenant.id`) is preserved on every row for callbacks.
+ */
+function hashTenantId(tenantId: string): number {
+  let h = 5381;
+  for (let i = 0; i < tenantId.length; i++) {
+    h = ((h << 5) + h + tenantId.charCodeAt(i)) | 0;
+  }
+  const n = Math.abs(h);
+  return n === 0 ? 1 : n;
 }
 
-function getCancelledByLabels(lang: Lang): Record<string, string> {
-  return {
-    client: t("gmAppts.byClient", lang),
-    master: t("gmAppts.byMaster", lang),
-    admin: t("gmAppts.byAdmin", lang),
-    system: t("gmAppts.bySystem", lang),
-  };
-}
-
-function getStatusFilters(lang: Lang) {
-  return [
-    { key: "", label: t("gmAppts.statusAll", lang) },
-    { key: "pending", label: t("gmAppts.statusPending", lang) },
-    { key: "confirmed", label: t("gmAppts.statusConfirmed", lang) },
-    { key: "done", label: t("gmAppts.statusDone", lang) },
-    { key: "cancelled", label: t("gmAppts.statusCancelled", lang) },
-    { key: "no_show", label: t("gmAppts.statusNoShow", lang) },
-    { key: "rejected", label: t("gmAppts.statusRejected", lang) },
-  ];
-}
-
-function fmtISO(year: number, month: number, day: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+function fmtISO(y: number, m: number, d: number): string {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 function downloadCSV(data: string, filename: string) {
@@ -76,463 +69,337 @@ function downloadCSV(data: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-type Appointment = {
-  id: string;
-  tenantId: string;
-  chatId: number;
-  svcId: string;
-  date: string;
-  time: string;
-  ts: number;
-  status: string;
-  masterId: number | null;
-  confirmedBy: number | null;
-  userName: string | null;
-  userPhone: string | null;
-  userTg: string | null;
-  cancelled: number;
-  cancelledBy: string | null;
-  cancelledAt: number | null;
-  noShow: number | null;
-  noShowBy: string | null;
-  rejectComment: string | null;
-  cancelReason: string | null;
-  createdAt: number;
-  googleEventId: string | null;
-  googleCalendarId: string | null;
-  googleIntegrationId: string | null;
-  remH24: number | null;
-  remH2: number | null;
-  counterTime: string | null;
-  counterComment: string | null;
-};
-
-// ─── AptCard ───────────────────────────────────────────────────────────────
-
-function AptCard({
-  apt,
-  onConfirm,
-  onReject,
-  isPending,
-}: {
-  apt: Appointment;
-  onConfirm: () => void;
-  onReject: () => void;
-  isPending: boolean;
-}) {
-  const { lang } = useLang();
-  const noShowLabels = getNoShowLabels(lang);
-  const cancelledByLabels = getCancelledByLabels(lang);
-  const statusKey = apt.noShow ? "no_show" : apt.cancelled ? "cancelled" : apt.status;
-  const statusLabel = statusKey === "no_show"
-    ? (noShowLabels[apt.noShowBy ?? ""] ?? t("gmAppts.noShowDefault", lang))
-    : statusKey === "cancelled" && apt.cancelledBy
-      ? `${STATUS_LABELS[statusKey]} (${cancelledByLabels[apt.cancelledBy] ?? apt.cancelledBy})`
-      : (STATUS_LABELS[statusKey] ?? statusKey);
-  return (
-    <div className="glass-card rounded-2xl p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">
-            {apt.userName ?? apt.userTg ?? `#${apt.chatId}`}
-          </p>
-          {apt.userPhone && (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{apt.userPhone}</p>
-          )}
-        </div>
-        <span
-          className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${STATUS_COLORS[statusKey] ?? ""}`}
-        >
-          {statusLabel}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-border/30">
-        <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
-          <Calendar className="w-3 h-3 text-slate-500" />
-          {apt.date}
-        </div>
-        <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
-          <Clock className="w-3 h-3 text-slate-500" />
-          {apt.time}
-        </div>
-        <span className="text-[10px] text-slate-500 font-mono truncate flex-1">
-          {apt.svcId}
-        </span>
-
-        {apt.status === "pending" && !apt.cancelled && (
-          <div className="flex gap-2 shrink-0">
-            <button
-              onClick={onConfirm}
-              disabled={isPending}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/15 active:bg-emerald-500/30 rounded-lg text-emerald-400 text-xs font-medium transition-colors disabled:opacity-50"
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              {t("gmAppts.confirmYes", lang)}
-            </button>
-            <button
-              onClick={onReject}
-              disabled={isPending}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500/15 active:bg-red-500/30 rounded-lg text-red-400 text-xs font-medium transition-colors disabled:opacity-50"
-            >
-              <XCircle className="w-3.5 h-3.5" />
-              {t("gmAppts.confirmNo", lang)}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <p className="text-[9px] text-slate-700 font-mono mt-1.5 truncate">
-        {apt.tenantId}
-      </p>
-    </div>
-  );
+function getStatusOf(a: Record<string, unknown>): StatusKey {
+  if (a.noShow) return "no_show";
+  if (a.cancelled || a.status === "cancelled" || a.status === "rejected") return "cancelled";
+  if (a.status === "done") return "done";
+  if (a.status === "confirmed") return "confirmed";
+  return "pending";
 }
-
-// ─── SelectedDayPanel ──────────────────────────────────────────────────────
-
-function SelectedDayPanel({
-  iso,
-  apts,
-  onClose,
-  onConfirm,
-  onReject,
-  mutPending,
-}: {
-  iso: string;
-  apts: Appointment[];
-  onClose: () => void;
-  onConfirm: (id: string) => void;
-  onReject: (id: string) => void;
-  mutPending: boolean;
-}) {
-  const { lang } = useLang();
-  const label = new Date(iso + "T12:00:00").toLocaleDateString(localeFor(lang), {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-
-  return (
-    <div className="glass-card rounded-2xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">{label}</p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {apts.length} {apts.length === 1 ? t("gmAppts.aptOne", lang) : apts.length < 5 ? t("gmAppts.aptFew", lang) : t("gmAppts.aptMany", lang)}
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {apts.length === 0 ? (
-        <p className="text-sm text-slate-500 py-4 text-center">{t("gmAppts.noApts", lang)}</p>
-      ) : (
-        <div className="space-y-2.5">
-          {apts
-            .slice()
-            .sort((a, b) => (a.time > b.time ? 1 : -1))
-            .map((apt) => (
-              <AptCard
-                key={apt.id}
-                apt={apt}
-                onConfirm={() => onConfirm(apt.id)}
-                onReject={() => onReject(apt.id)}
-                isPending={mutPending}
-              />
-            ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Main ──────────────────────────────────────────────────────────────────
 
 export default function AppointmentsPageClient() {
   const { lang } = useLang();
-  const STATUS_FILTERS = getStatusFilters(lang);
-  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
 
-  // Calendar state
+  const [aptViewMode, setAptViewMode] = useState<AptViewMode>("day");
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-
-  // List state
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [showDateFilter, setShowDateFilter] = useState(false);
-  const LIMIT = 30;
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<StatusKey>>(new Set());
+  const [hiddenServiceIds, setHiddenServiceIds] = useState<Set<string>>(new Set());
+  const [hiddenTenantHashes, setHiddenTenantHashes] = useState<Set<number>>(new Set());
 
   const utils = api.useUtils();
 
-  // ── Calendar data ──
+  // ── Tenants → calendar columns ──────────────────────────────────────────
+  const tenantsQ = api.tenants.getAll.useQuery();
+  const tenantMasters = useMemo(() => {
+    const ts = tenantsQ.data ?? [];
+    return ts.map((row) => ({
+      chatId: hashTenantId(row.id),
+      name: row.name ?? row.id,
+    }));
+  }, [tenantsQ.data]);
+
+  // ── Per-view data fetching ──────────────────────────────────────────────
   const calYear = calViewDate.getFullYear();
   const calMonth = calViewDate.getMonth();
+  const calDate = calViewDate.getDate();
   const calDateFrom = fmtISO(calYear, calMonth, 1);
   const calDateTo = fmtISO(calYear, calMonth, new Date(calYear, calMonth + 1, 0).getDate());
 
-  const { data: calData, isFetching: calLoading } = api.appointments.getAll.useQuery(
-    { dateFrom: calDateFrom, dateTo: calDateTo, limit: 300 },
-    { enabled: viewMode === "calendar" }
+  const dayApts = api.appointments.getAll.useQuery(
+    { dateFrom: fmtISO(calYear, calMonth, calDate), dateTo: fmtISO(calYear, calMonth, calDate), limit: 300 },
+    { enabled: aptViewMode === "day" },
   );
 
-  // ── List data ──
-  const { data: stats } = api.appointments.getStats.useQuery({});
-  const { data: listData, isLoading: listLoading } = api.appointments.getAll.useQuery(
-    {
-      offset,
-      limit: LIMIT,
-      status: statusFilter || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-    },
-    { enabled: viewMode === "list" }
+  const weekRange = useMemo(() => {
+    const start = new Date(calViewDate);
+    const dayIdx = (start.getDay() + 6) % 7; // Mon=0 … Sun=6
+    start.setDate(start.getDate() - dayIdx);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return {
+      from: fmtISO(start.getFullYear(), start.getMonth(), start.getDate()),
+      to: fmtISO(end.getFullYear(), end.getMonth(), end.getDate()),
+    };
+  }, [calViewDate]);
+  const weekApts = api.appointments.getAll.useQuery(
+    { dateFrom: weekRange.from, dateTo: weekRange.to, limit: 500 },
+    { enabled: aptViewMode === "week" },
   );
 
+  const calApts = api.appointments.getAll.useQuery(
+    { dateFrom: calDateFrom, dateTo: calDateTo, limit: 500 },
+    { enabled: aptViewMode === "calendar" },
+  );
+
+  const listApts = api.appointments.getAll.useQuery(
+    { limit: 100, offset: 0 },
+    { enabled: aptViewMode === "agenda" || aptViewMode === "list" },
+  );
+
+  // ── Adapter: assign each appointment a synthetic masterId = hash(tenantId).
+  // SalonDayView / SalonWeekView / MonthCalendar group apts by `masterId`;
+  // overriding it makes tenants behave like masters at the platform level. ─
+  type AdaptedApt = Record<string, unknown> & {
+    id: string | number;
+    date: string;
+    time: string;
+    status: string;
+    masterId: number | null;
+    svcId?: string | null;
+    tenantId?: string;
+  };
+  const adaptRows = (rows: ReadonlyArray<Record<string, unknown>> | undefined): AdaptedApt[] => {
+    return (rows ?? []).map((a) => ({
+      ...a,
+      masterId: typeof a.tenantId === "string" ? hashTenantId(a.tenantId) : null,
+    })) as AdaptedApt[];
+  };
+
+  const dayRows = useMemo(() => adaptRows(dayApts.data?.appointments), [dayApts.data]);
+  const weekRows = useMemo(() => adaptRows(weekApts.data?.appointments), [weekApts.data]);
+  const calRows = useMemo(() => adaptRows(calApts.data?.appointments), [calApts.data]);
+  const listRows = useMemo(() => adaptRows(listApts.data?.appointments), [listApts.data]);
+
+  // ── Service rail items: aggregate unique svcIds across visible feeds. ──
+  const serviceRailItems = useMemo(() => {
+    const counts = new Map<string, number>();
+    const allRows = [...dayRows, ...weekRows, ...calRows, ...listRows];
+    for (const a of allRows) {
+      const svc = a.svcId;
+      if (typeof svc !== "string" || !svc) continue;
+      counts.set(svc, (counts.get(svc) ?? 0) + 1);
+    }
+    return Array.from(counts, ([svcId, count]) => ({ svcId, name: svcId, count }));
+  }, [dayRows, weekRows, calRows, listRows]);
+
+  // ── Filter callbacks ──
+  const toggleMasterVisible = (chatId: number) =>
+    setHiddenTenantHashes((prev) => {
+      const next = new Set(prev);
+      if (next.has(chatId)) next.delete(chatId);
+      else next.add(chatId);
+      return next;
+    });
+  const showAllMasters = () => setHiddenTenantHashes(new Set());
+
+  const toggleStatusVisible = (s: StatusKey) =>
+    setHiddenStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  const showAllStatuses = () => setHiddenStatuses(new Set());
+
+  const toggleServiceVisible = (svcId: string) =>
+    setHiddenServiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(svcId)) next.delete(svcId);
+      else next.add(svcId);
+      return next;
+    });
+  const showAllServices = () => setHiddenServiceIds(new Set());
+
+  // ── Combined filter applied to every view ──
+  const filterApt = (a: Record<string, unknown>): boolean => {
+    const status = getStatusOf(a);
+    if (hiddenStatuses.has(status)) return false;
+    const svc = a.svcId;
+    if (typeof svc === "string" && hiddenServiceIds.has(svc)) return false;
+    const masterId = a.masterId;
+    if (typeof masterId === "number" && hiddenTenantHashes.has(masterId)) return false;
+    return true;
+  };
+
+  const dayFiltered = useMemo(() => dayRows.filter(filterApt), [dayRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
+  const weekFiltered = useMemo(() => weekRows.filter(filterApt), [weekRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
+  const calFiltered = useMemo(() => calRows.filter(filterApt), [calRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
+  const listFiltered = useMemo(() => listRows.filter(filterApt), [listRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
+
+  // ── Mutations ──
   const updateStatus = api.appointments.updateStatus.useMutation({
     onSuccess: () => {
       void utils.appointments.getAll.invalidate();
     },
   });
+  const onAction = (id: number | string, status: "confirmed" | "cancelled" | "rejected") =>
+    updateStatus.mutate({ id: String(id), status });
+  const onNoShow = (id: number | string, _by: "client" | "master") =>
+    updateStatus.mutate({ id: String(id), status: "no_show" });
 
-  const exportQuery = api.export.appointments.useQuery(
-    { dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, format: "csv" },
-    { enabled: false }
-  );
-
+  // ── CSV export ──
+  const exportQuery = api.export.appointments.useQuery({ format: "csv" }, { enabled: false });
   const handleExport = async () => {
     const res = await exportQuery.refetch();
     if (res.data) downloadCSV(res.data.data, res.data.filename);
   };
 
-  const calApts = calData?.appointments ?? [];
-  const listApts = listData?.appointments ?? [];
-  const total = listData?.total ?? 0;
-  const s = stats;
+  const filtersActive =
+    hiddenStatuses.size > 0 || hiddenServiceIds.size > 0 || hiddenTenantHashes.size > 0;
 
-  // Appointments for selected day
-  const dayApts = useMemo(
-    () => (selectedDay ? calApts.filter((a) => a.date === selectedDay) : []),
-    [selectedDay, calApts]
+  const viewButton = (
+    mode: AptViewMode,
+    Icon: typeof CalendarDays,
+    label: string,
+  ) => (
+    <button
+      key={mode}
+      onClick={() => setAptViewMode(mode)}
+      data-testid={`apt-view-mode-${mode}`}
+      data-active={aptViewMode === mode ? "1" : "0"}
+      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        aptViewMode === mode
+          ? "bg-brand-500/20 text-brand-400"
+          : "text-slate-500 dark:text-slate-400 hover:text-slate-200"
+      }`}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
   );
 
   return (
     <Shell>
       <div className="space-y-4">
-        {/* Header */}
+        {/* ── Header ──────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-4">
           <PageHeader
             title={t("gmAppts.title", lang)}
-            subtitle={viewMode === "list" ? `${(total ?? 0).toLocaleString(localeFor(lang))} ${t("gmHome.totalSuffix", lang)}` : undefined}
+            subtitle={t("gmAppts.subtitle", lang)}
           />
-          <div className="flex items-center gap-2 pt-1">
-            {viewMode === "list" && (
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-600 text-slate-900 dark:text-white px-3 py-2 text-xs font-medium rounded-xl transition-all"
-              >
-                <Download className="w-3.5 h-3.5" />
-                CSV
-              </button>
-            )}
-            {/* View toggle */}
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5">
-              <button
-                onClick={() => setViewMode("calendar")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  viewMode === "calendar"
-                    ? "bg-brand-500/20 text-brand-400"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <CalendarDays className="w-3.5 h-3.5" />
-                {t("gmAppts.calendarBtn", lang)}
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  viewMode === "list"
-                    ? "bg-brand-500/20 text-brand-400"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                <List className="w-3.5 h-3.5" />
-                {t("gmAppts.listBtn", lang)}
-              </button>
-            </div>
-          </div>
+          <button
+            onClick={handleExport}
+            data-testid="apt-export-csv"
+            className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-600 text-slate-900 dark:text-white px-3 py-2 text-xs font-medium rounded-xl transition-all shrink-0"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
         </div>
 
-        {/* ── Calendar view ── */}
-        {viewMode === "calendar" && (
-          <>
-            <MonthCalendar
-              apts={calApts}
-              viewDate={calViewDate}
-              setViewDate={(d) => { setCalViewDate(d); setSelectedDay(null); }}
-              selectedDay={selectedDay}
-              setSelectedDay={setSelectedDay}
-              isLoading={calLoading}
-              lang={lang}
-            />
+        {/* ── Two-column body: left rail + view ─────────────────────────── */}
+        <div className="flex flex-col lg:flex-row gap-4">
+          <CalendarLeftRail
+            selectedDate={calViewDate}
+            setSelectedDate={setCalViewDate}
+            lang={lang}
+            masters={tenantMasters}
+            hiddenMasterIds={hiddenTenantHashes}
+            toggleMasterVisible={toggleMasterVisible}
+            showAllMasters={showAllMasters}
+            hiddenStatuses={hiddenStatuses}
+            toggleStatusVisible={toggleStatusVisible}
+            showAllStatuses={showAllStatuses}
+            services={serviceRailItems}
+            hiddenServiceIds={hiddenServiceIds}
+            toggleServiceVisible={toggleServiceVisible}
+            showAllServices={showAllServices}
+          />
 
-            {selectedDay && (
-              <SelectedDayPanel
-                iso={selectedDay}
-                apts={dayApts}
-                onClose={() => setSelectedDay(null)}
-                onConfirm={(id) => updateStatus.mutate({ id, status: "confirmed" })}
-                onReject={(id) => updateStatus.mutate({ id, status: "rejected" })}
-                mutPending={updateStatus.isPending}
-              />
-            )}
-          </>
-        )}
-
-        {/* ── List view ── */}
-        {viewMode === "list" && (
-          <>
-            {/* Stats pills */}
-            <div className="grid grid-cols-5 gap-1.5">
-              {[
-                { label: t("gmAppts.statTotal", lang), value: s?.total ?? 0, color: "text-slate-900 dark:text-white" },
-                { label: t("gmAppts.statToday", lang), value: s?.today ?? 0, color: "text-brand-400" },
-                { label: t("gmAppts.statPending", lang), value: s?.pending ?? 0, color: "text-amber-400" },
-                { label: t("gmAppts.statConfirmed", lang), value: s?.confirmed ?? 0, color: "text-emerald-400" },
-                { label: t("gmAppts.statCancelled", lang), value: s?.cancelled ?? 0, color: "text-slate-500 dark:text-slate-400" },
-              ].map((stat) => (
-                <div key={stat.label} className="glass-card rounded-xl p-2.5 text-center">
-                  <div className={`text-lg font-extrabold ${stat.color}`}>{stat.value}</div>
-                  <div className="text-[9px] text-slate-500 mt-0.5 leading-tight">{stat.label}</div>
-                </div>
-              ))}
+          <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {t("gmAppts.title", lang)}
+              </h2>
+              <div
+                className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5"
+                data-testid="apt-view-mode-switcher"
+              >
+                {viewButton("day", Columns3, t("salon.cal.day", lang))}
+                {viewButton("week", CalendarRange, t("salon.cal.week", lang))}
+                {viewButton("calendar", CalendarDays, t("salon.cal.calendar", lang))}
+                {viewButton("agenda", AlignLeft, t("salon.cal.agenda", lang))}
+                {viewButton("list", List, t("salon.cal.list", lang))}
+              </div>
             </div>
 
-            {/* Status filter chips */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {STATUS_FILTERS.map(({ key, label }) => (
-                <button
-                  key={key || "all"}
-                  onClick={() => { setStatusFilter(key); setOffset(0); }}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
-                    statusFilter === key
-                      ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
-                      : "bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border border-transparent active:bg-slate-200 dark:active:bg-slate-700"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Date filter */}
-            <button
-              onClick={() => setShowDateFilter(!showDateFilter)}
-              className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${
-                dateFrom || dateTo
-                  ? "bg-brand-500/10 text-brand-400 border-brand-500/30"
-                  : "bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700/40"
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              {dateFrom || dateTo ? `${dateFrom || "..."} — ${dateTo || "..."}` : t("gmAppts.dateFilter", lang)}
-            </button>
-
-            {showDateFilter && (
-              <div className="glass-card rounded-2xl p-4 space-y-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t("gmAppts.dateRange", lang)}</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">{t("gmAppts.from", lang)}</label>
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => { setDateFrom(e.target.value); setOffset(0); }}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">{t("gmAppts.to", lang)}</label>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => { setDateTo(e.target.value); setOffset(0); }}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-brand-500/50"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => { setDateFrom(""); setDateTo(""); setOffset(0); setShowDateFilter(false); }}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {t("gmAppts.resetDates", lang)}
-                </button>
-              </div>
+            {aptViewMode === "day" && (
+              <SalonDayView
+                date={calViewDate}
+                setDate={setCalViewDate}
+                apts={dayFiltered}
+                masters={tenantMasters}
+                isLoading={dayApts.isLoading || tenantsQ.isLoading}
+                lang={lang}
+                onAction={onAction}
+                onNoShow={onNoShow}
+                hiddenMasterIds={hiddenTenantHashes}
+                toggleMasterVisible={toggleMasterVisible}
+                showAllMasters={showAllMasters}
+              />
             )}
 
-            {/* List */}
-            {listLoading ? (
-              <div className="space-y-2.5">
-                {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} lines={3} />)}
-              </div>
-            ) : listApts.length === 0 ? (
-              <EmptyState
-                icon={Calendar}
-                title="No appointments found"
-                description={statusFilter ? "No appointments match this status filter. Try clearing the filter." : "Appointments will appear here once clients start booking."}
+            {aptViewMode === "week" && (
+              <SalonWeekView
+                date={calViewDate}
+                setDate={setCalViewDate}
+                apts={weekFiltered}
+                masters={tenantMasters}
+                isLoading={weekApts.isLoading || tenantsQ.isLoading}
+                lang={lang}
+                onAction={onAction}
+                onNoShow={onNoShow}
               />
-            ) : (
-              <div className="space-y-2.5">
-                {listApts.map((apt) => (
-                  <AptCard
-                    key={apt.id}
-                    apt={apt}
-                    onConfirm={() => updateStatus.mutate({ id: apt.id, status: "confirmed" })}
-                    onReject={() => updateStatus.mutate({ id: apt.id, status: "rejected" })}
-                    isPending={updateStatus.isPending}
+            )}
+
+            {aptViewMode === "calendar" && (
+              <MonthCalendar
+                apts={calFiltered}
+                masters={tenantMasters}
+                viewDate={calViewDate}
+                setViewDate={(d) => {
+                  setCalViewDate(d);
+                  setSelectedDay(null);
+                }}
+                selectedDay={selectedDay}
+                setSelectedDay={setSelectedDay}
+                isLoading={calApts.isFetching}
+                lang={lang}
+              />
+            )}
+
+            {aptViewMode === "agenda" && (
+              <SalonAgendaView
+                apts={listFiltered}
+                isLoading={listApts.isLoading}
+                lang={lang}
+                onAction={onAction}
+                onNoShow={onNoShow}
+                masters={tenantMasters}
+                serviceNames={{}}
+                filtersActive={filtersActive && listRows.length > 0}
+              />
+            )}
+
+            {aptViewMode === "list" && (
+              <>
+                {listApts.isLoading ? (
+                  <div className="glass-card rounded-2xl p-6 text-center text-slate-500 dark:text-slate-400 text-sm">
+                    …
+                  </div>
+                ) : listFiltered.length === 0 && listRows.length === 0 ? (
+                  <EmptyState
+                    icon={CalendarDays}
+                    title={t("gmAppts.noAptsTitle", lang)}
+                    description={t("gmAppts.noAptsHint", lang)}
                   />
-                ))}
-              </div>
+                ) : (
+                  <SalonAgendaView
+                    apts={listFiltered}
+                    isLoading={false}
+                    lang={lang}
+                    onAction={onAction}
+                    onNoShow={onNoShow}
+                    masters={tenantMasters}
+                    serviceNames={{}}
+                    filtersActive={filtersActive && listRows.length > 0}
+                  />
+                )}
+              </>
             )}
-
-            {/* Pagination */}
-            {total > LIMIT && (
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {offset + 1}–{Math.min(offset + LIMIT, total)} {t("gmAppts.ofPagination", lang)} {total}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setOffset(Math.max(0, offset - LIMIT))}
-                    disabled={offset === 0}
-                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    {t("gmAppts.prev", lang)}
-                  </button>
-                  <button
-                    onClick={() => setOffset(offset + LIMIT)}
-                    disabled={offset + LIMIT >= total}
-                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs disabled:opacity-30 active:bg-slate-200 dark:active:bg-slate-700"
-                  >
-                    {t("gmAppts.next", lang)}
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
     </Shell>
   );

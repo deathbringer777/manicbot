@@ -3,7 +3,7 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
-  Puzzle,
+  Puzzle, Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -53,6 +53,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.roleRequests",  href: "/dashboard?tab=role-requests", icon: ArrowLeftRight, labelKey: "Role Requests", roles: ["system_admin"], group: "management" },
   { id: "god.leads",         href: "/dashboard?tab=leads", icon: Inbox,             labelKey: "Leads",            roles: ["system_admin"], group: "management" },
   { id: "god.agents",        href: "/agents",             icon: UserCog,         labelKey: "Agents",           roles: ["system_admin"], group: "management" },
+  { id: "god.marketing",     href: "/marketing",          icon: Megaphone,       labelKey: "Marketing",        roles: ["system_admin"], group: "management" },
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },
@@ -70,6 +71,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "salon.analytics",     href: "/dashboard?tab=analytics",      icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
   { id: "salon.reviews",       href: "/dashboard?tab=reviews",        icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.publicProfile", href: "/dashboard?tab=public_profile", icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
+  { id: "salon.marketing",     href: "/marketing",                    icon: Megaphone,     labelKey: "Marketing",     roles: ["tenant_owner"], hideable: true },
   { id: "salon.plugins",       href: "/plugins",                      icon: Puzzle,        labelKey: "Plugins",       roles: ["tenant_owner"], hideable: true },
 
   // ── Master — ?tab= hrefs handled by MasterDashboard monolith ──

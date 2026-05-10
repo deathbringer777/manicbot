@@ -244,9 +244,10 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             )}
           </div>
 
-          {/* Nav groups */}
+          {/* Nav groups — pinned plugins live UNDER the regular items, just
+              above Settings. Per user feedback: pinned items belong with
+              Plugins, not as a separate top-of-sidebar section. */}
           <nav className="flex-1 px-2.5 py-4 space-y-5 overflow-y-auto scrollbar-none">
-            <PinnedNavSection collapsed={collapsed} />
             {navGroups.map((group) => (
               <CollapsibleNavGroup
                 key={group.id}
@@ -255,6 +256,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 isActive={isActive}
               />
             ))}
+            <PinnedNavSection collapsed={collapsed} />
           </nav>
 
           {/* Bottom: Master switcher (owner only) + Settings */}
@@ -291,9 +293,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 </button>
               </div>
 
-              {/* Nav groups */}
+              {/* Nav groups — pinned items live below regular items (mirrors
+                  desktop sidebar order). */}
               <nav className="flex-1 px-2.5 py-4 space-y-5 overflow-y-auto scrollbar-none">
-                <PinnedNavSection />
                 {navGroups.map((group) => (
                   <CollapsibleNavGroup
                     key={group.id}
@@ -303,6 +305,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                     onItemClick={() => setSidebarOpen(false)}
                   />
                 ))}
+                <PinnedNavSection />
               </nav>
 
               {/* Mobile drawer bottom: settings only — logout in header */}
@@ -403,14 +406,21 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             </div>
           </header>
 
-          {/* Content */}
+          {/* Content — Settings pages drop the max-w-7xl gutter so the
+              section list + body can use the full width next to the
+              sidebar (per user feedback: «Settings не на весь экран»). */}
           <main className="flex-1 overflow-y-auto relative h-0">
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
               <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-brand-500/[0.05] blur-[120px]" />
               <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-purple-500/[0.05] blur-[120px]" />
             </div>
             <div className="min-h-full flex flex-col">
-              <div data-tour="web-content" className="relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto max-w-7xl w-full flex-1">
+              <div
+                data-tour="web-content"
+                className={`relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto w-full flex-1 ${
+                  pathname.startsWith("/settings") ? "max-w-none" : "max-w-7xl"
+                }`}
+              >
                 {children}
               </div>
             </div>

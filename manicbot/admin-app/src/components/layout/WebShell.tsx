@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut, Menu, X, Zap, ChevronLeft, ChevronRight, ChevronDown,
   Sun, Moon, Compass, Building2,
+  Maximize2, Minimize2,
   type LucideIcon,
 } from "lucide-react";
 import { PinnedNavSection } from "~/components/layout/PinnedNavSection";
@@ -148,6 +149,25 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
       localStorage.setItem("manicbot_web_theme", next ? "dark" : "light");
       return next;
     });
+  };
+
+  // Fullscreen toggle — turns the dashboard into a "salon OS" mode
+  // (e.g. on a reception-desk iPad). Subscribes to fullscreenchange so
+  // the icon flips when the user exits via Escape too.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  const toggleFullscreen = () => {
+    if (typeof document === "undefined") return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+    } else {
+      document.documentElement.requestFullscreen().catch(() => undefined);
+    }
   };
 
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
@@ -348,10 +368,24 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
+                data-testid="webshell-theme-toggle"
                 className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#e5e7eb] dark:border-white/10 bg-white dark:bg-white/[0.04] text-[#6b7280] dark:text-slate-400 hover:text-[#1a1a2e] dark:hover:text-white hover:bg-[#f3f4f6] dark:hover:bg-white/8 transition-colors"
                 title={isDark ? "Light mode" : "Dark mode"}
               >
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+
+              {/* Fullscreen toggle — "salon OS" mode for reception-desk use */}
+              <button
+                onClick={toggleFullscreen}
+                data-testid="webshell-fullscreen-toggle"
+                aria-pressed={isFullscreen}
+                className="hidden lg:flex h-8 w-8 items-center justify-center rounded-lg border border-[#e5e7eb] dark:border-white/10 bg-white dark:bg-white/[0.04] text-[#6b7280] dark:text-slate-400 hover:text-[#1a1a2e] dark:hover:text-white hover:bg-[#f3f4f6] dark:hover:bg-white/8 transition-colors"
+                title={isFullscreen
+                  ? (lang === "ru" ? "Выйти из полноэкранного" : lang === "ua" ? "Вийти з повноекранного" : lang === "pl" ? "Wyjdź z pełnego ekranu" : "Exit fullscreen")
+                  : (lang === "ru" ? "Полноэкранный режим" : lang === "ua" ? "Повноекранний режим" : lang === "pl" ? "Pełny ekran" : "Enter fullscreen")}
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
 
               {/* Language selector */}

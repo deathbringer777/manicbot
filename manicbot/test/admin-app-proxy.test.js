@@ -32,6 +32,16 @@ describe('isAdminAppPath', () => {
     ['/stripe'],
     ['/platform-support'],
     ['/settings/profile'],
+    ['/marketing'],
+    ['/marketing/contacts'],
+    ['/marketing/sms'],
+    ['/marketing/templates'],
+    ['/marketing/automations'],
+    ['/marketing/campaigns'],
+    ['/marketing/providers'],
+    ['/leads'],
+    ['/inbox'],
+    ['/role-requests'],
   ])('proxies %s', (path) => {
     expect(isAdminAppPath(path)).toBe(true);
   });

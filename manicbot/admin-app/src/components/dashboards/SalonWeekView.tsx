@@ -247,12 +247,12 @@ export function SalonWeekView({
       >
         <div className="flex" style={{ minWidth: 80 + 7 * 140 }}>
           {/* Hour scale */}
-          <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/5">
-            <div className="h-12 border-b border-slate-200 dark:border-white/5" />
+          <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
+            <div className="h-12 border-b border-slate-200 dark:border-white/10" />
             {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
               <div
                 key={h}
-                className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-100 dark:border-white/5"
+                className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-200 dark:border-white/10"
                 style={{ height: HOUR_HEIGHT }}
               >
                 <span className="relative -top-1.5">{pad(h)}:00</span>
@@ -269,7 +269,7 @@ export function SalonWeekView({
               return (
                 <div
                   key={iso}
-                  className={`flex-1 min-w-[140px] border-r border-slate-100 dark:border-white/5 last:border-r-0 relative ${
+                  className={`flex-1 min-w-[140px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative ${
                     isTodayCol ? "bg-brand-500/[0.025] dark:bg-brand-500/[0.04]" : ""
                   }`}
                   data-testid="week-view-day-column"
@@ -277,7 +277,7 @@ export function SalonWeekView({
                 >
                   {/* Day header */}
                   <div
-                    className={`h-12 flex flex-col items-center justify-center border-b border-slate-200 dark:border-white/5 sticky top-0 z-10 backdrop-blur-sm ${
+                    className={`h-12 flex flex-col items-center justify-center border-b border-slate-200 dark:border-white/10 sticky top-0 z-10 backdrop-blur-sm ${
                       isTodayCol
                         ? "bg-brand-500/10 dark:bg-brand-500/15"
                         : "bg-white/70 dark:bg-slate-900/40"
@@ -297,18 +297,26 @@ export function SalonWeekView({
                     </span>
                   </div>
 
-                  {/* Hour-rule lines + appointment blocks */}
+                  {/* Google-Calendar-style ruled grid: solid hour lines +
+                      dashed half-hour lines + appointment blocks */}
                   <div
                     className="relative"
                     style={{ height: TOTAL_HOURS * HOUR_HEIGHT }}
                     data-testid="week-view-column-body"
                   >
                     {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
-                      <div
-                        key={i}
-                        className="border-b border-slate-100 dark:border-white/[0.04] absolute left-0 right-0"
-                        style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
-                      />
+                      <div key={`h-${i}`}>
+                        {i > 0 && (
+                          <div
+                            className="absolute left-0 right-0 border-t border-slate-200 dark:border-white/[0.08] pointer-events-none"
+                            style={{ top: i * HOUR_HEIGHT }}
+                          />
+                        )}
+                        <div
+                          className="absolute left-0 right-0 border-t border-dashed border-slate-100 dark:border-white/[0.04] pointer-events-none"
+                          style={{ top: i * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                        />
+                      </div>
                     ))}
                     {list.map((a) => {
                       const top = timeToTop(a.time);

@@ -18,6 +18,7 @@ import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
+import { useMasterVisibility } from "~/lib/useMasterVisibility";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1432,6 +1433,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         (tab === "appointments" && (aptViewMode === "day" || aptViewMode === "week")),
     },
   );
+  // Auto-confirm settings — surfaced in the calendar left rail so the
+  // owner can flip channels without leaving the appointments view.
+  const autoConfirmQuery = api.salon.getAutoConfirmSettings.useQuery(
+    { tenantId },
+    { enabled: tab === "appointments" },
+  );
+  const autoConfirmMut = api.salon.setAutoConfirm.useMutation({
+    onSuccess: () => { void utils.salon.getAutoConfirmSettings.invalidate({ tenantId }); },
+  });
+  // Shared master-visibility state — both CalendarLeftRail and SalonDayView
+  // read from the same source. localStorage-backed so the owner's
+  // preference survives reloads.
+  const masterVis = useMasterVisibility();
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
@@ -1648,11 +1662,24 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {/* ── APPOINTMENTS ── */}
       {tab === "appointments" && (
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Left rail — mini-month + Jump By Week (desktop only). */}
+          {/* Left rail — mini-month + my calendars + auto-confirm + jump-by-week.
+              GCal/Booksy-parity vertical stack. Desktop only. */}
           <CalendarLeftRail
             selectedDate={calViewDate}
             setSelectedDate={setCalViewDate}
             lang={lang}
+            masters={(mastersList.data ?? []).filter((m: any) => m.active === 1).map((m: any) => ({
+              chatId: m.chatId,
+              name: m.name,
+            }))}
+            hiddenMasterIds={masterVis.hiddenMasterIds}
+            toggleMasterVisible={masterVis.toggleMasterVisible}
+            showAllMasters={masterVis.showAllMasters}
+            autoConfirm={autoConfirmQuery.data}
+            autoConfirmLoading={autoConfirmMut.isPending}
+            setAutoConfirm={(channel, enabled) =>
+              autoConfirmMut.mutate({ tenantId, channel, enabled })
+            }
           />
 
           {/* Main column — header + view */}
@@ -1724,6 +1751,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+              hiddenMasterIds={masterVis.hiddenMasterIds}
+              toggleMasterVisible={masterVis.toggleMasterVisible}
+              showAllMasters={masterVis.showAllMasters}
             />
           )}
 

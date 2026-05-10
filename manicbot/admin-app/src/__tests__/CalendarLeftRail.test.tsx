@@ -171,6 +171,171 @@ describe("CalendarLeftRail", () => {
     expect(rail.className).toMatch(/hidden\s+lg:flex/);
   });
 
+  // ── My Calendars section ──────────────────────────────────────────
+  describe("My Calendars section", () => {
+    const masters = [
+      { chatId: 100, name: "Anna" },
+      { chatId: 200, name: "Olga" },
+      { chatId: 300, name: "Petr" },
+    ];
+
+    it("renders one toggle per master when masters + handlers are passed", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={masters}
+          hiddenMasterIds={new Set()}
+          toggleMasterVisible={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.getByTestId("rail-my-calendars")).toBeTruthy();
+      const toggles = screen.getAllByTestId("rail-master-toggle");
+      expect(toggles.length).toBe(3);
+      // All visible by default
+      expect(toggles.every((t) => t.getAttribute("data-visible") === "1")).toBe(true);
+    });
+
+    it("does NOT render My Calendars when masters list is empty", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={[]}
+          hiddenMasterIds={new Set()}
+          toggleMasterVisible={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-my-calendars")).toBeNull();
+    });
+
+    it("clicking a master toggle calls toggleMasterVisible with the chatId", () => {
+      const toggleMasterVisible = vi.fn();
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={masters}
+          hiddenMasterIds={new Set()}
+          toggleMasterVisible={toggleMasterVisible}
+        />,
+        "en",
+      );
+      const toggles = screen.getAllByTestId("rail-master-toggle");
+      const olga = toggles.find((t) => t.getAttribute("data-master-id") === "200");
+      fireEvent.click(olga!);
+      expect(toggleMasterVisible).toHaveBeenCalledWith(200);
+    });
+
+    it("Show all link only appears when at least one master is hidden", () => {
+      const { rerender } = renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={masters}
+          hiddenMasterIds={new Set()}
+          toggleMasterVisible={() => undefined}
+          showAllMasters={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-show-all-masters")).toBeNull();
+      rerender(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={masters}
+          hiddenMasterIds={new Set([200])}
+          toggleMasterVisible={() => undefined}
+          showAllMasters={() => undefined}
+        />,
+      );
+      expect(screen.getByTestId("rail-show-all-masters")).toBeTruthy();
+    });
+  });
+
+  // ── Auto-confirm section ──────────────────────────────────────────
+  describe("Auto-confirm section", () => {
+    const allOff = { web: false, telegram: false, whatsapp: false, instagram: false };
+
+    it("renders one row per channel when autoConfirm + setAutoConfirm are passed", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          autoConfirm={allOff}
+          setAutoConfirm={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.getByTestId("rail-auto-confirm")).toBeTruthy();
+      const rows = screen.getAllByTestId("rail-auto-confirm-row");
+      expect(rows.length).toBe(4);
+      const channels = rows.map((r) => r.getAttribute("data-channel"));
+      expect(channels).toEqual(["web", "telegram", "whatsapp", "instagram"]);
+    });
+
+    it("data-enabled mirrors the autoConfirm state per channel", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          autoConfirm={{ web: true, telegram: false, whatsapp: true, instagram: false }}
+          setAutoConfirm={() => undefined}
+        />,
+        "en",
+      );
+      const rows = screen.getAllByTestId("rail-auto-confirm-row");
+      const byChannel: Record<string, string | null> = {};
+      for (const r of rows) {
+        byChannel[r.getAttribute("data-channel")!] = r.getAttribute("data-enabled");
+      }
+      expect(byChannel.web).toBe("1");
+      expect(byChannel.telegram).toBe("0");
+      expect(byChannel.whatsapp).toBe("1");
+      expect(byChannel.instagram).toBe("0");
+    });
+
+    it("clicking a toggle calls setAutoConfirm with the inverted value", () => {
+      const setAutoConfirm = vi.fn();
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          autoConfirm={{ web: true, telegram: false, whatsapp: false, instagram: false }}
+          setAutoConfirm={setAutoConfirm}
+        />,
+        "en",
+      );
+      const toggles = screen.getAllByTestId("rail-auto-confirm-toggle");
+      const tg = toggles.find((t) => t.getAttribute("data-channel") === "telegram");
+      fireEvent.click(tg!);
+      expect(setAutoConfirm).toHaveBeenCalledWith("telegram", true);
+    });
+
+    it("does NOT render Auto-confirm when settings are not passed", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-auto-confirm")).toBeNull();
+    });
+  });
+
   it("renders Mon-anchored weekday header (Monday in column 0)", () => {
     renderWithLang(
       <CalendarLeftRail

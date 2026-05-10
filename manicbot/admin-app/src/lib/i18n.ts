@@ -459,6 +459,7 @@ const translations = {
   "completeness.public":                 { ru: "Публичный профиль активен", ua: "Публічний профіль активний", en: "Public profile active", pl: "Profil publiczny aktywny" },
 
   "salon.rail.jumpByWeek":               { ru: "Перейти к неделе", ua: "Перейти до тижня", en: "Jump By Week", pl: "Przejdź do tygodnia" },
+  "salon.rail.autoConfirmHint":          { ru: "Записи через канал подтверждаются автоматически", ua: "Записи через канал підтверджуються автоматично", en: "Bookings via this channel are auto-accepted", pl: "Rezerwacje przez ten kanał są akceptowane automatycznie" },
   "salon.cal.todaySmall":                { ru: "сегодня", ua: "сьогодні", en: "today", pl: "dziś" },
   "salon.cal.today":                     { ru: "Сегодня", ua: "Сьогодні", en: "Today", pl: "Dziś" },
   "salon.cal.pending":                   { ru: "Ожидание", ua: "Очікування", en: "Pending", pl: "Oczekuje" },

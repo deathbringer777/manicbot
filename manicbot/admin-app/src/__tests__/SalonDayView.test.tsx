@@ -13,7 +13,7 @@
  *     start time (8:00 = 0, 9:00 = HOUR_HEIGHT, etc.).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("~/lib/appointments", () => ({
   APT_BORDER: {
@@ -40,11 +40,31 @@ const FIXED_NOW = new Date("2026-05-10T13:30:00");
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(FIXED_NOW);
+  // Fresh in-memory localStorage so My Calendars state does not leak between
+  // tests. happy-dom's stub is shared across the whole file.
+  const store: Record<string, string> = {};
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => (k in store ? store[k] : null),
+    setItem: (k: string, v: string) => {
+      store[k] = String(v);
+    },
+    removeItem: (k: string) => {
+      delete store[k];
+    },
+    clear: () => {
+      for (const k of Object.keys(store)) delete store[k];
+    },
+    key: (i: number) => Object.keys(store)[i] ?? null,
+    get length() {
+      return Object.keys(store).length;
+    },
+  });
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const masters = [
@@ -228,6 +248,66 @@ describe("SalonDayView", () => {
     expect((setDate.mock.calls[1]?.[0] as Date).toISOString().slice(0, 10)).toBe("2026-05-11");
     today.click();
     expect((setDate.mock.calls[2]?.[0] as Date).toISOString().slice(0, 10)).toBe("2026-05-10");
+  });
+
+  it("renders the My Calendars rail with one toggle per master", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.getByTestId("day-view-master-rail")).toBeTruthy();
+    const toggles = screen.getAllByTestId("day-view-master-toggle");
+    expect(toggles.length).toBe(3);
+    // All visible by default
+    expect(toggles.every((t) => t.getAttribute("data-visible") === "1")).toBe(true);
+  });
+
+  it("clicking a master toggle hides that column from the grid", () => {
+    try { localStorage.removeItem("manicbot_day_view_visible_masters"); } catch { /* noop */ }
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[apt({ id: 1, time: "10:00", masterId: 100 })]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.getAllByTestId("day-view-master-column").length).toBe(3);
+    const toggles = screen.getAllByTestId("day-view-master-toggle");
+    const olga = toggles.find((t) => t.getAttribute("data-master-id") === "200");
+    if (olga) fireEvent.click(olga);
+    const cols = screen.getAllByTestId("day-view-master-column");
+    expect(cols.length).toBe(2);
+    expect(cols.find((c) => c.getAttribute("data-master-id") === "200")).toBeUndefined();
+  });
+
+  it("Show all button reappears after hiding at least one master", () => {
+    try { localStorage.removeItem("manicbot_day_view_visible_masters"); } catch { /* noop */ }
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    expect(screen.queryByTestId("day-view-show-all-masters")).toBeNull();
+    const toggles = screen.getAllByTestId("day-view-master-toggle");
+    if (toggles[0]) fireEvent.click(toggles[0]);
+    expect(screen.getByTestId("day-view-show-all-masters")).toBeTruthy();
   });
 
   it("groups multiple appointments under the same master column", () => {

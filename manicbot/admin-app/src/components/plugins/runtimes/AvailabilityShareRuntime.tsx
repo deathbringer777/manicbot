@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 const LABELS = {
@@ -24,7 +25,7 @@ const LABELS = {
   qr: { ru: "QR-код", ua: "QR-код", en: "QR code", pl: "Kod QR" },
 } as const;
 
-export default function AvailabilityShareRuntime({ installationId }: PluginRuntimeProps) {
+export default function AvailabilityShareRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { tenantId } = useRole();
   const { lang } = useLang();
   const [copied, setCopied] = useState(false);
@@ -41,6 +42,7 @@ export default function AvailabilityShareRuntime({ installationId }: PluginRunti
   }, [url]);
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="availability-share-runtime" data-installation-id={installationId} className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4 items-start">
       {qrSrc && (
         <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white p-3 self-start">
@@ -88,5 +90,6 @@ export default function AvailabilityShareRuntime({ installationId }: PluginRunti
         </div>
       </div>
     </div>
+    </PluginRuntimeShell>
   );
 }

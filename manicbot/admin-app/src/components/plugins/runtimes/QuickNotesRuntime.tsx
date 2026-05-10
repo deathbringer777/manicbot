@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 interface Note {
@@ -37,7 +38,7 @@ function writeNotes(installationId: string, notes: Note[]) {
   } catch { /* noop */ }
 }
 
-export default function QuickNotesRuntime({ installationId }: PluginRuntimeProps) {
+export default function QuickNotesRuntime({ installationId, slug }: PluginRuntimeProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
@@ -96,6 +97,7 @@ export default function QuickNotesRuntime({ installationId }: PluginRuntimeProps
   const atLimit = notes.length >= MAX_NOTES;
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="quick-notes-runtime" className="flex flex-col gap-4">
       {/* Add note */}
       <div className="flex flex-col gap-2">
@@ -208,5 +210,6 @@ export default function QuickNotesRuntime({ installationId }: PluginRuntimeProps
         </ul>
       )}
     </div>
+    </PluginRuntimeShell>
   );
 }

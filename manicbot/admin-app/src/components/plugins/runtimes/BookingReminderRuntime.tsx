@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { Copy, Check, Calendar, Clock } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 interface DemoAppointment {
@@ -71,7 +72,7 @@ function label(key: string, lang: string): string {
   return LABELS[key]?.[lang] ?? LABELS[key]?.en ?? key;
 }
 
-export default function BookingReminderRuntime({ installationId: _installationId }: PluginRuntimeProps) {
+export default function BookingReminderRuntime({ installationId: _installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -85,6 +86,7 @@ export default function BookingReminderRuntime({ installationId: _installationId
   };
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="booking-reminder-runtime" className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <Calendar size={14} className="text-slate-400" />
@@ -140,5 +142,6 @@ export default function BookingReminderRuntime({ installationId: _installationId
         {label("demo", lang)}
       </p>
     </div>
+    </PluginRuntimeShell>
   );
 }

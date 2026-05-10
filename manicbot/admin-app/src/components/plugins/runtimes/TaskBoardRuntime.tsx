@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, X, Circle, Clock, CheckCircle2 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 type Column = "todo" | "doing" | "done";
@@ -59,7 +60,7 @@ const PLACEHOLDERS: Record<string, string> = {
   pl: "Nowe zadanie…",
 };
 
-export default function TaskBoardRuntime({ installationId }: PluginRuntimeProps) {
+export default function TaskBoardRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [drafts, setDrafts] = useState<Record<Column, string>>({
@@ -100,6 +101,7 @@ export default function TaskBoardRuntime({ installationId }: PluginRuntimeProps)
   }, [installationId, tasks]);
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="task-board-runtime" className="grid grid-cols-1 md:grid-cols-3 gap-3">
       {COLUMNS.map(({ key, icon: Icon, tint }) => {
         const col = tasks.filter((t) => t.column === key);
@@ -190,5 +192,6 @@ export default function TaskBoardRuntime({ installationId }: PluginRuntimeProps)
         );
       })}
     </div>
+    </PluginRuntimeShell>
   );
 }

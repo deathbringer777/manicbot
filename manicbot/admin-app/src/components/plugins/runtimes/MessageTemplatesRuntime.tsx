@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Copy, Check, Pencil, Trash2, X } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 interface Template {
@@ -81,7 +82,7 @@ function lbl(key: string, lang: string): string {
   return UI[key]?.[lang] ?? UI[key]?.en ?? key;
 }
 
-export default function MessageTemplatesRuntime({ installationId }: PluginRuntimeProps) {
+export default function MessageTemplatesRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -144,6 +145,7 @@ export default function MessageTemplatesRuntime({ installationId }: PluginRuntim
   }, [editId, editTitle, editBody, installationId, templates]);
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="message-templates-runtime" className="flex flex-col gap-4">
       {/* Template list */}
       {templates.length === 0 ? (
@@ -285,5 +287,6 @@ export default function MessageTemplatesRuntime({ installationId }: PluginRuntim
         </button>
       )}
     </div>
+    </PluginRuntimeShell>
   );
 }

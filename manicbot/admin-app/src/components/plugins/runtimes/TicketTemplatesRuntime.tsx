@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 type Lang = "ru" | "ua" | "en" | "pl";
@@ -70,12 +71,13 @@ const TEMPLATES: Template[] = [
   },
 ];
 
-export default function TicketTemplatesRuntime({ installationId }: PluginRuntimeProps) {
+export default function TicketTemplatesRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const pluginLang: Lang = (["ru", "ua", "en", "pl"] as const).includes(lang as Lang) ? (lang as Lang) : "ru";
   const [copied, setCopied] = useState<string | null>(null);
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="ticket-templates-runtime" data-installation-id={installationId} className="space-y-2">
       {TEMPLATES.map((tpl) => (
         <article
@@ -114,5 +116,6 @@ export default function TicketTemplatesRuntime({ installationId }: PluginRuntime
         </article>
       ))}
     </div>
+    </PluginRuntimeShell>
   );
 }

@@ -178,6 +178,82 @@ const PANEL_LOADERS = {
 
 Navigate to `/settings?section=plugin:my-plugin` — the panel renders.
 
+## 6.5. Runtime UI (the `/plugin/<slug>` open page)
+
+A *runtime* is the full-page UI users see when they click **Open** on a plugin
+card. Runtimes live in `admin-app/src/components/plugins/runtimes/` and are
+registered in `runtimePanels.ts`.
+
+### Mandatory shell
+
+Every runtime **MUST** wrap its output in `PluginRuntimeShell`. The shell
+reads the manifest from the registry and renders the icon + localized
+`name` + `tagline` exactly the same way the catalog card does — so the
+detail page never drifts from the catalog. Hand-rolling a header (with an
+inline brand SVG, custom heading, etc.) is forbidden and enforced by
+[`plugin-runtime-architecture.test.ts`](../admin-app/src/__tests__/plugin-runtime-architecture.test.ts).
+
+```tsx
+// admin-app/src/components/plugins/runtimes/MyPluginRuntime.tsx
+"use client";
+
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
+import type { PluginRuntimeProps } from "../runtimePanels";
+
+export default function MyPluginRuntime({ installationId, slug }: PluginRuntimeProps) {
+  return (
+    <PluginRuntimeShell slug={slug} bare>
+      {/* runtime body — focus on functionality, NOT identity */}
+    </PluginRuntimeShell>
+  );
+}
+```
+
+`bare` skips the default rounded card so the runtime can use its own grid /
+column layout. Drop `bare` if you want the standard white card.
+
+### Flash banner
+
+Need success / error feedback from a tRPC mutation? Pass `flash` into the
+shell — it renders a styled banner above the content:
+
+```tsx
+const [flash, setFlash] = useState<PluginRuntimeFlash>(null);
+return (
+  <PluginRuntimeShell slug={slug} flash={flash}>
+    …
+  </PluginRuntimeShell>
+);
+```
+
+### Loading state
+
+Use `PluginRuntimeLoading` while gating on a query — it ships a centered
+spinner that matches the rest of the dashboard.
+
+### Register the loader
+
+Add one line to `admin-app/src/components/plugins/runtimePanels.ts`:
+
+```ts
+const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
+  "my-plugin": () => import("./runtimes/MyPluginRuntime"),
+  …
+};
+```
+
+The slug must match the manifest exactly — the architecture test cross-checks
+both registries and fails if there's an orphan.
+
+### What the shell already gives you (so don't duplicate it)
+
+- Plugin icon (from `manifest.icon`, rendered via `PluginIcon`).
+- Localized name + tagline (active `LangContext` decides ru/ua/en/pl).
+- Flash banner (success / error) with consistent styling.
+- Default content card with proper light/dark borders.
+
+Anything else — domain controls, lists, forms — is yours.
+
 ## 7. (Optional) Contribute a sidebar nav item
 
 Add to manifest:

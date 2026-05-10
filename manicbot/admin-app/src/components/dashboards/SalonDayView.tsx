@@ -25,10 +25,11 @@
  */
 
 import { useMemo, useEffect, useState, useRef } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, Eye, EyeOff } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 
+const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
 const HOUR_START = 8; // 08:00
 const HOUR_END = 22; // 22:00 (exclusive — last visible row is 21:00–22:00)
@@ -119,6 +120,43 @@ export function SalonDayView({
   const isToday = isoDate === todayIso;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
+  // My Calendars rail — per-master visibility, persisted to localStorage so
+  // the choice survives reloads. Default: every master visible. The set
+  // stores chatIds that are HIDDEN (so a fresh master added later renders
+  // by default).
+  const [hiddenMasterIds, setHiddenMasterIds] = useState<Set<number>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem(VISIBLE_MASTERS_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set<number>(Array.isArray(arr) ? arr.filter((x) => typeof x === "number") : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleMasterVisible = (chatId: number) => {
+    setHiddenMasterIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(chatId)) next.delete(chatId);
+      else next.add(chatId);
+      try {
+        localStorage.setItem(VISIBLE_MASTERS_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
+  };
+  const showAllMasters = () => {
+    setHiddenMasterIds(new Set());
+    try {
+      localStorage.setItem(VISIBLE_MASTERS_KEY, "[]");
+    } catch {
+      /* noop */
+    }
+  };
+
   // Auto-scroll to current time when viewing today (delayed so layout settles).
   useEffect(() => {
     if (!isToday || !scrollerRef.current) return;
@@ -145,7 +183,8 @@ export function SalonDayView({
     return m;
   }, [apts, isoDate]);
 
-  const masterColumns = useMemo(() => {
+  // ALL columns (used by the rail to show every master, even hidden ones).
+  const allMasterColumns = useMemo(() => {
     const cols = masters.map((m, idx) => ({
       master: m,
       tone: MASTER_PALETTE[idx % MASTER_PALETTE.length]!,
@@ -161,6 +200,14 @@ export function SalonDayView({
     }
     return cols;
   }, [masters, aptsByMaster, lang]);
+
+  // VISIBLE columns (filtered through hiddenMasterIds — what actually
+  // renders in the grid). Unassigned column always renders if it has
+  // appointments (can't be filtered — those aren't yet assigned).
+  const masterColumns = useMemo(
+    () => allMasterColumns.filter((c) => c.master.chatId === -1 || !hiddenMasterIds.has(c.master.chatId as number)),
+    [allMasterColumns, hiddenMasterIds],
+  );
 
   const locale =
     lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU";
@@ -235,6 +282,58 @@ export function SalonDayView({
           </button>
         </div>
       </div>
+
+      {/* My Calendars rail — per-master visibility toggle. Hidden when
+          there are no masters (empty-state takes over) and on screens
+          narrow enough that the inline column header avatars are clearer. */}
+      {allMasterColumns.length > 0 && (
+        <div
+          className="glass-card rounded-2xl p-3 hidden sm:flex items-center gap-2 flex-wrap"
+          data-testid="day-view-master-rail"
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1">
+            {t("salon.day.myCalendars", lang)}
+          </span>
+          {allMasterColumns.map(({ master, tone }) => {
+            if (master.chatId === -1) return null; // unassigned — not toggleable
+            const visible = !hiddenMasterIds.has(master.chatId as number);
+            return (
+              <button
+                key={master.chatId}
+                type="button"
+                onClick={() => toggleMasterVisible(master.chatId as number)}
+                data-testid="day-view-master-toggle"
+                data-master-id={master.chatId}
+                data-visible={visible ? "1" : "0"}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] font-medium transition-colors ${
+                  visible
+                    ? "border-transparent text-slate-700 dark:text-slate-200"
+                    : "border-slate-300 dark:border-white/10 text-slate-400 dark:text-slate-500 line-through"
+                }`}
+                style={visible ? { background: tone.bg, borderColor: tone.border } : undefined}
+                title={visible ? t("salon.day.hideMaster", lang) : t("salon.day.showMaster", lang)}
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ background: visible ? tone.text : "transparent", border: visible ? "none" : `1.5px solid ${tone.text}` }}
+                />
+                <span className="truncate max-w-[120px]">{master.name ?? `#${master.chatId}`}</span>
+                {visible ? <Eye className="h-3 w-3 opacity-60" /> : <EyeOff className="h-3 w-3 opacity-60" />}
+              </button>
+            );
+          })}
+          {hiddenMasterIds.size > 0 && (
+            <button
+              type="button"
+              onClick={showAllMasters}
+              data-testid="day-view-show-all-masters"
+              className="ml-auto text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
+            >
+              {t("salon.day.showAll", lang)}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Empty state — no masters */}
       {masterColumns.length === 0 && (

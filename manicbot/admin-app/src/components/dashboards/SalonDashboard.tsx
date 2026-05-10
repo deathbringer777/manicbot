@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
-  Loader2, Plus, Pencil, Trash2, Save, X, List, AlignLeft, Columns3,
+  Loader2, Plus, Pencil, Trash2, Save, X, List, AlignLeft, Columns3, CalendarRange,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
 } from "lucide-react";
@@ -14,6 +14,7 @@ import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
+import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1354,7 +1355,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
   }, [resolvedSalonTab, inWeb, forceTab]);
-  const [aptViewMode, setAptViewMode] = useState<"day" | "calendar" | "list" | "agenda">("day");
+  const [aptViewMode, setAptViewMode] = useState<"day" | "week" | "calendar" | "list" | "agenda">("day");
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
@@ -1400,9 +1401,30 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { tenantId, date: fmtISO(calViewDate.getFullYear(), calViewDate.getMonth(), calViewDate.getDate()) },
     { enabled: tab === "appointments" && aptViewMode === "day" },
   );
+  // Week view: 7-day range starting from Mon of the week containing calViewDate.
+  const weekFrom = (() => {
+    const d = new Date(calViewDate);
+    const dayIdx = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+    d.setDate(d.getDate() - dayIdx);
+    return fmtISO(d.getFullYear(), d.getMonth(), d.getDate());
+  })();
+  const weekTo = (() => {
+    const d = new Date(calViewDate);
+    const dayIdx = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - dayIdx + 6);
+    return fmtISO(d.getFullYear(), d.getMonth(), d.getDate());
+  })();
+  const weekApts = api.salon.getAppointments.useQuery(
+    { tenantId, dateFrom: weekFrom, dateTo: weekTo, limit: 200 },
+    { enabled: tab === "appointments" && aptViewMode === "week" },
+  );
   const mastersList = api.salon.getMasters.useQuery(
     { tenantId },
-    { enabled: tab === "masters" || (tab === "appointments" && aptViewMode === "day") },
+    {
+      enabled:
+        tab === "masters" ||
+        (tab === "appointments" && (aptViewMode === "day" || aptViewMode === "week")),
+    },
   );
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
@@ -1629,6 +1651,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                   <Columns3 className="w-3.5 h-3.5" />
                   {t("salon.cal.day", lang)}
                 </button>
+                <button onClick={() => setAptViewMode("week")}
+                  data-testid="apt-view-mode-week"
+                  data-active={aptViewMode === "week" ? "1" : "0"}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "week" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
+                  <CalendarRange className="w-3.5 h-3.5" />
+                  {t("salon.cal.week", lang)}
+                </button>
                 <button onClick={() => setAptViewMode("calendar")}
                   data-testid="apt-view-mode-calendar"
                   data-active={aptViewMode === "calendar" ? "1" : "0"}
@@ -1675,6 +1704,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               apts={dayApts.data ?? []}
               masters={(mastersList.data ?? []) as any}
               isLoading={dayApts.isLoading || mastersList.isLoading}
+              lang={lang}
+              onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+              onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+            />
+          )}
+
+          {aptViewMode === "week" && (
+            <SalonWeekView
+              date={calViewDate}
+              setDate={setCalViewDate}
+              apts={weekApts.data ?? []}
+              masters={(mastersList.data ?? []) as any}
+              isLoading={weekApts.isLoading || mastersList.isLoading}
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}

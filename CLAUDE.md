@@ -113,7 +113,10 @@ Key files:
 - `manicbot/admin-app/src/server/plugins/assertPluginEnabled.ts` — runtime guard (role + plan + billing)
 - `manicbot/admin-app/src/server/plugins/manifestSchema.ts` — Zod validator
 - `manicbot/admin-app/src/app/(dashboard)/plugins/` — marketplace UI (`/plugins` catalog + `/plugins/[slug]` detail)
-- `manicbot/admin-app/src/components/plugins/` — `PluginCard`, `LockedFeatureCard`, `PluginFilters`, `InstallConfirmModal`, `PluginIcon`
+- `manicbot/admin-app/src/app/(dashboard)/plugin/[slug]/` — runtime "Open" page (loads runtime via `runtimePanels`)
+- `manicbot/admin-app/src/components/plugins/` — `PluginCard`, `LockedFeatureCard`, `PluginFilters`, `InstallConfirmModal`, `PluginIcon`, `PluginRuntimeShell`
+- `manicbot/admin-app/src/components/plugins/runtimes/` — per-plugin runtime UI; every runtime MUST wrap its output in `PluginRuntimeShell` (manifest-driven icon + name + tagline). Enforced by `src/__tests__/plugin-runtime-architecture.test.ts`.
+- `manicbot/admin-app/src/components/plugins/runtimePanels.ts` — runtime loader registry (`hasRuntime`, `loadRuntime`, `listRuntimeSlugs`)
 - `manicbot/admin-app/src/lib/plugins/clientIndex.ts` — Fuse.js search index
 - `manicbot/admin-app/src/components/settings/pluginPanels.ts` — registry of lazy-loaded settings panels
 - `manicbot/src/billing/pluginWebhooks.js` — Stripe webhook → `plugin_installations.billing_state` mapping

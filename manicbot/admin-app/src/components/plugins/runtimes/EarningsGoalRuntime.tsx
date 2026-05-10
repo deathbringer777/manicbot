@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Target, TrendingUp, X } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 const STORAGE = (id: string) => `manicbot_earnings_goal_${id}`;
@@ -57,7 +58,7 @@ const LABELS = {
   empty: { ru: "Пока пусто", ua: "Поки що порожньо", en: "Nothing yet", pl: "Jeszcze nic" },
 } as const;
 
-export default function EarningsGoalRuntime({ installationId }: PluginRuntimeProps) {
+export default function EarningsGoalRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [state, setState] = useState<State>({ goal: 20000, entries: [] });
   const [amount, setAmount] = useState("");
@@ -74,6 +75,7 @@ export default function EarningsGoalRuntime({ installationId }: PluginRuntimePro
   }
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="earnings-goal-runtime" data-installation-id={installationId} className="space-y-4">
       <section className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/40 p-4">
         <header className="flex items-center justify-between gap-2 mb-2">
@@ -187,5 +189,6 @@ export default function EarningsGoalRuntime({ installationId }: PluginRuntimePro
         )}
       </section>
     </div>
+    </PluginRuntimeShell>
   );
 }

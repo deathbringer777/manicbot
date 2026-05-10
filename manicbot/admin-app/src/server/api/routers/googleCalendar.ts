@@ -4,8 +4,10 @@
  */
 
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
+import { env } from "~/env";
 import { appointments, bots, googleBusyBlocks, googleIntegrations, masters } from "~/server/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -140,12 +142,15 @@ export const googleCalendarRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      const workerUrl = process.env.WORKER_URL || process.env.APP_BASE_URL || "";
-      const adminKey = process.env.ADMIN_KEY || "";
+      const workerUrl = (env.WORKER_PUBLIC_URL ?? "").replace(/\/$/, "");
+      const adminKey = env.ADMIN_KEY ?? "";
       if (!workerUrl || !adminKey) {
-        throw new Error("google_oauth_unconfigured");
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "WORKER_PUBLIC_URL / ADMIN_KEY not set on admin-app — cannot mint Google OAuth URL.",
+        });
       }
-      const res = await fetch(`${workerUrl.replace(/\/$/, "")}/admin/google/oauth-url`, {
+      const res = await fetch(`${workerUrl}/admin/google/oauth-url`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -160,7 +165,10 @@ export const googleCalendarRouter = createTRPCRouter({
       });
       const data = (await res.json().catch(() => ({}))) as { connectUrl?: string; error?: string };
       if (!res.ok || !data.connectUrl) {
-        throw new Error(data.error || "failed_to_mint_oauth_url");
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: data.error || `Worker returned ${res.status} when minting OAuth URL`,
+        });
       }
       return { connectUrl: data.connectUrl };
     }),

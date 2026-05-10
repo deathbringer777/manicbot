@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, X } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 const STORAGE = (id: string) => `manicbot_client_crm_lite_${id}`;
@@ -44,7 +45,7 @@ function write(id: string, list: Note[]) {
   try { localStorage.setItem(STORAGE(id), JSON.stringify(list)); } catch { /* noop */ }
 }
 
-export default function ClientCrmLiteRuntime({ installationId }: PluginRuntimeProps) {
+export default function ClientCrmLiteRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [notes, setNotes] = useState<Note[]>([]);
   const [client, setClient] = useState("");
@@ -65,6 +66,7 @@ export default function ClientCrmLiteRuntime({ installationId }: PluginRuntimePr
   }
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="client-crm-lite-runtime" data-installation-id={installationId} className="space-y-4">
       <section className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/40 p-4">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -152,5 +154,6 @@ export default function ClientCrmLiteRuntime({ installationId }: PluginRuntimePr
         </ul>
       )}
     </div>
+    </PluginRuntimeShell>
   );
 }

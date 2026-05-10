@@ -3,26 +3,32 @@
 /**
  * Google Calendar plugin — in-panel connect / disconnect UI.
  *
- * Replaces the old "open your Telegram bot and send /calendar" placeholder.
- * Minting the OAuth URL and saving the integration happens on the Worker;
- * this component only orchestrates the flow via tRPC.
+ * Visual identity (icon + name + tagline) is owned by `PluginRuntimeShell`,
+ * which reads the manifest from the registry. This file deliberately does NOT
+ * inline the Google Calendar logo — that's enforced by
+ * `plugin-runtime-architecture.test.ts`.
+ *
+ * The runtime focuses on the connect / disconnect flow:
+ *   1. Read connect status via tRPC `googleCalendar.getStatus`.
+ *   2. On click, mint a web OAuth URL via `createWebConnectUrl` and redirect.
+ *   3. Show the connected state (account, calendar, sync toggle, disconnect).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, CheckCircle2, AlertTriangle, Unplug, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, Unplug, RefreshCw } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
-
-interface Props {
-  installationId: string;
-  slug?: string;
-}
+import {
+  PluginRuntimeShell,
+  PluginRuntimeLoading,
+  type PluginRuntimeFlash,
+} from "../PluginRuntimeShell";
+import type { PluginRuntimeProps } from "../runtimePanels";
 
 type Lang = "ru" | "ua" | "en" | "pl";
 
 type TR = {
-  title: string; subtitle: string;
   disconnectedHeadline: string; disconnectedBody: string;
   continueWithGoogle: string; connecting: string;
   connected: string; account: string; calendar: string;
@@ -34,8 +40,6 @@ type TR = {
 };
 const COPY: Record<Lang, TR> = {
   ru: {
-    title: "Google Календарь",
-    subtitle: "Двусторонняя синхронизация записей в реальном времени",
     disconnectedHeadline: "Подключите Google Календарь",
     disconnectedBody:
       "Записи автоматически появятся в вашем Google Календаре, а занятые слоты из календаря заблокируются в боте.",
@@ -56,8 +60,6 @@ const COPY: Record<Lang, TR> = {
     errorNoCalendar: "В этом Google-аккаунте нет календаря с правом записи.",
   },
   ua: {
-    title: "Google Календар",
-    subtitle: "Двостороння синхронізація записів у реальному часі",
     disconnectedHeadline: "Підключіть Google Календар",
     disconnectedBody:
       "Записи автоматично з'являться у вашому Google Календарі, а зайняті слоти з календаря заблокуються в боті.",
@@ -78,8 +80,6 @@ const COPY: Record<Lang, TR> = {
     errorNoCalendar: "У цьому Google-акаунті немає календаря з правом запису.",
   },
   en: {
-    title: "Google Calendar",
-    subtitle: "Two-way real-time appointment sync",
     disconnectedHeadline: "Connect Google Calendar",
     disconnectedBody:
       "Your bookings show up in Google Calendar automatically, and busy slots from your calendar block the bot.",
@@ -100,8 +100,6 @@ const COPY: Record<Lang, TR> = {
     errorNoCalendar: "No writable calendar on this Google account.",
   },
   pl: {
-    title: "Kalendarz Google",
-    subtitle: "Dwustronna synchronizacja wizyt w czasie rzeczywistym",
     disconnectedHeadline: "Podłącz Kalendarz Google",
     disconnectedBody:
       "Wizyty pojawią się w Kalendarzu Google automatycznie, a zajęte sloty z kalendarza zablokują bota.",
@@ -128,23 +126,7 @@ function pickLang(raw: string | undefined | null): Lang {
   return "ru";
 }
 
-function GoogleCalendarLogo({ size = 56 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 200 200" aria-hidden="true" role="img">
-      <path fill="#fff" d="M148.882 43.618 105 40l-48.471 3.529L53 88l3.618 45.389L105 138l44.176-2.059L152 88z" />
-      <path fill="#1a73e8" d="M81.628 122.099c-3.648-2.464-6.173-6.064-7.561-10.818l8.464-3.488c.773 2.946 2.123 5.229 4.049 6.85 1.914 1.621 4.241 2.42 6.965 2.42 2.784 0 5.172-.847 7.165-2.54 1.992-1.694 2.995-3.854 2.995-6.467 0-2.673-1.051-4.857-3.152-6.55-2.1-1.694-4.736-2.54-7.884-2.54h-4.892v-8.379h4.389c2.712 0 4.995-.733 6.85-2.198 1.854-1.466 2.784-3.465 2.784-6.008 0-2.262-.833-4.066-2.496-5.421-1.662-1.355-3.768-2.039-6.322-2.039-2.496 0-4.477.66-5.941 1.999-1.46 1.324-2.556 3.019-3.152 4.917l-8.379-3.484c1.015-2.88 2.88-5.421 5.614-7.614 2.731-2.193 6.223-3.295 10.466-3.295 3.137 0 5.964.602 8.464 1.818 2.504 1.216 4.471 2.904 5.893 5.045 1.422 2.148 2.129 4.556 2.129 7.23 0 2.724-.66 5.03-1.98 6.922-1.324 1.889-2.9 3.333-4.736 4.349v.503c2.383.979 4.532 2.59 6.056 4.712 1.541 2.136 2.315 4.688 2.315 7.663 0 2.976-.757 5.628-2.27 7.951-1.516 2.324-3.609 4.148-6.259 5.47-2.661 1.324-5.647 2.001-8.96 2.001-3.841.012-7.385-1.08-10.613-3.274" />
-      <path fill="#1a73e8" d="M131 77.947 121.728 84.725l-4.689-7.107 12.751-9.199h6.41v43.342H131z" />
-      <path fill="#ea4335" d="m148.882 196 44.294-44.294-22.147-10.03-22.147 10.03-10.03 22.147z" />
-      <path fill="#34a853" d="M32.824 171.853 42.853 196h106.029v-44.294H42.853z" />
-      <path fill="#4285f4" d="M17 42.853v106.029L29.141 171.853l28.353-22.147V44.294L29.141 32.824z" />
-      <path fill="#188038" d="M17 148.882V192c0 2.209 1.792 4 4 4h21.853v-44.294z" />
-      <path fill="#fbbc04" d="M148.882 196H192c2.209 0 4-1.792 4-4v-43.118h-47.118z" />
-      <path fill="#4285f4" d="M192 48.294V4c0-2.209-1.792-4-4-4H48.294v43.118h100.588V48.294z" />
-      <path fill="#1967d2" d="M148.882 43.118V4H21c-2.209 0-4 1.791-4 4v34.853h131.882z" />
-    </svg>
-  );
-}
-
+/** Small Google "G" used inside the OAuth button. Not a plugin logo — kept inline by design. */
 function GoogleGMark({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
@@ -166,13 +148,13 @@ function formatDate(ts: number | null | undefined, lang: Lang): string | null {
   }
 }
 
-export default function GoogleCalendarSettingsPanel({ installationId: _installationId }: Props) {
+export default function GoogleCalendarSettingsPanel({ slug = "google-calendar" }: PluginRuntimeProps) {
   const { tenantId } = useRole();
   const { lang: rawLang } = useLang();
   const lang = pickLang(rawLang);
   const tr = useMemo(() => COPY[lang], [lang]);
 
-  const [flash, setFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [flash, setFlash] = useState<PluginRuntimeFlash>(null);
   const [confirming, setConfirming] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
@@ -237,9 +219,9 @@ export default function GoogleCalendarSettingsPanel({ installationId: _installat
 
   if (!tenantId) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="animate-spin text-slate-400" size={20} />
-      </div>
+      <PluginRuntimeShell slug={slug}>
+        <PluginRuntimeLoading />
+      </PluginRuntimeShell>
     );
   }
 
@@ -247,70 +229,37 @@ export default function GoogleCalendarSettingsPanel({ installationId: _installat
   const isConnected = data?.connected === true;
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="shrink-0 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-3">
-          <GoogleCalendarLogo size={44} />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">{tr.title}</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{tr.subtitle}</p>
-        </div>
-      </div>
-
-      {flash && (
-        <div
-          data-testid="gcal-flash"
-          role="status"
-          className={`mb-4 px-4 py-3 rounded-xl text-sm flex items-start gap-2 ${
-            flash.kind === "ok"
-              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border border-emerald-200/70 dark:border-emerald-500/20"
-              : "bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-200 border border-rose-200/70 dark:border-rose-500/20"
-          }`}
-        >
-          {flash.kind === "ok" ? (
-            <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
-          ) : (
-            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-          )}
-          <span>{flash.text}</span>
-        </div>
+    <PluginRuntimeShell slug={slug} flash={flash}>
+      {status.isLoading ? (
+        <PluginRuntimeLoading />
+      ) : isConnected && data ? (
+        <ConnectedState
+          data={data}
+          tr={tr}
+          lang={lang}
+          onToggle={(enabled) =>
+            toggleSync.mutate({
+              tenantId,
+              integrationId: data.integrationId!,
+              enabled,
+            })
+          }
+          togglePending={toggleSync.isPending}
+          confirming={confirming}
+          setConfirming={setConfirming}
+          onDisconnect={() =>
+            disconnect.mutate({ tenantId, integrationId: data.integrationId! })
+          }
+          disconnectPending={disconnect.isPending}
+        />
+      ) : (
+        <DisconnectedState
+          tr={tr}
+          connecting={connecting}
+          onConnect={handleConnect}
+        />
       )}
-
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.02] p-6 shadow-sm">
-        {status.isLoading ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 size={20} className="animate-spin text-slate-400" />
-          </div>
-        ) : isConnected && data ? (
-          <ConnectedState
-            data={data}
-            tr={tr}
-            lang={lang}
-            onToggle={(enabled) =>
-              toggleSync.mutate({
-                tenantId,
-                integrationId: data.integrationId!,
-                enabled,
-              })
-            }
-            togglePending={toggleSync.isPending}
-            confirming={confirming}
-            setConfirming={setConfirming}
-            onDisconnect={() =>
-              disconnect.mutate({ tenantId, integrationId: data.integrationId! })
-            }
-            disconnectPending={disconnect.isPending}
-          />
-        ) : (
-          <DisconnectedState
-            tr={tr}
-            connecting={connecting}
-            onConnect={handleConnect}
-          />
-        )}
-      </div>
-    </div>
+    </PluginRuntimeShell>
   );
 }
 

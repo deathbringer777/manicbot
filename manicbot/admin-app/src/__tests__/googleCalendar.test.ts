@@ -4,6 +4,16 @@ vi.mock("~/server/db", () => ({
   getDb: () => null,
 }));
 
+vi.mock("~/env", () => ({
+  env: {
+    WORKER_PUBLIC_URL: "https://manicbot.com",
+    ADMIN_KEY: "test-key",
+    ADMIN_CHAT_ID: "12345",
+    TELEGRAM_BOT_TOKEN: "0:TEST",
+    AUTH_SECRET: "test-secret",
+  },
+}));
+
 import { createCallerFactory } from "~/server/api/trpc";
 import { googleCalendarRouter } from "~/server/api/routers/googleCalendar";
 
@@ -159,12 +169,8 @@ describe("googleCalendarRouter", () => {
   });
 
   it("createWebConnectUrl proxies to the Worker admin endpoint with Bearer auth", async () => {
-    const prevUrl = process.env.WORKER_URL;
-    const prevKey = process.env.ADMIN_KEY;
-    process.env.WORKER_URL = "https://manicbot.com";
-    process.env.ADMIN_KEY = "test-key";
-
-    const fetchMock = vi.fn(async (_url: string, opts: { headers?: Record<string, string>; body?: string }) => {
+    const fetchMock = vi.fn(async (calledUrl: string, opts: { headers?: Record<string, string>; body?: string }) => {
+      expect(calledUrl).toBe("https://manicbot.com/admin/google/oauth-url");
       const authHeader = opts?.headers?.Authorization || opts?.headers?.authorization;
       expect(authHeader).toBe("Bearer test-key");
       expect(JSON.parse(opts?.body || "{}")).toMatchObject({ tenantId: "tenant_demo", scope: "tenant" });
@@ -180,8 +186,23 @@ describe("googleCalendarRouter", () => {
       expect(res.connectUrl).toContain("/google/connect?session=");
     } finally {
       globalThis.fetch = originalFetch;
-      if (prevUrl === undefined) delete process.env.WORKER_URL; else process.env.WORKER_URL = prevUrl;
-      if (prevKey === undefined) delete process.env.ADMIN_KEY; else process.env.ADMIN_KEY = prevKey;
+    }
+  });
+
+  it("createWebConnectUrl surfaces a clear error when the Worker rejects the request", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "tenant_not_found" }), { status: 400, headers: { "Content-Type": "application/json" } })
+    ) as unknown as typeof fetch;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock;
+
+    try {
+      const dbMock = createDbMock();
+      const caller = createCaller({ db: dbMock.db as never, webUser: { id: "w_test", email: "t@t.io", tenantId: "tenant_demo", webRole: "system_admin" }, headers: new Headers() });
+      await expect(caller.createWebConnectUrl({ tenantId: "tenant_demo", scope: "tenant" }))
+        .rejects.toThrowError(/tenant_not_found/);
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 

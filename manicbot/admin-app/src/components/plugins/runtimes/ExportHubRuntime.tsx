@@ -11,6 +11,7 @@ import { useLang } from "~/components/LangContext";
 import { toast } from "~/lib/toast";
 import { readPinned } from "~/lib/plugins/pinnedPlugins";
 import { collapsedGroupsStorageKey } from "~/lib/plugins/collapsedGroups";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 const LABELS = {
@@ -55,7 +56,7 @@ function download(filename: string, content: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export default function ExportHubRuntime({ installationId }: PluginRuntimeProps) {
+export default function ExportHubRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { role, tenantId } = useRole();
   const { lang } = useLang();
   const [busy, setBusy] = useState<string | null>(null);
@@ -122,6 +123,7 @@ export default function ExportHubRuntime({ installationId }: PluginRuntimeProps)
   const visible = CARDS.filter((c) => c.role === "any" || (c.role === "admin" && role === "system_admin"));
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="export-hub-runtime" data-installation-id={installationId} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {visible.map((card) => {
         const Icon = card.icon;
@@ -163,6 +165,7 @@ export default function ExportHubRuntime({ installationId }: PluginRuntimeProps)
         );
       })}
     </div>
+    </PluginRuntimeShell>
   );
 }
 

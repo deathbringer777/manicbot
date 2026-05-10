@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 type Theme = "default" | "oled" | "midnight" | "dracula";
@@ -48,7 +49,7 @@ function applyTheme(theme: Theme) {
   try { localStorage.setItem(THEME_STORAGE, theme); } catch { /* noop */ }
 }
 
-export default function DarkPlusRuntime({ installationId }: PluginRuntimeProps) {
+export default function DarkPlusRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [active, setActive] = useState<Theme>("default");
 
@@ -60,6 +61,7 @@ export default function DarkPlusRuntime({ installationId }: PluginRuntimeProps) 
   }, []);
 
   return (
+    <PluginRuntimeShell slug={slug} bare>
     <div data-testid="dark-plus-runtime" data-installation-id={installationId} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {THEMES.map((th) => {
         const isActive = th.id === active;
@@ -101,5 +103,6 @@ export default function DarkPlusRuntime({ installationId }: PluginRuntimeProps) 
         );
       })}
     </div>
+    </PluginRuntimeShell>
   );
 }

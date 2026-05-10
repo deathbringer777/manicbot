@@ -29,12 +29,47 @@ export const useInWebShell = () => useContext(WebShellContext);
 // Navigation config, labels, and role info are now in ~/lib/nav/*.
 // useNavItems() hook handles filtering by role, personalTenant, hiddenTabs.
 
-function getPageTitle(pathname: string, flat: NavItem[], lang: string): string {
+/**
+ * Resolve the page title shown in the top bar.
+ *
+ * The tenant_owner / master nav items use `?tab=` hrefs (e.g.
+ * `/dashboard?tab=clients`), so we have to look at both pathname AND the
+ * current search-string when matching — otherwise every dashboard tab
+ * collapses to the bare "Dashboard" label even after the user navigates
+ * to Clients / Services / Billing / etc.
+ *
+ * Priority:
+ *   1. /settings → "Settings" hardcoded.
+ *   2. Exact match on `pathname + ?search` (handles ?tab= navs).
+ *   3. Exact match on bare pathname for items without query strings.
+ *   4. Pathname prefix match for nested routes (e.g. /plugins/<slug>).
+ *   5. Fallback to "Dashboard".
+ */
+export function getPageTitle(
+  pathname: string,
+  search: string,
+  flat: NavItem[],
+  lang: string,
+): string {
   if (pathname.startsWith("/settings")) return tNav("Settings", lang);
-  const exact = flat.find(n => n.href === pathname);
-  if (exact) return exact.label;
-  const match = flat.find(n => n.href !== "/" && pathname.startsWith(n.href));
-  return match?.label ?? tNav("Dashboard", lang);
+  const fullPath = search ? `${pathname}${search.startsWith("?") ? search : `?${search}`}` : pathname;
+  // Exact match including query string — wins over the bare pathname so
+  // /dashboard?tab=clients lands on "Clients", not "Dashboard".
+  const exactWithQuery = flat.find((n) => n.href === fullPath);
+  if (exactWithQuery) return exactWithQuery.label;
+  // For tab-driven routes the bare `/dashboard` should only match when no
+  // ?tab= is present — otherwise we'd incorrectly fall back to "Dashboard".
+  if (!search || !search.includes("tab=")) {
+    const exact = flat.find((n) => n.href === pathname);
+    if (exact) return exact.label;
+  }
+  // Pathname prefix match for nested non-tab routes (e.g. /plugins/<slug>).
+  const prefix = flat.find((n) => {
+    if (n.href === "/") return false;
+    const cleanHref = n.href.split("?")[0]!;
+    return cleanHref !== "/dashboard" && pathname.startsWith(cleanHref);
+  });
+  return prefix?.label ?? tNav("Dashboard", lang);
 }
 
 function CollapsibleNavGroup({
@@ -173,7 +208,10 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const { groups: navGroups, flat: flatNav, settings: settingsItem } = useNavItems();
   const roleInfo = getRoleInfo(effectiveRole, lang, tNav);
-  const pageTitle = getPageTitle(pathname, flatNav, lang);
+  // searchParams.toString() gives us the canonical "?tab=…" form so the
+  // top bar header reflects the active dashboard tab (Clients / Services /
+  // Billing / …) instead of always reading "Dashboard".
+  const pageTitle = getPageTitle(pathname, searchParams?.toString() ?? "", flatNav, lang);
 
   const handleLogout = async () => {
     setShowLogoutDialog(false);

@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe("CalendarLeftRail", () => {
-  it("renders the rail with mini-month + jump-by-week sections", () => {
+  it("renders the rail with mini-month section (Jump By Week was removed)", () => {
     renderWithLang(
       <CalendarLeftRail
         selectedDate={FIXED_NOW}
@@ -42,57 +42,9 @@ describe("CalendarLeftRail", () => {
     );
     expect(screen.getByTestId("calendar-left-rail")).toBeTruthy();
     expect(screen.getByTestId("calendar-mini-month")).toBeTruthy();
-    expect(screen.getByTestId("jump-by-week")).toBeTruthy();
-  });
-
-  it("renders 12 jump-by-week chips (+1..+6, -1..-6) with the right delta attributes", () => {
-    renderWithLang(
-      <CalendarLeftRail
-        selectedDate={FIXED_NOW}
-        setSelectedDate={() => undefined}
-        lang="en"
-      />,
-      "en",
-    );
-    const chips = screen.getAllByTestId("jump-week-chip");
-    expect(chips.length).toBe(12);
-    const deltas = chips.map((c) => Number(c.getAttribute("data-delta")));
-    expect(deltas).toEqual([1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6]);
-  });
-
-  it("clicking a +N chip shifts selectedDate by N * 7 days", () => {
-    const setSelectedDate = vi.fn();
-    renderWithLang(
-      <CalendarLeftRail
-        selectedDate={FIXED_NOW}
-        setSelectedDate={setSelectedDate}
-        lang="en"
-      />,
-      "en",
-    );
-    const chips = screen.getAllByTestId("jump-week-chip");
-    const plusTwo = chips.find((c) => c.getAttribute("data-delta") === "2");
-    fireEvent.click(plusTwo!);
-    expect(setSelectedDate).toHaveBeenCalledTimes(1);
-    const arg = setSelectedDate.mock.calls[0]![0] as Date;
-    expect(arg.toISOString().slice(0, 10)).toBe("2026-05-24"); // +14 days from 2026-05-10
-  });
-
-  it("clicking a -N chip shifts selectedDate backwards by N * 7 days", () => {
-    const setSelectedDate = vi.fn();
-    renderWithLang(
-      <CalendarLeftRail
-        selectedDate={FIXED_NOW}
-        setSelectedDate={setSelectedDate}
-        lang="en"
-      />,
-      "en",
-    );
-    const chips = screen.getAllByTestId("jump-week-chip");
-    const minusOne = chips.find((c) => c.getAttribute("data-delta") === "-1");
-    fireEvent.click(minusOne!);
-    const arg = setSelectedDate.mock.calls[0]![0] as Date;
-    expect(arg.toISOString().slice(0, 10)).toBe("2026-05-03");
+    // Jump-By-Week was removed — the +1..-6 chip block is gone for good.
+    expect(screen.queryByTestId("jump-by-week")).toBeNull();
+    expect(screen.queryAllByTestId("jump-week-chip").length).toBe(0);
   });
 
   it("clicking a day in mini-month calls setSelectedDate with that day", () => {

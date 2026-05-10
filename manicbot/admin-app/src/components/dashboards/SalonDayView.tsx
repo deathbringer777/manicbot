@@ -51,7 +51,8 @@ const MASTER_PALETTE = [
 interface MasterRow {
   chatId: number;
   name: string | null;
-  workHours?: string | null; // optional JSON: { mon: "09:00-19:00", ... }
+  /** D1 stores `work_hours` as TEXT — accept any shape; parsed lazily. */
+  workHours?: unknown;
 }
 
 /**
@@ -102,6 +103,87 @@ function timeToTop(hhmm: string): number {
 function durationToHeight(durationMin: number | null | undefined): number {
   const d = Math.max(15, durationMin ?? 60); // minimum visible height = 15min slot
   return (d / 60) * HOUR_HEIGHT;
+}
+
+/**
+ * Resolve a master's working window for the given day-of-week.
+ *
+ * `work_hours` is stored as TEXT in D1 and historically can be:
+ *   1. JSON {from, to} — a single window applied to every day (legacy).
+ *   2. JSON {mon, tue, …, sun} where each value is "HH:MM-HH:MM" — per-day
+ *      windows. A missing key means closed for that day.
+ *   3. A plain "09:00-18:00" string — single window applied to every day.
+ *   4. null / undefined — unknown; treat as fully open (don't hatch).
+ *
+ * Returns null when fully open (case 4 or no data) or `{startMin, endMin}`
+ * relative to midnight when the master IS working that day. Returns
+ * `{closed: true}` when explicitly closed for that day.
+ */
+function getMasterWorkRange(
+  workHoursRaw: unknown,
+  dayOfWeek: number, // 0=Sun … 6=Sat (JS Date.getDay)
+): { closed: true } | { startMin: number; endMin: number } | null {
+  if (workHoursRaw == null) return null;
+  let parsed: unknown = workHoursRaw;
+  if (typeof workHoursRaw === "string") {
+    const trimmed = workHoursRaw.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        // Single-window string like "09:00-18:00".
+        return parseRangeString(trimmed);
+      }
+    } else {
+      return parseRangeString(trimmed);
+    }
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    const obj = parsed as Record<string, unknown>;
+    // Case 1: {from, to}
+    if ("from" in obj && "to" in obj) {
+      const f = obj.from;
+      const t = obj.to;
+      const startMin =
+        typeof f === "number" ? f * 60 : parseHHMMToMinutes(typeof f === "string" ? f : undefined);
+      const endMin =
+        typeof t === "number" ? t * 60 : parseHHMMToMinutes(typeof t === "string" ? t : undefined);
+      if (endMin > startMin) return { startMin, endMin };
+      return null;
+    }
+    // Case 2: per-day map
+    const KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayOfWeek]!;
+    const dayValue = obj[KEY];
+    if (dayValue == null || dayValue === "" || dayValue === false) {
+      return { closed: true };
+    }
+    if (typeof dayValue === "string") {
+      return parseRangeString(dayValue);
+    }
+    if (typeof dayValue === "object" && dayValue !== null) {
+      const inner = dayValue as Record<string, unknown>;
+      const f = inner.from ?? inner.start;
+      const t = inner.to ?? inner.end;
+      const startMin =
+        typeof f === "number" ? f * 60 : parseHHMMToMinutes(typeof f === "string" ? f : undefined);
+      const endMin =
+        typeof t === "number" ? t * 60 : parseHHMMToMinutes(typeof t === "string" ? t : undefined);
+      if (endMin > startMin) return { startMin, endMin };
+      return { closed: true };
+    }
+    return null;
+  }
+  return null;
+}
+
+function parseRangeString(s: string): { startMin: number; endMin: number } | { closed: true } | null {
+  const m = s.match(/(\d{1,2}):?(\d{2})\s*[-–—]\s*(\d{1,2}):?(\d{2})/);
+  if (!m) return null;
+  const startMin = Number(m[1]) * 60 + Number(m[2]);
+  const endMin = Number(m[3]) * 60 + Number(m[4]);
+  if (endMin > startMin) return { startMin, endMin };
+  return null;
 }
 
 export function SalonDayView({
@@ -388,7 +470,7 @@ export function SalonDayView({
                     </span>
                   </div>
 
-                  {/* Body — hour-rule lines */}
+                  {/* Body — hour-rule lines + non-working hatching */}
                   <div
                     className="relative"
                     style={{ height: TOTAL_HOURS * HOUR_HEIGHT }}
@@ -401,6 +483,58 @@ export function SalonDayView({
                         style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
                       />
                     ))}
+
+                    {/* Non-working hours hatching — drawn behind appointments
+                        so explicit overrides (apt scheduled outside the
+                        master's window) still pop visually. Skipped for the
+                        synthetic Unassigned column. */}
+                    {(() => {
+                      if (master.chatId === -1) return null;
+                      const range = getMasterWorkRange(
+                        (master as MasterRow).workHours,
+                        date.getDay(),
+                      );
+                      if (range === null) return null;
+                      const dayStart = HOUR_START * 60;
+                      const dayEnd = HOUR_END * 60;
+                      const hatchClass = "absolute left-0 right-0 pointer-events-none";
+                      const hatchStyle: React.CSSProperties = {
+                        backgroundImage:
+                          "repeating-linear-gradient(-45deg, rgba(148,163,184,0.12), rgba(148,163,184,0.12) 4px, transparent 4px, transparent 10px)",
+                      };
+                      if ("closed" in range) {
+                        return (
+                          <div
+                            data-testid="day-view-non-working"
+                            className={hatchClass}
+                            style={{ top: 0, height: TOTAL_HOURS * HOUR_HEIGHT, ...hatchStyle }}
+                          />
+                        );
+                      }
+                      const startVis = Math.max(range.startMin, dayStart);
+                      const endVis = Math.min(range.endMin, dayEnd);
+                      const beforeHeight = ((startVis - dayStart) / 60) * HOUR_HEIGHT;
+                      const afterTop = ((endVis - dayStart) / 60) * HOUR_HEIGHT;
+                      const afterHeight = TOTAL_HOURS * HOUR_HEIGHT - afterTop;
+                      return (
+                        <>
+                          {beforeHeight > 0 && (
+                            <div
+                              data-testid="day-view-non-working"
+                              className={hatchClass}
+                              style={{ top: 0, height: beforeHeight, ...hatchStyle }}
+                            />
+                          )}
+                          {afterHeight > 0 && (
+                            <div
+                              data-testid="day-view-non-working"
+                              className={hatchClass}
+                              style={{ top: afterTop, height: afterHeight, ...hatchStyle }}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* Appointment blocks */}
                     {list.map((a) => {

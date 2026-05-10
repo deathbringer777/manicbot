@@ -10,7 +10,7 @@
  *   - loading state shows spinner before data.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("~/lib/appointments", () => ({
   APT_BORDER: {
@@ -198,4 +198,140 @@ describe("SalonAgendaView", () => {
     expect(days[0]?.getAttribute("data-day")).toBe("2026-05-09");
     expect(days[1]?.getAttribute("data-day")).toBe("2026-05-08");
   });
+
+  // ── GCal-style row layout ─────────────────────────────────────────
+  it("renders one compact row per appointment with status data attribute", () => {
+    renderWithLang(
+      <SalonAgendaView
+        apts={[
+          apt({ id: 1, status: "confirmed" }),
+          apt({ id: 2, status: "pending", time: "11:00" }),
+          apt({ id: 3, cancelled: 1, status: "cancelled", time: "12:00" }),
+        ]}
+        isLoading={false}
+        lang="en"
+        onAction={() => undefined}
+        onNoShow={() => undefined}
+      />,
+      "en",
+    );
+    const rows = screen.getAllByTestId("agenda-row");
+    expect(rows.length).toBe(3);
+    const byId: Record<string, string | null> = {};
+    for (const r of rows) byId[r.getAttribute("data-apt-id")!] = r.getAttribute("data-status");
+    expect(byId["1"]).toBe("confirmed");
+    expect(byId["2"]).toBe("pending");
+    expect(byId["3"]).toBe("cancelled");
+  });
+
+  it("pending rows expose Confirm + Reject inline buttons", () => {
+    const onAction = vi.fn();
+    renderWithLang(
+      <SalonAgendaView
+        apts={[apt({ id: 7, status: "pending" })]}
+        isLoading={false}
+        lang="en"
+        onAction={onAction}
+        onNoShow={() => undefined}
+      />,
+      "en",
+    );
+    const confirmBtn = screen.getByTestId("agenda-row-confirm");
+    const rejectBtn = screen.getByTestId("agenda-row-reject");
+    fireEvent.click(confirmBtn);
+    expect(onAction).toHaveBeenCalledWith(7, "confirmed");
+    fireEvent.click(rejectBtn);
+    expect(onAction).toHaveBeenCalledWith(7, "rejected");
+  });
+
+  it("confirmed rows hide inline Confirm + Reject buttons", () => {
+    renderWithLang(
+      <SalonAgendaView
+        apts={[apt({ id: 1, status: "confirmed" })]}
+        isLoading={false}
+        lang="en"
+        onAction={() => undefined}
+        onNoShow={() => undefined}
+      />,
+      "en",
+    );
+    expect(screen.queryByTestId("agenda-row-confirm")).toBeNull();
+    expect(screen.queryByTestId("agenda-row-reject")).toBeNull();
+    expect(screen.getByTestId("agenda-row-menu")).toBeTruthy();
+  });
+
+  it("confirmed row menu opens popover with Cancel / no-show actions", () => {
+    const onAction = vi.fn();
+    const onNoShow = vi.fn();
+    renderWithLang(
+      <SalonAgendaView
+        apts={[apt({ id: 5, status: "confirmed" })]}
+        isLoading={false}
+        lang="en"
+        onAction={onAction}
+        onNoShow={onNoShow}
+      />,
+      "en",
+    );
+    expect(screen.queryByTestId("agenda-row-menu-popover")).toBeNull();
+    fireEvent.click(screen.getByTestId("agenda-row-menu"));
+    const popover = screen.getByTestId("agenda-row-menu-popover");
+    const buttons = popover.querySelectorAll("button");
+    expect(buttons.length).toBe(3);
+    // Cancel triggers onAction with "cancelled"
+    fireEvent.click(buttons[0]!);
+    expect(onAction).toHaveBeenCalledWith(5, "cancelled");
+  });
+
+  it("uses the master color for the row leading border + dot when masterId resolves", () => {
+    renderWithLang(
+      <SalonAgendaView
+        apts={[apt({ id: 1, masterId: 200, status: "confirmed" })]}
+        isLoading={false}
+        lang="en"
+        masters={[
+          { chatId: 100, name: "Anna" }, // index 0 → purple
+          { chatId: 200, name: "Olga" }, // index 1 → green
+        ]}
+        onAction={() => undefined}
+        onNoShow={() => undefined}
+      />,
+      "en",
+    );
+    const row = screen.getByTestId("agenda-row");
+    // Olga is index 1 in the palette → "#0b9b6b". CSSStyle reports
+    // it normalized so just check the inline style mentions the hue.
+    expect(row.getAttribute("style") ?? "").toMatch(/0b9b6b|11.*155.*107/);
+  });
+
+  it("looks up service display names via serviceNames map", () => {
+    renderWithLang(
+      <SalonAgendaView
+        apts={[apt({ id: 1, svcId: "gel_polish" })]}
+        isLoading={false}
+        lang="en"
+        serviceNames={{ gel_polish: "Pretty gel polish" }}
+        onAction={() => undefined}
+        onNoShow={() => undefined}
+      />,
+      "en",
+    );
+    expect(screen.getByTestId("agenda-row").textContent).toContain("Pretty gel polish");
+  });
+
+  it("shows 'filtered out' empty state when filtersActive + apts is empty", () => {
+    renderWithLang(
+      <SalonAgendaView
+        apts={[]}
+        isLoading={false}
+        lang="en"
+        filtersActive={true}
+        onAction={() => undefined}
+        onNoShow={() => undefined}
+      />,
+      "en",
+    );
+    expect(document.body.textContent).toContain("All bookings filtered out");
+  });
 });
+

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, List as ListIcon } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -10,6 +10,8 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { TodayTab } from "~/components/master/tabs/TodayTab";
+import { MonthCalendar } from "~/components/calendar/MonthCalendar";
+import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { TestBadge } from "~/components/ui/TestBadge";
@@ -94,6 +96,148 @@ function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "c
             className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
             <UserX className="h-3.5 w-3.5" /> {t("master.noShow.client", lang)}
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Master's schedule — calendar / list toggle wrapping the same data. */
+function ScheduleTab({
+  tenantId,
+  lang,
+  schedule,
+  canMutate,
+  markNoShowMut,
+}: {
+  tenantId: string;
+  lang: Lang;
+  schedule: { isLoading: boolean; isError: boolean; data?: any[] };
+  canMutate: boolean;
+  markNoShowMut: { mutate: (input: { tenantId: string; id: string; noShowBy: "client" | "master" }) => void };
+}) {
+  const [view, setView] = useState<"calendar" | "list">("calendar");
+  const [calViewDate, setCalViewDate] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const dayMap: Record<string, any[]> = {};
+  (schedule.data ?? []).forEach((a: any) => {
+    (dayMap[a.date] ??= []).push(a);
+  });
+  const selectedDayApts = selectedDay ? dayMap[selectedDay] ?? [] : [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">
+          {t("master.allApts", lang)}
+        </h2>
+        <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5" data-testid="master-schedule-view-switcher">
+          <button
+            type="button"
+            onClick={() => setView("calendar")}
+            data-testid="master-schedule-mode-calendar"
+            data-active={view === "calendar" ? "1" : "0"}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              view === "calendar"
+                ? "bg-brand-500/20 text-brand-400"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            {t("salon.cal.calendar", lang)}
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("list")}
+            data-testid="master-schedule-mode-list"
+            data-active={view === "list" ? "1" : "0"}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              view === "list"
+                ? "bg-brand-500/20 text-brand-400"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            <ListIcon className="w-3.5 h-3.5" />
+            {t("salon.cal.list", lang)}
+          </button>
+        </div>
+      </div>
+
+      {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+      {schedule.isError && (
+        <div className="glass-card rounded-2xl p-6 text-center">
+          <p className="text-red-400">{t("common.errorLoading", lang)}</p>
+        </div>
+      )}
+
+      {view === "calendar" && (
+        <>
+          <MonthCalendar
+            apts={schedule.data ?? []}
+            viewDate={calViewDate}
+            setViewDate={(d) => { setCalViewDate(d); setSelectedDay(null); }}
+            selectedDay={selectedDay}
+            setSelectedDay={setSelectedDay}
+            isLoading={schedule.isLoading}
+            lang={lang}
+          />
+          {selectedDay && (
+            <div className="glass-card rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+                  {new Date(selectedDay + "T12:00:00").toLocaleDateString(
+                    lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU",
+                    { weekday: "long", day: "numeric", month: "long" },
+                  )}
+                  {selectedDayApts.length > 0 && (
+                    <span className="ml-2 text-slate-400 dark:text-slate-500 font-medium">
+                      · {selectedDayApts.length}
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={() => setSelectedDay(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {selectedDayApts.map((a: any) => (
+                  <AptCard
+                    key={a.id}
+                    a={a}
+                    lang={lang}
+                    onNoShow={canMutate
+                      ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
+                      : undefined}
+                  />
+                ))}
+                {selectedDayApts.length === 0 && (
+                  <p className="text-slate-500 text-sm text-center py-4">{t("master.noApts", lang)}</p>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {view === "list" && (
+        <div className="space-y-2">
+          {schedule.data?.map((a: any) => (
+            <AptRow
+              key={a.id}
+              apt={a}
+              onNoShow={canMutate
+                ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
+                : undefined}
+            />
+          ))}
+          {schedule.data?.length === 0 && (
+            <p className="text-slate-500 text-sm text-center py-8">{t("master.noApts", lang)}</p>
+          )}
         </div>
       )}
     </div>
@@ -286,24 +430,13 @@ export function MasterDashboard({
 
       {/* SCHEDULE */}
       {tab === "schedule" && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">{t("master.allApts", lang)}</h2>
-          </div>
-          {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {schedule.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
-          <div className="space-y-2">
-            {schedule.data?.map((a: any) => (
-              <AptRow key={a.id} apt={a}
-                onNoShow={canMutate
-                  ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
-                  : undefined
-                }
-              />
-            ))}
-            {schedule.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("master.noApts", lang)}</p>}
-          </div>
-        </div>
+        <ScheduleTab
+          tenantId={tenantId}
+          lang={lang}
+          schedule={schedule}
+          canMutate={canMutate}
+          markNoShowMut={markNoShowMut}
+        />
       )}
 
       {/* CLIENTS */}

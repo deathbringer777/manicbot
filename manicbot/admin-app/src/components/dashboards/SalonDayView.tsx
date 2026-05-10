@@ -564,6 +564,7 @@ export function SalonDayView({
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
                       const isNoShow = !!a.noShow;
                       const opacity = isCancelled || isNoShow ? 0.45 : 1;
+                      const isSelected = selectedApt?.id === a.id;
                       return (
                         <button
                           type="button"
@@ -571,7 +572,10 @@ export function SalonDayView({
                           onClick={() => setSelectedApt(a)}
                           data-testid="day-view-event"
                           data-apt-id={a.id}
-                          className="absolute left-1 right-1 rounded-lg px-2 py-1 text-left transition-shadow hover:shadow-lg overflow-hidden"
+                          data-selected={isSelected ? "1" : "0"}
+                          className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left transition-all overflow-hidden ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-white/20 hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                            isSelected ? "ring-2 ring-offset-1 shadow-md" : ""
+                          }`}
                           style={{
                             top,
                             height,
@@ -584,7 +588,9 @@ export function SalonDayView({
                           <div className="text-[10px] font-bold tabular-nums" style={{ color: tone.text }}>
                             {a.time}
                           </div>
-                          <div className="text-[11px] font-medium text-slate-800 dark:text-white truncate leading-tight">
+                          <div className={`text-[11px] font-medium text-slate-800 dark:text-white truncate leading-tight ${
+                            isCancelled || isNoShow ? "line-through" : ""
+                          }`}>
                             {a.userName ?? a.userTg ?? `#${a.chatId ?? ""}`}
                           </div>
                           {a.svcId && height >= HOUR_HEIGHT * 0.75 && (

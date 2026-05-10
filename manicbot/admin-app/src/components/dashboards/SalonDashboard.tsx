@@ -15,6 +15,7 @@ import { Shell, type NavItem } from "~/components/layout/Shell";
 import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
+import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
@@ -1145,16 +1146,10 @@ function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
   );
 }
 
-// ─── Salon BigCalendar ────────────────────────────────────────────────────
-const WEEKDAYS_SHORT: Record<string, string[]> = {
-  ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
-  ua: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
-  en: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
-  pl: ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"],
-};
-
+// ─── Salon BigCalendar — thin wrapper around shared MonthCalendar ──────────
 function SalonBigCalendar({
   apts,
+  masters,
   viewDate,
   setViewDate,
   selectedDay,
@@ -1163,8 +1158,10 @@ function SalonBigCalendar({
   lang,
   onAction,
   onNoShow,
+  serviceNames,
 }: {
   apts: any[];
+  masters?: Array<{ chatId: number; name: string | null }>;
   viewDate: Date;
   setViewDate: (d: Date) => void;
   selectedDay: string | null;
@@ -1173,157 +1170,45 @@ function SalonBigCalendar({
   lang: Lang;
   onAction: (id: number, status: "confirmed" | "cancelled" | "rejected") => void;
   onNoShow: (id: number, noShowBy: "client" | "master") => void;
+  serviceNames?: Record<string, string>;
 }) {
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const fmtISO = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
-  const firstDowSun = new Date(year, month, 1).getDay();
-  const firstDow = (firstDowSun + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const cells: (number | null)[] = [
-    ...Array<null>(firstDow).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const today = new Date();
-  const isToday = (day: number) =>
-    today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-
   const dayMap = useMemo(() => {
     const m: Record<string, any[]> = {};
-    apts.forEach((a) => {
-      if (!m[a.date]) m[a.date] = [];
-      m[a.date]!.push(a);
-    });
+    apts.forEach((a) => { (m[a.date] ??= []).push(a); });
     return m;
   }, [apts]);
-
-  const monthLabel = viewDate.toLocaleString(lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU", { month: "long", year: "numeric" });
-  const weekdays = WEEKDAYS_SHORT[lang] ?? WEEKDAYS_SHORT.ru!;
-
-  const selectedDayApts = useMemo(
-    () => (selectedDay ? (dayMap[selectedDay] ?? []) : []),
-    [selectedDay, dayMap],
-  );
+  const selectedDayApts = selectedDay ? dayMap[selectedDay] ?? [] : [];
 
   return (
     <div className="space-y-3">
-      <div className="glass-card rounded-2xl p-3">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-brand-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{monthLabel}</h2>
-            {isLoading && (
-              <div className="w-3 h-3 rounded-full border-2 border-brand-500/40 border-t-brand-400 animate-spin" />
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setViewDate(new Date(year, month - 1))}
-              className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button onClick={() => { setViewDate(new Date()); setSelectedDay(null); }}
-              className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
-              {t("salon.cal.todaySmall", lang)}
-            </button>
-            <button onClick={() => setViewDate(new Date(year, month + 1))}
-              className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+      <MonthCalendar
+        apts={apts}
+        masters={masters}
+        viewDate={viewDate}
+        setViewDate={setViewDate}
+        selectedDay={selectedDay}
+        setSelectedDay={setSelectedDay}
+        isLoading={isLoading}
+        lang={lang}
+      />
 
-        {/* Weekday headers */}
-        <div className="grid grid-cols-7 mb-1">
-          {weekdays.map((d) => (
-            <div key={d} className="text-center text-[10px] font-medium text-slate-500 py-1">{d}</div>
-          ))}
-        </div>
-
-        {/* Day cells */}
-        <div className="grid grid-cols-7 gap-px">
-          {cells.map((day, i) => {
-            if (day === null) return <div key={`empty-${i}`} className="min-h-[64px]" />;
-
-            const iso = fmtISO(year, month, day);
-            const dayApts = dayMap[iso] ?? [];
-            const count = dayApts.length;
-            const isSelected = selectedDay === iso;
-            const todayDay = isToday(day);
-            const visible = dayApts.slice(0, 2);
-            const overflow = count - visible.length;
-
-            return (
-              <button key={iso}
-                onClick={() => setSelectedDay(isSelected ? null : iso)}
-                className={`relative flex flex-col rounded-xl p-1.5 text-left transition-all min-h-[64px] ${
-                  isSelected ? "bg-brand-500/25 ring-1 ring-brand-500/60"
-                  : todayDay ? "bg-brand-500/15 ring-1 ring-brand-500/30"
-                  : "hover:bg-white/[0.04] active:bg-white/[0.08]"
-                }`}>
-                <span className={`text-xs font-bold leading-none mb-1 ${
-                  todayDay ? "text-brand-400"
-                  : isSelected ? "text-slate-900 dark:text-white"
-                  : count > 0 ? "text-slate-200" : "text-slate-600"
-                }`}>{day}</span>
-                <div className="flex flex-col gap-0.5 w-full">
-                  {visible.map((a: any) => {
-                    const sk = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
-                    // Per-status chip colors with explicit light-theme variants
-                    // so Month grid is readable on the white surface (the
-                    // text-*-300 tones are barely visible without dark:).
-                    const chipColor =
-                      sk === "pending" ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                      : sk === "confirmed" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                      : sk === "done" ? "bg-brand-500/20 text-brand-700 dark:text-brand-300"
-                      : sk === "no_show" ? "bg-orange-500/20 text-orange-700 dark:text-orange-300"
-                      : "bg-slate-200 text-slate-600 dark:bg-slate-700/40 dark:text-slate-400";
-                    return (
-                      <div key={a.id} className={`text-[9px] leading-tight rounded px-1 py-0.5 truncate font-medium ${chipColor}`}>
-                        {a.time} {a.userName ?? a.userTg ?? ""}
-                      </div>
-                    );
-                  })}
-                  {overflow > 0 && <div className="text-[9px] text-slate-500 pl-1">+{overflow}</div>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Legend */}
-        <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
-          <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5 rounded bg-brand-500/40 ring-1 ring-brand-500/40" />
-            <span>{t("salon.cal.today", lang)}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5 rounded bg-amber-500/25" />
-            <span>{t("salon.cal.pending", lang)}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2.5 h-2.5 rounded bg-emerald-500/25" />
-            <span>{t("salon.cal.confirmed", lang)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Selected day panel */}
       {selectedDay && (
         <div className="glass-card rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
               {new Date(selectedDay + "T12:00:00").toLocaleDateString(
                 lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU",
-                { weekday: "long", day: "numeric", month: "long" }
+                { weekday: "long", day: "numeric", month: "long" },
+              )}
+              {selectedDayApts.length > 0 && (
+                <span className="ml-2 text-slate-400 dark:text-slate-500 font-medium">· {selectedDayApts.length}</span>
               )}
             </h3>
-            <button onClick={() => setSelectedDay(null)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition-colors">
+            <button
+              onClick={() => setSelectedDay(null)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+              aria-label="Close"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -1337,9 +1222,12 @@ function SalonBigCalendar({
           </div>
         </div>
       )}
+      {/* serviceNames reserved for future row enrichment */}
+      {!serviceNames && null}
     </div>
   );
 }
+
 
 export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; forceTab?: Tab }) {
   const { lang } = useLang();
@@ -1428,9 +1316,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const mastersList = api.salon.getMasters.useQuery(
     { tenantId },
     {
-      enabled:
-        tab === "masters" ||
-        (tab === "appointments" && (aptViewMode === "day" || aptViewMode === "week")),
+      // Masters power the rail's "My calendars" + every appointment view's
+      // master coloring, so keep the query enabled for the whole tab.
+      enabled: tab === "masters" || tab === "appointments",
     },
   );
   // Auto-confirm settings — surfaced in the calendar left rail so the
@@ -1446,7 +1334,48 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // read from the same source. localStorage-backed so the owner's
   // preference survives reloads.
   const masterVis = useMasterVisibility();
-  const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" });
+  // Calendar/agenda filter state — local to the appointments tab. Status
+  // filter persists on page reload via localStorage so the user's choice
+  // survives refresh; service filter is session-local since the service
+  // catalog can change.
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("manicbot_apt_hidden_statuses");
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set<string>(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggleStatusHidden = (s: string) => {
+    setHiddenStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      try { window.localStorage.setItem("manicbot_apt_hidden_statuses", JSON.stringify(Array.from(next))); } catch { /* noop */ }
+      return next;
+    });
+  };
+  const showAllStatuses = () => {
+    setHiddenStatuses(new Set());
+    try { window.localStorage.setItem("manicbot_apt_hidden_statuses", "[]"); } catch { /* noop */ }
+  };
+  const [hiddenServiceIds, setHiddenServiceIds] = useState<Set<string>>(new Set());
+  const toggleServiceHidden = (svcId: string) => {
+    setHiddenServiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(svcId)) next.delete(svcId);
+      else next.add(svcId);
+      return next;
+    });
+  };
+  const showAllServices = () => setHiddenServiceIds(new Set());
+  // Services list is needed in the appointments tab too — we use it both
+  // for the rail filter and to look up service display names in the
+  // agenda/list rows.
+  const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
@@ -1660,10 +1589,63 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       )}
 
       {/* ── APPOINTMENTS ── */}
-      {tab === "appointments" && (
+      {tab === "appointments" && (() => {
+        // ── Service catalog → rail items + name lookup ────────────────
+        const svcRows = (svcList.data ?? []) as Array<{ svcId: string; names?: string | null; active?: number }>;
+        const parseSvcName = (raw: string | null | undefined, fallback: string): string => {
+          if (!raw) return fallback;
+          const trimmed = raw.trim();
+          if (!trimmed) return fallback;
+          if (trimmed.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(trimmed) as Record<string, string>;
+              return parsed[lang] ?? parsed.en ?? parsed.ru ?? Object.values(parsed)[0] ?? fallback;
+            } catch {
+              return trimmed;
+            }
+          }
+          return trimmed;
+        };
+        const serviceNames: Record<string, string> = {};
+        const serviceRailItems = svcRows
+          .filter((s) => s.active !== 0)
+          .map((s) => {
+            const name = parseSvcName(s.names ?? null, s.svcId);
+            serviceNames[s.svcId] = name;
+            return { svcId: s.svcId, name };
+          });
+
+        // ── Apply filters to whichever apt set we're rendering ────────
+        const filterApt = (a: any): boolean => {
+          const status = a.noShow
+            ? "no_show"
+            : a.cancelled || a.status === "cancelled" || a.status === "rejected"
+              ? "cancelled"
+              : a.status === "done"
+                ? "done"
+                : a.status === "confirmed"
+                  ? "confirmed"
+                  : "pending";
+          if (hiddenStatuses.has(status)) return false;
+          if (a.svcId && hiddenServiceIds.has(a.svcId)) return false;
+          if (a.masterId != null && masterVis.hiddenMasterIds.has(Number(a.masterId))) return false;
+          return true;
+        };
+        const filtersActive =
+          hiddenStatuses.size > 0 ||
+          hiddenServiceIds.size > 0 ||
+          masterVis.hiddenMasterIds.size > 0;
+
+        const aptsFiltered = (apts.data ?? []).filter(filterApt);
+        const dayAptsFiltered = (dayApts.data ?? []).filter(filterApt);
+        const weekAptsFiltered = (weekApts.data ?? []).filter(filterApt);
+        const calAptsFiltered = (calApts.data ?? []).filter(filterApt);
+
+        return (
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Left rail — mini-month + my calendars + auto-confirm + jump-by-week.
-              GCal/Booksy-parity vertical stack. Desktop only. */}
+          {/* Left rail — mini-month + my calendars + status / services filters
+              + auto-confirm + jump-by-week. GCal/Booksy-parity vertical stack.
+              Desktop only. */}
           <CalendarLeftRail
             selectedDate={calViewDate}
             setSelectedDate={setCalViewDate}
@@ -1675,13 +1657,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             hiddenMasterIds={masterVis.hiddenMasterIds}
             toggleMasterVisible={masterVis.toggleMasterVisible}
             showAllMasters={masterVis.showAllMasters}
+            hiddenStatuses={hiddenStatuses as Set<any>}
+            toggleStatusVisible={(s) => toggleStatusHidden(s)}
+            showAllStatuses={showAllStatuses}
+            services={serviceRailItems}
+            hiddenServiceIds={hiddenServiceIds}
+            toggleServiceVisible={toggleServiceHidden}
+            showAllServices={showAllServices}
             autoConfirm={autoConfirmQuery.data}
             autoConfirmLoading={autoConfirmMut.isPending}
             setAutoConfirm={(channel, enabled) =>
               autoConfirmMut.mutate({ tenantId, channel, enabled })
             }
           />
-
           {/* Main column — header + view */}
           <div className="flex-1 min-w-0 space-y-3">
           <div className="flex items-center justify-between">
@@ -1729,7 +1717,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "calendar" && (
             <SalonBigCalendar
-              apts={calApts.data ?? []}
+              apts={calAptsFiltered}
+              masters={(mastersList.data ?? []).map((m: any) => ({ chatId: m.chatId, name: m.name }))}
               viewDate={calViewDate}
               setViewDate={setCalViewDate}
               selectedDay={selectedDay}
@@ -1738,6 +1727,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+              serviceNames={serviceNames}
             />
           )}
 
@@ -1745,7 +1735,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             <SalonDayView
               date={calViewDate}
               setDate={setCalViewDate}
-              apts={dayApts.data ?? []}
+              apts={dayAptsFiltered}
               masters={(mastersList.data ?? []) as any}
               isLoading={dayApts.isLoading || mastersList.isLoading}
               lang={lang}
@@ -1761,7 +1751,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             <SalonWeekView
               date={calViewDate}
               setDate={setCalViewDate}
-              apts={weekApts.data ?? []}
+              apts={weekAptsFiltered}
               masters={(mastersList.data ?? []) as any}
               isLoading={weekApts.isLoading || mastersList.isLoading}
               lang={lang}
@@ -1772,11 +1762,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "agenda" && (
             <SalonAgendaView
-              apts={apts.data ?? []}
+              apts={aptsFiltered}
               isLoading={apts.isLoading}
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+              masters={(mastersList.data ?? []).map((m: any) => ({ chatId: m.chatId, name: m.name }))}
+              serviceNames={serviceNames}
+              filtersActive={filtersActive && (apts.data?.length ?? 0) > 0}
             />
           )}
 
@@ -1785,18 +1778,22 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
               {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
               <div className="space-y-2">
-                {apts.data?.map((a: any) => (
+                {aptsFiltered.map((a: any) => (
                   <AptCard key={a.id} a={a} lang={lang}
                     onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
                     onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
                 ))}
-                {apts.data?.length === 0 && <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />}
+                {aptsFiltered.length === 0 && (apts.data?.length ?? 0) > 0 && filtersActive && (
+                  <EmptyState icon={CalendarDays} title={t("salon.agenda.allFiltered", lang)} description={t("salon.agenda.allFilteredHint", lang)} />
+                )}
+                {(apts.data?.length ?? 0) === 0 && <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />}
               </div>
             </>
           )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── SERVICES ── */}
       {tab === "services" && (

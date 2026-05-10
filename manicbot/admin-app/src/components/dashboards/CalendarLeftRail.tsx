@@ -30,7 +30,7 @@
  */
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors, Zap, Rocket } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
@@ -46,11 +46,31 @@ const MASTER_PALETTE = [
   { dot: "#0d9488", bg: "rgba(20,184,166,0.15)" },
 ] as const;
 
+/** Status palette — drives both the rail toggle dot and the agenda row pill.
+ *  Keys match the status filter Set values so callers can look up a tone
+ *  by status string. */
+export const STATUS_TONE: Record<string, { dot: string; bg: string; text: string }> = {
+  pending:   { dot: "#d97706", bg: "rgba(245,158,11,0.15)",  text: "#b45309" },
+  confirmed: { dot: "#059669", bg: "rgba(16,185,129,0.15)",  text: "#047857" },
+  cancelled: { dot: "#dc2626", bg: "rgba(239,68,68,0.15)",   text: "#b91c1c" },
+  no_show:   { dot: "#ea580c", bg: "rgba(249,115,22,0.15)",  text: "#c2410c" },
+  done:      { dot: "#0b9b6b", bg: "rgba(11,155,107,0.15)",  text: "#0b9b6b" },
+};
+
+export type StatusKey = "pending" | "confirmed" | "cancelled" | "no_show" | "done";
+export const STATUS_KEYS: StatusKey[] = ["pending", "confirmed", "cancelled", "no_show", "done"];
+
 export type AutoConfirmChannel = "web" | "telegram" | "whatsapp" | "instagram";
 
 export interface MasterRailItem {
   chatId: number;
   name: string | null;
+}
+
+export interface ServiceRailItem {
+  svcId: string;
+  name: string;
+  count?: number;
 }
 
 export interface AutoConfirmState {
@@ -73,6 +93,17 @@ interface Props {
   hiddenMasterIds?: Set<number>;
   toggleMasterVisible?: (chatId: number) => void;
   showAllMasters?: () => void;
+
+  /** ── Status filter section ────────────────────────────────────── */
+  hiddenStatuses?: Set<StatusKey>;
+  toggleStatusVisible?: (status: StatusKey) => void;
+  showAllStatuses?: () => void;
+
+  /** ── Service filter section ───────────────────────────────────── */
+  services?: ServiceRailItem[];
+  hiddenServiceIds?: Set<string>;
+  toggleServiceVisible?: (svcId: string) => void;
+  showAllServices?: () => void;
 
   /** ── Auto-confirm section ─────────────────────────────────────── */
   autoConfirm?: AutoConfirmState;
@@ -105,6 +136,13 @@ export function CalendarLeftRail({
   hiddenMasterIds,
   toggleMasterVisible,
   showAllMasters,
+  hiddenStatuses,
+  toggleStatusVisible,
+  showAllStatuses,
+  services,
+  hiddenServiceIds,
+  toggleServiceVisible,
+  showAllServices,
   autoConfirm,
   autoConfirmLoading,
   setAutoConfirm,
@@ -231,7 +269,8 @@ export function CalendarLeftRail({
       {masters && masters.length > 0 && hiddenMasterIds && toggleMasterVisible && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-my-calendars">
           <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <Users className="h-3 w-3" />
               {t("salon.day.myCalendars", lang)}
             </p>
             {hiddenMasterIds.size > 0 && showAllMasters && (
@@ -292,11 +331,140 @@ export function CalendarLeftRail({
         </section>
       )}
 
+      {/* Status filter — checkboxes per appointment status. GCal-parity:
+          each status renders as its own "calendar" toggle. */}
+      {hiddenStatuses && toggleStatusVisible && (
+        <section className="glass-card rounded-2xl p-3" data-testid="rail-status-filter">
+          <header className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <Filter className="h-3 w-3" />
+              {t("salon.rail.statusFilter", lang)}
+            </p>
+            {hiddenStatuses.size > 0 && showAllStatuses && (
+              <button
+                type="button"
+                onClick={showAllStatuses}
+                data-testid="rail-show-all-statuses"
+                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
+              >
+                {t("salon.day.showAll", lang)}
+              </button>
+            )}
+          </header>
+          <ul className="space-y-0.5">
+            {STATUS_KEYS.map((status) => {
+              const tone = STATUS_TONE[status]!;
+              const visible = !hiddenStatuses.has(status);
+              return (
+                <li key={status}>
+                  <button
+                    type="button"
+                    onClick={() => toggleStatusVisible(status)}
+                    data-testid="rail-status-toggle"
+                    data-status={status}
+                    data-visible={visible ? "1" : "0"}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                      visible
+                        ? "hover:bg-slate-100 dark:hover:bg-white/[0.04]"
+                        : "opacity-50 hover:opacity-80"
+                    }`}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-sm shrink-0 border"
+                      style={{
+                        background: visible ? tone.dot : "transparent",
+                        borderColor: tone.dot,
+                      }}
+                    />
+                    <span
+                      className={`flex-1 text-[11px] font-medium truncate text-left ${
+                        visible
+                          ? "text-slate-700 dark:text-slate-200"
+                          : "text-slate-400 dark:text-slate-500 line-through"
+                      }`}
+                    >
+                      {t(`status.${status}` as any, lang)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* Service filter — toggle per service. Optional: render only when a
+          services list is provided (e.g. caller derives it from the active
+          service catalog or from the visible appointments). */}
+      {services && services.length > 0 && hiddenServiceIds && toggleServiceVisible && (
+        <section className="glass-card rounded-2xl p-3" data-testid="rail-service-filter">
+          <header className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <Scissors className="h-3 w-3" />
+              {t("salon.rail.serviceFilter", lang)}
+            </p>
+            {hiddenServiceIds.size > 0 && showAllServices && (
+              <button
+                type="button"
+                onClick={showAllServices}
+                data-testid="rail-show-all-services"
+                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
+              >
+                {t("salon.day.showAll", lang)}
+              </button>
+            )}
+          </header>
+          <ul className="space-y-0.5 max-h-48 overflow-y-auto pr-0.5">
+            {services.map((svc) => {
+              const visible = !hiddenServiceIds.has(svc.svcId);
+              return (
+                <li key={svc.svcId}>
+                  <button
+                    type="button"
+                    onClick={() => toggleServiceVisible(svc.svcId)}
+                    data-testid="rail-service-toggle"
+                    data-service-id={svc.svcId}
+                    data-visible={visible ? "1" : "0"}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                      visible
+                        ? "hover:bg-slate-100 dark:hover:bg-white/[0.04]"
+                        : "opacity-50 hover:opacity-80"
+                    }`}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-sm shrink-0 border border-slate-400 dark:border-slate-500"
+                      style={{
+                        background: visible ? "rgb(100 116 139)" : "transparent",
+                      }}
+                    />
+                    <span
+                      className={`flex-1 text-[11px] font-medium truncate text-left ${
+                        visible
+                          ? "text-slate-700 dark:text-slate-200"
+                          : "text-slate-400 dark:text-slate-500 line-through"
+                      }`}
+                    >
+                      {svc.name}
+                    </span>
+                    {typeof svc.count === "number" && svc.count > 0 && (
+                      <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500 shrink-0">
+                        {svc.count}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
       {/* Auto-confirm — channel toggles. Mirrors AutoConfirmSettings on
           the dashboard but in a compact rail-friendly layout. */}
       {autoConfirm && setAutoConfirm && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-auto-confirm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 flex items-center gap-1.5">
+            <Zap className="h-3 w-3" />
             {t("salon.autoConfirm.title", lang)}
           </p>
           <p className="text-[10px] text-slate-500 dark:text-slate-500 mb-2 leading-snug">
@@ -351,7 +519,8 @@ export function CalendarLeftRail({
 
       {/* Jump By Week chips — Booksy-parity */}
       <section className="glass-card rounded-2xl p-3" data-testid="jump-by-week">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1.5">
+          <Rocket className="h-3 w-3" />
           {t("salon.rail.jumpByWeek", lang)}
         </p>
         <div className="grid grid-cols-6 gap-1 mb-1.5">

@@ -16,7 +16,9 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **Billing** — Stripe Checkout and Portal, three plans (Start / Pro / Studio)
 - **Support** — client↔master tickets and platform tickets client↔support agent
 - **Notifications** — cron every 15 min, appointment reminders
-- **Calendar** — ICS file for each appointment
+- **Calendar** — ICS file for each appointment; admin dashboard offers Calendar / Agenda / List view modes for appointments (`SalonBigCalendar` month grid + `SalonAgendaView` text-list with Today/Tomorrow/weekday grouping)
+- **Master calendar visibility** — masters control peer-to-peer schedule sharing within their tenant via `masters.calendar_visibility` (migration 0049): `private | salon_only | salon_and_peers`. Salon owner always sees regardless.
+- **Dashboard chrome** — sticky desktop top bar with theme toggle (sun/moon) and fullscreen toggle (browser Fullscreen API) for "salon OS" mode on reception-desk iPads
 - **4-language interface** — RU, UA, EN, PL
 - **Management panels** — HTML admin panel for tenants, sysadmin panel for the platform
 - **CSV export** — clients and appointments

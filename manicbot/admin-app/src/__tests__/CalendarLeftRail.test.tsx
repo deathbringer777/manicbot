@@ -247,7 +247,6 @@ describe("CalendarLeftRail", () => {
       );
       expect(screen.queryByTestId("rail-show-all-masters")).toBeNull();
       rerender(
-        // @ts-expect-error — re-render with one hidden
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}

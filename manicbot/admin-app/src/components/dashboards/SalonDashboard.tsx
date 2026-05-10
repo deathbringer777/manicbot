@@ -17,6 +17,7 @@ import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
+import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -1271,12 +1272,15 @@ function SalonBigCalendar({
                 <div className="flex flex-col gap-0.5 w-full">
                   {visible.map((a: any) => {
                     const sk = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
+                    // Per-status chip colors with explicit light-theme variants
+                    // so Month grid is readable on the white surface (the
+                    // text-*-300 tones are barely visible without dark:).
                     const chipColor =
-                      sk === "pending" ? "bg-amber-500/20 text-amber-300"
-                      : sk === "confirmed" ? "bg-emerald-500/20 text-emerald-300"
-                      : sk === "done" ? "bg-brand-500/20 text-brand-300"
-                      : sk === "no_show" ? "bg-orange-500/20 text-orange-300"
-                      : "bg-slate-700/40 text-slate-400";
+                      sk === "pending" ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                      : sk === "confirmed" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                      : sk === "done" ? "bg-brand-500/20 text-brand-700 dark:text-brand-300"
+                      : sk === "no_show" ? "bg-orange-500/20 text-orange-700 dark:text-orange-300"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-700/40 dark:text-slate-400";
                     return (
                       <div key={a.id} className={`text-[9px] leading-tight rounded px-1 py-0.5 truncate font-medium ${chipColor}`}>
                         {a.time} {a.userName ?? a.userTg ?? ""}
@@ -1643,7 +1647,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── APPOINTMENTS ── */}
       {tab === "appointments" && (
-        <div className="space-y-3">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Left rail — mini-month + Jump By Week (desktop only). */}
+          <CalendarLeftRail
+            selectedDate={calViewDate}
+            setSelectedDate={setCalViewDate}
+            lang={lang}
+          />
+
+          {/* Main column — header + view */}
+          <div className="flex-1 min-w-0 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
             <div className="flex items-center gap-2">
@@ -1751,6 +1764,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               </div>
             </>
           )}
+          </div>
         </div>
       )}
 

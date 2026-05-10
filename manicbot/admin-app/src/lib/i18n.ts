@@ -457,6 +457,8 @@ const translations = {
   "completeness.services":               { ru: "Минимум 3 услуги", ua: "Мінімум 3 послуги", en: "At least 3 services", pl: "Co najmniej 3 usługi" },
   "completeness.masters":                { ru: "Хотя бы один мастер", ua: "Хоча б один майстер", en: "At least one master", pl: "Co najmniej jeden mistrz" },
   "completeness.public":                 { ru: "Публичный профиль активен", ua: "Публічний профіль активний", en: "Public profile active", pl: "Profil publiczny aktywny" },
+
+  "salon.rail.jumpByWeek":               { ru: "Перейти к неделе", ua: "Перейти до тижня", en: "Jump By Week", pl: "Przejdź do tygodnia" },
   "salon.cal.todaySmall":                { ru: "сегодня", ua: "сьогодні", en: "today", pl: "dziś" },
   "salon.cal.today":                     { ru: "Сегодня", ua: "Сьогодні", en: "Today", pl: "Dziś" },
   "salon.cal.pending":                   { ru: "Ожидание", ua: "Очікування", en: "Pending", pl: "Oczekuje" },

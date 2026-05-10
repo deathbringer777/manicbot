@@ -18,16 +18,17 @@
  */
 import { describe, it, expect } from "vitest";
 import { getPageTitle } from "~/components/layout/WebShell";
-import { NAV_ITEMS, type Role, type NavItemConfig } from "~/lib/nav/navConfig";
+import { NAV_ITEMS, type NavItemDef } from "~/lib/nav/navConfig";
+import type { AppRole } from "~/server/api/routers/auth";
 import type { NavItem } from "~/lib/nav/useNavItems";
 import { tNav } from "~/lib/nav/useNavItems";
 
-function flatNavForRole(role: Role, lang: "ru" | "en" = "ru"): NavItem[] {
+function flatNavForRole(role: AppRole, lang: "ru" | "en" = "ru"): NavItem[] {
   // Mirror useNavItems flattening, minus the dashboard-prefs filtering
   // (test fixtures don't have access to that hook). We just want every
   // item the role would see.
-  return NAV_ITEMS.filter((it: NavItemConfig) => it.roles.includes(role)).map(
-    (it: NavItemConfig) => ({
+  return NAV_ITEMS.filter((it: NavItemDef) => it.roles.includes(role)).map(
+    (it: NavItemDef) => ({
       href: it.href,
       label: tNav(it.labelKey, lang),
       icon: it.icon,

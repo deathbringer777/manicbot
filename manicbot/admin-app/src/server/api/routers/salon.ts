@@ -805,7 +805,8 @@ export const salonRouter = createTRPCRouter({
       const webhookSecret = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
 
-      // Check bot not used by another tenant
+      // Check bot not used by another tenant (cross-tenant by design — bot_id
+      // is globally unique; we intentionally scan all tenants to detect collisions).
       const otherTenant = await ctx.db
         .select({ tenantId: bots.tenantId })
         .from(bots)

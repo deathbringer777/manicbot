@@ -50,7 +50,11 @@ export function Composer({
   return (
     <form
       onSubmit={submit}
-      className="flex items-end gap-2 px-3 md:px-4 py-2.5 border-t border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md"
+      // pb arbitrary value respects the iOS home-indicator safe area: at
+      // least 0.625rem (matches the old py-2.5), bumped up to
+      // env(safe-area-inset-bottom) on devices with a notch so the Send
+      // button is never hidden behind the indicator.
+      className="flex items-end gap-2 px-3 md:px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] border-t border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md"
     >
       <textarea
         ref={textareaRef}
@@ -60,7 +64,9 @@ export function Composer({
         placeholder={ph}
         disabled={disabled}
         rows={1}
-        className="flex-1 resize-none rounded-2xl bg-white dark:bg-slate-800 px-4 py-3 text-sm md:text-base text-slate-900 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50"
+        // text-base (16px) on all viewports — anything smaller forces
+        // iOS Safari to zoom in on focus, which collapses the layout.
+        className="flex-1 resize-none rounded-2xl bg-white dark:bg-slate-800 px-4 py-3 text-base text-slate-900 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50"
         style={{
           ['--tw-ring-color' as string]: brandColor,
         }}

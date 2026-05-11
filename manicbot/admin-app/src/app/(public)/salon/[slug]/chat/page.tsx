@@ -1,11 +1,23 @@
 export const runtime = "edge";
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { createCaller } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
 import { ChatClient } from "./ChatClient";
 import { buildSeo, SITE_NAME } from "~/lib/seo";
+
+// Chat is a full-bleed, keyboard-driven surface — override the root viewport
+// so it sits flush with the device edges and resizes (rather than overlays)
+// when the on-screen keyboard appears. interactiveWidget=resizes-content is
+// the iOS 16+ / Android knob that keeps the Composer glued to the bottom of
+// the visual viewport instead of being hidden behind the keyboard.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+};
 
 interface Props {
   params: Promise<{ slug: string }>;

@@ -10,34 +10,28 @@ import {
 import { useLang } from "~/components/LangContext";
 import { useRole } from "~/components/RoleContext";
 import { t, type Lang } from "~/lib/i18n";
+import { tNav } from "~/lib/nav/navLabels";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 
-/** Sidebar tabs that can be toggled (matches buildSalonNav tab params in WebShell). */
-const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; labelKey: string }[] = [
-  { tab: "appointments", icon: CalendarDays, labelKey: "salon.appointments" },
-  { tab: "services",     icon: Scissors,     labelKey: "salon.services" },
-  { tab: "masters",      icon: UserRound,    labelKey: "salon.masters" },
-  { tab: "clients",      icon: Users,        labelKey: "salon.clients" },
-  { tab: "billing",      icon: Wallet,       labelKey: "billing.plan" },
-  { tab: "channels",     icon: MessageSquare, labelKey: "nav.channels" },
-  { tab: "analytics",    icon: BarChart3,    labelKey: "nav.analytics" },
-  { tab: "reviews",      icon: Star,         labelKey: "nav.reviews" },
-  { tab: "public_profile", icon: Globe,      labelKey: "nav.publicProfile" },
+/**
+ * Sidebar tabs that can be toggled. `navKey` matches the sidebar's tNav key
+ * so labels here render identically to what the user sees in the sidebar
+ * (avoids "Тариф" vs "Биллинг" / "Обзор" vs "Дашборд" mismatches).
+ */
+const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; navKey: string }[] = [
+  { tab: "appointments",   icon: CalendarDays,  navKey: "Appointments" },
+  { tab: "services",       icon: Scissors,      navKey: "Services" },
+  { tab: "masters",        icon: UserRound,     navKey: "Masters" },
+  { tab: "clients",        icon: Users,         navKey: "Clients" },
+  { tab: "billing",        icon: Wallet,        navKey: "Billing" },
+  { tab: "channels",       icon: MessageSquare, navKey: "Channels" },
+  { tab: "analytics",      icon: BarChart3,     navKey: "Analytics" },
+  { tab: "reviews",        icon: Star,          navKey: "Reviews" },
+  { tab: "public_profile", icon: Globe,         navKey: "PublicProfile" },
 ];
 
-/** Tab label fallback — uses i18n key or WebShell nav labels. */
-function tabLabel(key: string, lang: Lang): string {
-  // Try i18n first
-  const val = t(key as any, lang);
-  if (val !== key) return val;
-  // Fallback map for nav-only labels
-  const FALLBACK: Record<string, Record<string, string>> = {
-    "nav.channels":       { ru: "Каналы", ua: "Канали", en: "Channels", pl: "Kanały" },
-    "nav.analytics":      { ru: "Аналитика", ua: "Аналітика", en: "Analytics", pl: "Analityka" },
-    "nav.reviews":        { ru: "Отзывы", ua: "Відгуки", en: "Reviews", pl: "Opinie" },
-    "nav.publicProfile":  { ru: "Публичный профиль", ua: "Публічний профіль", en: "Public Profile", pl: "Profil publiczny" },
-  };
-  return FALLBACK[key]?.[lang] ?? key;
+function tabLabel(navKey: string, lang: Lang): string {
+  return tNav(navKey, lang);
 }
 
 /** Overview stat cards that can be toggled. */
@@ -84,12 +78,13 @@ export function AppearanceSection() {
     );
   }
 
-  // Visible tabs for default-tab selector (overview + non-hidden)
+  // Visible tabs for default-tab selector (overview + non-hidden).
+  // Use sidebar nav labels (tNav) so the chips here match the sidebar exactly.
   const visibleTabs = [
-    { tab: "overview", label: t("salon.overview", lang) },
+    { tab: "overview", label: tNav("Dashboard", lang) },
     ...TOGGLEABLE_TABS
       .filter((tb) => !prefs.hiddenTabs.includes(tb.tab))
-      .map((tb) => ({ tab: tb.tab, label: tabLabel(tb.labelKey, lang) })),
+      .map((tb) => ({ tab: tb.tab, label: tabLabel(tb.navKey, lang) })),
   ];
 
   return (
@@ -111,14 +106,14 @@ export function AppearanceSection() {
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.02]">
             <LayoutGrid className="h-4 w-4 text-slate-400 shrink-0" />
             <span className="text-sm text-slate-700 dark:text-slate-300 flex-1">
-              {t("salon.overview", lang)}
+              {tNav("Dashboard", lang)}
             </span>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
               {t("settings.alwaysVisible", lang)}
             </span>
           </div>
 
-          {TOGGLEABLE_TABS.map(({ tab, icon: Icon, labelKey }) => {
+          {TOGGLEABLE_TABS.map(({ tab, icon: Icon, navKey }) => {
             const visible = !prefs.hiddenTabs.includes(tab);
             return (
               <div
@@ -127,7 +122,7 @@ export function AppearanceSection() {
               >
                 <Icon className={`h-4 w-4 shrink-0 transition-colors ${visible ? "text-slate-500 dark:text-slate-400" : "text-slate-300 dark:text-slate-600"}`} />
                 <span className={`text-sm flex-1 transition-colors ${visible ? "text-slate-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
-                  {tabLabel(labelKey, lang)}
+                  {tabLabel(navKey, lang)}
                 </span>
                 <Toggle on={visible} onToggle={() => toggleTab(tab)} />
               </div>

@@ -8,8 +8,6 @@
  *   - Clicking a day in the mini-cal calls setSelectedDate with that day.
  *   - prev / next chevrons advance the view month without changing
  *     selectedDate (separate concerns).
- *   - Jump By Week renders 12 chips: +1..+6 (green) and -1..-6 (red);
- *     clicking shifts selectedDate by `delta * 7` days.
  *   - Hidden on touch breakpoints (`hidden lg:flex` so the calendar grid
  *     gets the full width on phone / tablet).
  */
@@ -31,7 +29,7 @@ afterEach(() => {
 });
 
 describe("CalendarLeftRail", () => {
-  it("renders the rail with mini-month + jump-by-week sections", () => {
+  it("renders the rail with the mini-month section", () => {
     renderWithLang(
       <CalendarLeftRail
         selectedDate={FIXED_NOW}
@@ -42,10 +40,9 @@ describe("CalendarLeftRail", () => {
     );
     expect(screen.getByTestId("calendar-left-rail")).toBeTruthy();
     expect(screen.getByTestId("calendar-mini-month")).toBeTruthy();
-    expect(screen.getByTestId("jump-by-week")).toBeTruthy();
   });
 
-  it("renders 12 jump-by-week chips (+1..+6, -1..-6) with the right delta attributes", () => {
+  it("does NOT render the legacy Jump By Week chips block", () => {
     renderWithLang(
       <CalendarLeftRail
         selectedDate={FIXED_NOW}
@@ -54,45 +51,8 @@ describe("CalendarLeftRail", () => {
       />,
       "en",
     );
-    const chips = screen.getAllByTestId("jump-week-chip");
-    expect(chips.length).toBe(12);
-    const deltas = chips.map((c) => Number(c.getAttribute("data-delta")));
-    expect(deltas).toEqual([1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6]);
-  });
-
-  it("clicking a +N chip shifts selectedDate by N * 7 days", () => {
-    const setSelectedDate = vi.fn();
-    renderWithLang(
-      <CalendarLeftRail
-        selectedDate={FIXED_NOW}
-        setSelectedDate={setSelectedDate}
-        lang="en"
-      />,
-      "en",
-    );
-    const chips = screen.getAllByTestId("jump-week-chip");
-    const plusTwo = chips.find((c) => c.getAttribute("data-delta") === "2");
-    fireEvent.click(plusTwo!);
-    expect(setSelectedDate).toHaveBeenCalledTimes(1);
-    const arg = setSelectedDate.mock.calls[0]![0] as Date;
-    expect(arg.toISOString().slice(0, 10)).toBe("2026-05-24"); // +14 days from 2026-05-10
-  });
-
-  it("clicking a -N chip shifts selectedDate backwards by N * 7 days", () => {
-    const setSelectedDate = vi.fn();
-    renderWithLang(
-      <CalendarLeftRail
-        selectedDate={FIXED_NOW}
-        setSelectedDate={setSelectedDate}
-        lang="en"
-      />,
-      "en",
-    );
-    const chips = screen.getAllByTestId("jump-week-chip");
-    const minusOne = chips.find((c) => c.getAttribute("data-delta") === "-1");
-    fireEvent.click(minusOne!);
-    const arg = setSelectedDate.mock.calls[0]![0] as Date;
-    expect(arg.toISOString().slice(0, 10)).toBe("2026-05-03");
+    expect(screen.queryByTestId("jump-by-week")).toBeNull();
+    expect(screen.queryAllByTestId("jump-week-chip").length).toBe(0);
   });
 
   it("clicking a day in mini-month calls setSelectedDate with that day", () => {

@@ -162,8 +162,8 @@ const translations = {
   "settings.sidebarTabsDesc":     { ru: "Выберите, какие разделы показывать", ua: "Оберіть, які розділи показувати",    en: "Choose which sections to show", pl: "Wybierz, które sekcje wyświetlać" },
   "settings.overviewWidgets":     { ru: "Виджеты обзора",                    ua: "Віджети огляду",                     en: "Overview Widgets",              pl: "Widżety przeglądu" },
   "settings.overviewWidgetsDesc": { ru: "Карточки на главном экране",        ua: "Картки на головному екрані",         en: "Cards on the main screen",      pl: "Karty na ekranie głównym" },
-  "settings.defaultTab":          { ru: "Стартовый раздел",                  ua: "Стартовий розділ",                   en: "Default Tab",                   pl: "Domyślna zakładka" },
-  "settings.defaultTabDesc":      { ru: "Какой раздел открывается при входе",ua: "Який розділ відкривається при вході", en: "Which tab opens on login",      pl: "Która zakładka otwiera się po zalogowaniu" },
+  "settings.defaultTab":          { ru: "Какая вкладка открывается при входе", ua: "Яка вкладка відкривається при вході", en: "Which tab opens when you sign in", pl: "Która zakładka otwiera się po zalogowaniu" },
+  "settings.defaultTabDesc":      { ru: "Когда зайдёшь в кабинет — сразу попадёшь сюда. Можно поменять в любой момент.", ua: "Коли зайдеш у кабінет — одразу потрапиш сюди. Можна змінити будь-коли.", en: "When you sign in, this is the page you land on. Change it any time.", pl: "Po zalogowaniu od razu wylądujesz na tej zakładce. Możesz to zmienić w każdej chwili." },
   "settings.todayAptsList":       { ru: "Записи на сегодня",                 ua: "Записи на сьогодні",                 en: "Today's appointments",          pl: "Wizyty na dziś" },
   "settings.alwaysVisible":       { ru: "Всегда видим",                      ua: "Завжди видимий",                     en: "Always visible",                pl: "Zawsze widoczny" },
   "settings.statTodayApts":       { ru: "Записи сегодня",                    ua: "Записи сьогодні",                    en: "Today's appointments",          pl: "Wizyty dziś" },
@@ -463,7 +463,6 @@ const translations = {
   "completeness.masters":                { ru: "Хотя бы один мастер", ua: "Хоча б один майстер", en: "At least one master", pl: "Co najmniej jeden mistrz" },
   "completeness.public":                 { ru: "Публичный профиль активен", ua: "Публічний профіль активний", en: "Public profile active", pl: "Profil publiczny aktywny" },
 
-  "salon.rail.jumpByWeek":               { ru: "Перейти к неделе", ua: "Перейти до тижня", en: "Jump By Week", pl: "Przejdź do tygodnia" },
   "salon.rail.autoConfirmHint":          { ru: "Записи через канал подтверждаются автоматически", ua: "Записи через канал підтверджуються автоматично", en: "Bookings via this channel are auto-accepted", pl: "Rezerwacje przez ten kanał są akceptowane automatycznie" },
   "salon.rail.statusFilter":             { ru: "Статус записи",     ua: "Статус запису",        en: "Status",                     pl: "Status" },
   "salon.rail.serviceFilter":            { ru: "Услуги",            ua: "Послуги",              en: "Services",                   pl: "Usługi" },

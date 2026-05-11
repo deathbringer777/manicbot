@@ -91,6 +91,7 @@ Recent migrations:
 - `0034_tenant_manager.sql` — `tenant_member_permissions`, `tenant_action_requests`, `permission_elevation_codes` for the `tenant_manager` role.
 - `0035_plugins.sql` — `plugin_installations` (install rows, platform- or tenant-scoped) and `plugin_events` (immutable audit trail). Powers the Plugin Marketplace — see [Plugin Marketplace](#plugin-marketplace) below.
 - `0049_master_calendar_visibility.sql` — `calendar_visibility` column on `masters` (`'private' | 'salon_only' | 'salon_and_peers'`, default `salon_only`). Master-owned setting that governs peer-to-peer calendar sharing within a tenant. Salon owner visibility is unaffected (always sees, enforced by tRPC guards). Toggle UI lives in `MasterDashboard` profile tab; tRPC mutation `master.updateCalendarVisibility` rejects writes from `tenant_owner` (master owns the toggle by design); `system_admin` may override for support escalation. Note: 0036–0048 are existing migrations; 0040/0041 gap is intentional.
+- `0050_cookie_consent_log.sql` — `cookie_consent_log` (APPEND-ONLY GDPR/ePrivacy audit trail of cookie banner decisions). Distinct from `marketing_consent_log` (email/SMS opt-ins keyed by `contact_id`). Powers the consent gating that protects the `/api/track` ingest and any future third-party pixels.
 
 ---
 
@@ -169,6 +170,7 @@ HTTP request → src/worker.js
 | `calendarHttp.js`        | `GET /calendar/:aptId[.ics]`                                                                     |
 | `telegramWebhookHttp.js` | `POST /webhook`, `POST /webhook/:botId` (excluding `wa` / `ig`)                                  |
 | `metaWebhooksHttp.js`    | `GET                                                                                             |
+| `trackHttp.js`           | `POST /api/track` — landing event ingest. Allowlisted event names, IP rate limit (60/min), 8 KB body cap, server-side consent gate (drops events when no `cookie_consent_log` row grants `analytics`). Always 204/400/429 — never echoes data. Pure logic in `trackHttpLogic.js`. |
 
 
 ### Key Files
@@ -264,6 +266,7 @@ Telegram Mini App opens
 | `settings`       | `routers/settings.ts`       | adminProcedure                                                                                                  |
 | `system`         | `routers/system.ts`         | adminProcedure                                                                                                  |
 | `marketing`      | `routers/marketing.ts`      | adminProcedure (God Mode CRM: contacts, segments, templates, campaigns, providers)                              |
+| `consent`        | `routers/consent.ts`        | mixed: `record` is public + rate-limited (anonymous landing visitors must log decisions); `getRecentDecisions` and `getCategoryAcceptanceRates` are admin (system_admin / support / technical_support). Pure helpers in `server/api/consent/consentLogic.ts`. |
 
 
 ### Key Components
@@ -465,6 +468,7 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 | `google_integrations`      | Tenant/master Google OAuth integrations + sync status                                             |
 | `google_busy_blocks`       | Cached external busy windows loaded from Google Calendar                                          |
 | `web_users`                | Web panel accounts (email/password auth, verification tokens, brute-force tracking)               |
+| `cookie_consent_log`       | APPEND-ONLY audit trail of cookie banner decisions (anonymous_id, categories JSON, policy version, source, ip, ua) |
 
 
 ---

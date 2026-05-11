@@ -8,6 +8,7 @@ import { Toaster } from "sonner";
 import { TRPCReactProvider } from "~/trpc/react";
 import { LangProvider } from "~/components/LangContext";
 import { AuthProvider } from "~/components/AuthProvider";
+import { ConsentProvider } from "~/components/ConsentContext";
 import { CookieBanner } from "~/components/CookieBanner";
 import { SITE_URL, SITE_NAME } from "~/lib/seo";
 
@@ -104,15 +105,17 @@ export default function RootLayout({
         <AuthProvider>
           <TRPCReactProvider>
             <LangProvider>
-              {children}
-              <CookieBanner />
-              <Toaster
-                position="top-right"
-                richColors
-                closeButton
-                theme="system"
-                toastOptions={{ className: "manicbot-toast" }}
-              />
+              <ConsentProvider>
+                {children}
+                <CookieBanner />
+                <Toaster
+                  position="top-right"
+                  richColors
+                  closeButton
+                  theme="system"
+                  toastOptions={{ className: "manicbot-toast" }}
+                />
+              </ConsentProvider>
             </LangProvider>
           </TRPCReactProvider>
         </AuthProvider>

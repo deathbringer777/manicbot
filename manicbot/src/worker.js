@@ -25,6 +25,7 @@ import { tryChatWeb } from './http/chatWebHttp.js';
 import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
+import { handleTrackRequest } from './http/trackHttp.js';
 import { logEvent } from './utils/events.js';
 import { log } from './utils/logger.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
@@ -200,6 +201,26 @@ export default {
     // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath)
     if (isAdminAppPath(url.pathname)) {
       return addSecurityHeaders(await proxyToAdminApp(request, env, url));
+    }
+
+    // Landing analytics ingest (CORS-enabled, consent-gated server-side).
+    // See src/http/trackHttp.js — drops events when no analytics consent row exists.
+    if (url.pathname === '/api/track') {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Max-Age': '86400',
+          },
+        });
+      }
+      const trackRes = await handleTrackRequest(request, env);
+      const merged = new Response(trackRes.body, trackRes);
+      merged.headers.set('Access-Control-Allow-Origin', '*');
+      return addSecurityHeaders(merged);
     }
 
     // Public search API (CORS-enabled, no auth)

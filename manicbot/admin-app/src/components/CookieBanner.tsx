@@ -3,27 +3,30 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useLang } from "~/components/LangContext";
+import { useConsent } from "~/components/ConsentContext";
 import {
   COOKIE_BANNER_APPEAR_DELAY_MS,
   markCookieBannerShown,
   readCookieConsent,
   wasCookieBannerShownThisSession,
-  writeCookieConsent,
 } from "~/lib/cookieConsentStorage";
 import { isTelegramInAppContext } from "~/lib/telegramInApp";
 import { t } from "~/lib/i18n";
 
 /**
- * Cookie notice — bottom bar, appears after 10s (web and mobile). Choice is stored
- * in localStorage (12 months) so the bar does not re-spam after mobile/WebView
- * sessionStorage resets.
- * Not shown in Telegram (mini app / in-app browser / Telegram WebView) — not all
- * of those expose WebApp.initData, so we use a broader isTelegramInAppContext() check.
+ * Cookie notice — bottom bar, appears after 10s (web and mobile). The user's
+ * decision is persisted in localStorage AND audit-logged server-side via
+ * `consent.record` (see ConsentContext). Defaults are: only `necessary` cookies
+ * are active until the user clicks "Accept all" — analytics and marketing
+ * scripts must consult `useConsent()` before doing anything.
+ *
+ * Not shown in Telegram (mini app / in-app browser / Telegram WebView).
  * Not shown to authenticated web users — the banner only targets anonymous visitors.
  */
 export function CookieBanner() {
   const { lang } = useLang();
   const { status } = useSession();
+  const { acceptAll, rejectAll } = useConsent();
   const [shouldShow, setShouldShow] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -55,8 +58,12 @@ export function CookieBanner() {
 
   if (!shouldShow) return null;
 
-  const decide = (acceptAll: boolean) => {
-    writeCookieConsent(acceptAll);
+  const decide = (accept: boolean) => {
+    if (accept) {
+      acceptAll();
+    } else {
+      rejectAll();
+    }
     setMounted(false);
     window.setTimeout(() => setShouldShow(false), 350);
   };

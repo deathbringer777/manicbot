@@ -304,9 +304,9 @@ export function ChatClient({
   const brandColor = salon.brandPalette?.primary ?? "#EC4899";
 
   return (
-    <div className="h-dvh min-h-screen bg-slate-100 dark:bg-slate-950 md:flex md:items-stretch md:justify-center">
+    <div className="h-dvh overflow-hidden bg-slate-100 dark:bg-slate-950 md:flex md:items-stretch md:justify-center">
     <div
-      className="h-dvh min-h-screen flex flex-col w-full md:max-w-2xl lg:max-w-3xl md:shadow-2xl md:border-x md:border-slate-200/60 dark:md:border-white/5 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900"
+      className="h-dvh flex flex-col w-full md:max-w-2xl lg:max-w-3xl md:shadow-2xl md:border-x md:border-slate-200/60 dark:md:border-white/5 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900"
       style={{
         ['--chat-brand' as string]: brandColor,
       }}
@@ -320,7 +320,7 @@ export function ChatClient({
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto px-3 md:px-6 py-4 space-y-2.5">
+      <main className="flex-1 overflow-y-auto overscroll-contain px-3 md:px-6 py-4 space-y-2.5">
         {status === "initializing" && messages.length === 0 && (
           <div className="flex items-center justify-center py-12 text-slate-500">
             <Loader2 className="h-6 w-6 animate-spin" />

@@ -20,8 +20,8 @@ const BOTS = [
   {
     id: 'salon1',
     tenantId: 't_salon1',
-    botToken: '8613882748:AAFp0fbOb1lAAY0V8nnhPwiPfiTcLwd6HiM',
-    botId: '8613882748',
+    botToken: process.env.BOT_TOKEN_SALON1,
+    botId: (process.env.BOT_TOKEN_SALON1 || '').split(':')[0],
     botUsername: 'manic_salon1bot',
     tenant: {
       name: 'Crystal Nails',
@@ -59,8 +59,8 @@ const BOTS = [
   {
     id: 'salon2',
     tenantId: 't_salon2',
-    botToken: '8742175386:AAGhfxCI-vCSut4JayVW4VOCs_5zxiqqc88',
-    botId: '8742175386',
+    botToken: process.env.BOT_TOKEN_SALON2,
+    botId: (process.env.BOT_TOKEN_SALON2 || '').split(':')[0],
     botUsername: 'manic_salon2bot',
     tenant: {
       name: 'Velvet Touch',
@@ -98,8 +98,8 @@ const BOTS = [
   {
     id: 'master1',
     tenantId: 't_master1',
-    botToken: '8621333011:AAF1e8OKxJ9dhAY1njg9PdZfhH6Yvk_v7B4',
-    botId: '8621333011',
+    botToken: process.env.BOT_TOKEN_MASTER1,
+    botId: (process.env.BOT_TOKEN_MASTER1 || '').split(':')[0],
     botUsername: 'manic_master1bot',
     tenant: {
       name: 'Мастер Алина',
@@ -134,8 +134,8 @@ const BOTS = [
   {
     id: 'master2',
     tenantId: 't_master2',
-    botToken: '8669878808:AAGuobOSQ8LuZqSHqMjjSzW2G_mo8acLt_I',
-    botId: '8669878808',
+    botToken: process.env.BOT_TOKEN_MASTER2,
+    botId: (process.env.BOT_TOKEN_MASTER2 || '').split(':')[0],
     botUsername: 'manic_master2bot',
     tenant: {
       name: 'Мастер Виктория',
@@ -223,6 +223,15 @@ function generateWebhookSecret() {
 
 async function main() {
   console.log('=== ManicBot: Provisioning 4 bots ===\n');
+
+  const missing = BOTS.filter(b => !b.botToken).map(b => `BOT_TOKEN_${b.id.toUpperCase()}`);
+  if (missing.length) {
+    console.error(`FATAL: missing env vars: ${missing.join(', ')}`);
+    console.error('Set them before running, e.g.:');
+    console.error('  BOT_TOKEN_SALON1=... BOT_TOKEN_SALON2=... \\');
+    console.error('  BOT_TOKEN_MASTER1=... BOT_TOKEN_MASTER2=... node scripts/provision-bots.js');
+    process.exit(1);
+  }
 
   // 1. Read current tenants index
   let tenantsIndex = kvGet('tenants_index') || [];

@@ -18,6 +18,7 @@ paths = [
   '''(^|/)test/.*\.(js|ts|mjs|cjs)$''',
   '''(^|/)__tests__/.*\.(js|ts|mjs|cjs)$''',
   '''(^|/)tests/.*\.(js|ts|mjs|cjs)$''',
+  '''(^|/)scripts/.*\.(js|ts|mjs|cjs|sh)$''',
 ]
 
 # Surgical regex allowlist — keeps the safety net intact for everything else

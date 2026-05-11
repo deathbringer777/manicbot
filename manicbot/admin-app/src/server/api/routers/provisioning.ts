@@ -140,6 +140,8 @@ export const provisioningRouter = createTRPCRouter({
       let masterId: number | null = null;
       if (input.kind === "master") {
         // Synthetic chatId in the 10B+ range (no Telegram collision).
+        // isSynthetic=1 so cron post-visit + Telegram-dependent jobs
+        // can explicitly skip these rows (0052 migration).
         masterId = 10_000_000_000 + Math.floor(Math.random() * 1_000_000_000);
         await ctx.db.insert(masters).values({
           tenantId,
@@ -147,6 +149,7 @@ export const provisioningRouter = createTRPCRouter({
           name: input.name.trim(),
           active: 1,
           addedAt: now,
+          isSynthetic: 1,
         });
       }
 

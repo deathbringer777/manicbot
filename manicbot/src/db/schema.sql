@@ -46,6 +46,12 @@ CREATE INDEX IF NOT EXISTS idx_apt_tenant_ts ON appointments(tenant_id, ts);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_apt_unique_active_slot
   ON appointments(tenant_id, COALESCE(master_id, -1), date, time)
   WHERE cancelled = 0;
+-- 0051: composite indexes for cron + analytics hot paths.
+CREATE INDEX IF NOT EXISTS idx_apt_unsynced
+  ON appointments(tenant_id, ts)
+  WHERE google_event_id IS NULL AND status='confirmed' AND cancelled=0;
+CREATE INDEX IF NOT EXISTS idx_apt_master_date ON appointments(tenant_id, master_id, date);
+CREATE INDEX IF NOT EXISTS idx_apt_created ON appointments(tenant_id, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   tenant_id TEXT NOT NULL,
@@ -106,6 +112,7 @@ CREATE TABLE IF NOT EXISTS masters (
   allow_delegation INTEGER NOT NULL DEFAULT 0,
   web_user_id TEXT,
   calendar_visibility TEXT NOT NULL DEFAULT 'salon_only',
+  is_synthetic INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_master_web_user_id ON masters(web_user_id);
@@ -356,6 +363,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_conv_tenant_msg ON conversations(tenant_id, last_message_at);
+-- 0051: enable "this user's history" lookups in unified inbox.
+CREATE INDEX IF NOT EXISTS idx_conv_user ON conversations(tenant_id, channel_user_id);
 
 -- ─── Google Calendar integration ──────────────────────────────────────────────
 
@@ -711,6 +720,8 @@ CREATE INDEX IF NOT EXISTS idx_mkt_sends_campaign ON marketing_sends(campaign_id
 CREATE INDEX IF NOT EXISTS idx_mkt_sends_contact ON marketing_sends(contact_id);
 CREATE INDEX IF NOT EXISTS idx_mkt_sends_status ON marketing_sends(status);
 CREATE INDEX IF NOT EXISTS idx_mkt_sends_provider_msg ON marketing_sends(provider_message_id);
+-- 0051: campaign progress page reads (campaign_id, status) together.
+CREATE INDEX IF NOT EXISTS idx_msend_campaign_status ON marketing_sends(campaign_id, status);
 
 CREATE TABLE IF NOT EXISTS marketing_automations (
   id TEXT PRIMARY KEY,

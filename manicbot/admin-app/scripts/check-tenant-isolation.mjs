@@ -110,11 +110,11 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:812 — bot_id collision check across tenants (intentional global
+  // salon.ts:816 — bot_id collision check across tenants (intentional global
   // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
   // gated; this read confirms the bot isn't already claimed by SOMEONE ELSE
   // before we accept it.
-  "src/server/api/routers/salon.ts:812",
+  "src/server/api/routers/salon.ts:816",
   // tenantStaff.ts:366 — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

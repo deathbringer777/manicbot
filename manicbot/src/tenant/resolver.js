@@ -5,6 +5,7 @@
 
 import { getTenant, getTenantIdByBotId, getBot, getBotToken } from './storage.js';
 import { TelegramAdapter } from '../channels/telegram.js';
+import { baseCtx } from './baseCtx.js';
 
 const DEFAULT_TENANT_ID = 'default';
 
@@ -30,39 +31,13 @@ export async function resolveTenantFromBotId(ctx, botId, encryptionKey = null) {
   };
 }
 
-/** Shared env fields extracted once to avoid duplication. */
-function _baseCtx(env) {
-  return {
-    ...env,
-    kv: env.MANICBOT,
-    globalKv: env.MANICBOT,
-    db: env.DB || null,
-    ADMIN_KEY: env.ADMIN_KEY,
-    adminChatId: env.ADMIN_CHAT_ID || null,
-    ADMIN_CHAT_ID: env.ADMIN_CHAT_ID || null,
-    AI: env.AI || null,
-    WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
-    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
-    BOT_ENCRYPTION_KEY: env.BOT_ENCRYPTION_KEY || null,
-    BOT_ENCRYPTION_KEY_OLD: env.BOT_ENCRYPTION_KEY_OLD || null,
-    GOOGLE_SERVICE_ACCOUNT_KEY: env.GOOGLE_SERVICE_ACCOUNT_KEY || null,
-    GOOGLE_OAUTH_CLIENT_ID: env.GOOGLE_OAUTH_CLIENT_ID || null,
-    GOOGLE_OAUTH_CLIENT_SECRET: env.GOOGLE_OAUTH_CLIENT_SECRET || null,
-    GOOGLE_OAUTH_REDIRECT_URI: env.GOOGLE_OAUTH_REDIRECT_URI || null,
-    GOOGLE_TOKEN_ENCRYPTION_KEY: env.GOOGLE_TOKEN_ENCRYPTION_KEY || null,
-    APP_BASE_URL: env.APP_BASE_URL || null,
-    baseUrl: null,
-    ADMIN_APP_URL: env.ADMIN_APP_URL || null,
-  };
-}
-
 /**
  * Build tenant-scoped context for request processing.
  */
 export function buildTenantCtx(env, resolved) {
   const { tenantId, tenant, bot, TG } = resolved;
   const ctx = {
-    ..._baseCtx(env),
+    ...baseCtx(env),
     tenantId,
     tenant,
     bot,
@@ -80,7 +55,7 @@ export function buildTenantCtx(env, resolved) {
 export function buildLegacyCtx(env) {
   const botId = env.BOT_TOKEN.split(':')[0];
   const ctx = {
-    ..._baseCtx(env),
+    ...baseCtx(env),
     tenantId: null,
     tenant: null,
     bot: { botId, botToken: env.BOT_TOKEN, webhookSecret: env.WEBHOOK_SECRET },

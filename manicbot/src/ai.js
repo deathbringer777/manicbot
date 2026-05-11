@@ -441,13 +441,23 @@ export async function executeAIAction(ctx, cid, role, tag, param, from) {
 
 const WORKERS_AI_RUN_URL = 'https://api.cloudflare.com/client/v4/accounts';
 
+/**
+ * P1-14 — Worst-case latency budget. With 3 models and one timeout per
+ * model, the 8000ms cap was producing ~24s tail latencies on degraded
+ * Workers AI regions. Drop to 4000ms so the worst case is ~12s (still
+ * enough headroom for gpt-oss-120b TTFT in healthy regions).
+ *
+ * Exported so test/ai-timeout.test.js can assert the boundary.
+ */
+export const AI_TIMEOUT_MS = 4000;
+
 export async function runWorkersAIViaRESTOne(ctx, accountId, token, modelId, promptBody) {
   const url = `${WORKERS_AI_RUN_URL}/${accountId}/ai/run/${encodeURIComponent(modelId)}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(promptBody),
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   });
   if (!res.ok) {
     if (res.status === 429) log.error('ai.rest', new Error('Workers AI REST rate limit (429), trying next model'), { status: 429 });
@@ -559,28 +569,16 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
     messages.push({ role: 'user', content: userText });
     const messagesPayload = { messages, max_tokens: AI_MAX_TOKENS };
 
-    const bindingModels = [
-      { id: AI_MODEL, useInput: true },
-      { id: AI_MODEL_FALLBACK, useInput: false },
-      { id: AI_MODEL_FALLBACK2, useInput: false },
-    ];
-    const aiTimeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('AI binding timeout')), 8000));
-    for (const { id: modelId, useInput } of bindingModels) {
+    const bindingModels = [AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2];
+    // P1-14 — 4000ms per-model timeout caps the worst case at ~12s (3
+    // models × 4s) instead of 24s. The second binding race that retried
+    // gpt-oss-120b with `{ instructions, input }` instead of `messages` was
+    // dead weight — both shapes invoke the same underlying model, and the
+    // race doubled the time budget for AI_MODEL with no observed yield.
+    const aiTimeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('AI binding timeout')), AI_TIMEOUT_MS));
+    for (const modelId of bindingModels) {
       try {
-        let out;
-        try {
-          out = await Promise.race([ctx.AI.run(modelId, messagesPayload), aiTimeout()]);
-        } catch (e1) {
-          if (useInput && modelId === AI_MODEL) {
-            try {
-              out = await Promise.race([ctx.AI.run(modelId, { instructions: sys, input: userText, max_tokens: AI_MAX_TOKENS }), aiTimeout()]);
-            } catch (e2) {
-              continue;
-            }
-          } else {
-            continue;
-          }
-        }
+        const out = await Promise.race([ctx.AI.run(modelId, messagesPayload), aiTimeout()]);
         const text = parseAIResponse(out);
         if (text) return text.slice(0, 1000);
       } catch (e) {

@@ -61,8 +61,8 @@ KV key patterns:
 ### Legacy single-bot vs D1 multi-tenant
 
 - **D1 path:** Telegram calls `POST /webhook/{botId}`; `resolveTenantFromBotId` loads tenant + encrypted token from D1. KV prefix `t:{tenantId}:`*.
-- **Legacy path:** Single `BOT_TOKEN` + `WEBHOOK_SECRET` in env; `POST /webhook` (no botId in path); `buildLegacyCtx` uses KV prefix `b:{botId}:`*. Used when the bot is not (yet) in the D1 registry or during migration.
-- **Stricter production:** set Worker var `REQUIRE_WEBHOOK_BOT_ID=1` when D1 is bound to reject legacy `POST /webhook` (403 — use `/webhook/{botId}` only). Cron and HTML admin routes are unchanged.
+- **Legacy path:** Single `BOT_TOKEN` + `WEBHOOK_SECRET` in env; `POST /webhook` (no botId in path); `buildLegacyCtx` uses KV prefix `b:{botId}:`*. **Opt-in only**: requires Worker var `ALLOW_LEGACY_BOT_CTX=1` (P2-3). With the var unset (the prod default) the legacy fall-through returns `null`/404 and a `[SECURITY]` warning fires on startup whenever the flag is set.
+- **Stricter production:** set Worker var `REQUIRE_WEBHOOK_BOT_ID=1` when D1 is bound to reject legacy `POST /webhook` (403 — use `/webhook/{botId}` only). Cron and HTML admin routes are unchanged. Both `REQUIRE_WEBHOOK_BOT_ID=1` and `ALLOW_LEGACY_BOT_CTX` unset is the recommended prod posture.
 
 ### D1 schema discipline
 
@@ -95,6 +95,7 @@ Recent migrations:
 - `0051_composite_indexes.sql` — composite indexes to close cron + analytics query gaps (relax.md §7 P1-6): `idx_apt_unsynced` (partial; covers Google Calendar sync cron scan), `idx_apt_master_date` (MasterDashboard schedule filter), `idx_apt_created` (recent-activity ORDER BY), `idx_conv_user` (unified-inbox "user history" lookup), `idx_msend_campaign_status` (marketing campaign progress page).
 - `0052_masters_is_synthetic.sql` — `is_synthetic` flag on `masters` so we stop relying on the brittle `chat_id >= 10B` heuristic to identify web-only personal masters. Backfilled for existing rows where `chat_id >= 10000000000`. Set to `1` on the four creation paths in admin-app: `webUsers.register`, `webUsers.createMyTenant`, `provisioning.provisionTestAccount`, `roleChangeRequests` (owner→master), and `salon.inviteMaster`. Cron `processPostVisitConfirmations` LEFT JOINs `masters` and skips rows where `is_synthetic = 1` (relax.md §7 P1-7).
 - `0054_tenant_fts_triggers.sql` — INSERT/UPDATE/DELETE triggers on `tenants` that keep `tenant_fts` (FTS5 virtual table, originally created in `0004_fts_search.sql`) in sync with `tenants.search_text`. Previously the FTS index was only seeded ad-hoc by `/admin/seed` and `/admin/provision`; every regular write left the index stale, so the public directory router was forced to fall back to `LIKE '%q%'` (full-table scan). With the triggers in place, `publicSalon.search` and `publicSalon.autocomplete` JOIN against `tenant_fts MATCH ?` for O(log N) keystroke lookups. The migration also backfills the FTS table from `tenants`, so the rollout is zero-downtime.
+- `0055_analytics_promo_dedup.sql` — partial UNIQUE index on `analytics_events(tenant_id, user_id, event, date(created_at, 'unixepoch'))` where `event = 'promo.returning_candidate'`. Closes P1-1: the `processBirthdayAndReturningPromos` cron used to dump a duplicate row every 15 min for 30 days per eligible client; with `INSERT OR IGNORE` + this index, dupes are silent.
 
 ---
 
@@ -152,9 +153,13 @@ Both `CommandPalette` and `ActivityFeed` mount globally in `src/app/(dashboard)/
 HTTP request → src/worker.js
   ├─ src/http/*              → match URL first (landing, Stripe, admin keys, Google OAuth, HTML admin, calendar, webhooks)
   ├─ src/http/resolveCtx.js  → getCtx() → tenant/resolver.js (POST /webhook/:botId or legacy /webhook)
+  ├─ src/tenant/baseCtx.js   → shared env-spread (P2-4) consumed by both buildTenantCtx and buildChannelCtx
   └─ scheduled               → cron per tenant (D1) or legacy ctx
        └─ handlers/message.js, callback.js, inbound.js → onMsg / onCb (Telegram + WhatsApp/Instagram)
        └─ handlers/cron.js   ← scheduled tasks (every 15min)
+                              orchestrator → phaseReminders / phaseReviews / phaseGcalSync /
+                              phasePostVisit / phasePromos / phaseCleanup / phaseRetention.
+                              Each idempotent via `tenant_config` key `cron:phase:{name}:last`.
 ```
 
 ### HTTP modules (`src/http/`)

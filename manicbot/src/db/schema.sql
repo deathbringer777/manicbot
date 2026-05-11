@@ -605,6 +605,12 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_analytics_tenant_event_time ON analytics_events(tenant_id, event, created_at);
+-- migration 0055 — dedup `promo.returning_candidate` cron emits per
+-- (tenant, client chat_id, day). Cron uses INSERT OR IGNORE so the unique
+-- violation is silent. Partial index keeps other event types append-only.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_analytics_promo_returning
+  ON analytics_events(tenant_id, user_id, event, date(created_at, 'unixepoch'))
+  WHERE event = 'promo.returning_candidate';
 
 CREATE TABLE IF NOT EXISTS leads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

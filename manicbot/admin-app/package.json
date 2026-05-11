@@ -14,7 +14,8 @@
     "preview": "next build && next start",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check-tenant-isolation": "node scripts/check-tenant-isolation.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
@@ -25,6 +26,7 @@
     "@trpc/client": "^11.0.0",
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
+    "@types/sanitize-html": "^2.16.1",
     "driver.js": "^1.4.0",
     "drizzle-orm": "^0.45.2",
     "fuse.js": "^7.3.0",
@@ -35,6 +37,7 @@
     "react-dom": "^19.0.0",
     "react-is": "^19.2.5",
     "recharts": "^3.8.0",
+    "sanitize-html": "^2.17.3",
     "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "superjson": "^2.2.1",

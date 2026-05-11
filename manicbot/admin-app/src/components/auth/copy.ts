@@ -82,6 +82,9 @@ export const authCopy: Record<
       description: string;
       panelTitle: string;
       panelDescription: string;
+      email: string;
+      code: string;
+      codePlaceholder: string;
       newPassword: string;
       confirmPassword: string;
       passwordsMismatch: string;
@@ -90,6 +93,7 @@ export const authCopy: Record<
       submitting: string;
       success: string;
       error: string;
+      invalidCode: string;
       missingToken: string;
       goLogin: string;
       showPassword: string;
@@ -152,6 +156,8 @@ export const authCopy: Record<
       error: string;
       missingToken: string;
       goLogin: string;
+      useSettingsPanel?: string;
+      openSettings?: string;
     };
   }
 > = {
@@ -232,9 +238,12 @@ export const authCopy: Record<
     resetPassword: {
       kicker: "Новый пароль",
       title: "Задайте новый пароль",
-      description: "Введите пароль не короче 12 символов.",
+      description: "Введите код из письма и новый пароль.",
       panelTitle: "Сброс пароля",
       panelDescription: "После сохранения войдите с новым паролем.",
+      email: "Email",
+      code: "Код из письма",
+      codePlaceholder: "6-значный код",
       newPassword: "Новый пароль",
       confirmPassword: "Подтверждение пароля",
       passwordsMismatch: "Пароли не совпадают",
@@ -242,8 +251,9 @@ export const authCopy: Record<
       submit: "Сохранить пароль",
       submitting: "Сохранение…",
       success: "Пароль обновлён. Теперь можно войти.",
-      error: "Ссылка недействительна или срок её действия истёк.",
-      missingToken: "Нет токена в ссылке. Откройте страницу из письма.",
+      error: "Код недействителен или срок его действия истёк.",
+      invalidCode: "Введите 6-значный код",
+      missingToken: "Запросите код на странице «Забыли пароль».",
       goLogin: "Перейти ко входу",
       showPassword: "Показать пароль",
       hidePassword: "Скрыть пароль",
@@ -386,9 +396,12 @@ export const authCopy: Record<
     resetPassword: {
       kicker: "Новий пароль",
       title: "Задайте новий пароль",
-      description: "Пароль не коротший за 12 символів.",
+      description: "Введіть код із листа та новий пароль.",
       panelTitle: "Скидання пароля",
       panelDescription: "Після збереження увійдіть з новим паролем.",
+      email: "Email",
+      code: "Код із листа",
+      codePlaceholder: "6-значний код",
       newPassword: "Новий пароль",
       confirmPassword: "Підтвердження пароля",
       passwordsMismatch: "Паролі не збігаються",
@@ -396,8 +409,9 @@ export const authCopy: Record<
       submit: "Зберегти пароль",
       submitting: "Збереження…",
       success: "Пароль оновлено. Тепер можна увійти.",
-      error: "Посилання недійсне або термін його дії минув.",
-      missingToken: "У посиланні немає токена. Відкрийте сторінку з листа.",
+      error: "Код недійсний або термін його дії минув.",
+      invalidCode: "Введіть 6-значний код",
+      missingToken: "Запросіть код на сторінці «Забули пароль».",
       goLogin: "До входу",
       showPassword: "Показати пароль",
       hidePassword: "Сховати пароль",
@@ -540,9 +554,12 @@ export const authCopy: Record<
     resetPassword: {
       kicker: "New password",
       title: "Choose a new password",
-      description: "Use at least 12 characters.",
+      description: "Enter the code from the email and your new password.",
       panelTitle: "Reset password",
       panelDescription: "After saving, sign in with your new password.",
+      email: "Email",
+      code: "Code from email",
+      codePlaceholder: "6-digit code",
       newPassword: "New password",
       confirmPassword: "Confirm password",
       passwordsMismatch: "Passwords do not match",
@@ -550,8 +567,9 @@ export const authCopy: Record<
       submit: "Save password",
       submitting: "Saving…",
       success: "Password updated. You can sign in now.",
-      error: "This link is invalid or has expired.",
-      missingToken: "No token in the URL. Open the page from the email.",
+      error: "This code is invalid or has expired.",
+      invalidCode: "Enter the 6-digit code",
+      missingToken: "Request a code from the Forgot password page.",
       goLogin: "Go to sign in",
       showPassword: "Show password",
       hidePassword: "Hide password",
@@ -694,9 +712,12 @@ export const authCopy: Record<
     resetPassword: {
       kicker: "Nowe hasło",
       title: "Ustaw nowe hasło",
-      description: "Minimum 12 znaków.",
+      description: "Wpisz kod z wiadomości i nowe hasło.",
       panelTitle: "Reset hasła",
       panelDescription: "Po zapisaniu zaloguj się nowym hasłem.",
+      email: "Email",
+      code: "Kod z wiadomości",
+      codePlaceholder: "6-cyfrowy kod",
       newPassword: "Nowe hasło",
       confirmPassword: "Potwierdź hasło",
       passwordsMismatch: "Hasła nie są takie same",
@@ -704,8 +725,9 @@ export const authCopy: Record<
       submit: "Zapisz hasło",
       submitting: "Zapisywanie…",
       success: "Hasło zaktualizowane. Możesz się zalogować.",
-      error: "Link jest nieprawidłowy lub wygasł.",
-      missingToken: "Brak tokenu w adresie URL. Otwórz stronę z wiadomości.",
+      error: "Kod jest nieprawidłowy lub wygasł.",
+      invalidCode: "Wpisz 6-cyfrowy kod",
+      missingToken: "Poproś o kod na stronie „Nie pamiętasz hasła”.",
       goLogin: "Przejdź do logowania",
       showPassword: "Pokaż hasło",
       hidePassword: "Ukryj hasło",

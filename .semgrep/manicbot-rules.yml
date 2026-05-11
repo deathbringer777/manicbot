@@ -1,0 +1,124 @@
+# Custom Semgrep rules for ManicBot.
+# Run via: semgrep --config .semgrep/manicbot-rules.yml manicbot/
+# Wired into CI via .github/workflows/deploy.yml `Semgrep — SAST scan` step.
+
+rules:
+  # ── #H4 regression guard ────────────────────────────────────────────────
+  # State-changing tRPC mutations must NOT use `publicProcedure`. They must
+  # use `protectedProcedure` (or stricter: `tenantOwnerProcedure`,
+  # `masterProcedure`, `adminProcedure`, `systemAdminProcedure`).
+  #
+  # The exception is documented bootstrap mutations on `webUsersRouter`
+  # (register / verifyEmail / requestPasswordReset / resetPassword /
+  # resendVerificationCode / confirmEmailChange-legacy). Those have to be
+  # public by definition (no session yet), but each is rate-limited and
+  # validated by content. The allowlist below is intentional — adding a new
+  # publicProcedure mutation requires consciously editing this rule.
+  - id: trpc-public-procedure-mutation
+    message: >-
+      `publicProcedure` should not be used for state-changing tRPC mutations.
+      Use `protectedProcedure` or a role-scoped builder (`tenantOwnerProcedure`,
+      `masterProcedure`, `adminProcedure`). If the mutation is genuinely a
+      bootstrap public flow (registration / email verification), add the
+      procedure name to the Semgrep `paths.exclude-rule` block in
+      `.semgrep/manicbot-rules.yml` — that audit gate is the point.
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - "manicbot/admin-app/src/server/api/routers/**/*.ts"
+      exclude-rule:
+        # Bootstrap auth flow — must be public. Each is rate-limited.
+        - pattern-either:
+            - pattern: |
+                register: publicProcedure
+                  .input(...)
+                  .mutation(...)
+            - pattern: |
+                verifyEmail: publicProcedure
+                  .input(...)
+                  .mutation(...)
+            - pattern: |
+                resendVerificationCode: publicProcedure
+                  .input(...)
+                  .mutation(...)
+            - pattern: |
+                requestPasswordReset: publicProcedure
+                  .input(...)
+                  .mutation(...)
+            - pattern: |
+                resetPassword: publicProcedure
+                  .input(...)
+                  .mutation(...)
+            # Public web-widget submission endpoints
+            - pattern: |
+                createLead: publicProcedure
+                  .input(...)
+                  .mutation(...)
+            - pattern: |
+                emailSubscribe: publicProcedure
+                  .input(...)
+                  .mutation(...)
+    pattern: |
+      $NAME: publicProcedure
+        .input(...)
+        .mutation(...)
+
+  # ── #S-04 / #M2 regression guard ────────────────────────────────────────
+  # Worker admin endpoints must not accept ADMIN_KEY from URL query params
+  # (it leaks into Cloudflare access logs and Referer headers). Only
+  # `Authorization: Bearer <key>` is acceptable.
+  - id: admin-key-query-param
+    message: >-
+      ADMIN_KEY must travel via `Authorization: Bearer <key>` header, not as
+      a `?key=` query parameter. Use `requireAdmin(request, ctx)` or
+      `isAdminKeyValid(url, env, request)` (Bearer-only).
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include:
+        - "manicbot/src/http/**/*.js"
+        - "manicbot/src/http/**/*.ts"
+    pattern-either:
+      - pattern: |
+          $URL.searchParams.get("key")
+      - pattern: |
+          $URL.searchParams.get('key')
+
+  # ── #N1 regression guard ────────────────────────────────────────────────
+  # Password-reset emails must use `sendPasswordResetCodeEmail` (6-digit
+  # code), not the legacy `sendPasswordResetEmail` (URL token). The legacy
+  # function is kept exported for backwards-compat during the 1h grace
+  # window after deploy; new callsites are forbidden.
+  - id: legacy-url-password-reset
+    message: >-
+      `sendPasswordResetEmail` is deprecated (URL token leaks via Referer /
+      MTA logs). Use `sendPasswordResetCodeEmail` (6-digit code) instead.
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - "manicbot/admin-app/src/**/*.ts"
+        - "manicbot/admin-app/src/**/*.tsx"
+      exclude:
+        - "manicbot/admin-app/src/server/email/emailService.ts"
+        - "manicbot/admin-app/src/__tests__/**"
+    pattern: |
+      sendPasswordResetEmail(...)
+
+  # Same regression guard for the email-change variant.
+  - id: legacy-url-email-change
+    message: >-
+      `sendEmailChangeVerification` is deprecated (URL token leaks).
+      Use `sendEmailChangeCodeVerification` (6-digit code) instead.
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - "manicbot/admin-app/src/**/*.ts"
+        - "manicbot/admin-app/src/**/*.tsx"
+      exclude:
+        - "manicbot/admin-app/src/server/email/emailService.ts"
+        - "manicbot/admin-app/src/__tests__/**"
+    pattern: |
+      sendEmailChangeVerification(...)

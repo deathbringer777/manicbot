@@ -14,6 +14,7 @@ import { sendTemplateMessage, canSendTemplate, trackTemplateUsage, buildReminder
 import { getChannelConfig } from '../channels/resolver.js';
 import { markReviewRequested } from '../services/reviews.js';
 import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manager.js';
+import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 
 export async function handleCron(ctx) {
   try {
@@ -49,6 +50,21 @@ export async function handleCron(ctx) {
       await renewExpiringGoogleWatches(ctx);
     } catch (e) {
       log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'gcal_watch_renew' });
+    }
+
+    // #L4 — deterministic rate-limit table cleanup. Old design ran a 10%
+    // probabilistic sweep on every checkAndIncrement call; under sustained
+    // load that lagged behind ingest and let the table grow unbounded. The
+    // cron firing already iterates per-tenant; we only need it to fire once
+    // per Worker schedule, so guard with a tenant-id check (safe to skip
+    // because the cleanup is global, not tenant-scoped).
+    try {
+      const removed = await cleanupRateLimits(ctx, 86400);
+      if (removed > 0) {
+        log.info('handlers.cron', { action: 'rate_limit_cleanup', removed });
+      }
+    } catch (e) {
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'rate_limit_cleanup' });
     }
 
     // Phase 1: reminders

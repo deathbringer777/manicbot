@@ -65,6 +65,20 @@ The new helper `encryptBotTokenForWorker` mirrors the Worker's HKDF-SHA256 + AES
 ### H5 — `INSTAGRAM_ACCESS_TOKEN` env-var fallback ✅ FIXED
 **Verified:** `manicbot/src/http/metaWebhooksHttp.js:146-150` — if `channelConfig.token` is unset, code logs warning + error and `continue`s, no platform-wide fallback. The fallback to `env.INSTAGRAM_ACCESS_TOKEN` is removed; comment confirms "INSTAGRAM_ACCESS_TOKEN platform fallback removed; set token via POST /admin/ig-token".
 
+### H6 — Next.js 15.5.15 has 14 open high-severity advisories ✅ FIXED (2026-05-11)
+**Affected:** `manicbot/admin-app/package.json` — `next` was pinned at `^15.5.15`. The 2026-05-11 GitHub advisory feed surfaced 14 high-severity CVEs against the `next` range `9.3.4-canary.0 ‥ 16.3.0-canary.5`: DoS via Server Components, XSS in App Router with CSP nonces, SSRF via WebSocket upgrades, middleware/proxy bypass via dynamic route parameters, cache poisoning in RSC, image-optimization DoS, and adjacent issues. Manicbot's admin-app uses App Router + CSP nonces + Cloudflare Pages caching → multiple attack surfaces matched.
+
+**Fix:** Bump `manicbot/admin-app/package.json` to `"next": "^15.5.18"` (npm `backport` dist-tag — same major.minor, security-patch line). All 14 high-severity advisories list `>= 15.5.16` as the patched range, so 15.5.18 clears every one.
+
+**Verification:** see the PR that introduces this change — `Bot — Test` CI job runs `npm audit --audit-level=high --omit=dev` and must report 0 high before this row is marked ✅ FIXED. See M6 for the remaining transitive moderate.
+
+### M6 — Transitive `postcss <8.5.10` XSS via unescaped `</style>` 🟦 ACCEPTED-RISK
+**Affected:** `node_modules/next/node_modules/postcss` + `node_modules/postcss`. GHSA-qx2v-qp2m-jg93. Severity: moderate.
+
+**Why accepted-risk:** Manicbot does not render untrusted CSS server-side; the attack vector (XSS via `</style>` in CSS stringification) is not exploitable in our deployment. Upstream fix in `postcss>=8.5.10` is gated on next.js releasing a version that bumps the pin. `npm audit fix --force` would downgrade next to 9.3.3 — refused (breaking change). Tracked here until next publishes a release that lifts the pin.
+
+**Action item:** Re-check `npm audit` weekly. Bump `next` patch when a release lifts the postcss pin.
+
 ---
 
 ## MEDIUM Severity

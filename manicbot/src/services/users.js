@@ -409,6 +409,77 @@ export function isRegComplete(user) {
   return true;
 }
 
+/**
+ * DSR (GDPR right-of-access) helper: list `web_users` rows in a
+ * privacy-safe shape, filtered by tenant_id OR email.
+ *
+ * EXCLUDES (never returned, even to the platform admin running the export):
+ *   * password_hash
+ *   * verification_token, password_reset_token, login_token_hash,
+ *     email_change_token (all token fields)
+ *   * verification_token_expires_at, password_reset_expires_at,
+ *     email_change_token_expires_at, login_token_expires_at
+ *   * new_email (pending email change is in-flight state, not access data)
+ *   * login_attempts, locked_until (anti-abuse counters)
+ *   * password_changed_at, sessions_invalidated_at (security state)
+ *   * referral_source, referral_note (internal lead-source attribution)
+ *   * tos_accepted_at (audit field; surfaced separately if needed)
+ *
+ * INCLUDES (the seven DSR fields):
+ *   id, email, tenant_id, role, created_at, email_verified,
+ *   last_login_at, last_login_ip
+ *
+ * `last_login_ip` is the only IP field returned (the user already saw their
+ * own IP in login-alert emails; treat it as the user's own data).
+ *
+ * @param {object} ctx - Worker ctx with ctx.db bound.
+ * @param {{ tenantId?: string|null, email?: string|null }} filter
+ * @returns {Promise<Array<{
+ *   id: string,
+ *   email: string,
+ *   tenant_id: string|null,
+ *   role: string,
+ *   created_at: number,
+ *   email_verified: number,
+ *   last_login_at: number|null,
+ *   last_login_ip: string|null,
+ * }>>}
+ */
+export async function listWebUsersForDsr(ctx, filter = {}) {
+  if (!ctx?.db) return [];
+  const tenantId = filter.tenantId != null ? String(filter.tenantId).trim() : '';
+  const email = filter.email != null ? String(filter.email).trim().toLowerCase() : '';
+  // Require at least one filter: this export is privacy-sensitive even for
+  // platform admins, and dumping the full table would be footgun-shaped.
+  if (!tenantId && !email) return [];
+
+  const cols = `
+    id, email, tenant_id, role, created_at, email_verified,
+    last_login_at, last_login_ip
+  `;
+  let rows;
+  if (tenantId && email) {
+    rows = await dbAll(
+      ctx,
+      `SELECT ${cols} FROM web_users WHERE tenant_id = ? AND LOWER(email) = ? ORDER BY created_at`,
+      tenantId, email,
+    );
+  } else if (tenantId) {
+    rows = await dbAll(
+      ctx,
+      `SELECT ${cols} FROM web_users WHERE tenant_id = ? ORDER BY created_at`,
+      tenantId,
+    );
+  } else {
+    rows = await dbAll(
+      ctx,
+      `SELECT ${cols} FROM web_users WHERE LOWER(email) = ? ORDER BY created_at`,
+      email,
+    );
+  }
+  return rows || [];
+}
+
 export async function upsertUserFromTelegram(ctx, cid, from) {
   if (!cid || !from) return;
   // Compose the real name only from the parts actually provided. Do NOT

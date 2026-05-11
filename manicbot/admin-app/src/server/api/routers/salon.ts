@@ -754,6 +754,9 @@ export const salonRouter = createTRPCRouter({
 
       // Insert masters — bind to the just-created webUser so that S-01/S-03
       // authorization works for invited multi-master tenants out of the box.
+      // isSynthetic=1 because chatId is synthetic — 0052 migration adds
+      // an explicit flag so cron post-visit + Telegram-dependent jobs
+      // skip these rows.
       await ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: syntheticChatId,
@@ -761,6 +764,7 @@ export const salonRouter = createTRPCRouter({
         active: 1,
         addedAt: now,
         webUserId: id,
+        isSynthetic: 1,
       });
 
       // Assign tenant_roles

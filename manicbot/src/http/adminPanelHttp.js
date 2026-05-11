@@ -5,6 +5,57 @@ import { getAdminAllApts } from '../services/appointments.js';
 import { api } from '../telegram.js';
 import { initServices } from '../services/services.js';
 import { listTenantIds, getTenant } from '../tenant/storage.js';
+import { listWebUsersForDsr } from '../services/users.js';
+
+/**
+ * DSR (GDPR right-of-access) export uses Bearer auth — same shape as
+ * `adminKeyHttp.js` so platform operators can curl with the same ADMIN_KEY
+ * they already have. The existing /admin/export/* paths use Basic auth
+ * (driven by `requireAdmin`); we intentionally do NOT reuse that here.
+ * Keeping the DSR path Bearer-only avoids leaking the key into Cloudflare
+ * request logs / Referer headers / browser history.
+ */
+function isBearerAdmin(ctx, request) {
+  if (!ctx?.ADMIN_KEY) return false;
+  const authHeader = request?.headers?.get?.('authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return false;
+  return timingSafeEqual(authHeader.slice(7), ctx.ADMIN_KEY);
+}
+
+/** CSV cell escape — identical to the rule used by /admin/export/* below. */
+function csvCellSafe(v) {
+  let s = v == null ? '' : String(v).replace(/[\r\n]/g, ' ');
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  s = s.replace(/"/g, '""');
+  return `"${s}"`;
+}
+
+/**
+ * Build the DSR users.csv payload from web_users rows. Pure function so
+ * tests can snapshot the format without standing up a Response.
+ *
+ * Columns (in order): id, email, tenant_id, role, created_at,
+ * email_verified, last_login_at
+ *
+ * Timestamps emitted as ISO-8601 (UTC); booleans as 0/1.
+ */
+export function buildDsrUsersCsv(rows) {
+  const header = 'id,email,tenant_id,role,created_at,email_verified,last_login_at,last_login_ip\n';
+  let body = '';
+  for (const r of rows || []) {
+    body += [
+      csvCellSafe(r.id),
+      csvCellSafe(r.email),
+      csvCellSafe(r.tenant_id),
+      csvCellSafe(r.role),
+      csvCellSafe(r.created_at ? new Date(r.created_at * 1000).toISOString() : ''),
+      csvCellSafe(r.email_verified == null ? '' : Number(r.email_verified)),
+      csvCellSafe(r.last_login_at ? new Date(r.last_login_at * 1000).toISOString() : ''),
+      csvCellSafe(r.last_login_ip),
+    ].join(',') + '\n';
+  }
+  return header + body;
+}
 
 /**
  * @param {Request} request
@@ -239,6 +290,32 @@ tr:hover td{background:#fdf2f8}
     html += `</body></html>`;
 
     return new Response(html, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+  }
+
+  // GDPR DSR (right-of-access) export. Bearer-only — mirrors adminKeyHttp.js
+  // shape so platform operators can curl with the same ADMIN_KEY they
+  // already have, and so the key never ends up in a Referer / URL log.
+  // Filter by ?tenant_id=<id> (all web_users of a tenant) OR ?email=<addr>
+  // (single user across tenants). At least one filter required — an
+  // unfiltered request returns 400.
+  if (url.pathname === '/admin/export/users.csv') {
+    if (!isBearerAdmin(ctx, request)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!ctx?.db) return new Response('DB not bound', { status: 500 });
+    const tenantId = url.searchParams.get('tenant_id') || '';
+    const email = url.searchParams.get('email') || '';
+    if (!tenantId && !email) {
+      return new Response('Provide tenant_id or email query parameter', { status: 400 });
+    }
+    const rows = await listWebUsersForDsr(ctx, { tenantId: tenantId || null, email: email || null });
+    const csv = buildDsrUsersCsv(rows);
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv;charset=utf-8',
+        'Content-Disposition': 'attachment; filename="users.csv"',
+      },
+    });
   }
 
   if (url.pathname.startsWith('/admin/export/')) {

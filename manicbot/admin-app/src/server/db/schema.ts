@@ -112,6 +112,7 @@ export const masters = sqliteTable("masters", {
   allowDelegation: integer("allow_delegation").notNull().default(0),
   webUserId: text("web_user_id"),
   calendarVisibility: text("calendar_visibility").notNull().default("salon_only"),
+  isSynthetic: integer("is_synthetic").notNull().default(0),
 }, (t) => [
   index("idx_master_tenant").on(t.tenantId),
   index("idx_master_web_user_id").on(t.webUserId),
@@ -172,6 +173,9 @@ export const appointments = sqliteTable("appointments", {
   index("idx_apt_tenant_date").on(t.tenantId, t.date),
   index("idx_apt_tenant_status").on(t.tenantId, t.status),
   index("idx_apt_tenant_ts").on(t.tenantId, t.ts),
+  // 0051: composite indexes for cron + analytics hot paths.
+  index("idx_apt_master_date").on(t.tenantId, t.masterId, t.date),
+  index("idx_apt_created").on(t.tenantId, t.createdAt),
 ]);
 
 export const services = sqliteTable("services", {
@@ -323,6 +327,8 @@ export const conversations = sqliteTable("conversations", {
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_conv_tenant_msg").on(t.tenantId, t.lastMessageAt),
+  // 0051: enables "this user's history" lookups in unified inbox.
+  index("idx_conv_user").on(t.tenantId, t.channelUserId),
 ]);
 
 // ─── Google Calendar integration ─────────────────────────────────────────────
@@ -696,6 +702,8 @@ export const marketingSends = sqliteTable("marketing_sends", {
   index("idx_mkt_sends_contact").on(t.contactId),
   index("idx_mkt_sends_status").on(t.status),
   index("idx_mkt_sends_provider_msg").on(t.providerMessageId),
+  // 0051: campaign progress page reads (campaign_id, status) together.
+  index("idx_msend_campaign_status").on(t.campaignId, t.status),
 ]);
 
 export const marketingAutomations = sqliteTable("marketing_automations", {

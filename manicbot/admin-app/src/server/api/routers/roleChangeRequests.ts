@@ -241,13 +241,16 @@ export const roleChangeRequestsRouter = createTRPCRouter({
               .set({ isPersonal: 1 })
               .where(eq(tenants.id, user.tenantId));
 
-            // Create a master record with synthetic chatId
+            // Create a master record with synthetic chatId. isSynthetic=1
+            // so cron post-visit + Telegram-dependent jobs can skip these
+            // rows (0052 migration).
             const syntheticChatId = 10_000_000_000 + Math.floor(Math.random() * 1_000_000_000);
             await ctx.db.insert(masters).values({
               tenantId: user.tenantId,
               chatId: syntheticChatId,
               name: user.name ?? user.email,
               active: 1,
+              isSynthetic: 1,
             }).onConflictDoNothing();
 
           } else if (req.currentRole === "master" && req.requestedRole === "tenant_owner") {

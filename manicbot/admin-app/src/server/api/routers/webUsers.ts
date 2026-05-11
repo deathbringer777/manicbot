@@ -189,6 +189,8 @@ export const webUsersRouter = createTRPCRouter({
         // Independent master: also create a master record in the new tenant.
         // Generate a synthetic chatId (web-only masters have no Telegram ID).
         // Range 10B+ avoids collision with real Telegram user IDs.
+        // Set isSynthetic=1 so cron post-visit + future Telegram-dependent
+        // jobs can explicitly skip these rows (0052 migration).
         if (input.role === "master") {
           const syntheticChatId = 10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
           await ctx.db.insert(masters).values({
@@ -201,6 +203,7 @@ export const webUsersRouter = createTRPCRouter({
             // master-router authorization work without relying on the
             // personal-tenant fallback.
             webUserId: id,
+            isSynthetic: 1,
           });
         }
       }
@@ -895,7 +898,8 @@ export const webUsersRouter = createTRPCRouter({
         createdAt: now,
         updatedAt: now,
       });
-      // Independent master: also create a master record
+      // Independent master: also create a master record. isSynthetic=1
+      // because the chatId is synthetic — see 0052 migration.
       if (webRole === "master") {
         const syntheticChatId = 10_000_000_000 + (parseInt(ctx.webUser.id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
         await ctx.db.insert(masters).values({
@@ -904,6 +908,7 @@ export const webUsersRouter = createTRPCRouter({
           name: input.name.trim(),
           active: 1,
           addedAt: now,
+          isSynthetic: 1,
         });
       }
       await ctx.db

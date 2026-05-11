@@ -334,11 +334,22 @@ async function processPostVisitConfirmations(ctx, nowMs) {
   const twoHoursAgo = nowSec - 2 * 3600;
   const oneDayAgo = nowSec - 24 * 3600;
 
-  // Compute appointment end_at = ts + service duration. Avoid a JOIN by
-  // filtering on ts and post-filtering in JS — typical tenant has <500 open apts.
+  // Compute appointment end_at = ts + service duration. Filter on ts and
+  // post-filter in JS — typical tenant has <500 open apts.
+  //
+  // LEFT JOIN masters so we can read `is_synthetic` per appointment. A NULL
+  // join (master_id with no corresponding masters row) is treated as
+  // non-synthetic so legacy rows behave as before — the existing
+  // `master_id > 0` guard further protects against negative synthetic ids
+  // used for manual-booking clients. Synthetic personal-master chat_ids
+  // (range 10B+) MUST be skipped here — they have no real Telegram chat
+  // and sendMessage would fail silently for the post-visit prompt.
   const candidates = await dbAll(ctx, `
-    SELECT a.id, a.ts, a.date, a.time, a.svc_id, a.chat_id, a.master_id
+    SELECT a.id, a.ts, a.date, a.time, a.svc_id, a.chat_id, a.master_id,
+           COALESCE(m.is_synthetic, 0) AS master_is_synthetic
     FROM appointments a
+    LEFT JOIN masters m
+      ON m.tenant_id = a.tenant_id AND m.chat_id = a.master_id
     WHERE a.tenant_id = ?
       AND a.status = 'confirmed'
       AND a.cancelled = 0
@@ -380,7 +391,9 @@ async function processPostVisitConfirmations(ctx, nowMs) {
       // Send Telegram prompt to master with Yes/No-show buttons.
       // master_id is a Telegram chat_id for human masters (positive ints).
       // Negative IDs = synthetic (manual-booking clients) → skip.
-      if (a.master_id && a.master_id > 0) {
+      // is_synthetic=1 = personal-master synthetic chat_id (no real
+      // Telegram chat behind it) → skip to avoid sending to dead chats.
+      if (a.master_id && a.master_id > 0 && !a.master_is_synthetic) {
         const client = await dbGet(ctx,
           'SELECT name, phone FROM users WHERE tenant_id = ? AND chat_id = ?',
           ctx.tenantId, a.chat_id,

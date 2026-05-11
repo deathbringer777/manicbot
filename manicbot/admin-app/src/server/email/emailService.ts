@@ -18,6 +18,14 @@ import {
   roleRequestAdminEmailHtml,
   roleRequestDecisionEmailHtml,
   permissionElevationCodeEmailHtml,
+  paymentFailedEmailHtml,
+  paymentFailedEmailText,
+  planUpgradeEmailHtml,
+  planUpgradeEmailText,
+  masterInviteEmailHtml,
+  masterInviteEmailText,
+  supportReplyEmailHtml,
+  supportReplyEmailText,
   getEmailCopy,
   getPermissionElevationCopy,
 } from "./templates";
@@ -217,5 +225,99 @@ export async function sendPermissionElevationCodeEmail(
     to,
     subject: copy.subject,
     html: permissionElevationCodeEmailHtml(code, targetEmail, permissions, lang),
+  });
+}
+
+// ─── #P1-5 — New transactional emails (relax.md §5) ─────────────────────
+
+/**
+ * #P1-5 — Stripe `invoice.payment_failed` notification.
+ * Fired from `src/billing/webhooks.js` after the tenant is flipped into
+ * grace_period. We surface the failed amount + plan and CTA to update the
+ * payment method in the dashboard. No card metadata is included.
+ */
+export async function sendPaymentFailedEmail(
+  to: string,
+  amountFormatted: string,
+  planLabel: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const updatePaymentUrl = `${baseUrl()}/dashboard/billing`;
+  const copy = getEmailCopy(lang);
+  const options = { amountFormatted, planLabel, updatePaymentUrl };
+  return sendResendEmail({
+    to,
+    subject: copy.paymentFailed.subject,
+    html: paymentFailedEmailHtml(options, lang),
+    text: paymentFailedEmailText(options, lang),
+  });
+}
+
+/**
+ * #P1-5 — `customer.subscription.updated` plan-tier UPGRADE notification.
+ * Only emitted when the new plan is strictly higher than the previous one;
+ * the upgrade-vs-downgrade check lives in the webhook caller.
+ */
+export async function sendPlanUpgradeEmail(
+  to: string,
+  oldPlanLabel: string,
+  newPlanLabel: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const dashboardUrl = `${baseUrl()}/dashboard`;
+  const copy = getEmailCopy(lang);
+  const options = { oldPlanLabel, newPlanLabel, dashboardUrl };
+  return sendResendEmail({
+    to,
+    subject: copy.planUpgrade.subject,
+    html: planUpgradeEmailHtml(options, lang),
+    text: planUpgradeEmailText(options, lang),
+  });
+}
+
+/**
+ * #P1-5 — master-invite email. Sent when a tenant_owner adds a master row
+ * to `tenant_roles`. Best-effort: callers should pass the master's email
+ * if available and skip sending otherwise (Telegram-only masters get no
+ * email — their notification arrives via the bot).
+ */
+export async function sendMasterInviteEmail(
+  to: string,
+  salonName: string,
+  roleLabel: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const dashboardUrl = `${baseUrl()}/dashboard`;
+  const copy = getEmailCopy(lang);
+  const options = { salonName, roleLabel, dashboardUrl };
+  return sendResendEmail({
+    to,
+    subject: copy.masterInvite.subject,
+    html: masterInviteEmailHtml(options, lang),
+    text: masterInviteEmailText(options, lang),
+  });
+}
+
+/**
+ * #P1-5 — support-reply notification. Fired from `support.replyToTicket`
+ * after a platform support / technical_support / system_admin agent
+ * replies. The reply preview is capped at 240 chars and HTML-stripped
+ * inside the template so we never leak nested links/scripts into the
+ * inbox. Full content stays in the ticket UI.
+ */
+export async function sendSupportReplyEmail(
+  to: string,
+  ticketId: string,
+  previewText: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const ticketUrl = `${baseUrl()}/support/tickets/${encodeURIComponent(ticketId)}`;
+  const copy = getEmailCopy(lang);
+  const options = { ticketId, previewText, ticketUrl };
+  return sendResendEmail({
+    to,
+    subject: copy.supportReply.subject,
+    html: supportReplyEmailHtml(options, lang),
+    text: supportReplyEmailText(options, lang),
   });
 }

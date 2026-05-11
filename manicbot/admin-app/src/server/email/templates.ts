@@ -23,6 +23,47 @@ const emailCopy: Record<Lang, {
     approvedBody: string; deniedBody: string;
     note: string; cta: string;
   };
+  /** #P1-5 — Stripe `invoice.payment_failed` notice. */
+  paymentFailed: {
+    subject: string;
+    heading: string;
+    body: string;
+    amount: string;
+    plan: string;
+    nextStep: string;
+    cta: string;
+    grace: string;
+  };
+  /** #P1-5 — `customer.subscription.updated` with plan tier going UP. */
+  planUpgrade: {
+    subject: string;
+    heading: string;
+    body: string;
+    from: string;
+    to: string;
+    cta: string;
+    welcome: string;
+  };
+  /** #P1-5 — tenant_owner adding a master row to tenant_roles. */
+  masterInvite: {
+    subject: string;
+    heading: string;
+    body: string;
+    salon: string;
+    role: string;
+    cta: string;
+    note: string;
+  };
+  /** #P1-5 — support agent reply on a platform/local ticket. */
+  supportReply: {
+    subject: string;
+    heading: string;
+    body: string;
+    ticket: string;
+    preview: string;
+    cta: string;
+    footerNote: string;
+  };
   footer: string;
 }> = {
   ru: {
@@ -106,6 +147,43 @@ const emailCopy: Record<Lang, {
       deniedBody: "К сожалению, ваш запрос на смену роли был отклонён.",
       note: "Администратор оставил комментарий — посмотрите его в кабинете.",
       cta: "Перейти в кабинет",
+    },
+    paymentFailed: {
+      subject: "Оплата не прошла — ManicBot",
+      heading: "Не удалось списать оплату",
+      body: "Мы не смогли списать оплату вашей подписки ManicBot. Возможно, истёк срок действия карты или недостаточно средств.",
+      amount: "Сумма",
+      plan: "Тариф",
+      nextStep: "Чтобы избежать отключения, обновите способ оплаты в кабинете.",
+      cta: "Обновить способ оплаты",
+      grace: "У вас есть 7 дней до отключения функций.",
+    },
+    planUpgrade: {
+      subject: "Ваш тариф обновлён — ManicBot",
+      heading: "Тариф обновлён",
+      body: "Спасибо за апгрейд! Расширенные возможности уже доступны.",
+      from: "Старый тариф",
+      to: "Новый тариф",
+      cta: "Перейти в кабинет",
+      welcome: "Откройте для себя все новые функции, которые включены в ваш план.",
+    },
+    masterInvite: {
+      subject: "Вас добавили в салон — ManicBot",
+      heading: "Вас пригласили в команду",
+      body: "Владелец салона добавил вас как мастера в ManicBot.",
+      salon: "Салон",
+      role: "Ваша роль",
+      cta: "Войти в кабинет",
+      note: "После входа вы увидите свой график, клиентов и доход.",
+    },
+    supportReply: {
+      subject: "Ответ службы поддержки — ManicBot",
+      heading: "Новый ответ от поддержки",
+      body: "Служба поддержки ответила на ваше обращение.",
+      ticket: "Обращение",
+      preview: "Ответ",
+      cta: "Открыть обращение",
+      footerNote: "Чтобы продолжить, ответьте через кабинет — не отвечайте на это письмо.",
     },
     footer: "ManicBot.com — платформа для салонов красоты",
   },
@@ -191,6 +269,43 @@ const emailCopy: Record<Lang, {
       note: "Адміністратор залишив коментар — перегляньте його в кабінеті.",
       cta: "Перейти до кабінету",
     },
+    paymentFailed: {
+      subject: "Оплата не пройшла — ManicBot",
+      heading: "Не вдалося списати оплату",
+      body: "Ми не змогли списати оплату вашої підписки ManicBot. Можливо, термін дії картки закінчився або недостатньо коштів.",
+      amount: "Сума",
+      plan: "Тариф",
+      nextStep: "Щоб уникнути відключення, оновіть спосіб оплати в кабінеті.",
+      cta: "Оновити спосіб оплати",
+      grace: "У вас є 7 днів до відключення функцій.",
+    },
+    planUpgrade: {
+      subject: "Ваш тариф оновлено — ManicBot",
+      heading: "Тариф оновлено",
+      body: "Дякуємо за апгрейд! Розширені можливості вже доступні.",
+      from: "Старий тариф",
+      to: "Новий тариф",
+      cta: "Перейти до кабінету",
+      welcome: "Відкрийте для себе всі нові функції, які входять до вашого плану.",
+    },
+    masterInvite: {
+      subject: "Вас додали до салону — ManicBot",
+      heading: "Вас запросили до команди",
+      body: "Власник салону додав вас як майстра в ManicBot.",
+      salon: "Салон",
+      role: "Ваша роль",
+      cta: "Увійти до кабінету",
+      note: "Після входу ви побачите свій графік, клієнтів та дохід.",
+    },
+    supportReply: {
+      subject: "Відповідь служби підтримки — ManicBot",
+      heading: "Нова відповідь від підтримки",
+      body: "Служба підтримки відповіла на ваше звернення.",
+      ticket: "Звернення",
+      preview: "Відповідь",
+      cta: "Відкрити звернення",
+      footerNote: "Щоб продовжити, відповідайте через кабінет — не відповідайте на цей лист.",
+    },
     footer: "ManicBot.com — платформа для салонів краси",
   },
   en: {
@@ -275,6 +390,43 @@ const emailCopy: Record<Lang, {
       note: "An admin left a note — view it in your dashboard.",
       cta: "Go to dashboard",
     },
+    paymentFailed: {
+      subject: "Payment failed — ManicBot",
+      heading: "We couldn't charge your card",
+      body: "We were unable to charge your ManicBot subscription. The card may be expired or have insufficient funds.",
+      amount: "Amount",
+      plan: "Plan",
+      nextStep: "To avoid service interruption, update your payment method in the dashboard.",
+      cta: "Update payment method",
+      grace: "You have 7 days before features are paused.",
+    },
+    planUpgrade: {
+      subject: "Your plan was upgraded — ManicBot",
+      heading: "Plan upgraded",
+      body: "Thanks for upgrading! The expanded features are now available on your account.",
+      from: "Previous plan",
+      to: "New plan",
+      cta: "Go to dashboard",
+      welcome: "Explore the new features that come with your plan.",
+    },
+    masterInvite: {
+      subject: "You've been added to a salon — ManicBot",
+      heading: "You're on the team",
+      body: "The salon owner added you as a master in ManicBot.",
+      salon: "Salon",
+      role: "Your role",
+      cta: "Open dashboard",
+      note: "After signing in you'll see your schedule, clients and earnings.",
+    },
+    supportReply: {
+      subject: "New reply from support — ManicBot",
+      heading: "New reply from support",
+      body: "The support team has replied to your ticket.",
+      ticket: "Ticket",
+      preview: "Reply",
+      cta: "Open ticket",
+      footerNote: "Reply through the dashboard — please don't reply to this email.",
+    },
     footer: "ManicBot.com — beauty salon platform",
   },
   pl: {
@@ -358,6 +510,43 @@ const emailCopy: Record<Lang, {
       deniedBody: "Niestety, Twoja prośba o zmianę roli została odrzucona.",
       note: "Administrator zostawił komentarz — sprawdź go w panelu.",
       cta: "Przejdź do panelu",
+    },
+    paymentFailed: {
+      subject: "Płatność nie powiodła się — ManicBot",
+      heading: "Nie udało się obciążyć karty",
+      body: "Nie udało nam się pobrać opłaty za Twoją subskrypcję ManicBot. Możliwe, że karta wygasła lub brakuje środków.",
+      amount: "Kwota",
+      plan: "Plan",
+      nextStep: "Aby uniknąć przerwy w działaniu, zaktualizuj sposób płatności w panelu.",
+      cta: "Zaktualizuj sposób płatności",
+      grace: "Masz 7 dni zanim funkcje zostaną wstrzymane.",
+    },
+    planUpgrade: {
+      subject: "Twój plan został zaktualizowany — ManicBot",
+      heading: "Plan zaktualizowany",
+      body: "Dziękujemy za upgrade! Rozszerzone funkcje są już dostępne na Twoim koncie.",
+      from: "Poprzedni plan",
+      to: "Nowy plan",
+      cta: "Przejdź do panelu",
+      welcome: "Odkryj nowe funkcje, które zawiera Twój plan.",
+    },
+    masterInvite: {
+      subject: "Zostałeś dodany do salonu — ManicBot",
+      heading: "Jesteś w zespole",
+      body: "Właściciel salonu dodał Cię jako mistrza w ManicBot.",
+      salon: "Salon",
+      role: "Twoja rola",
+      cta: "Otwórz panel",
+      note: "Po zalogowaniu zobaczysz swój harmonogram, klientów i przychody.",
+    },
+    supportReply: {
+      subject: "Nowa odpowiedź od wsparcia — ManicBot",
+      heading: "Nowa odpowiedź od wsparcia",
+      body: "Zespół wsparcia odpowiedział na Twoje zgłoszenie.",
+      ticket: "Zgłoszenie",
+      preview: "Odpowiedź",
+      cta: "Otwórz zgłoszenie",
+      footerNote: "Odpowiedz przez panel — prosimy nie odpowiadać na ten e-mail.",
     },
     footer: "ManicBot.com — platforma dla salonów kosmetycznych",
   },
@@ -659,4 +848,203 @@ export function permissionElevationCodeEmailHtml(
     paragraph(c.body(targetEmail, permsLabel)) + codeBlock + muted(c.expires) + muted(c.ignore),
     getEmailCopy(lang).footer,
   );
+}
+
+// ─── #P1-5 — Plain-text fallbacks ─────────────────────────────────────────
+//
+// Email clients that prefer text/plain (corporate scanners, screen readers,
+// terminal mail) get a clean text alternative. We keep the same i18n copy
+// so language fidelity is preserved across both representations.
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * #P1-5 — Stripe `invoice.payment_failed` notification.
+ * Triggered from `src/billing/webhooks.js` after the grace_period flip.
+ *
+ * We avoid embedding raw card last4 or the full Stripe invoice id — those
+ * are best read from the dashboard, not the inbox.
+ */
+export function paymentFailedEmailHtml(
+  options: { amountFormatted: string; planLabel: string; updatePaymentUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).paymentFailed;
+  const details = `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.amount}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${options.amountFormatted}</td></tr>
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.plan}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;">${options.planLabel}</td></tr>
+  </table>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) +
+    details +
+    paragraph(c.nextStep) +
+    ctaButton(options.updatePaymentUrl, c.cta) +
+    muted(c.grace),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function paymentFailedEmailText(
+  options: { amountFormatted: string; planLabel: string; updatePaymentUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).paymentFailed;
+  return [
+    c.heading,
+    "",
+    c.body,
+    `${c.amount}: ${options.amountFormatted}`,
+    `${c.plan}: ${options.planLabel}`,
+    "",
+    c.nextStep,
+    options.updatePaymentUrl,
+    "",
+    c.grace,
+    "",
+    stripTags(getEmailCopy(lang).footer),
+  ].join("\n");
+}
+
+/**
+ * #P1-5 — `customer.subscription.updated` plan-upgrade notification.
+ * Fired only when the new plan tier is strictly HIGHER than the previous
+ * one (per PLAN_ORDER in webhooks.js). Downgrades and lateral moves are
+ * intentionally NOT emailed here — those would deserve a different tone.
+ */
+export function planUpgradeEmailHtml(
+  options: { oldPlanLabel: string; newPlanLabel: string; dashboardUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).planUpgrade;
+  const planRow = `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.from}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${options.oldPlanLabel}</td></tr>
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.to}</td><td style="padding:8px 12px;font-size:13px;color:#a78bfa;font-weight:600;">${options.newPlanLabel}</td></tr>
+  </table>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + planRow + paragraph(c.welcome) + ctaButton(options.dashboardUrl, c.cta),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function planUpgradeEmailText(
+  options: { oldPlanLabel: string; newPlanLabel: string; dashboardUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).planUpgrade;
+  return [
+    c.heading,
+    "",
+    c.body,
+    `${c.from}: ${options.oldPlanLabel}`,
+    `${c.to}: ${options.newPlanLabel}`,
+    "",
+    c.welcome,
+    options.dashboardUrl,
+    "",
+    stripTags(getEmailCopy(lang).footer),
+  ].join("\n");
+}
+
+/**
+ * #P1-5 — master-invite email. Fired when a tenant_owner adds a master
+ * row to `tenant_roles` via `salon.addMaster` or `salon.createMasterAccount`.
+ *
+ * We do NOT include the auto-generated password in the email body — the
+ * dashboard call that triggers this email returns the password to the
+ * inviting owner so they can share it through a trusted channel of their
+ * choice. Sending a password by email is a textbook credential-leakage
+ * antipattern and is forbidden by our `SECURITY_FINDINGS.md` posture.
+ */
+export function masterInviteEmailHtml(
+  options: { salonName: string; roleLabel: string; dashboardUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).masterInvite;
+  const details = `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.salon}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${options.salonName}</td></tr>
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.role}</td><td style="padding:8px 12px;font-size:13px;color:#a78bfa;font-weight:600;">${options.roleLabel}</td></tr>
+  </table>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + details + paragraph(c.note) + ctaButton(options.dashboardUrl, c.cta),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function masterInviteEmailText(
+  options: { salonName: string; roleLabel: string; dashboardUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).masterInvite;
+  return [
+    c.heading,
+    "",
+    c.body,
+    `${c.salon}: ${options.salonName}`,
+    `${c.role}: ${options.roleLabel}`,
+    "",
+    c.note,
+    options.dashboardUrl,
+    "",
+    stripTags(getEmailCopy(lang).footer),
+  ].join("\n");
+}
+
+/**
+ * #P1-5 — support-reply notification. Fired from `support.replyToTicket`
+ * (web) when a support / technical_support / system_admin agent replies on
+ * a platform ticket. We do NOT include the reply body in plaintext to
+ * avoid leaking sensitive support content to whoever forwards the email;
+ * a short preview (≤ 240 chars, no HTML) is fine.
+ */
+export function supportReplyEmailHtml(
+  options: { ticketId: string; previewText: string; ticketUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).supportReply;
+  const safePreview = stripTags(options.previewText).slice(0, 240);
+  const details = `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.ticket}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${options.ticketId}</td></tr>
+  </table>`;
+  const previewBlock = safePreview
+    ? `<div style="margin:16px 0;padding:12px 16px;background-color:#1e293b;border-radius:10px;border-left:3px solid #7c3aed;">
+        <p style="margin:0 0 6px;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">${c.preview}</p>
+        <p style="margin:0;font-size:13px;line-height:1.5;color:#e2e8f0;">${safePreview}</p>
+      </div>`
+    : "";
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) +
+    details +
+    previewBlock +
+    ctaButton(options.ticketUrl, c.cta) +
+    muted(c.footerNote),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function supportReplyEmailText(
+  options: { ticketId: string; previewText: string; ticketUrl: string },
+  lang: Lang,
+): string {
+  const c = getEmailCopy(lang).supportReply;
+  const safePreview = stripTags(options.previewText).slice(0, 240);
+  return [
+    c.heading,
+    "",
+    c.body,
+    `${c.ticket}: ${options.ticketId}`,
+    "",
+    safePreview ? `${c.preview}: ${safePreview}` : "",
+    "",
+    options.ticketUrl,
+    "",
+    c.footerNote,
+    "",
+    stripTags(getEmailCopy(lang).footer),
+  ].filter(Boolean).join("\n");
 }

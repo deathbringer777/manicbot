@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_SITE_ORIGIN,
+  ROUTE_LASTMOD,
   buildStaticSitemapEntries,
   renderSitemapXml,
   renderRobotsTxt,
@@ -31,12 +32,13 @@ describe('seo', () => {
       expect(entries.find((e) => e.loc === '/rules')).toBeTruthy();
     });
 
-    it('includes auth entry points (login/register) at low priority', () => {
-      const login = entries.find((e) => e.loc === '/login');
-      const register = entries.find((e) => e.loc === '/register');
-      expect(login).toBeTruthy();
-      expect(register).toBeTruthy();
-      expect(login.priority).toBe('0.3');
+    // #P0-4d (relax.md §3) — auth pages must NOT be in the sitemap. They
+    // are rendered with `<meta name="robots" content="noindex,nofollow">`,
+    // and listing them while marking them noindex sends Google a
+    // contradictory signal that hurts the rest of the sitemap's trust.
+    it('does NOT include auth entry points (login/register) — #P0-4d', () => {
+      expect(entries.find((e) => e.loc === '/login')).toBeUndefined();
+      expect(entries.find((e) => e.loc === '/register')).toBeUndefined();
     });
 
     it('includes blog article slugs', () => {
@@ -60,6 +62,58 @@ describe('seo', () => {
     it('/ has the highest priority', () => {
       const root = entries.find((e) => e.loc === '/');
       expect(root.priority).toBe('1.0');
+    });
+
+    // #P0-4c (relax.md §3) — previously every static entry was stamped with
+    // today's date on every fetch. Google flagged this as fake-freshness
+    // and discounted the entire sitemap. The fix is a route-keyed lastmod
+    // table; routes get their committed date, not the fetch-time date.
+    describe('#P0-4c — per-route lastmod', () => {
+      it('uses ROUTE_LASTMOD for routes that have an entry', () => {
+        const today = '2026-04-07';
+        const fresh = buildStaticSitemapEntries(today);
+        expect(fresh.find((e) => e.loc === '/').lastmod).toBe(ROUTE_LASTMOD['/']);
+        expect(fresh.find((e) => e.loc === '/help').lastmod).toBe(ROUTE_LASTMOD['/help']);
+        expect(fresh.find((e) => e.loc === '/search').lastmod).toBe(ROUTE_LASTMOD['/search']);
+        expect(fresh.find((e) => e.loc === '/blog').lastmod).toBe(ROUTE_LASTMOD['/blog']);
+        expect(fresh.find((e) => e.loc === '/privacy').lastmod).toBe(ROUTE_LASTMOD['/privacy']);
+        expect(fresh.find((e) => e.loc === '/terms').lastmod).toBe(ROUTE_LASTMOD['/terms']);
+        expect(fresh.find((e) => e.loc === '/cookies').lastmod).toBe(ROUTE_LASTMOD['/cookies']);
+      });
+
+      it('preserves the per-article BLOG_ARTICLES lastmod (not today)', () => {
+        const today = '2099-01-01';
+        const fresh = buildStaticSitemapEntries(today);
+        const post = fresh.find((e) => e.loc === '/blog/automate-salon-booking');
+        expect(post.lastmod).toBe('2026-04-01');
+        expect(post.lastmod).not.toBe(today);
+      });
+
+      it('emits varied lastmod values across routes (not all the same today)', () => {
+        const today = '2099-01-01';
+        const fresh = buildStaticSitemapEntries(today);
+        const lastmods = new Set(fresh.map((e) => e.lastmod));
+        // We expect at least 3 distinct dates across the catalog.
+        expect(lastmods.size).toBeGreaterThanOrEqual(3);
+        // None of the static routes in ROUTE_LASTMOD should pick up the
+        // synthetic far-future `today`, which would mean the table missed.
+        for (const loc of Object.keys(ROUTE_LASTMOD)) {
+          const entry = fresh.find((e) => e.loc === loc);
+          if (entry) expect(entry.lastmod).not.toBe(today);
+        }
+      });
+
+      it('falls back to `today` only for routes not in ROUTE_LASTMOD', () => {
+        const today = '2099-01-01';
+        const fresh = buildStaticSitemapEntries(today);
+        // `/rules` and `/support` are static routes without an explicit
+        // ROUTE_LASTMOD entry today; they should still receive `today` so
+        // we never emit a missing <lastmod>.
+        const rules = fresh.find((e) => e.loc === '/rules');
+        if (rules) expect(rules.lastmod).toBe(today);
+        const support = fresh.find((e) => e.loc === '/support');
+        if (support) expect(support.lastmod).toBe(today);
+      });
     });
   });
 

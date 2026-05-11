@@ -10,6 +10,11 @@ import { GRACE_DURATION_MS } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
 import { nowSec, msToSec } from '../utils/time.js';
 import { sendInvoiceEmail } from './invoiceEmail.js';
+import {
+  sendPaymentFailedEmail,
+  sendPlanUpgradeEmail,
+  isPlanUpgrade,
+} from './notificationEmails.js';
 import { log } from '../utils/logger.js';
 import {
   handleAddonCheckoutCompleted,
@@ -17,6 +22,10 @@ import {
   handleAddonInvoiceFailed,
   handleAddonSubscriptionCanceled,
 } from './pluginWebhooks.js';
+
+// #P1-5 (relax.md §5) — plan tier order is the single source of truth for
+// upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
+const PLAN_ORDER = ['start', 'pro', 'max']; // eslint-disable-line no-unused-vars
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
@@ -263,7 +272,32 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         updates.nextPaymentDate = null;
         updates.cancelAtPeriodEnd = false;
       }
+
+      // #P1-5 (relax.md §5) — detect plan-tier UPGRADES on subscription.updated.
+      // We read the existing tenant.plan BEFORE writing the new value so we
+      // can fire `plan_upgrade` exactly once on the transition. Downgrades
+      // and lateral moves never email; `isPlanUpgrade` enforces strict-up.
+      let oldPlanForUpgrade = null;
+      let newPlanForUpgrade = null;
+      if (type === 'customer.subscription.updated' && updates.plan) {
+        try {
+          const current = await dbGet(ctx, 'SELECT plan FROM tenants WHERE id = ?', tenantId);
+          oldPlanForUpgrade = current?.plan ?? null;
+          newPlanForUpgrade = updates.plan;
+        } catch { /* best-effort */ }
+      }
+
       await updateTenantBilling(ctx, tenantId, updates);
+
+      if (
+        type === 'customer.subscription.updated' &&
+        ctx.resendApiKey && ctx.resendFrom &&
+        isPlanUpgrade(oldPlanForUpgrade, newPlanForUpgrade)
+      ) {
+        // fire-and-forget: never block Stripe 200 on email delivery
+        sendPlanUpgradeEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, oldPlanForUpgrade, newPlanForUpgrade)
+          .catch(e => log.error('webhook.planUpgradeEmail', e));
+      }
     }
   }
 
@@ -297,6 +331,12 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           graceEndsAt: nowSec() + msToSec(GRACE_DURATION_MS),
           updatedAt: nowSec(),
         });
+        // #P1-5 (relax.md §5) — payment_failed notification email.
+        // Fire-and-forget so a slow Resend never blocks the 200 we owe Stripe.
+        if (ctx.resendApiKey && ctx.resendFrom) {
+          sendPaymentFailedEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
+            .catch(e => log.error('webhook.paymentFailedEmail', e));
+        }
       }
     }
   }

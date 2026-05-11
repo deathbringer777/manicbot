@@ -442,6 +442,8 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 - `BREVO_FROM` (optional — Brevo sender, same format as `RESEND_FROM`)
 - `BREVO_SMS_SENDER` (optional — SMS sender ID, 11 chars max; used by Max-plan SMS add-on)
 
+**DNS / email deliverability** (P2-17, relax.md §3): see [manicbot/docs/dns/DMARC.md](manicbot/docs/dns/DMARC.md) for the DMARC `rua=postmaster@manicbot.com` reporting setup — operator-facing runbook for the Cloudflare DNS dashboard. No CLI tooling is required.
+
 ---
 
 ## D1 Schema Key Tables

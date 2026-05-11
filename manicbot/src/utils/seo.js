@@ -35,14 +35,19 @@ const ADMIN_APP_PUBLIC_ROUTES = [
 ];
 
 /**
- * Low-priority auth entry points. Login/register should still be indexable for
- * brand queries but not compete with marketing pages.
- * @type {Array<{ loc: string; priority: string; changefreq: string }>}
+ * #P0-4d (relax.md §3) — `/login` and `/register` were previously listed here
+ * with priority 0.3, but the rendered pages return `<meta name="robots"
+ * content="noindex,nofollow">`. Listing them in the sitemap while marking
+ * them noindex sends Google conflicting signals and wastes crawl budget. The
+ * decision is to KEEP them noindex (auth flows are thin content with no
+ * marketing value) and remove them from the sitemap entirely. The
+ * `Disallow: /login` etc. directives in `renderRobotsTxt` below already
+ * cover crawl exclusion.
+ *
+ * If we ever want `/register` to be indexable, we have to (a) drop the
+ * noindex from the rendered page, (b) write real marketing copy on it, and
+ * (c) re-add it here with a thought-through priority.
  */
-const AUTH_PUBLIC_ROUTES = [
-  { loc: '/login',    priority: '0.3', changefreq: 'yearly' },
-  { loc: '/register', priority: '0.3', changefreq: 'yearly' },
-];
 
 /**
  * Blog article slugs — mirrored from admin-app/src/content/blog/articles.ts.
@@ -59,6 +64,26 @@ const BLOG_ARTICLES = [
   { slug: 'google-calendar-sync',        lastmod: '2026-02-10' },
   { slug: 'first-client-in-10-minutes',  lastmod: '2026-02-01' },
 ];
+
+/**
+ * #P0-4c (relax.md §3) — hardcoded `lastmod` per static route. Previously
+ * every entry was stamped with `today` on every sitemap fetch, which Google
+ * flags as fake-freshness and uses to discount the entire sitemap. The
+ * dates below should be bumped manually when the underlying page content
+ * meaningfully changes (not on every deploy). Routes not in this table
+ * fall back to `todayIso()` so we don't accidentally emit a missing lastmod.
+ *
+ * @type {Record<string, string>}
+ */
+export const ROUTE_LASTMOD = {
+  '/':         '2026-04-01',
+  '/help':     '2026-03-15',
+  '/search':   '2026-05-01',
+  '/blog':     '2026-04-15',
+  '/privacy':  '2025-12-01',
+  '/terms':    '2025-12-01',
+  '/cookies':  '2026-04-15',
+};
 
 /** XML-escape a URL (only ampersands actually need escaping in `<loc>`). */
 function xmlEscape(s) {
@@ -107,14 +132,23 @@ export function coerceLastmodDate(value) {
 /**
  * Build the list of sitemap entries (excluding DB-driven salon slugs).
  * Pure function — no env, no I/O. Easy to unit test.
+ *
+ * #P0-4c — per-route lastmod is sourced from `ROUTE_LASTMOD` so the
+ * sitemap reports honest freshness instead of stamping `today` everywhere.
+ * The `today` argument remains as a safety net for routes that aren't in
+ * the table; we'd rather emit a too-fresh date than a missing one.
+ *
  * @param {string} [today]
  */
 export function buildStaticSitemapEntries(today = todayIso()) {
-  const withLastmod = (entries) => entries.map((e) => ({ ...e, lastmod: today }));
+  const resolveLastmod = (loc) => ROUTE_LASTMOD[loc] || today;
+  const withLastmod = (entries) =>
+    entries.map((e) => ({ ...e, lastmod: resolveLastmod(e.loc) }));
   return [
     ...withLastmod(LANDING_ROUTES),
     ...withLastmod(ADMIN_APP_PUBLIC_ROUTES),
-    ...withLastmod(AUTH_PUBLIC_ROUTES),
+    // AUTH_PUBLIC_ROUTES removed (see comment above) — keeps auth pages out
+    // of the sitemap; the matching Disallow directives stay in robots.txt.
     ...BLOG_ARTICLES.map((a) => ({
       loc: `/blog/${a.slug}`,
       priority: '0.6',

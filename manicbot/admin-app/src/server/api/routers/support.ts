@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { platformTickets, platformTicketMessages } from "~/server/db/schema";
+import { platformTickets, platformTicketMessages, webUsers } from "~/server/db/schema";
 import { eq, desc, or, like, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { sendSupportReplyEmail } from "~/server/email/emailService";
+import { log } from "~/server/utils/logger";
+import type { Lang } from "~/lib/i18n";
 
 async function assertSupport(ctx: any) {
   if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -100,6 +103,39 @@ export const supportRouter = createTRPCRouter({
       await ctx.db.update(platformTickets)
         .set({ updatedAt: Math.floor(Date.now() / 1000) })
         .where(eq(platformTickets.id, input.ticketId));
+
+      // #P1-5 (relax.md §5) — best-effort support_reply notification. We
+      // resolve the ticket owner via platform_tickets.client_name (which
+      // holds the user's email at ticket-creation time — see createTicket
+      // below). Email failure must never break the support reply flow, so
+      // every step is guarded and the actual fetch is fire-and-forget.
+      try {
+        const ticketRows = await ctx.db
+          .select({ clientName: platformTickets.clientName })
+          .from(platformTickets)
+          .where(eq(platformTickets.id, input.ticketId))
+          .limit(1);
+        const recipientEmail = ticketRows[0]?.clientName?.trim();
+        if (recipientEmail && /@/.test(recipientEmail)) {
+          // Pull preferred language from the web_users row if we have one;
+          // otherwise default to English so the email is at least legible.
+          let lang: Lang = "en";
+          try {
+            const userRows = await ctx.db
+              .select({ lang: webUsers.lang })
+              .from(webUsers)
+              .where(eq(webUsers.email, recipientEmail))
+              .limit(1);
+            if (userRows[0]?.lang) lang = userRows[0].lang as Lang;
+          } catch { /* best-effort */ }
+          void sendSupportReplyEmail(recipientEmail, input.ticketId, input.text, lang).catch((e) =>
+            log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e))),
+          );
+        }
+      } catch (e) {
+        log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e)));
+      }
+
       return { ok: true };
     }),
 

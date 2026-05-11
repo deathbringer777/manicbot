@@ -16,6 +16,7 @@ import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { log } from "~/server/utils/logger";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import { sendMasterInviteEmail } from "~/server/email/emailService";
 
 const tenantIdInput = z.object({ tenantId: z.string() });
 
@@ -631,6 +632,39 @@ export const salonRouter = createTRPCRouter({
         detail: `chatId=${input.chatId}`,
         ip: ctxIp(ctx),
       });
+      // #P1-5 (relax.md §5) — best-effort master_invite email. The caller
+      // supplies a Telegram chatId, so the only path to an email is via a
+      // pre-existing web_users row bound to the same tenant + matching the
+      // synthetic-chatId derivation. Telegram-only masters (no web_users
+      // row) receive their invitation through the bot DM — no email is
+      // sent and that's by design.
+      try {
+        const tenantRow = await ctx.db
+          .select({ name: tenants.name })
+          .from(tenants)
+          .where(eq(tenants.id, input.tenantId))
+          .limit(1);
+        const salonName = tenantRow[0]?.name ?? "ManicBot";
+        const webRows = await ctx.db
+          .select({ email: webUsers.email, lang: webUsers.lang })
+          .from(webUsers)
+          .where(and(eq(webUsers.tenantId, input.tenantId), eq(webUsers.role, "master")));
+        for (const wu of webRows) {
+          const synth =
+            10_000_000_000 + (parseInt(wu.email.replace(/[^a-f0-9]/gi, "").slice(0, 8) || "0", 16) % 1_000_000_000);
+          // We don't have a reliable synth → email mapping for arbitrary
+          // chat ids; we only fire-and-forget when an email exists for
+          // this tenant. Pick the first master web_users row whose
+          // derived id matches the chatId, otherwise skip.
+          if (wu.email && synth === input.chatId) {
+            void sendMasterInviteEmail(wu.email, salonName, "Master", (wu.lang as any) ?? "en")
+              .catch((e) => log.error("salon.addMaster.email", e instanceof Error ? e : new Error(String(e))));
+            break;
+          }
+        }
+      } catch (e) {
+        log.error("salon.addMaster.email", e instanceof Error ? e : new Error(String(e)));
+      }
       return { success: true };
     }),
 
@@ -741,6 +775,27 @@ export const salonRouter = createTRPCRouter({
         detail: `masterId=${syntheticChatId} webUserId=${id}`,
         ip: ctxIp(ctx),
       });
+      // #P1-5 (relax.md §5) — send the master-invite email ONLY when the
+      // owner supplied a real address (`input.email`). The auto-generated
+      // `*.salon.manicbot.local` mailboxes are synthetic and don't accept
+      // mail. We do NOT include the auto-generated password in the email
+      // body — it goes back to the caller and the owner shares it through
+      // a trusted channel.
+      if (input.email && input.email.trim()) {
+        try {
+          const tenantRow = await ctx.db
+            .select({ name: tenants.name })
+            .from(tenants)
+            .where(eq(tenants.id, input.tenantId))
+            .limit(1);
+          const salonName = tenantRow[0]?.name ?? "ManicBot";
+          void sendMasterInviteEmail(input.email.trim(), salonName, "Master", "en").catch(
+            (e) => log.error("salon.createMasterAccount.email", e instanceof Error ? e : new Error(String(e))),
+          );
+        } catch (e) {
+          log.error("salon.createMasterAccount.email", e instanceof Error ? e : new Error(String(e)));
+        }
+      }
       return { login, password, masterId: syntheticChatId, webUserId: id };
     }),
 

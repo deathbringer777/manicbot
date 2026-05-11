@@ -29,11 +29,18 @@ export function isResendConfigured(): boolean {
 
 /**
  * Send one email. Returns ok:false if env missing (caller may treat as misconfiguration).
+ *
+ * #P1-5 — `text` is now an optional plain-text alternative. Resend serves
+ * the `text` part alongside `html` so MUAs that prefer text/plain (corporate
+ * filters, accessibility tools) get a real text payload instead of falling
+ * back to a tag-stripped HTML rendering. Templates that ship a `text` body
+ * should pass it here; everything else continues to be HTML-only.
  */
 export async function sendResendEmail(opts: {
   to: string;
   subject: string;
   html: string;
+  text?: string;
 }): Promise<SendEmailResult> {
   const key = getKey();
   const from = getFrom();
@@ -43,18 +50,20 @@ export async function sendResendEmail(opts: {
   }
 
   try {
+    const body: Record<string, unknown> = {
+      from,
+      to: [opts.to],
+      subject: opts.subject,
+      html: opts.html,
+    };
+    if (opts.text) body.text = opts.text;
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from,
-        to: [opts.to],
-        subject: opts.subject,
-        html: opts.html,
-      }),
+      body: JSON.stringify(body),
     });
 
     const data = (await res.json().catch(() => ({}))) as {

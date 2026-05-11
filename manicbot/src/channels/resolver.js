@@ -187,22 +187,16 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
   let token = null;
   const rawTok = row.token_encrypted;
   if (rawTok) {
-    if (encKey) token = await decryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
-    if (!token && isLikelyPlaintextMetaChannelToken(rawTok)) {
-      if (encKey) {
-        // Encryption key is set but token is plaintext — auto-encrypt it in place and use it
-        log.warn('channels.resolver', { message: 'Auto-encrypting plaintext Meta token', tenantId });
-        const encrypted = await encryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
-        if (encrypted) {
-          await dbRun(ctx,
-            'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ?',
-            encrypted, Math.floor(Date.now() / 1000), row.id,
-          ).catch(e => log.error('channels.resolver', e instanceof Error ? e : new Error(String(e.message)), { action: 'store_encrypted_token' }));
-        }
-        token = rawTok; // use the plaintext for this request
-      } else {
-        log.error('channels.resolver', new Error('SECURITY: Using plaintext Meta token — set BOT_ENCRYPTION_KEY to encrypt at rest'), { tenantId });
-        token = rawTok;
+    if (!encKey) {
+      // P1-8 — fail closed. Returning plaintext from `token_encrypted` when
+      // BOT_ENCRYPTION_KEY was unset was a footgun: a forgotten secret
+      // caused plaintext tokens to flow outbound. Refuse instead and emit a
+      // structured event so ops can fix the deploy.
+      log.error('channels.resolver', new Error('channel.token.missing_key'), { tenantId, channelType });
+    } else {
+      token = await decryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
+      if (!token) {
+        log.error('channels.resolver', new Error('channel.token.decrypt_failed'), { tenantId, channelType });
       }
     }
   }

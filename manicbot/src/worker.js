@@ -181,6 +181,37 @@ function validateSecurityConfig(env) {
       throw new Error('[SECURITY] META_APP_SECRET must be at least 32 characters — refusing to start');
     }
   }
+
+  // P2-8 — ADMIN_APP_URL is warn-only at startup (kept compatible with local
+  // dev where Pages is not configured). The fail-closed check is per-request
+  // and lives in `requireAdminAppConfigured` below — it returns 503 when an
+  // admin-app path is requested with no upstream configured.
+  if (!env.ADMIN_APP_URL) {
+    log.warn('worker.security', { message: 'ADMIN_APP_URL not set — admin-app paths will 503 (P2-8)' });
+  }
+}
+
+/**
+ * P2-8 — fail-closed gate for admin-app proxy.
+ *
+ * Pre-fix: when `ADMIN_APP_URL` was unset the proxy silently fell through to a
+ * hardcoded preview URL (`admin-app-3nc.pages.dev`). In a misconfigured
+ * production environment this leaked staging-vs-prod boundaries (callers'
+ * cookies, CSP nonces, NextAuth callbacks). Now we refuse the request with
+ * 503 and let ops fix the deploy.
+ *
+ * @param {Request} request
+ * @param {any} env
+ * @param {URL} url
+ * @returns {Response | null} 503 Response if path is admin-app and ADMIN_APP_URL is unset; null otherwise.
+ */
+export function requireAdminAppConfigured(request, env, url) {
+  if (env.ADMIN_APP_URL) return null;
+  if (!isAdminAppPath(url.pathname)) return null;
+  return new Response('admin-app upstream not configured', {
+    status: 503,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }
 
 export default {
@@ -198,8 +229,11 @@ export default {
       return addSecurityHeaders(await generateSitemapResponse(env, url.origin));
     }
 
-    // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath)
+    // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath).
+    // P2-8 — fail-closed when ADMIN_APP_URL is unset.
     if (isAdminAppPath(url.pathname)) {
+      const gate = requireAdminAppConfigured(request, env, url);
+      if (gate) return addSecurityHeaders(gate);
       return addSecurityHeaders(await proxyToAdminApp(request, env, url));
     }
 

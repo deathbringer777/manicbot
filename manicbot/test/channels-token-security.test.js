@@ -122,26 +122,24 @@ describe('BOT_ENCRYPTION_KEY is used when set', () => {
   });
 });
 
-// ── Plaintext fallback when no encryption key ─────────────────────────────
+// ── Fail-closed when no encryption key (P1-8) ─────────────────────────────
+//
+// Previously the channel-token helpers fell back to plaintext when
+// BOT_ENCRYPTION_KEY was unset. P1-8 removed that fallback: with no key,
+// writes refuse and reads return null. This documents the new contract.
 
-describe('plaintext fallback when BOT_ENCRYPTION_KEY is unset', () => {
-  it('encryptAndStoreToken stores plaintext when encKey is null', async () => {
+describe('plaintext fallback removed (P1-8)', () => {
+  it('encryptAndStoreToken refuses to store when encKey is null', async () => {
     const ctx = makeTokenCtx();
     await ctx.db.prepare(
       'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
     ).bind('cc3', 'test', 'whatsapp', '{}', '', Date.now(), Date.now()).run();
 
     const result = await encryptAndStoreToken(ctx, 'cc3', 'EAAplaintoken', null);
-    expect(result).toBe(true);
-
-    const row = await ctx.db.prepare(
-      'SELECT token_encrypted FROM channel_configs WHERE id = ?',
-    ).bind('cc3').first();
-    // Without encryption key, token is stored as-is
-    expect(row.token_encrypted).toBe('EAAplaintoken');
+    expect(result).toBe(false);
   });
 
-  it('getDecryptedToken returns raw value when encKey is null', async () => {
+  it('getDecryptedToken returns null when encKey is null', async () => {
     const ctx = makeTokenCtx();
     const plain = 'EAArawtoken456';
     await ctx.db.prepare(
@@ -149,7 +147,7 @@ describe('plaintext fallback when BOT_ENCRYPTION_KEY is unset', () => {
     ).bind('cc4', 'test', 'instagram', '{}', plain, Date.now(), Date.now()).run();
 
     const result = await getDecryptedToken(ctx, 'cc4', null);
-    expect(result).toBe(plain);
+    expect(result).toBeNull();
   });
 });
 

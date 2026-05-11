@@ -219,7 +219,11 @@ export const webUsersRouter = createTRPCRouter({
           referralSource: input.referralSource ?? null,
           referralNote: input.referralNote ?? null,
           emailVerified: skipEmailVerification ? 1 : 0,
+          // P1-9 — rolling-window: write the hash to both columns. The legacy
+          // column will be nulled in a follow-up migration once verifyEmail
+          // never falls back to it.
           verificationToken: skipEmailVerification ? null : verificationCodeHash,
+          verificationTokenHash: skipEmailVerification ? null : verificationCodeHash,
           verificationTokenExpiresAt: skipEmailVerification ? null : codeExpiresAt,
           tosAcceptedAt: now,
           tenantId: assignedTenantId,
@@ -303,8 +307,10 @@ export const webUsersRouter = createTRPCRouter({
         return { success: true, alreadyVerified: true };
       }
 
-      // Must have a pending verification token to proceed
-      if (!user.verificationToken) {
+      // P1-9 — prefer the hash-named column; fall back to the legacy column
+      // for tokens minted before migration 0053. Both store SHA-256 hex.
+      const storedHash = user.verificationTokenHash ?? user.verificationToken;
+      if (!storedHash) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No verification code pending. Request a new one." });
       }
 
@@ -315,7 +321,7 @@ export const webUsersRouter = createTRPCRouter({
 
       // Verification token is stored as a SHA-256 hash; hash the user input and compare.
       const inputHash = await hashToken(input.code);
-      if (!timingSafeEqualHex(inputHash, user.verificationToken)) {
+      if (!timingSafeEqualHex(inputHash, storedHash)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid verification code" });
       }
 
@@ -331,7 +337,10 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({
           emailVerified: 1,
+          // P1-9 — clear BOTH columns so the next read can't accidentally
+          // see a half-consumed token via the legacy path.
           verificationToken: null,
+          verificationTokenHash: null,
           verificationTokenExpiresAt: null,
           loginTokenHash,
           loginTokenExpiresAt,
@@ -384,7 +393,13 @@ export const webUsersRouter = createTRPCRouter({
 
       await ctx.db
         .update(webUsers)
-        .set({ verificationToken: newCodeHash, verificationTokenExpiresAt: expiresAt, updatedAt: now })
+        .set({
+          // P1-9 — rolling-window write.
+          verificationToken: newCodeHash,
+          verificationTokenHash: newCodeHash,
+          verificationTokenExpiresAt: expiresAt,
+          updatedAt: now,
+        })
         .where(eq(webUsers.id, user.id));
 
       const sent = await sendVerificationCodeEmail(email, newCode, (user.lang ?? "en") as Lang);
@@ -393,7 +408,12 @@ export const webUsersRouter = createTRPCRouter({
         try {
           await ctx.db
             .update(webUsers)
-            .set({ verificationToken: null, verificationTokenExpiresAt: null, updatedAt: now })
+            .set({
+              verificationToken: null,
+              verificationTokenHash: null,
+              verificationTokenExpiresAt: null,
+              updatedAt: now,
+            })
             .where(eq(webUsers.id, user.id));
         } catch { /* non-critical */ }
         log.error("webUsers.resendVerificationCode", new Error(sent.error ?? "email_send_failed"));
@@ -480,7 +500,9 @@ export const webUsersRouter = createTRPCRouter({
         await ctx.db
           .update(webUsers)
           .set({
+            // P1-9 — rolling-window write.
             passwordResetToken: codeHash,
+            passwordResetTokenHash: codeHash,
             passwordResetExpiresAt: expiresAt,
             updatedAt: now,
           })
@@ -495,6 +517,7 @@ export const webUsersRouter = createTRPCRouter({
             .update(webUsers)
             .set({
               passwordResetToken: null,
+              passwordResetTokenHash: null,
               passwordResetExpiresAt: null,
               updatedAt: now,
             })
@@ -552,7 +575,10 @@ export const webUsersRouter = createTRPCRouter({
         .limit(1);
       if (!rows.length) throw generic;
       const user = rows[0]!;
-      if (!user.passwordResetToken) throw generic;
+      // P1-9 — prefer the hash-named column; legacy column kept for rolling
+      // window only.
+      const storedHash = user.passwordResetTokenHash ?? user.passwordResetToken;
+      if (!storedHash) throw generic;
 
       const now = Math.floor(Date.now() / 1000);
       if (!user.passwordResetExpiresAt || now > user.passwordResetExpiresAt) {
@@ -560,7 +586,7 @@ export const webUsersRouter = createTRPCRouter({
       }
 
       const inputHash = await hashToken(input.code);
-      if (!timingSafeEqualHex(inputHash, user.passwordResetToken)) {
+      if (!timingSafeEqualHex(inputHash, storedHash)) {
         throw generic;
       }
 
@@ -569,7 +595,9 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({
           passwordHash: newHash,
+          // P1-9 — clear BOTH columns on consume.
           passwordResetToken: null,
+          passwordResetTokenHash: null,
           passwordResetExpiresAt: null,
           // #S8: bump password_changed_at so existing JWTs are rejected on next
           // session check (NextAuth callback compares stored value to token).
@@ -621,7 +649,9 @@ export const webUsersRouter = createTRPCRouter({
         passwordHash,
         role: input.role,
         emailVerified: shouldVerify ? 0 : 1,
+        // P1-9 — rolling-window write.
         verificationToken: verificationCodeHash,
+        verificationTokenHash: verificationCodeHash,
         verificationTokenExpiresAt: codeExpiresAt,
         tenantId: input.tenantId ?? null,
         createdAt: now,
@@ -709,7 +739,9 @@ export const webUsersRouter = createTRPCRouter({
         .update(webUsers)
         .set({
           newEmail,
+          // P1-9 — rolling-window write.
           emailChangeToken: codeHash,
+          emailChangeTokenHash: codeHash,
           emailChangeTokenExpiresAt: expiresAt,
           updatedAt: now,
         })
@@ -719,7 +751,13 @@ export const webUsersRouter = createTRPCRouter({
       if (!sent.ok) {
         await ctx.db
           .update(webUsers)
-          .set({ newEmail: null, emailChangeToken: null, emailChangeTokenExpiresAt: null, updatedAt: now })
+          .set({
+            newEmail: null,
+            emailChangeToken: null,
+            emailChangeTokenHash: null,
+            emailChangeTokenExpiresAt: null,
+            updatedAt: now,
+          })
           .where(eq(webUsers.id, ctx.webUser.id));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -764,8 +802,10 @@ export const webUsersRouter = createTRPCRouter({
       const user = rows[0]!;
       const now = Math.floor(Date.now() / 1000);
 
+      // P1-9 — prefer the hash-named column; fall back to legacy.
+      const storedHash = user.emailChangeTokenHash ?? user.emailChangeToken;
       if (
-        !user.emailChangeToken ||
+        !storedHash ||
         !user.emailChangeTokenExpiresAt ||
         now > user.emailChangeTokenExpiresAt ||
         !user.newEmail
@@ -774,7 +814,7 @@ export const webUsersRouter = createTRPCRouter({
       }
 
       const inputHash = await hashToken(input.code);
-      if (!timingSafeEqualHex(inputHash, user.emailChangeToken)) {
+      if (!timingSafeEqualHex(inputHash, storedHash)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
       }
 
@@ -787,7 +827,9 @@ export const webUsersRouter = createTRPCRouter({
           .set({
             email: user.newEmail,
             newEmail: null,
+            // P1-9 — clear BOTH columns on consume.
             emailChangeToken: null,
+            emailChangeTokenHash: null,
             emailChangeTokenExpiresAt: null,
             // #S8: bump password_changed_at so existing JWTs are rejected on next session check.
             passwordChangedAt: now,

@@ -434,6 +434,13 @@ CREATE TABLE IF NOT EXISTS web_users (
   sessions_invalidated_at INTEGER NOT NULL DEFAULT 0,
   login_token_hash TEXT,
   login_token_expires_at INTEGER,
+  -- 0053: rolling-window companions to the three legacy plaintext-named
+  -- token columns above (password_reset_token / verification_token /
+  -- email_change_token). Writers populate both during the deprecation
+  -- window; readers prefer the *_hash column.
+  password_reset_token_hash TEXT,
+  verification_token_hash TEXT,
+  email_change_token_hash TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

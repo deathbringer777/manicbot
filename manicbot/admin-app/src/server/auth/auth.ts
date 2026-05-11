@@ -27,6 +27,23 @@ function getClientIp(headers: Headers | null | undefined): string {
   );
 }
 
+/**
+ * Coarse-grain an IP address to a /24 prefix for rate-limit bucketing.
+ * - IPv4 `1.2.3.4`     → `1.2.3.0/24`
+ * - IPv6 (any)         → the whole address (already opaque enough; an attacker
+ *                        on a /48 cellular block can rotate enough sub-prefixes
+ *                        to evade — but the per-email and per-IP login limits
+ *                        in front are the primary defence)
+ * - unknown / malformed → the literal input (still buckets per-attacker)
+ *
+ * Exported for the rate-limit dedup test.
+ */
+export function ipv4Slash24(ip: string): string {
+  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/);
+  if (!m) return ip;
+  return `${m[1]}.${m[2]}.${m[3]}.0/24`;
+}
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -232,9 +249,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .where(eq(webUsers.id, user.id));
         } catch { /* non-critical */ }
 
-        // Non-blocking: alert if login from new IP
+        // Non-blocking: alert if login from new IP.
+        //
+        // P1-5p — dedup to 1 alert per (user_id, IP/24 prefix) per 24h. The
+        // pre-existing flow fired an email on every IP change, which a mobile
+        // user with rotating carrier IPs (or an attacker holding credentials)
+        // could weaponize as an outbound spam channel from RESEND_FROM. The
+        // /24 prefix tolerates same-network rotations.
         if (user.lastLoginIp && user.lastLoginIp !== ip && isResendConfigured()) {
-          sendLoginAlert(user.email, ip, (user.lang ?? "en") as import("~/lib/i18n").Lang).catch(() => {});
+          const ipPrefix = ipv4Slash24(ip);
+          const action = `loginalert:${user.id}:${ipPrefix}`;
+          const rl = await checkRateLimit(db, user.id, action, 1, 24 * 60 * 60 * 1000).catch(() => ({ allowed: true } as { allowed: boolean }));
+          if (rl.allowed) {
+            sendLoginAlert(user.email, ip, (user.lang ?? "en") as import("~/lib/i18n").Lang).catch(() => {});
+          }
         }
 
         return {

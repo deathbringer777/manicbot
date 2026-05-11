@@ -26,8 +26,19 @@ const CHANNEL_TOKEN_LABEL = 'channel-token-v1';
  */
 export async function encryptAndStoreToken(ctx, channelConfigId, plainToken, encKey, expiresAt = null) {
   if (!ctx?.db) return false;
-  const encrypted = encKey ? await encryptToken(plainToken, encKey, CHANNEL_TOKEN_LABEL) : plainToken;
-  if (!encrypted) return false;
+  // P1-8 — fail closed. The legacy fallback wrote the plaintext value into
+  // token_encrypted when BOT_ENCRYPTION_KEY was unset, producing a column
+  // whose name lied about its contents. Refuse instead so the operator
+  // notices and configures the key.
+  if (!encKey || String(encKey).length < 32) {
+    log.error('channels.tokenManager', new Error('channel.token.missing_key'), { channelConfigId });
+    return false;
+  }
+  const encrypted = await encryptToken(plainToken, encKey, CHANNEL_TOKEN_LABEL);
+  if (!encrypted) {
+    log.error('channels.tokenManager', new Error('channel.token.encrypt_failed'), { channelConfigId });
+    return false;
+  }
   await dbRun(ctx,
     'UPDATE channel_configs SET token_encrypted = ?, token_expires_at = ?, updated_at = ? WHERE id = ?',
     encrypted, expiresAt, nowSec(), channelConfigId,
@@ -47,7 +58,13 @@ export async function getDecryptedToken(ctx, channelConfigId, encKey) {
   if (!ctx?.db) return null;
   const rows = await dbAll(ctx, 'SELECT token_encrypted FROM channel_configs WHERE id = ? LIMIT 1', channelConfigId);
   if (!rows.length || !rows[0].token_encrypted) return null;
-  return encKey ? await decryptToken(rows[0].token_encrypted, encKey, CHANNEL_TOKEN_LABEL) : rows[0].token_encrypted;
+  // P1-8 — fail closed. Returning the raw column when the key was missing
+  // would surface plaintext from any legacy row. Refuse instead.
+  if (!encKey || String(encKey).length < 32) {
+    log.error('channels.tokenManager', new Error('channel.token.missing_key'), { channelConfigId });
+    return null;
+  }
+  return decryptToken(rows[0].token_encrypted, encKey, CHANNEL_TOKEN_LABEL);
 }
 
 /**

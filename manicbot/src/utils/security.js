@@ -173,10 +173,20 @@ async function aesGcmDecryptWithKey(b64, key) {
   return new TextDecoder().decode(dec);
 }
 
+// P1-8 — counter for accidental labelless encryptToken() calls. The legacy
+// labelless branch is only reachable when a caller forgets to pass a label;
+// every production caller now passes one. The counter is exposed through
+// `getLegacyEncryptionUsageCount` so a future ops endpoint / health probe
+// can confirm zero hits before we delete the else branch.
+let _legacyEncryptCalls = 0;
+export function getLegacyEncryptionUsageCount() {
+  return _legacyEncryptCalls;
+}
+
 /**
  * Encrypt a token with AES-GCM. If `label` is provided, derives an HKDF subkey
  * (preferred). Without a label, uses legacy slice(0, 32) — kept for back-compat
- * during the rotation grace window and removed in Sprint 2.
+ * during the rotation grace window.
  *
  * @param {string} plain
  * @param {string} keyStr  - BOT_ENCRYPTION_KEY
@@ -188,7 +198,11 @@ export async function encryptToken(plain, keyStr, label) {
     const key = await deriveSubkey(keyStr, label);
     return VERSION_PREFIX + await aesGcmEncryptWithKey(plain, key);
   }
-  // Legacy path — used by call sites not yet migrated.
+  // TODO(P1-8): delete this legacy branch once `/admin/rotate-encryption-key`
+  // confirms zero v0 blobs in D1+KV AND `getLegacyEncryptionUsageCount()`
+  // stays at 0 across a full deploy cycle. Until then we keep the branch +
+  // increment a counter so accidental fallbacks are observable.
+  _legacyEncryptCalls++;
   const keyBytes = new TextEncoder().encode(keyStr.slice(0, 32));
   const key = await crypto.subtle.importKey('raw', keyBytes, ALGO, false, ['encrypt']);
   return aesGcmEncryptWithKey(plain, key);

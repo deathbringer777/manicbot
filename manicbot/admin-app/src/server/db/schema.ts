@@ -405,6 +405,15 @@ export const webUsers = sqliteTable("web_users", {
   /** SHA-256 of one-time post-verify login token (migration 0047). */
   loginTokenHash: text("login_token_hash"),
   loginTokenExpiresAt: integer("login_token_expires_at"),
+  /**
+   * 0053: hash-named companions for the three legacy plaintext-named columns
+   * above. Writers populate both during the deprecation window; readers
+   * prefer the *_hash column and fall back to the legacy column for any
+   * tokens minted before the deploy.
+   */
+  passwordResetTokenHash: text("password_reset_token_hash"),
+  verificationTokenHash: text("verification_token_hash"),
+  emailChangeTokenHash: text("email_change_token_hash"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [

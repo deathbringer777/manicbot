@@ -4,6 +4,7 @@ import { tenants, services, masters, tenantConfig, bots, reviews } from "~/serve
 import { eq, and, like, or, isNotNull, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { checkRateLimit } from "~/server/auth/rateLimit";
+import { buildFtsMatchExpression } from "~/server/api/publicSalon/publicSalonSearchLogic";
 
 // Public salon directory: 120 req / 60 s per IP — prevents enumeration & scraping.
 const RL_PUBLIC_MAX = 120;
@@ -134,22 +135,18 @@ export const publicSalonRouter = createTRPCRouter({
       const reviewsPublic = !reviewsCfg || reviewsCfg.value !== "false";
       let rating: { avg: number; count: number } | null = null;
       if (reviewsPublic) {
+        // Reviews are keyed on tenant.id (not slug). The previous code
+        // accidentally queried with `input.slug` first, paid the round-
+        // trip, and then re-queried with `tenant.id` — see relax.md §4
+        // P0 finding. Dropped the dead query; one round-trip now.
         const ratingRow = await ctx.db.select({
-          avg: sql<number>`ROUND(AVG(rating), 1)`,
-          count: sql<number>`count(*)`,
-        }).from(reviews).where(and(
-          eq(reviews.tenantId, input.slug),
-          inArray(reviews.status, ["active", "featured"]),
-        ));
-        // slug != tenantId, re-query with actual tenant id
-        const ratingRow2 = await ctx.db.select({
           avg: sql<number>`ROUND(AVG(rating), 1)`,
           count: sql<number>`count(*)`,
         }).from(reviews).where(and(
           eq(reviews.tenantId, tenant.id),
           inArray(reviews.status, ["active", "featured"]),
         ));
-        const r = ratingRow2[0];
+        const r = ratingRow[0];
         if (r && r.count > 0) rating = { avg: r.avg, count: r.count };
       }
 
@@ -242,6 +239,25 @@ export const publicSalonRouter = createTRPCRouter({
       const { query, city, lat, lng, radiusKm, page, limit } = input;
       const offset = (page - 1) * limit;
 
+      // FTS5 path — see relax.md §4 P0-5. Both the free-text `query` and
+      // the `city` filter are converted into a single MATCH expression
+      // against `tenant_fts` (FTS5, unicode61 + diacritic-fold) and
+      // joined back to `tenants` for projection. Falls back to the old
+      // LIKE behaviour automatically when sanitisation strips the input
+      // to nothing — in that case the procedure returns an empty page.
+      const ftsTerms: string[] = [];
+      if (query) {
+        const expr = buildFtsMatchExpression(query);
+        if (expr) ftsTerms.push(expr);
+        else return { items: [], hasMore: false, page, total: 0 };
+      }
+      if (city) {
+        const cityExpr = buildFtsMatchExpression(city);
+        if (cityExpr) ftsTerms.push(cityExpr);
+        // No early-return on `city` mis-sanitise: city is a soft hint, an
+        // empty MATCH for it should not silently empty the whole result.
+      }
+
       // Require slug — salons without a slug cannot be opened via /salon/[slug],
       // so clicking their card would lead to "#". Hide them from the directory
       // until an owner sets one (also hides half-configured personal tenants).
@@ -250,40 +266,48 @@ export const publicSalonRouter = createTRPCRouter({
         isNotNull(tenants.slug),
       ];
 
-      if (city) {
-        // Match city column (title-case) and search_text (lowercase + Cyrillic variants)
-        conditions.push(
-          or(
-            like(tenants.city, `%${city}%`),
-            searchLike(tenants.searchText, city),
-          )!,
-        );
-      }
-      if (query) {
-        // search_text stores lowercase + Cyrillic variants; support Cyrillic→Latin fallback
-        conditions.push(searchLike(tenants.searchText, query));
-      }
+      // When we have a free-text query/city we drive the SELECT via an
+      // INNER JOIN against `tenant_fts` — that forces SQLite to start
+      // with the FTS5 virtual table (an O(log N) MATCH lookup) and
+      // then SEARCH tenants by PK, instead of SCAN tenants + post-
+      // filter. Verified via `EXPLAIN QUERY PLAN`.
+      //
+      // Without an FTS join we keep the original full-table-list path
+      // (browse mode); the limit + offset + order keep it cheap.
+      const projection = {
+        id: tenants.id,
+        slug: tenants.slug,
+        name: tenants.name,
+        description: tenants.description,
+        city: tenants.city,
+        lat: tenants.lat,
+        lng: tenants.lng,
+        photos: tenants.photos,
+        salon: tenants.salon,
+        mapsUrl: tenants.mapsUrl,
+        instagramUrl: tenants.instagramUrl,
+        isTest: tenants.isTest,
+      } as const;
 
-      const rows = await ctx.db
-        .select({
-          id: tenants.id,
-          slug: tenants.slug,
-          name: tenants.name,
-          description: tenants.description,
-          city: tenants.city,
-          lat: tenants.lat,
-          lng: tenants.lng,
-          photos: tenants.photos,
-          salon: tenants.salon,
-          mapsUrl: tenants.mapsUrl,
-          instagramUrl: tenants.instagramUrl,
-          isTest: tenants.isTest,
-        })
-        .from(tenants)
-        .where(and(...conditions))
-        .orderBy(tenants.name)
-        .limit(limit + 1) // +1 to detect hasMore
-        .offset(offset);
+      const rows = ftsTerms.length > 0
+        ? await ctx.db
+            .select(projection)
+            .from(tenants)
+            .innerJoin(
+              sql`tenant_fts`,
+              sql`tenant_fts.tenant_id = ${tenants.id} AND tenant_fts MATCH ${ftsTerms.join(" ")}`,
+            )
+            .where(and(...conditions))
+            .orderBy(tenants.name)
+            .limit(limit + 1)
+            .offset(offset)
+        : await ctx.db
+            .select(projection)
+            .from(tenants)
+            .where(and(...conditions))
+            .orderBy(tenants.name)
+            .limit(limit + 1)
+            .offset(offset);
 
       const hasMore = rows.length > limit;
       const items = rows.slice(0, limit).map((t) => {
@@ -413,6 +437,15 @@ export const publicSalonRouter = createTRPCRouter({
       const q = input.q.trim();
       if (q.length < 2) return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
 
+      // FTS5 path — see relax.md §4 P0-5. The autocomplete dropdown
+      // fires on every keystroke; the previous `LIKE '%q%'` ran a full
+      // table scan per call. `tenant_fts MATCH 'q*'` is O(log N) and
+      // gives us prefix matching for free.
+      const matchExpr = buildFtsMatchExpression(q);
+      if (!matchExpr) {
+        return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
+      }
+
       const rows = await ctx.db
         .select({
           slug: tenants.slug,
@@ -421,12 +454,11 @@ export const publicSalonRouter = createTRPCRouter({
           photos: tenants.photos,
         })
         .from(tenants)
-        .where(
-          and(
-            eq(tenants.publicActive, 1),
-            searchLike(tenants.searchText, q),
-          ),
+        .innerJoin(
+          sql`tenant_fts`,
+          sql`tenant_fts.tenant_id = ${tenants.id} AND tenant_fts MATCH ${matchExpr}`,
         )
+        .where(eq(tenants.publicActive, 1))
         .limit(5);
 
       const salons = rows.map((t) => {

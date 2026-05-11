@@ -25,22 +25,34 @@ export const salonRouter = createTRPCRouter({
     await assertTenantOwner(ctx, input.tenantId);
     const today = new Date().toISOString().slice(0, 10);
 
-    const [aptRows, masterRows, ticketRows, tenantRow, serviceRows] = await Promise.all([
-      ctx.db.select().from(appointments)
-        .where(and(eq(appointments.tenantId, input.tenantId), eq(appointments.date, today))),
+    // Today's appointment count via aggregate (relax.md §4 P1) — the
+    // previous `select().from(appointments)` pulled every column (incl.
+    // `notes`, `user_phone`, `user_tg`) just to compute `.length`. With
+    // the dashboard refreshing on visibility-change, this could move
+    // tens of KB per call on busy salons.
+    const [aptCountRow, masterRows, ticketCountRow, tenantRow, serviceRows] = await Promise.all([
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(appointments)
+        .where(and(
+          eq(appointments.tenantId, input.tenantId),
+          eq(appointments.date, today),
+          eq(appointments.cancelled, 0),
+        )),
       ctx.db.select().from(masters).where(eq(masters.tenantId, input.tenantId)),
-      ctx.db.select().from(localTickets)
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(localTickets)
         .where(and(eq(localTickets.tenantId, input.tenantId), eq(localTickets.open, 1))),
       ctx.db.select().from(tenants).where(eq(tenants.id, input.tenantId)).limit(1),
       ctx.db.select().from(services).where(eq(services.tenantId, input.tenantId)),
     ]);
 
-    const todayApts = aptRows.filter((a) => !a.cancelled);
     const t = tenantRow[0];
     return {
-      todayAppointments: todayApts.length,
+      todayAppointments: Number(aptCountRow[0]?.count ?? 0),
       activeMasters: masterRows.filter((m: any) => m.active === 1).length,
-      openTickets: ticketRows.length,
+      openTickets: Number(ticketCountRow[0]?.count ?? 0),
       plan: t?.plan ?? "start",
       billingStatus: t?.billingStatus ?? "trialing",
       // ── Profile completeness signals (consumed by ProfileCompletenessCard).

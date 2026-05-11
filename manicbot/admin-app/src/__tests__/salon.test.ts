@@ -75,26 +75,26 @@ describe("salonRouter", () => {
 
   // ── getOverview ───────────────────────────────────────────────────────────
   describe("getOverview", () => {
-    it("returns aggregated today appointments (excluding cancelled), masters, tickets, plan", async () => {
-      const apts = [
-        { cancelled: 0, date: "2026-04-08" },
-        { cancelled: 1, date: "2026-04-08" }, // cancelled — excluded
-      ];
+    it("returns aggregated today appointments via count(*), masters, tickets, plan", async () => {
+      // relax.md §4 P2-10 — `select({ count: count(*) })` returns a
+      // single-row aggregate, not a list. The cancelled-row filter
+      // moves into the WHERE clause, so the mock only needs the count.
+      const aptCount = [{ count: 1 }];
       const masters = [
         { id: "m1", active: 1 },
         { id: "m2", active: 1 },
       ];
-      const tickets = [{ id: "tkt_1", open: 1 }];
+      const ticketCount = [{ count: 1 }];
       const tenant = [{ plan: "pro", billingStatus: "active", name: "Test" }];
       const servicesRows: unknown[] = [];
 
-      // getOverview: Promise.all([apts, masters, tickets, tenant, services])
-      const dbMock = createDbMock([apts, masters, tickets, tenant, servicesRows]);
+      // getOverview: Promise.all([apt-count, masters, ticket-count, tenant, services])
+      const dbMock = createDbMock([aptCount, masters, ticketCount, tenant, servicesRows]);
       const caller = ownerCaller(dbMock.db);
 
       const result = await caller.getOverview({ tenantId: TENANT });
 
-      expect(result.todayAppointments).toBe(1); // only non-cancelled
+      expect(result.todayAppointments).toBe(1);
       expect(result.activeMasters).toBe(2);
       expect(result.openTickets).toBe(1);
       expect(result.plan).toBe("pro");
@@ -109,12 +109,16 @@ describe("salonRouter", () => {
 
       expect(result.plan).toBe("start");
       expect(result.billingStatus).toBe("trialing");
+      // Default counts must be 0 (not NaN) when the aggregate returns
+      // nothing — protects against undefined→NaN coercion regressions.
+      expect(result.todayAppointments).toBe(0);
+      expect(result.openTickets).toBe(0);
     });
 
     it("returns profileCompleteness signals from tenant + counts", async () => {
-      const apts: unknown[] = [];
+      const aptCount = [{ count: 0 }];
       const masters = [{ id: "m1", active: 1 }];
-      const tickets: unknown[] = [];
+      const ticketCount = [{ count: 0 }];
       const tenant = [{
         plan: "pro",
         billingStatus: "active",
@@ -131,7 +135,7 @@ describe("salonRouter", () => {
         { svcId: "s3", active: 0 }, // hidden — should not count
       ];
 
-      const dbMock = createDbMock([apts, masters, tickets, tenant, servicesRows]);
+      const dbMock = createDbMock([aptCount, masters, ticketCount, tenant, servicesRows]);
       const caller = ownerCaller(dbMock.db);
       const result = await caller.getOverview({ tenantId: TENANT });
 
@@ -143,6 +147,25 @@ describe("salonRouter", () => {
       expect(result.profileCompleteness.publicActive).toBe(true);
       expect(result.profileCompleteness.servicesCount).toBe(2); // active=1 only
       expect(result.profileCompleteness.mastersCount).toBe(1);
+    });
+
+    it("does NOT pull full appointment rows — uses count(*) aggregate (relax.md §4 P2-10)", async () => {
+      // Defense against regression: the procedure must not regress to
+      // `select().from(appointments)` + JS filter. Lock the wire
+      // contract: the appointment query returns a {count} row only.
+      const aptCount = [{ count: 42 }];
+      const masters: unknown[] = [];
+      const ticketCount = [{ count: 0 }];
+      const tenant = [{ plan: "start" }];
+      const servicesRows: unknown[] = [];
+
+      const dbMock = createDbMock([aptCount, masters, ticketCount, tenant, servicesRows]);
+      const caller = ownerCaller(dbMock.db);
+      const result = await caller.getOverview({ tenantId: TENANT });
+
+      // 5 selects: apt-count, masters, ticket-count, tenant, services
+      expect(dbMock.db.select).toHaveBeenCalledTimes(5);
+      expect(result.todayAppointments).toBe(42);
     });
   });
 

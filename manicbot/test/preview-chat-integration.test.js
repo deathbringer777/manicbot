@@ -207,6 +207,21 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     SRC = mod.DEMO_CHAT_SRC;
   });
 
+  // Regression: when localStorage `manicbot-locale` was set to a different
+  // value than the URL's ?lang, detectLangChange used to return the LS value
+  // and trigger location.reload() every 1s — the page reloaded forever
+  // because reload didn't reconcile LS with URL. URL must be authoritative.
+  it('detectLangChange treats URL ?lang as authoritative over stale localStorage', () => {
+    // URL-present branch: only return when URL ≠ LANG; LS is ignored.
+    expect(SRC).toMatch(/URL is authoritative when present/);
+    // After the URL-only branch decides "no change", LS gets synced to LANG
+    // so the next pass doesn't ping-pong.
+    expect(SRC).toMatch(/localStorage\.setItem\('manicbot-locale', LANG\)/);
+    // maybeReinit pre-syncs the new lang to LS BEFORE reload() so the
+    // post-reload pass doesn't re-trigger the same branch.
+    expect(SRC).toMatch(/localStorage\.setItem\('manicbot-locale', newLang\)/);
+  });
+
   it('has a querySelector fallback for document.currentScript', () => {
     expect(SRC).toMatch(/document\.currentScript/);
     expect(SRC).toMatch(/querySelector.*script\[src\]/);
@@ -270,16 +285,29 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
   it('drives all chrome colours through --mb-* variables', () => {
     expect(SRC).toMatch(/--mb-bg:#ffffff/);
     expect(SRC).toMatch(/--mb-fg:#1a1a1a/);
-    expect(SRC).toMatch(/--mb-btn-bg:#f8fafc/);
-    expect(SRC).toMatch(/--mb-btn-text:#1a1a1a/);
+    // Web-native chip palette: white surface + slate-10 hairline border in
+    // light mode; translucent-white surface + 10% border in dark. Hover-border
+    // token must exist so chips can lift on hover without a bg-swap flash.
+    expect(SRC).toMatch(/--mb-btn-bg:#ffffff/);
+    expect(SRC).toMatch(/--mb-btn-text:#0f172a/);
+    expect(SRC).toMatch(/--mb-btn-border:rgba\(15,23,42,0\.10\)/);
+    expect(SRC).toMatch(/--mb-btn-hover-border:rgba\(15,23,42,0\.22\)/);
     expect(SRC).toMatch(/--mb-input-placeholder/);
     // Dark palette matches the spec (iOS system surface colours).
     expect(SRC).toMatch(/--mb-bg:#1c1c1e/);
-    expect(SRC).toMatch(/--mb-btn-bg:#2c2c2e/);
+    expect(SRC).toMatch(/--mb-btn-bg:rgba\(255,255,255,0\.04\)/);
+    expect(SRC).toMatch(/--mb-btn-border:rgba\(255,255,255,0\.10\)/);
+    expect(SRC).toMatch(/--mb-btn-hover-border:rgba\(255,255,255,0\.22\)/);
     expect(SRC).toMatch(/--mb-input-text:#ffffff/);
     expect(SRC).toMatch(/--mb-statusbar-bg:#1c1c1e/);
     // Button text must be explicit (not color:inherit) so the label stays
     // readable when the surrounding bubble's text colour differs.
     expect(SRC).toMatch(/\.mb-btn\{[^}]*color:var\(--mb-btn-text\)/);
+    // Web-native chip layout: rows wrap; consecutive solo-rows are coalesced
+    // server-side into `.mb-btn-row-grid` (CSS Grid) so date pickers read as
+    // a 4-column calendar grid, not a stack of inline-keyboard pills.
+    expect(SRC).toMatch(/\.mb-btn-row\{display:flex;flex-wrap:wrap/);
+    expect(SRC).toMatch(/\.mb-btn-row-grid\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(54px,1fr\)\)/);
+    expect(SRC).toMatch(/mb-btn-row-grid/);
   });
 });

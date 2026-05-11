@@ -108,10 +108,11 @@ export const DEMO_CHAT_SRC = `
       '--mb-bot-text:#1a1a1a;' +
       '--mb-bubble-user:#8b5cf6;' +
       '--mb-user-text:#ffffff;' +
-      '--mb-btn-bg:#f8fafc;' +
-      '--mb-btn-text:#1a1a1a;' +
-      '--mb-btn-border:#cbd5e1;' +
-      '--mb-btn-hover:#f1f5f9;' +
+      '--mb-btn-bg:#ffffff;' +
+      '--mb-btn-text:#0f172a;' +
+      '--mb-btn-border:rgba(15,23,42,0.10);' +
+      '--mb-btn-hover:#f8fafc;' +
+      '--mb-btn-hover-border:rgba(15,23,42,0.22);' +
       '--mb-input-bg:#f5f5f5;' +
       '--mb-input-text:#1a1a1a;' +
       '--mb-input-placeholder:#999999;' +
@@ -134,10 +135,11 @@ export const DEMO_CHAT_SRC = `
       '--mb-header-bg:#1c1c1e;' +
       '--mb-bubble-bot:#2c2c2e;' +
       '--mb-bot-text:#ffffff;' +
-      '--mb-btn-bg:#2c2c2e;' +
+      '--mb-btn-bg:rgba(255,255,255,0.04);' +
       '--mb-btn-text:#ffffff;' +
-      '--mb-btn-border:#3a3a3c;' +
-      '--mb-btn-hover:#3a3a3c;' +
+      '--mb-btn-border:rgba(255,255,255,0.10);' +
+      '--mb-btn-hover:rgba(255,255,255,0.07);' +
+      '--mb-btn-hover-border:rgba(255,255,255,0.22);' +
       '--mb-input-bg:#2c2c2e;' +
       '--mb-input-text:#ffffff;' +
       '--mb-input-placeholder:#8e8e93;' +
@@ -167,12 +169,23 @@ export const DEMO_CHAT_SRC = `
     '.mb-bubble.bot{align-self:flex-start;background:var(--mb-bubble-bot);color:var(--mb-bot-text);border-bottom-left-radius:4px}' +
     '.mb-bubble.user{align-self:flex-end;background:var(--mb-bubble-user);color:var(--mb-user-text);border-bottom-right-radius:4px}' +
     '.mb-bubble img{max-width:100%;border-radius:8px;margin:-1px 0 4px;display:block}' +
-    '.mb-btns{display:flex;flex-direction:column;gap:4px;margin-top:5px}' +
+    // Buttons — web-native chip layout. Rows mirror the bot groupings:
+    //   • Multi-button rows (◀ 2/2 ▶) → inline-flex, chips share row evenly.
+    //   • Solo rows (1 chip) → row, content-sized chip.
+    //   • Runs of consecutive solo rows (8 dates) → coalesced server-side
+    //     into .mb-btn-row-grid, rendered as a CSS Grid (4 cols on the
+    //     iPhone bezel width) so the date list reads as a calendar grid.
+    '.mb-btns{display:flex;flex-direction:column;gap:6px;margin-top:8px}' +
+    '.mb-btn-row{display:flex;flex-wrap:wrap;gap:5px}' +
+    '.mb-btn-row-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:5px}' +
+    '.mb-btn-row-grid .mb-btn{width:100%;min-width:0;padding:8px 6px;font-variant-numeric:tabular-nums}' +
     // Buttons use explicit --mb-btn-text (not color:inherit) so the label
     // stays readable regardless of the surrounding bubble's text colour.
-    '.mb-btn{display:block;padding:8px 12px;text-align:center;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:12px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;transition:background .15s,transform .1s;text-decoration:none;box-shadow:0 1px 2px rgba(15,23,42,.04)}' +
-    '.mb-btn:active{transform:scale(.98)}' +
-    '.mb-btn:hover{background:var(--mb-btn-hover)}' +
+    '.mb-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6.5px 11px;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:9px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;letter-spacing:-.005em;transition:border-color .15s ease,background .15s ease,transform .12s ease,box-shadow .15s ease;text-decoration:none;box-shadow:0 1px 0 rgba(15,23,42,.02);white-space:nowrap}' +
+    '.mb-btn:active{transform:translateY(1px);box-shadow:none}' +
+    '.mb-btn:hover{border-color:var(--mb-btn-hover-border);background:var(--mb-btn-hover);box-shadow:0 2px 6px rgba(15,23,42,.06)}' +
+    // Multi-button rows (nav arrows, pagination): chips share row evenly.
+    '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn{flex:1 1 auto;min-width:38px}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
     '.mb-composer{display:flex;gap:6px;padding:6px 10px 14px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
@@ -290,7 +303,20 @@ export const DEMO_CHAT_SRC = `
   function detectLangChange() {
     try {
       var q = new URLSearchParams(window.location.search).get('lang');
-      if (q && /^(ru|en|ua|pl)$/.test(q) && q !== LANG) return q;
+      if (q && /^(ru|en|ua|pl)$/.test(q)) {
+        // URL is authoritative when present. Do NOT consult localStorage —
+        // a stale "manicbot-locale" (set by the landing on a previous visit)
+        // could otherwise disagree with the URL and trigger an infinite
+        // reload loop (URL=ru, LS=pl → reload → URL still ru, LS still pl
+        // → reload again …). Sync LS to URL so the next no-?lang visit
+        // sticks to the choice the user just made.
+        if (q !== LANG) return q;
+        try {
+          var cur = localStorage.getItem('manicbot-locale');
+          if (cur !== LANG) localStorage.setItem('manicbot-locale', LANG);
+        } catch (_) {}
+        return null;
+      }
       var s = localStorage.getItem('manicbot-locale');
       if (s && /^(ru|en|ua|pl)$/.test(s) && s !== LANG) return s;
     } catch (_) {}
@@ -300,6 +326,9 @@ export const DEMO_CHAT_SRC = `
     var newLang = detectLangChange();
     if (!newLang) return;
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    // Sync the locale store BEFORE reload so the post-reload pass doesn't
+    // immediately re-trigger this branch and refresh forever.
+    try { localStorage.setItem('manicbot-locale', newLang); } catch (_) {}
     location.reload();
   }
   setInterval(maybeReinit, 1000);
@@ -827,27 +856,55 @@ export const DEMO_CHAT_SRC = `
     if (m.buttons && m.buttons.length) {
       var btnWrap = document.createElement('div');
       btnWrap.className = 'mb-btns' + (opts && opts.staggerButtons ? ' mb-stagger' : '');
-      m.buttons.forEach(function (row) {
-        row.forEach(function (b) {
-          var btn;
-          if (b.url) {
-            btn = document.createElement('a');
-            btn.href = b.url; btn.target = '_blank'; btn.rel = 'noopener noreferrer';
-          } else {
-            btn = document.createElement('button');
-            btn.type = 'button';
+      // Map Telegram-row groupings to web-native chip layout:
+      //   • Multi-button rows (◀ 2/2 ▶) → one .mb-btn-row (inline flex).
+      //   • Runs of consecutive single-button rows (8 date pickers from
+      //     the bot) → coalesced into ONE .mb-btn-row.mb-btn-row-grid that
+      //     wraps. That makes a date list read as a calendar grid
+      //     instead of a stack of Telegram inline-keyboard pills.
+      var i = 0;
+      var rows = m.buttons;
+      function makeBtn(b) {
+        var btn;
+        if (b.url) {
+          btn = document.createElement('a');
+          btn.href = b.url; btn.target = '_blank'; btn.rel = 'noopener noreferrer';
+        } else {
+          btn = document.createElement('button');
+          btn.type = 'button';
+        }
+        btn.className = 'mb-btn';
+        btn.textContent = b.text;
+        if (b.callback_data) {
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            sendRaw({ callbackData: b.callback_data, messageId: m.id });
+          });
+        }
+        return btn;
+      }
+      while (i < rows.length) {
+        var row = rows[i];
+        if (!row || !row.length) { i++; continue; }
+        // Coalesce a run of single-button rows into one wrap-grid (≥2 in a row).
+        if (row.length === 1 && i + 1 < rows.length && rows[i + 1] && rows[i + 1].length === 1) {
+          var grid = document.createElement('div');
+          grid.className = 'mb-btn-row mb-btn-row-grid';
+          while (i < rows.length && rows[i] && rows[i].length === 1) {
+            grid.appendChild(makeBtn(rows[i][0]));
+            i++;
           }
-          btn.className = 'mb-btn';
-          btn.textContent = b.text;
-          if (b.callback_data) {
-            btn.addEventListener('click', function (ev) {
-              ev.preventDefault();
-              sendRaw({ callbackData: b.callback_data, messageId: m.id });
-            });
-          }
-          btnWrap.appendChild(btn);
-        });
-      });
+          btnWrap.appendChild(grid);
+          continue;
+        }
+        // Otherwise: one row = one inline-flex container.
+        var rowEl = document.createElement('div');
+        rowEl.className = 'mb-btn-row';
+        if (row.length === 1) rowEl.classList.add('mb-btn-row-solo');
+        row.forEach(function (b) { rowEl.appendChild(makeBtn(b)); });
+        btnWrap.appendChild(rowEl);
+        i++;
+      }
       div.appendChild(btnWrap);
     }
     return div;

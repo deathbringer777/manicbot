@@ -39,7 +39,10 @@ export async function tryCalendar(request, ctx, url) {
 
   const rawId = calMatch[1];
   const aptId = rawId.endsWith('.ics') ? rawId.slice(0, -4) : rawId;
-  if (!/^a\d+_\w+$/.test(aptId)) {
+  // `a<digits>_<word>` — real appointments persisted in D1.
+  // `demo_<word>`     — landing-preview synthetic appointments cached in KV
+  //                     (no D1 row). HMAC signature still authenticates them.
+  if (!/^(a\d+|demo)_\w+$/.test(aptId)) {
     return new Response('Invalid appointment ID', { status: 400 });
   }
 
@@ -55,6 +58,30 @@ export async function tryCalendar(request, ctx, url) {
   }
   if (!await verifyCalendarSig(aptId, sig, secret, ts)) {
     return new Response('Forbidden', { status: 403 });
+  }
+
+  const openInline = url.searchParams.get('open') === '1';
+  const icsHeaders = {
+    'Content-Type': 'text/calendar; charset=utf-8',
+    'Content-Disposition': openInline ? 'inline; filename="manicure.ics"' : 'attachment; filename="manicure.ics"',
+  };
+
+  // Demo (preview) appointments: served from a self-contained KV snapshot;
+  // no DB lookup, no tenant resolution. Snapshot is written by saveApt() in
+  // preview mode and TTL'd for 24h.
+  if (aptId.startsWith('demo_')) {
+    const gkv = ctx.globalKv || ctx.kv;
+    if (!gkv || typeof gkv.get !== 'function') {
+      return new Response('Service unavailable', { status: 503 });
+    }
+    const cached = await gkv.get(`mb_demo_apt:${aptId}`, 'json');
+    if (!cached || !cached.apt || !cached.svc) {
+      return new Response('Appointment not found', { status: 404 });
+    }
+    const synthCtx = { ...ctx, svc: [cached.svc] };
+    const ics = makeICS(synthCtx, cached.apt, cached.lang || 'pl');
+    if (!ics) return new Response('Error', { status: 500 });
+    return new Response(ics, { headers: icsHeaders });
   }
 
   if (!ctx.db) return new Response('Service unavailable', { status: 503 });
@@ -74,11 +101,5 @@ export async function tryCalendar(request, ctx, url) {
   const userLang = (await getLang(ctx, apt.chatId)) || 'ru';
   const ics = makeICS(ctx, apt, userLang);
   if (!ics) return new Response('Error', { status: 500 });
-  const openInline = url.searchParams.get('open') === '1';
-  return new Response(ics, {
-    headers: {
-      'Content-Type': 'text/calendar; charset=utf-8',
-      'Content-Disposition': openInline ? 'inline; filename="manicure.ics"' : 'attachment; filename="manicure.ics"',
-    },
-  });
+  return new Response(ics, { headers: icsHeaders });
 }

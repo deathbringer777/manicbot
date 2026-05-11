@@ -433,6 +433,7 @@ Deploy job `deploy-admin-app` runs only after the unified `test` job succeeds (i
 - `RESEND_API_KEY` — Resend API key for transactional emails
 - `RESEND_FROM` — sender address (e.g. `ManicBot <noreply@manicbot.com>`)
 - `AUTH_URL` — public URL for email links (e.g. `https://admin.manicbot.com`)
+- `WORKER_PUBLIC_URL` — public URL of the Worker (e.g. `https://manicbot.com`). Required for Google Calendar OAuth — the admin-app uses it to build absolute `/google/connect` redirect URLs that the Worker can resolve. Without it, GCal connect 500s.
 - `DATABASE_URL` (optional, for local dev with LibSQL)
 - `BREVO_API_KEY` (optional — dormant marketing provider; see [PROVIDERS.md](manicbot/admin-app/src/server/email/PROVIDERS.md))
 - `BREVO_FROM` (optional — Brevo sender, same format as `RESEND_FROM`)

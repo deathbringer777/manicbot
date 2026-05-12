@@ -14,6 +14,7 @@ import {
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { t, LANGS } from "~/lib/i18n";
+import { tNav } from "~/lib/nav/navLabels";
 import { api } from "~/trpc/react";
 import { useInWebShell } from "~/components/layout/WebShell";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -24,21 +25,28 @@ export interface NavItem {
   label: string;
 }
 
-// ─── God Mode nav items ──────────────────────────────────────────
-const godModeNavItems: NavItem[] = [
-  { href: "/", icon: Home, label: "Dashboard" },
-  { href: "/users", icon: Users, label: "Users" },
-  { href: "/tenants", icon: Building2, label: "Tenants" },
-  { href: "/appointments", icon: CalendarDays, label: "Appts" },
-  { href: "/conversations", icon: MessageSquare, label: "Inbox" },
-  { href: "/agents", icon: UserCog, label: "Agents" },
-  { href: "/?tab=role-requests", icon: ArrowLeftRight, label: "Roles" },
-  { href: "/channels", icon: Radio, label: "Channels" },
-  { href: "/marketing", icon: Megaphone, label: "Marketing" },
-  { href: "/billing", icon: CreditCard, label: "Billing" },
-  { href: "/system", icon: Activity, label: "System" },
-  { href: "/settings", icon: Settings, label: "Settings" },
-];
+/**
+ * God Mode nav fallback used when a consumer of <Shell> doesn't pass `navItems`
+ * (e.g. legacy Telegram Mini App routes). The proper WebShell sidebar comes
+ * from `useNavItems()` — see PinnedNavSection. Keep labels via `tNav` so
+ * fallback rendering still localizes correctly.
+ */
+function buildGodModeNavItems(lang: string): NavItem[] {
+  return [
+    { href: "/", icon: Home, label: tNav("Dashboard", lang) },
+    { href: "/users", icon: Users, label: tNav("Users", lang) },
+    { href: "/tenants", icon: Building2, label: tNav("Tenants", lang) },
+    { href: "/appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
+    { href: "/conversations", icon: MessageSquare, label: tNav("Inbox", lang) },
+    { href: "/agents", icon: UserCog, label: tNav("Agents", lang) },
+    { href: "/?tab=role-requests", icon: ArrowLeftRight, label: tNav("Role Requests", lang) },
+    { href: "/channels", icon: Radio, label: tNav("Channels", lang) },
+    { href: "/marketing", icon: Megaphone, label: tNav("Marketing", lang) },
+    { href: "/billing", icon: CreditCard, label: tNav("Billing", lang) },
+    { href: "/system", icon: Activity, label: tNav("System", lang) },
+    { href: "/settings", icon: Settings, label: tNav("Settings", lang) },
+  ];
+}
 
 function getAdminInfo() {
   return { name: "God Mode", username: "creator" };
@@ -559,7 +567,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
   const { role, previewRole } = useRole();
   const { lang } = useLang();
-  const activeNavItems = navItems ?? godModeNavItems;
+  const activeNavItems = navItems ?? buildGodModeNavItems(lang);
   const displayTitle = title ?? "ManicBot";
   /** Creator in plain God Mode: language + preview mode live on /settings, not in the chrome (avoids clash with Settings tab). */
   const godPlainChrome = role === "system_admin" && !previewRole;

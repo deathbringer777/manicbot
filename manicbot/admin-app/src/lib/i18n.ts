@@ -59,7 +59,7 @@ const translations = {
   "salon.masters":          { ru: "Мастера",      ua: "Майстри",        en: "Masters",    pl: "Mistrzowie" },
   "salon.services":         { ru: "Услуги",       ua: "Послуги",        en: "Services",   pl: "Usługi" },
   "salon.clients":          { ru: "Клиенты",      ua: "Клієнти",        en: "Clients",    pl: "Klienci" },
-  "salon.billing":          { ru: "Тариф",        ua: "Тариф",          en: "Billing",    pl: "Płatności" },
+  "salon.billing":          { ru: "Биллинг",      ua: "Білінг",         en: "Billing",    pl: "Rozliczenia" },
   "salon.todayApts":        { ru: "Записей сегодня", ua: "Записів сьогодні", en: "Today's appointments", pl: "Wizyty dziś" },
   "salon.activeMasters":    { ru: "Мастеров",     ua: "Майстрів",       en: "Masters",    pl: "Mistrzów" },
   "salon.openTickets":      { ru: "Открытых тикетов", ua: "Відкритих тікетів", en: "Open tickets", pl: "Otwarte zgłoszenia" },
@@ -122,7 +122,7 @@ const translations = {
   "nav.tenants":            { ru: "Tenants",      ua: "Tenants",        en: "Tenants",    pl: "Tenants" },
   "nav.appointments":       { ru: "Appts",        ua: "Appts",          en: "Appts",      pl: "Appts" },
   "nav.agents":             { ru: "Agents",       ua: "Agents",         en: "Agents",     pl: "Agents" },
-  "nav.billing":            { ru: "Billing",      ua: "Billing",        en: "Billing",    pl: "Billing" },
+  "nav.billing":            { ru: "Биллинг",      ua: "Білінг",         en: "Billing",    pl: "Rozliczenia" },
   "nav.system":             { ru: "System",       ua: "System",         en: "System",     pl: "System" },
   "nav.settings":           { ru: "Settings",     ua: "Settings",       en: "Settings",   pl: "Settings" },
 
@@ -162,8 +162,8 @@ const translations = {
   "settings.sidebarTabsDesc":     { ru: "Выберите, какие разделы показывать", ua: "Оберіть, які розділи показувати",    en: "Choose which sections to show", pl: "Wybierz, które sekcje wyświetlać" },
   "settings.overviewWidgets":     { ru: "Виджеты обзора",                    ua: "Віджети огляду",                     en: "Overview Widgets",              pl: "Widżety przeglądu" },
   "settings.overviewWidgetsDesc": { ru: "Карточки на главном экране",        ua: "Картки на головному екрані",         en: "Cards on the main screen",      pl: "Karty na ekranie głównym" },
-  "settings.defaultTab":          { ru: "Стартовый раздел",                  ua: "Стартовий розділ",                   en: "Default Tab",                   pl: "Domyślna zakładka" },
-  "settings.defaultTabDesc":      { ru: "Какой раздел открывается при входе",ua: "Який розділ відкривається при вході", en: "Which tab opens on login",      pl: "Która zakładka otwiera się po zalogowaniu" },
+  "settings.defaultTab":          { ru: "Какая вкладка открывается при входе", ua: "Яка вкладка відкривається при вході", en: "Which tab opens when you sign in", pl: "Która zakładka otwiera się po zalogowaniu" },
+  "settings.defaultTabDesc":      { ru: "Когда зайдёшь в кабинет — сразу попадёшь сюда. Можно поменять в любой момент.", ua: "Коли зайдеш у кабінет — одразу потрапиш сюди. Можна змінити будь-коли.", en: "When you sign in, this is the page you land on. Change it any time.", pl: "Po zalogowaniu od razu wylądujesz na tej zakładce. Możesz to zmienić w każdej chwili." },
   "settings.todayAptsList":       { ru: "Записи на сегодня",                 ua: "Записи на сьогодні",                 en: "Today's appointments",          pl: "Wizyty na dziś" },
   "settings.alwaysVisible":       { ru: "Всегда видим",                      ua: "Завжди видимий",                     en: "Always visible",                pl: "Zawsze widoczny" },
   "settings.statTodayApts":       { ru: "Записи сегодня",                    ua: "Записи сьогодні",                    en: "Today's appointments",          pl: "Wizyty dziś" },
@@ -463,7 +463,6 @@ const translations = {
   "completeness.masters":                { ru: "Хотя бы один мастер", ua: "Хоча б один майстер", en: "At least one master", pl: "Co najmniej jeden mistrz" },
   "completeness.public":                 { ru: "Публичный профиль активен", ua: "Публічний профіль активний", en: "Public profile active", pl: "Profil publiczny aktywny" },
 
-  "salon.rail.jumpByWeek":               { ru: "Перейти к неделе", ua: "Перейти до тижня", en: "Jump By Week", pl: "Przejdź do tygodnia" },
   "salon.rail.autoConfirmHint":          { ru: "Записи через канал подтверждаются автоматически", ua: "Записи через канал підтверджуються автоматично", en: "Bookings via this channel are auto-accepted", pl: "Rezerwacje przez ten kanał są akceptowane automatycznie" },
   "salon.rail.statusFilter":             { ru: "Статус записи",     ua: "Статус запису",        en: "Status",                     pl: "Status" },
   "salon.rail.serviceFilter":            { ru: "Услуги",            ua: "Послуги",              en: "Services",                   pl: "Usługi" },
@@ -797,7 +796,7 @@ const translations = {
   "cookies.policy":         { ru: "Политика cookies",                                 ua: "Політика cookies",                                 en: "Cookie policy",                                      pl: "Polityka cookies" },
 
   // ── God Mode: Billing page ─────────────────────────────────────────────────
-  "gmBilling.title":              { ru: "Billing",                ua: "Billing",                en: "Billing",                pl: "Billing" },
+  "gmBilling.title":              { ru: "Биллинг",                ua: "Білінг",                 en: "Billing",                pl: "Rozliczenia" },
   "gmBilling.subtitle":           { ru: "Подписки и финансы",     ua: "Підписки та фінанси",    en: "Subscriptions & finance", pl: "Subskrypcje i finanse" },
   "gmBilling.mrrLabel":           { ru: "MRR (расчётный, PLN)",   ua: "MRR (розрахунковий, PLN)", en: "MRR (estimated, PLN)", pl: "MRR (szac., PLN)" },
   "gmBilling.activeCount":        { ru: "Активных",               ua: "Активних",               en: "Active",                 pl: "Aktywne" },
@@ -821,7 +820,7 @@ const translations = {
   "gmBilling.perMonthShort":      { ru: "/мес",                   ua: "/міс",                   en: "/mo",                    pl: "/mies" },
 
   // ── God Mode: Tenants page ─────────────────────────────────────────────────
-  "gmTenants.title":              { ru: "Тенанты",                ua: "Тенанти",                en: "Tenants",                pl: "Najemcy" },
+  "gmTenants.title":              { ru: "Салоны",                 ua: "Салони",                 en: "Salons",                 pl: "Salony" },
   "gmTenants.subtitle":           { ru: "Все салоны",             ua: "Усі салони",             en: "All salons",             pl: "Wszystkie salony" },
   "gmTenants.searchPlaceholder":  { ru: "Поиск по названию или ID…", ua: "Пошук за назвою або ID…", en: "Search by name or ID…", pl: "Szukaj po nazwie lub ID…" },
   "gmTenants.create":             { ru: "Создать",                ua: "Створити",               en: "Create",                 pl: "Utwórz" },
@@ -909,7 +908,7 @@ const translations = {
   "gmUsers.name":                 { ru: "Имя",                    ua: "Ім'я",                   en: "Name",                   pl: "Imię" },
   "gmUsers.telegram":             { ru: "Telegram",               ua: "Telegram",               en: "Telegram",               pl: "Telegram" },
   "gmUsers.role":                 { ru: "Роль",                   ua: "Роль",                   en: "Role",                   pl: "Rola" },
-  "gmUsers.tenant":               { ru: "Тенант",                 ua: "Тенант",                 en: "Tenant",                 pl: "Najemca" },
+  "gmUsers.tenant":               { ru: "Салон",                  ua: "Салон",                  en: "Salon",                  pl: "Salon" },
   "gmUsers.lastLogin":            { ru: "Последний вход",         ua: "Останній вхід",          en: "Last login",             pl: "Ostatnie logowanie" },
   "gmUsers.empty":                { ru: "Пользователей нет",      ua: "Користувачів немає",     en: "No users",               pl: "Brak użytkowników" },
   "gmUsers.changeRole":           { ru: "Сменить роль",           ua: "Змінити роль",           en: "Change role",            pl: "Zmień rolę" },
@@ -951,7 +950,7 @@ const translations = {
   "gmAppts.dateTo":               { ru: "По дату",                ua: "До дати",                en: "To date",                pl: "Do daty" },
   "gmAppts.status":               { ru: "Статус",                 ua: "Статус",                 en: "Status",                 pl: "Status" },
   "gmAppts.all":                  { ru: "Все",                    ua: "Усі",                    en: "All",                    pl: "Wszystkie" },
-  "gmAppts.tenant":               { ru: "Тенант",                 ua: "Тенант",                 en: "Tenant",                 pl: "Najemca" },
+  "gmAppts.tenant":               { ru: "Салон",                  ua: "Салон",                  en: "Salon",                  pl: "Salon" },
   "gmAppts.client":               { ru: "Клиент",                 ua: "Клієнт",                 en: "Client",                 pl: "Klient" },
   "gmAppts.master":               { ru: "Мастер",                 ua: "Майстер",                en: "Master",                 pl: "Mistrz" },
   "gmAppts.service":              { ru: "Услуга",                 ua: "Послуга",                en: "Service",                pl: "Usługa" },
@@ -1059,14 +1058,14 @@ const translations = {
   "gmAgents.techSupportDesc":   { ru: "Доступ к техническим вопросам от владельцев салонов", ua: "Доступ до технічних питань від власників салонів", en: "Access to technical issues from salon owners", pl: "Dostęp do technicznych spraw właścicieli salonów" },
   "gmAgents.titleHeader":       { ru: "Агенты",                 ua: "Агенти",                 en: "Agents",                 pl: "Agenci" },
   "gmAgents.subtitleSuffix":    { ru: "агентов поддержки",      ua: "агентів підтримки",      en: "support agents",         pl: "agentów wsparcia" },
-  "gmAgents.legacyAdminsSuffix":{ ru: "устаревших записей system_admin в БД", ua: "застарілих записів system_admin у БД", en: "legacy system_admin rows in DB", pl: "przestarzałych wpisów system_admin w bazie" },
+  "gmAgents.legacyAdminsSuffix":{ ru: "устаревших записей", ua: "застарілих записів", en: "legacy rows", pl: "przestarzałych wpisów" },
   "gmAgents.platformRoles":     { ru: "Платформенные роли",     ua: "Платформенні ролі",      en: "Platform roles",         pl: "Role platformowe" },
   "gmAgents.platformInfo":      { ru: "Админ платформы только вы (через ADMIN_CHAT_ID). Здесь — support и техподдержка, как /grant_support в боте. Владельцы салонов — в разделе Tenants.", ua: "Адмін платформи лише ви (через ADMIN_CHAT_ID). Тут — support і техпідтримка, як /grant_support у боті. Власники салонів — у розділі Tenants.", en: "You are the only platform admin (via ADMIN_CHAT_ID). Support and tech support here, like /grant_support in the bot. Salon owners are in Tenants.", pl: "Tylko Ty jesteś adminem platformy (przez ADMIN_CHAT_ID). Support i wsparcie techniczne tutaj, jak /grant_support w bocie. Właściciele salonów — w sekcji Tenants." },
   "gmAgents.noAgentsOfType":    { ru: "Нет агентов этого типа", ua: "Немає агентів цього типу", en: "No agents of this type", pl: "Brak agentów tego typu" },
   "gmAgents.addAgent":          { ru: "Добавить агента",        ua: "Додати агента",          en: "Add agent",              pl: "Dodaj agenta" },
   "gmAgents.addPrefix":         { ru: "Добавить",               ua: "Додати",                 en: "Add",                    pl: "Dodaj" },
-  "gmAgents.legacyAdminsTitle": { ru: "Устаревшие записи system_admin", ua: "Застарілі записи system_admin", en: "Legacy system_admin rows", pl: "Przestarzałe wpisy system_admin" },
-  "gmAgents.legacyAdminsDesc":  { ru: "Назначение через API отключено. Удалите строки, чтобы очистить БД (ваш ADMIN_CHAT_ID удалить нельзя).", ua: "Призначення через API вимкнено. Видаліть рядки, щоб очистити БД (ваш ADMIN_CHAT_ID видалити не можна).", en: "API assignment is disabled. Delete rows to clean the DB (your ADMIN_CHAT_ID cannot be deleted).", pl: "Przypisanie przez API jest wyłączone. Usuń wiersze, aby wyczyścić bazę (Twojego ADMIN_CHAT_ID nie można usunąć)." },
+  "gmAgents.legacyAdminsTitle": { ru: "Старые записи администраторов", ua: "Старі записи адміністраторів", en: "Legacy admin entries", pl: "Stare wpisy administratorów" },
+  "gmAgents.legacyAdminsDesc":  { ru: "Назначение через интерфейс отключено. Удалите строки, чтобы навести порядок (свою запись удалить нельзя).", ua: "Призначення через інтерфейс вимкнено. Видаліть рядки, щоб навести лад (свій запис видалити не можна).", en: "Assignment via UI is disabled. Delete rows to clean up (your own row can't be removed).", pl: "Przypisanie przez UI jest wyłączone. Usuń wiersze, aby uporządkować (swojego wpisu nie możesz usunąć)." },
   "gmAgents.tgIdHint":          { ru: "Числовой ID пользователя в Telegram (не username)", ua: "Числовий ID користувача в Telegram (не username)", en: "Numeric user ID in Telegram (not username)", pl: "Numeryczny ID użytkownika Telegrama (nie username)" },
   "gmAgents.roleType":          { ru: "Тип роли",               ua: "Тип ролі",               en: "Role type",              pl: "Typ roli" },
   "gmAgents.adding":            { ru: "Добавляю...",            ua: "Додаю...",               en: "Adding...",              pl: "Dodaję..." },
@@ -1238,6 +1237,68 @@ const translations = {
   "common.unknown":               { ru: "Неизвестно",             ua: "Невідомо",               en: "Unknown",                pl: "Nieznane" },
   "common.never":                 { ru: "Никогда",                ua: "Ніколи",                 en: "Never",                  pl: "Nigdy" },
   "common.error":                 { ru: "Ошибка",                 ua: "Помилка",                en: "Error",                  pl: "Błąd" },
+
+  // ── Relative time (compact, plural-safe shorthand) ─────────────────────────
+  // Short forms ("мин", "ч", "д") are invariant across plurals so we avoid the
+  // Russian plural-three-forms problem entirely. Pass count via {n} substitution.
+  "time.justNow":                 { ru: "только что",             ua: "щойно",                  en: "just now",               pl: "przed chwilą" },
+  "time.minutesAgo":              { ru: "{n} мин назад",          ua: "{n} хв тому",            en: "{n}m ago",               pl: "{n} min temu" },
+  "time.hoursAgo":                { ru: "{n} ч назад",            ua: "{n} год тому",           en: "{n}h ago",               pl: "{n} godz. temu" },
+  "time.daysAgo":                 { ru: "{n} д назад",            ua: "{n} дн тому",            en: "{n}d ago",               pl: "{n} dni temu" },
+
+  // ── Activity-feed action labels (gender-neutral) ───────────────────────────
+  "activity.tenantCreated":       { ru: "Новый салон в системе",  ua: "Новий салон у системі",  en: "joined the platform",    pl: "dołączył do platformy" },
+  "activity.bookingConfirmed":    { ru: "Новая запись · подтверждена", ua: "Новий запис · підтверджено", en: "new booking · confirmed", pl: "nowa rezerwacja · potwierdzona" },
+  "activity.bookingPending":      { ru: "Новая запись · ждёт подтверждения", ua: "Новий запис · очікує", en: "new booking · pending", pl: "nowa rezerwacja · oczekuje" },
+  "activity.bookingCancelled":    { ru: "Запись отменена",        ua: "Запис скасовано",        en: "booking cancelled",      pl: "rezerwacja anulowana" },
+  "activity.bookingRejected":     { ru: "Запись отклонена",       ua: "Запис відхилено",        en: "booking rejected",       pl: "rezerwacja odrzucona" },
+  "activity.bookingDone":         { ru: "Запись выполнена",       ua: "Запис виконано",         en: "booking completed",      pl: "rezerwacja wykonana" },
+  "activity.bookingNoShow":       { ru: "Клиент не пришёл",       ua: "Клієнт не з’явився",     en: "no-show",                pl: "klient nie przyszedł" },
+
+  // ── Plural-aware count subtitles ───────────────────────────────────────────
+  // Use pluralRu(count, ["one","few","many"]) — see helpers below.
+  "count.users.one":              { ru: "пользователь",           ua: "користувач",             en: "user",                   pl: "użytkownik" },
+  "count.users.few":              { ru: "пользователя",           ua: "користувача",            en: "users",                  pl: "użytkownicy" },
+  "count.users.many":             { ru: "пользователей",          ua: "користувачів",           en: "users",                  pl: "użytkowników" },
+  "count.salons.one":             { ru: "салон",                  ua: "салон",                  en: "salon",                  pl: "salon" },
+  "count.salons.few":             { ru: "салона",                 ua: "салони",                 en: "salons",                 pl: "salony" },
+  "count.salons.many":            { ru: "салонов",                ua: "салонів",                en: "salons",                 pl: "salonów" },
+  "count.bookings.one":           { ru: "запись",                 ua: "запис",                  en: "booking",                pl: "rezerwacja" },
+  "count.bookings.few":           { ru: "записи",                 ua: "записи",                 en: "bookings",               pl: "rezerwacje" },
+  "count.bookings.many":          { ru: "записей",                ua: "записів",                en: "bookings",               pl: "rezerwacji" },
+  "count.masters.one":            { ru: "мастер",                 ua: "майстер",                en: "master",                 pl: "mistrz" },
+  "count.masters.few":            { ru: "мастера",                ua: "майстри",                en: "masters",                pl: "mistrzowie" },
+  "count.masters.many":           { ru: "мастеров",               ua: "майстрів",               en: "masters",                pl: "mistrzów" },
+  "count.agents.one":             { ru: "агент поддержки",        ua: "агент підтримки",        en: "support agent",          pl: "agent wsparcia" },
+  "count.agents.few":             { ru: "агента поддержки",       ua: "агенти підтримки",       en: "support agents",         pl: "agenci wsparcia" },
+  "count.agents.many":            { ru: "агентов поддержки",      ua: "агентів підтримки",      en: "support agents",         pl: "agentów wsparcia" },
+  "count.clients.one":            { ru: "клиент",                 ua: "клієнт",                 en: "client",                 pl: "klient" },
+  "count.clients.few":            { ru: "клиента",                ua: "клієнти",                en: "clients",                pl: "klienci" },
+  "count.clients.many":           { ru: "клиентов",               ua: "клієнтів",               en: "clients",                pl: "klientów" },
+
+  // ── Support tickets ────────────────────────────────────────────────────────
+  "support.search.placeholder":   { ru: "Поиск по имени, ID тикета, салону…", ua: "Пошук за іменем, ID тикета, салоном…", en: "Search name, ticket id, salon…", pl: "Szukaj po imieniu, ID, salonie…" },
+
+  // ── Marketing provider statuses ────────────────────────────────────────────
+  "marketing.provider.enabled":   { ru: "Активен",                ua: "Активний",               en: "Enabled",                pl: "Aktywny" },
+  "marketing.provider.dormant":   { ru: "Не активен",             ua: "Не активний",            en: "Dormant",                pl: "Nieaktywny" },
+  "marketing.comingSoon":         { ru: "Скоро",                  ua: "Скоро",                  en: "Coming soon",            pl: "Wkrótce" },
+
+  // ── Conversations / Inbox filters ──────────────────────────────────────────
+  "conv.search.placeholder":      { ru: "Поиск по ID пользователя в канале…", ua: "Пошук за ID користувача в каналі…", en: "Search channel user id…", pl: "Szukaj po ID użytkownika kanału…" },
+  "conv.filter.allSalons":        { ru: "Все салоны",             ua: "Усі салони",             en: "All salons",             pl: "Wszystkie salony" },
+  "conv.filter.all":              { ru: "Все",                    ua: "Усі",                    en: "All",                    pl: "Wszystkie" },
+  "conv.filter.open":             { ru: "Открытые",               ua: "Відкриті",               en: "Open",                   pl: "Otwarte" },
+  "conv.filter.closed":           { ru: "Закрытые",               ua: "Закриті",                en: "Closed",                 pl: "Zamknięte" },
+
+  // ── Marketing module nav ───────────────────────────────────────────────────
+  "marketing.nav.overview":       { ru: "Обзор",                  ua: "Огляд",                  en: "Overview",               pl: "Przegląd" },
+  "marketing.nav.contacts":       { ru: "Контакты",               ua: "Контакти",               en: "Contacts",               pl: "Kontakty" },
+  "marketing.nav.campaigns":      { ru: "Кампании",               ua: "Кампанії",               en: "Campaigns",              pl: "Kampanie" },
+  "marketing.nav.sms":            { ru: "SMS",                    ua: "SMS",                    en: "SMS",                    pl: "SMS" },
+  "marketing.nav.automations":    { ru: "Автоматизации",          ua: "Автоматизації",          en: "Automations",            pl: "Automatyzacje" },
+  "marketing.nav.templates":      { ru: "Шаблоны",                ua: "Шаблони",                en: "Templates",              pl: "Szablony" },
+  "marketing.nav.providers":      { ru: "Провайдеры",             ua: "Провайдери",             en: "Providers",              pl: "Dostawcy" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
@@ -1249,4 +1310,54 @@ export function t(key: TranslationKey, lang: Lang): string {
 /** BCP-47 locale tag matching the user's interface language (for Intl/toLocale*). */
 export function localeFor(lang: Lang): string {
   return lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : lang === "ua" ? "uk-UA" : "ru-RU";
+}
+
+/**
+ * Russian/Ukrainian/Polish CLDR plural category for an integer count.
+ * Returns "one" | "few" | "many" — matches the i18n key suffixes.
+ *
+ * Examples (ru):
+ *   1, 21, 31, 101 → "one"  ("1 запись")
+ *   2-4, 22-24    → "few"   ("2 записи")
+ *   5-20, 25-30   → "many"  ("5 записей")
+ *
+ * English collapses to "one"/"many" only (no "few").
+ */
+export function pluralCategory(count: number, lang: Lang): "one" | "few" | "many" {
+  const n = Math.abs(Math.trunc(count));
+  if (lang === "en") return n === 1 ? "one" : "many";
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "one";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "few";
+  return "many";
+}
+
+/**
+ * Pluralize a noun with a count prefix. `nounKeyBase` like "count.users" →
+ * resolves to `count.users.one|few|many` depending on the count.
+ *
+ *   pluralCount(3, "count.bookings", "ru") → "3 записи"
+ *   pluralCount(5, "count.users",    "ru") → "5 пользователей"
+ *   pluralCount(1, "count.salons",   "en") → "1 salon"
+ */
+export function pluralCount(count: number, nounKeyBase: string, lang: Lang): string {
+  const cat = pluralCategory(count, lang);
+  const key = `${nounKeyBase}.${cat}` as TranslationKey;
+  const noun = translations[key]?.[lang] ?? translations[key]?.["ru"] ?? key;
+  return `${count.toLocaleString(localeFor(lang))} ${noun}`;
+}
+
+/**
+ * Localized relative time: "just now", "5m ago", "3h ago", "2d ago",
+ * fallback to absolute date for >7d. Pure function — pass an absolute
+ * `nowMs` for testability (defaults to Date.now()).
+ */
+export function formatRelativeTime(unixSeconds: number, lang: Lang, nowMs = Date.now()): string {
+  const diffSec = Math.max(0, Math.floor(nowMs / 1000 - unixSeconds));
+  if (diffSec < 60) return t("time.justNow", lang);
+  if (diffSec < 3600) return t("time.minutesAgo", lang).replace("{n}", String(Math.floor(diffSec / 60)));
+  if (diffSec < 86400) return t("time.hoursAgo", lang).replace("{n}", String(Math.floor(diffSec / 3600)));
+  if (diffSec < 7 * 86400) return t("time.daysAgo", lang).replace("{n}", String(Math.floor(diffSec / 86400)));
+  return new Date(unixSeconds * 1000).toLocaleDateString(localeFor(lang));
 }

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+
+export interface KpiTrend {
+  value: number;
+  label?: string;
+}
 
 export function KpiCard({
   label,
@@ -11,6 +17,8 @@ export function KpiCard({
   iconBg,
   iconColor,
   href,
+  trend,
+  sparkline,
 }: {
   label: string;
   value: string | number;
@@ -19,42 +27,124 @@ export function KpiCard({
   iconBg: string;
   iconColor: string;
   href?: string;
+  trend?: KpiTrend;
+  sparkline?: number[];
 }) {
+  const trendUp = trend ? trend.value > 0 : false;
+  const trendDown = trend ? trend.value < 0 : false;
+  const trendTone = trendUp
+    ? "text-accent-600 dark:text-accent-400 bg-accent-500/10 dark:bg-accent-500/15"
+    : trendDown
+    ? "text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15"
+    : "text-[#6b7280] dark:text-slate-400 bg-[#f3f4f6] dark:bg-white/[0.06]";
+  const TrendIcon = trendUp ? TrendingUp : trendDown ? TrendingDown : null;
+
   const inner = (
-    <div className="flex items-start gap-4">
-      <div
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBg}`}
-      >
-        <Icon className={`h-5 w-5 ${iconColor}`} />
+    <>
+      <div className="flex items-start gap-4">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconBg}`}
+        >
+          <Icon className={`h-5 w-5 ${iconColor}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] dark:text-slate-400">
+              {label}
+            </p>
+            {href && (
+              <ArrowUpRight className="h-3.5 w-3.5 text-[#d1d5db] dark:text-slate-600 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 shrink-0" />
+            )}
+          </div>
+          <p className="mt-0.5 text-[26px] font-bold leading-none text-[#1a1a2e] dark:text-white tabular-nums">
+            {typeof value === "number" ? value.toLocaleString() : value}
+          </p>
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+            {trend && TrendIcon && (
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums ${trendTone}`}
+              >
+                <TrendIcon className="h-3 w-3" />
+                {Math.abs(trend.value).toFixed(0)}%
+                {trend.label && (
+                  <span className="font-normal opacity-70 ml-0.5">{trend.label}</span>
+                )}
+              </span>
+            )}
+            {subtext && (
+              <p className="text-[12px] text-[#6b7280] dark:text-slate-500 truncate">{subtext}</p>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] dark:text-slate-400">
-          {label}
-        </p>
-        <p className="mt-0.5 text-[26px] font-bold leading-none text-[#1a1a2e] dark:text-white tabular-nums">
-          {typeof value === "number" ? value.toLocaleString() : value}
-        </p>
-        {subtext && (
-          <p className="mt-1.5 text-[12px] text-[#6b7280] dark:text-slate-500">{subtext}</p>
-        )}
-      </div>
-    </div>
+
+      {sparkline && sparkline.length >= 2 && (
+        <div className="mt-3 -mx-1">
+          <Sparkline data={sparkline} trendUp={trendUp} trendDown={trendDown} />
+        </div>
+      )}
+    </>
   );
 
-  const cls =
-    "rounded-xl border border-[#e5e7eb] dark:border-white/[0.06] bg-white dark:bg-slate-800 p-5 transition-all duration-150";
+  const base =
+    "group relative rounded-xl border border-[#e5e7eb] dark:border-white/[0.06] bg-white dark:bg-slate-800 p-5 transition-all duration-200";
 
   if (href) {
     return (
       <Link
         href={href}
-        className={`${cls} block hover:border-accent-500/40 dark:hover:border-accent-500/30 hover:shadow-sm`}
+        className={`${base} block hover:border-accent-500/40 dark:hover:border-accent-500/30 hover:shadow-md hover:-translate-y-0.5`}
       >
         {inner}
       </Link>
     );
   }
-  return <div className={cls}>{inner}</div>;
+  return <div className={base}>{inner}</div>;
+}
+
+function Sparkline({ data, trendUp, trendDown }: { data: number[]; trendUp: boolean; trendDown: boolean }) {
+  const w = 160;
+  const h = 32;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const step = data.length > 1 ? w / (data.length - 1) : w;
+  const points = data
+    .map((d, i) => `${i * step},${h - ((d - min) / range) * (h - 4) - 2}`)
+    .join(" ");
+  const lastX = (data.length - 1) * step;
+  const lastY = h - ((data[data.length - 1]! - min) / range) * (h - 4) - 2;
+
+  const strokeId = `kpi-sparkline-stroke-${trendDown ? "down" : "up"}`;
+  const fillId = `kpi-sparkline-fill-${trendDown ? "down" : "up"}`;
+  const stroke = trendDown ? "#ef4444" : trendUp ? "#0b9b6b" : "#7c3aed";
+  const fillTop = trendDown ? "rgba(239,68,68,0.18)" : trendUp ? "rgba(11,155,107,0.20)" : "rgba(124,58,237,0.18)";
+
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="overflow-visible">
+      <defs>
+        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={fillTop} />
+          <stop offset="100%" stopColor={fillTop} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline
+        points={`0,${h} ${points} ${lastX},${h}`}
+        fill={`url(#${fillId})`}
+        stroke="none"
+      />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={lastX} cy={lastY} r="2.5" fill={stroke} />
+      <circle cx={lastX} cy={lastY} r="5" fill={stroke} opacity="0.18" />
+    </svg>
+  );
 }
 
 export function KpiCardSkeleton() {

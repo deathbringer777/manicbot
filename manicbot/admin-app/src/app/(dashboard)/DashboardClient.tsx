@@ -25,7 +25,30 @@ import {
 } from "lucide-react";
 import { formatPlnWhole } from "~/lib/money";
 import { useLang } from "~/components/LangContext";
-import { t, localeFor, type Lang } from "~/lib/i18n";
+import { t, localeFor, formatRelativeTime, type Lang, type TranslationKey } from "~/lib/i18n";
+
+type ActivityEntry = {
+  id: number | string;
+  name: string;
+  kind: "tenant_created" | "booking";
+  status: "confirmed" | "pending" | "cancelled" | "rejected" | "no_show" | "done" | null;
+  icon: "salon" | "appointment";
+  ts: number;
+};
+
+function activityActionLabel(a: ActivityEntry, lang: Lang): string {
+  if (a.kind === "tenant_created") return t("activity.tenantCreated", lang);
+  const map: Record<string, TranslationKey> = {
+    confirmed: "activity.bookingConfirmed",
+    pending:   "activity.bookingPending",
+    cancelled: "activity.bookingCancelled",
+    rejected:  "activity.bookingRejected",
+    no_show:   "activity.bookingNoShow",
+    done:      "activity.bookingDone",
+  };
+  const key = a.status ? map[a.status] ?? "activity.bookingPending" : "activity.bookingPending";
+  return t(key, lang);
+}
 
 // ─── Period switcher ──────────────────────────────────────────────
 
@@ -338,7 +361,7 @@ export default function DashboardClient() {
                 )
                 : (s?.recentActivity ?? []).map((a, i) => (
                     <div
-                      key={a.id + i}
+                      key={String(a.id) + i}
                       className="flex items-center gap-3 py-2.5 border-b border-[#f3f4f6] dark:border-white/[0.04] last:border-0 rounded-lg px-1 hover:bg-[#fafaf7] dark:hover:bg-white/[0.02] transition-colors"
                     >
                       <div className="h-8 w-8 shrink-0 rounded-full bg-accent-500/10 flex items-center justify-center text-accent-600 dark:text-accent-400 text-[11px] font-bold">
@@ -346,9 +369,9 @@ export default function DashboardClient() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium text-[#1a1a2e] dark:text-white truncate">{a.name}</p>
-                        <p className="text-[11px] text-[#6b7280] dark:text-slate-500 truncate">{a.action}</p>
+                        <p className="text-[11px] text-[#6b7280] dark:text-slate-500 truncate">{activityActionLabel(a as ActivityEntry, lang)}</p>
                       </div>
-                      <span className="text-[11px] text-[#9ca3af] dark:text-slate-600 shrink-0 tabular-nums">{a.time}</span>
+                      <span className="text-[11px] text-[#9ca3af] dark:text-slate-600 shrink-0 tabular-nums">{formatRelativeTime(a.ts, lang)}</span>
                     </div>
                   ))
               }

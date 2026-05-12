@@ -4,6 +4,8 @@ import { useState } from "react";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
 import { Loader2, Activity, Zap, ZapOff } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 type HealthResult = {
   status: "ok" | "not_configured" | "degraded" | "down";
@@ -20,6 +22,7 @@ function fmtDate(ts?: number | null) {
 }
 
 export default function ProvidersClient() {
+  const { lang } = useLang();
   const utils = api.useUtils();
   const listQ = (api as any).marketing.providersList.useQuery();
   const [lastCheck, setLastCheck] = useState<Record<string, HealthResult>>({});
@@ -62,9 +65,9 @@ export default function ProvidersClient() {
                         {status}
                       </span>
                       {p.db?.enabled ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30">enabled</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30">{t("marketing.provider.enabled", lang)}</span>
                       ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">dormant</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">{t("marketing.provider.dormant", lang)}</span>
                       )}
                       {p.db?.isDefault && (
                         <span className="text-[10px] px-2 py-0.5 rounded font-bold uppercase bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">default</span>

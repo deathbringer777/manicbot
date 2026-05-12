@@ -17,10 +17,6 @@
  *   │ Web         [ON]   │
  *   │ Telegram    [OFF]  │
  *   │ ...                │
- *   ├────────────────────┤
- *   │ Jump By Week       │
- *   │ +1 +2 +3 +4 +5 +6  │
- *   │ -1 -2 -3 -4 -5 -6  │
  *   └────────────────────┘
  *
  * The rail is stateless w.r.t. selectedDate (parent owns) but does
@@ -30,7 +26,7 @@
  */
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors, Zap, Rocket } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors, Zap } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
@@ -174,12 +170,6 @@ export function CalendarLeftRail({
     { month: "long", year: "numeric" },
   );
   const weekdays = WEEKDAYS_BY_LANG[lang] ?? WEEKDAYS_BY_LANG.ru!;
-
-  const jumpWeeks = (delta: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + delta * 7);
-    setSelectedDate(d);
-  };
 
   const jumpDay = (day: number) => {
     const d = new Date(year, month, day);
@@ -517,41 +507,6 @@ export function CalendarLeftRail({
         </section>
       )}
 
-      {/* Jump By Week chips — Booksy-parity */}
-      <section className="glass-card rounded-2xl p-3" data-testid="jump-by-week">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1.5">
-          <Rocket className="h-3 w-3" />
-          {t("salon.rail.jumpByWeek", lang)}
-        </p>
-        <div className="grid grid-cols-6 gap-1 mb-1.5">
-          {[1, 2, 3, 4, 5, 6].map((d) => (
-            <button
-              key={`+${d}`}
-              type="button"
-              onClick={() => jumpWeeks(d)}
-              data-testid="jump-week-chip"
-              data-delta={d}
-              className="h-7 rounded text-[10px] font-bold tabular-nums text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors"
-            >
-              +{d}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-6 gap-1">
-          {[1, 2, 3, 4, 5, 6].map((d) => (
-            <button
-              key={`-${d}`}
-              type="button"
-              onClick={() => jumpWeeks(-d)}
-              data-testid="jump-week-chip"
-              data-delta={-d}
-              className="h-7 rounded text-[10px] font-bold tabular-nums text-rose-700 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-colors"
-            >
-              −{d}
-            </button>
-          ))}
-        </div>
-      </section>
     </aside>
   );
 }

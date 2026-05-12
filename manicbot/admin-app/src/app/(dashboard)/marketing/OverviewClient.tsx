@@ -3,6 +3,8 @@
 import { MarketingShell, StubCard } from "./MarketingShell";
 import { api } from "~/trpc/react";
 import { Users, Mail, MessageSquare, Megaphone, Activity } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
   return (
@@ -17,6 +19,7 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
 }
 
 export default function OverviewClient() {
+  const { lang } = useLang();
   const statsQ = (api as any).marketing.stats.useQuery();
   const providersQ = (api as any).marketing.providersList.useQuery();
 
@@ -67,7 +70,7 @@ export default function OverviewClient() {
                       ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
                       : "bg-slate-200 dark:bg-slate-700/40 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
                   }`}>
-                    {p.db?.enabled ? "enabled" : "dormant"}
+                    {p.db?.enabled ? t("marketing.provider.enabled", lang) : t("marketing.provider.dormant", lang)}
                   </span>
                 </div>
               ))}

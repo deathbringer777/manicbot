@@ -1174,6 +1174,8 @@ const translations = {
   "gmAppts.aptFew":             { ru: "записи",                 ua: "записи",                 en: "appointments",           pl: "wizyty" },
   "gmAppts.aptMany":            { ru: "записей",                ua: "записів",                en: "appointments",           pl: "wizyt" },
   "gmAppts.noApts":             { ru: "Нет записей",            ua: "Немає записів",          en: "No appointments",        pl: "Brak wizyt" },
+  "gmAppts.noAptsTitle":        { ru: "Записей пока нет",       ua: "Записів поки немає",     en: "No appointments yet",    pl: "Brak wizyt" },
+  "gmAppts.noAptsHint":         { ru: "Они появятся здесь, как только клиенты начнут бронировать.", ua: "Вони з’являться тут, щойно клієнти почнуть бронювати.", en: "They will appear here once clients start booking.", pl: "Pojawią się tutaj, gdy klienci zaczną rezerwować." },
   "gmAppts.calendarBtn":        { ru: "Календарь",              ua: "Календар",               en: "Calendar",               pl: "Kalendarz" },
   "gmAppts.listBtn":            { ru: "Список",                 ua: "Список",                 en: "List",                   pl: "Lista" },
   "gmAppts.statTotal":          { ru: "Всего",                  ua: "Всього",                 en: "Total",                  pl: "Łącznie" },

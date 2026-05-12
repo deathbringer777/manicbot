@@ -131,7 +131,13 @@ const FIXTURES: Tenant[] = [
   },
 ];
 
-describe("FTS5 integration — multi-language search", () => {
+// node:sqlite ships with Node 22+. CI is still on Node 20 — skip the
+// integration suite there. The migration-shape suite below (text-only,
+// no DB) still runs everywhere.
+const NODE_MAJOR = Number(process.versions.node.split(".")[0] ?? 0);
+const describeOnSqlite = NODE_MAJOR >= 22 ? describe : describe.skip;
+
+describeOnSqlite("FTS5 integration — multi-language search", () => {
   let db: any;
   beforeAll(async () => {
     db = await openTestDb();

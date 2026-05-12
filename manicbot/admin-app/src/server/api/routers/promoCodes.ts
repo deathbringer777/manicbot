@@ -4,6 +4,20 @@
  * Supports manual codes + auto-generated (birthday/returning/stamp_reward).
  * Redemption is recorded in `promo_code_uses` with a unique constraint per
  * (promo_code_id, appointment_id) to prevent double-application.
+ *
+ * Public-surface audit (P2-7).
+ *
+ * Every procedure in this router calls `assertTenantOwner(ctx, input.tenantId)`
+ * before reading or writing. The `publicProcedure` base is the admin-app
+ * convention for tRPC scaffold; the guard is what enforces auth.
+ *
+ * Callers (verified):
+ *   * `list`     — SalonDashboard / MasterDashboard promo-code tabs.
+ *   * `create`   — SalonDashboard "New code" modal.
+ *   * `delete`   — SalonDashboard delete button.
+ *   * `validate` — Booking-flow validation (modal + AI tag handler). The
+ *     guard ensures only the owner of `tenantId` can read code metadata —
+ *     prevents a competitor from probing whether a code is active.
  */
 
 import { z } from "zod";

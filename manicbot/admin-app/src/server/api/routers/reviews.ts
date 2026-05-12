@@ -1,3 +1,26 @@
+/**
+ * Reviews router — public-surface audit (P2-7).
+ *
+ * Procedure-level access model (admin-app convention: `publicProcedure` is the
+ * tRPC base, but every mutation/query in this router enforces an explicit
+ * `assertTenantOwner(ctx, input.tenantId)` guard so a caller without a
+ * NextAuth session cannot reach the data).
+ *
+ * Callers (verified):
+ *   * `getForSalon`     — SalonDashboard → Reviews tab (owner-only).
+ *   * `getStats`        — SalonDashboard / MasterDashboard cards.
+ *   * `updateStatus`    — SalonDashboard owner-only moderation buttons.
+ *   * `addReply` / `deleteReply` — owner-only reply editor.
+ *   * `getPublicReviews` — public salon profile page (`/salon/[slug]`). This
+ *     procedure is the only one in the file that does NOT call
+ *     `assertTenantOwner`; instead it gates on `tenantConfig.reviews_public`
+ *     and only returns `status IN ('active', 'featured')` rows + already-
+ *     redacted fields (no chatId, no IP, no internal notes).
+ *
+ * Therefore: no procedure in this router is silently public. The file uses
+ * `publicProcedure` as the tRPC scaffold; access control is at the call
+ * site via `assertTenantOwner` or content-level filtering.
+ */
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";

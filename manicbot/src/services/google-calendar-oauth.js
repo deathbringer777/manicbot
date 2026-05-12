@@ -199,7 +199,33 @@ async function deleteOAuthSession(ctx, sessionId) {
   try { await kv.delete(OAUTH_SESSION_PREFIX + sessionId); } catch {}
 }
 
-function buildGoogleAuthUrl(ctx, sessionId) {
+/**
+ * P2-14 — PKCE (RFC 7636).
+ *
+ * Generate a 64-char base64url `code_verifier` (32 random bytes encoded
+ * URL-safe with no padding — 43 chars; we pad to 64 by appending more random
+ * data so callers can rely on a fixed length for tests). Sufficient entropy
+ * either way.
+ */
+export function generatePkceVerifier() {
+  const buf = crypto.getRandomValues(new Uint8Array(48));
+  return base64urlEncode(buf).slice(0, 64);
+}
+
+/** Derive the S256 `code_challenge` from a `code_verifier`. */
+export async function deriveCodeChallengeS256(verifier) {
+  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return base64urlEncode(new Uint8Array(hashBuf));
+}
+
+function base64urlEncode(bytes) {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function buildGoogleAuthUrl(ctx, sessionId, codeChallenge) {
   const params = new URLSearchParams({
     client_id: ctx.GOOGLE_OAUTH_CLIENT_ID,
     redirect_uri: getRedirectUri(ctx),
@@ -210,10 +236,17 @@ function buildGoogleAuthUrl(ctx, sessionId) {
     scope: OAUTH_SCOPE,
     state: sessionId,
   });
+  // P2-14 — PKCE hardens against authorization-code-injection. Client secret
+  // is server-side here so the risk class is lower, but PKCE is the modern
+  // best-practice for any OAuth 2.0 authorization code flow.
+  if (codeChallenge) {
+    params.set('code_challenge', codeChallenge);
+    params.set('code_challenge_method', 'S256');
+  }
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
-async function exchangeCodeForTokens(ctx, code) {
+async function exchangeCodeForTokens(ctx, code, codeVerifier) {
   const body = new URLSearchParams({
     code,
     client_id: ctx.GOOGLE_OAUTH_CLIENT_ID,
@@ -221,6 +254,9 @@ async function exchangeCodeForTokens(ctx, code) {
     redirect_uri: getRedirectUri(ctx),
     grant_type: 'authorization_code',
   });
+  // P2-14 — PKCE proof. Required when `code_challenge` was sent on the auth
+  // URL; Google rejects the exchange otherwise.
+  if (codeVerifier) body.set('code_verifier', codeVerifier);
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -673,6 +709,10 @@ export async function deleteGoogleIntegration(ctx, { scope = 'tenant', masterCha
 export async function createGoogleConnectUrl(ctx, { scope = 'master', actorChatId, masterChatId = null } = {}) {
   if (!ctx?.db || !ctx?.tenantId || !hasOAuthConfig(ctx) || !getBaseUrl(ctx)) return null;
   const sessionId = randomId(16);
+  // P2-14 — PKCE verifier persisted alongside the OAuth session. The
+  // 900-second KV TTL bounds the window for a stolen authorization code to
+  // be redeemed, and the verifier never leaves the Worker.
+  const codeVerifier = generatePkceVerifier();
   await putOAuthSession(ctx, sessionId, {
     stage: 'oauth',
     tenantId: ctx.tenantId || null,
@@ -680,6 +720,7 @@ export async function createGoogleConnectUrl(ctx, { scope = 'master', actorChatI
     scope,
     actorChatId,
     masterChatId,
+    codeVerifier,
     createdAt: nowTs(),
   }, 900);
   return `${getBaseUrl(ctx)}/google/connect?session=${encodeURIComponent(sessionId)}`;
@@ -697,6 +738,8 @@ export async function createWebOAuthSession(ctx, { tenantId, scope = 'tenant', m
   if (!hasOAuthConfig(ctx)) return { ok: false, error: 'google_oauth_not_configured' };
   if (!getBaseUrl(ctx)) return { ok: false, error: 'base_url_not_configured' };
   const sessionId = randomId(16);
+  // P2-14 — PKCE verifier persisted alongside the OAuth session.
+  const codeVerifier = generatePkceVerifier();
   await putOAuthSession(ctx, sessionId, {
     stage: 'oauth',
     mode: 'web',
@@ -705,6 +748,7 @@ export async function createWebOAuthSession(ctx, { tenantId, scope = 'tenant', m
     scope: scope === 'master' ? 'master' : 'tenant',
     masterChatId: scope === 'master' ? masterChatId : null,
     returnUrl: returnUrl || null,
+    codeVerifier,
     createdAt: nowTs(),
   }, 900);
   return {
@@ -723,7 +767,12 @@ export async function handleGoogleConnectRequest(ctx, url) {
   if (!hasOAuthConfig(ctx)) {
     return new Response('Google OAuth is not configured on the platform.', { status: 500 });
   }
-  return Response.redirect(buildGoogleAuthUrl(ctx, sessionId), 302);
+  // P2-14 — derive the S256 challenge from the per-session verifier.
+  let codeChallenge = null;
+  if (session.codeVerifier) {
+    codeChallenge = await deriveCodeChallengeS256(session.codeVerifier);
+  }
+  return Response.redirect(buildGoogleAuthUrl(ctx, sessionId, codeChallenge), 302);
 }
 
 function renderCalendarChoiceHtml(sessionId, accountEmail, calendars) {
@@ -777,7 +826,9 @@ export async function handleGoogleCallback(ctx, url) {
   }
   let tokens;
   try {
-    tokens = await exchangeCodeForTokens(ctx, code);
+    // P2-14 — pass the per-session PKCE verifier (null if the session was
+    // created before this change rolled out — Google ignores absent verifier).
+    tokens = await exchangeCodeForTokens(ctx, code, session.codeVerifier ?? null);
   } catch (e) {
     log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e.message)), { action: 'exchangeCodeForTokens' });
     return new Response('Google token exchange failed. Please try again.', { status: 500 });

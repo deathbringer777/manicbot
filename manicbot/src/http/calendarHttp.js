@@ -7,23 +7,52 @@ import { initServices } from '../services/services.js';
 const ICS_LINK_MAX_AGE_SEC = 48 * 3600; // 48 hours (reduced from 7 days)
 const ICS_HMAC_MIN_KEY_LEN = 32;
 
+// P2-15 — grace window for exp-less URLs. Mints created before this deploy
+// don't carry `exp`; rather than 410 them on day one we accept them while
+// `ts` is < (now - GRACE_SEC). After this deploy date + 14 days every URL
+// without `exp` is 410 Gone. Set to a fixed deploy-time anchor + 14d.
+const P2_15_DEPLOY_TS = 1810000000; // 2027-05-13 (deploy anchor; safe future date)
+const EXP_GRACE_FROM_DEPLOY_SEC = 14 * 24 * 3600;
+
 /**
- * Verify a calendar link signature with timestamp freshness check.
- * Delegates the actual HMAC math to ics.js (which handles HKDF subkey + legacy
- * raw-key fallback during the rotation grace window). This wrapper layers in
- * the timestamp age check, which is a presentation-tier policy not a crypto one.
+ * Calendar-link signature verification with timestamp + expiry policy.
+ *
+ * Returns:
+ *   { ok: true }                   — signature valid AND not expired.
+ *   { ok: false, expired: true }   — signature valid BUT past `exp` (410 Gone).
+ *   { ok: false }                  — signature invalid or stale ts (403 Forbidden).
  */
-async function verifyCalendarSig(aptId, sig, secret, ts) {
-  if (!sig || !secret || secret.length < ICS_HMAC_MIN_KEY_LEN) return false;
-  if (ts) {
-    const age = Date.now() / 1000 - Number(ts);
-    if (!Number.isFinite(age) || age > ICS_LINK_MAX_AGE_SEC || age < -300) return false;
-  } else {
+async function verifyCalendarSig(aptId, sig, secret, ts, exp) {
+  if (!sig || !secret || secret.length < ICS_HMAC_MIN_KEY_LEN) return { ok: false };
+  if (!ts) {
     // Old links without ts: refuse — used to be allowed for back-compat with
     // pre-timestamp links, but the link generator has emitted ts since 2025-Q3.
-    return false;
+    return { ok: false };
   }
-  return verifyCalendarSigSubkey(secret, aptId, ts, sig);
+  const nowSec = Date.now() / 1000;
+  const age = nowSec - Number(ts);
+  if (!Number.isFinite(age) || age > ICS_LINK_MAX_AGE_SEC || age < -300) {
+    return { ok: false };
+  }
+
+  const sigValid = await verifyCalendarSigSubkey(secret, aptId, ts, sig, exp);
+  if (!sigValid) return { ok: false };
+
+  // P2-15 — expiry policy.
+  //
+  //   * With `exp` in the URL: hard-enforce. `exp` is part of the signed
+  //     payload, so an attacker can't extend it without re-signing.
+  //   * Without `exp` (URLs minted pre-deploy): accept while we're inside
+  //     the 14-day grace window from P2_15_DEPLOY_TS, then 410.
+  if (exp) {
+    const expSec = Number(exp);
+    if (!Number.isFinite(expSec) || nowSec > expSec) {
+      return { ok: false, expired: true };
+    }
+  } else if (nowSec > P2_15_DEPLOY_TS + EXP_GRACE_FROM_DEPLOY_SEC) {
+    return { ok: false, expired: true };
+  }
+  return { ok: true };
 }
 
 
@@ -48,6 +77,7 @@ export async function tryCalendar(request, ctx, url) {
 
   const sig = url.searchParams.get('sig') || '';
   const ts = url.searchParams.get('ts') || null;
+  const exp = url.searchParams.get('exp') || null; // P2-15
   // Use BOT_ENCRYPTION_KEY exclusively — do NOT fall back to ADMIN_KEY.
   // ADMIN_KEY is an authentication secret for admin endpoints, not a crypto key.
   // Key separation (NIST SP 800-57) prevents key-reuse attacks.
@@ -56,7 +86,11 @@ export async function tryCalendar(request, ctx, url) {
     log.error('http.calendar', new Error('BOT_ENCRYPTION_KEY missing or too short — calendar links disabled'));
     return new Response('Calendar links not configured', { status: 503 });
   }
-  if (!await verifyCalendarSig(aptId, sig, secret, ts)) {
+  const verifyResult = await verifyCalendarSig(aptId, sig, secret, ts, exp);
+  if (!verifyResult.ok) {
+    // P2-15 — distinguish expired (410 Gone) from forged/stale (403 Forbidden)
+    // so calendar apps can drop the cached URL on 410 instead of retrying.
+    if (verifyResult.expired) return new Response('Gone', { status: 410 });
     return new Response('Forbidden', { status: 403 });
   }
 

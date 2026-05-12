@@ -10,24 +10,26 @@ function ctxWith(secret = SECRET, baseUrl = 'https://manicbot.com') {
 describe('#S6 — calendar URL signing (ics.js)', () => {
   it('makeCalendarUrl produces a verifiable URL', async () => {
     const url = await makeCalendarUrl(ctxWith(), 'a123_xyz');
-    expect(url).toMatch(/^https:\/\/manicbot\.com\/calendar\/a123_xyz\.ics\?sig=[a-f0-9]+&ts=\d+$/);
+    // P2-15 — URL now includes `exp` after `ts`.
+    expect(url).toMatch(/^https:\/\/manicbot\.com\/calendar\/a123_xyz\.ics\?sig=[a-f0-9]+&ts=\d+&exp=\d+$/);
     const u = new URL(url);
     const sig = u.searchParams.get('sig');
     const ts = u.searchParams.get('ts');
-    expect(await verifyCalendarSig(SECRET, 'a123_xyz', ts, sig)).toBe(true);
+    const exp = u.searchParams.get('exp');
+    expect(await verifyCalendarSig(SECRET, 'a123_xyz', ts, sig, exp)).toBe(true);
   });
 
   it('verifyCalendarSig rejects tampered aptId', async () => {
     const url = await makeCalendarUrl(ctxWith(), 'a123_xyz');
     const u = new URL(url);
-    const ok = await verifyCalendarSig(SECRET, 'a999_evil', u.searchParams.get('ts'), u.searchParams.get('sig'));
+    const ok = await verifyCalendarSig(SECRET, 'a999_evil', u.searchParams.get('ts'), u.searchParams.get('sig'), u.searchParams.get('exp'));
     expect(ok).toBe(false);
   });
 
   it('verifyCalendarSig rejects tampered ts', async () => {
     const url = await makeCalendarUrl(ctxWith(), 'a123_xyz');
     const u = new URL(url);
-    const ok = await verifyCalendarSig(SECRET, 'a123_xyz', '0', u.searchParams.get('sig'));
+    const ok = await verifyCalendarSig(SECRET, 'a123_xyz', '0', u.searchParams.get('sig'), u.searchParams.get('exp'));
     expect(ok).toBe(false);
   });
 
@@ -35,7 +37,7 @@ describe('#S6 — calendar URL signing (ics.js)', () => {
     const url = await makeCalendarUrl(ctxWith(), 'a123_xyz');
     const u = new URL(url);
     const wrong = 'b'.repeat(64);
-    const ok = await verifyCalendarSig(wrong, 'a123_xyz', u.searchParams.get('ts'), u.searchParams.get('sig'));
+    const ok = await verifyCalendarSig(wrong, 'a123_xyz', u.searchParams.get('ts'), u.searchParams.get('sig'), u.searchParams.get('exp'));
     expect(ok).toBe(false);
   });
 

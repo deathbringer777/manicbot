@@ -4,6 +4,18 @@
  * One config row per tenant. When enabled, post-visit confirmation flow
  * increments stamp_card_progress.visits_completed and emits an analytics
  * event when the Nth visit reward is earned.
+ *
+ * Public-surface audit (P2-7).
+ *
+ * Every procedure in this router calls `assertTenantOwner(ctx, input.tenantId)`
+ * before reading or writing. The `publicProcedure` base is the admin-app
+ * convention for tRPC scaffold; the guard is what enforces auth.
+ *
+ * Callers (verified):
+ *   * `getConfig`    — SalonDashboard stamp-card panel.
+ *   * `updateConfig` — SalonDashboard owner-only edit button.
+ *   * `topProgress`  — SalonDashboard "top clients" panel.
+ *   * `resetClient`  — SalonDashboard manual reset (e.g. dispute resolution).
  */
 
 import { z } from "zod";

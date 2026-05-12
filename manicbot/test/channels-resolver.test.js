@@ -85,7 +85,9 @@ describe('resolveTenantFromInstagram', () => {
 });
 
 describe('getChannelConfig', () => {
-  it('returns plaintext Meta token when BOT_ENCRYPTION_KEY is unset (IGAA…)', async () => {
+  it('P1-8 — returns token=null when BOT_ENCRYPTION_KEY is unset (fail-closed)', async () => {
+    // Pre-P1-8 contract: pass through plaintext-looking tokens (EAA / IGAA)
+    // when no key is configured. New contract: refuse and log.
     const plain = `IGAA${'a'.repeat(100)}`;
     const row = {
       id: 'cc1',
@@ -101,7 +103,7 @@ describe('getChannelConfig', () => {
     };
     const ctx = { db: mockDbFirstRow(row) };
     const r = await getChannelConfig(ctx, 't_x', 'instagram', null);
-    expect(r?.token).toBe(plain);
+    expect(r?.token).toBeNull();
     expect(r?.config?.page_id).toBe('1');
   });
 

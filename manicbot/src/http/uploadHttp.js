@@ -27,6 +27,51 @@ import { log } from '../utils/logger.js';
 
 const CDN_PATH_PREFIX = '/cdn/';
 
+/**
+ * P2-13 — magic-byte sniff. Confirms the file actually starts with the bytes
+ * that match its declared `image/*` MIME so a polyglot (e.g. an HTML file
+ * with a PNG-shaped suffix) cannot be uploaded as `image/png` and later
+ * served back to a browser. Headers on the read path stop sniffing as a
+ * second layer of defence.
+ *
+ * Signatures (8 bytes is enough for all three formats):
+ *   PNG  89 50 4E 47 0D 0A 1A 0A
+ *   JPEG FF D8 FF
+ *   WEBP 52 49 46 46 .. .. .. .. 57 45 42 50  (RIFF....WEBP)
+ *
+ * @param {Uint8Array} bytes
+ * @param {string} declaredMime
+ * @returns {boolean} true when the magic bytes match the declared MIME.
+ */
+export function magicBytesMatchMime(bytes, declaredMime) {
+  if (!bytes || bytes.length < 4) return false;
+  if (declaredMime === 'image/png') {
+    return (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    );
+  }
+  if (declaredMime === 'image/jpeg' || declaredMime === 'image/jpg') {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (declaredMime === 'image/webp') {
+    if (bytes.length < 12) return false;
+    return (
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    );
+  }
+  return false;
+}
+
 function jsonError(message, status, extra = {}) {
   return Response.json({ error: message, ...extra }, { status });
 }
@@ -62,6 +107,16 @@ export async function tryUpload(request, env, url) {
     headers.set('Cache-Control', 'public, max-age=31536000, immutable');
     headers.set('ETag', obj.httpEtag);
     headers.set('Access-Control-Allow-Origin', '*');
+    // P2-13 — defence in depth against polyglot uploads. `nosniff` prevents
+    // browsers from sniffing a PNG-with-HTML-prefix as text/html when served
+    // cross-origin; `Content-Disposition: inline` keeps legitimate <img>
+    // rendering working without inviting downloads with attacker-controlled
+    // filenames. Magic-byte validation on the WRITE path (below) is the
+    // primary defence; these headers are belt-and-braces.
+    headers.set('X-Content-Type-Options', 'nosniff');
+    if (!headers.has('Content-Disposition')) {
+      headers.set('Content-Disposition', 'inline');
+    }
     return new Response(obj.body, { headers });
   }
 
@@ -101,6 +156,13 @@ export async function tryUpload(request, env, url) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+
+    // P2-13 — reject polyglots whose actual bytes don't match the declared
+    // MIME. 415 (Unsupported Media Type) per the read-path semantics.
+    if (!magicBytesMatchMime(bytes, mime)) {
+      return jsonError(`Content does not match declared type: ${mime}`, 415);
+    }
+
     const key = await buildAssetKey(claim.tid, claim.kind, bytes, ext);
 
     try {

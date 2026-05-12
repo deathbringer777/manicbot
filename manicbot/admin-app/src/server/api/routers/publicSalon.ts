@@ -73,7 +73,15 @@ const BLOG_ARTICLES: Array<{ slug: string; titles: Record<string, string> }> = [
 /** Public salon directory — no authentication required. */
 export const publicSalonRouter = createTRPCRouter({
 
-  /** Get a public salon profile by slug (URL-friendly id). */
+  /**
+   * Get a public salon profile by slug (URL-friendly id).
+   *
+   * P0-2 — gate on `tenants.publicActive = 1`. Without this gate, any
+   * unpublished / deactivated / personal tenant was readable to anyone who
+   * guessed or scraped the slug, exposing phone, address, masters list,
+   * services, photos, and bot username — i.e. a privacy leak. The sibling
+   * procedures (search, searchMasters, autocomplete) already enforce it.
+   */
   getProfile: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -82,7 +90,7 @@ export const publicSalonRouter = createTRPCRouter({
       const tenantRows = await ctx.db
         .select()
         .from(tenants)
-        .where(eq(tenants.slug, input.slug))
+        .where(and(eq(tenants.slug, input.slug), eq(tenants.publicActive, 1)))
         .limit(1);
 
       const tenant = tenantRows[0];
@@ -135,10 +143,9 @@ export const publicSalonRouter = createTRPCRouter({
       const reviewsPublic = !reviewsCfg || reviewsCfg.value !== "false";
       let rating: { avg: number; count: number } | null = null;
       if (reviewsPublic) {
-        // Reviews are keyed on tenant.id (not slug). The previous code
-        // accidentally queried with `input.slug` first, paid the round-
-        // trip, and then re-queried with `tenant.id` — see relax.md §4
-        // P0 finding. Dropped the dead query; one round-trip now.
+        // Reviews are keyed on tenant.id (not slug). Earlier code paid an
+        // extra round-trip with `input.slug` (always 0 rows because slug ≠
+        // tenant.id) before re-querying with `tenant.id`. One round-trip now.
         const ratingRow = await ctx.db.select({
           avg: sql<number>`ROUND(AVG(rating), 1)`,
           count: sql<number>`count(*)`,
@@ -155,10 +162,16 @@ export const publicSalonRouter = createTRPCRouter({
         brandPalette = tenant.brandPalette ? JSON.parse(tenant.brandPalette) : null;
       } catch { /* ignore */ }
 
+      // P0-2 — `publicActive` is now informational only. The where-clause
+      // above already guarantees publicActive=1, so this is always 1; we
+      // still emit it as a literal so frontend code that branches on it
+      // (e.g. SEO robots tags) keeps its type contract. Anyone reading this
+      // value as authoritative for "is this salon public?" should instead
+      // trust the presence of the payload itself.
       return {
         id: tenant.id,
         slug: tenant.slug,
-        publicActive: tenant.publicActive ?? 0,
+        publicActive: 1 as const,
         isTest: !!tenant.isTest,
         name: tenant.name,
         displayName: tenant.displayName ?? null,

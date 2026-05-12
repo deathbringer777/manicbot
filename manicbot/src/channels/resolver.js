@@ -10,6 +10,7 @@ import { encryptToken } from '../utils/security.js';
 import { decryptToken } from '../utils/security.js';
 import { log } from '../utils/logger.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
+import { baseCtx } from '../tenant/baseCtx.js';
 import { getTenant, getBot, getBotIdsByTenantId, getBotToken } from '../tenant/storage.js';
 
 // #S6: must match the label used in token-manager.js so encrypt/decrypt agree.
@@ -245,23 +246,13 @@ export async function buildChannelCtx(env, tenantId, channelConfig, channelAdapt
 
   const prefix = `t:${tenantId}:`;
   const ctx = {
-    ...env,
-    kv: env.MANICBOT,
-    globalKv: env.MANICBOT,
-    db: env.DB || null,
+    ...baseCtx(env),
     tenantId,
     tenant,
     bot: bot ? { ...bot, botToken } : null,
     TG: botToken ? `https://api.telegram.org/bot${botToken}` : null,
     prefix,
-    ADMIN_KEY: env.ADMIN_KEY,
     WEBHOOK_SECRET: null, // not applicable for Meta webhooks
-    adminChatId: env.ADMIN_CHAT_ID || null,
-    ADMIN_CHAT_ID: env.ADMIN_CHAT_ID || null,
-    AI: env.AI || null,
-    WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
-    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
-    baseUrl: null,
     channelConfig, // raw channel_configs row + decrypted token
     channel: channelAdapter,
     previewMode,

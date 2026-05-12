@@ -167,8 +167,10 @@ describe('disallowLegacyWebhook — refuses legacy fallback for /webhook/{botId}
 });
 
 describe('webhook resolution cascade — fallback paths still correct', () => {
+  // P2-3 — legacy bot ctx is opt-in (default off). These tests pre-date the
+  // gate and need ALLOW_LEGACY_BOT_CTX=1 to exercise the legacy fall-through.
   it('/webhook/wa is treated as Meta path, not Telegram bot id (legacy ctx OK)', async () => {
-    const { env } = makeEnv({ REQUIRE_WEBHOOK_BOT_ID: '0' });
+    const { env } = makeEnv({ REQUIRE_WEBHOOK_BOT_ID: '0', ALLOW_LEGACY_BOT_CTX: '1' });
     const url = new URL('https://x/webhook/wa');
     const ctx = await getCtx(env, url, postReq(url));
     expect(ctx).not.toBeNull();
@@ -176,10 +178,17 @@ describe('webhook resolution cascade — fallback paths still correct', () => {
   });
 
   it('/webhook/ig is treated as Meta path, not Telegram bot id (legacy ctx OK)', async () => {
-    const { env } = makeEnv({ REQUIRE_WEBHOOK_BOT_ID: '0' });
+    const { env } = makeEnv({ REQUIRE_WEBHOOK_BOT_ID: '0', ALLOW_LEGACY_BOT_CTX: '1' });
     const url = new URL('https://x/webhook/ig');
     const ctx = await getCtx(env, url, postReq(url));
     expect(ctx).not.toBeNull();
     expect(ctx.prefix).toBe('b:12345:'); // legacy
+  });
+
+  it('/webhook/wa without ALLOW_LEGACY_BOT_CTX returns null (P2-3 default)', async () => {
+    const { env } = makeEnv({ REQUIRE_WEBHOOK_BOT_ID: '0' });
+    const url = new URL('https://x/webhook/wa');
+    const ctx = await getCtx(env, url, postReq(url));
+    expect(ctx).toBeNull();
   });
 });

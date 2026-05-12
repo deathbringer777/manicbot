@@ -7,12 +7,19 @@
  * Levels: "info" | "warn" | "error"
  * Types: booking.created, booking.confirmed, booking.cancelled,
  *        webhook.telegram, webhook.meta, stripe.event,
- *        error.handler, auth.web_login, channel.ig_message
+ *        error.handler, auth.web_login, channel.ig_message,
+ *        cron.tenant.skipped, cron.phase.error, cron.retention.pruned
  */
 
 const MAX_EVENTS = 500;
 const TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const KEY = 'adminlog:recent';
+
+// P0-1 — per-(tenantId, reason) rate-limit window for cron.tenant.skipped
+// so a single tenant with a deleted bot row doesn't flood the activity feed
+// every 15 min. 1h TTL means one event per tenant per reason per hour.
+const CRON_SKIP_TTL_SECONDS = 3600;
+const CRON_SKIP_KEY_PREFIX = 'cronskip:';
 
 /**
  * Log a platform event to the global KV ring buffer (max 500, 7-day TTL).
@@ -75,6 +82,42 @@ export async function logEvent(ctx, type, data = {}) {
 
     // Write back with TTL
     await kv.put(KEY, JSON.stringify(list), { expirationTtl: TTL_SECONDS });
+  } catch {
+    // Never throw from event logging
+  }
+}
+
+/**
+ * P0-1 — Emit a `cron.tenant.skipped` event, rate-limited per (tenantId, reason).
+ *
+ * The Queue consumer in `worker.js` silently ack()s when a tenant has no bot
+ * rows or the bot can't be resolved. A tenant with an active subscription but
+ * a token-decrypt failure (the exact P0 scenario fixed in commit b76d3f5)
+ * would never see reminders / GCal sync / reviews — with zero signal anywhere.
+ *
+ * This helper logs the skip but caps to one event per tenant per reason per
+ * hour so a single broken tenant doesn't drown the activity feed.
+ *
+ * @param {{ globalKv?: KVNamespace }} ctx
+ * @param {string} tenantId
+ * @param {"no_bots"|"bot_unresolved"} reason
+ */
+export async function emitCronSkipRateLimited(ctx, tenantId, reason) {
+  try {
+    const kv = ctx?.globalKv;
+    if (!kv || !tenantId || !reason) return;
+    const key = `${CRON_SKIP_KEY_PREFIX}${tenantId}:${reason}`;
+    // Rate-limit check: if a marker is set, the previous emit was within TTL.
+    const existing = await kv.get(key).catch(() => null);
+    if (existing) return;
+    // Set the marker first so concurrent invocations dedup.
+    await kv.put(key, '1', { expirationTtl: CRON_SKIP_TTL_SECONDS }).catch(() => {});
+    await logEvent(ctx, 'cron.tenant.skipped', {
+      level: 'warn',
+      tenantId,
+      message: `Cron skipped for tenant ${tenantId}: ${reason}`,
+      reason,
+    });
   } catch {
     // Never throw from event logging
   }

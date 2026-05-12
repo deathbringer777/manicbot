@@ -26,7 +26,7 @@ import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
-import { logEvent } from './utils/events.js';
+import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
 
@@ -84,6 +84,27 @@ export function disallowLegacyWebhook(env, request, url) {
   if (url.pathname === '/webhook') return true;
   const m = url.pathname.match(/^\/webhook\/([^/]+)$/);
   if (m && m[1] !== 'wa' && m[1] !== 'ig') return true;
+  return false;
+}
+
+/**
+ * P2-2 — Predicate: does this URL pathname require a Telegram/admin/calendar
+ * ctx to be built before dispatch?
+ *
+ * Returns true for: /webhook, /webhook/{botId}, /admin/*, /setup,
+ * /remove-webhook, /calendar/{aptId}[.ics]. Everything else (landing,
+ * /api/search/*, /embed/*, static assets) can short-circuit to tryLanding
+ * without a D1 round-trip.
+ *
+ * Exported so test/worker-fast-path-landing.test.js can verify the matcher
+ * stays in sync with the actual route handlers.
+ */
+export function pathNeedsCtx(pathname) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  if (pathname === '/webhook' || /^\/webhook\/[^/]+$/.test(pathname)) return true;
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return true;
+  if (pathname === '/setup' || pathname === '/remove-webhook') return true;
+  if (/^\/calendar\/.+/.test(pathname)) return true;
   return false;
 }
 
@@ -188,6 +209,15 @@ function validateSecurityConfig(env) {
   // admin-app path is requested with no upstream configured.
   if (!env.ADMIN_APP_URL) {
     log.warn('worker.security', { message: 'ADMIN_APP_URL not set — admin-app paths will 503 (P2-8)' });
+  }
+
+  // P2-3 — Legacy single-bot ctx is now opt-in. If an operator explicitly
+  // re-enables it (e.g. for smoke tests), shout in the logs so the deviation
+  // is visible in every deploy.
+  if (env.ALLOW_LEGACY_BOT_CTX === '1') {
+    log.warn('worker.security', {
+      message: '[SECURITY] ALLOW_LEGACY_BOT_CTX=1 — legacy single-bot ctx fallback is ENABLED. Bot tokens may bypass D1 + per-bot encryption. Unset this var in production.',
+    });
   }
 }
 
@@ -315,11 +345,27 @@ export default {
     res = await tryEmbed(request, env, url);
     if (res) return addSecurityHeaders(res);
 
+    // P2-2 — hoist tryLanding(force=true) above the ctx-build ladder for
+    // GETs that don't need a ctx. Before this gate, every public landing
+    // request (`/`, `/api/search/*`, `/embed/*` fallback paths, etc.) paid
+    // a D1 round-trip + a `_baseCtx` env-spread only to be discarded right
+    // before tryLanding fired at the bottom of the pipeline.
+    //
+    // Paths that still need ctx: POST /webhook[...], /admin/*, /setup,
+    // /remove-webhook, GET /calendar/*. Everything else is non-ctx.
+    if (request.method === 'GET' && !pathNeedsCtx(url.pathname)) {
+      const landingRes = await tryLanding(request, env, url, /* force */ true);
+      if (landingRes) return addSecurityHeaders(landingRes);
+    }
+
     const isAdminPath = url.pathname.startsWith('/admin/');
     const needsFallback = url.pathname !== '/' && !isAdminPath;
     function tryFallbackCtx() {
       const skipLegacy = disallowLegacyWebhook(env, request, url);
-      if (env.BOT_TOKEN && env.WEBHOOK_SECRET && !skipLegacy) return buildLegacyCtx(env);
+      // P2-3 — legacy bot ctx is opt-in. The plain `buildCtx` (no-bot landing
+      // ctx) stays available because it's not bot-token-bearing.
+      const legacyAllowed = env.ALLOW_LEGACY_BOT_CTX === '1';
+      if (env.BOT_TOKEN && env.WEBHOOK_SECRET && !skipLegacy && legacyAllowed) return buildLegacyCtx(env);
       if (!skipLegacy) return buildCtx(env);
       return null;
     }
@@ -420,16 +466,25 @@ export default {
         if (tenantIds.length > 0) {
           for (const tenantId of tenantIds) {
             const botIds = await getBotIdsByTenantId(ec, tenantId);
-            if (botIds.length === 0) continue;
+            if (botIds.length === 0) {
+              await emitCronSkipRateLimited(ec, tenantId, 'no_bots');
+              continue;
+            }
             const resolved = await resolveTenantFromBotId(ec, botIds[0], env.BOT_ENCRYPTION_KEY || null);
-            if (!resolved) continue;
+            if (!resolved) {
+              await emitCronSkipRateLimited(ec, tenantId, 'bot_unresolved');
+              continue;
+            }
             const ctx = buildTenantCtx(env, resolved);
             _scheduledCtx.waitUntil(handleCron(ctx));
           }
           return;
         }
       }
-      const ctx = env.BOT_TOKEN && env.WEBHOOK_SECRET ? buildLegacyCtx(env) : buildCtx(env);
+      // P2-3 — legacy ctx is opt-in. Default to landing-only buildCtx so cron
+      // doesn't accidentally trigger telegram actions via env BOT_TOKEN.
+      const legacyAllowed = env.ALLOW_LEGACY_BOT_CTX === '1';
+      const ctx = env.BOT_TOKEN && env.WEBHOOK_SECRET && legacyAllowed ? buildLegacyCtx(env) : buildCtx(env);
       _scheduledCtx.waitUntil(handleCron(ctx));
     } catch (e) {
       log.error('worker.cron', e instanceof Error ? e : new Error(String(e?.message || e)), { stack: e?.stack?.slice(0, 300) || null });
@@ -453,11 +508,18 @@ export default {
       try {
         const botIds = await getBotIdsByTenantId(ec, tenantId);
         if (botIds.length === 0) {
+          // P0-1 — a tenant with no bot rows used to be silently dropped.
+          // Emit a rate-limited (1/h/tenant/reason) skip event so this is
+          // visible in the activity feed.
+          await emitCronSkipRateLimited(ec, tenantId, 'no_bots');
           msg.ack();
           continue;
         }
         const resolved = await resolveTenantFromBotId(ec, botIds[0], env.BOT_ENCRYPTION_KEY || null);
         if (!resolved) {
+          // P0-1 — token decrypt failed, bot inactive, or row missing.
+          // Used to be a silent ack(); now emit cron.tenant.skipped.
+          await emitCronSkipRateLimited(ec, tenantId, 'bot_unresolved');
           msg.ack();
           continue;
         }

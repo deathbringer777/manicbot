@@ -45,7 +45,12 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # Отклонять legacy POST /webhook (без botId) — только D1 мультиарендный режим
 # REQUIRE_WEBHOOK_BOT_ID=1
 
+# Включить legacy single-bot ctx fallback (P2-3). По умолчанию выключен.
+# Только для миграции/тестов; на production оставляйте unset — иначе env BOT_TOKEN
+# обходит D1 + шифрование. При включении worker логирует [SECURITY] warning.
+# ALLOW_LEGACY_BOT_CTX=1
+
 # ─── LEGACY (одиночный бот) ──────────────────────────────────────────────────
-# Нужны только при использовании POST /webhook без botId
+# Нужны только при использовании POST /webhook без botId И ALLOW_LEGACY_BOT_CTX=1
 # BOT_TOKEN=123456:ABCdef...
 # WEBHOOK_SECRET=your_webhook_secret

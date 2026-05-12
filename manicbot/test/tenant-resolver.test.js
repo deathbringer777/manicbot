@@ -84,6 +84,10 @@ describe('tenant resolver (D1)', () => {
 });
 
 describe('getCtx Meta webhook paths', () => {
+  // P2-3 — these tests assert that /webhook/wa and /webhook/ig fall through
+  // to the legacy-ctx branch (not the Telegram bot-id branch). Now that
+  // legacy ctx is opt-in (default off), the tests need ALLOW_LEGACY_BOT_CTX=1
+  // to exercise the historical behaviour.
   it('does not treat /webhook/ig as Telegram bot id (no resolveTenantFromBotId ig)', async () => {
     const db = createMockD1();
     const kv = makeMockKv();
@@ -93,6 +97,7 @@ describe('getCtx Meta webhook paths', () => {
       BOT_TOKEN: '12345:AAxxx',
       WEBHOOK_SECRET: 'wh',
       ADMIN_KEY: 'k',
+      ALLOW_LEGACY_BOT_CTX: '1',
     };
     const url = new URL('https://x/webhook/ig');
     const req = new Request(url, { method: 'POST' });
@@ -110,6 +115,7 @@ describe('getCtx Meta webhook paths', () => {
       BOT_TOKEN: '999:AA',
       WEBHOOK_SECRET: 'wh',
       ADMIN_KEY: 'k',
+      ALLOW_LEGACY_BOT_CTX: '1',
     };
     const url = new URL('https://x/webhook/wa');
     const req = new Request(url, { method: 'POST' });

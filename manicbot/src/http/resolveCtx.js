@@ -2,6 +2,17 @@ import { resolveTenantFromBotId, buildTenantCtx, buildLegacyCtx, isMigrationDone
 import { envCtx } from './envCtx.js';
 
 /**
+ * P2-3 — Legacy single-bot ctx (env BOT_TOKEN + WEBHOOK_SECRET) is now opt-in.
+ *
+ * Once migration 0048 shipped bot tokens to D1 + per-bot encryption, the
+ * `buildLegacyCtx` branch became dead code in production. The risk: a future
+ * operator setting BOT_TOKEN env (e.g. for a smoke test) silently bypasses D1
+ * and the encryption layer.
+ *
+ * To re-enable, set the Worker var `ALLOW_LEGACY_BOT_CTX=1`. A `[SECURITY]`
+ * startup warning is logged by `validateSecurityConfig` whenever the flag is
+ * set, so operators see it in every deploy.
+ *
  * @param {any} env
  * @param {URL} url
  * @param {Request} request
@@ -33,5 +44,7 @@ export async function getCtx(env, url, request) {
     const resolved = await resolveTenantFromBotId(ec, botId, env.BOT_ENCRYPTION_KEY || null);
     if (resolved) return buildTenantCtx(env, resolved);
   }
-  return buildLegacyCtx(env);
+  // Legacy ctx is now opt-in. Default → 404 (caller handles).
+  if (env.ALLOW_LEGACY_BOT_CTX === '1') return buildLegacyCtx(env);
+  return null;
 }

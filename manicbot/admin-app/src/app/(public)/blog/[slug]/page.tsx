@@ -19,7 +19,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const article = BLOG_ARTICLES.find((a) => a.slug === slug);
-  if (!article) return { title: `Статья не найдена — ${SITE_NAME}` };
+  if (!article) return { title: "Статья не найдена" };
   return buildSeo({
     title: article.titles.ru,
     description: article.excerpts.ru,

@@ -228,14 +228,18 @@ describe('DEMO_CHAT_SRC widget fixes', () => {
     expect(SRC).toMatch(/\/embed\/demo-chat\.js/);
   });
 
-  it('clears stale sessions via SESSION_TTL_MS', () => {
-    expect(SRC).toMatch(/SESSION_TTL_MS/);
-    expect(SRC).toMatch(/savedAt/);
-    expect(SRC).toMatch(/localStorage\.removeItem/);
+  it('does not persist chat session across reloads', () => {
+    // Preview is throwaway by design — every reload must start fresh.
+    expect(SRC).not.toMatch(/SESSION_TTL_MS/);
+    expect(SRC).not.toMatch(/savedAt/);
+    expect(SRC).not.toMatch(/loadPersisted/);
   });
 
-  it('persists savedAt in localStorage', () => {
-    expect(SRC).toMatch(/savedAt.*Date\.now\(\)/);
+  it('does not write chat session to localStorage', () => {
+    // No setItem against the chat STORAGE_KEY — state lives only in memory.
+    expect(SRC).not.toMatch(/localStorage\.setItem\([^)]*STORAGE_KEY/);
+    // Legacy-key cleanup must remain so returning visitors get evicted.
+    expect(SRC).toMatch(/localStorage\.removeItem\(STORAGE_KEY\)/);
   });
 
   it('shows an error bubble when init fails', () => {

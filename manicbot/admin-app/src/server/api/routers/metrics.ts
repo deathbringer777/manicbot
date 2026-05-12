@@ -4,13 +4,13 @@ import { sql, desc, and, eq, gte, asc } from "drizzle-orm";
 import { z } from "zod";
 import { PLAN_PRICES_PLN } from "~/lib/money";
 
-function formatTime(ts: number): string {
-  const diff = Math.floor(Date.now() / 1000 - ts);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return new Date(ts * 1000).toLocaleDateString("ru-RU");
-}
+/**
+ * Activity-feed entry kinds. The client renders gender-neutral labels via
+ * i18n (see `activity.tenantCreated` / `activity.booking*` keys + the
+ * `formatRelativeTime` helper).
+ */
+export type ActivityKind = "tenant_created" | "booking";
+export type BookingStatus = "confirmed" | "pending" | "cancelled" | "rejected" | "no_show" | "done";
 
 const REFERRAL_STACK_KEYS = ["google", "instagram", "telegram", "friends", "other", "unspecified"] as const;
 export type ReferralStackKey = (typeof REFERRAL_STACK_KEYS)[number];
@@ -83,27 +83,29 @@ export const metricsRouter = createTRPCRouter({
         .limit(5),
     ]);
 
+    // Structured activity entries — client formats text via i18n so we don't
+    // ship hardcoded ru/en strings from the server (and avoid gender-bound
+    // verbs like "записался" that read wrong for feminine subjects).
     const activity = [
       ...recentTenants.map((t) => ({
         id: t.id,
         name: t.name,
-        action: "подключил новый салон",
+        kind: "tenant_created" as ActivityKind,
+        status: null as BookingStatus | null,
         icon: "salon" as const,
-        time: formatTime(t.createdAt),
-        _ts: t.createdAt,
+        ts: t.createdAt,
       })),
       ...recentApts.map((a) => ({
         id: a.id,
-        name: a.userName ?? a.userTg ?? "Неизвестный",
-        action: `записался (${a.status})`,
+        name: a.userName ?? a.userTg ?? "—",
+        kind: "booking" as ActivityKind,
+        status: (a.status as BookingStatus) ?? "pending",
         icon: "appointment" as const,
-        time: formatTime(a.createdAt),
-        _ts: a.createdAt,
+        ts: a.createdAt,
       })),
     ]
-      .sort((a, b) => b._ts - a._ts)
-      .slice(0, 8)
-      .map(({ _ts, ...rest }) => rest);
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 8);
 
     return {
       totalUsers: usersCount[0]?.count ?? 0,

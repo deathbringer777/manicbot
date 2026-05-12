@@ -332,8 +332,8 @@ export default function AppointmentsPageClient() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <PageHeader
-            title="Appointments"
-            subtitle={viewMode === "list" ? `${total} total` : undefined}
+            title={t("gmAppts.title", lang)}
+            subtitle={viewMode === "list" ? `${(total ?? 0).toLocaleString(localeFor(lang))} ${t("gmHome.totalSuffix", lang)}` : undefined}
           />
           <div className="flex items-center gap-2 pt-1">
             {viewMode === "list" && (

@@ -7,6 +7,8 @@ import { SkeletonCard } from "~/components/ui/Skeleton";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
+import { useLang } from "~/components/LangContext";
+import { formatRelativeTime, t } from "~/lib/i18n";
 
 type ChannelFilter = "all" | "telegram" | "whatsapp" | "instagram";
 type StatusFilter = "open" | "closed" | "all";
@@ -23,17 +25,10 @@ const STATUS_BADGE: Record<string, string> = {
   closed: "bg-slate-500/15 text-slate-400 border-slate-500/20",
 };
 
-function timeAgo(ts: number | null | undefined) {
-  if (!ts) return "";
-  const diff = Math.floor(Date.now() / 1000) - ts;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
 export function ConversationsPage() {
   const { tenantId, role } = useRole();
+  const { lang } = useLang();
+  const timeAgo = (ts: number | null | undefined) => (ts ? formatRelativeTime(ts, lang) : "");
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [selected, setSelected] = useState<string | null>(null);
@@ -98,7 +93,7 @@ export function ConversationsPage() {
               type="search"
               value={convSearch}
               onChange={(e) => setConvSearch(e.target.value)}
-              placeholder="Search channel user id…"
+              placeholder={t("conv.search.placeholder", lang)}
               className="flex-1 min-w-0 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
             />
           </div>
@@ -107,7 +102,7 @@ export function ConversationsPage() {
             onChange={(e) => setGodTenantFilter(e.target.value)}
             className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500/40"
           >
-            <option value="">All salons</option>
+            <option value="">{t("conv.filter.allSalons", lang)}</option>
             {(tenants.data ?? []).map((t: { id: string; name: string | null }) => (
               <option key={t.id} value={t.id}>
                 {t.name ?? t.id}
@@ -129,7 +124,7 @@ export function ConversationsPage() {
                   : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              {ch === "all" ? "All" : ch === "telegram" ? "TG" : ch === "whatsapp" ? "WA" : "IG"}
+              {ch === "all" ? t("conv.filter.all", lang) : ch === "telegram" ? "TG" : ch === "whatsapp" ? "WA" : "IG"}
             </button>
           ))}
         </div>
@@ -139,13 +134,13 @@ export function ConversationsPage() {
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all capitalize ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                 statusFilter === s
                   ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                   : "text-slate-500 hover:text-slate-300"
               }`}
             >
-              {s}
+              {s === "open" ? t("conv.filter.open", lang) : s === "closed" ? t("conv.filter.closed", lang) : t("conv.filter.all", lang)}
             </button>
           ))}
         </div>

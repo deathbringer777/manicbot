@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { useLang } from "~/components/LangContext";
-import { t, localeFor } from "~/lib/i18n";
+import { t, localeFor, pluralCount } from "~/lib/i18n";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20",
@@ -201,7 +201,7 @@ export default function TenantsPageClient() {
         <div className="flex items-start justify-between gap-4">
           <PageHeader
             title={t("gmTenants.title", lang)}
-            subtitle={isLoading ? t("gmTenants.loading", lang) : `${tenants.length} ${tenants.length === 1 ? t("gmTenants.salonSingular", lang) : t("gmTenants.salonsSuffix", lang)}`}
+            subtitle={isLoading ? t("gmTenants.loading", lang) : pluralCount(tenants.length, "count.salons", lang)}
           />
           <div className="flex items-center gap-2">
             <button

@@ -7,20 +7,23 @@ import {
   Megaphone, Users, Mail, MessageSquare, Workflow, FileText, Plug,
   type LucideIcon,
 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { t, type TranslationKey } from "~/lib/i18n";
+import { tNav } from "~/lib/nav/navLabels";
 
-const SUB_NAV: Array<{ href: string; icon: LucideIcon; label: string }> = [
-  { href: "/marketing",              icon: Megaphone,     label: "Overview" },
-  { href: "/marketing/contacts",     icon: Users,         label: "Contacts" },
-  { href: "/marketing/campaigns",    icon: Mail,          label: "Campaigns" },
-  { href: "/marketing/sms",          icon: MessageSquare, label: "SMS" },
-  { href: "/marketing/automations",  icon: Workflow,      label: "Automations" },
-  { href: "/marketing/templates",    icon: FileText,      label: "Templates" },
-  { href: "/marketing/providers",    icon: Plug,          label: "Providers" },
+const SUB_NAV: Array<{ href: string; icon: LucideIcon; labelKey: TranslationKey }> = [
+  { href: "/marketing",              icon: Megaphone,     labelKey: "marketing.nav.overview" },
+  { href: "/marketing/contacts",     icon: Users,         labelKey: "marketing.nav.contacts" },
+  { href: "/marketing/campaigns",    icon: Mail,          labelKey: "marketing.nav.campaigns" },
+  { href: "/marketing/sms",          icon: MessageSquare, labelKey: "marketing.nav.sms" },
+  { href: "/marketing/automations",  icon: Workflow,      labelKey: "marketing.nav.automations" },
+  { href: "/marketing/templates",    icon: FileText,      labelKey: "marketing.nav.templates" },
+  { href: "/marketing/providers",    icon: Plug,          labelKey: "marketing.nav.providers" },
 ];
 
 export function MarketingShell({
   children,
-  title = "Marketing",
+  title,
   subtitle,
 }: {
   children: React.ReactNode;
@@ -28,11 +31,15 @@ export function MarketingShell({
   subtitle?: string;
 }) {
   const pathname = usePathname();
+  const { lang } = useLang();
+  const resolvedTitle = title ?? tNav("Marketing", lang);
+  const resolvedSubtitle = subtitle ?? `${t("marketing.nav.contacts", lang)} · ${t("marketing.nav.campaigns", lang)} · ${t("marketing.nav.automations", lang)}`;
 
   return (
-    <Shell title={title} subtitle={subtitle ?? "CRM • Campaigns • Automations"}>
+    <Shell title={resolvedTitle} subtitle={resolvedSubtitle}>
       <div className="flex flex-wrap gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-3 mb-5 overflow-x-auto">
-        {SUB_NAV.map(({ href, icon: Icon, label }) => {
+        {SUB_NAV.map(({ href, icon: Icon, labelKey }) => {
+          const label = t(labelKey, lang);
           const active =
             href === "/marketing" ? pathname === "/marketing" : pathname?.startsWith(href);
           return (
@@ -57,9 +64,10 @@ export function MarketingShell({
 }
 
 function ComingSoonBadge() {
+  const { lang } = useLang();
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
-      Coming Soon
+      {t("marketing.comingSoon", lang)}
     </span>
   );
 }

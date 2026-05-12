@@ -5,7 +5,7 @@ import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { Headphones, Wrench, Shield, Plus, Trash2, X, UserCog } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t, type Lang } from "~/lib/i18n";
+import { t, pluralCount, type Lang } from "~/lib/i18n";
 
 type AgentType = "support" | "technical_support";
 
@@ -79,7 +79,7 @@ export default function AgentsPageClient() {
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">{t("gmAgents.titleHeader", lang)}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {totalCount} {t("gmAgents.subtitleSuffix", lang)}
+              {pluralCount(totalCount, "count.agents", lang)}
               {legacyAdmins.length > 0 ? ` · ${legacyAdmins.length} ${t("gmAgents.legacyAdminsSuffix", lang)}` : ""}
             </p>
           </div>

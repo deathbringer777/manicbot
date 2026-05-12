@@ -20,7 +20,7 @@ import {
   Building2,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, pluralCount } from "~/lib/i18n";
 
 type Filter = "all" | "banned";
 type AssignablePlatformRole = "support" | "technical_support";
@@ -236,7 +236,7 @@ export default function UsersPageClient() {
       <div className="space-y-4">
         <PageHeader
           title={t("gmUsers.title", lang)}
-          subtitle={isLoading ? t("gmTenants.loading", lang) : `${total} ${t("gmUsers.usersWordCountSuffix", lang)}`}
+          subtitle={isLoading ? t("gmTenants.loading", lang) : pluralCount(total, "count.users", lang)}
         />
 
         {/* Search */}

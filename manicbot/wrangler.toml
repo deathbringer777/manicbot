@@ -94,12 +94,12 @@ database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 #   2. npx wrangler r2 bucket create manicbot-archive
 #   3. Uncomment the [[r2_buckets]] block below and redeploy.
 #
-# Until then, phaseRetention runs without archive (logs
+# If R2 is not yet enabled, phaseRetention runs without archive (logs
 # `cron.retention.archive_failed` with reason `no_archive_binding` and
 # still runs the DELETE — graceful fallback by design).
-# [[r2_buckets]]
-# binding = "ARCHIVE"
-# bucket_name = "manicbot-archive"
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "manicbot-archive"
 
 # ─── Required secret for signed upload tokens ────────────────────────────────
 #   wrangler secret put UPLOAD_TOKEN_SECRET

@@ -1276,6 +1276,9 @@ const translations = {
   "count.clients.few":            { ru: "клиента",                ua: "клієнти",                en: "clients",                pl: "klienci" },
   "count.clients.many":           { ru: "клиентов",               ua: "клієнтів",               en: "clients",                pl: "klientów" },
 
+  // ── Support tickets ────────────────────────────────────────────────────────
+  "support.search.placeholder":   { ru: "Поиск по имени, ID тикета, салону…", ua: "Пошук за іменем, ID тикета, салоном…", en: "Search name, ticket id, salon…", pl: "Szukaj po imieniu, ID, salonie…" },
+
   // ── Marketing provider statuses ────────────────────────────────────────────
   "marketing.provider.enabled":   { ru: "Активен",                ua: "Активний",               en: "Enabled",                pl: "Aktywny" },
   "marketing.provider.dormant":   { ru: "Не активен",             ua: "Не активний",            en: "Dormant",                pl: "Nieaktywny" },

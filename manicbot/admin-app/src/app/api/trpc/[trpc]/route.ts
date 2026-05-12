@@ -6,6 +6,10 @@ export const runtime = "edge";
 import { appRouter } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
 import { log } from "~/server/utils/logger";
+import {
+  PUBLIC_CACHE_CONTROL,
+  shouldCacheTrpcPath,
+} from "~/server/api/publicSalon/publicSalonSearchLogic";
 
 /**
  * This wraps the `createTRPCContext` helper and provides the required context for the tRPC API when
@@ -32,6 +36,22 @@ const handler = (req: NextRequest) =>
         path: path ?? "<no-path>",
         code: error.code,
       });
+    },
+    // Edge cache headers for public salon directory endpoints (relax.md
+    // §4 P2-9). Only applied when *every* procedure in the batch is on
+    // the public allow-list AND there were no errors — keeps user-
+    // session-bearing queries far away from edge caches.
+    responseMeta: ({ ctx, paths, errors, type }) => {
+      void ctx;
+      if (type !== "query") return {};
+      if (errors.length > 0) return {};
+      const pathParam = paths?.join(",") ?? "";
+      if (!shouldCacheTrpcPath(pathParam)) return {};
+      return {
+        headers: new Headers({
+          "Cache-Control": PUBLIC_CACHE_CONTROL,
+        }),
+      };
     },
   });
 

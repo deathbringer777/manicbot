@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { SearchAutocomplete } from "~/components/public/SearchAutocomplete";
 import { t } from "~/lib/i18n";
 import { useLang } from "~/components/LangContext";
+import { POPULAR_CITY_COORDS } from "~/lib/popularCities";
 
 const SERVICE_CHIPS = [
   { label: "Маникюр", value: "маникюр" },
@@ -154,15 +155,26 @@ function SearchPageContent() {
   const searchParams = useSearchParams();
   const urlQ = searchParams.get("q") ?? "";
   const urlCity = searchParams.get("city") ?? "";
+  const urlLat = searchParams.get("lat");
+  const urlLng = searchParams.get("lng");
+  const initialLat = (() => {
+    const n = urlLat != null ? parseFloat(urlLat) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  })();
+  const initialLng = (() => {
+    const n = urlLng != null ? parseFloat(urlLng) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  })();
 
   const [query, setQuery] = useState(urlQ);
   const [city, setCity] = useState(urlCity);
   const [activeChips, setActiveChips] = useState<string[]>([]);
-  const [lat, setLat] = useState<number | undefined>();
-  const [lng, setLng] = useState<number | undefined>();
+  const [lat, setLat] = useState<number | undefined>(initialLat);
+  const [lng, setLng] = useState<number | undefined>(initialLng);
   const [locating, setLocating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
+  const autoCityPickedRef = useRef(false);
 
   // Sync URL params on mount / change so popular-city links pre-fill the
   // city filter and so deep-links from outside remain bookmarkable.
@@ -176,6 +188,37 @@ function SearchPageContent() {
   const fullQuery = [query, ...activeChips].filter(Boolean).join(" ");
 
   const citiesQuery = api.publicSalon.getCities.useQuery();
+
+  // When arriving with ?lat=&lng= (e.g. from the landing's geolocation
+  // button), auto-pick the nearest pinned city so the dropdown shows
+  // something selected. Only runs once — if the user clears the city, we
+  // don't re-pick it.
+  useEffect(() => {
+    if (autoCityPickedRef.current) return;
+    if (lat == null || lng == null) return;
+    if (city) return;
+    const cities = citiesQuery.data;
+    if (!cities || cities.length === 0) return;
+    let best: { name: string; d: number } | null = null;
+    for (const name of cities) {
+      const coords = POPULAR_CITY_COORDS[name];
+      if (!coords) continue;
+      const R = 6371;
+      const dLat = ((coords.lat - lat) * Math.PI) / 180;
+      const dLng = ((coords.lng - lng) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((lat * Math.PI) / 180) *
+          Math.cos((coords.lat * Math.PI) / 180) *
+          Math.sin(dLng / 2) ** 2;
+      const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      if (best == null || d < best.d) best = { name, d };
+    }
+    if (best) {
+      setCity(best.name);
+      autoCityPickedRef.current = true;
+    }
+  }, [lat, lng, city, citiesQuery.data]);
 
   const searchQuery = api.publicSalon.search.useQuery(
     {

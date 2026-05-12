@@ -71,12 +71,14 @@ function AuthShellInner({
     },
   ];
 
+  const landingHref = `/?theme=${theme}&lang=${lang}`;
+
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
       return;
     }
-    window.location.href = "https://manicbot.com";
+    window.location.href = `https://manicbot.com${landingHref}`;
   };
 
   return (
@@ -106,7 +108,7 @@ function AuthShellInner({
           <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-white/10" />
 
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2.5">
+          <a href={landingHref} className="flex items-center gap-2.5">
             <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full shadow-sm shadow-violet-500/20 dark:shadow-violet-900/30">
               <Image
                 src="/manicbot-mark-ui.png"

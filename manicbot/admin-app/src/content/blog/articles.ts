@@ -38,70 +38,210 @@ export const BLOG_ARTICLES: BlogArticle[] = [
       pl: "Bot Telegram, widget online, przypomnienia — analizujemy, co naprawdę oszczędza czas technika.",
     },
     bodies: {
-      ru: `Автоматизация записи — это не роскошь, а необходимость для салона, который хочет расти.
+      ru: `Автоматизация записи в nail-салон — это не модное слово из презентаций, а конкретный набор инструментов, которые экономят часы рабочего времени каждую неделю. Средний мастер тратит 30–40% дня на ответы в Direct, перенос записей, поиск свободных слотов и подтверждения по телефону. Всё это можно делегировать боту — и получить взамен время на самих клиентов, на учёбу, на отдых.
 
-1. Telegram-бот для записи
-Клиент выбирает мастера, услугу и время прямо в мессенджере. Без звонков и ожидания. ManicBot позволяет настроить это за 15 минут.
+## Почему ручная запись больше не работает
 
-2. Автоматические напоминания
-За 24 и 2 часа до визита клиент получает сообщение. Это снижает no-show на 40-60%.
+Раньше салон обходился блокнотом и одним менеджером на ресепшене. Сегодня клиент ожидает мгновенного ответа — желательно в мессенджере, в 11 вечера, без диалогов «можете записать меня на пятницу? — на какое время? — нет, не подходит, давайте на субботу». Каждая такая переписка съедает 10–15 минут чистого внимания мастера. Умножьте на 30 запросов в день — и вот вы уже работаете на свой Direct, а не на клиентов.
 
-3. Онлайн-расписание
-Мастер видит свои записи в реальном времени. Клиент видит только свободные слоты — никаких конфликтов.
+Хорошая новость: 80% этих диалогов алгоритмизируются. Клиент почти всегда хочет одно из четырёх — узнать цену, записаться, перенести запись или отменить. Бот закрывает все четыре сценария за секунды.
 
-4. Повторная запись
-После визита бот предлагает записаться снова через 2-3 недели. Удержание клиентов растёт.
+## 1. Telegram-бот для записи — основа всего
 
-5. Синхронизация с Google Calendar
-Все записи автоматически попадают в личный календарь мастера. Двойные бронирования исключены.`,
-      ua: `Автоматизація запису — це не розкіш, а необхідність для салону, який хоче рости.
+Telegram — мессенджер №1 в Польше, Украине и СНГ среди людей 25–45 лет. Это ваша целевая аудитория. Клиент открывает бота, выбирает мастера, услугу и удобное время из списка свободных слотов. Запись попадает в вашу панель управления и в Google Calendar мастера одновременно.
 
-1. Telegram-бот для запису
-Клієнт обирає майстра, послугу та час прямо в месенджері. Без дзвінків та очікування. ManicBot дозволяє налаштувати це за 15 хвилин.
+В ManicBot настройка занимает 15 минут: вы добавляете услуги (название, длительность, цена), указываете рабочие часы и приглашаете первого клиента. Не нужны разработчики, не нужны интеграции — всё через визуальную панель.
 
-2. Автоматичні нагадування
-За 24 та 2 години до візиту клієнт отримує повідомлення. Це знижує no-show на 40-60%.
+Дополнительный бонус: Telegram-бот никогда не «болеет», не уходит в отпуск и не пропускает сообщения. Он работает 24/7, и каждый клиент получает одинаковое качество обслуживания.
 
-3. Онлайн-розклад
-Майстер бачить свої записи в реальному часі. Клієнт бачить лише вільні слоти — жодних конфліктів.
+## 2. Автоматические напоминания снижают no-show на 40–60%
 
-4. Повторний запис
-Після візиту бот пропонує записатися знову через 2-3 тижні. Утримання клієнтів зростає.
+No-show (когда клиент записался, но не пришёл) — самая дорогая проблема бьюти-индустрии. В среднем 15–30% записей теряются именно так. На полной загрузке это значит, что вы фактически работаете 4 дня в неделю, получая зарплату за 3.
 
-5. Синхронізація з Google Calendar
-Усі записи автоматично потрапляють до особистого календаря майстра. Подвійні бронювання виключені.`,
-      en: `Automating appointments isn't a luxury — it's a necessity for any salon that wants to grow.
+Решение: двухступенчатая система напоминаний. ManicBot отправляет первое напоминание за 24 часа до визита («Завтра в 14:00 у вас маникюр у Анны, адрес: ул. Хмельная 12») и второе за 2 часа («Через 2 часа ждём вас на маникюр»). Открываемость Telegram-сообщений — 85% и выше. Сравните с SMS, где открывают только 20%.
 
-1. Telegram bot for booking
-Clients choose a technician, service, and time right in the messenger. No calls or waiting. ManicBot lets you set this up in 15 minutes.
+Если клиент не подтвердил приход за 6 часов до визита, можно настроить автоматическое сообщение администратору. Это даёт время предложить слот другому клиенту из листа ожидания.
 
-2. Automatic reminders
-24 and 2 hours before the visit, the client gets a message. This reduces no-shows by 40-60%.
+## 3. Онлайн-расписание без двойных бронирований
 
-3. Online schedule
-The technician sees their bookings in real time. Clients only see available slots — no conflicts.
+Главный кошмар салона — когда два мастера записали клиента на одно время, или клиент пришёл, а его «забыли» в журнале. Бумажный журнал не масштабируется: как только в салоне больше 2 мастеров, риск конфликтов растёт экспоненциально.
 
-4. Re-booking
-After a visit, the bot suggests booking again in 2-3 weeks. Client retention grows.
+ManicBot показывает мастеру его расписание в реальном времени, а клиенту — только свободные слоты с учётом длительности услуги, перерывов между записями и личных дел мастера из Google Calendar. Если мастер сам блокирует время через панель, эти слоты сразу исчезают из бота.
 
-5. Google Calendar sync
-All appointments automatically land in the technician's personal calendar. Double bookings eliminated.`,
-      pl: `Automatyzacja rezerwacji to nie luksus — to konieczność dla salonu, który chce rosnąć.
+Каждая запись имеет историю изменений: кто перенёс, кто отменил, во сколько. Это критично, когда возникают споры с клиентом.
 
-1. Bot Telegram do rezerwacji
-Klient wybiera technika, usługę i czas bezpośrednio w komunikatorze. Bez dzwonienia i czekania. ManicBot pozwala skonfigurować to w 15 minut.
+## 4. Повторная запись и удержание
 
-2. Automatyczne przypomnienia
-24 i 2 godziny przed wizytą klient otrzymuje wiadomość. Zmniejsza to nieobecności o 40-60%.
+Главный источник прибыли любого салона — не новые клиенты, а повторные. Стоимость привлечения нового клиента в 5–7 раз выше, чем удержание существующего. И всё-таки 70% салонов не имеют системы, которая возвращает клиента через 2–3 недели.
 
-3. Harmonogram online
-Technik widzi swoje rezerwacje w czasie rzeczywistym. Klient widzi tylko wolne terminy — żadnych konfliktów.
+ManicBot решает это автоматически: через 18 дней после визита клиент получает сообщение «Анна, прошло почти 3 недели — обновим маникюр? Вот свободные слоты на эту неделю». Один тап — и запись готова. Конверсия таких сообщений — 25–35%, что в разы выше любой рекламы.
 
-4. Ponowna rezerwacja
-Po wizycie bot proponuje ponowną rezerwację za 2-3 tygodnie. Retencja klientów rośnie.
+Кроме того, бот запоминает предпочтения: любимого мастера, любимый тип покрытия, среднюю длительность визита. На повторе клиент не отвечает «как обычно?» — он просто выбирает дату.
 
-5. Synchronizacja z Google Calendar
-Wszystkie wizyty automatycznie trafiają do osobistego kalendarza technika. Podwójne rezerwacje wykluczone.`,
+## 5. Синхронизация с Google Calendar
+
+Это технический пункт, но он закрывает 80% жалоб мастеров на любую CRM. Мастер живёт в своём личном Google Calendar: туда попадают встречи с друзьями, поездки, тренировки. Если рабочий календарь отдельно — рано или поздно вы запишетесь на маникюр одновременно с приёмом у врача.
+
+ManicBot синхронизирует записи в обе стороны: новые брони появляются в Google Calendar, занятые слоты в Google автоматически блокируются в боте. Никаких ручных копирований и никаких накладок.
+
+## Что в итоге
+
+Автоматизация — это не про замену человека. Это про то, чтобы человек делал работу, ради которой пришёл в профессию (красить ногти, общаться с клиентами, расти как мастер), а не работу администратора. Те 5 инструментов, которые мы разобрали, окупаются за первую неделю — и продолжают экономить часы каждый месяц.
+
+Если вы только начинаете автоматизировать процессы — начните с Telegram-бота и напоминаний. Это два самых высокоокупаемых шага. Календарь и повторная запись подключите позже, когда поймёте свой поток.`,
+      ua: `Автоматизація запису в nail-салон — це не модне слово з презентацій, а конкретний набір інструментів, які економлять години робочого часу щотижня. Середній майстер витрачає 30–40% дня на відповіді в Direct, перенесення записів, пошук вільних слотів і підтвердження телефоном. Все це можна делегувати боту — і отримати натомість час на самих клієнтів, на навчання, на відпочинок.
+
+## Чому ручний запис більше не працює
+
+Раніше салон обходився блокнотом і одним менеджером на ресепшені. Сьогодні клієнт очікує миттєвої відповіді — бажано в месенджері, об 11 вечора, без діалогів «можете записати мене на п'ятницю? — на який час? — ні, не підходить, давайте на суботу». Кожне таке листування з'їдає 10–15 хвилин чистої уваги майстра.
+
+Хороша новина: 80% цих діалогів алгоритмізуються. Клієнт майже завжди хоче одного з чотирьох — дізнатися ціну, записатися, перенести запис або скасувати. Бот закриває всі чотири сценарії за секунди.
+
+## 1. Telegram-бот для запису — основа всього
+
+Telegram — месенджер №1 у Польщі, Україні та СНД серед людей 25–45 років. Це ваша цільова аудиторія. Клієнт відкриває бота, обирає майстра, послугу та зручний час зі списку вільних слотів. Запис потрапляє у вашу панель керування і в Google Calendar майстра одночасно.
+
+В ManicBot налаштування займає 15 хвилин: ви додаєте послуги (назва, тривалість, ціна), вказуєте робочі години та запрошуєте першого клієнта. Не потрібні розробники, не потрібні інтеграції — все через візуальну панель.
+
+Додатковий бонус: Telegram-бот ніколи не «хворіє», не йде у відпустку і не пропускає повідомлень. Він працює 24/7.
+
+## 2. Автоматичні нагадування знижують no-show на 40–60%
+
+No-show (коли клієнт записався, але не прийшов) — найдорожча проблема б'юті-індустрії. В середньому 15–30% записів втрачаються саме так. На повному завантаженні це означає, що ви фактично працюєте 4 дні на тиждень, отримуючи зарплату за 3.
+
+Рішення: двоступенева система нагадувань. ManicBot надсилає перше нагадування за 24 години до візиту і друге за 2 години. Відкриваність Telegram-повідомлень — 85% і вище. Порівняйте з SMS, де відкривають лише 20%.
+
+Якщо клієнт не підтвердив прихід за 6 годин до візиту, можна налаштувати автоматичне повідомлення адміністратору. Це дає час запропонувати слот іншому клієнту зі списку очікування.
+
+## 3. Онлайн-розклад без подвійних бронювань
+
+Головний кошмар салону — коли два майстри записали клієнта на один час. Паперовий журнал не масштабується: щойно в салоні більше 2 майстрів, ризик конфліктів зростає експоненційно.
+
+ManicBot показує майстру його розклад у реальному часі, а клієнту — лише вільні слоти з урахуванням тривалості послуги, перерв між записами і особистих справ майстра з Google Calendar. Якщо майстер сам блокує час через панель, ці слоти одразу зникають з бота.
+
+Кожен запис має історію змін: хто переніс, хто скасував, о котрій годині. Це критично, коли виникають суперечки з клієнтом.
+
+## 4. Повторний запис і утримання
+
+Головне джерело прибутку будь-якого салону — не нові клієнти, а повторні. Вартість залучення нового клієнта в 5–7 разів вища, ніж утримання існуючого. І все ж 70% салонів не мають системи, яка повертає клієнта через 2–3 тижні.
+
+ManicBot вирішує це автоматично: через 18 днів після візиту клієнт отримує повідомлення «Анно, минуло майже 3 тижні — оновимо манікюр? Ось вільні слоти на цей тиждень». Один тап — і запис готовий. Конверсія таких повідомлень — 25–35%, що в рази вище за будь-яку рекламу.
+
+Крім того, бот запам'ятовує вподобання: улюбленого майстра, улюблений тип покриття, середню тривалість візиту.
+
+## 5. Синхронізація з Google Calendar
+
+Це технічний пункт, але він закриває 80% скарг майстрів на будь-яку CRM. Майстер живе у своєму особистому Google Calendar: туди потрапляють зустрічі з друзями, поїздки, тренування. Якщо робочий календар окремо — рано чи пізно ви запишетеся на манікюр одночасно з прийомом у лікаря.
+
+ManicBot синхронізує записи в обидва боки: нові броні з'являються в Google Calendar, зайняті слоти в Google автоматично блокуються в боті. Жодних ручних копіювань і жодних накладок.
+
+## Що в підсумку
+
+Автоматизація — це не про заміну людини. Це про те, щоб людина робила роботу, заради якої прийшла в професію (фарбувати нігті, спілкуватися з клієнтами, рости як майстер), а не роботу адміністратора. Ті 5 інструментів, які ми розібрали, окуповуються за перший тиждень — і продовжують економити години щомісяця.
+
+Якщо ви тільки починаєте автоматизувати процеси — почніть з Telegram-бота і нагадувань. Це два найбільш високоокупних кроки.`,
+      en: `Automating bookings for a nail salon isn't a buzzword from a slide deck — it's a concrete set of tools that save hours of work every week. An average technician spends 30–40% of their day answering Direct messages, rescheduling, hunting for free slots, and confirming visits over the phone. All of this can be delegated to a bot — giving you back time for actual clients, training, or rest.
+
+## Why manual booking no longer works
+
+Salons used to get by with a paper journal and one receptionist. Today, clients expect an instant response — preferably in a messenger, at 11 PM, without three-message chains of "can you book me for Friday? — what time? — no, that doesn't work, how about Saturday?" Every such conversation eats 10–15 minutes of pure focus. Multiply that by 30 requests a day, and you're working for your Direct inbox, not for your clients.
+
+Good news: 80% of these dialogues can be algorithmized. The client almost always wants one of four things — to check a price, to book, to reschedule, or to cancel. A bot handles all four scenarios in seconds.
+
+## 1. Telegram bot for booking — the foundation
+
+Telegram is the #1 messenger in Poland, Ukraine, and the CIS for people aged 25–45. That's your target audience. The client opens the bot, picks a technician, a service, and an available time slot. The booking lands in your dashboard and in the technician's Google Calendar simultaneously.
+
+Setup in ManicBot takes 15 minutes: add services (name, duration, price), define working hours, and invite the first client. No developers, no integrations — everything through a visual panel.
+
+Bonus: a Telegram bot never gets sick, never goes on vacation, never misses a message. It works 24/7, and every client gets the same quality of service.
+
+## 2. Automatic reminders cut no-shows by 40–60%
+
+No-shows (when a client books but doesn't come) are the most expensive problem in the beauty industry. On average, 15–30% of bookings are lost this way. At full capacity, that means you're effectively working 4 days a week and getting paid for 3.
+
+The solution: a two-step reminder system. ManicBot sends the first reminder 24 hours before the visit ("Tomorrow at 2 PM you have a manicure with Anna, address: Hmelna 12") and the second 2 hours before. Telegram open rates run 85% and above. Compare that to SMS, where only 20% are opened.
+
+If the client doesn't confirm 6 hours before the visit, you can set up an automatic alert to the administrator. That gives you time to offer the slot to someone on the waitlist.
+
+## 3. Online schedule without double-bookings
+
+The nightmare scenario: two technicians booked the same client at the same time, or the client showed up and was "forgotten" in the journal. A paper journal doesn't scale: once you have more than 2 technicians, the risk of conflicts grows exponentially.
+
+ManicBot shows technicians their schedule in real time, and clients only see available slots — accounting for service duration, buffers between bookings, and the technician's personal events from Google Calendar. If the technician blocks time through the panel, those slots disappear from the bot immediately.
+
+Each booking carries a change history: who rescheduled, who cancelled, when. Critical when disputes arise.
+
+## 4. Re-booking and retention
+
+The main source of profit for any salon isn't new clients — it's returning ones. Acquisition cost is 5–7× higher than retention. And yet 70% of salons don't have a system that brings the client back in 2–3 weeks.
+
+ManicBot solves this automatically: 18 days after a visit, the client gets a message "Anna, it's been almost 3 weeks — refresh your manicure? Here are slots this week." One tap — done. Conversion on these messages runs 25–35%, multiples higher than any ad.
+
+The bot also remembers preferences: favourite technician, preferred coating, average visit duration. On the second visit, the client doesn't have to say "the usual?" — they just pick a date.
+
+## 5. Google Calendar sync
+
+This is the technical piece, but it closes 80% of technician complaints about any CRM. A technician lives in their personal Google Calendar: that's where friends, trips, and workouts land. If the work calendar is separate, sooner or later you'll book a manicure at the same time as a doctor's appointment.
+
+ManicBot syncs both ways: new bookings appear in Google Calendar, busy slots in Google are blocked in the bot automatically. No manual copying, no overlaps.
+
+## The bottom line
+
+Automation isn't about replacing people. It's about letting people do the work they came into the profession for (painting nails, talking to clients, growing as professionals) instead of admin work. The 5 tools we covered pay for themselves in the first week — and keep saving hours every month.
+
+If you're just starting to automate — begin with the Telegram bot and reminders. They're the two highest-ROI steps. Calendar sync and re-booking can come later, once you understand your flow.`,
+      pl: `Automatyzacja rezerwacji w salonie paznokci to nie modne słowo z prezentacji — to konkretny zestaw narzędzi, które oszczędzają godziny pracy każdego tygodnia. Przeciętny technik spędza 30–40% dnia na odpowiadaniu w Direct, przenoszeniu wizyt, szukaniu wolnych terminów i potwierdzaniu przez telefon. Wszystko to można oddelegować botowi — i odzyskać czas na klientów, naukę i odpoczynek.
+
+## Dlaczego ręczna rezerwacja już nie działa
+
+Kiedyś salon radził sobie z notatnikiem i jedną recepcjonistką. Dziś klient oczekuje natychmiastowej odpowiedzi — najlepiej w komunikatorze, o 23, bez trzymiadowych dialogów „czy mogę zarezerwować na piątek? — o której? — nie, nie pasuje, niech będzie sobota". Każda taka rozmowa zjada 10–15 minut skupienia. Pomnóż przez 30 zapytań dziennie — i już pracujesz dla swojej skrzynki Direct, a nie dla klientów.
+
+Dobra wiadomość: 80% tych rozmów można zalgorytmizować. Klient niemal zawsze chce jednego z czterech — sprawdzić cenę, zarezerwować, przenieść lub anulować. Bot zamyka wszystkie cztery scenariusze w kilka sekund.
+
+## 1. Bot Telegram do rezerwacji — fundament
+
+Telegram to komunikator nr 1 w Polsce, na Ukrainie i w WNP w grupie 25–45 lat. To Twoja grupa docelowa. Klient otwiera bota, wybiera technika, usługę i wolny termin z listy. Rezerwacja trafia do panelu zarządzania i do Google Calendar technika jednocześnie.
+
+W ManicBot konfiguracja zajmuje 15 minut: dodajesz usługi (nazwa, czas, cena), ustalasz godziny pracy i zapraszasz pierwszego klienta. Bez programistów, bez integracji — wszystko przez panel wizualny.
+
+Bonus: bot Telegram nigdy nie choruje, nie idzie na urlop, nie pomija wiadomości. Pracuje 24/7, każdy klient dostaje tę samą jakość obsługi.
+
+## 2. Automatyczne przypomnienia obniżają nieobecności o 40–60%
+
+No-show (klient zarezerwował, ale nie przyszedł) to najdroższy problem branży beauty. Średnio 15–30% wizyt jest tracona w ten sposób. Przy pełnym obłożeniu oznacza to, że pracujesz 4 dni w tygodniu, a płacą Ci za 3.
+
+Rozwiązanie: dwustopniowy system przypomnień. ManicBot wysyła pierwsze przypomnienie 24 godziny przed wizytą i drugie 2 godziny przed. Otwieralność wiadomości Telegram to 85% i więcej. Porównaj z SMS-ami, gdzie otwieralność wynosi 20%.
+
+Jeśli klient nie potwierdził 6 godzin przed wizytą, można skonfigurować automatyczne powiadomienie dla administratora. To daje czas na zaoferowanie slotu komuś z listy oczekujących.
+
+## 3. Harmonogram online bez podwójnych rezerwacji
+
+Najgorszy scenariusz: dwóch techników zarezerwowało tego samego klienta na tę samą godzinę, albo klient przyszedł i „został zapomniany" w dzienniku. Papierowy dziennik nie skaluje się: gdy w salonie jest więcej niż 2 techników, ryzyko konfliktów rośnie wykładniczo.
+
+ManicBot pokazuje technikowi grafik w czasie rzeczywistym, a klientowi — tylko wolne sloty z uwzględnieniem czasu trwania usługi, przerw między rezerwacjami i osobistych spraw technika z Google Calendar. Jeśli technik sam zablokuje czas, te sloty natychmiast znikają z bota.
+
+Każda rezerwacja ma historię zmian: kto przeniósł, kto anulował, o której. Kluczowe, gdy pojawiają się spory.
+
+## 4. Ponowna rezerwacja i retencja
+
+Główne źródło zysku salonu to nie nowi klienci, lecz powracający. Koszt pozyskania nowego klienta jest 5–7 razy wyższy niż retencja istniejącego. A jednak 70% salonów nie ma systemu, który zwraca klienta za 2–3 tygodnie.
+
+ManicBot rozwiązuje to automatycznie: 18 dni po wizycie klient dostaje wiadomość „Anna, minęły prawie 3 tygodnie — odnowimy manicure? Oto wolne terminy w tym tygodniu". Jeden tap — rezerwacja gotowa. Konwersja takich wiadomości to 25–35%, wielokrotnie więcej niż jakakolwiek reklama.
+
+Bot zapamiętuje też preferencje: ulubionego technika, ulubione pokrycie, średni czas wizyty.
+
+## 5. Synchronizacja z Google Calendar
+
+To element techniczny, ale zamyka 80% skarg techników na każdy CRM. Technik żyje w swoim osobistym Google Calendar: tam trafiają spotkania ze znajomymi, wycieczki, treningi. Jeśli kalendarz pracy jest osobno, prędzej czy później zarezerwujesz manicure w tej samej chwili, co wizytę u lekarza.
+
+ManicBot synchronizuje w obu kierunkach: nowe rezerwacje pojawiają się w Google Calendar, zajęte terminy z Google są automatycznie blokowane w bocie. Żadnego ręcznego kopiowania, żadnych nakładek.
+
+## Podsumowanie
+
+Automatyzacja nie polega na zastępowaniu ludzi. Polega na tym, by człowiek robił pracę, dla której wszedł do zawodu (malowanie paznokci, rozmowa z klientami, rozwój), a nie pracę administracyjną. Te 5 narzędzi zwraca się w pierwszym tygodniu — i nadal oszczędza godziny każdego miesiąca.
+
+Jeśli dopiero zaczynasz automatyzację — zacznij od bota Telegram i przypomnień. To dwa kroki o najwyższym zwrocie. Synchronizację kalendarza i ponowną rezerwację możesz dodać później, gdy zrozumiesz swój przepływ.`,
     },
   },
   {
@@ -121,21 +261,72 @@ Wszystkie wizyty automatycznie trafiają do osobistego kalendarza technika. Podw
       pl: "Nieobecności oznaczają utracony czas i pieniądze. Wyjaśniamy, jakie narzędzia pomagają rozwiązać ten problem.",
     },
     bodies: {
-      ru: `No-show — когда клиент записался, но не пришёл — одна из главных проблем бьюти-индустрии. В среднем это 15-30% всех записей.
+      ru: `No-show — когда клиент записался, но не пришёл — стоит мастерам не просто времени, а денег и нервов. В среднем салон теряет 15–30% записей именно так. На полной загрузке это эквивалент одного потерянного рабочего дня в неделю. Если вы работаете 5 дней, вам платят за 4 — а аренда, налоги и материалы платятся за все 5.
 
-Что помогает:
+Хорошая новость: no-show — не «карма» и не неизбежность. Это статистическая проблема, которую можно уменьшить до 5–8% правильной комбинацией коммуникации, удобства и аналитики.
 
-Напоминания в мессенджере
-Обычные SMS открывают 20% людей. Telegram-сообщения — 85%+. ManicBot отправляет напоминания автоматически за день и за 2 часа.
+## Почему клиенты не приходят
 
-Простая отмена
-Если клиенту неудобно — пусть легко отменит. Это лучше, чем пустое окно в расписании. В ManicBot отмена — одна кнопка.
+Прежде чем лечить — давайте поймём диагноз. Опросы показывают четыре основные причины:
 
-Учёт no-show
-ManicBot отмечает клиентов, которые не приходят. Мастер видит статистику и может принять решение: предоплата, подтверждение за день, или отказ в записи.
+1. **Забыли.** Записались за две недели, в потоке дел вылетело из головы.
+2. **Что-то срочное.** Заболел ребёнок, задержка на работе, поломалась машина.
+3. **Передумали.** Увидели бьюти-тренд в TikTok, передумали идти на гель.
+4. **Неудобно отменить.** Записывались через звонок, отменять надо тоже звонком, а это неловко.
 
-Повторные записи
-Если клиент активно записывается через бота — он реже пропускает. Привычка пользоваться сервисом = ответственность.`,
+Три из четырёх причин решаются продуктом, а не наказанием.
+
+## 1. Напоминания в мессенджере
+
+Самое простое и одновременно самое эффективное. ManicBot шлёт два сообщения:
+- **За 24 часа:** «Завтра в 15:00 у вас маникюр у Анны. Адрес: ул. Хмельная 12. Подтвердите кнопкой ниже.»
+- **За 2 часа:** «Через 2 часа ждём вас. Если что-то изменилось — нажмите Отменить.»
+
+Открываемость Telegram — 85% и выше, SMS — 20%. WhatsApp — 90%+. Эти три канала покрывают почти всех клиентов в Польше и СНГ.
+
+В письме обязательно укажите адрес, имя мастера и кнопку отмены. Чем меньше клиенту нужно думать — тем меньше «забыли» и «неловко отменить».
+
+## 2. Лёгкая отмена и перенос
+
+Это контринтуитивно, но: чем легче отменить, тем меньше no-show. Если клиент знает, что отмена — это один клик в боте без объяснений и без «давайте я перезвоню», он сделает это сразу как только понял, что не успевает. А значит, у вас есть час-два чтобы заполнить слот из листа ожидания.
+
+В ManicBot отмена — одна кнопка в напоминании. Перенос — тоже один тап: бот показывает свободные слоты и сразу подтверждает.
+
+## 3. Лист ожидания
+
+Клиенты, которым «прямо сейчас не подошло время», часто готовы прийти, если кто-то отменит. ManicBot ведёт лист ожидания автоматически: когда слот освобождается, бот рассылает уведомление по очереди — первый подтвердивший получает место. Часто это происходит в течение 10 минут.
+
+Это превращает 70% отмен в новые записи. Финансовая прибыль от листа ожидания — обычно сопоставима с прибылью от рекламы.
+
+## 4. Учёт no-show и репутация клиента
+
+ManicBot ведёт счётчик пропусков по каждому клиенту. Если клиент пропустил 2 визита из последних 5, мастер видит это при следующей записи. Дальше — выбор владельца:
+
+- Мягкая стратегия: подтверждение визита за день обязательно, иначе слот снимается.
+- Средняя: предоплата 50% за визит.
+- Жёсткая: блокировка повторной записи без предоплаты.
+
+Эта градация важна — нельзя одинаково относиться к клиенту, который пропустил 1 раз за год, и к клиенту, который пропустил 4 из 6.
+
+## 5. Предоплата для дорогих услуг
+
+Для услуг от 150 zł и выше имеет смысл вводить частичную предоплату — 50–100 zł. Это убирает 90% no-show без отпугивания клиента: те, кто не серьёзно, не платят, а те, кто платит — почти всегда приходят.
+
+ManicBot интегрирован со Stripe — клиент платит прямо в боте, ссылка действует 30 минут. Если оплата не прошла — слот автоматически освобождается.
+
+## 6. Привычка пользоваться сервисом
+
+Это длинный, но самый сильный рычаг. Клиенты, которые активно записываются через бота (а не через звонок), пропускают визиты на 60% реже. Почему? Потому что бот — это «контракт»: я нажал кнопку, я подтвердил, я знаю, что система меня помнит.
+
+Чем глубже клиент в вашем продукте — тем меньше no-show. Поэтому стоит мотивировать клиентов записываться именно через бот: давать ссылку в Instagram, в Direct, в визитке.
+
+## Как измерить эффект
+
+Заведите простую метрику: процент no-show за неделю. Записи, на которые клиент не пришёл и не отменил за 2+ часа. Считайте каждую неделю. Если в неделю до автоматизации было 15%, через месяц после внедрения должно стать 5–8%. Если осталось 15% — что-то в настройке напоминаний не работает.
+
+## В итоге
+
+No-show — не приговор. Это набор небольших улучшений, каждое из которых снимает 2–5% потерь. Внедрите все шесть — и получите салон, где практически нет пустых слотов.`,
       ua: `No-show — коли клієнт записався, але не прийшов — одна з головних проблем б'юті-індустрії. В середньому це 15-30% усіх записів.
 
 Що допомагає:
@@ -200,22 +391,63 @@ Gdy klienci aktywnie rezerwują przez bota, rzadziej opuszczają wizyty. Nawyk k
       pl: "Minimalizm, asystenci AI, rezerwacja online — jak technologia zmienia branżę paznokci.",
     },
     bodies: {
-      ru: `Nail-индустрия в 2026 году продолжает трансформироваться. Вот ключевые тренды:
+      ru: `Каждый год индустрия маникюра меняется чуть быстрее, чем кажется со стороны. 2026 год не стал исключением — на фоне общей цифровизации малого бизнеса появилось несколько устойчивых трендов, которые отделят растущие салоны от стагнирующих к 2027.
 
-Автоматизация коммуникации
-Клиенты ожидают мгновенного ответа. AI-ассистенты в Telegram и Instagram отвечают на вопросы о ценах, свободных слотах и услугах 24/7.
+В этой статье — семь главных трендов, которые мы видим в данных ManicBot и в разговорах с владельцами салонов в Польше, Украине и СНГ.
 
-Мультиканальность
-Один салон — несколько каналов: Telegram, WhatsApp, Instagram. ManicBot объединяет все обращения в единый inbox.
+## 1. Автоматизация коммуникации стала минимумом, а не плюсом
 
-Персонализация
-Бот запоминает предпочтения клиента: любимого мастера, тип покрытия, частоту визитов. Следующая запись — в два клика.
+Ещё два года назад «бот для записи» был конкурентным преимуществом. В 2026 — это базовая гигиена. Клиент 25–40 лет ожидает, что у салона есть либо бот, либо хотя бы быстрый ответ в Instagram Direct в течение 5 минут. Если этого нет — клиент уходит к конкуренту, который ответил.
 
-Прозрачное ценообразование
-Клиент видит каталог услуг с ценами прямо в боте. Никаких сюрпризов при оплате.
+AI-ассистенты выводят это на следующий уровень: бот не просто принимает запись, а отвечает на вопросы о ценах, услугах, парковке, наличии конкретного гель-лака. Открываемость и конверсия таких диалогов в 2–3 раза выше, чем у людей.
 
-Удержание через данные
-Аналитика показывает, какие клиенты уходят, а какие приносят больше всего выручки. Владелец принимает решения на основе цифр, а не интуиции.`,
+## 2. Мультиканальность по умолчанию
+
+Один клиент пишет в Instagram, другой — в WhatsApp, третий открывает Telegram. Пытаться вести три разных аккаунта руками — путь к выгоранию администратора. В 2026 году салон, который хочет масштабироваться, использует унифицированный inbox: ManicBot собирает все сообщения в одну ленту, а отвечать можно из единой панели или того же бота.
+
+Бонус: контекст разговора сохраняется при переключении канала. Клиент написал в Instagram, продолжил в Telegram — бот не «забывает», что они говорили.
+
+## 3. Персонализация по данным
+
+«Анна, как обычно — гель-лак нюд, мастер Карина?» — раньше так разговаривал только знакомый администратор небольшого салона. В 2026 это умеет делать бот, потому что данные о предпочтениях клиента накапливаются автоматически.
+
+Это меняет повторный визит до одного клика. Никаких 10 сообщений «во сколько у вас свободно? а у Карины? а в субботу?» — клиент видит свои любимые слоты сверху.
+
+## 4. Прозрачное ценообразование как конкурентное преимущество
+
+Долгое время в индустрии работал принцип «цена обсуждается на месте». В 2026 это уже минус. Клиент 25+ ожидает увидеть цену в каталоге до записи. Салоны, скрывающие цены, теряют молодую аудиторию, которая привыкла к прозрачности Uber, Bolino и других сервисов.
+
+В ManicBot каталог услуг с ценами отображается прямо в боте. Это снижает количество вопросов и фильтрует «не подходит по бюджету» клиентов ещё до записи — экономит время мастера.
+
+## 5. Удержание через данные
+
+Главный тренд 2026 — переход от «делать рекламу для новых клиентов» к «удерживать существующих». Стоимость рекламы выросла на 30–40% за два года, а лояльный клиент стоит в 5–7 раз меньше.
+
+Аналитика в ManicBot показывает:
+- Какие клиенты не возвращались более 60 дней (риск ухода)
+- Какие услуги приносят максимум выручки
+- Какие мастера загружены, а кто простаивает
+- Сезонные колебания спроса
+
+Это превращает интуитивное управление салоном в управление по цифрам.
+
+## 6. Мини-приложения вместо отдельных мобильных приложений
+
+Никто больше не делает «приложение салона в App Store». Это слишком дорого, и клиент не будет ставить отдельное приложение ради одного маникюра в месяц. Вместо этого — Telegram Mini Apps и Instagram-интеграции. Клиент не уходит из мессенджера, не качает ничего, не регистрируется — просто записывается.
+
+Это снижает порог входа до нуля. ManicBot построен вокруг этой идеи: вся запись и общение происходит внутри мессенджера.
+
+## 7. Этика и прозрачность данных
+
+GDPR в 2018 запустил волну, а в 2026 уже все понимают: персональные данные клиентов — это ответственность. Салоны, у которых утечка контактов из CRM, теряют репутацию мгновенно — TikTok разносит такие истории за часы.
+
+ManicBot хранит данные клиентов с шифрованием, журналом согласий и возможностью удалить всю историю по запросу клиента. Это уже не «приятно иметь», а юридическая необходимость в ЕС.
+
+## Что делать в 2026
+
+Если коротко: автоматизация — это новая базовая гигиена. Салоны, у которых нет онлайн-записи, единого inbox и хотя бы простой аналитики, к 2027 будут терять клиентов в пользу тех, у кого это есть.
+
+Хорошая новость: внедрить всё это можно за неделю и без бюджета на разработчиков — ManicBot готов из коробки, цена сравнима с одним маникюром в месяц. Главный ресурс, который вы инвестируете — это время на настройку и обучение команды.`,
       ua: `Nail-індустрія у 2026 році продовжує трансформуватися. Ось ключові тренди:
 
 Автоматизація комунікації

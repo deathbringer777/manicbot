@@ -10,7 +10,7 @@ import {
   buildSeo,
   beautySalonJsonLd,
   breadcrumbJsonLd,
-  SITE_NAME,
+  ogLocaleForCity,
 } from "~/lib/seo";
 
 interface Props {
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const profile = await caller.publicSalon.getProfile({ slug }).catch(() => null);
   if (!profile) {
     return {
-      title: `Салон не найден — ${SITE_NAME}`,
+      title: "Салон не найден",
       robots: { index: false, follow: false },
     };
   }
@@ -38,6 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     path: `/salon/${slug}`,
     image: profile.photos?.[0] ?? undefined,
     imageAlt: profile.name,
+    ogLocale: ogLocaleForCity(profile.city),
     keywords: [
       profile.name,
       profile.city ?? "nail салон",
@@ -69,12 +70,22 @@ export default async function SalonProfilePage({ params }: Props) {
               slug: profile.slug ?? slug,
               description: profile.description,
               image: profile.photos?.[0] ?? null,
+              images: profile.photos ?? null,
               city: profile.city,
               address: profile.address,
               phone: profile.phone,
               lat: profile.lat,
               lng: profile.lng,
               rating: profile.rating,
+              workHours: profile.workHours,
+              services: profile.services?.map((s) => ({
+                name: s.name,
+                price: s.price ?? null,
+                duration: s.duration ?? null,
+              })) ?? null,
+              sameAs: [profile.instagramUrl, profile.mapsUrl].filter((u): u is string => !!u),
+              currency: "PLN",
+              countryCode: "PL",
             }),
             breadcrumbJsonLd([
               { name: "Главная", path: "/" },

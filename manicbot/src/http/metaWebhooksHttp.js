@@ -12,7 +12,7 @@ import { handleInbound } from '../handlers/inbound.js';
 import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
-import { claimMetaMessage } from '../utils/dedup.js';
+import { claimMetaMessage, claimWAMessage } from '../utils/dedup.js';
 
 /**
  * @param {Request} request
@@ -69,6 +69,26 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             for (const change of changes) {
               const phoneNumberId = change.value?.metadata?.phone_number_id;
               if (!phoneNumberId) continue;
+
+              // Dedup by wamid. Meta retries WA webhooks for up to 24h on 5xx —
+              // without dedup every retry replays the message (duplicate AI
+              // replies, duplicate bookings, duplicate analytics). Status
+              // updates (delivered/read receipts) carry no message id; we
+              // claim once per message, never on receipts.
+              const wamids = (change.value?.messages ?? [])
+                .map(m => m?.id)
+                .filter(Boolean);
+              if (wamids.length) {
+                let anyFresh = false;
+                for (const wamid of wamids) {
+                  const fresh = await claimWAMessage(
+                    { MANICBOT: env.MANICBOT }, String(phoneNumberId), String(wamid),
+                  );
+                  if (fresh) anyFresh = true;
+                }
+                if (!anyFresh) continue; // every message in this change is a replay
+              }
+
               const resolved = await resolveTenantFromWhatsApp(ec, phoneNumberId);
               if (!resolved) {
                 log.warn('http.metaWebhooks', { message: 'unresolved WA phone_number_id' });

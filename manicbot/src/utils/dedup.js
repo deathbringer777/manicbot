@@ -50,6 +50,28 @@ export async function claimMetaMessage(env, pageId, mid) {
 }
 
 /**
+ * Check + claim a WhatsApp message id (wamid). Meta retries WA webhooks for
+ * up to 24h on 5xx — without dedup every retry replays the message into the
+ * bot, producing duplicate AI replies, duplicate bookings, duplicate
+ * analytics. Mirrors `claimMetaMessage` but uses a distinct key prefix so
+ * IG and WA dedup namespaces never collide.
+ *
+ * @param {{ MANICBOT?: KVNamespace, kv?: KVNamespace }} env
+ * @param {string} phoneNumberId - WA business phone number id (from value.metadata)
+ * @param {string} wamid - WA message id (from value.messages[].id)
+ * @returns {Promise<boolean>} true if first-seen (process); false if duplicate (skip)
+ */
+export async function claimWAMessage(env, phoneNumberId, wamid) {
+  const kv = env?.MANICBOT || env?.kv;
+  if (!kv?.put || !kv?.get) return true;
+  const key = `wa:msg:${phoneNumberId}:${wamid}`;
+  const seen = await kv.get(key);
+  if (seen) return false;
+  await kv.put(key, '1', { expirationTtl: META_TTL_SEC });
+  return true;
+}
+
+/**
  * Generic claim helper for arbitrary keys.
  * @param {{ MANICBOT?: KVNamespace, kv?: KVNamespace }} env
  * @param {string} key

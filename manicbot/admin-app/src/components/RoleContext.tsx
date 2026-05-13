@@ -16,6 +16,9 @@ export interface RoleContextValue {
   isTest?: boolean;
   /** Only populated when role === "tenant_manager". */
   permissions: PermissionKey[];
+  // Billing state (effective, post lazy-flip). Null/false for platform staff.
+  billingStatus: string | null;
+  isTrialExpired: boolean;
   // Creator-only preview
   previewRole: AppRole;
   previewTenantId: string | null;
@@ -36,6 +39,8 @@ export const RoleContext = createContext<RoleContextValue>({
   isPersonalTenant: false,
   isTest: false,
   permissions: [],
+  billingStatus: null,
+  isTrialExpired: false,
   previewRole: null,
   previewTenantId: null,
   setPreviewRole: () => {},

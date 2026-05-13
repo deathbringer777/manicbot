@@ -2,6 +2,7 @@ import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { webUsers, masters, tenants } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { listPermissions, type PermissionKey } from "~/server/api/permissions";
+import { evaluateTrialState } from "~/lib/billing/trialState";
 
 export type AppRole =
   | "system_admin"
@@ -25,6 +26,16 @@ type RoleResult = {
   hasPassword: boolean;
   /** Only populated for role === "tenant_manager". [] for other roles. */
   permissions: PermissionKey[];
+  // Billing state — populated for tenant-scoped roles only. Drives the BillingGate.
+  // Effective status (post lazy-flip of expired trials). Null for platform staff.
+  billingStatus: string | null;
+  trialEndsAt: number | null;
+  graceEndsAt: number | null;
+  /**
+   * True when the tenant's trial has expired AND no Stripe customer exists yet.
+   * Mirrors BillingSection.tsx's "hard block" rule. The UI gates dashboard access on this.
+   */
+  isTrialExpired: boolean;
 };
 
 const EMPTY: RoleResult = {
@@ -39,6 +50,10 @@ const EMPTY: RoleResult = {
   email: null,
   hasPassword: true,
   permissions: [],
+  billingStatus: null,
+  trialEndsAt: null,
+  graceEndsAt: null,
+  isTrialExpired: false,
 };
 
 export const authRouter = createTRPCRouter({
@@ -71,6 +86,10 @@ export const authRouter = createTRPCRouter({
     let isPersonalTenant = false;
     let isTest = false;
     let tenantName: string | null = null;
+    let billingStatus: string | null = null;
+    let trialEndsAt: number | null = null;
+    let graceEndsAt: number | null = null;
+    let isTrialExpired = false;
     if (tenantId) {
       try {
         const [tenantRow] = await ctx.db
@@ -79,6 +98,10 @@ export const authRouter = createTRPCRouter({
             displayName: tenants.displayName,
             isPersonal: tenants.isPersonal,
             isTest: tenants.isTest,
+            billingStatus: tenants.billingStatus,
+            trialEndsAt: tenants.trialEndsAt,
+            graceEndsAt: tenants.graceEndsAt,
+            stripeCustomerId: tenants.stripeCustomerId,
           })
           .from(tenants)
           .where(eq(tenants.id, tenantId))
@@ -87,6 +110,31 @@ export const authRouter = createTRPCRouter({
           tenantName = tenantRow.displayName || tenantRow.name || null;
           if (tenantRow.isPersonal) isPersonalTenant = true;
           if (tenantRow.isTest) isTest = true;
+
+          // Real-time expiry bridge: cron runs every 15 min but the user is here NOW.
+          // Mirror of salon.getBillingStatus so the BillingGate triggers immediately
+          // on auth, not only when the user opens the Billing tab.
+          const nowUnix = Math.floor(Date.now() / 1000);
+          const evalResult = evaluateTrialState(
+            {
+              billingStatus: tenantRow.billingStatus ?? null,
+              trialEndsAt: tenantRow.trialEndsAt ?? null,
+              stripeCustomerId: tenantRow.stripeCustomerId ?? null,
+            },
+            nowUnix,
+          );
+          billingStatus = evalResult.effectiveBillingStatus;
+          trialEndsAt = tenantRow.trialEndsAt ?? null;
+          graceEndsAt = tenantRow.graceEndsAt ?? null;
+          isTrialExpired = evalResult.isTrialExpired;
+
+          if (evalResult.shouldPersistFlip) {
+            // Fire-and-forget: do not block the auth response on the UPDATE.
+            void ctx.db
+              .update(tenants)
+              .set({ billingStatus: "inactive", updatedAt: nowUnix })
+              .where(eq(tenants.id, tenantId));
+          }
         }
       } catch { /* non-critical */ }
       if (role === "master") {
@@ -127,6 +175,22 @@ export const authRouter = createTRPCRouter({
       } catch { /* non-critical */ }
     }
 
-    return { role, tenantId, tenantName, masterId, isPersonalTenant, isTest, createdAt, emailVerified, email, hasPassword, permissions };
+    return {
+      role,
+      tenantId,
+      tenantName,
+      masterId,
+      isPersonalTenant,
+      isTest,
+      createdAt,
+      emailVerified,
+      email,
+      hasPassword,
+      permissions,
+      billingStatus,
+      trialEndsAt,
+      graceEndsAt,
+      isTrialExpired,
+    };
   }),
 });

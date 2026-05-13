@@ -10,6 +10,7 @@ import { Card, CardHeader } from "~/components/ui/Card";
 import { Skeleton } from "~/components/ui/Skeleton";
 import { OverviewChart } from "~/components/dashboard/OverviewChart";
 import { ReferralSignupCharts } from "~/components/dashboard/ReferralSignupCharts";
+import { ErrorStatsWidget } from "~/components/dashboard/ErrorStatsWidget";
 import {
   Users,
   Building2,
@@ -281,6 +282,9 @@ export default function DashboardClient() {
             <KpiCardSkeleton /><KpiCardSkeleton />
           </div>
         )}
+
+        {/* Error monitoring widget */}
+        <ErrorStatsWidget />
 
         {/* ── Chart + Calendar ── */}
         <div className="grid gap-4 lg:grid-cols-[1fr_300px]">

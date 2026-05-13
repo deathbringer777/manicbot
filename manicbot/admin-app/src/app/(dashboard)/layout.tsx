@@ -15,6 +15,8 @@ import { NoTenantOnboarding } from "~/components/onboarding/NoTenantOnboarding";
 import { EmailVerificationGate } from "~/components/EmailVerificationGate";
 import { EmailVerificationPopup } from "~/components/EmailVerificationPopup";
 import { SetPasswordBanner } from "~/components/SetPasswordBanner";
+import { BillingGate } from "~/components/BillingGate";
+import { shouldShowBillingGate } from "~/lib/billing/trialState";
 import type { AppRole } from "~/server/api/routers/auth";
 
 // Lazy-loaded god-mode tab pages that live under broken (dashboard) routes on CF Pages.
@@ -79,7 +81,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions } = roleQuery.data;
+  const { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions, billingStatus, isTrialExpired } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -93,6 +95,8 @@ export default function DashboardLayout({
     hasPassword: hasPassword ?? true,
     isPersonalTenant: isPersonalTenant ?? false,
     permissions: permissions ?? [],
+    billingStatus: billingStatus ?? null,
+    isTrialExpired: isTrialExpired ?? false,
     previewRole,
     previewTenantId,
     setPreviewRole,
@@ -124,11 +128,23 @@ export default function DashboardLayout({
     );
   }
 
+  // Gate: block dashboard content when the tenant's trial has expired and they
+  // have not started a paid subscription. Whitelisted paths (/billing, /settings,
+  // /plugins) remain reachable so the user can resolve the gate or escape.
+  // System admins / support never trigger this gate. Effective role is used so
+  // a system_admin previewing a tenant_owner still sees their unblocked view.
+  function wrapWithBillingGate(content: React.ReactNode) {
+    if (shouldShowBillingGate({ role: effectiveRole, isTrialExpired, pathname })) {
+      return <BillingGate />;
+    }
+    return content;
+  }
+
   if (effectiveRole === "tenant_owner") {
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {wrapWithEmailGate(
+          {wrapWithEmailGate(wrapWithBillingGate(
             isSettingsPage || isPluginsPage
               ? children
               : !effectiveTenantId
@@ -136,7 +152,7 @@ export default function DashboardLayout({
                 : previewMasterId !== null
                   ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
                   : <SalonDashboard tenantId={effectiveTenantId} />
-          )}
+          ))}
         </WebShell>
         <CommandPalette />
         <ActivityFeed />
@@ -149,13 +165,13 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {wrapWithEmailGate(
+          {wrapWithEmailGate(wrapWithBillingGate(
             isSettingsPage || isPluginsPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
                 : <SalonDashboard tenantId={effectiveTenantId} />
-          )}
+          ))}
         </WebShell>
         <CommandPalette />
         <ActivityFeed />
@@ -167,13 +183,13 @@ export default function DashboardLayout({
     return (
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
-          {wrapWithEmailGate(
+          {wrapWithEmailGate(wrapWithBillingGate(
             isSettingsPage || isPluginsPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="master" />
                 : <MasterDashboard tenantId={effectiveTenantId} masterId={masterId!} isPersonal={isPersonalTenant} />
-          )}
+          ))}
         </WebShell>
         <CommandPalette />
         <ActivityFeed />

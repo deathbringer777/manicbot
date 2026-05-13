@@ -294,8 +294,10 @@ Telegram Mini App opens
 | Component                         | Purpose                                                                            |
 | --------------------------------- | ---------------------------------------------------------------------------------- |
 | `TelegramGate.tsx`                | Auth + role-based routing                                                          |
-| `RoleContext.tsx`                 | React context: `{ role, tenantId, userId, hasPassword, emailVerified }`            |
+| `RoleContext.tsx`                 | React context: `{ role, tenantId, userId, hasPassword, emailVerified, billingStatus, isTrialExpired }` |
 | `layout/Shell.tsx`                | Main layout (sidebar + mobile nav). Accepts `navItems`, `title`, `subtitle` props  |
+| `EmailVerificationGate.tsx`       | Full-screen blocker when `emailVerified === false`. Whitelist: `/settings`.        |
+| `BillingGate.tsx`                 | Full-screen blocker when `isTrialExpired === true` for `tenant_owner / tenant_manager / master`. Whitelist: `/billing`, `/settings`, `/plugins`, `/plugin/*`. Logic lives in `lib/billing/trialState.ts` (pure helpers, shared with the server-side lazy flip in `auth.getMyRole`). |
 | `dashboards/SalonDashboard.tsx`   | Salon owner: Overview, Appointments, Masters, Services, Clients, Billing, Settings |
 | `dashboards/MasterDashboard.tsx`  | Master: Today, Schedule, Clients, Earnings, Profile                                |
 | `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close                       |

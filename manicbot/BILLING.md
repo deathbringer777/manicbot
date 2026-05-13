@@ -53,6 +53,8 @@ Registration → trialing (7 days)
 - Transitions `trialing` → `inactive` when `trial_ends_at` has expired
 - Transitions `grace_period` → `inactive` when `grace_ends_at` has expired
 
+**Real-time bridge** (between cron ticks): both `auth.getMyRole` and `salon.getBillingStatus` evaluate `evaluateTrialState()` (`admin-app/src/lib/billing/trialState.ts`) on every call. If a trial has expired in the DB but cron hasn't flipped it yet, they return the post-flip status synchronously and fire-and-forget the persisting UPDATE. The admin-app `BillingGate` component reads `isTrialExpired` from `getMyRole` and blocks the whole tenant dashboard (with `/billing`, `/settings`, `/plugins`, `/plugin/*` whitelisted) so staff-side features become unreachable the moment the trial ends, without waiting for cron.
+
 ---
 
 ## Stripe Environment Variables

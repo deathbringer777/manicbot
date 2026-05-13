@@ -35,6 +35,8 @@ function makeWrapper(tenantId: string | null) {
     emailVerified: true,
     isPersonalTenant: false,
     permissions: [],
+    billingStatus: "active",
+    isTrialExpired: false,
     previewRole: null,
     previewTenantId: null,
     setPreviewRole: () => {},

@@ -74,6 +74,8 @@ function renderRuntime(tenantId: string | null = "t_test") {
           isPersonalTenant: false,
           isTest: false,
           permissions: [],
+          billingStatus: "active",
+          isTrialExpired: false,
           previewRole: null,
           previewTenantId: null,
           setPreviewRole: () => {},

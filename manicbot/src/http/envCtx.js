@@ -12,5 +12,9 @@ export function envCtx(env) {
     // Resend transactional email — set via `wrangler secret put RESEND_API_KEY / RESEND_FROM`
     resendApiKey: env.RESEND_API_KEY || null,
     resendFrom: env.RESEND_FROM || null,
+    // Stripe REST API. Needed by handlers that resolve secondary objects
+    // (e.g. GET /v1/charges/{id} from a dispute) — the webhook signature
+    // secret is separate and lives in STRIPE_WEBHOOK_SECRET.
+    stripeSecretKey: env.STRIPE_SECRET_KEY || null,
   };
 }

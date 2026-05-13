@@ -914,3 +914,28 @@ CREATE TABLE IF NOT EXISTS cookie_consent_log (
 CREATE INDEX IF NOT EXISTS idx_cookie_consent_anon    ON cookie_consent_log(anonymous_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cookie_consent_user    ON cookie_consent_log(web_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cookie_consent_created ON cookie_consent_log(created_at);
+
+-- ─── Error events (migration 0056) ───────────────────────────────────────
+-- God Mode in-house error monitor. Worker `captureError()` writes here with
+-- 1h dedup on `fingerprint`; admin-app `/errors` page reads/resolves rows.
+CREATE TABLE IF NOT EXISTS error_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fingerprint TEXT NOT NULL,
+  source TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  message TEXT NOT NULL,
+  stack TEXT,
+  path TEXT,
+  tenant_id TEXT,
+  user_id TEXT,
+  context TEXT,
+  count INTEGER NOT NULL DEFAULT 1,
+  first_seen INTEGER NOT NULL,
+  last_seen INTEGER NOT NULL,
+  resolved_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_error_events_severity_seen ON error_events(severity, last_seen);
+CREATE INDEX IF NOT EXISTS idx_error_events_fingerprint   ON error_events(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_error_events_tenant        ON error_events(tenant_id, last_seen);
+CREATE INDEX IF NOT EXISTS idx_error_events_unresolved    ON error_events(resolved_at, last_seen);

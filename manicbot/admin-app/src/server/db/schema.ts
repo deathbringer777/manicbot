@@ -905,3 +905,35 @@ export const cookieConsentLog = sqliteTable("cookie_consent_log", {
   index("idx_cookie_consent_user").on(t.webUserId, t.createdAt),
   index("idx_cookie_consent_created").on(t.createdAt),
 ]);
+
+// ─── Error events (custom error monitoring) ──────────────────────────────
+// Custom in-house error tracking — replaces external services (Sentry etc.)
+// Errors are deduplicated by `fingerprint` (stable hash of source+message+path);
+// repeated occurrences bump `count` and `last_seen` rather than inserting new
+// rows. `resolved_at` is set by an admin via the God Mode `/errors` page.
+//
+// The companion migration that creates this table lives in the Worker side
+// (`manicbot/migrations/`). When that migration lands, this Drizzle definition
+// must stay in lockstep with the SQL DDL (`schema.sql`).
+export const errorEvents = sqliteTable("error_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fingerprint: text("fingerprint").notNull(),
+  source: text("source").notNull(),
+  severity: text("severity").notNull(),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  path: text("path"),
+  tenantId: text("tenant_id"),
+  userId: text("user_id"),
+  context: text("context"),
+  count: integer("count").notNull().default(1),
+  firstSeen: integer("first_seen").notNull(),
+  lastSeen: integer("last_seen").notNull(),
+  resolvedAt: integer("resolved_at"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_error_events_severity_seen").on(t.severity, t.lastSeen),
+  index("idx_error_events_fingerprint").on(t.fingerprint),
+  index("idx_error_events_tenant").on(t.tenantId, t.lastSeen),
+  index("idx_error_events_unresolved").on(t.resolvedAt, t.lastSeen),
+]);

@@ -18,7 +18,9 @@ export function makeAwaitableChain(result: unknown) {
     from: () => chain,
     where: () => chain,
     orderBy: () => chain,
+    groupBy: () => chain,
     innerJoin: () => chain,
+    leftJoin: () => chain,
     limit: () => limitChain,
     then: (resolve: (v: unknown) => unknown, reject?: (r: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),

@@ -1,3 +1,5 @@
+export const runtime = "edge";
+
 import type { Metadata } from "next";
 import { buildSeo, langToOgLocale } from "~/lib/seo";
 import { RulesClient } from "./RulesClient";

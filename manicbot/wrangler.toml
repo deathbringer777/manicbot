@@ -21,6 +21,10 @@ ADMIN_APP_URL = "https://admin-app-3nc.pages.dev"
 # be rejected. All connected bots use POST /webhook/{botId}. The legacy path
 # was only relevant during initial migration from KV-only single-bot mode.
 REQUIRE_WEBHOOK_BOT_ID = "1"
+# Retention dry-run: when "1", phaseRetention logs counts but skips DELETE/archive.
+# Production default is "0" (live deletes with R2 archive). Flip to "1" in the
+# Cloudflare dashboard to preview a retention run without losing data.
+RETENTION_DRY_RUN = "0"
 
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID
@@ -78,6 +82,24 @@ database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 # binding = "ASSETS"
 # bucket_name = "manicbot-assets"
 # preview_bucket_name = "manicbot-assets-preview"
+
+# ─── R2 archive for phaseRetention pre-delete export ─────────────────────────
+# Rows pruned by phaseRetention (audit_log, error_log, analytics_events,
+# permission_elevation_codes, stripe_events, marketing_sends) are written to
+# this bucket as gzipped NDJSON before the DELETE runs. Key layout:
+#   archive/{table}/{YYYY-MM-DD}T{HHmmss}Z.jsonl.gz
+#
+# Activation (one-time, in order):
+#   1. Enable R2 in the Cloudflare dashboard (Storage → R2 → Enable).
+#   2. npx wrangler r2 bucket create manicbot-archive
+#   3. Uncomment the [[r2_buckets]] block below and redeploy.
+#
+# If R2 is not yet enabled, phaseRetention runs without archive (logs
+# `cron.retention.archive_failed` with reason `no_archive_binding` and
+# still runs the DELETE — graceful fallback by design).
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "manicbot-archive"
 
 # ─── Required secret for signed upload tokens ────────────────────────────────
 #   wrangler secret put UPLOAD_TOKEN_SECRET

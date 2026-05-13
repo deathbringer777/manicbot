@@ -915,27 +915,50 @@ CREATE INDEX IF NOT EXISTS idx_cookie_consent_anon    ON cookie_consent_log(anon
 CREATE INDEX IF NOT EXISTS idx_cookie_consent_user    ON cookie_consent_log(web_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_cookie_consent_created ON cookie_consent_log(created_at);
 
--- ─── Error events (migration 0056) ───────────────────────────────────────
+-- ─── Error events (migrations 0056 + 0057) ───────────────────────────────
 -- God Mode in-house error monitor. Worker `captureError()` writes here with
--- 1h dedup on `fingerprint`; admin-app `/errors` page reads/resolves rows.
+-- status-aware dedup on `fingerprint`; admin-app `/errors` page reads,
+-- resolves, ignores, snoozes, and assigns rows.
+--
+-- Status lifecycle (0057): open / resolved / ignored / snoozed. A new fire
+-- on a `resolved` issue flips status back to `open` (regression signal).
+-- Ignored issues never auto-reopen; snoozed reopen once `snooze_until`
+-- passes.
 CREATE TABLE IF NOT EXISTS error_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  fingerprint TEXT NOT NULL,
-  source TEXT NOT NULL,
-  severity TEXT NOT NULL,
-  message TEXT NOT NULL,
-  stack TEXT,
-  path TEXT,
-  tenant_id TEXT,
-  user_id TEXT,
-  context TEXT,
-  count INTEGER NOT NULL DEFAULT 1,
-  first_seen INTEGER NOT NULL,
-  last_seen INTEGER NOT NULL,
-  resolved_at INTEGER,
-  created_at INTEGER NOT NULL
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  fingerprint     TEXT NOT NULL,
+  source          TEXT NOT NULL,
+  severity        TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  stack           TEXT,
+  path            TEXT,
+  tenant_id       TEXT,
+  user_id         TEXT,
+  context         TEXT,
+  count           INTEGER NOT NULL DEFAULT 1,
+  first_seen      INTEGER NOT NULL,
+  last_seen       INTEGER NOT NULL,
+  resolved_at     INTEGER,
+  created_at      INTEGER NOT NULL,
+  -- 0057 additions ------------------------------------------------------
+  status          TEXT NOT NULL DEFAULT 'open',
+  snooze_until    INTEGER,
+  assignee_id     TEXT,
+  resolved_by     TEXT,
+  tags_json       TEXT,
+  environment     TEXT NOT NULL DEFAULT 'production',
+  release         TEXT,
+  error_type      TEXT,
+  url             TEXT,
+  method          TEXT,
+  request_id      TEXT,
+  sample_json     TEXT,
+  users_affected  INTEGER NOT NULL DEFAULT 1,
+  title           TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_error_events_severity_seen ON error_events(severity, last_seen);
 CREATE INDEX IF NOT EXISTS idx_error_events_fingerprint   ON error_events(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_error_events_tenant        ON error_events(tenant_id, last_seen);
 CREATE INDEX IF NOT EXISTS idx_error_events_unresolved    ON error_events(resolved_at, last_seen);
+CREATE INDEX IF NOT EXISTS idx_error_events_status_last   ON error_events(status, last_seen);
+CREATE INDEX IF NOT EXISTS idx_error_events_assignee      ON error_events(assignee_id, status, last_seen);

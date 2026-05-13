@@ -221,3 +221,241 @@ describe("errorEventsRouter.clear", () => {
     expect(mock.deleteCalls[0]!.whereCalled).toBe(true);
   });
 });
+
+// ─── 0057 additions ─────────────────────────────────────────────────────
+
+describe("errorEventsRouter.resolve (0057 fields)", () => {
+  it("sets status='resolved' and resolved_by from ctx.webUser", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    const out = await caller.resolve({ id: 7 });
+    expect(out.ok).toBe(true);
+    const patch = mock.updateCalls[0]!.values;
+    expect(patch.status).toBe("resolved");
+    expect(patch.resolvedBy).toBe("w_admin");
+    expect(patch.snoozeUntil).toBeNull();
+  });
+});
+
+describe("errorEventsRouter.setStatus", () => {
+  it("rejects setStatus(snoozed) — must use dedicated snooze mutation", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    const out = await caller.setStatus({ id: 1, status: "snoozed" });
+    expect(out).toEqual({ ok: false, error: "use_snooze_mutation" });
+    expect(mock.updateCalls).toHaveLength(0);
+  });
+
+  it("setStatus(open) clears resolved_at/by and snooze_until", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.setStatus({ id: 1, status: "open" });
+    const patch = mock.updateCalls[0]!.values;
+    expect(patch.status).toBe("open");
+    expect(patch.resolvedAt).toBeNull();
+    expect(patch.resolvedBy).toBeNull();
+    expect(patch.snoozeUntil).toBeNull();
+  });
+
+  it("setStatus(ignored) clears snooze but keeps resolution history", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.setStatus({ id: 1, status: "ignored" });
+    const patch = mock.updateCalls[0]!.values;
+    expect(patch.status).toBe("ignored");
+    expect(patch.snoozeUntil).toBeNull();
+    expect("resolvedAt" in patch).toBe(false);
+  });
+
+  it("setStatus(resolved) is equivalent to resolve()", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.setStatus({ id: 1, status: "resolved" });
+    const patch = mock.updateCalls[0]!.values;
+    expect(patch.status).toBe("resolved");
+    expect(patch.resolvedAt).toBeTypeOf("number");
+    expect(patch.resolvedBy).toBe("w_admin");
+  });
+
+  it("rejects an invalid status", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await expect(
+      caller.setStatus({ id: 1, status: "broken" as never }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("errorEventsRouter.snooze", () => {
+  it("sets status='snoozed' and snooze_until in the future", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    const out = await caller.snooze({ id: 1, hours: 24 });
+    expect(out.ok).toBe(true);
+    const nowSec = Math.floor(Date.now() / 1000);
+    expect(out.snoozeUntil).toBeGreaterThan(nowSec);
+    expect(out.snoozeUntil).toBeLessThanOrEqual(nowSec + 24 * 3600 + 5);
+    const patch = mock.updateCalls[0]!.values;
+    expect(patch.status).toBe("snoozed");
+    expect(patch.snoozeUntil).toBe(out.snoozeUntil);
+    expect(patch.resolvedAt).toBeNull();
+  });
+
+  it("rejects hours <= 0 and > 720", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await expect(caller.snooze({ id: 1, hours: 0 })).rejects.toThrow();
+    await expect(caller.snooze({ id: 1, hours: 9999 })).rejects.toThrow();
+  });
+
+  it("rejects non-admin", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
+    await expect(caller.snooze({ id: 1, hours: 24 })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
+});
+
+describe("errorEventsRouter.assign", () => {
+  it("sets assigneeId", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.assign({ id: 1, assigneeId: "w_kirill" });
+    expect(mock.updateCalls[0]!.values.assigneeId).toBe("w_kirill");
+  });
+
+  it("clears assignee when passed null", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.assign({ id: 1, assigneeId: null });
+    expect(mock.updateCalls[0]!.values.assigneeId).toBeNull();
+  });
+});
+
+describe("errorEventsRouter.setTags", () => {
+  it("serializes tags as JSON", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.setTags({ id: 1, tags: ["payments", "stripe"] });
+    expect(mock.updateCalls[0]!.values.tagsJson).toBe('["payments","stripe"]');
+  });
+
+  it("caps tag list at 20", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const tooMany = Array.from({ length: 21 }, (_, i) => `t${i}`);
+    await expect(caller.setTags({ id: 1, tags: tooMany })).rejects.toThrow();
+  });
+});
+
+describe("errorEventsRouter.list — 0057 status filter + regressed flag", () => {
+  it("accepts the new status filter", async () => {
+    const rows = [
+      {
+        id: 1,
+        fingerprint: "fp",
+        source: "worker",
+        severity: "error",
+        message: "boom",
+        stack: null,
+        path: "/x",
+        tenantId: null,
+        userId: null,
+        context: null,
+        count: 1,
+        firstSeen: 0,
+        lastSeen: 0,
+        resolvedAt: null,
+        createdAt: 0,
+        status: "open",
+        snoozeUntil: null,
+        assigneeId: null,
+        resolvedBy: null,
+        tagsJson: null,
+        environment: "production",
+        release: null,
+        errorType: "Error",
+        url: null,
+        method: null,
+        requestId: null,
+        sampleJson: null,
+        usersAffected: 1,
+        title: "boom",
+      },
+    ];
+    const { db } = createDbMock([rows, [{ count: 1 }]]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.list({ status: "open" });
+    expect(out.rows[0]!.regressed).toBe(false);
+  });
+
+  it("flags regressed rows (open + resolved_at not null)", async () => {
+    const rows = [
+      {
+        id: 1,
+        fingerprint: "fp",
+        source: "worker",
+        severity: "error",
+        message: "regressed",
+        stack: null,
+        path: null,
+        tenantId: null,
+        userId: null,
+        context: null,
+        count: 8,
+        firstSeen: 0,
+        lastSeen: 0,
+        resolvedAt: 1_700_000_000,
+        createdAt: 0,
+        status: "open",
+        snoozeUntil: null,
+        assigneeId: null,
+        resolvedBy: null,
+        tagsJson: null,
+        environment: "production",
+        release: null,
+        errorType: null,
+        url: null,
+        method: null,
+        requestId: null,
+        sampleJson: null,
+        usersAffected: 1,
+        title: "regressed",
+      },
+    ];
+    const { db } = createDbMock([rows, [{ count: 1 }]]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.list({});
+    expect(out.rows[0]!.regressed).toBe(true);
+  });
+
+  it("rejects an unknown status value", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await expect(caller.list({ status: "lol" as never })).rejects.toThrow();
+  });
+});
+
+describe("errorEventsRouter.stats — 0057 byStatus + regressions24h", () => {
+  it("aggregates by status and exposes regressions24h", async () => {
+    // 6 selects in order: by24h, total24h, by7d, total7d, byStatus, regressions24h.
+    const { db } = createDbMock([
+      [{ severity: "error", count: 3 }],
+      [{ count: 3 }],
+      [{ severity: "error", count: 10 }],
+      [{ count: 10 }],
+      [
+        { status: "open", count: 4 },
+        { status: "resolved", count: 30 },
+        { status: "ignored", count: 1 },
+        { status: "snoozed", count: 2 },
+      ],
+      [{ count: 7 }],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.stats();
+    expect(out.byStatus).toEqual({ open: 4, resolved: 30, ignored: 1, snoozed: 2 });
+    expect(out.regressions24h).toBe(7);
+  });
+});

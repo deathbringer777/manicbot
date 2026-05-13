@@ -14,10 +14,14 @@ import {
   ChevronRight,
   ChevronDown,
   Filter,
+  BellOff,
+  Clock,
+  Zap,
 } from "lucide-react";
 
 type Severity = "fatal" | "error" | "warning";
 type Source = "worker" | "admin-app" | "cron" | "edge" | "unknown";
+type Status = "open" | "resolved" | "ignored" | "snoozed";
 
 type ErrorRow = {
   id: number;
@@ -35,6 +39,22 @@ type ErrorRow = {
   lastSeen: number;
   resolvedAt: number | null;
   createdAt: number;
+  // 0057 additions
+  status: string;
+  snoozeUntil: number | null;
+  assigneeId: string | null;
+  resolvedBy: string | null;
+  tagsJson: string | null;
+  environment: string;
+  release: string | null;
+  errorType: string | null;
+  url: string | null;
+  method: string | null;
+  requestId: string | null;
+  sampleJson: string | null;
+  usersAffected: number;
+  title: string | null;
+  regressed: boolean;
 };
 
 const SEVERITY_OPTIONS: Array<{ value: Severity | ""; label: string }> = [
@@ -51,6 +71,15 @@ const SOURCE_OPTIONS: Array<{ value: Source | ""; label: string }> = [
   { value: "cron", label: "Cron" },
   { value: "edge", label: "Edge" },
   { value: "unknown", label: "Unknown" },
+];
+
+const STATUS_OPTIONS: Array<{ value: Status | "regressed" | "all"; label: string }> = [
+  { value: "open", label: "Open" },
+  { value: "regressed", label: "Regressed" },
+  { value: "snoozed", label: "Snoozed" },
+  { value: "ignored", label: "Ignored" },
+  { value: "resolved", label: "Resolved" },
+  { value: "all", label: "All statuses" },
 ];
 
 function severityBadge(severity: string) {
@@ -88,21 +117,53 @@ function relativeTime(ts: number): string {
   return `${Math.floor(diff / 86400)}d`;
 }
 
+function statusBadge(status: string, regressed: boolean) {
+  if (regressed) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-300 bg-pink-500/15 px-1.5 py-0.5 rounded-md border border-pink-500/30 shrink-0">
+        <Zap className="w-2.5 h-2.5" /> REGRESSED
+      </span>
+    );
+  }
+  if (status === "resolved")
+    return <span className="text-[10px] font-semibold text-emerald-400 shrink-0">RESOLVED</span>;
+  if (status === "ignored")
+    return <span className="text-[10px] font-semibold text-slate-500 shrink-0">IGNORED</span>;
+  if (status === "snoozed")
+    return <span className="text-[10px] font-semibold text-violet-400 shrink-0">SNOOZED</span>;
+  return null;
+}
+
 function ErrorEventRow({
   ev,
   onResolve,
-  resolving,
+  onIgnore,
+  onSnooze,
+  onReopen,
+  busy,
 }: {
   ev: ErrorRow;
   onResolve: (id: number) => void;
-  resolving: boolean;
+  onIgnore: (id: number) => void;
+  onSnooze: (id: number, hours: number) => void;
+  onReopen: (id: number) => void;
+  busy: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const resolved = ev.resolvedAt !== null;
+  const isOpen = ev.status === "open";
+  const tags: string[] = (() => {
+    if (!ev.tagsJson) return [];
+    try {
+      const v = JSON.parse(ev.tagsJson);
+      return Array.isArray(v) ? v.filter((t): t is string => typeof t === "string") : [];
+    } catch {
+      return [];
+    }
+  })();
 
   return (
     <div
-      className={`border-b border-slate-200 dark:border-slate-800/50 last:border-0 transition-colors ${rowAccent(ev.severity, resolved)}`}
+      className={`border-b border-slate-200 dark:border-slate-800/50 last:border-0 transition-colors ${rowAccent(ev.severity, ev.status !== "open")}`}
     >
       <div
         className="flex items-start gap-2 py-2.5 px-3 cursor-pointer hover:bg-white/[0.02]"
@@ -115,11 +176,12 @@ function ErrorEventRow({
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </button>
         {severityBadge(ev.severity)}
+        {statusBadge(ev.status, ev.regressed)}
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-300 shrink-0">
           {ev.source}
         </span>
         <span className="text-xs flex-1 min-w-0 truncate text-slate-700 dark:text-slate-200">
-          {ev.message}
+          {ev.title ?? ev.message}
         </span>
         {ev.path && (
           <span className="text-[10px] text-slate-500 font-mono shrink-0 hidden md:block truncate max-w-[160px]">
@@ -137,24 +199,46 @@ function ErrorEventRow({
         <span className="text-[10px] text-slate-500 tabular-nums shrink-0 pt-0.5 w-10 text-right">
           {relativeTime(ev.lastSeen)}
         </span>
-        {!resolved && (
-          <button
-            disabled={resolving}
-            onClick={(e) => {
-              e.stopPropagation();
-              onResolve(ev.id);
-            }}
-            className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50 shrink-0"
-            title="Mark resolved"
-          >
-            <Check className="w-3 h-3 inline -mt-0.5" />
-          </button>
-        )}
-        {resolved && (
-          <span className="ml-1 text-[10px] font-semibold text-emerald-400 shrink-0">
-            ✓
-          </span>
-        )}
+        <div className="ml-1 flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {isOpen && (
+            <>
+              <button
+                disabled={busy}
+                onClick={() => onResolve(ev.id)}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-md border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50"
+                title="Mark resolved"
+              >
+                <Check className="w-3 h-3 inline -mt-0.5" />
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => onSnooze(ev.id, 24)}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-md border border-violet-500/30 text-violet-400 hover:bg-violet-500/10 disabled:opacity-50"
+                title="Snooze 24h"
+              >
+                <Clock className="w-3 h-3 inline -mt-0.5" />
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => onIgnore(ev.id)}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-md border border-slate-500/30 text-slate-400 hover:bg-slate-500/10 disabled:opacity-50"
+                title="Ignore forever"
+              >
+                <BellOff className="w-3 h-3 inline -mt-0.5" />
+              </button>
+            </>
+          )}
+          {!isOpen && (
+            <button
+              disabled={busy}
+              onClick={() => onReopen(ev.id)}
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-md border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 disabled:opacity-50"
+              title="Reopen"
+            >
+              Reopen
+            </button>
+          )}
+        </div>
       </div>
       {expanded && (
         <div className="px-3 pb-3 space-y-2">
@@ -175,10 +259,61 @@ function ErrorEventRow({
               <div className="font-semibold text-slate-400">User</div>
               <div className="font-mono">{ev.userId ?? "—"}</div>
             </div>
+            <div>
+              <div className="font-semibold text-slate-400">Type</div>
+              <div className="font-mono">{ev.errorType ?? "—"}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-slate-400">Environment</div>
+              <div className="font-mono">{ev.environment}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-slate-400">Release</div>
+              <div className="font-mono">{ev.release ?? "—"}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-slate-400">Assignee</div>
+              <div className="font-mono">{ev.assigneeId ?? "—"}</div>
+            </div>
+            {ev.url && (
+              <div className="col-span-2">
+                <div className="font-semibold text-slate-400">URL</div>
+                <div className="font-mono break-all">{ev.method ?? ""} {ev.url}</div>
+              </div>
+            )}
+            {ev.requestId && (
+              <div>
+                <div className="font-semibold text-slate-400">Request</div>
+                <div className="font-mono">{ev.requestId}</div>
+              </div>
+            )}
+            {ev.snoozeUntil && (
+              <div>
+                <div className="font-semibold text-slate-400">Snoozed until</div>
+                <div>{new Date(ev.snoozeUntil * 1000).toLocaleString()}</div>
+              </div>
+            )}
           </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/60 text-slate-400"
+                >
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
           {ev.stack && (
             <pre className="text-[10px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900/80 rounded-xl p-3 overflow-x-auto border border-slate-200 dark:border-slate-800/50 scrollbar-none whitespace-pre-wrap">
               {ev.stack}
+            </pre>
+          )}
+          {ev.sampleJson && (
+            <pre className="text-[10px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900/80 rounded-xl p-3 overflow-x-auto border border-slate-200 dark:border-slate-800/50 scrollbar-none">
+              {ev.sampleJson}
             </pre>
           )}
           {ev.context && (
@@ -197,20 +332,25 @@ export default function ErrorsPageClient() {
   const [source, setSource] = useState<Source | "">("");
   const [tenantId, setTenantId] = useState("");
   const [search, setSearch] = useState("");
-  const [resolved, setResolved] = useState<"all" | "open" | "done">("open");
+  const [statusFilter, setStatusFilter] = useState<Status | "regressed" | "all">("open");
 
+  // The `regressed` view is a client-side overlay on the "open" status:
+  // ask the server for open issues, then filter by row.regressed === true.
   const filterArgs = useMemo(
     () => ({
       severity: severity || undefined,
       source: source || undefined,
       tenantId: tenantId.trim() || undefined,
       search: search.trim() || undefined,
-      resolved:
-        resolved === "all" ? undefined : resolved === "open" ? false : true,
+      status: statusFilter === "all" || statusFilter === "regressed"
+        ? statusFilter === "regressed"
+          ? ("open" as const)
+          : undefined
+        : statusFilter,
       limit: 100,
       offset: 0,
     }),
-    [severity, source, tenantId, search, resolved],
+    [severity, source, tenantId, search, statusFilter],
   );
 
   const listQuery = api.errorEvents.list.useQuery(filterArgs, {
@@ -221,17 +361,21 @@ export default function ErrorsPageClient() {
   });
 
   const utils = api.useUtils();
-  const resolveMut = api.errorEvents.resolve.useMutation({
-    onSuccess: () => {
-      void utils.errorEvents.list.invalidate();
-      void utils.errorEvents.stats.invalidate();
-    },
-  });
+  const invalidate = () => {
+    void utils.errorEvents.list.invalidate();
+    void utils.errorEvents.stats.invalidate();
+  };
+  const resolveMut = api.errorEvents.resolve.useMutation({ onSuccess: invalidate });
+  const setStatusMut = api.errorEvents.setStatus.useMutation({ onSuccess: invalidate });
+  const snoozeMut = api.errorEvents.snooze.useMutation({ onSuccess: invalidate });
 
-  const rows = (listQuery.data?.rows ?? []) as ErrorRow[];
-  const total = listQuery.data?.total ?? 0;
+  const busy = resolveMut.isPending || setStatusMut.isPending || snoozeMut.isPending;
+
+  const rawRows = (listQuery.data?.rows ?? []) as ErrorRow[];
+  const rows = statusFilter === "regressed" ? rawRows.filter((r) => r.regressed) : rawRows;
+  const total = statusFilter === "regressed" ? rows.length : (listQuery.data?.total ?? 0);
   const stats = statsQuery.data;
-  const hasAnyFilter = !!(severity || source || tenantId || search || resolved !== "open");
+  const hasAnyFilter = !!(severity || source || tenantId || search || statusFilter !== "open");
 
   return (
     <Shell>
@@ -259,13 +403,26 @@ export default function ErrorsPageClient() {
         </div>
 
         {/* Stats bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           <div className="glass-card rounded-xl p-3 text-center">
             <div className="text-lg font-bold text-slate-200">
               {stats?.last24h.total ?? 0}
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">Total today</div>
           </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("regressed")}
+            className={`glass-card rounded-xl p-3 text-center transition-colors hover:bg-pink-500/5 ${(stats?.regressions24h ?? 0) > 0 ? "ring-1 ring-pink-500/30" : ""}`}
+            title="Issues that came back after being resolved"
+          >
+            <div
+              className={`text-lg font-bold ${(stats?.regressions24h ?? 0) > 0 ? "text-pink-400" : "text-slate-500"}`}
+            >
+              {stats?.regressions24h ?? 0}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Regressions (24h)</div>
+          </button>
           <div className="glass-card rounded-xl p-3 text-center">
             <div
               className={`text-lg font-bold ${(stats?.last24h.fatal ?? 0) > 0 ? "text-red-400" : "text-slate-500"}`}
@@ -318,13 +475,17 @@ export default function ErrorsPageClient() {
             ))}
           </select>
           <select
-            value={resolved}
-            onChange={(e) => setResolved(e.target.value as "all" | "open" | "done")}
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as Status | "regressed" | "all")
+            }
             className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
           >
-            <option value="open">Unresolved</option>
-            <option value="done">Resolved</option>
-            <option value="all">All</option>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
           <input
             type="text"
@@ -350,7 +511,7 @@ export default function ErrorsPageClient() {
                 setSource("");
                 setTenantId("");
                 setSearch("");
-                setResolved("open");
+                setStatusFilter("open");
               }}
               className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               title="Reset filters"
@@ -399,7 +560,10 @@ export default function ErrorsPageClient() {
                   key={ev.id}
                   ev={ev}
                   onResolve={(id) => resolveMut.mutate({ id })}
-                  resolving={resolveMut.isPending}
+                  onIgnore={(id) => setStatusMut.mutate({ id, status: "ignored" })}
+                  onSnooze={(id, hours) => snoozeMut.mutate({ id, hours })}
+                  onReopen={(id) => setStatusMut.mutate({ id, status: "open" })}
+                  busy={busy}
                 />
               ))}
             </div>

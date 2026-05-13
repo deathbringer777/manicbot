@@ -183,7 +183,7 @@ describe('captureError — severity detection', () => {
 });
 
 describe('captureError — passes context through to INSERT bindings', () => {
-  it('binds tenantId, source, severity, path, userId, error_name, message', async () => {
+  it('binds tenantId, source bucket, severity, path, userId and message', async () => {
     const db = makeDb({ firstResult: null });
     const env = { DB: db };
     await captureError(env, new Error('boom'), {
@@ -194,13 +194,21 @@ describe('captureError — passes context through to INSERT bindings', () => {
       severity: 'warning',
       phase: 'reminders',
     });
-    // INSERT is the second prepared statement (after SELECT dedupe lookup)
-    // Pick the INSERT bind (it includes the source 'worker.fetch'); the
-    // SELECT bind also contains 't_demo' (twice) but never the source.
-    const bind = db.__calls.bind.find(args => args.includes('worker.fetch'));
+    // INSERT bind contains the bucketed source ('worker'); the SELECT bind
+    // contains the fingerprint hash instead.
+    const bind = db.__calls.bind.find((args) => args.includes('worker'));
     expect(bind).toBeTruthy();
-    expect(bind).toEqual(expect.arrayContaining(['t_demo', 'worker.fetch', '/webhook/abc', 'warning']));
-    // userId is stringified
+    expect(bind).toEqual(
+      expect.arrayContaining(['t_demo', 'worker', '/webhook/abc', 'warning', 'boom']),
+    );
+    // userId is stringified.
     expect(bind).toEqual(expect.arrayContaining(['99']));
+    // Raw source is preserved in the JSON context blob, not as a column.
+    const ctxArg = bind.find((v) => typeof v === 'string' && v.startsWith('{'));
+    expect(ctxArg).toBeTruthy();
+    const ctx = JSON.parse(ctxArg);
+    expect(ctx.source_raw).toBe('worker.fetch');
+    expect(ctx.error_name).toBe('Error');
+    expect(ctx.phase).toBe('reminders');
   });
 });

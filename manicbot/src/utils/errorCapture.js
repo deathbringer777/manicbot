@@ -2,14 +2,19 @@
  * In-house error capture for the Worker. Writes to D1 `error_events` with
  * 1h deduplication and PII stripping. Never throws.
  *
- * Schema assumed (migration 0056_error_events, handled separately):
- *   id, tenant_id, source, error_name, message, stack, path, user_id,
- *   severity, context (JSON TEXT), count, first_seen_at, last_seen_at
+ * Schema (migration 0056_error_events, mirrored in Drizzle `errorEvents`):
+ *   id, fingerprint, source, severity, message, stack, path, tenant_id,
+ *   user_id, context (JSON TEXT), count, first_seen, last_seen,
+ *   resolved_at, created_at
  *
  * Caller contract:
  *   await captureError(env, err, { tenantId, source, path, userId, phase, severity })
- * All context fields are optional. The capture is always best-effort —
- * if D1 is unavailable, the call returns without raising.
+ * `source` is a free-form caller location (e.g. "worker.fetch",
+ * "cron.phase.reminders") — it gets bucketed to the router's enum
+ * (worker|admin-app|cron|edge|unknown) and the raw value is preserved in
+ * `context.source_raw`. All context fields are optional. The capture is
+ * always best-effort — if D1 is unavailable, the call returns without
+ * raising.
  */
 
 const MAX_MESSAGE_LEN = 2000;
@@ -43,6 +48,29 @@ function stripPII(text) {
 function bound(text, max) {
   if (!text || typeof text !== 'string') return text || '';
   return text.length <= max ? text : text.slice(0, max);
+}
+
+// FNV-1a 32-bit, hex-encoded. Deterministic, no crypto dep, runs in Workers.
+function fingerprintHash(parts) {
+  const input = parts.filter((p) => p != null).join('|');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+// Map a caller-supplied source string ("worker.fetch", "cron.phase.x") to
+// the router's enum bucket. Keeps the raw value in context for the UI.
+function bucketSource(source) {
+  if (!source) return 'unknown';
+  const s = String(source).toLowerCase();
+  if (s.startsWith('cron')) return 'cron';
+  if (s.startsWith('worker')) return 'worker';
+  if (s.startsWith('admin') || s.startsWith('trpc')) return 'admin-app';
+  if (s.startsWith('edge')) return 'edge';
+  return 'unknown';
 }
 
 function detectSeverity(err, context) {
@@ -110,10 +138,14 @@ export async function captureError(env, error, context = {}) {
     const path = context.path ? String(context.path).slice(0, 500) : null;
     const tenantId = context.tenantId ? String(context.tenantId) : null;
     const userId = context.userId != null ? String(context.userId) : null;
-    const source = context.source ? String(context.source).slice(0, 100) : null;
+    const sourceRaw = context.source ? String(context.source).slice(0, 100) : null;
+    const sourceBucket = bucketSource(sourceRaw);
+    const fingerprint = fingerprintHash([name, safeMessage.slice(0, 200), path || '']);
 
     // Strip well-known sensitive context keys before serializing.
     const ctxJson = JSON.stringify({
+      error_name: name,
+      source_raw: sourceRaw,
       phase: context.phase ?? null,
       // Future-proof: callers may pass extra fields; allow only primitives.
       ...Object.fromEntries(
@@ -128,20 +160,19 @@ export async function captureError(env, error, context = {}) {
     const nowSec = Math.floor(Date.now() / 1000);
     const cutoff = nowSec - DEDUP_WINDOW_SEC;
 
-    // 1h dedup lookup. NULL-safe match on tenant_id + path so a tenant-less
-    // worker.fetch error doesn't merge into a tenant-scoped one.
+    // 1h dedup lookup on fingerprint + nullable tenant_id.
     let existing = null;
     try {
       existing = await db
         .prepare(
           `SELECT id, count FROM error_events
-           WHERE error_name = ? AND message = ?
-             AND (path IS ? OR path = ?)
+           WHERE fingerprint = ?
              AND (tenant_id IS ? OR tenant_id = ?)
-             AND last_seen_at > ?
+             AND last_seen > ?
+             AND resolved_at IS NULL
            LIMIT 1`,
         )
-        .bind(name, safeMessage, path, path, tenantId, tenantId, cutoff)
+        .bind(fingerprint, tenantId, tenantId, cutoff)
         .first();
     } catch {
       existing = null;
@@ -151,7 +182,7 @@ export async function captureError(env, error, context = {}) {
       await db
         .prepare(
           `UPDATE error_events
-           SET count = count + 1, last_seen_at = ?
+           SET count = count + 1, last_seen = ?
            WHERE id = ?`,
         )
         .bind(nowSec, existing.id)
@@ -162,20 +193,21 @@ export async function captureError(env, error, context = {}) {
     await db
       .prepare(
         `INSERT INTO error_events
-          (tenant_id, source, error_name, message, stack, path, user_id,
-           severity, context, count, first_seen_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          (fingerprint, source, severity, message, stack, path, tenant_id,
+           user_id, context, count, first_seen, last_seen, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       )
       .bind(
-        tenantId,
-        source,
-        name,
+        fingerprint,
+        sourceBucket,
+        severity,
         safeMessage,
         safeStack,
         path,
+        tenantId,
         userId,
-        severity,
         ctxJson,
+        nowSec,
         nowSec,
         nowSec,
       )
@@ -191,4 +223,11 @@ export async function captureError(env, error, context = {}) {
 }
 
 // Exposed for unit testing only.
-export const _internals = { stripPII, bound, detectSeverity, normalizeError };
+export const _internals = {
+  stripPII,
+  bound,
+  detectSeverity,
+  normalizeError,
+  fingerprintHash,
+  bucketSource,
+};

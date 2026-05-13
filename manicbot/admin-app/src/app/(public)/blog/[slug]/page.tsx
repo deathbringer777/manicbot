@@ -11,6 +11,8 @@ import {
   SITE_NAME,
 } from "~/lib/seo";
 
+export const runtime = "edge";
+
 type Props = {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ lang?: string | string[] }>;

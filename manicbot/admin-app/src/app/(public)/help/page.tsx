@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { buildSeo, langToOgLocale } from "~/lib/seo";
 import { HelpCenterClient } from "./HelpCenterClient";
 
+export const runtime = "edge";
+
 type Props = { searchParams: Promise<{ lang?: string | string[] }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {

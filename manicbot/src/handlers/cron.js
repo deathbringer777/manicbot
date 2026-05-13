@@ -379,46 +379,158 @@ export async function phaseCleanup(ctx, now) {
  * platform-wide caches, not tenant-scoped, so pruning runs globally once
  * per tenant invocation that wins the 24h idempotency window race.
  */
+/**
+ * Rows-per-table ceiling. If a single retention pass would touch more than
+ * this many rows we treat it as a sign of trouble (clock skew, migration
+ * accident, ingest gone wild) and skip that one table. The other tables
+ * continue normally.
+ */
+export const RETENTION_MAX_ROWS = 50_000;
+
+/**
+ * Retention pass declarations. Each entry exposes the same WHERE clause for
+ * COUNT / SELECT / DELETE so the archive and the DELETE see exactly the
+ * same row set. The clauses are static (no user input) so inlining them
+ * into the SQL string is safe.
+ */
+const RETENTION_PRUNES = Object.freeze([
+  { table: 'audit_log',                  where: "created_at < strftime('%s','now','-180 days')" },
+  { table: 'error_log',                  where: "created_at < strftime('%s','now','-30 days')" },
+  { table: 'analytics_events',           where: "created_at < strftime('%s','now','-365 days')" },
+  { table: 'permission_elevation_codes', where: "expires_at < strftime('%s','now','-7 days')" },
+  { table: 'stripe_events',              where: "received_at < strftime('%s','now','-90 days')" },
+  { table: 'marketing_sends',            where: "status = 'delivered' AND sent_at < strftime('%s','now','-90 days')" },
+]);
+
+/**
+ * Gzip an array of objects as NDJSON via the Web CompressionStream API
+ * (available in Cloudflare Workers and modern Node). Returns an ArrayBuffer
+ * suitable for R2Bucket.put.
+ */
+async function gzipNdjson(rows) {
+  const ndjson = rows.map(r => JSON.stringify(r)).join('\n') + '\n';
+  const source = new Blob([ndjson]).stream();
+  const compressed = source.pipeThrough(new CompressionStream('gzip'));
+  return await new Response(compressed).arrayBuffer();
+}
+
+/** ISO-8601 archive key: archive/{table}/YYYY-MM-DDTHHmmssZ.jsonl.gz */
+export function archiveKey(table, date = new Date()) {
+  const iso = date.toISOString();          // 2026-05-12T09:36:01.234Z
+  const day = iso.slice(0, 10);            // 2026-05-12
+  const time = iso.slice(11, 19).replace(/:/g, ''); // 093601
+  return `archive/${table}/${day}T${time}Z.jsonl.gz`;
+}
+
+/**
+ * Archive the rows that are about to be deleted to R2 as gzipped NDJSON.
+ * Returns { ok, key, error }. Failure is non-fatal — the caller logs it
+ * and continues with the DELETE so a transient R2 outage never blocks
+ * data expiry.
+ */
+async function archiveRowsToR2(ctx, table, rows) {
+  if (!ctx?.ARCHIVE || typeof ctx.ARCHIVE.put !== 'function') {
+    return { ok: false, error: 'no_archive_binding' };
+  }
+  if (!rows.length) return { ok: true, key: null, skipped: 'empty' };
+  try {
+    const body = await gzipNdjson(rows);
+    const key = archiveKey(table);
+    await ctx.ARCHIVE.put(key, body, {
+      httpMetadata: { contentType: 'application/gzip' },
+      customMetadata: { table, rows: String(rows.length) },
+    });
+    return { ok: true, key };
+  } catch (e) {
+    return { ok: false, error: e?.message ?? 'unknown' };
+  }
+}
+
+/**
+ * Prune append-only tables per retention SLA.
+ *
+ * For each table the pass:
+ *   1. SELECT COUNT(*) to size the prune.
+ *   2. If ctx.RETENTION_DRY_RUN === "1" emit cron.retention.dryrun and skip.
+ *   3. If count > RETENTION_MAX_ROWS emit cron.retention.skipped and skip
+ *      (operator investigates — clock skew or a runaway ingest is the
+ *      typical cause).
+ *   4. Otherwise: archive to R2 (gzipped NDJSON), then DELETE. Archive
+ *      failure is non-blocking — we log cron.retention.archive_failed and
+ *      still run DELETE, because compliance retention must not be held
+ *      hostage to a stuck R2 binding.
+ *
+ * Each table is independent — one failure does not block the others. The
+ * `tenantId` argument is informational; these tables are platform-wide.
+ */
 export async function phaseRetention(ctx, tenantId, _now) {
   if (!ctx?.db) return;
-  const prunes = [
-    {
-      table: 'audit_log',
-      sql: "DELETE FROM audit_log WHERE created_at < strftime('%s','now','-180 days')",
-    },
-    {
-      table: 'error_log',
-      sql: "DELETE FROM error_log WHERE created_at < strftime('%s','now','-30 days')",
-    },
-    {
-      table: 'analytics_events',
-      sql: "DELETE FROM analytics_events WHERE created_at < strftime('%s','now','-365 days')",
-    },
-    {
-      table: 'permission_elevation_codes',
-      sql: "DELETE FROM permission_elevation_codes WHERE expires_at < strftime('%s','now','-7 days')",
-    },
-    {
-      table: 'stripe_events',
-      sql: "DELETE FROM stripe_events WHERE received_at < strftime('%s','now','-90 days')",
-    },
-    {
-      table: 'marketing_sends',
-      sql: "DELETE FROM marketing_sends WHERE status = 'delivered' AND sent_at < strftime('%s','now','-90 days')",
-    },
-  ];
-  for (const { table, sql } of prunes) {
+  const dryRun = String(ctx?.RETENTION_DRY_RUN ?? '') === '1';
+
+  for (const { table, where } of RETENTION_PRUNES) {
     try {
-      const result = await dbRun(ctx, sql);
-      // D1 returns meta.changes from .run(); some adapters wrap this. Try common shapes.
+      const countRow = await dbGet(ctx, `SELECT COUNT(*) AS c FROM ${table} WHERE ${where}`);
+      const count = Number(countRow?.c ?? 0);
+
+      if (dryRun) {
+        void logEvent(ctx, 'cron.retention.dryrun', {
+          level: 'info',
+          tenantId,
+          message: `[dry-run] Would prune ${count} rows from ${table}`,
+          table,
+          rows: count,
+        });
+        continue;
+      }
+
+      if (count > RETENTION_MAX_ROWS) {
+        log.warn('handlers.cron', {
+          action: 'retention_skip_overflow', table, rows: count, cap: RETENTION_MAX_ROWS,
+        });
+        void logEvent(ctx, 'cron.retention.skipped', {
+          level: 'warn',
+          tenantId,
+          message: `Skipped ${table}: ${count} rows > cap ${RETENTION_MAX_ROWS}`,
+          table,
+          rows: count,
+          cap: RETENTION_MAX_ROWS,
+        });
+        continue;
+      }
+
+      if (count > 0) {
+        const rows = await dbAll(ctx, `SELECT * FROM ${table} WHERE ${where}`);
+        const archive = await archiveRowsToR2(ctx, table, rows);
+        if (archive.ok && archive.key) {
+          void logEvent(ctx, 'cron.retention.archived', {
+            level: 'info',
+            tenantId,
+            message: `Archived ${rows.length} rows of ${table} to ${archive.key}`,
+            table,
+            rows: rows.length,
+            key: archive.key,
+          });
+        } else if (!archive.ok) {
+          log.warn('handlers.cron', {
+            action: 'retention_archive_failed', table, error: archive.error,
+          });
+          void logEvent(ctx, 'cron.retention.archive_failed', {
+            level: 'warn',
+            tenantId,
+            message: `Archive of ${table} failed (${archive.error}); proceeding with DELETE`,
+            table,
+            error: String(archive.error).slice(0, 200),
+          });
+        }
+      }
+
+      const result = await dbRun(ctx, `DELETE FROM ${table} WHERE ${where}`);
       const rows = Number(
         result?.meta?.changes ??
         result?.changes ??
         result?.rowsAffected ??
         0,
       );
-      // logEvent destructures the data arg directly; `table` / `rows` end up
-      // under event.data.* in the ring buffer.
       void logEvent(ctx, 'cron.retention.pruned', {
         level: 'info',
         tenantId,

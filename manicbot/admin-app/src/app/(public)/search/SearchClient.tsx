@@ -408,7 +408,7 @@ function SearchPageContent() {
   );
 }
 
-export default function SearchPageClient() {
+export default function SearchClient() {
   return (
     <Suspense fallback={
       <div className="mx-auto max-w-6xl px-4 py-8">

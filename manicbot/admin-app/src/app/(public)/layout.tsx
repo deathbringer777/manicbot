@@ -7,6 +7,7 @@ import {
   SITE_NAME,
   organizationJsonLd,
   websiteJsonLd,
+  buildLanguageAlternates,
 } from "~/lib/seo";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export const metadata: Metadata = {
     "Каталог nail-салонов. Найдите салон рядом, выберите мастера и запишитесь онлайн через Telegram за минуту. Более 1000 салонов, отзывы, фото работ.",
   alternates: {
     canonical: SITE_URL,
+    languages: buildLanguageAlternates("/"),
   },
   openGraph: {
     type: "website",

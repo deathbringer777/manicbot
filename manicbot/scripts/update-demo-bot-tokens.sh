@@ -27,12 +27,24 @@ SALON2_ID="${SALON2_TOKEN%%:*}"
 MASTER1_ID="${MASTER1_TOKEN%%:*}"
 MASTER2_ID="${MASTER2_TOKEN%%:*}"
 
+# Escape single quotes in token values via SQL single-quote doubling ('' inside '...').
+# Defence-in-depth: Telegram tokens are alphanumeric + ':' / '_' / '-' in practice, but
+# never embed untrusted values into a SQL string without escaping.
+SALON1_TOKEN_ESC="${SALON1_TOKEN//\'/\'\'}"
+SALON2_TOKEN_ESC="${SALON2_TOKEN//\'/\'\'}"
+MASTER1_TOKEN_ESC="${MASTER1_TOKEN//\'/\'\'}"
+MASTER2_TOKEN_ESC="${MASTER2_TOKEN//\'/\'\'}"
+SALON1_ID_ESC="${SALON1_ID//\'/\'\'}"
+SALON2_ID_ESC="${SALON2_ID//\'/\'\'}"
+MASTER1_ID_ESC="${MASTER1_ID//\'/\'\'}"
+MASTER2_ID_ESC="${MASTER2_ID//\'/\'\'}"
+
 echo "Updating D1 tokens..."
 npx wrangler d1 execute manicbot-db --remote --command "
-  UPDATE bots SET token_encrypted = '$SALON1_TOKEN', bot_id = '$SALON1_ID', updated_at = strftime('%s','now') WHERE tenant_id = 't_salon1';
-  UPDATE bots SET token_encrypted = '$SALON2_TOKEN', bot_id = '$SALON2_ID', updated_at = strftime('%s','now') WHERE tenant_id = 't_salon2';
-  UPDATE bots SET token_encrypted = '$MASTER1_TOKEN', bot_id = '$MASTER1_ID', updated_at = strftime('%s','now') WHERE tenant_id = 't_master1';
-  UPDATE bots SET token_encrypted = '$MASTER2_TOKEN', bot_id = '$MASTER2_ID', updated_at = strftime('%s','now') WHERE tenant_id = 't_master2';
+  UPDATE bots SET token_encrypted = '$SALON1_TOKEN_ESC', bot_id = '$SALON1_ID_ESC', updated_at = strftime('%s','now') WHERE tenant_id = 't_salon1';
+  UPDATE bots SET token_encrypted = '$SALON2_TOKEN_ESC', bot_id = '$SALON2_ID_ESC', updated_at = strftime('%s','now') WHERE tenant_id = 't_salon2';
+  UPDATE bots SET token_encrypted = '$MASTER1_TOKEN_ESC', bot_id = '$MASTER1_ID_ESC', updated_at = strftime('%s','now') WHERE tenant_id = 't_master1';
+  UPDATE bots SET token_encrypted = '$MASTER2_TOKEN_ESC', bot_id = '$MASTER2_ID_ESC', updated_at = strftime('%s','now') WHERE tenant_id = 't_master2';
 "
 
 echo ""

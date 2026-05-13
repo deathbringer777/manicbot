@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { createCaller } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
 import { ChatClient } from "./ChatClient";
-import { buildSeo, SITE_NAME } from "~/lib/seo";
+import { buildSeo } from "~/lib/seo";
 
 // Chat is a full-bleed, keyboard-driven surface — override the root viewport
 // so it sits flush with the device edges and resizes (rather than overlays)
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const profile = await caller.publicSalon.getProfile({ slug }).catch(() => null);
   if (!profile) {
     return {
-      title: `Чат — ${SITE_NAME}`,
+      title: "Чат",
       robots: { index: false, follow: false },
     };
   }

@@ -1,5 +1,3 @@
-export const runtime = "edge";
-
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BLOG_ARTICLES } from "~/content/blog/articles";
@@ -9,21 +7,19 @@ import {
   buildSeo,
   articleJsonLd,
   breadcrumbJsonLd,
-  langToOgLocale,
   SITE_NAME,
 } from "~/lib/seo";
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ lang?: string | string[] }>;
 };
 
 export function generateStaticParams() {
   return BLOG_ARTICLES.map((a) => ({ slug: a.slug }));
 }
 
-export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
-  const [{ slug }, { lang }] = await Promise.all([params, searchParams]);
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
   const article = BLOG_ARTICLES.find((a) => a.slug === slug);
   if (!article) return { title: "Статья не найдена" };
   return buildSeo({
@@ -35,7 +31,6 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     modifiedTime: article.date,
     authors: [SITE_NAME],
     keywords: [article.titles.ru, "nail салон", "автоматизация", "ManicBot блог"],
-    locale: langToOgLocale(lang),
   });
 }
 

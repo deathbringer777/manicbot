@@ -18,6 +18,7 @@ import { makeInbound } from './types.js';
 import { nowSec } from '../utils/time.js';
 import { graphPost } from './graph-api.js';
 import { log } from '../utils/logger.js';
+import { isWithinMessageWindow } from '../handlers/inbound.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 const MAX_BUTTON_BUTTONS = 3;
@@ -136,10 +137,25 @@ export class WhatsAppAdapter {
   /**
    * Send a message to a WhatsApp phone number.
    *
+   * Free-form sends outside the 24h window after the last user message
+   * are rejected by Meta (error 131047). We refuse them in-process to
+   * avoid a Graph round-trip and the associated quota debit. Outside
+   * the window the caller must switch to a pre-approved template send
+   * via channels/whatsapp-templates.js. Mirrors the equivalent guard
+   * in InstagramAdapter.send.
+   *
    * @param {string} userId - Recipient phone number
    * @param {import('./types.js').OutboundMessage} outbound
    */
   async send(userId, outbound) {
+    if (this._ctx?.db && this._ctx?.tenantId) {
+      const inWindow = await isWithinMessageWindow(this._ctx, 'whatsapp', String(userId));
+      if (!inWindow) {
+        log.warn('channels.whatsapp', { message: 'skipping send — outside 24h message window; use template send instead' });
+        return { ok: false, error: 'outside_message_window' };
+      }
+    }
+
     const text = this.htmlToWhatsApp(outbound.text ?? '');
     const buttons = outbound.buttons;
 

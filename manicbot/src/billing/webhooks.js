@@ -382,11 +382,43 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
 
   if (type === 'charge.dispute.created') {
     const dispute = body.data?.object;
-    const customerId = dispute?.charge && typeof dispute.charge === 'string'
-      ? null  // would need GET /charges/{id} to resolve customer; skip for now
-      : dispute?.payment_intent?.customer;
+    // Resolve the customer in the easy cases first. Stripe sends
+    // `dispute.charge` as a string id by default; only expanded payloads
+    // ship the full object. `dispute.payment_intent` is rarely expanded
+    // either, but if it is and carries a customer we use it.
+    let customerId = null;
+    if (dispute?.charge && typeof dispute.charge === 'object') {
+      customerId = typeof dispute.charge.customer === 'string'
+        ? dispute.charge.customer
+        : dispute.charge.customer?.id || null;
+    } else if (dispute?.payment_intent && typeof dispute.payment_intent === 'object') {
+      customerId = typeof dispute.payment_intent.customer === 'string'
+        ? dispute.payment_intent.customer
+        : dispute.payment_intent.customer?.id || null;
+    }
+    // Common case: dispute.charge is a string id and STRIPE_SECRET_KEY is
+    // configured. Fetch the charge to extract the customer. Failures
+    // (network error, non-200, expired key) MUST NOT break the webhook —
+    // we still ack 200 and just lose the tenant tag for analytics.
+    if (!customerId && typeof dispute?.charge === 'string' && ctx?.stripeSecretKey) {
+      try {
+        const res = await fetch(`https://api.stripe.com/v1/charges/${dispute.charge}`, {
+          headers: { Authorization: `Bearer ${ctx.stripeSecretKey}` },
+        });
+        if (res?.ok) {
+          const charge = await res.json();
+          customerId = typeof charge?.customer === 'string'
+            ? charge.customer
+            : charge?.customer?.id || null;
+        } else {
+          log.warn('stripe.dispute', { message: 'charge lookup non-200', status: res?.status });
+        }
+      } catch (e) {
+        log.warn('stripe.dispute', { message: 'charge lookup threw', error: e?.message?.slice(0, 200) });
+      }
+    }
     const tenantId = customerId ? await resolveTenantIdByCustomer(ctx, customerId) : null;
-    log.warn('stripe.dispute', { amount: dispute?.amount, reason: dispute?.reason });
+    log.warn('stripe.dispute', { amount: dispute?.amount, reason: dispute?.reason, tenantId });
     if (tenantId) {
       try {
         const { dbRun: dbRun2 } = await import('../utils/db.js');

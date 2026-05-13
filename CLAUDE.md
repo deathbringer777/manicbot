@@ -161,6 +161,16 @@ HTTP request → src/worker.js
                               orchestrator → phaseReminders / phaseReviews / phaseGcalSync /
                               phasePostVisit / phasePromos / phaseCleanup / phaseRetention.
                               Each idempotent via `tenant_config` key `cron:phase:{name}:last`.
+                              phasePostVisit gated by `shouldAutoDonePostVisit` —
+                              defers the T+24h auto-done when a real master's
+                              Stage-1 prompt has not been delivered; hard cap
+                              `POST_VISIT_HARD_CAP_SEC = 72h` so unreachable
+                              masters never pin appointments forever. WA
+                              reminder loop emits `wa.template.quota_exhausted`
+                              when the plan's monthly template quota is used
+                              up so the dashboard / Activity Feed surfaces it.
+                              `error_log` retention is 90d (matches
+                              `stripe_events` / `marketing_sends`).
 ```
 
 ### HTTP modules (`src/http/`)
@@ -395,6 +405,13 @@ npx wrangler deploy          # deploy to Cloudflare Workers
 - Optional: `INSTAGRAM_IGNORE_SENDER_IDS`, `INSTAGRAM_AI_TRIGGER` — see [META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md).
 
 **Outbound Instagram** uses `graph.facebook.com` + Page ID + Page access token (`[channels/instagram.js](manicbot/src/channels/instagram.js)`); `**entry.id`** is matched to `page_id` / `instagram_business_id` / `ig_account_id` in D1 (`[channels/resolver.js](manicbot/src/channels/resolver.js)`).
+
+**Inbound dedup (all channels)** — Meta retries WA/IG webhooks for up to 24h on 5xx; Telegram retries for ~10min. Each channel claims a KV key before any handler work so a retry is a 200 ack with no replay:
+- Telegram: `tg:upd:{botId}:{updateId}` (5min TTL) — `claimTelegramUpdate` in `[utils/dedup.js](manicbot/src/utils/dedup.js)`.
+- Instagram: `ig:msg:{pageId}:{mid}` (24h TTL) — `claimMetaMessage`.
+- WhatsApp: `wa:msg:{phoneNumberId}:{wamid}` (24h TTL) — `claimWAMessage`. Claim runs **before** tenant resolution so unknown-tenant retries don't burn DB lookups.
+
+**Outbound 24h-window guard (WA/IG)** — `WhatsAppAdapter.send` and `InstagramAdapter.send` both refuse free-form sends outside the Meta 24h messaging window (`isWithinMessageWindow` check in `[handlers/inbound.js](manicbot/src/handlers/inbound.js)`). Return shape: `{ ok: false, error: 'outside_message_window' }`. Outside the window the caller must switch to a pre-approved WA template (`[channels/whatsapp-templates.js](manicbot/src/channels/whatsapp-templates.js)`) — IG has no template fallback. The cron reminder loop emits `wa.template.quota_exhausted` when both gates fail (outside window AND no template quota) so the dashboard surfaces it.
 
 **IG E2E fixture:** `cd manicbot && npm run ig-e2e:tenant -- --owner=TG_USER_ID --bot-id=BOT_ID` (optional `--dry-run` / `--local`) — see `[META_CHANNELS_SETUP.md](manicbot/META_CHANNELS_SETUP.md)` § «Тестовый тенант для E2E».
 

@@ -205,8 +205,23 @@ export async function phaseReminders(ctx, now, w) {
                   log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'wa_template_reminder' });
                 }
               }
+            } else {
+              // Outside 24h AND the plan's monthly template quota is
+              // exhausted. Pre-fix this branch was silent and the client
+              // simply got no reminder — the owner had no signal to top
+              // up the plan or call the client manually. Emit a
+              // structured event so the dashboard and ops can surface it.
+              void logEvent(ctx, 'wa.template.quota_exhausted', {
+                level: 'warn',
+                tenantId: ctx.tenantId,
+                message: 'WA reminder skipped: outside 24h window and no template quota left on this plan',
+                data: {
+                  appointmentId: row.id,
+                  reminderKind: do24 ? '24h' : '2h',
+                  channel: 'whatsapp',
+                },
+              });
             }
-            // Outside 24h and no quota — skip silently
           } else if (identity.channel_type === 'instagram' && canUse(ctx, 'instagram')) {
             const withinWindow = await isWithinMessageWindow(ctx, 'instagram', identity.channel_user_id);
             if (withinWindow) {
@@ -395,7 +410,10 @@ export const RETENTION_MAX_ROWS = 50_000;
  */
 const RETENTION_PRUNES = Object.freeze([
   { table: 'audit_log',                  where: "created_at < strftime('%s','now','-180 days')" },
-  { table: 'error_log',                  where: "created_at < strftime('%s','now','-30 days')" },
+  // error_log was 30d — too tight for "check the logs once a month and
+  // spot a pattern" ops loop. 90d matches stripe_events / marketing_sends
+  // retention and gives a quarter of history without blowing storage.
+  { table: 'error_log',                  where: "created_at < strftime('%s','now','-90 days')" },
   { table: 'analytics_events',           where: "created_at < strftime('%s','now','-365 days')" },
   { table: 'permission_elevation_codes', where: "expires_at < strftime('%s','now','-7 days')" },
   { table: 'stripe_events',              where: "received_at < strftime('%s','now','-90 days')" },
@@ -622,21 +640,68 @@ export async function handleCron(ctx) {
 }
 
 /**
+ * Hard cap on Stage-1 prompt retries. After this many seconds post-end
+ * we give up and auto-done regardless of Stage-1 status. Without the cap
+ * a master who blocked the bot (or has a broken Telegram client) would
+ * pin appointments forever and `processPostVisitConfirmations` would
+ * keep retrying the prompt on every cron tick.
+ */
+export const POST_VISIT_HARD_CAP_SEC = 3 * 24 * 3600; // 72h post-end
+
+/**
+ * Pure decision helper: should this appointment be auto-marked 'done'
+ * at the T+24h sweep?
+ *
+ * Exported so the boolean can be locked in by unit tests without the
+ * full cron round-trip.
+ *
+ * @param {{
+ *   master_id: number|null,
+ *   master_is_synthetic: number|boolean,
+ *   review_requested_at: number|null,
+ * }} apt
+ * @param {number} endSec - appointment_ts + duration*60 (unix seconds)
+ * @param {number} oneDayAgoSec - nowSec - 24h
+ * @param {number} hardCapAgoSec - nowSec - POST_VISIT_HARD_CAP_SEC
+ * @returns {boolean}
+ */
+export function shouldAutoDonePostVisit(apt, endSec, oneDayAgoSec, hardCapAgoSec) {
+  // Still inside the T+24h window — too early to auto-done.
+  if (endSec > oneDayAgoSec) return false;
+  // Past the hard cap — give up and auto-done regardless of Stage-1 state.
+  if (endSec <= hardCapAgoSec) return true;
+  // Master cannot receive a Telegram prompt (synthetic personal-master,
+  // negative id placeholder for manual bookings, or null). Stage 1 was
+  // intentionally skipped — there's nothing to wait for.
+  const hasRealMaster = !!(apt.master_id && apt.master_id > 0 && !apt.master_is_synthetic);
+  if (!hasRealMaster) return true;
+  // Real master AND Stage 1 prompt confirmed sent (review_requested_at
+  // populated). Master had ≥22h to tap a button; auto-done now.
+  // Empty review_requested_at = Stage 1 has not been delivered yet (the
+  // send failed transiently or the master hasn't been pickup-able). Defer
+  // — Stage 1 retries every cron tick until the hard cap.
+  return apt.review_requested_at != null;
+}
+
+/**
  * Sprint 3 Section 8: post-visit confirmation flow.
  *
- * Stage 1 (T+2h): for each appointment that ended ~2h ago, confirmed status,
- * and no visit_confirmed_at yet — emit an analytics event for now. The master
- * prompt send happens via a Telegram message in a follow-up PR (requires
- * tg api + i18n review).
+ * Stage 1 (T+2h): for each appointment that ended ≥2h ago, send the
+ * master a "did the visit happen?" prompt. Only set review_requested_at
+ * + emit analytics when the send actually succeeds — a transient TG
+ * failure must be retryable on the next cron tick.
  *
- * Stage 2 (T+24h): for appointments still unconfirmed, auto-mark as 'done'
- * with visit_confirmed_by='auto'. We don't request a review in this case
- * because the master's silence is ambiguous.
+ * Stage 2 (T+24h): for appointments still unconfirmed, auto-mark as
+ * 'done' with visit_confirmed_by='auto'. Gated by `shouldAutoDonePostVisit`
+ * so we never auto-done an appointment whose Stage-1 prompt has not been
+ * delivered (the master would silently lose visits to a TG outage). After
+ * POST_VISIT_HARD_CAP_SEC post-end we give up and auto-done regardless.
  */
 async function processPostVisitConfirmations(ctx, nowMs) {
   const nowSec = Math.floor(nowMs / 1000);
   const twoHoursAgo = nowSec - 2 * 3600;
   const oneDayAgo = nowSec - 24 * 3600;
+  const hardCapAgo = nowSec - POST_VISIT_HARD_CAP_SEC;
 
   // Compute appointment end_at = ts + service duration. Filter on ts and
   // post-filter in JS — typical tenant has <500 open apts.
@@ -650,6 +715,7 @@ async function processPostVisitConfirmations(ctx, nowMs) {
   // and sendMessage would fail silently for the post-visit prompt.
   const candidates = await dbAll(ctx, `
     SELECT a.id, a.ts, a.date, a.time, a.svc_id, a.chat_id, a.master_id,
+           a.review_requested_at,
            COALESCE(m.is_synthetic, 0) AS master_is_synthetic
     FROM appointments a
     LEFT JOIN masters m
@@ -666,12 +732,14 @@ async function processPostVisitConfirmations(ctx, nowMs) {
 
   const svcDurMap = new Map((ctx.svc || []).map(s => [s.id, s.dur]));
 
-  // Stage 2: T+24h → auto-done
+  // Stage 2: T+24h → auto-done, with the Stage-1-completion gate.
   const toAutoDone = [];
   for (const a of candidates) {
     const dur = svcDurMap.get(a.svc_id) || 60;
     const endSec = a.ts + dur * 60;
-    if (endSec <= oneDayAgo) toAutoDone.push(a.id);
+    if (shouldAutoDonePostVisit(a, endSec, oneDayAgo, hardCapAgo)) {
+      toAutoDone.push(a.id);
+    }
   }
   if (toAutoDone.length) {
     const placeholders = toAutoDone.map(() => '?').join(',');
@@ -682,22 +750,26 @@ async function processPostVisitConfirmations(ctx, nowMs) {
     `, nowSec, ctx.tenantId, ...toAutoDone);
   }
 
-  // Stage 1: T+2h → mark review_requested_at + emit analytics
+  // Stage 1: T+2h → prompt master, set review_requested_at on success.
   const toPrompt = [];
   for (const a of candidates) {
     if (toAutoDone.includes(a.id)) continue;
+    // Already prompted on a previous cron tick — skip (the analytics event
+    // only fires once, see below).
+    if (a.review_requested_at != null) continue;
     const dur = svcDurMap.get(a.svc_id) || 60;
     const endSec = a.ts + dur * 60;
     if (endSec <= twoHoursAgo) toPrompt.push(a);
   }
   for (const a of toPrompt) {
     try {
-      // Send Telegram prompt to master with Yes/No-show buttons.
-      // master_id is a Telegram chat_id for human masters (positive ints).
-      // Negative IDs = synthetic (manual-booking clients) → skip.
-      // is_synthetic=1 = personal-master synthetic chat_id (no real
-      // Telegram chat behind it) → skip to avoid sending to dead chats.
-      if (a.master_id && a.master_id > 0 && !a.master_is_synthetic) {
+      const hasRealMaster = !!(a.master_id && a.master_id > 0 && !a.master_is_synthetic);
+      // promptOk semantics: true when the prompt was delivered OR when no
+      // prompt was needed (synthetic/no master). We only persist
+      // review_requested_at + analytics when promptOk — a transient TG
+      // failure must remain retryable on the next cron tick.
+      let promptOk = !hasRealMaster;
+      if (hasRealMaster) {
         const client = await dbGet(ctx,
           'SELECT name, phone FROM users WHERE tenant_id = ? AND chat_id = ?',
           ctx.tenantId, a.chat_id,
@@ -706,15 +778,25 @@ async function processPostVisitConfirmations(ctx, nowMs) {
         const svc = (ctx.svc || []).find(s => s.id === a.svc_id);
         const svcLabel = svc ? (svc.names?.ru || svc.names?.en || svc.id) : a.svc_id;
         const text = `Был ли визит? ${clientName} — ${svcLabel} (${a.date} ${a.time})`;
-        await send(ctx, a.master_id, text, {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '✅ Пришёл', callback_data: `visit_ok:${a.id}` },
-              { text: '❌ Не пришёл', callback_data: `visit_noshow:${a.id}` },
-            ]],
-          },
-        }).catch(() => {});
+        try {
+          const sendRes = await send(ctx, a.master_id, text, {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '✅ Пришёл', callback_data: `visit_ok:${a.id}` },
+                { text: '❌ Не пришёл', callback_data: `visit_noshow:${a.id}` },
+              ]],
+            },
+          });
+          promptOk = !!(sendRes && sendRes.ok !== false);
+          if (!promptOk) {
+            log.warn('handlers.cron', { action: 'post_visit_prompt_send_failed', aptId: a.id, masterId: a.master_id, description: sendRes?.description });
+          }
+        } catch (e) {
+          log.warn('handlers.cron', { action: 'post_visit_prompt_send_threw', aptId: a.id, masterId: a.master_id, error: e?.message?.slice(0, 200) });
+          promptOk = false;
+        }
       }
+      if (!promptOk) continue; // retry on next cron tick
       await dbRun(ctx,
         'UPDATE appointments SET review_requested_at = ? WHERE id = ? AND tenant_id = ?',
         nowSec, a.id, ctx.tenantId,

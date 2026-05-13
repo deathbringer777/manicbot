@@ -126,7 +126,9 @@ describe('phaseRetention (P1-10)', () => {
     const sqls = db.deletes.map(d => d.sql);
     expect(sqls).toHaveLength(6);
     expect(sqls.some(s => /DELETE FROM audit_log.*-180 days/i.test(s))).toBe(true);
-    expect(sqls.some(s => /DELETE FROM error_log.*-30 days/i.test(s))).toBe(true);
+    // error_log retention was widened 30 → 90 days during the pre-prod
+    // hardening pass (matches stripe_events / marketing_sends retention).
+    expect(sqls.some(s => /DELETE FROM error_log.*-90 days/i.test(s))).toBe(true);
     expect(sqls.some(s => /DELETE FROM analytics_events.*-365 days/i.test(s))).toBe(true);
     expect(sqls.some(s => /DELETE FROM permission_elevation_codes.*-7 days/i.test(s))).toBe(true);
     expect(sqls.some(s => /DELETE FROM stripe_events.*-90 days/i.test(s))).toBe(true);

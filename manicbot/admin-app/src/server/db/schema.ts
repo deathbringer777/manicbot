@@ -885,6 +885,50 @@ export const errorLog = sqliteTable("error_log", {
   index("idx_error_log_user").on(t.userId, t.createdAt),
 ]);
 
+// ─── Error events / issue tracker (migration 0056) ───────────────────────
+// Deduplicated issue tracker for the in-project error monitoring system.
+// One row per `fingerprint`; the write path UPSERTs (ON CONFLICT) to bump
+// count + last_seen instead of inserting duplicates. The raw firehose lives
+// in `error_log`. A new fire on a `resolved` issue flips status back to
+// `open` — that is the regression signal the God Mode dashboard surfaces.
+// See migrations/0056_error_events.sql for full rationale.
+export const errorEvents = sqliteTable("error_events", {
+  id: text("id").primaryKey(),
+  fingerprint: text("fingerprint").notNull(),
+  tenantId: text("tenant_id"),
+  source: text("source").notNull(),
+  environment: text("environment").notNull().default("production"),
+  release: text("release"),
+  severity: text("severity").notNull().default("error"),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  errorType: text("error_type"),
+  stack: text("stack"),
+  url: text("url"),
+  method: text("method"),
+  userId: text("user_id"),
+  requestId: text("request_id"),
+  count: integer("count").notNull().default(1),
+  usersAffected: integer("users_affected").notNull().default(1),
+  firstSeen: integer("first_seen").notNull(),
+  lastSeen: integer("last_seen").notNull(),
+  status: text("status").notNull().default("open"),
+  resolvedAt: integer("resolved_at"),
+  resolvedBy: text("resolved_by"),
+  snoozeUntil: integer("snooze_until"),
+  assigneeId: text("assignee_id"),
+  tagsJson: text("tags_json"),
+  sampleJson: text("sample_json"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("uniq_error_events_fingerprint").on(t.fingerprint),
+  index("idx_error_events_status_last").on(t.status, t.lastSeen),
+  index("idx_error_events_tenant_status_last").on(t.tenantId, t.status, t.lastSeen),
+  index("idx_error_events_severity_last").on(t.severity, t.lastSeen),
+  index("idx_error_events_source_last").on(t.source, t.lastSeen),
+  index("idx_error_events_last_seen").on(t.lastSeen),
+]);
+
 // ─── Cookie consent log (migration 0049) ─────────────────────────────────
 // APPEND-ONLY audit trail of cookie banner decisions. The application never
 // UPDATEs or DELETEs. Tracking activation MUST consult this table — never the

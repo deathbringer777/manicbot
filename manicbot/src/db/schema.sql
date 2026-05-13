@@ -896,6 +896,48 @@ CREATE INDEX IF NOT EXISTS idx_error_log_created_at ON error_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_error_log_source     ON error_log(source, created_at);
 CREATE INDEX IF NOT EXISTS idx_error_log_user       ON error_log(user_id, created_at);
 
+-- ─── Error events / issue tracker (migration 0056) ───────────────────────
+-- Deduplicated *issues* (one row per fingerprint). The raw firehose lives in
+-- error_log; this table is the Sentry-style aggregate used by the God Mode
+-- dashboard. UPSERT on `fingerprint` bumps count and last_seen instead of
+-- inserting duplicates. See migrations/0056_error_events.sql for the full
+-- rationale (status lifecycle, fingerprint algorithm, regression detection).
+CREATE TABLE IF NOT EXISTS error_events (
+  id              TEXT PRIMARY KEY,
+  fingerprint     TEXT NOT NULL,
+  tenant_id       TEXT,
+  source          TEXT NOT NULL,
+  environment     TEXT NOT NULL DEFAULT 'production',
+  release         TEXT,
+  severity        TEXT NOT NULL DEFAULT 'error',
+  title           TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  error_type      TEXT,
+  stack           TEXT,
+  url             TEXT,
+  method          TEXT,
+  user_id         TEXT,
+  request_id      TEXT,
+  count           INTEGER NOT NULL DEFAULT 1,
+  users_affected  INTEGER NOT NULL DEFAULT 1,
+  first_seen      INTEGER NOT NULL,
+  last_seen       INTEGER NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'open',
+  resolved_at     INTEGER,
+  resolved_by     TEXT,
+  snooze_until    INTEGER,
+  assignee_id     TEXT,
+  tags_json       TEXT,
+  sample_json     TEXT,
+  created_at      INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_error_events_fingerprint        ON error_events(fingerprint);
+CREATE INDEX        IF NOT EXISTS idx_error_events_status_last         ON error_events(status, last_seen);
+CREATE INDEX        IF NOT EXISTS idx_error_events_tenant_status_last  ON error_events(tenant_id, status, last_seen);
+CREATE INDEX        IF NOT EXISTS idx_error_events_severity_last       ON error_events(severity, last_seen);
+CREATE INDEX        IF NOT EXISTS idx_error_events_source_last         ON error_events(source, last_seen);
+CREATE INDEX        IF NOT EXISTS idx_error_events_last_seen           ON error_events(last_seen);
+
 -- ─── Cookie consent audit trail (migration 0049) ─────────────────────────
 -- APPEND-ONLY. Each banner decision (Accept All / Only Necessary / future
 -- per-category) inserts a row. The application never UPDATEs or DELETEs.

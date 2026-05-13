@@ -1,8 +1,8 @@
 /**
  * #S12 — plugin_pins(web_user_id) → web_users(id) ON DELETE CASCADE.
  *
- * The Vitest worker runtime is plain Node 20 in CI (no node:sqlite, no
- * better-sqlite3 dependency), so we cannot exercise FK enforcement at
+ * The Vitest worker runtime is plain Node in CI (no better-sqlite3
+ * dependency wired into this suite), so we cannot exercise FK enforcement at
  * runtime here. Instead we lock the wire-level invariants the production D1
  * engine will enforce:
  *

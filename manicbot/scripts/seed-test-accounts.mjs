@@ -121,15 +121,19 @@ function slugify(name) {
 // ─── Account roster ─────────────────────────────────────────────────────────
 // Group A — annual paid subscriptions (active, current_period_end = now + 365d)
 // Group B — expired trials (trialing, trial_ends_at = now - 86400)
+//
+// Platform operates in Poland — names and cities are Polish. Distributed
+// across multiple cities so /search city-filter regressions can exercise
+// real-world variety.
 const ACCOUNTS = [
-  { kind: "salon",  plan: "start", email: "salon-start@test.manicbot.local",  name: "Test Салон Start",  city: "Київ" },
-  { kind: "salon",  plan: "pro",   email: "salon-pro@test.manicbot.local",    name: "Test Салон Pro",    city: "Київ" },
-  { kind: "salon",  plan: "max",   email: "salon-max@test.manicbot.local",    name: "Test Салон Max",    city: "Київ" },
-  { kind: "master", plan: "start", email: "master-start@test.manicbot.local", name: "Test Майстер Start", city: "Київ" },
-  { kind: "master", plan: "pro",   email: "master-pro@test.manicbot.local",   name: "Test Майстер Pro",   city: "Київ" },
-  { kind: "master", plan: "max",   email: "master-max@test.manicbot.local",   name: "Test Майстер Max",   city: "Київ" },
-  { kind: "salon",  plan: "expired_trial", email: "salon-trial@test.manicbot.local",  name: "Test Салон Trial",  city: "Київ" },
-  { kind: "master", plan: "expired_trial", email: "master-trial@test.manicbot.local", name: "Test Майстер Trial", city: "Київ" },
+  { kind: "salon",  plan: "start", email: "salon-start@test.manicbot.local",  name: "Test Salon Start",  city: "Warszawa" },
+  { kind: "salon",  plan: "pro",   email: "salon-pro@test.manicbot.local",    name: "Test Salon Pro",    city: "Kraków"   },
+  { kind: "salon",  plan: "max",   email: "salon-max@test.manicbot.local",    name: "Test Salon Max",    city: "Wrocław"  },
+  { kind: "master", plan: "start", email: "master-start@test.manicbot.local", name: "Test Mistrz Start", city: "Warszawa" },
+  { kind: "master", plan: "pro",   email: "master-pro@test.manicbot.local",   name: "Test Mistrz Pro",   city: "Kraków"   },
+  { kind: "master", plan: "max",   email: "master-max@test.manicbot.local",   name: "Test Mistrz Max",   city: "Gdańsk"   },
+  { kind: "salon",  plan: "expired_trial", email: "salon-trial@test.manicbot.local",  name: "Test Salon Trial",  city: "Wrocław" },
+  { kind: "master", plan: "expired_trial", email: "master-trial@test.manicbot.local", name: "Test Mistrz Trial", city: "Wrocław" },
 ];
 
 // ─── Build SQL ──────────────────────────────────────────────────────────────
@@ -193,7 +197,7 @@ for (const acc of ACCOUNTS) {
         sqlString(role),
         sqlString(tenantId),
         sqlString(acc.name),
-        sqlString("ua"),
+        sqlString("pl"),
         "1",
         sqlInt(now),
         sqlInt(now),

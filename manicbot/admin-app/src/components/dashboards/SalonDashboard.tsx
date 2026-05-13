@@ -932,7 +932,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-600 dark:text-slate-500 shrink-0">manicbot.com/salon/</span>
                 <input value={slug} onChange={(e) => { setSlug(e.target.value.toLowerCase()); validateSlug(e.target.value.toLowerCase()); }}
-                  placeholder="moi-salon-moskva"
+                  placeholder="moj-salon-warszawa"
                   className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
                 {slug && !slugError && (
                   <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
@@ -946,7 +946,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             <div>
               <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.city", lang)}</label>
               <input value={city} onChange={(e) => setCity(e.target.value)}
-                placeholder="Москва"
+                placeholder="Warszawa"
                 className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
             </div>
 

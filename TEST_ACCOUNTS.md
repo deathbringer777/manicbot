@@ -22,16 +22,17 @@
 
 ## Группа A — годовые активные подписки (6 аккаунтов)
 
-`billing_status = active`, `current_period_end = now + 365 дней`.
+`billing_status = active`, `current_period_end = now + 365 дней`. Платформа
+работает в Польше — имена и города у тест-аккаунтов польские.
 
-| Email                              | Роль          | План  | Тенант (`is_personal`) | Где смотреть             |
-| ---------------------------------- | ------------- | ----- | ---------------------- | ------------------------ |
-| `salon-start@test.manicbot.local`  | tenant_owner  | start | 0 (обычный салон)      | SalonDashboard, /search  |
-| `salon-pro@test.manicbot.local`    | tenant_owner  | pro   | 0                      | SalonDashboard, /search  |
-| `salon-max@test.manicbot.local`    | tenant_owner  | max   | 0                      | SalonDashboard, /search  |
-| `master-start@test.manicbot.local` | master        | start | 1 (personal)           | MasterDashboard          |
-| `master-pro@test.manicbot.local`   | master        | pro   | 1                      | MasterDashboard          |
-| `master-max@test.manicbot.local`   | master        | max   | 1                      | MasterDashboard          |
+| Email                              | Роль          | План  | Имя / Город          | Тенант (`is_personal`) | Где смотреть             |
+| ---------------------------------- | ------------- | ----- | -------------------- | ---------------------- | ------------------------ |
+| `salon-start@test.manicbot.local`  | tenant_owner  | start | Test Salon Start / Warszawa | 0 (обычный салон) | SalonDashboard, /search  |
+| `salon-pro@test.manicbot.local`    | tenant_owner  | pro   | Test Salon Pro / Kraków     | 0                 | SalonDashboard, /search  |
+| `salon-max@test.manicbot.local`    | tenant_owner  | max   | Test Salon Max / Wrocław    | 0                 | SalonDashboard, /search  |
+| `master-start@test.manicbot.local` | master        | start | Test Mistrz Start / Warszawa | 1 (personal)     | MasterDashboard          |
+| `master-pro@test.manicbot.local`   | master        | pro   | Test Mistrz Pro / Kraków     | 1                | MasterDashboard          |
+| `master-max@test.manicbot.local`   | master        | max   | Test Mistrz Max / Gdańsk     | 1                | MasterDashboard          |
 
 ## Группа B — истёкшие триалы (2 аккаунта)
 
@@ -39,10 +40,10 @@
 продакшн-кейс, когда юзер зарегистрировался, триал автопроставился, ушёл и
 не оплатил.
 
-| Email                               | Роль          | План  | Тенант              | Что должно быть видно                       |
-| ----------------------------------- | ------------- | ----- | ------------------- | ------------------------------------------- |
-| `salon-trial@test.manicbot.local`   | tenant_owner  | start | обычный             | Заглушка «триал истёк», staff-фичи блокированы |
-| `master-trial@test.manicbot.local`  | master        | start | personal            | То же                                       |
+| Email                               | Роль          | План  | Имя / Город              | Тенант      | Что должно быть видно                       |
+| ----------------------------------- | ------------- | ----- | ------------------------ | ----------- | ------------------------------------------- |
+| `salon-trial@test.manicbot.local`   | tenant_owner  | start | Test Salon Trial / Wrocław | обычный   | Заглушка «триал истёк», staff-фичи блокированы |
+| `master-trial@test.manicbot.local`  | master        | start | Test Mistrz Trial / Wrocław | personal | То же                                       |
 
 ## Что проверять
 

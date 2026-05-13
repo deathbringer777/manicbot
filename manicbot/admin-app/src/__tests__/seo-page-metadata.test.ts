@@ -89,9 +89,10 @@ describe("regression: relax.md §3 P1 (Warsaw salons render og:locale=ru_RU)", (
     ["Kyiv", "uk_UA"],
     ["Lviv", "uk_UA"],
     ["London", "en_US"],
-    [null, "ru_RU"],
-    [undefined, "ru_RU"],
-    ["Москва", "ru_RU"],
+    // Poland-only platform: unknown / null cities fall back to pl_PL
+    [null, "pl_PL"],
+    [undefined, "pl_PL"],
+    ["Some Random Town", "pl_PL"],
   ])("ogLocaleForCity(%j) → %s", (city, expected) => {
     expect(ogLocaleForCity(city)).toBe(expected);
   });

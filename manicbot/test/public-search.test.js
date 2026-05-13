@@ -59,10 +59,10 @@ describe('Haversine distance', () => {
     expect(d).toBeCloseTo(0, 2);
   });
 
-  it('Moscow ↔ Warsaw is roughly 1250 km', () => {
-    const d = haversineKm(55.7558, 37.6173, 52.2297, 21.0122);
-    expect(d).toBeGreaterThan(1100);
-    expect(d).toBeLessThan(1400);
+  it('Warsaw ↔ Kraków is roughly 250 km', () => {
+    const d = haversineKm(52.2297, 21.0122, 50.0647, 19.9450);
+    expect(d).toBeGreaterThan(200);
+    expect(d).toBeLessThan(320);
   });
 
   it('nearby points < 1 km', () => {
@@ -75,12 +75,12 @@ describe('Haversine distance', () => {
 describe('buildSearchText', () => {
   it('includes name, city, description', () => {
     const text = buildSearchTextPure(
-      { name: 'Nails Studio', city: 'Варшава', description: 'Маникюр' },
+      { name: 'Nails Studio', city: 'Warszawa', description: 'Manicure' },
       [],
     );
     expect(text).toContain('Nails Studio');
-    expect(text).toContain('Варшава');
-    expect(text).toContain('Маникюр');
+    expect(text).toContain('Warszawa');
+    expect(text).toContain('Manicure');
   });
 
   it('includes service names in all languages', () => {

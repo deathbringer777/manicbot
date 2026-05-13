@@ -15,24 +15,24 @@ import { SITE_URL, SITE_NAME } from "~/lib/seo";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — онлайн-запись в nail-салоны через Telegram`,
+    default: `${SITE_NAME} — rezerwacje online dla salonów paznokci przez Telegram`,
     template: `%s — ${SITE_NAME}`,
   },
   description:
-    "ManicBot — платформа автоматизации nail-салонов: онлайн-запись через Telegram, WhatsApp и Instagram, напоминания, синхронизация с Google Calendar, AI-ассистент.",
+    "ManicBot — platforma automatyzacji salonów paznokci: rezerwacje online przez Telegram, WhatsApp i Instagram, przypomnienia, synchronizacja z Google Calendar, asystent AI.",
   applicationName: SITE_NAME,
   authors: [{ name: SITE_NAME, url: SITE_URL }],
   creator: SITE_NAME,
   publisher: SITE_NAME,
   keywords: [
     "ManicBot",
-    "онлайн-запись",
-    "nail-салон",
-    "маникюр",
-    "педикюр",
-    "Telegram бот",
-    "салон красоты",
-    "автоматизация салона",
+    "rezerwacje online",
+    "salon paznokci",
+    "manicure",
+    "pedicure",
+    "bot Telegram",
+    "salon kosmetyczny",
+    "automatyzacja salonu",
     "booking",
     "beauty salon",
   ],
@@ -40,8 +40,8 @@ export const metadata: Metadata = {
     type: "website",
     url: SITE_URL,
     siteName: SITE_NAME,
-    locale: "ru_RU",
-    alternateLocale: ["uk_UA", "en_US", "pl_PL"],
+    locale: "pl_PL",
+    alternateLocale: ["en_US", "uk_UA", "ru_RU"],
   },
   twitter: {
     card: "summary_large_image",
@@ -83,7 +83,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className={`${geist.variable}`} suppressHydrationWarning>
+    <html lang="pl" className={`${geist.variable}`} suppressHydrationWarning>
       {/* Blocking script: apply .dark before first paint based on stored preference (avoids flash).
           Default is dark. Removed on toggle via WebShell which syncs document.documentElement.
 

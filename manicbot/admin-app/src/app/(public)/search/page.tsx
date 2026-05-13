@@ -1,14 +1,34 @@
 export const runtime = "edge";
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { createCaller } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
 import { JsonLd } from "~/components/public/JsonLd";
-import { canonicalUrl, SITE_URL } from "~/lib/seo";
+import { buildSeo, canonicalUrl, langToOgLocale, SITE_URL } from "~/lib/seo";
 import SearchClient from "./SearchClient";
 
 interface Props {
-  searchParams: Promise<{ city?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ city?: string; q?: string; page?: string; lang?: string | string[] }>;
+}
+
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const { lang } = await searchParams;
+  return buildSeo({
+    title: "Поиск салонов красоты",
+    description:
+      "Найдите nail-салон рядом. Поиск по городу, услуге, мастеру. Маникюр, педикюр, наращивание, nail-арт. Онлайн-запись через Telegram.",
+    path: "/search",
+    keywords: [
+      "поиск салонов красоты",
+      "nail салон рядом",
+      "маникюр рядом",
+      "педикюр рядом",
+      "записаться онлайн",
+      "каталог салонов",
+    ],
+    locale: langToOgLocale(lang),
+  });
 }
 
 /**

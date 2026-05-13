@@ -28,6 +28,7 @@ import { isAdminAppPath } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
+import { captureError } from './utils/errorCapture.js';
 import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
 
 async function proxyToAdminApp(request, env, url) {
@@ -246,9 +247,19 @@ export function requireAdminAppConfigured(request, env, url) {
 
 export default {
   async fetch(request, env, executionCtx) {
-    validateSecurityConfig(env);
+    try {
+      validateSecurityConfig(env);
+    } catch (e) {
+      // Security config errors are fatal — surface them to the monitor.
+      if (executionCtx?.waitUntil) {
+        executionCtx.waitUntil(captureError(env, e, { source: 'worker.fetch', phase: 'startup' }));
+      } else {
+        void captureError(env, e, { source: 'worker.fetch', phase: 'startup' });
+      }
+      throw e;
+    }
     const url = new URL(request.url);
-
+    try {
     // robots.txt — served BEFORE landing proxy so Workers own it
     if (url.pathname === '/robots.txt' && request.method === 'GET') {
       return addSecurityHeaders(generateRobotsResponse(url.origin));
@@ -376,6 +387,9 @@ export default {
     } catch (e) {
       logWorkerError('context resolution failed', request, url, e);
       void logEvent(envCtx(env), 'error.handler', { level: 'error', message: e?.message ?? 'Unknown error', stack: e?.stack?.slice(0, 300) });
+      const capCtxResolve = captureError(env, e, { source: 'worker.fetch.resolveCtx', path: url.pathname });
+      if (executionCtx?.waitUntil) executionCtx.waitUntil(capCtxResolve);
+      else void capCtxResolve;
       if (needsFallback) {
         try {
           ctx = tryFallbackCtx();
@@ -423,6 +437,18 @@ export default {
       if (landingRes) return addSecurityHeaders(landingRes);
     }
     return addSecurityHeaders(new Response('Not Found', { status: 404 }));
+    } catch (e) {
+      // Unhandled error in a sub-handler: capture, then return 500.
+      // Capture is async/best-effort — use waitUntil so the response is not blocked.
+      const capturePromise = captureError(env, e, {
+        source: 'worker.fetch',
+        path: url.pathname,
+      });
+      if (executionCtx?.waitUntil) executionCtx.waitUntil(capturePromise);
+      else void capturePromise;
+      logWorkerError('unhandled', request, url, e);
+      return addSecurityHeaders(new Response('Internal Server Error', { status: 500 }));
+    }
   },
 
   /**
@@ -489,6 +515,7 @@ export default {
     } catch (e) {
       log.error('worker.cron', e instanceof Error ? e : new Error(String(e?.message || e)), { stack: e?.stack?.slice(0, 300) || null });
       void logEvent(envCtx(env), 'error.cron', { level: 'error', message: e?.message ?? 'Cron init error', data: { stack: e?.stack?.slice(0, 300) } });
+      void captureError(env, e, { source: 'worker.scheduled', phase: 'cron' });
     }
   },
 
@@ -531,6 +558,11 @@ export default {
           level: 'error',
           message: `Cron failed for tenant ${tenantId}: ${e?.message ?? 'unknown'}`,
           data: { tenantId, scheduledAt, attempts: msg.attempts, error: e?.message?.slice(0, 200) },
+        });
+        void captureError(env, e, {
+          source: 'worker.queue.cron',
+          tenantId,
+          phase: 'cron',
         });
         // Retry up to 3 times (configured in wrangler.toml max_retries)
         msg.retry({ delaySeconds: Math.min(60 * msg.attempts, 300) });

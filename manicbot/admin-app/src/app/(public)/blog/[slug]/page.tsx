@@ -7,17 +7,21 @@ import {
   buildSeo,
   articleJsonLd,
   breadcrumbJsonLd,
+  langToOgLocale,
   SITE_NAME,
 } from "~/lib/seo";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ lang?: string | string[] }>;
+};
 
 export function generateStaticParams() {
   return BLOG_ARTICLES.map((a) => ({ slug: a.slug }));
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const [{ slug }, { lang }] = await Promise.all([params, searchParams]);
   const article = BLOG_ARTICLES.find((a) => a.slug === slug);
   if (!article) return { title: `Статья не найдена — ${SITE_NAME}` };
   return buildSeo({
@@ -29,6 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     modifiedTime: article.date,
     authors: [SITE_NAME],
     keywords: [article.titles.ru, "nail салон", "автоматизация", "ManicBot блог"],
+    locale: langToOgLocale(lang),
   });
 }
 

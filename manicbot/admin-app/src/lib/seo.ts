@@ -9,6 +9,29 @@ import type { Metadata } from "next";
 export const SITE_URL = "https://manicbot.com";
 export const SITE_NAME = "ManicBot";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
+export const DEFAULT_OG_LOCALE = "ru_RU";
+
+const LANG_TO_OG_LOCALE: Record<string, string> = {
+  en: "en_US",
+  pl: "pl_PL",
+  ua: "uk_UA",
+  uk: "uk_UA",
+  ru: "ru_RU",
+};
+
+/**
+ * Map a `?lang=` query-param value to an Open Graph locale code.
+ * Accepts the array shape Next.js exposes via `searchParams` (uses first entry).
+ * Unknown / missing values fall back to ru_RU (legacy default).
+ */
+export function langToOgLocale(
+  lang: string | string[] | null | undefined,
+): string {
+  const raw = Array.isArray(lang) ? lang[0] : lang;
+  if (!raw) return DEFAULT_OG_LOCALE;
+  const key = String(raw).toLowerCase();
+  return LANG_TO_OG_LOCALE[key] ?? DEFAULT_OG_LOCALE;
+}
 
 /** Canonical URL for a given pathname (no trailing slash unless root). */
 export function canonicalUrl(pathname: string): string {
@@ -29,6 +52,8 @@ export interface PageSeoInput {
   authors?: string[];
   keywords?: string[];
   noIndex?: boolean;
+  /** Open Graph locale code (e.g. "en_US"). Defaults to ru_RU. Use langToOgLocale() to derive from a lang code. */
+  locale?: string;
 }
 
 /** Build a full Next.js Metadata object with OG + Twitter + canonical. */
@@ -52,7 +77,7 @@ export function buildSeo(input: PageSeoInput): Metadata {
       siteName: SITE_NAME,
       title: fullTitle,
       description: input.description,
-      locale: "ru_RU",
+      locale: input.locale ?? DEFAULT_OG_LOCALE,
       images: [{ url: image, width: 1200, height: 630, alt: input.imageAlt ?? input.title }],
       ...(input.type === "article" && input.publishedTime
         ? { publishedTime: input.publishedTime }

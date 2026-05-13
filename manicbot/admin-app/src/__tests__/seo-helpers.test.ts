@@ -87,9 +87,9 @@ describe("ogLocaleForCity (relax.md §3 P1 — RU og:locale on Warsaw salons)", 
     expect(ogLocaleForCity("Kyiv")).toBe("uk_UA");
     expect(ogLocaleForCity("Lviv")).toBe("uk_UA");
   });
-  it("falls back to ru_RU for unknown cities", () => {
-    expect(ogLocaleForCity("Some Random Town")).toBe("ru_RU");
-    expect(ogLocaleForCity(null)).toBe("ru_RU");
+  it("falls back to pl_PL for unknown cities (Poland is our primary market)", () => {
+    expect(ogLocaleForCity("Some Random Town")).toBe("pl_PL");
+    expect(ogLocaleForCity(null)).toBe("pl_PL");
   });
 });
 

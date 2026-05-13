@@ -40,7 +40,7 @@ function tenantsByPlan(plan: string, kind: "salon" | "master" = "salon") {
     email: `${kind}-${plan}@test.example`,
     password: "TestPass!2026",
     name: `Test ${kind} ${plan}`,
-    city: "Київ",
+    city: "Warszawa",
   };
 }
 

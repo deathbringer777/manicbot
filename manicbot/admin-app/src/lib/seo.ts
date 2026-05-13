@@ -289,9 +289,9 @@ export function workHoursToOpeningHoursSpec(raw: unknown): Array<Record<string, 
 }
 
 /**
- * Map a city name to an `og:locale`. Falls back to `ru_RU` because the bulk
- * of our content + descriptions are still Russian. Cities are matched by
- * lower-case substring so "Warszawa", "warsaw", "Kraków" all resolve to PL.
+ * Map a city name to an `og:locale`. Falls back to `pl_PL` — the platform
+ * currently operates in Poland only. Cities are matched by lower-case
+ * substring so "Warszawa", "warsaw", "Kraków" all resolve to PL.
  */
 const CITY_LOCALE_MAP: Array<[RegExp, string]> = [
   [/warsz|warsaw|krak[oó]w|gda[nń]sk|wroc[lł]aw|pozna[nń]|[lł]od[zź]|szczecin|katowice|lublin|poland|polska|pl-pl/i, "pl_PL"],
@@ -300,11 +300,11 @@ const CITY_LOCALE_MAP: Array<[RegExp, string]> = [
 ];
 
 export function ogLocaleForCity(city?: string | null): string {
-  if (!city) return "ru_RU";
+  if (!city) return "pl_PL";
   for (const [re, locale] of CITY_LOCALE_MAP) {
     if (re.test(city)) return locale;
   }
-  return "ru_RU";
+  return "pl_PL";
 }
 
 /** Build a LocalBusiness / BeautySalon JSON-LD payload for a salon profile. */

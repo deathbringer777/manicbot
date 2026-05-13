@@ -105,21 +105,21 @@ const FIXTURES: Tenant[] = [
     city: "Krakow",
     searchText: "polish studio krakow nails english manicure",
   },
-  // Ukrainian — "лак для нігтів"
+  // Ukrainian language (PL-based salon serving Ukrainian-speaking clients)
   {
     id: "t_ua_lak",
     name: "Лак Студія",
     slug: "lak-studia",
-    city: "Львів",
-    searchText: "лак студія львів манікюр",
+    city: "Wrocław",
+    searchText: "лак студія wrocław манікюр",
   },
-  // Russian — "маникюр"
+  // Russian language (PL-based salon serving Russian-speaking clients)
   {
     id: "t_ru_manicure",
     name: "Маникюр Плюс",
     slug: "manicure-plus",
-    city: "Москва",
-    searchText: "маникюр педикюр москва салон",
+    city: "Gdańsk",
+    searchText: "маникюр педикюр gdańsk салон",
   },
   // English
   {
@@ -235,6 +235,10 @@ describeOnSqlite("FTS5 integration — multi-language search", () => {
 
   it("DELETE trigger drops the corresponding tenant_fts row", () => {
     db.prepare("DELETE FROM tenants WHERE id = ?").run("t_ru_manicure");
+    // After delete, the Russian-language row is gone — but the Latin-only
+    // sibling tenant "t_latin_only" inserted earlier still matches "маникюр"
+    // via the Cyrillic→Latin OR-branch, so we assert specifically that the
+    // deleted row no longer appears in results.
     expect(searchViaBuilder("маникюр")).not.toContain("t_ru_manicure");
   });
 

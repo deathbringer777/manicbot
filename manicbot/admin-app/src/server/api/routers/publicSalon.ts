@@ -111,7 +111,11 @@ export const publicSalonRouter = createTRPCRouter({
         ctx.db
           .select()
           .from(masters)
-          .where(and(eq(masters.tenantId, tenant.id), eq(masters.active, 1))),
+          .where(and(
+            eq(masters.tenantId, tenant.id),
+            eq(masters.active, 1),
+            eq(masters.publicHidden, 0),
+          )),
         ctx.db
           .select()
           .from(tenantConfig)
@@ -215,21 +219,33 @@ export const publicSalonRouter = createTRPCRouter({
             photos: svcPhotos,
           };
         }),
-        masters: masterRows.map((m: any) => ({
-          chatId: m.chatId,
-          name: m.name,
-          tgUsername: m.tgUsername,
-          onVacation: !!m.onVacation,
-          services: (() => {
-            try { return m.services ? JSON.parse(m.services) : []; } catch { return []; }
-          })(),
-          workHours: (() => {
-            try { return m.workHours ? JSON.parse(m.workHours) : null; } catch { return null; }
-          })(),
-          workDays: (() => {
-            try { return m.workDays ? JSON.parse(m.workDays) : null; } catch { return null; }
-          })(),
-        })),
+        masters: masterRows.map((m: any) => {
+          // Live vacation derivation: legacy boolean OR (now ∈ [from, until])
+          const nowSec = Math.floor(Date.now() / 1000);
+          const inRange =
+            typeof m.vacationFrom === "number" &&
+            typeof m.vacationUntil === "number" &&
+            m.vacationFrom <= nowSec &&
+            nowSec <= m.vacationUntil;
+          const onVacation = !!m.onVacation || inRange;
+          return {
+            chatId: m.chatId,
+            name: m.name,
+            // tgUsername is intentionally NOT exposed — keep the public
+            // page free of Telegram handles for either owner or masters.
+            onVacation,
+            vacationUntil: onVacation && typeof m.vacationUntil === "number" ? m.vacationUntil : null,
+            services: (() => {
+              try { return m.services ? JSON.parse(m.services) : []; } catch { return []; }
+            })(),
+            workHours: (() => {
+              try { return m.workHours ? JSON.parse(m.workHours) : null; } catch { return null; }
+            })(),
+            workDays: (() => {
+              try { return m.workDays ? JSON.parse(m.workDays) : null; } catch { return null; }
+            })(),
+          };
+        }),
       };
     }),
 

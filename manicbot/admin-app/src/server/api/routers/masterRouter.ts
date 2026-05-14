@@ -397,10 +397,86 @@ export const masterRouter = createTRPCRouter({
       const setObj: Record<string, unknown> = {};
       if (input.workHours !== undefined) setObj.workHours = input.workHours;
       if (input.workDays !== undefined) setObj.workDays = input.workDays;
-      if (input.onVacation !== undefined) setObj.onVacation = input.onVacation;
+      if (input.onVacation !== undefined) {
+        setObj.onVacation = input.onVacation;
+        // Toggling the legacy flag OFF clears any pinned date range — the
+        // master can't be "back at work" and still have a future end date.
+        if (input.onVacation === 0) {
+          setObj.vacationFrom = null;
+          setObj.vacationUntil = null;
+        }
+      }
       if (Object.keys(setObj).length === 0) return { success: true };
       await ctx.db.update(masters).set(setObj)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
       return { success: true };
+    }),
+
+  /**
+   * Booksy-style vacation range. Either both dates set (a closed window)
+   * or both null (clears the vacation entirely). The legacy `on_vacation`
+   * boolean is kept in lock-step so the Worker booking + notification
+   * paths (which still read the old flag) don't have to be changed in
+   * the same release. Range semantics:
+   *   from <= NOW <= until → flag = 1
+   *   future range         → flag = 0 (will flip when from <= NOW)
+   *   cleared              → flag = 0
+   *
+   * The "flip-when-range-starts" transition is handled lazily on every
+   * read by `publicSalon.getProfile` (renders `onVacation` from the live
+   * range) and on every booking attempt by the existing cron + ui paths,
+   * so we don't need a scheduled task to flip it.
+   */
+  setVacation: masterProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number(),
+      // Both null = clear vacation. Otherwise both required.
+      vacationFrom: z.number().int().nullable(),
+      vacationUntil: z.number().int().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+
+      const { vacationFrom, vacationUntil } = input;
+      if ((vacationFrom == null) !== (vacationUntil == null)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "vacationFrom and vacationUntil must both be set or both be null",
+        });
+      }
+      if (vacationFrom != null && vacationUntil != null) {
+        if (vacationUntil < vacationFrom) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "vacationUntil must be on or after vacationFrom",
+          });
+        }
+        // Hard cap of 2y to keep the column from being abused for indefinite hides
+        // (that's what `salon.setMasterPublicHidden` is for).
+        const MAX_RANGE = 2 * 365 * 24 * 60 * 60;
+        if (vacationUntil - vacationFrom > MAX_RANGE) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Vacation range cannot exceed 2 years",
+          });
+        }
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const onVacationNow =
+        vacationFrom != null && vacationUntil != null
+          ? (vacationFrom <= now && now <= vacationUntil ? 1 : 0)
+          : 0;
+
+      await ctx.db.update(masters)
+        .set({
+          vacationFrom: vacationFrom,
+          vacationUntil: vacationUntil,
+          onVacation: onVacationNow,
+        })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
+
+      return { success: true, onVacation: onVacationNow === 1 };
     }),
 });

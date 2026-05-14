@@ -716,6 +716,36 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  /**
+   * Show/hide a master on the public salon profile.
+   *
+   * Booksy parity: owner can hide a master from /salon/[slug] without
+   * deleting them. The master still works internally (assigned to
+   * bookings, sees own schedule, master dashboard works) — only the
+   * public directory & profile master list filter them out.
+   * Implemented via `masters.public_hidden` (migration 0060).
+   */
+  setMasterPublicHidden: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatId: z.number(),
+      hidden: z.number().min(0).max(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db.update(masters)
+        .set({ publicHidden: input.hidden })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.chatId)));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: input.hidden ? "master.public.hide" : "master.public.show",
+        tenantId: input.tenantId,
+        detail: `chatId=${input.chatId}`,
+        ip: ctxIp(ctx),
+      });
+      return { success: true };
+    }),
+
   createMasterAccount: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),

@@ -113,11 +113,15 @@ export const masters = sqliteTable("masters", {
   webUserId: text("web_user_id"),
   calendarVisibility: text("calendar_visibility").notNull().default("salon_only"),
   isSynthetic: integer("is_synthetic").notNull().default(0),
+  publicHidden: integer("public_hidden").notNull().default(0),
+  vacationFrom: integer("vacation_from"),
+  vacationUntil: integer("vacation_until"),
 }, (t) => [
   index("idx_master_tenant").on(t.tenantId),
   index("idx_master_web_user_id").on(t.webUserId),
   index("idx_master_tenant_web_user").on(t.tenantId, t.webUserId),
   index("idx_masters_calendar_visibility").on(t.tenantId, t.calendarVisibility),
+  index("idx_masters_vacation_until").on(t.vacationUntil),
 ]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {

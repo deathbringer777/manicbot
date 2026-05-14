@@ -447,6 +447,90 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
+  // POST /admin/ig-set-direct-token — install a new-API "Instagram Login"
+  // direct token (prefix `IGAA…`) into D1. Validates via graph.instagram.com
+  // /me, confirms returned `id` matches the IG Business ID stored in the
+  // channel_configs row, encrypts with BOT_ENCRYPTION_KEY, and writes.
+  //
+  // Used after generating a token via Meta App Dashboard →
+  // Instagram → API setup with Instagram login → Generate token.
+  //
+  // No Bearer auth — self-gated like /admin/ig-recover: refuses unless the
+  // supplied token authenticates as the SAME ig_business_id already stored.
+  if (request.method === 'POST' && url.pathname === '/admin/ig-set-direct-token') {
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    if (!env.BOT_ENCRYPTION_KEY) return Response.json({ error: 'no enc key' }, { status: 503 });
+    try {
+      const { tenantId, token } = await request.json().catch(() => ({}));
+      if (!tenantId || !token) {
+        return Response.json({ error: 'tenantId and token required' }, { status: 400 });
+      }
+      const { dbGet, dbRun } = await import('../utils/db.js');
+      const { encryptToken } = await import('../utils/security.js');
+      const ec = envCtx(env);
+
+      const row = await dbGet(ec,
+        `SELECT id, page_id, ig_business_id, config FROM channel_configs
+         WHERE tenant_id = ? AND channel_type = 'instagram' AND active = 1 LIMIT 1`,
+        tenantId,
+      );
+      if (!row) return Response.json({ error: 'no IG channel for tenant' }, { status: 404 });
+
+      // Validate against the new Instagram-direct Graph host.
+      const meR = await fetch(
+        `https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
+      );
+      const meData = await meR.json().catch(() => ({}));
+      if (!meR.ok || !meData.id) {
+        return Response.json({
+          error: 'token rejected by graph.instagram.com',
+          graphStatus: meR.status,
+          graphError: meData.error?.message,
+        }, { status: 400 });
+      }
+
+      // Bind: returned IG ID must match the ig_business_id stored on the row
+      // (denormalized column or inside config JSON).
+      const cfg = row.config ? (() => { try { return JSON.parse(row.config); } catch { return {}; } })() : {};
+      const expectedIg = String(row.ig_business_id || cfg.instagram_business_id || cfg.ig_account_id || '');
+      if (expectedIg && String(meData.id) !== expectedIg) {
+        return Response.json({
+          error: `token belongs to IG ${meData.id} but channel_configs has ${expectedIg}`,
+        }, { status: 403 });
+      }
+
+      const encrypted = await encryptToken(token, env.BOT_ENCRYPTION_KEY, 'channel-token-v1');
+      if (!encrypted) return Response.json({ error: 'encrypt failed' }, { status: 500 });
+
+      // Tag the config blob with `api: "instagram_direct"` so downstream
+      // adapters know to talk to graph.instagram.com instead of
+      // graph.facebook.com. Old `page_id` is preserved for diagnostics.
+      const newCfg = { ...cfg, api: 'instagram_direct', ig_user_id: String(meData.id), ig_username: meData.username || null };
+      await dbRun(ec,
+        `UPDATE channel_configs
+            SET token_encrypted = ?,
+                config = ?,
+                updated_at = ?
+          WHERE id = ?`,
+        encrypted, JSON.stringify(newCfg), Math.floor(Date.now() / 1000), row.id,
+      );
+
+      void logEvent(ec, 'admin.ig_set_direct_token', { level: 'info', tenantId, message: 'IG-direct token installed' });
+      void audit(ec, 'admin.ig_set_direct_token', { tenantId, detail: { igUserId: meData.id, username: meData.username } });
+
+      return Response.json({
+        ok: true,
+        tenantId,
+        igUserId: meData.id,
+        igUsername: meData.username,
+        configApi: 'instagram_direct',
+      });
+    } catch (e) {
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_set_direct_token' });
+      return Response.json({ error: 'request failed', message: e?.message }, { status: 400 });
+    }
+  }
+
   // POST /admin/ig-diag — outbound test + diagnostic. Reads the current
   // (encrypted) IG token from D1 for the tenant, decrypts it, then:
   //   • GET /me with token → confirms decrypt + Graph reach

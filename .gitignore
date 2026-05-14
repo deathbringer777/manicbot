@@ -22,3 +22,10 @@ manicbot-blog/dist/
 # Claude Code ephemeral worktrees (each is its own git repo — never commit as submodules)
 .claude/worktrees/
 .claude/settings.local.json
+
+# IG/Meta tokens — never commit plaintext tokens
+*.token
+*-token-*.txt
+ig-direct-token*
+fb-page-token*
+**/.config/manicbot/**

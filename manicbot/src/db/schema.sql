@@ -962,3 +962,61 @@ CREATE INDEX IF NOT EXISTS idx_error_events_tenant        ON error_events(tenant
 CREATE INDEX IF NOT EXISTS idx_error_events_unresolved    ON error_events(resolved_at, last_seen);
 CREATE INDEX IF NOT EXISTS idx_error_events_status_last   ON error_events(status, last_seen);
 CREATE INDEX IF NOT EXISTS idx_error_events_assignee      ON error_events(assignee_id, status, last_seen);
+
+-- ─── Marketing content plan (migration 0058) ─────────────────────────────
+-- Scheduled posts for the @manicbot_com IG autopilot (and future
+-- tenant-scoped autopilot when graduated into a plugin). Replaces the
+-- markdown content_plan_30days.md, which had no machine-parseable status.
+--
+-- tenant_id is nullable on purpose: @manicbot_com posts as system_admin.
+-- Status lifecycle: pending → generating → ready → publishing → posted
+-- (or failed / paused at any step).
+CREATE TABLE IF NOT EXISTS marketing_content_plan (
+  id              TEXT PRIMARY KEY,
+  tenant_id       TEXT,
+  scheduled_at    INTEGER NOT NULL,
+  theme           TEXT NOT NULL,
+  topic           TEXT NOT NULL,
+  key_message     TEXT,
+  headline_pl     TEXT,
+  caption_pl      TEXT,
+  hashtags_json   TEXT,
+  image_url       TEXT,
+  image_prompt    TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending',
+  meta_post_id    TEXT,
+  permalink       TEXT,
+  error_msg       TEXT,
+  error_count     INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL,
+  published_at    INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_status_sched ON marketing_content_plan(status, scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_mcp_tenant_sched ON marketing_content_plan(tenant_id, scheduled_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_unique_slot
+  ON marketing_content_plan(IFNULL(tenant_id,''), scheduled_at);
+
+-- ─── Marketing publish queue (migration 0059) ────────────────────────────
+-- Outbox for the two-step IG Feed publish flow:
+--   1) POST /{page_id}/media         → returns container_id
+--   2) POST /{page_id}/media_publish → moves container live
+-- Container processing on Meta side can take 5-30s; persist between
+-- steps and let the next cron tick complete the publish.
+CREATE TABLE IF NOT EXISTS marketing_publish_queue (
+  id                 TEXT PRIMARY KEY,
+  content_plan_id    TEXT NOT NULL,
+  tenant_id          TEXT,
+  channel_type       TEXT NOT NULL DEFAULT 'instagram',
+  page_id            TEXT NOT NULL,
+  meta_container_id  TEXT,
+  meta_post_id       TEXT,
+  status             TEXT NOT NULL DEFAULT 'queued',
+  error_msg          TEXT,
+  attempts           INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at    INTEGER,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mpq_status_attempt ON marketing_publish_queue(status, last_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_mpq_content_plan   ON marketing_publish_queue(content_plan_id);

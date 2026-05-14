@@ -6,7 +6,6 @@
  */
 
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
-import { encryptToken } from '../utils/security.js';
 import { decryptToken, decryptTokenWithFallback, encryptToken } from '../utils/security.js';
 import { log } from '../utils/logger.js';
 import { buildTenantCtx } from '../tenant/resolver.js';

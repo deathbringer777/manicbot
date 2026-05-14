@@ -20,7 +20,7 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
+  theme: "light",
   setTheme: () => undefined,
   toggleTheme: () => undefined,
 });
@@ -42,7 +42,7 @@ function readStoredTheme(): Theme {
   } catch {
     /* ignore */
   }
-  return "dark";
+  return "light";
 }
 
 function applyDomTheme(theme: Theme) {
@@ -51,7 +51,7 @@ function applyDomTheme(theme: Theme) {
 }
 
 export function PublicThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useLayoutEffect(() => {
     const initial = readStoredTheme();

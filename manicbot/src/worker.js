@@ -13,6 +13,7 @@ import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
 import { getCtx } from './http/resolveCtx.js';
 import { tryLanding } from './http/landingHttp.js';
+import { tryLegalPages } from './http/legalPagesHttp.js';
 import { tryStripe } from './http/stripeHttp.js';
 import { tryAdminKeyRoutes } from './http/adminKeyHttp.js';
 import { tryLeadRoutes } from './http/leadsHttp.js';
@@ -325,6 +326,13 @@ export default {
     // Must come before tryLanding so the landing proxy doesn't swallow it.
     const demoRes = tryDemoPage(request, env, url);
     if (demoRes) return demoRes;
+
+    // Meta App Review requires statically-served Privacy Policy, Data
+    // Deletion Instructions, and Terms. Must intercept BEFORE the landing
+    // SPA proxy — landing returns the same SPA shell for any path which
+    // gives HTTP 200 to GET but 404 to HEAD (Meta crawler uses HEAD).
+    const legalRes = tryLegalPages(request, url);
+    if (legalRes) return addSecurityHeaders(legalRes);
 
     let res = await tryLanding(request, env, url);
     if (res) return addSecurityHeaders(res);

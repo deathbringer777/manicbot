@@ -1,11 +1,13 @@
 /**
- * Shared Graph API POST with retry + exponential backoff.
+ * Shared Graph API POST + GET with retry + exponential backoff.
  * Used by Instagram and WhatsApp adapters.
  */
 
 import { log } from '../utils/logger.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
+
+export { GRAPH_API };
 
 /**
  * Meta error codes that mean the token is dead (re-auth required).
@@ -61,6 +63,50 @@ export async function graphPost(path, token, body, { maxRetries = 2, label = 'gr
     } catch (e) {
       if (attempt < maxRetries) {
         log.warn(`channels.${label}`, { message: `POST ${path} fetch error, retrying`, attempt: attempt + 1, maxRetries });
+        await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
+        continue;
+      }
+      log.error(`channels.${label}`, e instanceof Error ? e : new Error(String(e.message)));
+      return { ok: false, error: e.message };
+    }
+  }
+}
+
+/**
+ * Shared Graph API GET. Same retry semantics as graphPost.
+ * Use for read-only ops like polling container status or fetching insights.
+ *
+ * @param {string} path - Graph API path with optional querystring (e.g. "/{containerId}?fields=status_code")
+ * @param {string} token - Access token
+ * @param {{ maxRetries?: number, label?: string }} [opts]
+ * @returns {Promise<{ ok: boolean, data?: any, status?: number, error?: string, errorCode?: number, errorType?: string, tokenDead?: boolean }>}
+ */
+export async function graphGet(path, token, { maxRetries = 2, label = 'graph' } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${GRAPH_API}${path}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, data };
+      if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+        log.warn(`channels.${label}`, { message: `GET ${path} got ${res.status}, retrying`, attempt: attempt + 1, maxRetries });
+        await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
+        continue;
+      }
+      log.error(`channels.${label}`, new Error(`GET ${path} failed ${res.status}`), { status: res.status });
+      return {
+        ok: false,
+        status: res.status,
+        error: data.error?.message ?? 'unknown',
+        errorCode: data.error?.code,
+        errorType: data.error?.type,
+        tokenDead: isTokenDead(data),
+      };
+    } catch (e) {
+      if (attempt < maxRetries) {
+        log.warn(`channels.${label}`, { message: `GET ${path} fetch error, retrying`, attempt: attempt + 1, maxRetries });
         await new Promise(r => setTimeout(r, 300 * Math.pow(2, attempt)));
         continue;
       }

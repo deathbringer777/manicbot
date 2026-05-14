@@ -954,3 +954,56 @@ export const errorEvents = sqliteTable("error_events", {
   index("idx_error_events_status_last").on(t.status, t.lastSeen),
   index("idx_error_events_assignee").on(t.assigneeId, t.status, t.lastSeen),
 ]);
+
+// ─── Marketing content plan (migration 0058) ─────────────────────────────
+// Scheduled posts for the @manicbot_com IG autopilot. Replaces the
+// markdown content_plan_30days.md. tenant_id is nullable: @manicbot_com
+// posts as system_admin. Status lifecycle:
+//   pending → generating → ready → publishing → posted | failed | paused
+export const marketingContentPlan = sqliteTable("marketing_content_plan", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  scheduledAt: integer("scheduled_at").notNull(),
+  theme: text("theme").notNull(),
+  topic: text("topic").notNull(),
+  keyMessage: text("key_message"),
+  headlinePl: text("headline_pl"),
+  captionPl: text("caption_pl"),
+  hashtagsJson: text("hashtags_json"),
+  imageUrl: text("image_url"),
+  imagePrompt: text("image_prompt"),
+  status: text("status").notNull().default("pending"),
+  metaPostId: text("meta_post_id"),
+  permalink: text("permalink"),
+  errorMsg: text("error_msg"),
+  errorCount: integer("error_count").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  publishedAt: integer("published_at"),
+}, (t) => [
+  index("idx_mcp_status_sched").on(t.status, t.scheduledAt),
+  index("idx_mcp_tenant_sched").on(t.tenantId, t.scheduledAt),
+]);
+
+// ─── Marketing publish queue (migration 0059) ────────────────────────────
+// Outbox for the two-step IG Feed publish flow (container → publish).
+// One row per content_plan attempt; attempts++ on retry; cap at 5
+// before marking content_plan as failed.
+export const marketingPublishQueue = sqliteTable("marketing_publish_queue", {
+  id: text("id").primaryKey(),
+  contentPlanId: text("content_plan_id").notNull(),
+  tenantId: text("tenant_id"),
+  channelType: text("channel_type").notNull().default("instagram"),
+  pageId: text("page_id").notNull(),
+  metaContainerId: text("meta_container_id"),
+  metaPostId: text("meta_post_id"),
+  status: text("status").notNull().default("queued"),
+  errorMsg: text("error_msg"),
+  attempts: integer("attempts").notNull().default(0),
+  lastAttemptAt: integer("last_attempt_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_mpq_status_attempt").on(t.status, t.lastAttemptAt),
+  index("idx_mpq_content_plan").on(t.contentPlanId),
+]);

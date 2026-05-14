@@ -955,5 +955,86 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: allOk, chunks: results.length, results });
   }
 
+  // ─── Marketing IG autopilot — admin manual triggers ─────────────────────
+  // Run the IG autopilot phase once for ALL eligible @manicbot_com slots.
+  // Useful for kicking generation outside the 15-min cron tick, or before
+  // flipping MARKETING_AUTOPILOT_ENABLED=1. Always honours processSlot
+  // missing-credentials guards.
+  if (request.method === 'POST' && url.pathname === '/admin/marketing-tick') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    try {
+      const { phaseInstagramAutopilot } = await import('../marketing/autopilot.js');
+      const result = await phaseInstagramAutopilot(env);
+      return Response.json({ ok: true, ...result });
+    } catch (e) {
+      log.error('admin.marketingTick', e instanceof Error ? e : new Error(String(e?.message)));
+      return Response.json({ error: e?.message || 'tick failed' }, { status: 500 });
+    }
+  }
+
+  // Process a single slot by id — pure manual override. Useful for
+  // re-running a failed slot, kicking a one-off post, or smoke-testing
+  // the generation pipeline before live launch.
+  if (request.method === 'POST' && url.pathname === '/admin/marketing-publish-one') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const slotId = url.searchParams.get('slot_id');
+    if (!slotId) {
+      return Response.json({ error: 'slot_id query param required' }, { status: 400 });
+    }
+    try {
+      const slot = await env.DB.prepare(
+        `SELECT id, scheduled_at, theme, topic, key_message, headline_pl, caption_pl,
+                hashtags_json, image_url, image_prompt, status, error_count
+         FROM marketing_content_plan
+         WHERE id = ? AND tenant_id IS NULL`,
+      )
+        .bind(slotId)
+        .first();
+      if (!slot) {
+        return Response.json({ error: 'slot not found' }, { status: 404 });
+      }
+      const { processSlot } = await import('../marketing/autopilot.js');
+      const nowSec = Math.floor(Date.now() / 1000);
+      await processSlot(env, slot, nowSec);
+      const refreshed = await env.DB.prepare(
+        `SELECT id, status, meta_post_id, permalink, image_url, error_msg, error_count
+         FROM marketing_content_plan WHERE id = ?`,
+      )
+        .bind(slotId)
+        .first();
+      return Response.json({ ok: true, slot: refreshed });
+    } catch (e) {
+      log.error('admin.marketingPublishOne', e instanceof Error ? e : new Error(String(e?.message)));
+      return Response.json({ error: e?.message || 'publish_one failed' }, { status: 500 });
+    }
+  }
+
+  // Read-only status dashboard. Returns counts by status + recent rows.
+  if (request.method === 'GET' && url.pathname === '/admin/marketing-status') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    try {
+      const counts = await env.DB.prepare(
+        `SELECT status, COUNT(*) AS n FROM marketing_content_plan WHERE tenant_id IS NULL GROUP BY status`,
+      ).all();
+      const upcoming = await env.DB.prepare(
+        `SELECT id, datetime(scheduled_at, 'unixepoch') AS scheduled, status, theme, topic, meta_post_id, error_msg
+         FROM marketing_content_plan
+         WHERE tenant_id IS NULL
+         ORDER BY scheduled_at ASC
+         LIMIT 30`,
+      ).all();
+      return Response.json({
+        counts: counts.results ?? [],
+        upcoming: upcoming.results ?? [],
+        autopilot_enabled: env.MARKETING_AUTOPILOT_ENABLED === '1',
+      });
+    } catch (e) {
+      log.error('admin.marketingStatus', e instanceof Error ? e : new Error(String(e?.message)));
+      return Response.json({ error: e?.message || 'status failed' }, { status: 500 });
+    }
+  }
+
   return null;
 }

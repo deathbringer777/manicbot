@@ -25,6 +25,22 @@ REQUIRE_WEBHOOK_BOT_ID = "1"
 # Production default is "0" (live deletes with R2 archive). Flip to "1" in the
 # Cloudflare dashboard to preview a retention run without losing data.
 RETENTION_DRY_RUN = "0"
+# Public URL prefix of the marketing-assets R2 bucket. Worker uploads
+# generated post images here, then passes `{prefix}/{key}` to Meta Graph
+# API as `image_url` so Meta can fetch the asset. Set via
+# `npx wrangler r2 bucket dev-url enable manicbot-marketing-assets` and
+# pinned here so the Worker doesn't have to query R2 for the URL.
+MARKETING_ASSETS_PUBLIC_URL = "https://pub-1dff67fc0bd644c59f1677cb5d553ce6.r2.dev"
+# Master kill switch for the @manicbot_com IG autopilot cron phase.
+# Default "0" — cron will SKIP the phase, no captions/images/posts created.
+# Flip to "1" via Cloudflare dashboard once these are all in place:
+#   - Meta App approved for `instagram_content_publish`
+#   - wrangler secret put ANTHROPIC_API_KEY
+#   - wrangler secret put MARKETING_IG_PAGE_ID
+#   - wrangler secret put MARKETING_IG_ACCESS_TOKEN
+# Manual triggers via /admin/marketing-tick + /admin/marketing-publish-one
+# ignore this flag (always run, useful for testing before flipping live).
+MARKETING_AUTOPILOT_ENABLED = "0"
 
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID
@@ -100,6 +116,15 @@ database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 [[r2_buckets]]
 binding = "ARCHIVE"
 bucket_name = "manicbot-archive"
+
+# ─── R2 bucket for @manicbot_com IG autopilot generated images ──────────────
+# Cron-generated post images (Workers AI flux-1-schnell → 1080×1350 PNG)
+# are uploaded here, then surfaced to Meta Graph API as a public URL via
+# MARKETING_ASSETS_PUBLIC_URL. Public access enabled via wrangler:
+#   wrangler r2 bucket dev-url enable manicbot-marketing-assets
+[[r2_buckets]]
+binding = "MARKETING_ASSETS"
+bucket_name = "manicbot-marketing-assets"
 
 # ─── Required secret for signed upload tokens ────────────────────────────────
 #   wrangler secret put UPLOAD_TOKEN_SECRET

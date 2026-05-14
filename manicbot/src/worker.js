@@ -4,7 +4,8 @@ import {
   resolveTenantFromBotId,
   buildTenantCtx,
 } from './tenant/resolver.js';
-import { listTenantIds, getBotIdsByTenantId } from './tenant/storage.js';
+import { listTenantIds, getBotIdsByTenantId, getTenant } from './tenant/storage.js';
+import { tenantHasActiveChannel } from './channels/resolver.js';
 import { handleCron } from './handlers/cron.js';
 import { phaseInstagramAutopilot } from './marketing/autopilot.js';
 import { envCtx } from './http/envCtx.js';
@@ -560,6 +561,19 @@ export default {
       try {
         const botIds = await getBotIdsByTenantId(ec, tenantId);
         if (botIds.length === 0) {
+          // IG-/WA-only tenants have no Telegram bot row but still need
+          // cron (token refresh, webhook re-subscribe, post-visit). Diag
+          // 2026-05-14: t_1c305v2g5011 was an IG-only salon whose IG
+          // health-check + resubscribe had never run because of this gate.
+          const tenant = await getTenant(ec, tenantId);
+          const hasActiveChannel = tenant && await tenantHasActiveChannel(ec, tenantId);
+          if (tenant && hasActiveChannel) {
+            const { buildBotlessTenantCtx } = await import('./tenant/resolver.js');
+            const ctx = buildBotlessTenantCtx(env, tenantId, tenant);
+            await handleCron(ctx);
+            msg.ack();
+            continue;
+          }
           // P0-1 — a tenant with no bot rows used to be silently dropped.
           // Emit a rate-limited (1/h/tenant/reason) skip event so this is
           // visible in the activity feed.

@@ -177,6 +177,25 @@ export async function resolveTenantFromSlug(ctx, slug) {
  * @param {string|null} encKey - encryption key from env
  * @returns {Promise<object|null>}
  */
+/**
+ * True if the tenant has at least one active row in `channel_configs`
+ * (any channel type — instagram/whatsapp/etc). Used by the cron queue
+ * consumer to decide whether an IG-/WA-only tenant (no Telegram bot)
+ * still needs a cron tick.
+ */
+export async function tenantHasActiveChannel(ctx, tenantId) {
+  if (!ctx?.db || !tenantId) return false;
+  try {
+    const rows = await dbAll(ctx,
+      'SELECT 1 FROM channel_configs WHERE tenant_id = ? AND active = 1 LIMIT 1',
+      tenantId,
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function getChannelConfig(ctx, tenantId, channelType, encKey = null) {
   if (!ctx?.db) return null;
   const rows = await dbAll(ctx,

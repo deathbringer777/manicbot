@@ -50,6 +50,30 @@ export function buildTenantCtx(env, resolved) {
 }
 
 /**
+ * Build a minimal tenant ctx for IG-/WA-only tenants that have no Telegram
+ * bot row. Used by the cron queue consumer so channel-only tenants still
+ * get IG token health checks, webhook re-subscribe, post-visit reminders,
+ * etc. — instead of being silently dropped at the `botIds.length === 0`
+ * gate.
+ *
+ * Shape: same baseCtx, tenantId + tenant set, but bot/TG/channel are
+ * deliberately null. Phases that need Telegram (send-only paths) must
+ * already no-op when ctx.bot is null.
+ */
+export function buildBotlessTenantCtx(env, tenantId, tenant) {
+  return {
+    ...baseCtx(env),
+    tenantId,
+    tenant,
+    bot: null,
+    TG: null,
+    channel: null,
+    prefix: `t:${tenantId}:`,
+    WEBHOOK_SECRET: null,
+  };
+}
+
+/**
  * Build context for legacy single-bot mode.
  */
 export function buildLegacyCtx(env) {

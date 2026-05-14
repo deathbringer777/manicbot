@@ -447,6 +447,66 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
+  // POST /admin/ig-resubscribe — re-subscribe the Facebook Page (linked to an
+  // IG Business account) to messages/messaging_postbacks/message_reads so
+  // Meta resumes delivering DM webhooks. Optional body { tenantId } scopes
+  // to one tenant; omit to refresh every active IG channel.
+  //
+  // Built after live diagnosis (2026-05-14): worker tail saw 0 IG POSTs in a
+  // 2-min window after a real user DM — Page subscription had silently lapsed.
+  if (request.method === 'POST' && url.pathname === '/admin/ig-resubscribe') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    if (!env.BOT_ENCRYPTION_KEY || String(env.BOT_ENCRYPTION_KEY).length < 32) {
+      return Response.json({ error: 'BOT_ENCRYPTION_KEY not configured (≥ 32 chars required)' }, { status: 503 });
+    }
+    try {
+      const { tenantId } = await request.json().catch(() => ({}));
+      const { decryptToken } = await import('../utils/security.js');
+      const sql = tenantId
+        ? `SELECT tenant_id, page_id, token_encrypted FROM channel_configs
+             WHERE channel_type = 'instagram' AND active = 1 AND tenant_id = ?`
+        : `SELECT tenant_id, page_id, token_encrypted FROM channel_configs
+             WHERE channel_type = 'instagram' AND active = 1`;
+      const stmt = env.DB.prepare(sql);
+      const bound = tenantId ? stmt.bind(tenantId) : stmt.bind();
+      const rs = await bound.all();
+      const rows = rs?.results ?? [];
+
+      const FIELDS = 'messages,messaging_postbacks,message_reads';
+      const results = [];
+      for (const row of rows) {
+        const entry = { tenantId: row.tenant_id, pageId: row.page_id, graphSuccess: false };
+        if (!row.page_id || !row.token_encrypted) {
+          entry.error = !row.page_id ? 'missing page_id' : 'missing token';
+          results.push(entry);
+          continue;
+        }
+        const token = await decryptToken(row.token_encrypted, env.BOT_ENCRYPTION_KEY, 'channel-token-v1');
+        if (!token) { entry.error = 'token decrypt failed'; results.push(entry); continue; }
+        const graphUrl = `https://graph.facebook.com/v21.0/${encodeURIComponent(row.page_id)}/subscribed_apps?subscribed_fields=${encodeURIComponent(FIELDS)}&access_token=${encodeURIComponent(token)}`;
+        try {
+          const r = await fetch(graphUrl, { method: 'POST' });
+          const data = await r.json().catch(() => ({}));
+          entry.graphSuccess = !!(r.ok && (data.success === true || data.success === undefined));
+          entry.graphStatus = r.status;
+          if (!entry.graphSuccess) entry.graphError = data.error?.message || `HTTP ${r.status}`;
+        } catch (e) {
+          entry.error = `graph fetch failed: ${e?.message || e}`;
+        }
+        results.push(entry);
+      }
+
+      const ec = envCtx(env);
+      void logEvent(ec, 'admin.ig_resubscribe', { level: 'info', message: `resubscribed ${results.filter(r => r.graphSuccess).length}/${results.length}` });
+      void audit(ec, 'admin.ig_resubscribe', { detail: { count: results.length, ok: results.filter(r => r.graphSuccess).length } });
+      return Response.json({ ok: true, results });
+    } catch (e) {
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_resubscribe' });
+      return Response.json({ error: 'Request failed' }, { status: 400 });
+    }
+  }
+
   // POST /admin/ig-channel?key=ADMIN_KEY — create Instagram channel config for a tenant
   if (request.method === 'POST' && url.pathname === '/admin/ig-channel') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();

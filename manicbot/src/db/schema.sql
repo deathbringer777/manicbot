@@ -113,10 +113,14 @@ CREATE TABLE IF NOT EXISTS masters (
   web_user_id TEXT,
   calendar_visibility TEXT NOT NULL DEFAULT 'salon_only',
   is_synthetic INTEGER NOT NULL DEFAULT 0,
+  public_hidden INTEGER NOT NULL DEFAULT 0,
+  vacation_from INTEGER,
+  vacation_until INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_master_web_user_id ON masters(web_user_id);
 CREATE INDEX IF NOT EXISTS idx_master_tenant_web_user ON masters(tenant_id, web_user_id);
+CREATE INDEX IF NOT EXISTS idx_masters_vacation_until ON masters(vacation_until) WHERE vacation_until IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_masters_calendar_visibility ON masters(tenant_id, calendar_visibility);
 
 CREATE TABLE IF NOT EXISTS tenant_roles (

@@ -1392,6 +1392,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const removeMaster = api.salon.removeMaster.useMutation({
     onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
+  const setMasterPublicHidden = api.salon.setMasterPublicHidden.useMutation({
+    onSuccess: () => { utils.salon.getMasters.invalidate(); },
+  });
   const deleteSvc = api.salon.deleteService.useMutation({
     onSuccess: () => { utils.salon.getServices.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
@@ -1873,22 +1876,54 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           <div className="space-y-2">
             {mastersList.data?.map((m: any) => {
               const isWebAccount = m.chatId >= 10_000_000_000;
+              const isHidden = m.publicHidden === 1;
+              // Live vacation derivation — mirrors publicSalon.getProfile so the
+              // owner sees the same state customers do.
+              const nowSec = Math.floor(Date.now() / 1000);
+              const inRange =
+                typeof m.vacationFrom === "number" &&
+                typeof m.vacationUntil === "number" &&
+                m.vacationFrom <= nowSec &&
+                nowSec <= m.vacationUntil;
+              const onVacation = m.onVacation === 1 || inRange;
               return (
                 <div key={m.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-brand-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                  <div className={`h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-brand-500 flex items-center justify-center text-sm font-bold text-white shrink-0 ${isHidden ? "opacity-50" : ""}`}>
                     {(m.name ?? "?").charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-900 dark:text-white text-sm">{m.name ?? `#${m.chatId}`}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`font-medium text-sm ${isHidden ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"}`}>{m.name ?? `#${m.chatId}`}</p>
                       {isWebAccount && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/15 text-purple-400 border border-purple-500/20">
                           {t("master.webBadge", lang)}
                         </span>
                       )}
+                      {isHidden && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-500/15 text-slate-500 border border-slate-500/20">
+                          {t("master.hiddenBadge", lang)}
+                        </span>
+                      )}
+                      {onVacation && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-500 border border-amber-500/20">
+                          {t("master.vacationBadge", lang)}
+                        </span>
+                      )}
                     </div>
                     {!isWebAccount && <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>}
                   </div>
+                  <button
+                    onClick={() => setMasterPublicHidden.mutate({ tenantId, chatId: m.chatId, hidden: isHidden ? 0 : 1 })}
+                    disabled={setMasterPublicHidden.isPending}
+                    title={isHidden ? t("master.showOnPublic", lang) : t("master.hideFromPublic", lang)}
+                    className={`h-8 w-8 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 ${
+                      isHidden
+                        ? "bg-slate-500/10 text-slate-500 hover:bg-slate-500/20"
+                        : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                    }`}
+                  >
+                    {isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
                   <button onClick={() => setRemoveMasterConfirm({ active: true, chatId: m.chatId })}
                     className="h-8 w-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />

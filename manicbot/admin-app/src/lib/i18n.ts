@@ -718,6 +718,16 @@ const translations = {
   "master.vacation":        { ru: "Отпуск",         ua: "Відпустка",      en: "Vacation",    pl: "Urlop" },
   "master.vacationOn":      { ru: "Вы в отпуске — запись приостановлена", ua: "Ви у відпустці — запис призупинено", en: "On vacation — bookings paused", pl: "Na urlopie — rezerwacje wstrzymane" },
   "master.vacationOff":     { ru: "Рабочий режим",  ua: "Робочий режим",  en: "Working mode", pl: "Tryb pracy" },
+  "master.vacationFrom":    { ru: "С",              ua: "З",              en: "From",        pl: "Od" },
+  "master.vacationUntil":   { ru: "До",             ua: "До",             en: "Until",       pl: "Do" },
+  "master.vacationSave":    { ru: "Сохранить отпуск", ua: "Зберегти відпустку", en: "Save vacation", pl: "Zapisz urlop" },
+  "master.vacationClear":   { ru: "Снять отпуск",   ua: "Зняти відпустку", en: "Clear vacation", pl: "Wyłącz urlop" },
+  "master.vacationActive":  { ru: "Отпуск с {from} по {until}", ua: "Відпустка з {from} по {until}", en: "Vacation from {from} to {until}", pl: "Urlop od {from} do {until}" },
+  "master.vacationRangeError": { ru: "Дата окончания должна быть позже даты начала", ua: "Дата закінчення має бути пізнішою за дату початку", en: "End date must be after start date", pl: "Data zakończenia musi być po dacie rozpoczęcia" },
+  "master.vacationBadge":   { ru: "В отпуске",      ua: "У відпустці",    en: "On vacation", pl: "Na urlopie" },
+  "master.hiddenBadge":     { ru: "Скрыт",          ua: "Прихований",     en: "Hidden",      pl: "Ukryty" },
+  "master.showOnPublic":    { ru: "Показать на публичной странице", ua: "Показати на публічній сторінці", en: "Show on public page", pl: "Pokaż na stronie publicznej" },
+  "master.hideFromPublic":  { ru: "Скрыть с публичной страницы",    ua: "Сховати з публічної сторінки",  en: "Hide from public page", pl: "Ukryj na stronie publicznej" },
 
   // ── Create master account modal ──────────────────────────────────────────────
   "master.createAccount":         { ru: "Создать аккаунт",       ua: "Створити акаунт",        en: "Create Account",        pl: "Utwórz konto" },

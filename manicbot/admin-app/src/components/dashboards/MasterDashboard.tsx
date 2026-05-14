@@ -338,6 +338,30 @@ export function MasterDashboard({
   const updateWorkHoursMut = api.master.updateWorkHours.useMutation({
     onSuccess: () => { utils.master.getMyProfile.invalidate(); },
   });
+  const setVacationMut = api.master.setVacation.useMutation({
+    onSuccess: () => { utils.master.getMyProfile.invalidate(); setVacationError(null); },
+  });
+  const [vacationFromInput, setVacationFromInput] = useState("");
+  const [vacationUntilInput, setVacationUntilInput] = useState("");
+  const [vacationError, setVacationError] = useState<string | null>(null);
+
+  // Seed vacation inputs from the profile when it loads. We re-seed
+  // whenever the underlying timestamps change so an external update (e.g.
+  // owner overriding) reflects in the picker without the user noticing.
+  const vacFrom = (profile.data as any)?.vacationFrom ?? null;
+  const vacUntil = (profile.data as any)?.vacationUntil ?? null;
+  useEffect(() => {
+    const toDate = (sec: number | null) => {
+      if (sec == null) return "";
+      const d = new Date(sec * 1000);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    setVacationFromInput(toDate(vacFrom));
+    setVacationUntilInput(toDate(vacUntil));
+  }, [vacFrom, vacUntil]);
 
   const [bioEdit, setBioEdit] = useState(false);
   const [bio, setBio] = useState("");
@@ -923,33 +947,81 @@ export function MasterDashboard({
             </div>
           )}
 
-          {/* Vacation toggle — independent masters only */}
+          {/* Vacation date range — independent masters only.
+              Booksy-style: pick start/end and bookings are blocked, the
+              public salon page shows "В отпуске до DD.MM". Leaving both
+              fields empty + clicking Clear removes the vacation. */}
           {isPersonal && !isDelegating && profile.data && (
             <div className="glass-card rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    {t("master.vacation", lang)}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {(profile.data as any).onVacation ? t("master.vacationOn", lang) : t("master.vacationOff", lang)}
-                  </p>
-                </div>
+              <div>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">
+                  {t("master.vacation", lang)}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {(profile.data as any).onVacation ? t("master.vacationOn", lang) : t("master.vacationOff", lang)}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-xs text-slate-500">{t("master.vacationFrom", lang)}</span>
+                  <input
+                    type="date"
+                    value={vacationFromInput}
+                    onChange={(e) => setVacationFromInput(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-500">{t("master.vacationUntil", lang)}</span>
+                  <input
+                    type="date"
+                    value={vacationUntilInput}
+                    onChange={(e) => setVacationUntilInput(e.target.value)}
+                    min={vacationFromInput || undefined}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </label>
+              </div>
+              {vacationError && (
+                <p className="text-xs text-red-500">{vacationError}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => updateWorkHoursMut.mutate({
-                    tenantId,
-                    masterId,
-                    onVacation: (profile.data as any).onVacation ? 0 : 1,
-                  })}
-                  disabled={updateWorkHoursMut.isPending}
-                  className={`relative flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
-                    (profile.data as any).onVacation ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-600"
-                  }`}
+                  disabled={setVacationMut.isPending || !vacationFromInput || !vacationUntilInput}
+                  onClick={() => {
+                    const fromMs = new Date(vacationFromInput + "T00:00:00").getTime();
+                    const untilMs = new Date(vacationUntilInput + "T23:59:59").getTime();
+                    if (!Number.isFinite(fromMs) || !Number.isFinite(untilMs) || untilMs < fromMs) {
+                      setVacationError(t("master.vacationRangeError", lang));
+                      return;
+                    }
+                    setVacationError(null);
+                    setVacationMut.mutate({
+                      tenantId,
+                      masterId,
+                      vacationFrom: Math.floor(fromMs / 1000),
+                      vacationUntil: Math.floor(untilMs / 1000),
+                    });
+                  }}
+                  className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span className={`absolute h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    (profile.data as any).onVacation ? "translate-x-6" : "translate-x-1"
-                  }`} />
+                  {t("master.vacationSave", lang)}
+                </button>
+                <button
+                  type="button"
+                  disabled={setVacationMut.isPending || (!(profile.data as any).onVacation && vacFrom == null && vacUntil == null)}
+                  onClick={() => {
+                    setVacationError(null);
+                    setVacationMut.mutate({ tenantId, masterId, vacationFrom: null, vacationUntil: null });
+                    // Also clear the legacy boolean in case it was set without a range.
+                    if ((profile.data as any).onVacation && vacFrom == null) {
+                      updateWorkHoursMut.mutate({ tenantId, masterId, onVacation: 0 });
+                    }
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  {t("master.vacationClear", lang)}
                 </button>
               </div>
             </div>

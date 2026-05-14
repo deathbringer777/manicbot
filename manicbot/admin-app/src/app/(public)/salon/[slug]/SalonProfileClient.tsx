@@ -23,8 +23,8 @@ interface ServiceItem {
 interface MasterItem {
   chatId: number;
   name: string | null;
-  tgUsername: string | null;
   onVacation: boolean;
+  vacationUntil: number | null;
   services: string[];
   workHours: WorkHours;
   workDays: number[] | null;
@@ -208,6 +208,14 @@ function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: stri
 
 function MasterCard({ master, services }: { master: MasterItem; services: ServiceItem[] }) {
   const masterServices = services.filter((s) => master.services.includes(s.svcId));
+  const vacationLabel = (() => {
+    if (!master.onVacation) return null;
+    if (!master.vacationUntil) return "В отпуске";
+    const until = new Date(master.vacationUntil * 1000);
+    const day = String(until.getDate()).padStart(2, "0");
+    const month = String(until.getMonth() + 1).padStart(2, "0");
+    return `В отпуске до ${day}.${month}`;
+  })();
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/60">
       <div className="flex items-center gap-3">
@@ -216,12 +224,9 @@ function MasterCard({ master, services }: { master: MasterItem; services: Servic
         </div>
         <div>
           <p className="font-semibold text-slate-900 dark:text-white">{master.name ?? "Мастер"}</p>
-          {master.tgUsername && (
-            <p className="text-xs text-slate-500">@{master.tgUsername}</p>
-          )}
-          {master.onVacation && (
+          {vacationLabel && (
             <span className="mt-1 inline-block rounded-full bg-yellow-50 px-2 py-0.5 text-xs text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400">
-              В отпуске
+              {vacationLabel}
             </span>
           )}
         </div>

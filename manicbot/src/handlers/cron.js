@@ -87,6 +87,48 @@ async function setPhaseLastRun(ctx, phase, epochSec) {
   }
 }
 
+const IG_RESUBSCRIBE_WINDOW_SEC = 24 * 60 * 60;
+const IG_RESUBSCRIBE_FIELDS = 'messages,messaging_postbacks,message_reads';
+
+/**
+ * Re-subscribe the Facebook Page linked to this tenant's IG channel to the
+ * Messenger Platform webhook fields. Idempotent: only fires once per
+ * IG_RESUBSCRIBE_WINDOW_SEC per tenant (key: `cron:ig:last_resubscribe`).
+ *
+ * Why exists: even when the App↔Page link is configured correctly, Meta
+ * silently de-subscribes the Page from webhook fields after some inactivity
+ * / re-auth events. Re-issuing `POST /{page_id}/subscribed_apps` once a day
+ * keeps the bot reachable.
+ */
+export async function maybeResubscribeIgWebhook(ctx, igConfig, nowMs) {
+  if (!ctx?.db || !ctx?.tenantId) return { ok: false, skipped: 'no-ctx' };
+  if (!igConfig?.token || !igConfig?.page_id) return { ok: false, skipped: 'no-token-or-page' };
+
+  const nowSec = Math.floor((nowMs ?? Date.now()) / 1000);
+  const last = await getPhaseLastRun(ctx, 'ig_resubscribe');
+  if ((nowSec - last) < IG_RESUBSCRIBE_WINDOW_SEC) {
+    return { ok: true, skipped: 'window' };
+  }
+
+  const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(igConfig.page_id)}/subscribed_apps?subscribed_fields=${encodeURIComponent(IG_RESUBSCRIBE_FIELDS)}&access_token=${encodeURIComponent(igConfig.token)}`;
+  try {
+    const r = await fetch(url, { method: 'POST' });
+    const data = await r.json().catch(() => ({}));
+    const ok = !!(r.ok && (data.success === true || data.success === undefined));
+    if (ok) {
+      await setPhaseLastRun(ctx, 'ig_resubscribe', nowSec);
+      log.info('handlers.cron', { action: 'ig_resubscribe_ok', tenantId: ctx.tenantId, pageId: igConfig.page_id });
+      void logEvent(ctx, 'cron.ig_resubscribe', { level: 'info', tenantId: ctx.tenantId, message: 'IG webhook re-subscribed' });
+      return { ok: true };
+    }
+    log.error('handlers.cron', new Error(`IG resubscribe failed: ${data?.error?.message ?? `HTTP ${r.status}`}`), { tenantId: ctx.tenantId, pageId: igConfig.page_id });
+    return { ok: false, status: r.status, error: data?.error };
+  } catch (e) {
+    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_resubscribe', tenantId: ctx.tenantId });
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+}
+
 /**
  * P1-1 idempotency guard. Returns true if the phase should run; false to skip.
  * Window is taken from PHASE_WINDOWS. Always-run phases pass `windowSec=0`.
@@ -586,7 +628,7 @@ export async function handleCron(ctx) {
 
     if (!ctx?.db || !ctx?.tenantId) return;
 
-    // Phase 0 (always-run): IG token health check
+    // Phase 0 (always-run): IG token health check + daily webhook resubscribe
     try {
       const igConfig = await getChannelConfig(ctx, ctx.tenantId, 'instagram', ctx.BOT_ENCRYPTION_KEY || null);
       if (igConfig) {
@@ -600,6 +642,12 @@ export async function handleCron(ctx) {
           } else {
             log.error('handlers.cron', new Error('IG token refresh failed — update manually via POST /admin/ig-token'), { tenantId: ctx.tenantId, error: refreshResult.error });
           }
+        }
+        // Re-prime Meta Page → App webhook subscription. Diagnosed 2026-05-14:
+        // subscription silently lapsed for @manicbot_com IG, worker tail saw
+        // zero POSTs for hours. Running this daily keeps the link warm.
+        if (igConfig.token && igConfig.page_id) {
+          await maybeResubscribeIgWebhook(ctx, igConfig, now);
         }
       }
     } catch (e) {

@@ -302,6 +302,7 @@ Telegram Mini App opens
 | `dashboards/SalonDashboard.tsx`   | Salon owner: Overview, Appointments, Masters, Services, Clients, Billing, Settings |
 | `dashboards/MasterDashboard.tsx`  | Master: Today, Schedule, Clients, Earnings, Profile                                |
 | `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close                       |
+| `salon/IGHealthCard.tsx`          | Live Instagram channel state (4-color: healthy / warning / needs_attention / broken). Reads `salon.getInstagramHealth` — fuses `channel_configs.active`, last `message_windows.last_user_message_at`, token age, and any open `error_events` IG row. Surfaces the silent-drop case where a dead Page token auto-flips `channel_configs.active = 0` and the resolver stops matching inbound webhooks. |
 
 
 ### Web User Authentication (`server/auth/`, `server/email/`)

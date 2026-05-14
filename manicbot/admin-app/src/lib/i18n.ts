@@ -535,6 +535,25 @@ const translations = {
   "channels.downloadPng":                { ru: "Скачать PNG", ua: "Завантажити PNG", en: "Download PNG", pl: "Pobierz PNG" },
   "channels.tabWeb":                     { ru: "Веб-профиль", ua: "Веб-профіль", en: "Web profile", pl: "Profil web" },
 
+  // ── IG health card ──────────────────────────────────────────────────────────
+  "channels.igHealth.title":             { ru: "Состояние канала", ua: "Стан каналу", en: "Channel health", pl: "Stan kanału" },
+  "channels.igHealth.state.healthy":     { ru: "Работает", ua: "Працює", en: "Healthy", pl: "Działa" },
+  "channels.igHealth.state.warning":     { ru: "Давно не было сообщений", ua: "Давно не було повідомлень", en: "No recent inbound", pl: "Brak ostatnich wiadomości" },
+  "channels.igHealth.state.needsAttention": { ru: "Требует внимания", ua: "Потребує уваги", en: "Needs attention", pl: "Wymaga uwagi" },
+  "channels.igHealth.state.broken":      { ru: "Не работает", ua: "Не працює", en: "Broken", pl: "Nie działa" },
+  "channels.igHealth.lastInbound":       { ru: "Последнее сообщение", ua: "Останнє повідомлення", en: "Last inbound", pl: "Ostatnia wiadomość" },
+  "channels.igHealth.never":             { ru: "не приходило", ua: "не надходило", en: "never", pl: "nigdy" },
+  "channels.igHealth.hoursAgo":          { ru: "{n} ч назад", ua: "{n} год тому", en: "{n}h ago", pl: "{n}h temu" },
+  "channels.igHealth.daysAgo":           { ru: "{n} дн назад", ua: "{n} дн тому", en: "{n}d ago", pl: "{n}d temu" },
+  "channels.igHealth.tokenAge":          { ru: "Токен выдан", ua: "Токен видано", en: "Token issued", pl: "Token wystawiono" },
+  "channels.igHealth.tokenAgeDays":      { ru: "{n} дн назад", ua: "{n} дн тому", en: "{n} days ago", pl: "{n} dni temu" },
+  "channels.igHealth.tokenExpiringSoon": { ru: "Скоро истечёт", ua: "Скоро мине", en: "Expiring soon", pl: "Wkrótce wygasa" },
+  "channels.igHealth.activeFlag":        { ru: "Активен в БД", ua: "Активний у БД", en: "Active in DB", pl: "Aktywny w bazie" },
+  "channels.igHealth.inactiveFlag":      { ru: "Деактивирован (вероятно, токен умер)", ua: "Деактивовано (ймовірно, токен помер)", en: "Deactivated (token likely dead)", pl: "Dezaktywowany (token prawdopodobnie martwy)" },
+  "channels.igHealth.openError":         { ru: "Открытая ошибка", ua: "Відкрита помилка", en: "Open error", pl: "Otwarty błąd" },
+  "channels.igHealth.relinkHint":        { ru: "Сгенерируйте новый Page Access Token в Meta Business Suite и отключите/подключите канал заново — иначе входящие DM не дойдут до бота.", ua: "Згенеруйте новий Page Access Token у Meta Business Suite та перепідключіть канал — інакше вхідні DM не дійдуть до бота.", en: "Generate a new Page Access Token in Meta Business Suite and reconnect the channel — otherwise incoming DMs will silently drop.", pl: "Wygeneruj nowy Page Access Token w Meta Business Suite i podłącz kanał ponownie — w przeciwnym razie przychodzące DM zostaną cicho odrzucone." },
+  "channels.igHealth.warningHint":       { ru: "Канал жив, но за неделю никто не написал. Отправьте тестовый DM в IG-аккаунт, чтобы убедиться что инбаунд проходит.", ua: "Канал живий, але за тиждень ніхто не писав. Надішліть тестовий DM на IG-акаунт, щоб переконатися що інбаунд проходить.", en: "Channel is alive but no one has messaged in a week. Send a test DM to the IG account to confirm inbound works.", pl: "Kanał działa, ale nikt nie pisał od tygodnia. Wyślij testową wiadomość DM, aby potwierdzić, że przychodzące działają." },
+
   // ── Charts / overview ───────────────────────────────────────────────────────
   "charts.tooltipBookings":              { ru: "Записи", ua: "Записи", en: "Bookings", pl: "Rezerwacje" },
   "charts.tooltipSignups":               { ru: "Регистрации", ua: "Реєстрації", en: "Signups", pl: "Rejestracje" },

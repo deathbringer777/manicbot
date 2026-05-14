@@ -82,6 +82,53 @@ describe('resolveTenantFromInstagram', () => {
     const r = await resolveTenantFromInstagram(ctx, '999888');
     expect(r?.tenantId).toBe('t_alt');
   });
+
+  // Silent-drop regression: when a Page access token dies, `instagram.js`
+  // flips `channel_configs.active = 0`. The resolver then refuses to match
+  // that row and the webhook handler logs "unresolved IG page_id". Without
+  // this guard a stale row would keep being picked, the token-dead path
+  // would fire on every inbound, and we'd never surface the re-auth need.
+  it('skips channel_configs rows with active = 0 (silent-drop on deactivated channels)', async () => {
+    const sqlsSeen = [];
+    // SQL-aware mock that mirrors D1's `active = 1` server-side filter.
+    const allRows = [
+      {
+        id: 'cc-dead',
+        tenant_id: 't_dead',
+        channel_type: 'instagram',
+        active: 0,
+        page_id: '1008301152373103',
+        ig_business_id: '25881183448226493',
+        config: JSON.stringify({ page_id: '1008301152373103', instagram_business_id: '25881183448226493' }),
+      },
+    ];
+    const ctx = {
+      db: {
+        prepare(sql) {
+          sqlsSeen.push(sql);
+          return {
+            bind: () => ({
+              all: async () => {
+                const visible = /active\s*=\s*1/.test(sql)
+                  ? allRows.filter(r => r.active === 1)
+                  : allRows;
+                return { results: visible };
+              },
+            }),
+          };
+        },
+      },
+    };
+    const r = await resolveTenantFromInstagram(ctx, '1008301152373103');
+    expect(r).toBeNull();
+    // Every SQL the resolver issues must include `active = 1` — that's the
+    // only line of defence against routing inbound DMs to a tenant whose
+    // token Meta has already revoked.
+    expect(sqlsSeen.length).toBeGreaterThan(0);
+    for (const sql of sqlsSeen) {
+      expect(sql).toMatch(/active\s*=\s*1/);
+    }
+  });
 });
 
 describe('getChannelConfig', () => {

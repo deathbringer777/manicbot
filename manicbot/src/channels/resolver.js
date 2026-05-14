@@ -7,7 +7,7 @@
 
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { encryptToken } from '../utils/security.js';
-import { decryptToken, decryptTokenWithFallback } from '../utils/security.js';
+import { decryptToken, decryptTokenWithFallback, encryptToken } from '../utils/security.js';
 import { log } from '../utils/logger.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
 import { baseCtx } from '../tenant/baseCtx.js';
@@ -230,9 +230,27 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
         token = plain;
         if (token && usedOldKey) {
           log.warn('channels.resolver', {
-            message: 'channel.token.decrypted_with_old_key — schedule re-encrypt sweep',
+            message: 'channel.token.decrypted_with_old_key — re-encrypting in place',
             tenantId, channelType,
           });
+          // Self-heal: re-encrypt with the new key so future reads don't
+          // need the old key. Best-effort; failure here is non-fatal and
+          // just means the next read also pays the old-key fallback cost.
+          try {
+            const fresh = await encryptToken(plain, encKey, CHANNEL_TOKEN_LABEL);
+            if (fresh && row.id) {
+              const { dbRun } = await import('../utils/db.js');
+              await dbRun(ctx,
+                'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ?',
+                fresh, Math.floor(Date.now() / 1000), row.id,
+              );
+            }
+          } catch (e) {
+            log.warn('channels.resolver', {
+              message: 'channel.token.re_encrypt_failed',
+              tenantId, channelType, error: e?.message,
+            });
+          }
         }
       } else {
         token = await decryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);

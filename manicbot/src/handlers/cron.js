@@ -129,6 +129,95 @@ export async function maybeResubscribeIgWebhook(ctx, igConfig, nowMs) {
   }
 }
 
+const CHANNEL_HEALTH_WINDOW_SEC = 6 * 60 * 60;
+
+/**
+ * Channel health probe. For each IG channel for this tenant, calls Graph
+ * `/me` with the decrypted Page token. A 401/expired response surfaces as
+ * a `fatal` row in the God Mode `error_events` dashboard so a token going
+ * dead never goes unnoticed again (root cause of the Mar→May 2026 IG
+ * outage that took 6 weeks to detect).
+ *
+ * Runs at most every 6h per tenant via `cron:phase:channel_health:last`.
+ */
+export async function phaseChannelHealth(ctx, nowMs) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  const nowSec = Math.floor((nowMs ?? Date.now()) / 1000);
+  const last = await getPhaseLastRun(ctx, 'channel_health');
+  if ((nowSec - last) < CHANNEL_HEALTH_WINDOW_SEC) return;
+
+  const igConfig = await getChannelConfig(
+    ctx, ctx.tenantId, 'instagram',
+    ctx.BOT_ENCRYPTION_KEY || null,
+    ctx.BOT_ENCRYPTION_KEY_OLD || null,
+  );
+  if (!igConfig) {
+    await setPhaseLastRun(ctx, 'channel_health', nowSec);
+    return;
+  }
+
+  const { captureError } = await import('../utils/errorCapture.js');
+  if (!igConfig.token) {
+    await captureError(ctx, new Error('IG token decrypt failed — bot is dead until recovery'), {
+      source: 'cron.channel_health',
+      tenantId: ctx.tenantId,
+      severity: 'fatal',
+      path: 'cron.phase.channel_health',
+      channelType: 'instagram',
+      pageId: String(igConfig.page_id || ''),
+    });
+    await setPhaseLastRun(ctx, 'channel_health', nowSec);
+    return;
+  }
+
+  try {
+    const r = await fetch(
+      `https://graph.facebook.com/v21.0/me?fields=id&access_token=${encodeURIComponent(igConfig.token)}`,
+    );
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      await captureError(ctx, new Error(`IG token rejected by Graph: ${data?.error?.message ?? `HTTP ${r.status}`}`), {
+        source: 'cron.channel_health',
+        tenantId: ctx.tenantId,
+        severity: 'fatal',
+        path: 'cron.phase.channel_health',
+        channelType: 'instagram',
+        pageId: String(igConfig.page_id || ''),
+        graphCode: String(data?.error?.code ?? ''),
+        graphSubcode: String(data?.error?.error_subcode ?? ''),
+      });
+    } else {
+      // Verify Page subscribed_apps is healthy; if missing, capture warning.
+      const sR = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(igConfig.page_id)}/subscribed_apps?access_token=${encodeURIComponent(igConfig.token)}`,
+      );
+      const sData = await sR.json().catch(() => ({}));
+      const ourSub = (sData?.data || []).find(s => String(s.id) === String(ctx.META_APP_ID || ''));
+      const expectedFields = ['messages', 'messaging_postbacks', 'message_reads'];
+      const missing = expectedFields.filter(f => !(ourSub?.subscribed_fields || []).includes(f));
+      if (!ourSub || missing.length) {
+        await captureError(ctx,
+          new Error(`Page subscribed_apps missing fields: ${missing.join(',') || 'app not subscribed'}`),
+          {
+            source: 'cron.channel_health',
+            tenantId: ctx.tenantId,
+            severity: 'error',
+            path: 'cron.phase.channel_health',
+            channelType: 'instagram',
+            pageId: String(igConfig.page_id || ''),
+            missingFields: missing.join(','),
+          },
+        );
+      }
+    }
+  } catch (e) {
+    // Graph is down or fetch timed out. Don't bump last-run so we retry on next tick.
+    log.warn('handlers.cron', { action: 'channel_health_probe_error', error: e?.message });
+    return;
+  }
+  await setPhaseLastRun(ctx, 'channel_health', nowSec);
+}
+
 /**
  * P1-1 idempotency guard. Returns true if the phase should run; false to skip.
  * Window is taken from PHASE_WINDOWS. Always-run phases pass `windowSec=0`.
@@ -672,6 +761,13 @@ export async function handleCron(ctx) {
       }
     } catch (e) {
       log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'rate_limit_cleanup' });
+    }
+
+    // Always-run health probe (its own idempotency window inside).
+    try {
+      await phaseChannelHealth(ctx, now);
+    } catch (e) {
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'channel_health' });
     }
 
     // Idempotent phases.

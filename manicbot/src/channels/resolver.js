@@ -7,7 +7,7 @@
 
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { encryptToken } from '../utils/security.js';
-import { decryptToken } from '../utils/security.js';
+import { decryptToken, decryptTokenWithFallback } from '../utils/security.js';
 import { log } from '../utils/logger.js';
 import { buildTenantCtx } from '../tenant/resolver.js';
 import { baseCtx } from '../tenant/baseCtx.js';
@@ -196,7 +196,7 @@ export async function tenantHasActiveChannel(ctx, tenantId) {
   }
 }
 
-export async function getChannelConfig(ctx, tenantId, channelType, encKey = null) {
+export async function getChannelConfig(ctx, tenantId, channelType, encKey = null, oldKey = null) {
   if (!ctx?.db) return null;
   const rows = await dbAll(ctx,
     'SELECT * FROM channel_configs WHERE tenant_id = ? AND channel_type = ? AND active = 1 LIMIT 1',
@@ -214,7 +214,29 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
       // structured event so ops can fix the deploy.
       log.error('channels.resolver', new Error('channel.token.missing_key'), { tenantId, channelType });
     } else {
-      token = await decryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
+      // Fall back to BOT_ENCRYPTION_KEY_OLD when the primary key can't
+      // unwrap an old blob — diagnosed 2026-05-14: IG channel for an
+      // active tenant had `channel.token.decrypt_failed` because the key
+      // rotated but channel_configs.token_encrypted was never re-wrapped.
+      // The rotation sweep can pick these up async, but the cron resubscribe
+      // / outbound send paths need a working token NOW.
+      const effOld = oldKey
+        ?? (typeof ctx === 'object' ? ctx.BOT_ENCRYPTION_KEY_OLD : null)
+        ?? null;
+      if (effOld && effOld !== encKey && String(effOld).length >= 32) {
+        const { plain, usedOldKey } = await decryptTokenWithFallback(
+          rawTok, encKey, effOld, CHANNEL_TOKEN_LABEL,
+        );
+        token = plain;
+        if (token && usedOldKey) {
+          log.warn('channels.resolver', {
+            message: 'channel.token.decrypted_with_old_key — schedule re-encrypt sweep',
+            tenantId, channelType,
+          });
+        }
+      } else {
+        token = await decryptToken(rawTok, encKey, CHANNEL_TOKEN_LABEL);
+      }
       if (!token) {
         log.error('channels.resolver', new Error('channel.token.decrypt_failed'), { tenantId, channelType });
       }

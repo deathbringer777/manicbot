@@ -38,6 +38,8 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    /** Mirror of Worker var: "1" when the IG autopilot cron phase is live. */
+    MARKETING_AUTOPILOT_ENABLED: z.string().optional(),
   },
 
   client: {
@@ -68,6 +70,7 @@ export const env = createEnv({
     STRIPE_PRICE_PRO_ANNUAL: process.env.STRIPE_PRICE_PRO_ANNUAL,
     STRIPE_PRICE_MAX_ANNUAL: process.env.STRIPE_PRICE_MAX_ANNUAL,
     NODE_ENV: process.env.NODE_ENV,
+    MARKETING_AUTOPILOT_ENABLED: process.env.MARKETING_AUTOPILOT_ENABLED,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,

@@ -31,6 +31,16 @@ RETENTION_DRY_RUN = "0"
 # `npx wrangler r2 bucket dev-url enable manicbot-marketing-assets` and
 # pinned here so the Worker doesn't have to query R2 for the URL.
 MARKETING_ASSETS_PUBLIC_URL = "https://pub-1dff67fc0bd644c59f1677cb5d553ce6.r2.dev"
+# Master kill switch for the @manicbot_com IG autopilot cron phase.
+# Default "0" — cron will SKIP the phase, no captions/images/posts created.
+# Flip to "1" via Cloudflare dashboard once these are all in place:
+#   - Meta App approved for `instagram_content_publish`
+#   - wrangler secret put ANTHROPIC_API_KEY
+#   - wrangler secret put MARKETING_IG_PAGE_ID
+#   - wrangler secret put MARKETING_IG_ACCESS_TOKEN
+# Manual triggers via /admin/marketing-tick + /admin/marketing-publish-one
+# ignore this flag (always run, useful for testing before flipping live).
+MARKETING_AUTOPILOT_ENABLED = "0"
 
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID

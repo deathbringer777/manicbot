@@ -6,6 +6,7 @@ import {
 } from './tenant/resolver.js';
 import { listTenantIds, getBotIdsByTenantId } from './tenant/storage.js';
 import { handleCron } from './handlers/cron.js';
+import { phaseInstagramAutopilot } from './marketing/autopilot.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
@@ -466,6 +467,30 @@ export default {
   async scheduled(event, env, _scheduledCtx) {
     try {
       const ec = envCtx(env);
+
+      // ─── @manicbot_com IG autopilot ─────────────────────────────────────
+      // Global phase (NOT per-tenant) — runs once per cron tick when
+      // env.MARKETING_AUTOPILOT_ENABLED is set to "1". Defaults to off so
+      // we don't accidentally fire 400s into Meta before App review
+      // approves `instagram_content_publish`. Toggle via Cloudflare
+      // dashboard once Meta + ANTHROPIC_API_KEY + MARKETING_IG_* secrets
+      // are all in place.
+      if (env.MARKETING_AUTOPILOT_ENABLED === '1') {
+        const nowMs = event.scheduledTime || Date.now();
+        _scheduledCtx.waitUntil(
+          phaseInstagramAutopilot(env, nowMs).catch((e) => {
+            log.error(
+              'worker.marketingAutopilot',
+              e instanceof Error ? e : new Error(String(e?.message || e)),
+            );
+            void captureError(env, e, {
+              source: 'worker.scheduled',
+              phase: 'marketing_autopilot',
+            });
+          }),
+        );
+      }
+
       // Queues fan-out path
       if (ec.db && env.MANICBOT_TENANT_CRON?.sendBatch) {
         const tenantIds = await listTenantIds(ec);

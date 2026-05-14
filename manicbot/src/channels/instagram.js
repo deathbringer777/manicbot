@@ -51,9 +51,12 @@ export class InstagramAdapter {
     const cfg = ctx.channelConfig?.config ?? {};
     this._pageId = cfg.page_id ?? null;
     this._token = ctx.channelConfig?.token ?? null;
-    if (this._token && String(this._token).startsWith('IGAA')) {
-      log.warn('channels.instagram', { message: 'Token starts with IGAA — Instagram product tokens often cannot call POST /{page-id}/messages. Use a Facebook Page access token (usually EAA…) for the Page linked to this IG account; save it in Mini App → Channels.' });
-    }
+    // 2026-03 Meta API split: the Instagram Login product issues IGAA tokens
+    // that authenticate against graph.instagram.com (NOT graph.facebook.com)
+    // and post messages to /me/messages (NOT /{pageId}/messages). The channel
+    // config is tagged with api='instagram_direct' by /admin/ig-set-direct-token.
+    this._api = cfg.api === 'instagram_direct' ? 'instagram_direct' : 'facebook';
+    this._igUserId = cfg.ig_user_id ?? null;
     /** @type {Set<string>} */
     this._ignoreSenderIds = ctx.instagramIgnoreSenderIds instanceof Set
       ? ctx.instagramIgnoreSenderIds
@@ -191,7 +194,11 @@ export class InstagramAdapter {
       };
     }
 
-    return this._post(`/${this._pageId}/messages`, body);
+    // Path + host depend on the API generation:
+    //   • instagram_direct → POST /me/messages on graph.instagram.com
+    //   • legacy (Page Messenger) → POST /{pageId}/messages on graph.facebook.com
+    const path = this._api === 'instagram_direct' ? '/me/messages' : `/${this._pageId}/messages`;
+    return this._post(path, body);
   }
 
   /**
@@ -291,11 +298,17 @@ export class InstagramAdapter {
    * @private
    */
   async _post(path, body) {
-    if (!this._token || !this._pageId) {
-      log.error('channels.instagram', new Error('missing token or page_id'));
+    // page_id is OPTIONAL on the new instagram_direct API path (/me/messages).
+    if (!this._token) {
+      log.error('channels.instagram', new Error('missing token'));
       return { ok: false, error: 'not_configured' };
     }
-    const result = await graphPost(path, this._token, body, { label: 'ig' });
+    if (this._api !== 'instagram_direct' && !this._pageId) {
+      log.error('channels.instagram', new Error('missing page_id for legacy IG outbound'));
+      return { ok: false, error: 'not_configured' };
+    }
+    const host = this._api === 'instagram_direct' ? 'instagram' : 'facebook';
+    const result = await graphPost(path, this._token, body, { label: 'ig', host });
     // Sprint 2: If Meta reports the token is dead (OAuthException / code 190),
     // mark the channel config as needs_reauth so the admin UI surfaces it.
     if (!result.ok && result.tokenDead && this._ctx?.db && this._ctx?.tenantId) {

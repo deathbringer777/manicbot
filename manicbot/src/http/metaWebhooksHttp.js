@@ -133,10 +133,35 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
     } catch {
       return new Response('OK');
     }
-    const valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET);
-    if (!valid) return new Response('Forbidden', { status: 403 });
+    // Try META_APP_SECRET first; fall back to META_INSTAGRAM_APP_SECRET
+    // for the new Instagram Login product (post-Mar-2026), which signs with
+    // its OWN App Secret separate from the parent FB App Secret.
+    let valid = await verifyMetaSignature(rawBytes, sig, env.META_APP_SECRET);
+    let usedIgSecret = false;
+    if (!valid && env.META_INSTAGRAM_APP_SECRET) {
+      valid = await verifyMetaSignature(rawBytes, sig, env.META_INSTAGRAM_APP_SECRET);
+      if (valid) usedIgSecret = true;
+    }
+    if (!valid) {
+      // Capture so we can see whether Meta IS delivering with a different
+      // signing secret. Bodies stay private — only sig prefix + length.
+      try {
+        const { captureError } = await import('../utils/errorCapture.js');
+        await captureError(env, new Error('IG webhook signature mismatch — Meta may be using a different App Secret (Instagram product has its own)'), {
+          source: 'webhook.ig',
+          severity: 'error',
+          path: '/webhook/ig',
+          sigPrefix: sig.slice(0, 24),
+          bodyLen: rawBytes.byteLength,
+          hasMetaAppSecret: env.META_APP_SECRET ? 'yes' : 'no',
+          hasInstagramAppSecret: env.META_INSTAGRAM_APP_SECRET ? 'yes' : 'no',
+        });
+      } catch { /* never throw from webhook hot path */ }
+      return new Response('Forbidden', { status: 403 });
+    }
 
     const ec = envCtx(env);
+    if (usedIgSecret) log.info('http.metaWebhooks', { message: 'IG webhook verified via META_INSTAGRAM_APP_SECRET' });
     void logEvent(ec, 'webhook.meta', { message: 'Meta webhook: ig' });
     const parsed = (() => {
       try {

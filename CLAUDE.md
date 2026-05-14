@@ -134,9 +134,27 @@ Background: `@manicbot_com` IG went silent from **2026-03-30 to 2026-05-14**. Di
 
 - `META_APP_ID` (public, in [wrangler.toml](manicbot/wrangler.toml) `[vars]`, paired with the existing `META_APP_SECRET` secret). Used by long-lived token exchange + App-level subscription management.
 
-### Open Meta-side work (NOT a code problem)
+### Resolution: Instagram Login product migration
 
-App-level subscription on `object=instagram` for `fields=messages,messaging_postbacks,message_reads` returns Graph code `1929002 "Invalid Permissions"` — App lacks Advanced Access on `instagram_manage_messages`. With the current Page-only delivery model (legacy) the bot worked, but Meta is phasing this out. Long-term: pass **App Review** for `instagram_basic` + `instagram_manage_messages` + complete **Business Verification**. Interim: add operators as **Instagram Tester** in App Roles so DMs from those accounts bypass review.
+The root cause turned out to be a Meta-side API split (post-Mar-2026): Instagram Messaging moved off the Page Messenger model onto a separate **Instagram Login** product. Symptoms:
+- Old Page Access Token (EAA…) stopped receiving DM webhooks
+- App-level `object=instagram` + `messages` field needs Advanced Access which the legacy permissions track no longer grants
+- New product has its OWN App ID (`3756985564432185`), its OWN App Secret (`META_INSTAGRAM_APP_SECRET` worker secret), and its OWN endpoint (`graph.instagram.com`)
+
+Full recovery flow:
+
+1. **Generate IGAA-prefixed token** in App Dashboard → Instagram → API setup with Instagram login → step 1 → Generate token. Add `dezbringer` as Instagram Tester in App Roles → Roles → invite → accept in IG app.
+2. **POST /admin/ig-set-direct-token** with `{ tenantId, token }` — validates via `graph.instagram.com/me`, binds to stored `ig_business_id`, encrypts and writes; stamps `config.api = 'instagram_direct'`.
+3. **Subscribe IG webhook fields**: `POST graph.instagram.com/v21.0/{ig_user_id}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,messaging_seen,message_reactions&access_token=IGAA…`.
+4. **Install `META_INSTAGRAM_APP_SECRET`** via `wrangler secret put`. `metaWebhooksHttp.js` tries `META_APP_SECRET` first, falls back to `META_INSTAGRAM_APP_SECRET`, and `captureError`s on full mismatch so future signature-secret rotations surface in the God Mode `/errors` dashboard.
+
+### Outbound adapter routing
+
+`channels/instagram.js` reads `config.api` at construction:
+- **`'instagram_direct'`** → `graphPost` with `host: 'instagram'` (→ `graph.instagram.com`) and path `/me/messages`
+- **otherwise (legacy)** → `host: 'facebook'` (→ `graph.facebook.com`) and path `/{pageId}/messages`
+
+`channels/graph-api.js` exposes `graphBase(host)` and accepts `{ host }` opt on `graphPost`. Default `'facebook'` preserves backward-compat for every other caller (WhatsApp, legacy IG installs).
 
 ---
 

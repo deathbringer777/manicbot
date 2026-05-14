@@ -6,8 +6,19 @@
 import { log } from '../utils/logger.js';
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
+const GRAPH_API_IG = 'https://graph.instagram.com/v21.0';
 
-export { GRAPH_API };
+export { GRAPH_API, GRAPH_API_IG };
+
+/**
+ * Pick the Graph host. 'facebook' (default, legacy Page Messenger) →
+ * graph.facebook.com. 'instagram' (post-Mar-2026 Instagram Login product) →
+ * graph.instagram.com — accepts IGAA-prefixed user tokens.
+ * @param {'facebook'|'instagram'} [host]
+ */
+export function graphBase(host) {
+  return host === 'instagram' ? GRAPH_API_IG : GRAPH_API;
+}
 
 /**
  * Meta error codes that mean the token is dead (re-auth required).
@@ -31,10 +42,11 @@ export function isTokenDead(errorData) {
  * @param {{ maxRetries?: number, label?: string }} [opts]
  * @returns {Promise<{ ok: boolean, data?: any, status?: number, error?: string }>}
  */
-export async function graphPost(path, token, body, { maxRetries = 2, label = 'graph' } = {}) {
+export async function graphPost(path, token, body, { maxRetries = 2, label = 'graph', host = 'facebook' } = {}) {
+  const base = graphBase(host);
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(`${GRAPH_API}${path}`, {
+      const res = await fetch(`${base}${path}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

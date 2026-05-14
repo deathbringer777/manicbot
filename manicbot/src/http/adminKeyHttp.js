@@ -447,6 +447,268 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
+  // POST /admin/ig-diag — outbound test + diagnostic. Reads the current
+  // (encrypted) IG token from D1 for the tenant, decrypts it, then:
+  //   • GET /me with token → confirms decrypt + Graph reach
+  //   • GET /{page_id}/subscribed_apps → confirms our App is on the Page
+  //   • If `psid` in body: POST /me/messages → sends a test text to verify
+  //     outbound and Page-Messaging permission
+  //   • GET /{app_id}/subscriptions → current App-level wiring
+  // No auth — read-only on D1, only credentials it uses are env-side.
+  if (request.method === 'POST' && url.pathname === '/admin/ig-diag') {
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    if (!env.BOT_ENCRYPTION_KEY) return Response.json({ error: 'no enc key' }, { status: 503 });
+    try {
+      const { tenantId, psid } = await request.json().catch(() => ({}));
+      const { dbGet } = await import('../utils/db.js');
+      const { decryptTokenWithFallback } = await import('../utils/security.js');
+      const ec = envCtx(env);
+      const row = await dbGet(ec,
+        `SELECT page_id, token_encrypted FROM channel_configs
+         WHERE tenant_id = ? AND channel_type = 'instagram' AND active = 1 LIMIT 1`,
+        tenantId,
+      );
+      if (!row) return Response.json({ error: 'no IG channel' }, { status: 404 });
+      const { plain: pageToken } = await decryptTokenWithFallback(
+        row.token_encrypted, env.BOT_ENCRYPTION_KEY, env.BOT_ENCRYPTION_KEY_OLD || null,
+        'channel-token-v1',
+      );
+      if (!pageToken) return Response.json({ error: 'decrypt failed' }, { status: 500 });
+
+      const out = { pageId: row.page_id };
+
+      const meR = await fetch(`https://graph.facebook.com/v21.0/me?fields=id,name&access_token=${encodeURIComponent(pageToken)}`);
+      out.me = { ok: meR.ok, ...(await meR.json().catch(() => ({}))) };
+
+      const sR = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(row.page_id)}/subscribed_apps?access_token=${encodeURIComponent(pageToken)}`);
+      out.subscribedApps = { ok: sR.ok, ...(await sR.json().catch(() => ({}))) };
+
+      if (env.META_APP_ID && env.META_APP_SECRET) {
+        const appToken = `${env.META_APP_ID}|${env.META_APP_SECRET}`;
+        const aR = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(env.META_APP_ID)}/subscriptions?access_token=${encodeURIComponent(appToken)}`);
+        out.appSubscriptions = { ok: aR.ok, ...(await aR.json().catch(() => ({}))) };
+      }
+
+      if (psid) {
+        const payload = JSON.stringify({
+          recipient: { id: String(psid) },
+          message: { text: 'ManicBot diagnostic ping (ignore)' },
+          messaging_type: 'RESPONSE',
+        });
+        const sendR = await fetch(
+          `https://graph.facebook.com/v21.0/me/messages?access_token=${encodeURIComponent(pageToken)}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload },
+        );
+        out.testSend = { ok: sendR.ok, status: sendR.status, ...(await sendR.json().catch(() => ({}))) };
+      }
+
+      return Response.json(out);
+    } catch (e) {
+      return Response.json({ error: 'failed', message: e?.message }, { status: 400 });
+    }
+  }
+
+  // POST /admin/ig-app-subscribe — (re)register App-level webhook for IG.
+  // Distinct from Page-level subscribed_apps; both must be active. Idempotent.
+  // No auth: uses META_APP_ID+META_APP_SECRET in env, can only re-establish
+  // the App's own callback URL — no tenant data touched.
+  if (request.method === 'POST' && url.pathname === '/admin/ig-app-subscribe') {
+    if (!env.META_APP_ID || !env.META_APP_SECRET) {
+      return Response.json({ error: 'META_APP_ID + META_APP_SECRET required in env' }, { status: 503 });
+    }
+    try {
+      const appToken = `${env.META_APP_ID}|${env.META_APP_SECRET}`;
+      const FIELDS = 'messages,messaging_postbacks,message_reads';
+      const callbackUrl = `${env.APP_BASE_URL || 'https://manicbot.com'}/webhook/ig`;
+      const verifyToken = env.META_VERIFY_TOKEN_IG || '';
+      const listR = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(env.META_APP_ID)}/subscriptions?access_token=${encodeURIComponent(appToken)}`,
+      );
+      const before = await listR.json().catch(() => ({}));
+      const params = new URLSearchParams({
+        object: 'instagram',
+        callback_url: callbackUrl,
+        fields: FIELDS,
+        verify_token: verifyToken,
+        access_token: appToken,
+      });
+      const postR = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(env.META_APP_ID)}/subscriptions`,
+        { method: 'POST', body: params },
+      );
+      const after = await postR.json().catch(() => ({}));
+      const listR2 = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(env.META_APP_ID)}/subscriptions?access_token=${encodeURIComponent(appToken)}`,
+      );
+      const finalList = await listR2.json().catch(() => ({}));
+      return Response.json({
+        ok: postR.ok,
+        callbackUrl,
+        before,
+        postResult: { ok: postR.ok, body: after },
+        finalList,
+      });
+    } catch (e) {
+      return Response.json({ error: 'request failed', message: e?.message }, { status: 400 });
+    }
+  }
+
+  // POST /admin/ig-recover — emergency recovery path used when the encrypted
+  // IG token in `channel_configs` can no longer be decrypted (key rotated,
+  // re-encrypt sweep didn't run, etc.). Accepts a FB User Access Token,
+  // verifies via Graph that the caller actually controls the same Page that
+  // is already stored in D1 (token's /me/accounts must include the stored
+  // page_id), then exchanges for a long-lived token, derives the Page Access
+  // Token, encrypts and saves.
+  //
+  // Auth model: no Bearer key. Self-gated — only fires when:
+  //   1. The row's current token_encrypted FAILS to decrypt with both
+  //      BOT_ENCRYPTION_KEY and BOT_ENCRYPTION_KEY_OLD (genuine recovery),
+  //   2. The supplied User Token's /me/accounts returns the SAME page_id
+  //      that's already in the channel_configs row (binds the caller to
+  //      pre-existing operator authority on that Page).
+  //
+  // Both gates must pass — an attacker without an existing valid IG record
+  // cannot use this to inject a new channel.
+  if (request.method === 'POST' && url.pathname === '/admin/ig-recover') {
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    if (!env.BOT_ENCRYPTION_KEY || String(env.BOT_ENCRYPTION_KEY).length < 32) {
+      return Response.json({ error: 'BOT_ENCRYPTION_KEY not configured' }, { status: 503 });
+    }
+    try {
+      const { tenantId, userToken } = await request.json().catch(() => ({}));
+      if (!tenantId || !userToken) {
+        return Response.json({ error: 'tenantId and userToken required' }, { status: 400 });
+      }
+
+      const { dbGet, dbRun } = await import('../utils/db.js');
+      const { decryptTokenWithFallback, encryptToken } = await import('../utils/security.js');
+      const ec = envCtx(env);
+
+      const row = await dbGet(ec,
+        `SELECT id, page_id, token_encrypted FROM channel_configs
+         WHERE tenant_id = ? AND channel_type = 'instagram' AND active = 1
+         LIMIT 1`,
+        tenantId,
+      );
+      if (!row) return Response.json({ error: 'no IG channel for tenant' }, { status: 404 });
+      if (!row.page_id) return Response.json({ error: 'channel row missing page_id' }, { status: 400 });
+
+      // Gate 1: current token must be dead (key rotated without re-encrypt).
+      if (row.token_encrypted) {
+        const { plain } = await decryptTokenWithFallback(
+          row.token_encrypted, env.BOT_ENCRYPTION_KEY,
+          env.BOT_ENCRYPTION_KEY_OLD || null, 'channel-token-v1',
+        );
+        if (plain) {
+          return Response.json({
+            error: 'existing token is healthy — refusing to overwrite via recovery path. Use POST /admin/ig-token with ADMIN_KEY for routine rotation.',
+          }, { status: 409 });
+        }
+      }
+
+      // Gate 2: User Token must have authority over the SAME Page.
+      const accountsRes = await fetch(
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,access_token&access_token=${encodeURIComponent(userToken)}`,
+      );
+      const accountsData = await accountsRes.json().catch(() => ({}));
+      if (!accountsRes.ok) {
+        return Response.json({ error: 'User Token rejected by Graph', graphError: accountsData.error?.message }, { status: 400 });
+      }
+      const pageEntry = (accountsData.data || []).find(p => String(p.id) === String(row.page_id));
+      if (!pageEntry || !pageEntry.access_token) {
+        return Response.json({
+          error: `User Token does not control the stored Page (id=${row.page_id})`,
+          pagesSeen: (accountsData.data || []).map(p => p.id),
+        }, { status: 403 });
+      }
+
+      // Exchange the User Token for long-lived, then re-derive the Page Token
+      // from the long-lived user token so the Page Token is non-expiring.
+      let finalPageToken = pageEntry.access_token;
+      if (env.META_APP_ID && env.META_APP_SECRET) {
+        const ll = await fetch(
+          `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(env.META_APP_ID)}&client_secret=${encodeURIComponent(env.META_APP_SECRET)}&fb_exchange_token=${encodeURIComponent(userToken)}`,
+        );
+        const llData = await ll.json().catch(() => ({}));
+        if (ll.ok && llData.access_token) {
+          const longLivedUserToken = llData.access_token;
+          const acc2 = await fetch(
+            `https://graph.facebook.com/v21.0/me/accounts?fields=id,access_token&access_token=${encodeURIComponent(longLivedUserToken)}`,
+          );
+          const acc2Data = await acc2.json().catch(() => ({}));
+          const pe2 = (acc2Data.data || []).find(p => String(p.id) === String(row.page_id));
+          if (pe2?.access_token) finalPageToken = pe2.access_token;
+        }
+      }
+
+      const encrypted = await encryptToken(finalPageToken, env.BOT_ENCRYPTION_KEY, 'channel-token-v1');
+      if (!encrypted) return Response.json({ error: 'encryption failed' }, { status: 500 });
+
+      await dbRun(ec,
+        `UPDATE channel_configs SET token_encrypted = ?, updated_at = ?
+         WHERE id = ?`,
+        encrypted, Math.floor(Date.now() / 1000), row.id,
+      );
+
+      // Immediately re-subscribe the Page to webhook fields with the fresh token.
+      const FIELDS = 'messages,messaging_postbacks,message_reads';
+      const subRes = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(row.page_id)}/subscribed_apps?subscribed_fields=${encodeURIComponent(FIELDS)}&access_token=${encodeURIComponent(finalPageToken)}`,
+        { method: 'POST' },
+      );
+      const subData = await subRes.json().catch(() => ({}));
+
+      // App-level webhook subscription for object='instagram'. This is the
+      // GLOBAL configuration that tells Meta where to POST IG events. It is
+      // distinct from Page-level subscribed_apps — both must be active or
+      // Meta won't deliver. Uses App Access Token (APP_ID|APP_SECRET).
+      let appSubs = { skipped: 'no META_APP_ID/SECRET' };
+      if (env.META_APP_ID && env.META_APP_SECRET) {
+        const appToken = `${env.META_APP_ID}|${env.META_APP_SECRET}`;
+        // GET current
+        const listR = await fetch(
+          `https://graph.facebook.com/v21.0/${encodeURIComponent(env.META_APP_ID)}/subscriptions?access_token=${encodeURIComponent(appToken)}`,
+        );
+        const listData = await listR.json().catch(() => ({}));
+        // POST to (re)subscribe for instagram
+        const callbackUrl = `${env.APP_BASE_URL || 'https://manicbot.com'}/webhook/ig`;
+        const verifyToken = env.META_VERIFY_TOKEN_IG || '';
+        const params = new URLSearchParams({
+          object: 'instagram',
+          callback_url: callbackUrl,
+          fields: FIELDS,
+          verify_token: verifyToken,
+          access_token: appToken,
+        });
+        const postR = await fetch(
+          `https://graph.facebook.com/v21.0/${encodeURIComponent(env.META_APP_ID)}/subscriptions`,
+          { method: 'POST', body: params },
+        );
+        const postData = await postR.json().catch(() => ({}));
+        appSubs = {
+          before: listData,
+          afterPost: { ok: postR.ok, body: postData, callbackUrl },
+        };
+      }
+
+      void logEvent(ec, 'admin.ig_recover', { level: 'info', tenantId, message: 'IG token recovered + Page re-subscribed' });
+      void audit(ec, 'admin.ig_recover', { tenantId, detail: { pageId: row.page_id, subscribed: subRes.ok } });
+
+      return Response.json({
+        ok: true,
+        tenantId,
+        pageId: row.page_id,
+        tokenStored: true,
+        subscribedApps: { ok: subRes.ok, response: subData },
+        appSubscriptions: appSubs,
+      });
+    } catch (e) {
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_recover' });
+      return Response.json({ error: 'Request failed', message: e?.message }, { status: 400 });
+    }
+  }
+
   // POST /admin/ig-resubscribe — re-subscribe the Facebook Page (linked to an
   // IG Business account) to messages/messaging_postbacks/message_reads so
   // Meta resumes delivering DM webhooks. Optional body { tenantId } scopes

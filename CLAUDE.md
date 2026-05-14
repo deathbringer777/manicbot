@@ -109,6 +109,37 @@ Recent migrations:
 
 ---
 
+## Channel Health & Recovery (2026-05-14 incident)
+
+Background: `@manicbot_com` IG went silent from **2026-03-30 to 2026-05-14**. Diagnosis chain (compound failure, in causal order):
+
+1. **Cron consumer dropped IG-only tenants.** `worker.js queue()` early-exited at `botIds.length === 0` and ACKed without running `handleCron`. The IG-only `t_1c305v2g5011` got zero cron ticks → no token refresh, no health probe, no resubscribe heartbeat.
+2. **`BOT_ENCRYPTION_KEY` rotated** without re-encrypting `channel_configs.token_encrypted`. `getChannelConfig` returned `token=null` and emitted `channel.token.decrypt_failed`; the IG handler bailed at `!channelConfig.token` and silently dropped every webhook.
+3. **Page subscription drifted.** With no live token, no resubscribe fired and Meta eventually de-prioritized delivery.
+4. **No health probe existed**, so the entire chain was invisible to monitoring. Detected only because the operator opened IG and noticed.
+
+### Mitigations shipped
+
+- **Cron now serves IG-/WA-only tenants.** `worker.js queue` looks up `tenantHasActiveChannel()` and falls back to `buildBotlessTenantCtx()` for tenants with an active `channel_configs` row but no Telegram bot. `handleCron` tolerates `ctx.bot = null` — channel-only phases run; Telegram-only paths no-op.
+- **Old-key fallback with auto re-encrypt.** `getChannelConfig` accepts an optional `oldKey` arg (or reads `ctx.BOT_ENCRYPTION_KEY_OLD`). On a successful old-key decrypt it **re-encrypts the row in place with the current key**, so the next rotation doesn't compound.
+- **Daily `subscribed_apps` resubscribe.** [src/handlers/cron.js](manicbot/src/handlers/cron.js) `maybeResubscribeIgWebhook` — Phase 0 always-run, idempotent via `cron:phase:ig_resubscribe:last` (24h window). POSTs `messages, messaging_postbacks, message_reads` to `/{page_id}/subscribed_apps`. Keeps the Meta-side subscription warm.
+- **`phaseChannelHealth` (6h window).** Probes Graph `/me` with the decrypted Page token and reads `/{page_id}/subscribed_apps`. On token rejection → `captureError(severity='fatal')`. On missing/incomplete subscribed_fields → `captureError(severity='error')`. Rows land in the God Mode `/errors` dashboard with full request context.
+- **Operator recovery endpoints** ([src/http/adminKeyHttp.js](manicbot/src/http/adminKeyHttp.js)):
+  - `POST /admin/ig-recover` — self-gated (no Bearer key). Refuses unless current encrypted token genuinely won't decrypt AND the supplied FB User Token's `/me/accounts` includes the stored `page_id`. Exchanges User Token → long-lived (60d) via `META_APP_ID + META_APP_SECRET`, derives a non-expiring Page Token, AES-GCM-encrypts, writes to D1, then immediately re-subscribes the Page.
+  - `POST /admin/ig-app-subscribe` — re-registers the App-level webhook for `object=instagram`. No tenant data touched.
+  - `POST /admin/ig-diag` — read-only diagnostic: returns `/me`, Page `subscribed_apps`, App-level `/subscriptions`, optional outbound test message to a PSID.
+  - `POST /admin/ig-resubscribe` — Bearer-keyed batch re-subscribe across all/specific IG tenants.
+
+### Worker var added
+
+- `META_APP_ID` (public, in [wrangler.toml](manicbot/wrangler.toml) `[vars]`, paired with the existing `META_APP_SECRET` secret). Used by long-lived token exchange + App-level subscription management.
+
+### Open Meta-side work (NOT a code problem)
+
+App-level subscription on `object=instagram` for `fields=messages,messaging_postbacks,message_reads` returns Graph code `1929002 "Invalid Permissions"` — App lacks Advanced Access on `instagram_manage_messages`. With the current Page-only delivery model (legacy) the bot worked, but Meta is phasing this out. Long-term: pass **App Review** for `instagram_basic` + `instagram_manage_messages` + complete **Business Verification**. Interim: add operators as **Instagram Tester** in App Roles so DMs from those accounts bypass review.
+
+---
+
 ## Plugin Marketplace
 
 1st-party extension system. Plugins are compile-time modules in `manicbot/plugins/<slug>/` with:

@@ -1,5 +1,13 @@
 # ManicBot — Architecture Reference
 
+## Working with the user (read first)
+
+- **Read the user's initial message in full before doing anything.** Don't skim, don't compress, don't drop details. If the request has multiple parts, address every part — not just the first or the most obvious.
+- **Do not optimize for brevity at the cost of fidelity.** If the prompt asks for X, Y, and Z, deliver X, Y, and Z. Saving output tokens by skipping pieces of the request is a failure mode, not a feature.
+- **Restate the ask only when ambiguous.** Otherwise just do the work — the user runs in autonomy mode (no confirmation pauses for commit/push/deploy/migrate).
+- **If you skip something on purpose** (out of scope, blocked, won't fix), say so explicitly. Silent omission = bug.
+- **Re-read context before assuming.** When a long CLAUDE.md / system reminder / file is in scope, scan for the relevant section instead of answering from a guess at the middle.
+
 ## Overview
 
 Multi-tenant Telegram bot platform for nail salon booking. Two deployable units:

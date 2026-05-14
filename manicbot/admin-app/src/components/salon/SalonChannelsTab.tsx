@@ -12,6 +12,7 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { SectionHeader } from "./SalonShared";
+import { IGHealthCard } from "./IGHealthCard";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
 import { MetaGuide } from "~/components/settings/MetaGuide";
 
@@ -231,6 +232,7 @@ function InstagramTab({ tenantId }: { tenantId: string }) {
           />
           {error && <p className="text-xs text-red-400">{error}</p>}
         </section>
+        <IGHealthCard tenantId={tenantId} />
       </div>
     );
   }

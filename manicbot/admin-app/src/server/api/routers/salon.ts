@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
-  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers,
+  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents,
 } from "~/server/db/schema";
 import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
@@ -1325,5 +1325,129 @@ export const salonRouter = createTRPCRouter({
           eq(channelConfigs.channelType, input.channelType),
         ));
       return { ok: true as const };
+    }),
+
+  /**
+   * Health snapshot for the tenant's Instagram channel.
+   *
+   * Reads three signals from D1 (no Worker round-trip):
+   *  - `channel_configs` row: active flag, token presence, token age (proxy for
+   *    Meta Page-token TTL, since Meta issues 60-day tokens by default).
+   *  - `message_windows`: most recent inbound IGSID timestamp — proves
+   *    inbound is reaching the Worker and `handleInbound` is firing.
+   *  - `error_events`: any open instagram-related fingerprint in the last
+   *    30 days; matches the auto-deactivation event emitted by
+   *    `channels/instagram.js` when the Page token dies.
+   *
+   * State machine matches the four-color UI in `IGHealthCard.tsx`:
+   *  - `not_configured` — no row in channel_configs.
+   *  - `needs_attention` — active=0 OR token missing OR open IG error.
+   *  - `warning` — healthy DB state but no inbound in 7d.
+   *  - `healthy` — active, token present, inbound within 7d, no open errors.
+   */
+  getInstagramHealth: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const nowSec = Math.floor(Date.now() / 1000);
+
+      const cfgRows = await ctx.db
+        .select({
+          id: channelConfigs.id,
+          active: channelConfigs.active,
+          tokenEncrypted: channelConfigs.tokenEncrypted,
+          tokenExpiresAt: channelConfigs.tokenExpiresAt,
+          pageId: channelConfigs.pageId,
+          igBusinessId: channelConfigs.igBusinessId,
+          config: channelConfigs.config,
+          createdAt: channelConfigs.createdAt,
+          updatedAt: channelConfigs.updatedAt,
+        })
+        .from(channelConfigs)
+        .where(and(
+          eq(channelConfigs.tenantId, input.tenantId),
+          eq(channelConfigs.channelType, "instagram"),
+        ))
+        .limit(1);
+
+      if (!cfgRows.length) {
+        return {
+          configured: false as const,
+          state: "not_configured" as const,
+          active: false,
+          hasToken: false,
+          lastInboundAt: null as number | null,
+          hoursSinceLastInbound: null as number | null,
+          tokenAgeDays: null as number | null,
+          lastError: null as { message: string; lastSeen: number; count: number } | null,
+          pageId: null as string | null,
+          igBusinessId: null as string | null,
+          updatedAt: null as number | null,
+        };
+      }
+      const cfg = cfgRows[0]!;
+
+      const [inboundRow] = await ctx.db
+        .select({ last: sql<number | null>`MAX(${messageWindows.lastUserMessageAt})` })
+        .from(messageWindows)
+        .where(and(
+          eq(messageWindows.tenantId, input.tenantId),
+          eq(messageWindows.channelType, "instagram"),
+        ));
+      const lastInboundAt = inboundRow?.last ?? null;
+      const hoursSinceLastInbound = lastInboundAt
+        ? Math.floor((nowSec - lastInboundAt) / 3600)
+        : null;
+
+      const errorRows = await ctx.db
+        .select({
+          message: errorEvents.message,
+          lastSeen: errorEvents.lastSeen,
+          count: errorEvents.count,
+        })
+        .from(errorEvents)
+        .where(and(
+          eq(errorEvents.tenantId, input.tenantId),
+          eq(errorEvents.status, "open"),
+          gte(errorEvents.lastSeen, nowSec - 30 * 86400),
+          or(
+            like(errorEvents.message, "%instagram%"),
+            like(errorEvents.message, "%channels.instagram%"),
+            like(errorEvents.message, "%OAuthException%"),
+            like(errorEvents.message, "%needs_reauth%"),
+            like(errorEvents.message, "%decrypt_failed%"),
+          ),
+        ))
+        .orderBy(desc(errorEvents.lastSeen))
+        .limit(1);
+      const lastError = errorRows[0]
+        ? { message: errorRows[0].message, lastSeen: errorRows[0].lastSeen, count: errorRows[0].count }
+        : null;
+
+      const active = cfg.active === 1;
+      const hasToken = !!cfg.tokenEncrypted;
+      const tokenAgeDays = hasToken && cfg.updatedAt
+        ? Math.floor((nowSec - cfg.updatedAt) / 86400)
+        : null;
+
+      let state: "healthy" | "warning" | "needs_attention" | "broken";
+      if (!active || !hasToken) state = "needs_attention";
+      else if (lastError) state = "broken";
+      else if (lastInboundAt && nowSec - lastInboundAt < 7 * 86400) state = "healthy";
+      else state = "warning";
+
+      return {
+        configured: true as const,
+        state,
+        active,
+        hasToken,
+        lastInboundAt,
+        hoursSinceLastInbound,
+        tokenAgeDays,
+        lastError,
+        pageId: cfg.pageId,
+        igBusinessId: cfg.igBusinessId,
+        updatedAt: cfg.updatedAt,
+      };
     }),
 });

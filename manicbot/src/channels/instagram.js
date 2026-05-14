@@ -311,20 +311,36 @@ export class InstagramAdapter {
     const result = await graphPost(path, this._token, body, { label: 'ig', host });
     // Sprint 2: If Meta reports the token is dead (OAuthException / code 190),
     // mark the channel config as needs_reauth so the admin UI surfaces it.
+    //
+    // 2026-05-14 hardening: do NOT auto-deactivate on a *single* failure
+    // for IG-direct (Mar-2026 Meta API). Reasons:
+    //   • Mid-deploy host/path mismatch (legacy code calling /me/messages on
+    //     graph.facebook.com) returns code 190 even with a valid IGAA token.
+    //     That false-positive cost us 2h on May 14.
+    //   • Real token death surfaces consistently — phaseChannelHealth already
+    //     captures it as a fatal error_events row every 6h.
+    // We still emit `integration.needs_reauth` for operator visibility, but
+    // leave active=1 so transient host mismatches don't take the channel
+    // offline irreversibly without operator action.
     if (!result.ok && result.tokenDead && this._ctx?.db && this._ctx?.tenantId) {
+      const shouldDeactivate = this._api !== 'instagram_direct';
       try {
-        const { dbRun } = await import('../utils/db.js');
-        await dbRun(this._ctx,
-          `UPDATE channel_configs SET active = 0, updated_at = ?
-           WHERE tenant_id = ? AND channel_type = 'instagram'`,
-          Math.floor(Date.now() / 1000), this._ctx.tenantId,
-        );
+        if (shouldDeactivate) {
+          const { dbRun } = await import('../utils/db.js');
+          await dbRun(this._ctx,
+            `UPDATE channel_configs SET active = 0, updated_at = ?
+             WHERE tenant_id = ? AND channel_type = 'instagram'`,
+            Math.floor(Date.now() / 1000), this._ctx.tenantId,
+          );
+        }
         const { logEvent } = await import('../utils/events.js');
         await logEvent(this._ctx, 'integration.needs_reauth', {
           level: 'warn',
           tenantId: this._ctx.tenantId,
-          message: 'Instagram token dead — marked needs_reauth',
-          data: { code: result.errorCode, type: result.errorType, path },
+          message: shouldDeactivate
+            ? 'Instagram token dead — marked needs_reauth'
+            : 'Instagram-direct outbound 401 — investigating, channel left active',
+          data: { code: result.errorCode, type: result.errorType, path, api: this._api },
         });
       } catch (e) {
         log.error('channels.instagram', e instanceof Error ? e : new Error(String(e?.message)));

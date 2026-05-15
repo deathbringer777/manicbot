@@ -194,6 +194,7 @@ export async function showMyApts(ctx, cid) {
   if (apts.length > 1) {
     btns.push([{ text: t(lg, 'my_cancel_all'), callback_data: CB.CANCEL_ALL }]);
   }
+  btns.push([{ text: t(lg, 'm_book'), callback_data: CB.BOOK }]);
   btns.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }

@@ -245,22 +245,23 @@ export function SalonWeekView({
         className="glass-card rounded-2xl overflow-auto"
         style={{ maxHeight: "calc(100vh - 280px)" }}
       >
-        <div className="flex" style={{ minWidth: 80 + 7 * 140 }}>
-          {/* Hour scale */}
-          <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
+        <div className="flex min-w-[clamp(0px,100%,1060px)]">
+          {/* Hour scale — narrower on mobile (40px) than desktop (80px) */}
+          <div className="shrink-0 w-10 sm:w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
             <div className="h-12 border-b border-slate-200 dark:border-white/10" />
             {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
               <div
                 key={h}
-                className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-200 dark:border-white/10"
+                className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 text-right pr-1 sm:pr-2 border-b border-slate-200 dark:border-white/10"
                 style={{ height: HOUR_HEIGHT }}
               >
-                <span className="relative -top-1.5">{pad(h)}:00</span>
+                <span className="relative -top-1.5 tabular-nums">{pad(h)}:00</span>
               </div>
             ))}
           </div>
 
-          {/* 7 day columns */}
+          {/* 7 day columns — narrower min-width on mobile so 4–5 fit per screen,
+              the rest scrolls horizontally. */}
           <div className="flex-1 flex relative">
             {days.map((day, dayIdx) => {
               const iso = fmtIsoDate(day);
@@ -269,7 +270,7 @@ export function SalonWeekView({
               return (
                 <div
                   key={iso}
-                  className={`flex-1 min-w-[140px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative ${
+                  className={`flex-1 min-w-[72px] sm:min-w-[140px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative ${
                     isTodayCol ? "bg-brand-500/[0.025] dark:bg-brand-500/[0.04]" : ""
                   }`}
                   data-testid="week-view-day-column"

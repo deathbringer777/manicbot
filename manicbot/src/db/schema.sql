@@ -503,6 +503,27 @@ CREATE TABLE IF NOT EXISTS role_change_requests (
 CREATE INDEX IF NOT EXISTS idx_rcr_user ON role_change_requests(web_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_rcr_status ON role_change_requests(status, created_at);
 
+-- Ownership-transfer tokens (single-use, 24h TTL). See migration 0062.
+CREATE TABLE IF NOT EXISTS ownership_transfer_tokens (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  from_user_id TEXT NOT NULL,
+  to_user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  consumed_at INTEGER,
+  cancelled_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  ip_address TEXT,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ott_tenant_created ON ownership_transfer_tokens(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ott_token_hash ON ownership_transfer_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_ott_user ON ownership_transfer_tokens(from_user_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ott_one_pending
+  ON ownership_transfer_tokens(tenant_id)
+  WHERE consumed_at IS NULL AND cancelled_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS rate_limits (
   key TEXT NOT NULL,
   action TEXT NOT NULL,
@@ -1024,3 +1045,71 @@ CREATE TABLE IF NOT EXISTS marketing_publish_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_mpq_status_attempt ON marketing_publish_queue(status, last_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_mpq_content_plan   ON marketing_publish_queue(content_plan_id);
+
+-- ─── Reminders plugin (migration 0063) ───────────────────────────────────
+-- One row per reminder/routine definition. Recurrence is stored as JSON;
+-- validation lives at the tRPC boundary. starts_on + time are the anchor.
+CREATE TABLE IF NOT EXISTS plugin_reminders (
+  id                       TEXT PRIMARY KEY,
+  tenant_id                TEXT NOT NULL,
+  created_by_web_user_id   TEXT NOT NULL,
+  target_master_id         INTEGER,
+  kind                     TEXT NOT NULL DEFAULT 'reminder'
+                           CHECK (kind IN ('reminder','routine')),
+  title                    TEXT NOT NULL,
+  note                     TEXT,
+  starts_on                TEXT NOT NULL,
+  time                     TEXT NOT NULL,
+  recurrence_json          TEXT NOT NULL,
+  channels_json            TEXT NOT NULL DEFAULT '["inapp"]',
+  archived_at              INTEGER,
+  created_at               INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at               INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_tenant_active
+  ON plugin_reminders(tenant_id, starts_on) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_reminders_target
+  ON plugin_reminders(tenant_id, target_master_id, starts_on) WHERE archived_at IS NULL;
+
+-- Idempotency claim + fire log. The (reminder_id, fires_at_epoch) UNIQUE
+-- index IS the contract — INSERT OR IGNORE in the cron loop returns
+-- changes=0 on duplicate, which is how the second cron tick at the same
+-- minute knows not to re-fire.
+CREATE TABLE IF NOT EXISTS plugin_reminder_fires (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  reminder_id     TEXT NOT NULL REFERENCES plugin_reminders(id) ON DELETE CASCADE,
+  fires_at_epoch  INTEGER NOT NULL,
+  fired_at_epoch  INTEGER,
+  delivery_state  TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (delivery_state IN ('pending','sent','failed')),
+  delivery_error  TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reminder_fires_occurrence
+  ON plugin_reminder_fires(reminder_id, fires_at_epoch);
+
+-- ─── User notifications (migration 0063) ─────────────────────────────────
+-- Platform-wide in-app feed consumed by the header bell. Generic by design
+-- — reminders is the first writer but any future feature (checklists,
+-- billing alerts) shares the same surface. The partial UNIQUE on
+-- (web_user_id, source_slug, source_id, kind) dedups bell entries on
+-- repeated cron-handler invocations.
+CREATE TABLE IF NOT EXISTS user_notifications (
+  id            TEXT PRIMARY KEY,
+  tenant_id     TEXT,
+  web_user_id   TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  body          TEXT,
+  link          TEXT,
+  source_slug   TEXT,
+  source_id     TEXT,
+  read_at       INTEGER,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_user_notifications_unread
+  ON user_notifications(web_user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_notifications_recent
+  ON user_notifications(web_user_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_notifications_source
+  ON user_notifications(web_user_id, source_slug, source_id, kind)
+  WHERE source_slug IS NOT NULL AND source_id IS NOT NULL;

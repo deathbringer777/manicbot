@@ -57,6 +57,9 @@ import quickNotesManifest from "./quick-notes/manifest";
 import bookingReminderManifest from "./booking-reminder/manifest";
 import messageTemplatesManifest from "./message-templates/manifest";
 
+// ── productivity / cron-backed ──────────────────────────────────────────────
+import remindersManifest from "./reminders/manifest";
+
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // system_admin
   aiAbuseMonitorManifest,
@@ -89,6 +92,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   // master + tenant_owner
   bookingReminderManifest,
   messageTemplatesManifest,
+  // productivity / cron-backed (first plugin wired to phasePluginCron)
+  remindersManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

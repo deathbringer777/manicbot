@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "./NotificationBell";
 import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
@@ -523,6 +524,8 @@ function DashboardTopBar({ title, subtitle }: { title: string; subtitle?: string
         <h1 className="text-sm font-semibold text-slate-900 dark:text-white truncate">{title}</h1>
         {subtitle && <p className="text-[11px] text-slate-500 truncate">{subtitle}</p>}
       </div>
+
+      <NotificationBell />
 
       <button
         type="button"

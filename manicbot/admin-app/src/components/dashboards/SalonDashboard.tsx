@@ -16,7 +16,9 @@ import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
-import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
+import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
+import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
+import { Bell, Repeat } from "lucide-react";
 import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
@@ -28,6 +30,9 @@ import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
+import { SalonSettingsEditor } from "~/components/salon/SalonSettingsEditor";
+import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
+import { PublicProfileEditor } from "~/components/salon/PublicProfileEditor";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
 import { StaffTab } from "~/components/salon/tabs/StaffTab";
@@ -1429,6 +1434,35 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
   // Sprint 3/4 — manual booking modal state
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  // Reminders plugin — FAB-launched modal state
+  const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
+  // Which plugins are installed for this tenant. Drives the FAB extraItems list.
+  // Skipped (enabled:false) until tenantId is known so we don't fetch on the
+  // public landing pre-auth render.
+  const installedPlugins = api.plugins.getInstalled.useQuery(undefined, {
+    enabled: !!tenantId,
+  });
+  const remindersInstalled = !!installedPlugins.data?.find(
+    (p) => p.pluginSlug === "reminders" && p.enabled === 1,
+  );
+  const fabExtraItems: FabExtraItem[] = remindersInstalled
+    ? [
+        {
+          id: "reminder",
+          icon: Bell,
+          label: "Напоминание",
+          description: "Однократное напоминание для себя или мастера",
+          onClick: () => setReminderModal("reminder"),
+        },
+        {
+          id: "routine",
+          icon: Repeat,
+          label: "Рутина",
+          description: "Циклическое напоминание (например, по будням)",
+          onClick: () => setReminderModal("routine"),
+        },
+      ]
+    : [];
 
   const isTest = useRole().isTest;
 
@@ -1508,6 +1542,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         <QuickAddFab
           lang={lang}
           onNewBooking={() => setManualBookingOpen(true)}
+          extraItems={fabExtraItems}
         />
       )}
 
@@ -1519,6 +1554,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             apts.refetch();
             todayApts.refetch();
           }}
+        />
+      )}
+
+      {reminderModal && (
+        <ReminderModal
+          tenantId={tenantId}
+          defaultKind={reminderModal}
+          onClose={() => setReminderModal(null)}
         />
       )}
 

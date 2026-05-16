@@ -117,7 +117,7 @@ const translations = {
   "support.platform":       { ru: "Платформа",   ua: "Платформа",       en: "Platform",   pl: "Platforma" },
 
   // ── God Mode Shell nav ─────────────────────────────────────────────────────
-  "nav.dashboard":          { ru: "Dashboard",    ua: "Dashboard",      en: "Dashboard",  pl: "Dashboard" },
+  "nav.dashboard":          { ru: "Домой",        ua: "Додому",         en: "Home",       pl: "Strona główna" },
   "nav.users":              { ru: "Users",        ua: "Users",          en: "Users",      pl: "Users" },
   "nav.tenants":            { ru: "Tenants",      ua: "Tenants",        en: "Tenants",    pl: "Tenants" },
   "nav.appointments":       { ru: "Appts",        ua: "Appts",          en: "Appts",      pl: "Appts" },
@@ -1228,7 +1228,7 @@ const translations = {
   "gmPlugins.tryAdjusting":     { ru: "Попробуйте изменить фильтры или поисковый запрос", ua: "Спробуйте змінити фільтри або пошуковий запит", en: "Try adjusting your filters or search query", pl: "Spróbuj dostosować filtry lub zapytanie wyszukiwania" },
 
   // ── God Mode: Home dashboard ───────────────────────────────────────────────
-  "gmHome.title":               { ru: "Дашборд",                ua: "Дашборд",                en: "Dashboard",              pl: "Dashboard" },
+  "gmHome.title":               { ru: "Домой",                  ua: "Додому",                 en: "Home",                   pl: "Strona główna" },
   "gmHome.subtitle":            { ru: "Метрики платформы · live", ua: "Метрики платформи · live", en: "Platform metrics · live", pl: "Metryki platformy · live" },
   "gmHome.totalUsers":          { ru: "Пользователей",          ua: "Користувачів",           en: "Total Users",            pl: "Wszyscy użytkownicy" },
   "gmHome.salons":              { ru: "Салоны",                 ua: "Салони",                 en: "Salons",                 pl: "Salony" },

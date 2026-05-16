@@ -110,23 +110,24 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:964 — bot_id collision check across tenants (intentional global
-  // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
-  // gated; this read confirms the bot isn't already claimed by SOMEONE ELSE
-  // before we accept it. Line drift history: 883 → 913 → 920 → 937 → 964
-  // (after the master-invitation imports landed alongside the URL-hardening
-  // regexes from the clients/public-profile PR).
-  "src/server/api/routers/salon.ts:964",
-  // tenantStaff.ts:366 — permissionElevationCodes lookup by primary key.
+  // salon.ts:<LINE> — bot_id collision check across tenants (intentional
+  // global lookup, cross-tenant by design). The procedure is
+  // tenantOwnerProcedure-gated; this read confirms the bot isn't already
+  // claimed by SOMEONE ELSE before we accept it. Line drift history: 883
+  // (initial) → 913 → 920 → 937 → 964 (master-invitation imports +
+  // URL-hardening regexes from clients/public-profile PR) → current
+  // (after PR-A permission unification + PR-B referral helpers merged).
+  "src/server/api/routers/salon.ts:1049",
+  // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization
-  // is by ownerUserId.
-  "src/server/api/routers/tenantStaff.ts:366",
-  // tenantStaff.ts:525 — tenantActionRequests query. The `where` variable is
-  // built two lines above (line 521-522) and DOES include eq(table.tenantId,
-  // input.tenantId). The scanner's 800-char window misses the prior
-  // assignment.
-  "src/server/api/routers/tenantStaff.ts:525",
+  // is by ownerUserId. Line drifted after listMembers extension for masters (PR-A).
+  "src/server/api/routers/tenantStaff.ts:381",
+  // tenantStaff.ts:540 — tenantActionRequests query. The `where` variable is
+  // built two lines above and DOES include eq(table.tenantId, input.tenantId).
+  // The scanner's 800-char window misses the prior assignment. Line drifted
+  // 525 → 540 after listMembers extension for masters (PR-A).
+  "src/server/api/routers/tenantStaff.ts:540",
 ]);
 
 function listRouterFiles(dir) {

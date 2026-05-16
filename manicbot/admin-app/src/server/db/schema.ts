@@ -848,6 +848,7 @@ export const tenantMemberPermissions = sqliteTable("tenant_member_permissions", 
 }, (t) => [
   index("idx_tmp_user").on(t.webUserId),
   index("idx_tmp_tenant").on(t.tenantId),
+  index("idx_tmp_tenant_user").on(t.tenantId, t.webUserId),
 ]);
 
 export const tenantActionRequests = sqliteTable("tenant_action_requests", {
@@ -1102,7 +1103,7 @@ export const appointmentBlocks = sqliteTable("appointment_blocks", {
   index("idx_apt_blocks_tenant_date").on(t.tenantId, t.date),
 ]);
 
-// ─── Master invitations (migration 0063) ─────────────────────────────────────
+// ─── Master invitations (migration 0064) ─────────────────────────────────────
 // Pending invitations sent by salon owners to add a master by email. Two
 // scenarios captured at send time: existing_user (web_user already exists,
 // landed via /invitations/[id]) or new_user (magic link with token →
@@ -1131,7 +1132,7 @@ export const masterInvitations = sqliteTable("master_invitations", {
   index("idx_master_invitations_tenant_status").on(t.tenantId, t.status, t.createdAt),
 ]);
 
-// ─── Global OTP codes (migration 0064) ───────────────────────────────────────
+// ─── Global OTP codes (migration 0065) ───────────────────────────────────────
 // Generic OTP store for destructive / role-escalation mutations. One row per
 // (web_user_id, action, payload_hash). Caller emails a 6-digit code to the
 // actor's own email, then verifies inline via requireOtpConfirmation().
@@ -1153,9 +1154,9 @@ export const globalOtpCodes = sqliteTable("global_otp_codes", {
   index("idx_global_otp_user_action").on(t.webUserId, t.action, t.expiresAt),
 ]);
 
-// ─── Internal messenger (migration 0066) ─────────────────────────────────────
+// ─── Internal messenger (migration 0067) ─────────────────────────────────────
 // Unified inbox: staff DMs + groups + mirrored client channel conversations.
-// See migrations/0066_messenger.sql for the design and the bridge to the
+// See migrations/0067_messenger.sql for the design and the bridge to the
 // existing `conversations` table via client_conversation_id.
 export const threads = sqliteTable("threads", {
   id: text("id").primaryKey(),
@@ -1223,4 +1224,71 @@ export const threadMessages = sqliteTable("thread_messages", {
 }, (t) => [
   index("idx_thread_messages_thread").on(t.threadId, t.id),
   index("idx_thread_messages_tenant_created").on(t.tenantId, t.createdAt),
+]);
+
+// ─── Referral Program (migration 0069) ─────────────────────────────────
+
+export const referralCodes = sqliteTable("referral_codes", {
+  code: text("code").primaryKey(),
+  ownerWebUserId: text("owner_web_user_id").notNull(),
+  ownerTenantId: text("owner_tenant_id").notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  rotatedAt: integer("rotated_at"),
+}, (t) => [
+  index("idx_referral_codes_owner").on(t.ownerWebUserId, t.isActive),
+  uniqueIndex("uq_referral_codes_active_one").on(t.ownerWebUserId),
+]);
+
+export const referrals = sqliteTable("referrals", {
+  id: text("id").primaryKey(),
+  referrerWebUserId: text("referrer_web_user_id").notNull(),
+  referrerTenantId: text("referrer_tenant_id").notNull(),
+  inviteeWebUserId: text("invitee_web_user_id").notNull(),
+  inviteeTenantId: text("invitee_tenant_id").notNull(),
+  code: text("code").notNull(),
+  status: text("status").notNull(),
+  inviteeDiscountKind: text("invitee_discount_kind"),
+  inviteeDiscountAppliedAt: integer("invitee_discount_applied_at"),
+  firstInvoicePaidAt: integer("first_invoice_paid_at"),
+  rewardId: text("reward_id"),
+  inviteePaymentMethodFp: text("invitee_payment_method_fp"),
+  fraudFlags: text("fraud_flags"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  uniqueIndex("uq_ref_invitee_one_active").on(t.inviteeWebUserId),
+  index("idx_ref_referrer").on(t.referrerWebUserId, t.status, t.createdAt),
+  index("idx_ref_fingerprint").on(t.inviteePaymentMethodFp),
+  index("idx_ref_status").on(t.status, t.createdAt),
+  index("idx_ref_code").on(t.code),
+]);
+
+export const referralRewards = sqliteTable("referral_rewards", {
+  id: text("id").primaryKey(),
+  referrerWebUserId: text("referrer_web_user_id").notNull(),
+  referrerTenantId: text("referrer_tenant_id").notNull(),
+  referralId: text("referral_id"),
+  kind: text("kind").notNull(),
+  amountGrosz: integer("amount_grosz").notNull(),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeBalanceTransaction: text("stripe_balance_transaction"),
+  appliedAt: integer("applied_at"),
+  expiresAt: integer("expires_at").notNull(),
+  status: text("status").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_rewards_referrer").on(t.referrerWebUserId, t.status),
+  index("idx_rewards_expiry").on(t.status, t.expiresAt),
+]);
+
+export const referralEvents = sqliteTable("referral_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  referralId: text("referral_id"),
+  rewardId: text("reward_id"),
+  event: text("event").notNull(),
+  metadata: text("metadata"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_ref_events_referral").on(t.referralId, t.createdAt),
 ]);

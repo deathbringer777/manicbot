@@ -28,6 +28,8 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"tenant_owner" | "master">("tenant_owner");
   const [referralSource, setReferralSource] = useState<"google" | "instagram" | "telegram" | "friends" | "other" | "">("");
   const [referralNote, setReferralNote] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [referralCodeLocked, setReferralCodeLocked] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -44,12 +46,34 @@ export default function RegisterPage() {
 
   useEffect(() => {
     try {
-      const g = new URLSearchParams(window.location.search).get("g");
+      const sp = new URLSearchParams(window.location.search);
+      const g = sp.get("g");
       if (g) setGooglePrefillToken(g);
+      const ref = sp.get("ref");
+      if (ref) {
+        const normalized = ref.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 16);
+        if (normalized.length >= 6) {
+          setReferralCode(normalized);
+          setReferralCodeLocked(true);
+          setReferralSource("friends");
+        }
+      }
     } catch {
       /* ignore */
     }
   }, []);
+
+  // Live validation against the referrals router. Only fires once the code
+  // is in valid shape; cheap enough to run on every keystroke (server is
+  // rate-limited 10/min/IP).
+  const codeValidation = api.referrals.validateCode.useQuery(
+    { code: referralCode },
+    {
+      enabled: /^[A-Z0-9-]{6,16}$/.test(referralCode) && referralSource === "friends",
+      retry: false,
+      staleTime: 60 * 1000,
+    },
+  );
 
   const prefillQuery = api.webUsers.googlePrefillPreview.useQuery(
     { token: googlePrefillToken! },
@@ -149,6 +173,10 @@ export default function RegisterPage() {
           lang,
           referralSource: referralSource || undefined,
           referralNote: (referralSource === "other" && referralNote.trim()) ? referralNote.trim() : undefined,
+          referralCode:
+            referralSource === "friends" && /^[A-Z0-9-]{6,16}$/.test(referralCode)
+              ? referralCode
+              : undefined,
           tosAccepted: true as const,
           googlePrefillToken:
             emailFromGoogleLocked && googlePrefillToken ? googlePrefillToken : undefined,
@@ -348,10 +376,47 @@ export default function RegisterPage() {
             <ReferralSourceSelect
               value={referralSource}
               note={referralNote}
-              onChange={setReferralSource}
+              onChange={(v) => {
+                setReferralSource(v);
+                if (v !== "friends" && !referralCodeLocked) setReferralCode("");
+              }}
               onNoteChange={setReferralNote}
               copy={copy.register}
             />
+            {referralSource === "friends" && (
+              <div className="mt-3 space-y-2">
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+                  {copy.register.referralCodeLabel}
+                </label>
+                <input
+                  type="text"
+                  value={referralCode}
+                  onChange={(e) =>
+                    setReferralCode(
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 16),
+                    )
+                  }
+                  readOnly={referralCodeLocked}
+                  placeholder={copy.register.referralCodePlaceholder}
+                  className={authFieldClassName}
+                  autoComplete="off"
+                />
+                {referralCode && /^[A-Z0-9-]{6,16}$/.test(referralCode) && codeValidation.data && (
+                  codeValidation.data.valid ? (
+                    <p className="rounded-xl border border-emerald-200/60 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200">
+                      {copy.register.referralCodeValid.replace(
+                        "{name}",
+                        codeValidation.data.ownerDisplayName ?? "—",
+                      )}
+                    </p>
+                  ) : (
+                    <p className="rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-200">
+                      {copy.register.referralCodeInvalid}
+                    </p>
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
 

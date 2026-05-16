@@ -2,14 +2,13 @@
 /**
  * QuickAddFab — bottom-right floating menu for the appointments tab.
  *
- * Pins:
+ * Pins (after the 2026-05-16 calendar overhaul):
  *   - The button toggles the menu open/closed.
  *   - Three actions render in fixed order: New booking, Time reservation,
- *     Time off.
- *   - Time reservation + Time off are "soon" disabled when their handlers
- *     aren't passed in (this is the current first-ship state — backend
- *     `appointment_blocks` lands later).
- *   - Clicking New booking calls onNewBooking and closes the menu.
+ *     Time off — all three are now real backend flows (no `СКОРО`
+ *     disabled state, no `data-disabled` flag).
+ *   - Clicking each action invokes the matching callback and closes
+ *     the menu.
  *   - Escape closes the menu.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
@@ -42,25 +41,12 @@ describe("QuickAddFab", () => {
     }
   });
 
-  it("Time reservation + Time off are disabled when their handlers are not passed", () => {
+  it("all three actions are enabled — no `СКОРО` placeholders any more", () => {
     renderWithLang(<QuickAddFab lang="en" onNewBooking={() => undefined} />, "en");
     fireEvent.click(screen.getByTestId("quick-add-fab"));
-    expect(screen.getByTestId("quick-add-timeReservation").getAttribute("data-disabled")).toBe("1");
-    expect(screen.getByTestId("quick-add-timeOff").getAttribute("data-disabled")).toBe("1");
-    expect(screen.getByTestId("quick-add-newBooking").getAttribute("data-disabled")).toBe("0");
-  });
-
-  it("Time reservation becomes enabled when its handler is supplied", () => {
-    renderWithLang(
-      <QuickAddFab
-        lang="en"
-        onNewBooking={() => undefined}
-        onTimeReservation={() => undefined}
-      />,
-      "en",
-    );
-    fireEvent.click(screen.getByTestId("quick-add-fab"));
-    expect(screen.getByTestId("quick-add-timeReservation").getAttribute("data-disabled")).toBe("0");
+    expect(screen.getByTestId("quick-add-timeReservation").hasAttribute("disabled")).toBe(false);
+    expect(screen.getByTestId("quick-add-timeOff").hasAttribute("disabled")).toBe(false);
+    expect(screen.getByTestId("quick-add-newBooking").hasAttribute("disabled")).toBe(false);
   });
 
   it("clicking New booking invokes onNewBooking and closes the menu", () => {
@@ -72,12 +58,28 @@ describe("QuickAddFab", () => {
     expect(screen.queryByTestId("quick-add-menu")).toBeNull();
   });
 
-  it("clicking a disabled action does NOT invoke any handler", () => {
-    const onNewBooking = vi.fn();
-    renderWithLang(<QuickAddFab lang="en" onNewBooking={onNewBooking} />, "en");
+  it("clicking Time reservation invokes onTimeReservation and closes the menu", () => {
+    const onTimeReservation = vi.fn();
+    renderWithLang(
+      <QuickAddFab lang="en" onNewBooking={() => undefined} onTimeReservation={onTimeReservation} />,
+      "en",
+    );
+    fireEvent.click(screen.getByTestId("quick-add-fab"));
+    fireEvent.click(screen.getByTestId("quick-add-timeReservation"));
+    expect(onTimeReservation).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("quick-add-menu")).toBeNull();
+  });
+
+  it("clicking Time off invokes onTimeOff and closes the menu", () => {
+    const onTimeOff = vi.fn();
+    renderWithLang(
+      <QuickAddFab lang="en" onNewBooking={() => undefined} onTimeOff={onTimeOff} />,
+      "en",
+    );
     fireEvent.click(screen.getByTestId("quick-add-fab"));
     fireEvent.click(screen.getByTestId("quick-add-timeOff"));
-    expect(onNewBooking).not.toHaveBeenCalled();
+    expect(onTimeOff).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("quick-add-menu")).toBeNull();
   });
 
   it("Escape key closes the menu", () => {

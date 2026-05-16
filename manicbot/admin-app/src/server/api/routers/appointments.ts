@@ -5,6 +5,7 @@ import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "~/env";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
+import { slotsBusy } from "~/server/api/slotsBusy";
 import { log } from "~/server/utils/logger";
 
 /**
@@ -255,40 +256,26 @@ export const appointmentsRouter = createTRPCRouter({
       const svc = svcRows[0];
       if (!svc) throw new TRPCError({ code: "NOT_FOUND", message: "service_not_found" });
 
-      // Slot-conflict check (mirrors src/services/appointments.js checkSlotConflict)
-      const [h, m] = input.time.split(":").map(Number);
-      const candStart = h! + m! / 60;
-      const candEnd = candStart + svc.duration / 60;
-
-      const existing = await ctx.db
-        .select()
-        .from(appointments)
-        .where(and(
-          eq(appointments.tenantId, input.tenantId),
-          eq(appointments.masterId, input.masterId),
-          eq(appointments.date, input.date),
-          eq(appointments.cancelled, 0),
-        ));
-      const bookedIds = existing.map(a => a.svcId);
-      const bookedSvcs = bookedIds.length ? await ctx.db
-        .select()
-        .from(services)
-        .where(and(eq(services.tenantId, input.tenantId))) : [];
-      const svcMap = new Map(bookedSvcs.map(s => [s.svcId, s]));
-      for (const a of existing) {
-        const bs = svcMap.get(a.svcId);
-        if (!bs) continue;
-        const [ah, am] = a.time.split(":").map(Number);
-        const as = ah! + am! / 60;
-        const ae = as + bs.duration / 60;
-        if (candStart < ae && candEnd > as) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "slot_conflict",
-            cause: { withAppointmentId: a.id },
-          });
-        }
+      // Slot-conflict check — unions appointments AND appointment_blocks so
+      // a master can't be double-booked between a client and a self-block.
+      // Calendar overhaul (2026-05-16): replaces the old appointments-only
+      // walk that let bookings slip through reservations / time-off rows.
+      const busy = await slotsBusy({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        masterId: input.masterId,
+        date: input.date,
+        startTime: input.time,
+        durationMin: svc.duration,
+      });
+      if (busy.busy) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "slot_conflict",
+          cause: busy.conflict,
+        });
       }
+      const [h, m] = input.time.split(":").map(Number);
 
       // Resolve or create client
       let chatId = input.clientChatId ?? null;

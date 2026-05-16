@@ -8,6 +8,11 @@ import { t, type Lang } from "~/lib/i18n";
 interface Props {
   tenantId: string;
   defaultMasterId?: number | null;
+  /** Calendar overhaul (2026-05-16): drag-to-create on the grid pre-fills
+   *  the date/time so the user lands in the dialog with the slot already
+   *  picked. Optional — falls back to "" (no prefill) when not provided. */
+  defaultDate?: string;
+  defaultTime?: string;
   onClose: () => void;
   onCreated?: (appointmentId: string) => void;
 }
@@ -45,12 +50,12 @@ function formatDateForUser(s: string, lang: Lang): string {
  * Manual booking modal used on dashboard Overview / Appointments / Clients tabs.
  * Owner role: can pick any master. Master role: locked to their own chat_id.
  */
-export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreated }: Props) {
+export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, defaultTime, onClose, onCreated }: Props) {
   const { lang } = useLang();
   const [masterId, setMasterId] = useState<number | null>(defaultMasterId ?? null);
   const [serviceId, setServiceId] = useState<string>("");
-  const [date, setDate] = useState<string>("");
-  const [time, setTime] = useState<string>("");
+  const [date, setDate] = useState<string>(defaultDate ?? "");
+  const [time, setTime] = useState<string>(defaultTime ?? "");
   const [clientChatId, setClientChatId] = useState<string>("");
   const [clientName, setClientName] = useState<string>("");
   const [clientPhone, setClientPhone] = useState<string>("");

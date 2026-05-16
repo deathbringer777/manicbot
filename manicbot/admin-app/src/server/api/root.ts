@@ -6,6 +6,7 @@ import { billingRouter } from "~/server/api/routers/billing";
 import { settingsRouter } from "~/server/api/routers/settings";
 import { tenantsRouter } from "~/server/api/routers/tenants";
 import { appointmentsRouter } from "~/server/api/routers/appointments";
+import { appointmentBlocksRouter } from "~/server/api/routers/appointmentBlocks";
 import { exportRouter } from "~/server/api/routers/export";
 import { provisioningRouter } from "~/server/api/routers/provisioning";
 import { authRouter } from "~/server/api/routers/auth";
@@ -48,6 +49,7 @@ export const appRouter = createTRPCRouter({
   settings: settingsRouter,
   tenants: tenantsRouter,
   appointments: appointmentsRouter,
+  appointmentBlocks: appointmentBlocksRouter,
   export: exportRouter,
   provisioning: provisioningRouter,
   publicSalon: publicSalonRouter,

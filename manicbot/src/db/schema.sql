@@ -1024,3 +1024,28 @@ CREATE TABLE IF NOT EXISTS marketing_publish_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_mpq_status_attempt ON marketing_publish_queue(status, last_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_mpq_content_plan   ON marketing_publish_queue(content_plan_id);
+
+-- ─── Appointment blocks (migration 0061) ─────────────────────────────────
+-- Master-owned non-client occupancy: short reservations and time-off
+-- bands. Backs the two FAB scenarios that previously showed СКОРО.
+-- See migrations/0061_appointment_blocks.sql for the full rationale.
+CREATE TABLE IF NOT EXISTS appointment_blocks (
+  id            TEXT PRIMARY KEY,
+  tenant_id     TEXT NOT NULL,
+  master_id     INTEGER NOT NULL,
+  type          TEXT NOT NULL CHECK (type IN ('reservation','time_off')),
+  date          TEXT NOT NULL,
+  time          TEXT NOT NULL,
+  duration_min  INTEGER NOT NULL,
+  end_date      TEXT,
+  reason        TEXT,
+  created_at    INTEGER NOT NULL,
+  created_by    TEXT,
+  cancelled     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_apt_blocks_master_date
+  ON appointment_blocks(tenant_id, master_id, date)
+  WHERE cancelled = 0;
+CREATE INDEX IF NOT EXISTS idx_apt_blocks_tenant_date
+  ON appointment_blocks(tenant_id, date)
+  WHERE cancelled = 0;

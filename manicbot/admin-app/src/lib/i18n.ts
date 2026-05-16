@@ -446,6 +446,26 @@ const translations = {
   "salon.fab.timeOffDesc":               { ru: "Обед, выходной, отпуск", ua: "Обід, вихідний, відпустка", en: "Lunch, day off, vacation", pl: "Lunch, wolne, urlop" },
   "salon.fab.comingSoon":                { ru: "Скоро", ua: "Скоро", en: "Soon", pl: "Wkrótce" },
 
+  // Calendar overhaul (2026-05-16) — Time-reservation dialog (FAB scenario 2).
+  "block.reservation.title":             { ru: "Резерв времени", ua: "Резерв часу", en: "Time reservation", pl: "Rezerwacja czasu" },
+  "block.reservation.subtitle":          { ru: "Заблокируйте слот в календаре без записи клиента", ua: "Заблокуйте слот без клієнта", en: "Hold a slot in the calendar without a client", pl: "Zablokuj slot bez klienta" },
+  "block.reservation.reasonPh":          { ru: "Например: подготовка, образец, прогрев", ua: "Наприклад: підготовка, зразок, прогрів", en: "e.g. prep, sample, warm-up", pl: "Np. przygotowanie, próbka, rozgrzanie" },
+  // Calendar overhaul — Time-off dialog (FAB scenario 3).
+  "block.timeOff.title":                 { ru: "Перерыв или выходной", ua: "Перерва або вихідний", en: "Time off / break", pl: "Przerwa / wolne" },
+  "block.timeOff.subtitle":              { ru: "Обед, выходной день или диапазон отпуска", ua: "Обід, вихідний або відпустка", en: "Break, single day off, or vacation range", pl: "Przerwa, wolny dzień lub urlop" },
+  "block.timeOff.kindBreak":             { ru: "Перерыв (часы)", ua: "Перерва (години)", en: "Break (hours)", pl: "Przerwa (godziny)" },
+  "block.timeOff.kindDayOff":            { ru: "Выходной (день)", ua: "Вихідний (день)", en: "Day off (single day)", pl: "Wolny dzień" },
+  "block.timeOff.kindVacation":          { ru: "Отпуск (диапазон)", ua: "Відпустка (діапазон)", en: "Vacation (date range)", pl: "Urlop (zakres dat)" },
+  "block.timeOff.reasonPh":              { ru: "Например: обед, отпуск, врач", ua: "Наприклад: обід, відпустка, лікар", en: "e.g. lunch, vacation, doctor", pl: "Np. lunch, urlop, lekarz" },
+  "block.timeOff.dateFrom":              { ru: "Начало", ua: "Початок", en: "Start", pl: "Początek" },
+  "block.timeOff.dateTo":                { ru: "Конец", ua: "Кінець", en: "End", pl: "Koniec" },
+  // Shared block-dialog labels.
+  "block.duration":                      { ru: "Длительность", ua: "Тривалість", en: "Duration", pl: "Czas trwania" },
+  "block.reason":                        { ru: "Причина (необязательно)", ua: "Причина (необов'язково)", en: "Reason (optional)", pl: "Powód (opcjonalnie)" },
+  "block.create":                        { ru: "Создать", ua: "Створити", en: "Create", pl: "Utwórz" },
+  "block.creating":                      { ru: "Создаю…", ua: "Створюю…", en: "Creating…", pl: "Tworzę…" },
+  "block.slotConflict":                  { ru: "Этот слот уже занят — выберите другое время", ua: "Слот вже зайнятий — оберіть інший час", en: "Slot is already busy — pick a different time", pl: "Slot zajęty — wybierz inny czas" },
+
   "completeness.title":                  { ru: "Профиль готов на", ua: "Профіль готовий на", en: "Profile ready", pl: "Profil gotowy w" },
   "completeness.toDo":                   { ru: "Доделай чтобы расти", ua: "Доробити, щоб рости", en: "Finish to level up", pl: "Dokończ, by awansować" },
   "completeness.alreadyDone":            { ru: "Уже готово", ua: "Вже зроблено", en: "Already done", pl: "Już gotowe" },

@@ -2,18 +2,21 @@
 
 /**
  * QuickAddFab — floating bottom-right action button for the appointments
- * tab. Booksy-parity menu: tapping the FAB opens a 3-item action sheet:
+ * tab. Three-action menu (calendar overhaul, 2026-05-16):
  *
  *   ┌─────────────────────────────┐
- *   │ + Новая запись              │
- *   │ ⏸  Резерв времени           │
- *   │ ☕ Перерыв / выходной        │
+ *   │ + Новая запись              │  → opens NewBookingDialog (existing
+ *   │                                  ManualBookingModal)
+ *   │ ⏸  Резерв времени           │  → opens TimeReservationDialog
+ *   │ ☕ Перерыв / выходной        │  → opens TimeOffDialog
  *   └─────────────────────────────┘
  *
- * For the first ship the secondary actions render as "coming soon"
- * disabled buttons with explanation copy — backend (`appointment_blocks`
- * table + tRPC) lands in a follow-up commit. The UI affordance and i18n
- * surface ship now so we are not rebuilding the menu twice.
+ * All three actions are now wired to real backend flows (the secondary
+ * two used to render `СКОРО` placeholders before migration 0061 added
+ * `appointment_blocks`). If a parent forgets to wire `onTimeReservation`
+ * or `onTimeOff` we keep the row enabled but no-op the click — the FAB
+ * will surface the bug visually instead of pretending the feature isn't
+ * shipped.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -25,8 +28,6 @@ interface Action {
   icon: LucideIcon;
   label: string;
   description: string;
-  disabled?: boolean;
-  comingSoonCopy?: string;
 }
 
 interface Props {
@@ -74,25 +75,20 @@ export function QuickAddFab({ lang, onNewBooking, onTimeReservation, onTimeOff }
       icon: PauseCircle,
       label: t("salon.fab.timeReservation", lang),
       description: t("salon.fab.timeReservationDesc", lang),
-      disabled: !onTimeReservation,
-      comingSoonCopy: t("salon.fab.comingSoon", lang),
     },
     {
       id: "timeOff",
       icon: Coffee,
       label: t("salon.fab.timeOff", lang),
       description: t("salon.fab.timeOffDesc", lang),
-      disabled: !onTimeOff,
-      comingSoonCopy: t("salon.fab.comingSoon", lang),
     },
   ];
 
   const handleClick = (a: Action) => {
-    if (a.disabled) return;
     setOpen(false);
     if (a.id === "newBooking") onNewBooking();
-    else if (a.id === "timeReservation" && onTimeReservation) onTimeReservation();
-    else if (a.id === "timeOff" && onTimeOff) onTimeOff();
+    else if (a.id === "timeReservation") onTimeReservation?.();
+    else if (a.id === "timeOff") onTimeOff?.();
   };
 
   return (
@@ -119,34 +115,20 @@ export function QuickAddFab({ lang, onNewBooking, onTimeReservation, onTimeOff }
           <ul className="py-1">
             {actions.map((a) => {
               const Icon = a.icon;
-              const isDisabled = !!a.disabled;
               return (
                 <li key={a.id}>
                   <button
                     type="button"
-                    disabled={isDisabled}
                     onClick={() => handleClick(a)}
                     data-testid={`quick-add-${a.id}`}
-                    data-disabled={isDisabled ? "1" : "0"}
-                    className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors ${
-                      isDisabled
-                        ? "opacity-60 cursor-not-allowed"
-                        : "hover:bg-slate-50 dark:hover:bg-white/[0.04]"
-                    }`}
+                    className="w-full text-left flex items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.04]"
                   >
                     <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/10 text-brand-500 dark:text-brand-400 shrink-0">
                       <Icon className="h-4 w-4" />
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                          {a.label}
-                        </span>
-                        {isDisabled && a.comingSoonCopy && (
-                          <span className="text-[9px] uppercase tracking-wide font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5">
-                            {a.comingSoonCopy}
-                          </span>
-                        )}
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white block">
+                        {a.label}
                       </span>
                       <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
                         {a.description}

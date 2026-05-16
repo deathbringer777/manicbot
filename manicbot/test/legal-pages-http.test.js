@@ -187,4 +187,18 @@ describe('tryLegalPages', () => {
     expect(body).toMatch(/retention/i);
     expect(body).toMatch(/cookie/i);
   });
+
+  // Google OAuth verification (sensitive scopes) requires the policy URL +
+  // "Limited Use" string to be discoverable on the Privacy Policy page —
+  // reviewers grep for these. Don't drop these strings without coordinating
+  // with the active OAuth verification submission.
+  it('Privacy page declares Google API Services User Data Policy + Limited Use compliance', async () => {
+    const res = tryLegalPages(req('/privacy'), new URL('https://manicbot.com/privacy'));
+    const body = await res.text();
+    expect(body).toMatch(/Google API Services User Data Policy/);
+    expect(body).toMatch(/Limited Use/);
+    expect(body).toMatch(/developers\.google\.com\/terms\/api-services-user-data-policy/);
+    expect(body).toMatch(/calendar\.events/);
+    expect(body).toMatch(/calendar\.readonly/);
+  });
 });

@@ -158,12 +158,17 @@ CREATE TABLE IF NOT EXISTS masters (
   public_hidden INTEGER NOT NULL DEFAULT 0,
   vacation_from INTEGER,
   vacation_until INTEGER,
+  -- 0062: account-origin model + soft-delete via archived_at.
+  origin TEXT NOT NULL DEFAULT 'salon_created',
+  archived_at INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_master_web_user_id ON masters(web_user_id);
 CREATE INDEX IF NOT EXISTS idx_master_tenant_web_user ON masters(tenant_id, web_user_id);
 CREATE INDEX IF NOT EXISTS idx_masters_vacation_until ON masters(vacation_until) WHERE vacation_until IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_masters_calendar_visibility ON masters(tenant_id, calendar_visibility);
+CREATE INDEX IF NOT EXISTS idx_masters_active ON masters(tenant_id) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_masters_tenant_origin ON masters(tenant_id, origin);
 
 CREATE TABLE IF NOT EXISTS tenant_roles (
   tenant_id TEXT NOT NULL,
@@ -487,6 +492,11 @@ CREATE TABLE IF NOT EXISTS web_users (
   password_reset_token_hash TEXT,
   verification_token_hash TEXT,
   email_change_token_hash TEXT,
+  -- 0065: reversibly-encrypted plaintext password for salon-owned master
+  -- accounts (origin='salon_created' on the linked masters row). AES-GCM
+  -- ciphertext (BOT_ENCRYPTION_KEY + HKDF label 'master-password-v1').
+  -- NULL for accounts the master owns themselves.
+  password_encrypted TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -1104,3 +1114,105 @@ CREATE INDEX IF NOT EXISTS idx_apt_blocks_master_date
 CREATE INDEX IF NOT EXISTS idx_apt_blocks_tenant_date
   ON appointment_blocks(tenant_id, date)
   WHERE cancelled = 0;
+
+-- ─── Master invitations (migration 0063) ─────────────────────────────────
+-- Pending invitations sent by salon owners to add a master by email.
+-- See migrations/0063_master_invitations.sql for the rationale.
+CREATE TABLE IF NOT EXISTS master_invitations (
+  id                 TEXT PRIMARY KEY,
+  tenant_id          TEXT NOT NULL,
+  email              TEXT NOT NULL,
+  inviter_user_id    TEXT NOT NULL,
+  invited_name       TEXT,
+  token_hash         TEXT NOT NULL,
+  token_expires_at   INTEGER NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'pending',
+  scenario           TEXT NOT NULL,
+  accepted_at        INTEGER,
+  accepted_master_id INTEGER,
+  revoked_at         INTEGER,
+  created_at         INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_master_invitations_unique_pending
+  ON master_invitations(tenant_id, email) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_master_invitations_token
+  ON master_invitations(token_hash) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_master_invitations_tenant_status
+  ON master_invitations(tenant_id, status, created_at);
+
+-- ─── Global OTP codes (migration 0064) ───────────────────────────────────
+-- Generic OTP store for destructive / role-escalation mutations.
+-- See migrations/0064_global_otp_codes.sql for the full design.
+CREATE TABLE IF NOT EXISTS global_otp_codes (
+  id            TEXT PRIMARY KEY,
+  web_user_id   TEXT NOT NULL,
+  action        TEXT NOT NULL,
+  payload_hash  TEXT NOT NULL,
+  code_hash     TEXT NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  consumed_at   INTEGER,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_global_otp_user_action
+  ON global_otp_codes(web_user_id, action, expires_at);
+
+-- ─── Internal messenger (migration 0066) ─────────────────────────────────
+-- Unified inbox: staff DMs + groups + mirrored client channel conversations.
+-- See migrations/0066_messenger.sql for the design and join-to-conversations.
+CREATE TABLE IF NOT EXISTS threads (
+  id                       TEXT PRIMARY KEY,
+  tenant_id                TEXT NOT NULL,
+  kind                     TEXT NOT NULL,
+  title                    TEXT,
+  client_conversation_id   TEXT,
+  dm_key                   TEXT,
+  created_by_web_user_id   TEXT,
+  created_at               INTEGER NOT NULL,
+  last_message_at          INTEGER,
+  last_message_preview     TEXT,
+  archived                 INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_threads_tenant_last
+  ON threads(tenant_id, last_message_at);
+CREATE INDEX IF NOT EXISTS idx_threads_tenant_kind_archived
+  ON threads(tenant_id, kind, archived, last_message_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_dm_unique
+  ON threads(tenant_id, dm_key) WHERE kind = 'staff_dm';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_client_conv_unique
+  ON threads(tenant_id, client_conversation_id)
+  WHERE client_conversation_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS thread_members (
+  thread_id              TEXT NOT NULL,
+  member_kind            TEXT NOT NULL,
+  member_ref             TEXT NOT NULL,
+  role                   TEXT NOT NULL DEFAULT 'member',
+  joined_at              INTEGER NOT NULL,
+  muted_until            INTEGER,
+  last_read_message_id   TEXT,
+  last_read_at           INTEGER,
+  PRIMARY KEY (thread_id, member_kind, member_ref)
+);
+CREATE INDEX IF NOT EXISTS idx_thread_members_ref
+  ON thread_members(member_kind, member_ref, last_read_at);
+
+CREATE TABLE IF NOT EXISTS thread_messages (
+  id                     TEXT PRIMARY KEY,
+  thread_id              TEXT NOT NULL,
+  tenant_id              TEXT NOT NULL,
+  sender_kind            TEXT NOT NULL,
+  sender_ref             TEXT NOT NULL,
+  body                   TEXT NOT NULL,
+  attachments_json       TEXT,
+  is_internal_note       INTEGER NOT NULL DEFAULT 0,
+  external_msg_id        TEXT,
+  reply_to_message_id    TEXT,
+  created_at             INTEGER NOT NULL,
+  edited_at              INTEGER,
+  deleted_at             INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_thread_messages_thread
+  ON thread_messages(thread_id, id);
+CREATE INDEX IF NOT EXISTS idx_thread_messages_tenant_created
+  ON thread_messages(tenant_id, created_at);

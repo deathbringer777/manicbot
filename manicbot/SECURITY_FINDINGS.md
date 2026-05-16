@@ -21,6 +21,40 @@
 - Worker (`manicbot/`): **104 test files / 1612 tests passing**, `check-schema` OK (57 tables match)
 - Admin-app (`manicbot/admin-app/`): **77 test files / 3111 tests passing** (+5 files, +59 tests vs baseline), `tsc --noEmit` clean, `check-tenant-isolation` clean
 
+Subsequent post-baseline: Worker now at 150 files / 2062 tests; Admin-app at 123 files / 3774 tests; `check-schema` OK (67 tables). `check-tenant-isolation` allowlist updated through line drift only (see ARN-1 below).
+
+---
+
+## Design-level trade-offs accepted (2026-05-16)
+
+### V1 — Salon-owned master passwords stored reversibly 🟦 ACCEPTED-RISK
+**Where:** `web_users.password_encrypted` (migration 0065), `server/security/masterPasswordVault.ts`, `salon.peekMasterPassword`, `salon.resetMasterPassword`.
+
+**What:** For master accounts created directly by a salon owner via `salon.createMasterAccount` (origin='salon_created'), we keep an AES-GCM encrypted copy of the plaintext password alongside the standard PBKDF2 hash. The salon owner can decrypt-and-display it under an email OTP gate (`peek_master_password` action) or rotate it (`reset_master_password` action — the new plaintext is emailed directly to the master; the salon never sees the new value in the response).
+
+**Why accepted:** Product requirement — salon-created accounts are treated as the salon's property (the master receives credentials FROM the salon, didn't choose them, can't change them, can only be archived). Reversibility lets the owner recover credentials if the master mislaid them, without inflicting a full password-reset flow on a working employee. Authentication still uses `password_hash` only; the encrypted column is auxiliary.
+
+**Mitigations:**
+- Encryption key (`BOT_ENCRYPTION_KEY`) is a Worker secret, never in source, never logged. Same key the channel-token + Google-refresh-token vaults use; rotation runbook (`/admin/rotate-encryption-key`) covers this column.
+- HKDF subkey label `master-password-v1` domain-separates from other vault uses, so a single-vault leak doesn't cross-contaminate.
+- Read access via `salon.peekMasterPassword` is gated by a fresh 6-digit email OTP (15-min TTL, payload-bound — see V2 below). Audit-logged as `tenant.master.password.peek`.
+- Only `origin='salon_created'` accounts populate this column. Masters who registered themselves or accepted an email invitation leave it NULL — their password is owned by them, not the salon.
+
+**Residual risk:** If `BOT_ENCRYPTION_KEY` leaks, every encrypted master password becomes recoverable. Same blast radius as the channel-token leak (every WA/IG/TG token). Treat key rotation as the recovery path.
+
+### V2 — Reversible password peek/reset gated by single-action email OTP 🟦 ACCEPTED-RISK
+**Where:** `auth/otp.ts requireOtpConfirmation`, `global_otp_codes` table (migration 0064).
+
+**What:** Sensitive `salon.*` mutations (archive/unarchive master, reset/peek master password) require the caller to first call `otp.request({ action, payload })`, receive a 6-digit code via email, and pass it back as `otpCode`. The code is hashed in D1, payload-bound (SHA-256 of canonical JSON), 15-min TTL, max 5 attempts, single-use (consumed_at).
+
+**Why accepted:** Stronger than no gate (a stolen session alone cannot peek a master password) but weaker than hardware-bound 2FA (a phishing-stage email compromise + session compromise can both occur). Operator-side mitigation: the OTP destination is the salon owner's verified email; multi-factor for that email account is the operator's responsibility.
+
+**Mitigations:**
+- Per-(user, action) rate limit at 5 issuances per 10 min (`otp_request`).
+- Per-row attempts counter caps brute-force at 5 wrong codes.
+- Payload hash binds the code to a single operation (no replay across master ids).
+- Action whitelist on the issuance side (`archive_master`, `unarchive_master`, `reset_master_password`, `peek_master_password`) — clients cannot prompt arbitrary OTP emails.
+
 ---
 
 ## Secrets Status

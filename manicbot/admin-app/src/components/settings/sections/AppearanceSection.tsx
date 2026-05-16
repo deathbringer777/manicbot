@@ -4,7 +4,6 @@ import {
   LayoutGrid, CalendarDays, Scissors, UserRound, Users,
   Wallet, MessageSquare, BarChart3, Star, Globe,
   Eye, EyeOff, ChevronDown,
-  AlertCircle, CreditCard,
   type LucideIcon,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
@@ -34,14 +33,6 @@ function tabLabel(navKey: string, lang: Lang): string {
   return tNav(navKey, lang);
 }
 
-/** Overview stat cards that can be toggled. */
-const STAT_CARDS: { key: string; labelKey: string; icon: LucideIcon }[] = [
-  { key: "todayAppointments", labelKey: "settings.statTodayApts",     icon: CalendarDays },
-  { key: "activeMasters",     labelKey: "settings.statActiveMasters", icon: UserRound },
-  { key: "openTickets",       labelKey: "settings.statOpenTickets",   icon: AlertCircle },
-  { key: "billingPlan",       labelKey: "settings.statBillingPlan",   icon: CreditCard },
-];
-
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -64,7 +55,7 @@ export function AppearanceSection() {
   const { lang } = useLang();
   const { role, previewRole } = useRole();
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const { prefs, toggleTab, toggleStatCard, setShowTodayApts, setDefaultTab } = useDashboardPrefs();
+  const { prefs, toggleTab, setShowTodayApts, setDefaultTab } = useDashboardPrefs();
 
   const isSalonOwner = effectiveRole === "tenant_owner" || effectiveRole === "system_admin";
 
@@ -144,22 +135,6 @@ export function AppearanceSection() {
         </p>
 
         <div className="space-y-1">
-          {STAT_CARDS.map(({ key, labelKey, icon: Icon }) => {
-            const visible = !prefs.hiddenStatCards.includes(key);
-            return (
-              <div
-                key={key}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors"
-              >
-                <Icon className={`h-4 w-4 shrink-0 transition-colors ${visible ? "text-slate-500 dark:text-slate-400" : "text-slate-300 dark:text-slate-600"}`} />
-                <span className={`text-sm flex-1 transition-colors ${visible ? "text-slate-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
-                  {t(labelKey as any, lang)}
-                </span>
-                <Toggle on={visible} onToggle={() => toggleStatCard(key)} />
-              </div>
-            );
-          })}
-
           {/* Today's appointments list */}
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
             <CalendarDays className={`h-4 w-4 shrink-0 transition-colors ${prefs.showTodayApts ? "text-slate-500 dark:text-slate-400" : "text-slate-300 dark:text-slate-600"}`} />

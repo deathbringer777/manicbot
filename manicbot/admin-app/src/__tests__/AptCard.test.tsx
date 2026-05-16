@@ -128,4 +128,14 @@ describe("AptCard", () => {
     expect(screen.queryByTestId("status-pill-trigger")).toBeNull();
     expect(screen.queryByTestId("status-pill-readonly")).toBeTruthy();
   });
+
+  it("outer card wrapper does NOT carry overflow-hidden (would clip the status dropdown)", () => {
+    // The legacy bottom action strip needed overflow-hidden for rounded
+    // corners; after the 2026-05-16 dashboard cleanup that strip is
+    // gone and the class only served to clip the StatusActionMenu
+    // dropdown. Keep the regression guard so it can't sneak back in.
+    render(<AptCard a={baseApt} lang="ru" onAction={mkAction()} onNoShow={mkNoShow()} />);
+    const card = screen.getByTestId("apt-card");
+    expect(card.className).not.toMatch(/\boverflow-hidden\b/);
+  });
 });

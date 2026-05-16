@@ -1048,3 +1048,159 @@ export function supportReplyEmailText(
     stripTags(getEmailCopy(lang).footer),
   ].filter(Boolean).join("\n");
 }
+
+// ─── Ownership transfer ─────────────────────────────────────────────────────
+
+const ownershipCopy: Record<Lang, {
+  request: { subject: string; heading: string; body1: string; body2: string; cta: string; expires: string; ignore: string };
+  oldOwner: { subject: string; heading: string; body: string; loginNote: string };
+  newOwner: { subject: string; heading: string; body: string; loginNote: string };
+}> = {
+  ru: {
+    request: {
+      subject: "Подтвердите передачу прав владения",
+      heading: "Подтверждение передачи прав",
+      body1: "Вы инициировали передачу прав владения салоном",
+      body2: "После подтверждения вы станете мастером, а получатель — владельцем салона. Если запрос инициировали не вы — просто проигнорируйте это письмо.",
+      cta: "Подтвердить передачу",
+      expires: "Ссылка действительна 24 часа.",
+      ignore: "Если вы не запрашивали передачу прав — игнорируйте это письмо. Никаких изменений не произойдёт.",
+    },
+    oldOwner: {
+      subject: "Права владения переданы",
+      heading: "Права владения переданы",
+      body: "Вы передали права владения салоном.",
+      loginNote: "Ваша роль теперь — мастер. Для входа используйте обычные данные.",
+    },
+    newOwner: {
+      subject: "Вы — владелец салона",
+      heading: "Вы — новый владелец салона",
+      body: "Бывший владелец передал вам права. Теперь вы управляете салоном.",
+      loginNote: "Откройте кабинет, чтобы начать работу.",
+    },
+  },
+  ua: {
+    request: {
+      subject: "Підтвердьте передачу прав власника",
+      heading: "Підтвердження передачі прав",
+      body1: "Ви ініціювали передачу прав власника салоном",
+      body2: "Після підтвердження ви станете майстром, а отримувач — власником салону. Якщо запит ініціювали не ви — просто проігноруйте цей лист.",
+      cta: "Підтвердити передачу",
+      expires: "Посилання дійсне 24 години.",
+      ignore: "Якщо ви не запитували передачу прав — проігноруйте цей лист. Жодних змін не відбудеться.",
+    },
+    oldOwner: {
+      subject: "Права власника передано",
+      heading: "Права власника передано",
+      body: "Ви передали права власника салоном.",
+      loginNote: "Ваша роль тепер — майстер. Для входу використовуйте звичайні дані.",
+    },
+    newOwner: {
+      subject: "Ви — власник салону",
+      heading: "Ви — новий власник салону",
+      body: "Колишній власник передав вам права. Тепер ви керуєте салоном.",
+      loginNote: "Відкрийте кабінет, щоб почати роботу.",
+    },
+  },
+  en: {
+    request: {
+      subject: "Confirm ownership transfer",
+      heading: "Confirm ownership transfer",
+      body1: "You initiated a transfer of salon ownership",
+      body2: "After confirmation, you become a master and the recipient becomes the salon owner. If you did not initiate this request, simply ignore this email.",
+      cta: "Confirm transfer",
+      expires: "This link is valid for 24 hours.",
+      ignore: "If you did not request ownership transfer — ignore this email. Nothing will change.",
+    },
+    oldOwner: {
+      subject: "Ownership transferred",
+      heading: "Ownership transferred",
+      body: "You transferred salon ownership.",
+      loginNote: "Your role is now master. Log in with your usual credentials.",
+    },
+    newOwner: {
+      subject: "You are now the salon owner",
+      heading: "You are now the salon owner",
+      body: "The previous owner transferred ownership to you. You now manage the salon.",
+      loginNote: "Open the dashboard to get started.",
+    },
+  },
+  pl: {
+    request: {
+      subject: "Potwierdź przekazanie własności",
+      heading: "Potwierdzenie przekazania własności",
+      body1: "Zainicjowano przekazanie własności salonu",
+      body2: "Po potwierdzeniu zostaniesz mistrzem, a odbiorca — właścicielem salonu. Jeśli to nie Ty zainicjowałeś prośbę — po prostu zignoruj tę wiadomość.",
+      cta: "Potwierdź przekazanie",
+      expires: "Link jest ważny 24 godziny.",
+      ignore: "Jeśli nie prosiłeś o przekazanie własności — zignoruj tę wiadomość. Nic się nie zmieni.",
+    },
+    oldOwner: {
+      subject: "Własność przekazana",
+      heading: "Własność przekazana",
+      body: "Przekazałeś własność salonu.",
+      loginNote: "Twoja rola to teraz mistrz. Zaloguj się jak zwykle.",
+    },
+    newOwner: {
+      subject: "Jesteś nowym właścicielem salonu",
+      heading: "Jesteś nowym właścicielem salonu",
+      body: "Poprzedni właściciel przekazał własność Tobie. Teraz zarządzasz salonem.",
+      loginNote: "Otwórz panel, aby rozpocząć.",
+    },
+  },
+};
+
+export function getOwnershipCopy(lang: Lang) {
+  return ownershipCopy[lang] ?? ownershipCopy.en;
+}
+
+export function ownershipTransferRequestEmailHtml(opts: {
+  fromName: string;
+  toName: string;
+  toEmail: string;
+  tenantName: string;
+  confirmUrl: string;
+  lang: Lang;
+}): string {
+  const c = getOwnershipCopy(opts.lang).request;
+  return baseLayout(
+    c.heading,
+    paragraph(`${c.body1}: <strong>${opts.tenantName}</strong>`, "#e2e8f0") +
+    paragraph(`${opts.toName} (<strong>${opts.toEmail}</strong>)`, "#d1d5db") +
+    paragraph(c.body2) +
+    ctaButton(opts.confirmUrl, c.cta) +
+    muted(c.expires) +
+    muted(c.ignore),
+    getEmailCopy(opts.lang).footer,
+  );
+}
+
+export function ownershipTransferCompletedOldOwnerEmailHtml(opts: {
+  newOwnerName: string;
+  tenantName: string;
+  lang: Lang;
+}): string {
+  const c = getOwnershipCopy(opts.lang).oldOwner;
+  return baseLayout(
+    c.heading,
+    paragraph(`${c.body} <strong>${opts.tenantName}</strong>`, "#e2e8f0") +
+    paragraph(`→ ${opts.newOwnerName}`, "#d1d5db") +
+    muted(c.loginNote),
+    getEmailCopy(opts.lang).footer,
+  );
+}
+
+export function ownershipTransferCompletedNewOwnerEmailHtml(opts: {
+  oldOwnerName: string;
+  tenantName: string;
+  lang: Lang;
+}): string {
+  const c = getOwnershipCopy(opts.lang).newOwner;
+  return baseLayout(
+    c.heading,
+    paragraph(`${c.body}`) +
+    paragraph(`<strong>${opts.tenantName}</strong> ← ${opts.oldOwnerName}`, "#e2e8f0") +
+    muted(c.loginNote),
+    getEmailCopy(opts.lang).footer,
+  );
+}

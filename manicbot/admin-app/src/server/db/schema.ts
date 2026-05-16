@@ -483,6 +483,26 @@ export const roleChangeRequests = sqliteTable("role_change_requests", {
   index("idx_rcr_status").on(t.status, t.createdAt),
 ]);
 
+// ─── Ownership-transfer tokens ─────────────────────────────────────────────
+
+export const ownershipTransferTokens = sqliteTable("ownership_transfer_tokens", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  fromUserId: text("from_user_id").notNull(),
+  toUserId: text("to_user_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  cancelledAt: integer("cancelled_at"),
+  createdAt: integer("created_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+}, (t) => [
+  index("idx_ott_tenant_created").on(t.tenantId, t.createdAt),
+  index("idx_ott_token_hash").on(t.tokenHash),
+  index("idx_ott_user").on(t.fromUserId, t.createdAt),
+]);
+
 // ─── D1-based rate limiting ─────────────────────────────────────────────────
 
 export const rateLimits = sqliteTable("rate_limits", {

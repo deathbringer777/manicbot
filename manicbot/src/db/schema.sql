@@ -503,6 +503,27 @@ CREATE TABLE IF NOT EXISTS role_change_requests (
 CREATE INDEX IF NOT EXISTS idx_rcr_user ON role_change_requests(web_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_rcr_status ON role_change_requests(status, created_at);
 
+-- Ownership-transfer tokens (single-use, 24h TTL). See migration 0062.
+CREATE TABLE IF NOT EXISTS ownership_transfer_tokens (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  from_user_id TEXT NOT NULL,
+  to_user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  consumed_at INTEGER,
+  cancelled_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  ip_address TEXT,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ott_tenant_created ON ownership_transfer_tokens(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ott_token_hash ON ownership_transfer_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_ott_user ON ownership_transfer_tokens(from_user_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ott_one_pending
+  ON ownership_transfer_tokens(tenant_id)
+  WHERE consumed_at IS NULL AND cancelled_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS rate_limits (
   key TEXT NOT NULL,
   action TEXT NOT NULL,

@@ -5,7 +5,6 @@ import { useRole } from "~/components/RoleContext";
 
 export interface DashboardPrefs {
   hiddenTabs: string[];
-  hiddenStatCards: string[];
   showTodayApts: boolean;
   defaultTab: string;
 }
@@ -19,7 +18,6 @@ function storageKey(tenantId?: string | null): string {
 
 const DEFAULTS: DashboardPrefs = {
   hiddenTabs: [],
-  hiddenStatCards: [],
   showTodayApts: true,
   defaultTab: "overview",
 };
@@ -70,17 +68,6 @@ export function useDashboardPrefs() {
     });
   }, [tenantId]);
 
-  const toggleStatCard = useCallback((card: string) => {
-    setPrefsState((prev) => {
-      const hidden = prev.hiddenStatCards.includes(card)
-        ? prev.hiddenStatCards.filter((c) => c !== card)
-        : [...prev.hiddenStatCards, card];
-      const next = { ...prev, hiddenStatCards: hidden };
-      save(next, tenantId);
-      return next;
-    });
-  }, [tenantId]);
-
   const setShowTodayApts = useCallback((show: boolean) => {
     update({ showTodayApts: show });
   }, [update]);
@@ -89,7 +76,7 @@ export function useDashboardPrefs() {
     update({ defaultTab: tab });
   }, [update]);
 
-  return { prefs, toggleTab, toggleStatCard, setShowTodayApts, setDefaultTab };
+  return { prefs, toggleTab, setShowTodayApts, setDefaultTab };
 }
 
 // Pure helpers for testing / server-side seeding

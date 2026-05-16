@@ -60,6 +60,9 @@ import messageTemplatesManifest from "./message-templates/manifest";
 // ── Variant A (Phase 3) — growth plugins ────────────────────────────────────
 import reviewCollectorManifest from "./review-collector/manifest";
 
+// ── Variant A (Phase 3) — operations plugins ────────────────────────────────
+import inventoryLiteManifest from "./inventory-lite/manifest";
+
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
@@ -75,6 +78,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   messageTemplatesManifest,
   // Variant A growth
   reviewCollectorManifest,
+  // Variant A operations
+  inventoryLiteManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

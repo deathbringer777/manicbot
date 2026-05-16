@@ -78,7 +78,7 @@ function FunnelCard({
 }) {
   const max = Math.max(1, ...stages.map((s) => s.count));
   return (
-    <div className="glass-card rounded-2xl p-4 space-y-2">
+    <div data-testid="funnel-card" className="glass-card rounded-2xl p-4 space-y-2">
       {stages.map((s, i) => {
         const pct = max > 0 ? Math.max(4, Math.round((s.count / max) * 100)) : 0;
         const prev = i > 0 ? stages[i - 1]! : null;
@@ -137,7 +137,7 @@ function AnalyticsEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
 function FunnelEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
   const { lang } = useLang();
   return (
-    <div className="glass-card rounded-2xl p-6 flex flex-col items-center text-center space-y-3">
+    <div data-testid="funnel-empty" className="glass-card rounded-2xl p-6 flex flex-col items-center text-center space-y-3">
       <div className="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center">
         <Route className="h-6 w-6 text-brand-400" />
       </div>
@@ -243,20 +243,22 @@ export function AnalyticsTab({
               hint={t("analytics.uniqueHint", lang)}
               icon={Target}
             />
-            <StatBox
-              label={t("analytics.conversion", lang)}
-              value={
-                hasTrackedTouches && funnel.data && (funnel.data.stages[1]?.count ?? 0) > 0
-                  ? `${Math.round((totalBookings / (funnel.data.stages[1]!.count ?? 1)) * 100)}%`
-                  : "—"
-              }
-              hint={
-                hasTrackedTouches
-                  ? t("analytics.touchToBookHint", lang)
-                  : t("analytics.noTrackedTouches", lang)
-              }
-              icon={TrendingUp}
-            />
+            <div data-testid="conversion-stat" data-tracked={hasTrackedTouches ? "1" : "0"}>
+              <StatBox
+                label={t("analytics.conversion", lang)}
+                value={
+                  hasTrackedTouches && funnel.data && (funnel.data.stages[1]?.count ?? 0) > 0
+                    ? `${Math.round((totalBookings / (funnel.data.stages[1]!.count ?? 1)) * 100)}%`
+                    : "—"
+                }
+                hint={
+                  hasTrackedTouches
+                    ? t("analytics.touchToBookHint", lang)
+                    : t("analytics.noTrackedTouches", lang)
+                }
+                icon={TrendingUp}
+              />
+            </div>
           </div>
 
           {/* ── Acquisition chart ──────────────────────────────── */}

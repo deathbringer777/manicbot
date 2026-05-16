@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
-import { TrendingUp, Target, Users, Loader2, Link2, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
+import { TrendingUp, Target, Users, Loader2, Link2, ChevronDown, ChevronUp, BarChart3, Route } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -134,6 +134,33 @@ function AnalyticsEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
   );
 }
 
+function FunnelEmptyState({ onCreateLink }: { onCreateLink: () => void }) {
+  const { lang } = useLang();
+  return (
+    <div className="glass-card rounded-2xl p-6 flex flex-col items-center text-center space-y-3">
+      <div className="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center">
+        <Route className="h-6 w-6 text-brand-400" />
+      </div>
+      <div className="space-y-1 max-w-md">
+        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+          {t("analytics.funnel.empty.title", lang)}
+        </h4>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          {t("analytics.funnel.empty.text", lang)}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onCreateLink}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-500/15 text-brand-400 text-xs font-medium hover:bg-brand-500/25 transition-colors"
+      >
+        <Link2 className="h-3.5 w-3.5" />
+        {t("analytics.createLink", lang)}
+      </button>
+    </div>
+  );
+}
+
 export function AnalyticsTab({
   tenantId,
   botUsername,
@@ -157,6 +184,16 @@ export function AnalyticsTab({
   const totalBookings = funnel.data?.stages.find((s) => s.key === "booked")?.count ?? 0;
   const totalTouches = funnel.data?.stages[0]?.count ?? 0;
   const hasAnyData = totalUsers > 0 || totalBookings > 0 || totalTouches > 0;
+  const hasTrackedTouches = totalTouches > 0;
+
+  function openLinkGenerator() {
+    setShowLinkGen(true);
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        document.getElementById("tracking-links-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -187,7 +224,7 @@ export function AnalyticsTab({
       )}
 
       {!isLoading && !hasAnyData && (
-        <AnalyticsEmptyState onCreateLink={() => setShowLinkGen(true)} />
+        <AnalyticsEmptyState onCreateLink={openLinkGenerator} />
       )}
 
       {!isLoading && hasAnyData && (
@@ -208,14 +245,16 @@ export function AnalyticsTab({
             />
             <StatBox
               label={t("analytics.conversion", lang)}
-              value={`${
-                funnel.data && (funnel.data.stages[1]?.count ?? 0) > 0
-                  ? Math.round(
-                      (totalBookings / (funnel.data.stages[1]!.count ?? 1)) * 100,
-                    )
-                  : 0
-              }%`}
-              hint={t("analytics.touchToBookHint", lang)}
+              value={
+                hasTrackedTouches && funnel.data && (funnel.data.stages[1]?.count ?? 0) > 0
+                  ? `${Math.round((totalBookings / (funnel.data.stages[1]!.count ?? 1)) * 100)}%`
+                  : "—"
+              }
+              hint={
+                hasTrackedTouches
+                  ? t("analytics.touchToBookHint", lang)
+                  : t("analytics.noTrackedTouches", lang)
+              }
               icon={TrendingUp}
             />
           </div>
@@ -270,7 +309,11 @@ export function AnalyticsTab({
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
               {t("analytics.funnel", lang)}
             </h3>
-            {funnel.data && <FunnelCard stages={funnel.data.stages} />}
+            {hasTrackedTouches && funnel.data ? (
+              <FunnelCard stages={funnel.data.stages} />
+            ) : (
+              <FunnelEmptyState onCreateLink={openLinkGenerator} />
+            )}
           </div>
 
           {/* ── Top campaigns ──────────────────────────────────── */}
@@ -323,7 +366,7 @@ export function AnalyticsTab({
       )}
 
       {/* ── Tracking links (collapsible) ───────────────────── */}
-      <div>
+      <div id="tracking-links-section">
         <button
           type="button"
           onClick={() => setShowLinkGen((v) => !v)}
@@ -334,7 +377,10 @@ export function AnalyticsTab({
           {showLinkGen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
         </button>
         {showLinkGen && (
-          <div className="mt-3">
+          <div className="mt-3 space-y-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed px-1">
+              {t("tracking.intro", lang)}
+            </p>
             <TrackingLinksGenerator
               tenantId={tenantId}
               botUsername={botUsername}

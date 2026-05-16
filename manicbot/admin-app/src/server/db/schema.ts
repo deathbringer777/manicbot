@@ -1081,3 +1081,70 @@ export const appointmentBlocks = sqliteTable("appointment_blocks", {
   index("idx_apt_blocks_master_date").on(t.tenantId, t.masterId, t.date),
   index("idx_apt_blocks_tenant_date").on(t.tenantId, t.date),
 ]);
+
+// ─── Referral Program (migration 0064) ─────────────────────────────────
+
+export const referralCodes = sqliteTable("referral_codes", {
+  code: text("code").primaryKey(),
+  ownerWebUserId: text("owner_web_user_id").notNull(),
+  ownerTenantId: text("owner_tenant_id").notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: integer("created_at").notNull(),
+  rotatedAt: integer("rotated_at"),
+}, (t) => [
+  index("idx_referral_codes_owner").on(t.ownerWebUserId, t.isActive),
+  uniqueIndex("uq_referral_codes_active_one").on(t.ownerWebUserId),
+]);
+
+export const referrals = sqliteTable("referrals", {
+  id: text("id").primaryKey(),
+  referrerWebUserId: text("referrer_web_user_id").notNull(),
+  referrerTenantId: text("referrer_tenant_id").notNull(),
+  inviteeWebUserId: text("invitee_web_user_id").notNull(),
+  inviteeTenantId: text("invitee_tenant_id").notNull(),
+  code: text("code").notNull(),
+  status: text("status").notNull(),
+  inviteeDiscountKind: text("invitee_discount_kind"),
+  inviteeDiscountAppliedAt: integer("invitee_discount_applied_at"),
+  firstInvoicePaidAt: integer("first_invoice_paid_at"),
+  rewardId: text("reward_id"),
+  inviteePaymentMethodFp: text("invitee_payment_method_fp"),
+  fraudFlags: text("fraud_flags"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  uniqueIndex("uq_ref_invitee_one_active").on(t.inviteeWebUserId),
+  index("idx_ref_referrer").on(t.referrerWebUserId, t.status, t.createdAt),
+  index("idx_ref_fingerprint").on(t.inviteePaymentMethodFp),
+  index("idx_ref_status").on(t.status, t.createdAt),
+  index("idx_ref_code").on(t.code),
+]);
+
+export const referralRewards = sqliteTable("referral_rewards", {
+  id: text("id").primaryKey(),
+  referrerWebUserId: text("referrer_web_user_id").notNull(),
+  referrerTenantId: text("referrer_tenant_id").notNull(),
+  referralId: text("referral_id"),
+  kind: text("kind").notNull(),
+  amountGrosz: integer("amount_grosz").notNull(),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeBalanceTransaction: text("stripe_balance_transaction"),
+  appliedAt: integer("applied_at"),
+  expiresAt: integer("expires_at").notNull(),
+  status: text("status").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_rewards_referrer").on(t.referrerWebUserId, t.status),
+  index("idx_rewards_expiry").on(t.status, t.expiresAt),
+]);
+
+export const referralEvents = sqliteTable("referral_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  referralId: text("referral_id"),
+  rewardId: text("reward_id"),
+  event: text("event").notNull(),
+  metadata: text("metadata"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_ref_events_referral").on(t.referralId, t.createdAt),
+]);

@@ -778,6 +778,13 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'promos', () => phasePromos(ctx, now));
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
+    // Referral reward 12-month expiry sweep. Idempotent — `runPhase` enforces
+    // a 24h gap via `cron:phase:referral_expiry:last`, and individual reward
+    // reversals carry an Idempotency-Key to Stripe.
+    await runPhase(ctx, 'referral_expiry', async () => {
+      const { phaseReferralExpiry } = await import('../billing/referralWebhooks.js');
+      return phaseReferralExpiry(ctx);
+    });
   } catch (e) {
     log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)));
   }

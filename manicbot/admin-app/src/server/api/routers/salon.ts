@@ -7,7 +7,8 @@ import {
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
-import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
+import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
+import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
 import { eq, and, desc, sql, ne, like, or, gte, lte } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -20,6 +21,66 @@ import { writeAudit, ctxIp } from "~/server/security/audit";
 import { sendMasterInviteEmail } from "~/server/email/emailService";
 
 const tenantIdInput = z.object({ tenantId: z.string() });
+
+/**
+ * Referral attach helper (PR-B).
+ *
+ * If the caller has a `referrals` row in status='pending' (= they were
+ * invited via a code and have not yet paid an invoice), mint a one-shot
+ * Stripe coupon for the discount and return `{ couponId, referralId }` so
+ * the checkout session can pass them through.
+ *
+ * Returns `null` when there is no pending referral, when Stripe is not
+ * configured, OR when the coupon mint fails — in all cases the checkout
+ * proceeds at full price. A referral row is never marked applied here;
+ * that only happens inside the Worker invoice.paid handler, so a failed
+ * Stripe coupon mint doesn't burn the referral.
+ */
+async function maybeAttachReferral(
+  ctx: { db: ReturnType<typeof import("~/server/db").getDb>; webUser: { id: string } | null | undefined },
+  billingCycle: "monthly" | "annual",
+): Promise<{ couponId: string; referralId: string } | null> {
+  if (!ctx.webUser) return null;
+  const stripeKey = env.STRIPE_SECRET_KEY;
+  if (!stripeKey) return null;
+
+  const [row] = await ctx.db
+    .select({
+      id: referrals.id,
+      status: referrals.status,
+    })
+    .from(referrals)
+    .where(and(
+      eq(referrals.inviteeWebUserId, ctx.webUser.id),
+      eq(referrals.status, "pending"),
+    ))
+    .limit(1);
+  if (!row) return null;
+
+  const percentOff = billingCycle === "annual" ? 10 : 20;
+  const discountKind = billingCycle === "annual" ? "10pct_yearly" : "20pct_monthly";
+
+  let couponId: string;
+  try {
+    couponId = await createOneTimePercentOffCoupon(stripeKey, {
+      percentOff,
+      name: `Referral — ${discountKind}`,
+      metadata: { referralId: row.id, kind: discountKind },
+    });
+  } catch (err) {
+    log.error("salon.maybeAttachReferral: coupon mint failed", err instanceof Error ? err : new Error(String(err)));
+    return null;
+  }
+
+  // Stamp the kind on the referral so the dashboard can show the right
+  // discount label. invoice_discount_applied_at is set on webhook fire.
+  await ctx.db
+    .update(referrals)
+    .set({ inviteeDiscountKind: discountKind, updatedAt: Math.floor(Date.now() / 1000) })
+    .where(eq(referrals.id, row.id));
+
+  return { couponId, referralId: row.id };
+}
 
 export const salonRouter = createTRPCRouter({
   getOverview: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
@@ -1200,6 +1261,13 @@ export const salonRouter = createTRPCRouter({
       }
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : (process.env.AUTH_URL ?? "https://admin.manicbot.com");
+
+      // Referral injection: if the caller has a pending referral row (= they
+      // were invited via someone's code), mint a one-shot Stripe coupon for
+      // their first invoice and stamp the subscription metadata so the
+      // Worker webhook can credit the referrer when invoice.paid fires.
+      const referralAttach = await maybeAttachReferral(ctx, cycle);
+
       const url = await createCheckoutSession(stripeKey, {
         customerId,
         priceId,
@@ -1209,6 +1277,8 @@ export const salonRouter = createTRPCRouter({
         plan: input.plan,
         locale: input.locale,
         billingCycle: cycle,
+        couponId: referralAttach?.couponId,
+        referralId: referralAttach?.referralId,
       });
 
       return { url };
@@ -1269,6 +1339,8 @@ export const salonRouter = createTRPCRouter({
       const baseUrl = process.env.AUTH_URL ?? "https://admin.manicbot.com";
       const returnUrl = `${baseUrl}/settings?section=billing&checkout=success`;
 
+      const referralAttach = await maybeAttachReferral(ctx, cycle);
+
       const clientSecret = await createEmbeddedCheckoutSession(stripeKey, {
         customerId,
         priceId,
@@ -1277,6 +1349,8 @@ export const salonRouter = createTRPCRouter({
         plan: input.plan,
         locale: input.locale,
         billingCycle: cycle,
+        couponId: referralAttach?.couponId,
+        referralId: referralAttach?.referralId,
       });
 
       return { clientSecret };

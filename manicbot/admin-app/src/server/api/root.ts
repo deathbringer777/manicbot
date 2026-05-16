@@ -35,6 +35,7 @@ import { consentRouter } from "~/server/api/routers/consent";
 import { errorEventsRouter } from "~/server/api/routers/errorEvents";
 import { marketingAutopilotRouter } from "~/server/api/routers/marketingAutopilot";
 import { clientsRouter } from "~/server/api/routers/clients";
+import { referralsRouter } from "~/server/api/routers/referrals";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -73,6 +74,7 @@ export const appRouter = createTRPCRouter({
   errorEvents: errorEventsRouter,
   marketingAutopilot: marketingAutopilotRouter,
   clients: clientsRouter,
+  referrals: referralsRouter,
 });
 
 export type AppRouter = typeof appRouter;

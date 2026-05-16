@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   User, CreditCard, Palette, HelpCircle, ArrowLeft,
-  Settings, Wrench,
+  Settings, Wrench, Gift,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -49,6 +49,12 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     en: { label: "Platform", desc: "Platform settings" },
     pl: { label: "Platforma", desc: "Ustawienia platformy" },
   },
+  referrals: {
+    ru: { label: "Реферальная программа", desc: "Пригласить друга, скидки" },
+    ua: { label: "Реферальна програма", desc: "Запросити друга, знижки" },
+    en: { label: "Refer a friend", desc: "Share, earn free months" },
+    pl: { label: "Poleć znajomemu", desc: "Udostępnij, zarabiaj wolne miesiące" },
+  },
 };
 
 const BACK_LABELS: Record<Lang, string> = {
@@ -71,16 +77,28 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   appearance: Palette,
   help: HelpCircle,
   platform: Wrench,
+  referrals: Gift,
 };
 
 function getSections(role: string | null, lang: Lang, isPersonalTenant?: boolean): SettingsSection[] {
   const sections: string[] = [];
 
+  // Eligibility for the Referrals section mirrors assertReferralEligible
+  // in the referrals tRPC router: self-registered customer accounts only.
+  // Salon-invited masters (master + !isPersonalTenant) are explicitly not
+  // shown the section — their referral attempts would 403 server-side.
+  const showReferrals =
+    role === "tenant_owner" ||
+    (role === "master" && isPersonalTenant === true);
+
   if (role === "tenant_owner") {
-    // Billing only for salon owners
-    sections.push("account", "billing", "appearance", "help");
+    sections.push("account", "billing", "appearance");
+    if (showReferrals) sections.push("referrals");
+    sections.push("help");
   } else if (role === "master") {
-    sections.push("account", "appearance", "help");
+    sections.push("account", "appearance");
+    if (showReferrals) sections.push("referrals");
+    sections.push("help");
   } else if (role === "support" || role === "technical_support") {
     sections.push("account", "appearance", "help");
   } else if (role === "system_admin") {

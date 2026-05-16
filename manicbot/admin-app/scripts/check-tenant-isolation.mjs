@@ -110,13 +110,13 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:937 — bot_id collision check across tenants (intentional global
+  // salon.ts:998 — bot_id collision check across tenants (intentional global
   // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
   // gated; this read confirms the bot isn't already claimed by SOMEONE ELSE
   // before we accept it. Line drifted 883 → 913 (PRs #66/#67) → 937 (PR-A
   // permission unification 0063 added the createMasterAccount perm-grant
-  // block).
-  "src/server/api/routers/salon.ts:937",
+  // block) → 998 (PR-B referral program added the maybeAttachReferral helper).
+  "src/server/api/routers/salon.ts:998",
   // tenantStaff.ts:381 — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

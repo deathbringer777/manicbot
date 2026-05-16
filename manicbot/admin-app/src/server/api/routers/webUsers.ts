@@ -106,6 +106,11 @@ export const webUsersRouter = createTRPCRouter({
         lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
         referralSource: z.enum(["google", "instagram", "telegram", "friends", "other"]).nullish(),
         referralNote: z.string().max(200).nullish(),
+        // Optional referral code redeemed via /register?ref=XXXX or the
+        // "Friends" flow. Server-side validation is loose: a malformed/expired/
+        // self-referral code logs + continues — registration must never fail
+        // because of a bad code.
+        referralCode: z.string().regex(/^[A-Z0-9-]{6,16}$/, "Invalid code format").nullish(),
         tosAccepted: z.literal(true, { errorMap: () => ({ message: "Terms of Service must be accepted" }) }),
         googlePrefillToken: z.string().min(1).max(8000).nullish(),
       })
@@ -271,6 +276,24 @@ export const webUsersRouter = createTRPCRouter({
                 ? "Email could not be sent. Check Resend configuration."
                 : `Could not send verification email: ${sent.error}`,
           });
+        }
+      }
+
+      // Record referral code redemption AFTER everything else succeeds.
+      // Fail-open: invalid/self-referral codes log but never block signup.
+      if (input.referralCode && assignedTenantId) {
+        try {
+          const { recordRedemption } = await import("~/server/api/routers/referrals");
+          const r = await recordRedemption(ctx.db, {
+            code: input.referralCode,
+            inviteeWebUserId: id,
+            inviteeTenantId: assignedTenantId,
+          });
+          if (!r.ok) {
+            log.info(`webUsers.register: referral code redemption rejected (${r.reason})`, { code: input.referralCode });
+          }
+        } catch (err: unknown) {
+          log.error("webUsers.register: referral redemption threw", err instanceof Error ? err : new Error(String(err)));
         }
       }
 

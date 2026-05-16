@@ -65,7 +65,6 @@ export const appRouter = createTRPCRouter({
   reviews: reviewsRouter,
   analytics: analyticsRouter,
   roleChangeRequests: roleChangeRequestsRouter,
-  ownership: ownershipRouter,
   onboarding: onboardingRouter,
   promoCodes: promoCodesRouter,
   stampCard: stampCardRouter,

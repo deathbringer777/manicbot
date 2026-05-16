@@ -1,9 +1,10 @@
 "use client";
 
+import { useId, useState, type ReactNode } from "react";
 import {
   LayoutGrid, CalendarDays, Scissors, UserRound, Users,
   Wallet, MessageSquare, BarChart3, Star, Globe,
-  Eye, EyeOff, ChevronDown,
+  Eye, ChevronDown,
   AlertCircle, CreditCard,
   type LucideIcon,
 } from "lucide-react";
@@ -16,7 +17,7 @@ import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 /**
  * Sidebar tabs that can be toggled. `navKey` matches the sidebar's tNav key
  * so labels here render identically to what the user sees in the sidebar
- * (avoids "Тариф" vs "Биллинг" / "Обзор" vs "Домой" mismatches).
+ * (avoids "Тариф" vs "Биллинг" / "Обзор" vs "Дашборд" mismatches).
  */
 const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; navKey: string }[] = [
   { tab: "appointments",   icon: CalendarDays,  navKey: "Appointments" },
@@ -60,6 +61,44 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   );
 }
 
+interface CollapsibleSectionProps {
+  icon: LucideIcon;
+  iconClass: string;
+  title: string;
+  desc: string;
+  children: ReactNode;
+}
+
+function CollapsibleSection({ icon: Icon, iconClass, title, desc, children }: CollapsibleSectionProps) {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
+  return (
+    <section className="glass-card rounded-2xl">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={bodyId}
+        className="w-full text-left p-4 flex items-start gap-2 rounded-2xl hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+      >
+        <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${iconClass}`} />
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{desc}</p>
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 shrink-0 mt-0.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div id={bodyId} className="px-4 pb-4">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function AppearanceSection() {
   const { lang } = useLang();
   const { role, previewRole } = useRole();
@@ -79,7 +118,7 @@ export function AppearanceSection() {
   }
 
   // Visible tabs for default-tab selector (overview + non-hidden).
-  // Use sidebar nav labels (tNav) so the chips here match the sidebar exactly.
+  // Use sidebar nav labels (tNav) so the options here match the sidebar exactly.
   const visibleTabs = [
     { tab: "overview", label: tNav("Dashboard", lang) },
     ...TOGGLEABLE_TABS
@@ -90,17 +129,12 @@ export function AppearanceSection() {
   return (
     <div className="space-y-4">
       {/* ── Sidebar Tabs ── */}
-      <section className="glass-card rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-1">
-          <LayoutGrid className="w-4 h-4 text-brand-400 shrink-0" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            {t("settings.sidebarTabs", lang)}
-          </h2>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          {t("settings.sidebarTabsDesc", lang)}
-        </p>
-
+      <CollapsibleSection
+        icon={LayoutGrid}
+        iconClass="text-brand-400"
+        title={t("settings.sidebarTabs", lang)}
+        desc={t("settings.sidebarTabsDesc", lang)}
+      >
         <div className="space-y-1">
           {/* Dashboard (overview) — always visible */}
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.02]">
@@ -129,20 +163,15 @@ export function AppearanceSection() {
             );
           })}
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* ── Overview Widgets ── */}
-      <section className="glass-card rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Eye className="w-4 h-4 text-sky-400 shrink-0" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            {t("settings.overviewWidgets", lang)}
-          </h2>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          {t("settings.overviewWidgetsDesc", lang)}
-        </p>
-
+      <CollapsibleSection
+        icon={Eye}
+        iconClass="text-sky-400"
+        title={t("settings.overviewWidgets", lang)}
+        desc={t("settings.overviewWidgetsDesc", lang)}
+      >
         <div className="space-y-1">
           {STAT_CARDS.map(({ key, labelKey, icon: Icon }) => {
             const visible = !prefs.hiddenStatCards.includes(key);
@@ -169,37 +198,26 @@ export function AppearanceSection() {
             <Toggle on={prefs.showTodayApts} onToggle={() => setShowTodayApts(!prefs.showTodayApts)} />
           </div>
         </div>
-      </section>
+      </CollapsibleSection>
 
       {/* ── Default Tab ── */}
-      <section className="glass-card rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-1">
-          <ChevronDown className="w-4 h-4 text-violet-400 shrink-0" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-            {t("settings.defaultTab", lang)}
-          </h2>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          {t("settings.defaultTabDesc", lang)}
-        </p>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+      <CollapsibleSection
+        icon={ChevronDown}
+        iconClass="text-violet-400"
+        title={t("settings.defaultTab", lang)}
+        desc={t("settings.defaultTabDesc", lang)}
+      >
+        <select
+          value={prefs.defaultTab}
+          onChange={(e) => setDefaultTab(e.target.value)}
+          className="block w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        >
+          <option value="">{t("settings.defaultTabNotSelected", lang)}</option>
           {visibleTabs.map(({ tab, label }) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setDefaultTab(tab)}
-              className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-all border ${
-                prefs.defaultTab === tab
-                  ? "bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-300"
-                  : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              {label}
-            </button>
+            <option key={tab} value={tab}>{label}</option>
           ))}
-        </div>
-      </section>
+        </select>
+      </CollapsibleSection>
     </div>
   );
 }

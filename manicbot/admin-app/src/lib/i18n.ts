@@ -599,6 +599,42 @@ const translations = {
   "billing.switchToYearly":              { ru: "Перейти на годовой", ua: "Перейти на річний", en: "Switch to yearly", pl: "Przełącz na roczny" },
   "billing.choose":                      { ru: "Выбрать", ua: "Вибрати", en: "Choose", pl: "Wybierz" },
   "billing.yearlyDiscount":              { ru: "Оплата раз в год. Скидка 20% от суммы за 12 месяцев.", ua: "Оплата раз на рік. Знижка 20% від суми за 12 місяців.", en: "Pay once a year. Save 20% off the 12-month total.", pl: "Płatność raz w roku. Oszczędź 20% rocznej kwoty." },
+  // — Trial banner —
+  "billing.trial.daysLeft":              { ru: "Пробный период · ещё {n}", ua: "Пробний період · ще {n}", en: "Trial · {n} left", pl: "Okres próbny · zostało {n}" },
+  "billing.trial.endsToday":             { ru: "Пробный период заканчивается сегодня", ua: "Пробний період закінчується сьогодні", en: "Trial ends today", pl: "Okres próbny kończy się dziś" },
+  "billing.trial.endingSoon":            { ru: "Триал заканчивается — выберите план, чтобы продолжить", ua: "Тріал завершується — оберіть план, щоб продовжити", en: "Trial is ending — pick a plan to continue", pl: "Okres próbny się kończy — wybierz plan, aby kontynuować" },
+  "billing.trial.expired":               { ru: "Пробный период истёк — выберите тариф, чтобы продолжить пользоваться", ua: "Пробний період минув — оберіть тариф, щоб продовжити", en: "Trial expired — choose a plan to continue", pl: "Okres próbny wygasł — wybierz plan, aby kontynuować" },
+  "billing.trial.day1":                  { ru: "1 день", ua: "1 день", en: "1 day", pl: "1 dzień" },
+  "billing.trial.dayFew":                { ru: "{n} дня", ua: "{n} дні", en: "{n} days", pl: "{n} dni" },
+  "billing.trial.dayMany":               { ru: "{n} дней", ua: "{n} днів", en: "{n} days", pl: "{n} dni" },
+  // — Plan card —
+  "billing.popular":                     { ru: "Популярный", ua: "Популярний", en: "Most popular", pl: "Popularny" },
+  "billing.annualTotal":                 { ru: "{total} в год", ua: "{total} на рік", en: "{total} per year", pl: "{total} rocznie" },
+  "billing.choosePlan":                  { ru: "Выбрать план", ua: "Обрати план", en: "Choose plan", pl: "Wybierz plan" },
+  "billing.continueWithPlan":            { ru: "Продолжить на этом тарифе", ua: "Продовжити на цьому тарифі", en: "Continue with this plan", pl: "Kontynuuj z tym planem" },
+  "billing.upgradeToPlan":               { ru: "Перейти на {plan}", ua: "Перейти на {plan}", en: "Upgrade to {plan}", pl: "Przejdź na {plan}" },
+  // — Cycle toggle —
+  "billing.cycle.annualFree":            { ru: "2 FREE 🎁", ua: "2 FREE 🎁", en: "2 FREE 🎁", pl: "2 FREE 🎁" },
+  "billing.cycle.annualSubtitle":        { ru: "2 месяца бесплатно при оплате за год", ua: "2 місяці безкоштовно при оплаті за рік", en: "2 months free with annual billing", pl: "2 miesiące gratis przy płatności rocznej" },
+  // — Subscription management —
+  "billing.manage.title":                { ru: "Управление подпиской", ua: "Керування підпискою", en: "Subscription", pl: "Subskrypcja" },
+  "billing.manage.nextCharge":           { ru: "Следующее списание", ua: "Наступне списання", en: "Next charge", pl: "Następna płatność" },
+  "billing.manage.cancelsAt":            { ru: "Подписка отменена — закроется", ua: "Підписку скасовано — закриється", en: "Cancels on", pl: "Anulowana — zakończy się" },
+  "billing.manage.openPortal":           { ru: "Управление подпиской", ua: "Керування підпискою", en: "Manage subscription", pl: "Zarządzaj subskrypcją" },
+  "billing.manage.openPortalHint":       { ru: "Карта, инвойсы, отмена и смена тарифа в Stripe", ua: "Картка, інвойси, скасування та зміна тарифу в Stripe", en: "Card, invoices, cancellation & plan changes via Stripe", pl: "Karta, faktury, anulowanie i zmiany planu w Stripe" },
+  "billing.manage.openingPortal":        { ru: "Открываем портал…", ua: "Відкриваємо портал…", en: "Opening portal…", pl: "Otwieramy portal…" },
+  "billing.manage.portalFailed":         { ru: "Не удалось открыть портал", ua: "Не вдалося відкрити портал", en: "Failed to open portal", pl: "Nie udało się otworzyć portalu" },
+  "billing.manage.statusActive":         { ru: "Активная", ua: "Активна", en: "Active", pl: "Aktywna" },
+  "billing.manage.statusGrace":          { ru: "Льготный период", ua: "Пільговий період", en: "Grace period", pl: "Okres karencji" },
+  "billing.manage.statusPastDue":        { ru: "Просрочена", ua: "Прострочена", en: "Past due", pl: "Zaległa" },
+  "billing.manage.statusCanceled":       { ru: "Отменена", ua: "Скасована", en: "Canceled", pl: "Anulowana" },
+  // — Embedded checkout modal —
+  "billing.checkout.title":              { ru: "Оплата подписки", ua: "Оплата підписки", en: "Subscription checkout", pl: "Płatność za subskrypcję" },
+  "billing.checkout.processing":         { ru: "Обрабатываем оплату…", ua: "Обробляємо оплату…", en: "Processing payment…", pl: "Przetwarzamy płatność…" },
+  "billing.checkout.success":            { ru: "Подписка активирована", ua: "Підписку активовано", en: "Subscription activated", pl: "Subskrypcja aktywowana" },
+  "billing.checkout.pending":            { ru: "Платёж принят — статус обновится в течение минуты", ua: "Платіж прийнято — статус оновиться протягом хвилини", en: "Payment received — status will update shortly", pl: "Płatność przyjęta — status zaktualizuje się wkrótce" },
+  "billing.checkout.loadFailed":         { ru: "Не удалось загрузить форму оплаты", ua: "Не вдалося завантажити форму оплати", en: "Failed to load checkout form", pl: "Nie udało się załadować formularza" },
+  "billing.checkout.closeConfirm":       { ru: "Закрыть оплату?", ua: "Закрити оплату?", en: "Close checkout?", pl: "Zamknąć płatność?" },
 
   // ── Asset upload field ──────────────────────────────────────────────────────
   "asset.uploading":                     { ru: "Загрузка…", ua: "Завантаження…", en: "Uploading…", pl: "Wysyłanie…" },

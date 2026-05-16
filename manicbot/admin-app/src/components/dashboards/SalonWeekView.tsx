@@ -358,10 +358,10 @@ export function SalonWeekView({
             {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
               <div
                 key={h}
-                className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-200 dark:border-white/10"
+                className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 text-right pr-1 sm:pr-2 border-b border-slate-200 dark:border-white/10"
                 style={{ height: HOUR_HEIGHT }}
               >
-                <span className="relative -top-1.5">{pad(h)}:00</span>
+                <span className="relative -top-1.5 tabular-nums">{pad(h)}:00</span>
               </div>
             ))}
           </div>
@@ -375,7 +375,9 @@ export function SalonWeekView({
               return (
                 <div
                   key={iso}
-                  className={`flex-1 border-r border-slate-200 dark:border-white/10 last:border-r-0 relative`}
+                  className={`flex-1 border-r border-slate-200 dark:border-white/10 last:border-r-0 relative ${
+                    isTodayCol ? "bg-brand-500/[0.025] dark:bg-brand-500/[0.04]" : ""
+                  }`}
                   style={{ minWidth: colWidth }}
                   data-testid="week-view-day-column"
                   data-day={iso}

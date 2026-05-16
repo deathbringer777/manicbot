@@ -920,9 +920,9 @@ export function MasterDashboard({
               {!bioEdit && (profile.data as any).portfolio?.length > 0 && (
                 <div className="border-t border-slate-200 dark:border-white/5 pt-3">
                   <p className="text-xs text-slate-500 mb-2">{t("master.portfolioLabel", lang)} ({(profile.data as any).portfolio.length})</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
                     {(profile.data as any).portfolio.map((url: string, i: number) => (
-                      <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                      <img key={i} src={url} alt="" className="aspect-square w-full sm:h-16 sm:w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
                     ))}
                   </div>
                 </div>
@@ -944,7 +944,7 @@ export function MasterDashboard({
                   {(profile.data as any).onVacation ? t("master.vacationOn", lang) : t("master.vacationOff", lang)}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="block">
                   <span className="text-xs text-slate-500">{t("master.vacationFrom", lang)}</span>
                   <input

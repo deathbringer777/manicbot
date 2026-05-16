@@ -206,7 +206,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   };
 
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const { groups: navGroups, flat: flatNav, settings: settingsItem } = useNavItems();
+  const { groups: navGroups, flat: flatNav, settings: settingsItem, mobileNav } = useNavItems();
   const roleInfo = getRoleInfo(effectiveRole, lang, tNav);
   // searchParams.toString() gives us the canonical "?tab=…" form so the
   // top bar header reflects the active dashboard tab (Clients / Services /
@@ -232,10 +232,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
     return pathname.startsWith(item.href);
   };
 
-  // Mobile nav: max 5
-  const mobileNav = flatNav.length <= 5
-    ? flatNav
-    : [...flatNav.slice(0, 4), flatNav.find(n => n.href.includes("settings")) ?? flatNav[flatNav.length - 1]!];
+  // Mobile nav is sourced from useNavItems().mobileNav above — honours
+  // the user's customisation in Settings → Appearance, falls back to the
+  // legacy "first 5 + Settings" slice when bottomNavLayout === "default".
 
   // Tour button: show for first 2 days after registration for non-admin roles
   const showTourButton = (() => {

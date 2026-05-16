@@ -21,7 +21,7 @@ function routeTarget(activeSection: string): { kind: "plugin" | "builtin"; slug?
 
 describe("settings section routing for plugin:<slug>", () => {
   it("valid plugin slug routes to plugin panel", () => {
-    expect(routeTarget("plugin:quick-notes")).toEqual({ kind: "plugin", slug: "quick-notes" });
+    expect(routeTarget("plugin:task-board")).toEqual({ kind: "plugin", slug: "task-board" });
   });
 
   it("non-plugin section routes to builtin handlers", () => {

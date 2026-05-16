@@ -10,6 +10,11 @@
  * inline runtime). Then add one loader entry here.
  *
  * Panels receive one prop: { installationId }.
+ *
+ * 2026-05-16 — dropped 6 runtime entries whose plugins were removed in the
+ * marketplace cleanup: google-calendar, quick-notes, ticket-templates,
+ * dark-plus, client-crm-lite, booking-reminder. See plugins/registry.ts
+ * header for the full rationale.
  */
 
 import dynamic from "next/dynamic";
@@ -25,15 +30,9 @@ type RuntimeLoader = () => Promise<{ default: ComponentType<PluginRuntimeProps> 
 const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
   "task-board": () => import("./runtimes/TaskBoardRuntime"),
   "export-hub": () => import("./runtimes/ExportHubRuntime"),
-  "ticket-templates": () => import("./runtimes/TicketTemplatesRuntime"),
-  "dark-plus": () => import("./runtimes/DarkPlusRuntime"),
   "availability-share": () => import("./runtimes/AvailabilityShareRuntime"),
   "earnings-goal": () => import("./runtimes/EarningsGoalRuntime"),
-  "client-crm-lite": () => import("./runtimes/ClientCrmLiteRuntime"),
-  "quick-notes": () => import("./runtimes/QuickNotesRuntime"),
-  "booking-reminder": () => import("./runtimes/BookingReminderRuntime"),
   "message-templates": () => import("./runtimes/MessageTemplatesRuntime"),
-  "google-calendar": () => import("./runtimes/GoogleCalendarRuntime"),
 };
 
 export function loadRuntime(slug: string): ComponentType<PluginRuntimeProps> | null {

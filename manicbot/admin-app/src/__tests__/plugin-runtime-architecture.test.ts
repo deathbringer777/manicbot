@@ -89,9 +89,9 @@ describe("plugin runtime architecture", () => {
     const slugs = new Set(listRuntimeSlugs());
     // These three are the most user-visible runtimes today; if any of them
     // disappears from the loader map, surface the regression early.
-    expect(slugs.has("google-calendar")).toBe(true);
     expect(slugs.has("task-board")).toBe(true);
-    expect(slugs.has("quick-notes")).toBe(true);
+    expect(slugs.has("export-hub")).toBe(true);
+    expect(slugs.has("availability-share")).toBe(true);
   });
 
   it("runtime file names follow the *Runtime.tsx convention", () => {

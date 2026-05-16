@@ -1,11 +1,16 @@
 /**
  * Validates the real seeded catalog:
  *  - Zod passes for every manifest
- *  - all 30+ manifests declare full 4-language coverage
+ *  - every manifest declares full 4-language coverage
  *  - no duplicate slugs
  *  - translations are actually different (not copy-paste placeholder)
  *  - paid addons declare a Stripe price env var name
  *  - role-gated plugins list at least one concrete role
+ *
+ * 2026-05-16 — Phase 1 cleanup shrank the catalog from 20 → 7 retained
+ * plugins. Role-coverage floors have been lowered accordingly. Phase 3
+ * (Variant A) will add 10 more plugins; raise the floors back up at that
+ * point so a regression in support/system_admin coverage is still caught.
  */
 
 import { describe, it, expect } from "vitest";
@@ -17,8 +22,8 @@ const manifests = listManifests();
 const realPlugins = manifests; // all registered plugins are now production plugins
 
 describe("Seeded catalog — global shape", () => {
-  it("at least 20 real plugins are registered", () => {
-    expect(realPlugins.length).toBeGreaterThanOrEqual(20);
+  it("at least 5 real plugins are registered (Phase 1 floor; raise to 17 after Phase 3)", () => {
+    expect(realPlugins.length).toBeGreaterThanOrEqual(5);
   });
 
   it("no duplicate slugs", () => {
@@ -66,7 +71,16 @@ describe("Seeded catalog — localization coverage", () => {
   });
 });
 
-describe("Seeded catalog — role coverage matrix", () => {
+describe("Seeded catalog — role coverage matrix (Phase 1 floors)", () => {
+  // After Phase 1 cleanup the retained 7 plugins cover roles as follows:
+  //   tenant_owner       — 5 (loyalty-stamps, shift-planner, task-board, export-hub, message-templates)
+  //   master             — 5 (task-board, availability-share, earnings-goal, export-hub, message-templates)
+  //   tenant_manager     — 4 (loyalty-stamps, shift-planner, task-board, export-hub)
+  //   support / techsup  — 1 (export-hub only)
+  //   system_admin       — 1 (export-hub only)
+  // Phase 3 lands sms-reminders / review-collector / inventory-lite / etc.
+  // and lifts all role floors back up. Raise the numbers below when that happens.
+
   it("has at least 5 plugins available for tenant_owner", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_owner")).length;
     expect(n).toBeGreaterThanOrEqual(5);
@@ -77,29 +91,26 @@ describe("Seeded catalog — role coverage matrix", () => {
     expect(n).toBeGreaterThanOrEqual(5);
   });
 
-  it("has at least 5 plugins available for support/technical_support", () => {
+  it("has at least 1 plugin available for support/technical_support (Phase 3 raises to 5)", () => {
     const n = realPlugins.filter(
       (m) => m.availableForRoles.includes("support") || m.availableForRoles.includes("technical_support"),
     ).length;
-    expect(n).toBeGreaterThanOrEqual(5);
+    expect(n).toBeGreaterThanOrEqual(1);
   });
 
-  it("has at least 5 plugins available for system_admin", () => {
+  it("has at least 1 plugin available for system_admin (Phase 3 raises to 5)", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("system_admin")).length;
-    expect(n).toBeGreaterThanOrEqual(5);
+    expect(n).toBeGreaterThanOrEqual(1);
   });
 
-  it("has at least 5 plugins available for tenant_manager", () => {
+  it("has at least 4 plugins available for tenant_manager (Phase 3 raises to 5)", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_manager")).length;
-    expect(n).toBeGreaterThanOrEqual(5);
+    expect(n).toBeGreaterThanOrEqual(4);
   });
 
-  it("has at least 4 universal plugins (available for 5+ roles)", () => {
-    // PR #84 (drop 4 duplicate plugins) intentionally tightened the catalog
-    // from 24 → 20 plugins; universal count moved from 5 → 4 as a result.
-    // Keep the floor here so a future drop is still caught.
+  it("has at least 1 universal plugin (available for 5+ roles) (Phase 3 raises to 4)", () => {
     const universal = realPlugins.filter((m) => m.availableForRoles.length >= 5);
-    expect(universal.length).toBeGreaterThanOrEqual(4);
+    expect(universal.length).toBeGreaterThanOrEqual(1);
   });
 });
 

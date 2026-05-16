@@ -14,11 +14,11 @@ import { renderWithLang } from "./helpers/renderWithLang";
 
 // Mock next/navigation
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ slug: "quick-notes" }),
+  useParams: () => ({ slug: "task-board" }),
   useRouter: () => ({ replace: vi.fn() }),
 }));
 
-// Mock tRPC — simulate an installed + enabled quick-notes plugin
+// Mock tRPC — simulate an installed + enabled task-board plugin
 // Note: DB row uses `pluginSlug` (not `slug`) to match the Drizzle schema.
 vi.mock("~/trpc/react", () => ({
   api: {
@@ -29,7 +29,7 @@ vi.mock("~/trpc/react", () => ({
           data: [
             {
               id: "inst_test_123",
-              pluginSlug: "quick-notes",
+              pluginSlug: "task-board",
               enabled: 1, // SQLite integer
               tenantId: "t_test",
               settingsJson: null,
@@ -48,11 +48,11 @@ vi.mock("~/trpc/react", () => ({
   },
 }));
 
-// Mock runtimePanels to return a simple stub component for quick-notes
+// Mock runtimePanels to return a simple stub component for task-board
 vi.mock("~/components/plugins/runtimePanels", () => ({
-  hasRuntime: (slug: string) => slug === "quick-notes",
+  hasRuntime: (slug: string) => slug === "task-board",
   loadRuntime: (slug: string) => {
-    if (slug === "quick-notes") {
+    if (slug === "task-board") {
       return function StubRuntime() {
         return <div data-testid="stub-runtime">Runtime content</div>;
       };

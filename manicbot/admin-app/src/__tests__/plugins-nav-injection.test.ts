@@ -34,9 +34,9 @@ function filterContributionsFor(
 }
 
 const basic: NavContribution = {
-  id: "plugin.quick-notes",
-  href: "/plugins/quick-notes/settings",
-  iconName: "StickyNote",
+  id: "plugin.task-board",
+  href: "/plugins/task-board/settings",
+  iconName: "LayoutGrid",
   labelKey: "self.name",
   roles: ["tenant_owner"],
 };

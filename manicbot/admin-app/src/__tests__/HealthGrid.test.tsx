@@ -39,11 +39,13 @@ describe("HealthGrid", () => {
     expect(d1Cell?.getAttribute("data-status")).toBe("ok");
   });
 
-  it("appends a plugins-health section when any manifest declares healthCheck", () => {
+  it("does NOT render a plugins-health section when no retained plugin declares healthCheck", () => {
+    // 2026-05-16 — the only seed-catalog plugins that declared healthCheck
+    // (ai-abuse-monitor, sla-tracker) were removed. Until Phase 3 ships a
+    // plugin with a real health check, this section must stay absent so
+    // we don't render an empty UI row.
     renderWithLang(<HealthGrid />);
-    // ai-abuse-monitor + sla-tracker declare healthCheck in seed catalog
-    const pluginsRow = screen.getByTestId("health-grid-plugins");
-    expect(pluginsRow).toBeTruthy();
+    expect(screen.queryByTestId("health-grid-plugins")).toBeNull();
   });
 
   it("renders in dark mode without crashing", () => {

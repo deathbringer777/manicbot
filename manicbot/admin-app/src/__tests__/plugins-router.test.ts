@@ -11,6 +11,18 @@
  *   - duplicate install → CONFLICT
  *   - settings size cap
  *   - every mutation writes to plugin_events
+ *
+ * 2026-05-16 cleanup notes:
+ *   - All retained plugins (post Phase 1) are tenant-scoped, `minPlan: "any"`,
+ *     `billing.model: "free"`. Substitutions:
+ *       google-calendar (master+owner, pro, included_in_plan) → message-templates (master+owner, any, free)
+ *       portfolio-gallery (master+owner, any, free)          → availability-share (master only)
+ *   - Tests that require a plan-gated plugin (`minPlan != "any"`), a
+ *     `system_admin`-only plugin, or a `scope: "platform"` plugin are
+ *     marked `it.skip` with a TODO pointing to Phase 3. They come back to
+ *     life once Variant A lands real paid plugins.
+ *   - For `free` plugins, the initial billing state is `not_applicable`
+ *     (only `included_in_plan` returns `included`).
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -39,6 +51,11 @@ import {
 
 const createCaller = createCallerFactory(pluginsRouter);
 
+// Slugs used across the suite. Keeping these as named constants makes future
+// substitutions a one-line change instead of a sed pass.
+const TENANT_PLUGIN = "message-templates";   // master + tenant_owner, free, scope=tenant
+const MASTER_ONLY_PLUGIN = "availability-share"; // master only, free, scope=tenant
+
 // ─── Auth / basic guards ────────────────────────────────────────────────────
 
 describe("pluginsRouter auth guards", () => {
@@ -52,7 +69,7 @@ describe("pluginsRouter auth guards", () => {
     const { db } = createDbMock();
     const caller = createCaller(makeUnauthCtx(db) as never);
     await expect(
-      caller.install({ slug: "google-calendar" }),
+      caller.install({ slug: TENANT_PLUGIN }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -71,35 +88,36 @@ describe("pluginsRouter.listCatalog", () => {
     const caller = createCaller(makeAdminCtx(db) as never);
     const cards = await caller.listCatalog({ lang: "en" });
     expect(cards.length).toBeGreaterThanOrEqual(3);
-    const gcal = cards.find((c) => c.slug === "google-calendar");
-    expect(gcal?.name).toBe("Google Calendar");
-    expect(gcal?.billingLabel).toBe("Included in plan");
+    const card = cards.find((c) => c.slug === TENANT_PLUGIN);
+    expect(card?.name).toBe("Message Templates");
+    expect(card?.billingLabel).toBe("Free");
   });
 
-  it("marks plan-locked plugins when tenant plan is insufficient", async () => {
+  it.skip("[Phase 3] marks plan-locked plugins when tenant plan is insufficient", async () => {
+    // No retained plugin has `minPlan != "any"`. Phase 3 ships sms-reminders
+    // (paid addon) and several included_in_plan plugins — re-enable then.
     const { db } = createDbMock([[{ plan: "start" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "ru" });
-    const gcal = cards.find((c) => c.slug === "google-calendar");
-    expect(gcal?.lock.kind).toBe("plan");
+    const planGated = cards.find((c) => c.lock.kind === "plan");
+    expect(planGated).toBeDefined();
   });
 
-  it("hides system_admin-only plugins from non-admin viewers entirely", async () => {
-    // Server-side filter strips plugins whose availableForRoles doesn't include
-    // the viewer's role, so tenant_owner never sees gdpr-center (system_admin-only).
+  it.skip("[Phase 3] hides system_admin-only plugins from non-admin viewers", async () => {
+    // No retained plugin is system_admin-only after the Phase 1 cleanup.
+    // gdpr-center was the only one and it was folded into core /admin/gdpr.
     const { db } = createDbMock([[{ plan: "pro" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "ru" });
-    const gdpr = cards.find((c) => c.slug === "gdpr-center");
-    expect(gdpr).toBeUndefined();
+    expect(cards.every((c) => c.slug !== "some-future-system-admin-plugin")).toBe(true);
   });
 
   it("falls back to ru when unknown lang is passed", async () => {
     const { db } = createDbMock([[{ plan: "pro" }], []]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "xx" as never });
-    const gcal = cards.find((c) => c.slug === "google-calendar");
-    expect(gcal?.tagline).toBe("Синхронизируйте записи с Google Календарём в реальном времени");
+    const card = cards.find((c) => c.slug === TENANT_PLUGIN);
+    expect(card?.tagline).toBe("Готовые тексты для частых ситуаций — одним кликом");
   });
 
   it("installedOnly filter returns empty when none installed", async () => {
@@ -113,29 +131,33 @@ describe("pluginsRouter.listCatalog", () => {
 // ─── install happy path ─────────────────────────────────────────────────────
 
 describe("pluginsRouter.install — happy paths", () => {
-  it("tenant_owner installs google-calendar for their tenant", async () => {
+  it("tenant_owner installs a tenant-scoped plugin for their tenant", async () => {
+    // TENANT_PLUGIN has minPlan="any", so no plan-gate select fires.
+    // Only the duplicate-check select runs before the install inserts.
     const { db, insertCalls } = createDbMock([
-      [{ plan: "pro" }], // plan gate lookup
-      [],                // existing-install check (no duplicates)
+      [], // existing-install check (no duplicates)
     ]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
-    const r = await caller.install({ slug: "google-calendar", tenantId: "t_pro" });
+    const r = await caller.install({ slug: TENANT_PLUGIN, tenantId: "t_pro" });
     expect(r.id).toMatch(/.+/);
-    expect(r.billingState).toBe("included"); // included_in_plan billing model
+    // Free plugin → initial billing state is "not_applicable" (only
+    // included_in_plan returns "included"; only paid addons return "trialing").
+    expect(r.billingState).toBe("not_applicable");
     // 1st insert = plugin_installations, 2nd = plugin_events (installed)
     expect(insertCalls.length).toBeGreaterThanOrEqual(2);
     const installRow = insertCalls[0]!.values as Record<string, unknown>;
-    expect(installRow.pluginSlug).toBe("google-calendar");
+    expect(installRow.pluginSlug).toBe(TENANT_PLUGIN);
     expect(installRow.tenantId).toBe("t_pro");
     expect(installRow.enabled).toBe(1);
     const eventRow = insertCalls[1]!.values as Record<string, unknown>;
     expect(eventRow.event).toBe("installed");
   });
 
-  it("system_admin installs gdpr-center at platform scope", async () => {
-    const { db, insertCalls } = createDbMock([[]]); // no dup check
+  it.skip("[Phase 3] system_admin installs a platform-scoped plugin", async () => {
+    // No retained plugin has scope=platform. Phase 3 may add one.
+    const { db, insertCalls } = createDbMock([[]]);
     const caller = createCaller(makeAdminCtx(db) as never);
-    const r = await caller.install({ slug: "gdpr-center", tenantId: null });
+    const r = await caller.install({ slug: "some-platform-plugin-from-phase-3", tenantId: null });
     expect(r.id).toMatch(/.+/);
     const installRow = insertCalls[0]!.values as Record<string, unknown>;
     expect(installRow.tenantId).toBe(null);
@@ -145,11 +167,12 @@ describe("pluginsRouter.install — happy paths", () => {
 // ─── install security rejections ────────────────────────────────────────────
 
 describe("pluginsRouter.install — security rejections", () => {
-  it("rejects platform install from non-admin", async () => {
+  it.skip("[Phase 3] rejects platform install from non-admin", async () => {
+    // Requires a scope=platform plugin in the registry. None retained.
     const { db } = createDbMock();
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "gdpr-center", tenantId: null }),
+      caller.install({ slug: "some-platform-plugin-from-phase-3", tenantId: null }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -157,16 +180,15 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock([[{ plan: "pro" }]]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_mine") as never);
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: "t_other" }),
+      caller.install({ slug: TENANT_PLUGIN, tenantId: "t_other" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("platform plugin install auto-scopes to null even when tenantId is passed", async () => {
-    // New behaviour: platform plugins always land at tenant_id=null regardless
-    // of the tenantId hint, so admin's own salon-tenant doesn't break install.
-    const { db, insertCalls } = createDbMock([[]]); // dup check returns empty
+  it.skip("[Phase 3] platform plugin install auto-scopes to null even when tenantId is passed", async () => {
+    // Requires a scope=platform plugin. None retained.
+    const { db, insertCalls } = createDbMock([[]]);
     const caller = createCaller(makeAdminCtx(db) as never);
-    const r = await caller.install({ slug: "gdpr-center", tenantId: "t_any" });
+    const r = await caller.install({ slug: "some-platform-plugin-from-phase-3", tenantId: "t_any" });
     expect(r.id).toMatch(/.+/);
     const row = insertCalls[0]!.values as Record<string, unknown>;
     expect(row.tenantId).toBeNull();
@@ -176,36 +198,40 @@ describe("pluginsRouter.install — security rejections", () => {
     const { db } = createDbMock();
     const caller = createCaller(makeAdminCtx(db) as never);
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: null }),
+      caller.install({ slug: TENANT_PLUGIN, tenantId: null }),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
-  it("rejects plan-gated plugin on a lower plan (tenant_owner on start)", async () => {
+  it.skip("[Phase 3] rejects plan-gated plugin on a lower plan", async () => {
+    // No retained plugin has minPlan != "any". Phase 3 sms-reminders /
+    // multi-location etc. are paid addons that re-enable this test.
     const { db } = createDbMock([[{ plan: "start" }]]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_start") as never);
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: "t_start" }),
+      caller.install({ slug: "some-pro-only-plugin-from-phase-3", tenantId: "t_start" }),
     ).rejects.toMatchObject({ code: "PAYMENT_REQUIRED" });
   });
 
-  it("rejects role-unavailable plugin (tenant_manager cannot install google-calendar)", async () => {
+  it("rejects role-unavailable plugin (tenant_manager cannot install master+owner-only plugin)", async () => {
+    // TENANT_PLUGIN (message-templates) is restricted to availableForRoles=
+    // ["master", "tenant_owner"]. tenant_manager is not in the list → FORBIDDEN.
     const { db } = createDbMock([[{ plan: "pro" }]]);
     const caller = createCaller(makeTenantManagerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: "t_pro" }),
+      caller.install({ slug: TENANT_PLUGIN, tenantId: "t_pro" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("system_admin bypasses the role-availability gate", async () => {
-    // portfolio-gallery is restricted to availableForRoles=["master","tenant_owner"],
-    // but system_admin should STILL be able to install for testing/support.
-    // minPlan is "any", so the plan lookup is skipped — we only need the dup
-    // check mock to return empty.
+    // MASTER_ONLY_PLUGIN (availability-share) is restricted to
+    // availableForRoles=["master"], but system_admin should STILL be able to
+    // install it for testing/support. minPlan is "any", so the plan lookup is
+    // skipped — we only need the dup check mock to return empty.
     const { db, insertCalls } = createDbMock([
       [], // dup check (no existing install)
     ]);
     const caller = createCaller(makeAdminCtx(db) as never);
-    const r = await caller.install({ slug: "portfolio-gallery", tenantId: "t_test" });
+    const r = await caller.install({ slug: MASTER_ONLY_PLUGIN, tenantId: "t_test" });
     expect(r.id).toMatch(/.+/);
     expect(insertCalls.length).toBeGreaterThanOrEqual(2);
   });
@@ -213,11 +239,11 @@ describe("pluginsRouter.install — security rejections", () => {
   it("rejects duplicate install (CONFLICT)", async () => {
     const { db } = createDbMock([
       [{ plan: "pro" }],
-      [{ id: "pi_existing", pluginSlug: "google-calendar", tenantId: "t_pro", enabled: 1 }],
+      [{ id: "pi_existing", pluginSlug: TENANT_PLUGIN, tenantId: "t_pro", enabled: 1 }],
     ]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: "t_pro" }),
+      caller.install({ slug: TENANT_PLUGIN, tenantId: "t_pro" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -226,7 +252,7 @@ describe("pluginsRouter.install — security rejections", () => {
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     const huge = { blob: "x".repeat(9 * 1024) };
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: "t_pro", settings: huge }),
+      caller.install({ slug: TENANT_PLUGIN, tenantId: "t_pro", settings: huge }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
@@ -244,7 +270,7 @@ describe("pluginsRouter.install — security rejections", () => {
 const ROW_LIVE = {
   id: "pi_1",
   tenantId: "t_pro",
-  pluginSlug: "google-calendar",
+  pluginSlug: TENANT_PLUGIN,
   enabled: 1,
   version: "1.0.0",
   installedBy: "w_owner",
@@ -324,18 +350,18 @@ describe("pluginsRouter.uninstall/enable/disable/updateSettings", () => {
 // ─── Master on personal tenant can install ─────────────────────────────────
 
 describe("Personal master can install on their tenant only", () => {
-  it("master on personal tenant can install google-calendar (compatible plugin)", async () => {
-    // google-calendar includes master in availableForRoles; minPlan=pro.
+  it("master on personal tenant can install a compatible plugin", async () => {
+    // TENANT_PLUGIN includes master in availableForRoles; minPlan="any".
     // Personal tenant isPersonal=1 allows the master to write to their own tenant.
+    // No plan-gate select fires because minPlan="any".
     const { db, insertCalls } = createDbMock([
       [{ isPersonal: 1 }],   // assertCanWriteScope personal check
-      [{ plan: "pro" }],     // plan lookup
       [],                    // duplicate check
     ]);
     const caller = createCaller(makeMasterCtx(db, "t_personal") as never);
-    const r = await caller.install({ slug: "google-calendar", tenantId: "t_personal" });
+    const r = await caller.install({ slug: TENANT_PLUGIN, tenantId: "t_personal" });
     expect(r.id).toMatch(/.+/);
-    expect(insertCalls[0]!.values.pluginSlug).toBe("google-calendar");
+    expect(insertCalls[0]!.values.pluginSlug).toBe(TENANT_PLUGIN);
   });
 
   it("master on non-personal tenant cannot install", async () => {
@@ -344,7 +370,7 @@ describe("Personal master can install on their tenant only", () => {
     ]);
     const caller = createCaller(makeMasterCtx(db, "t_salon") as never);
     await expect(
-      caller.install({ slug: "google-calendar", tenantId: "t_salon" }),
+      caller.install({ slug: TENANT_PLUGIN, tenantId: "t_salon" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
@@ -352,20 +378,21 @@ describe("Personal master can install on their tenant only", () => {
 // ─── getInstalled returns visible rows ─────────────────────────────────────
 
 describe("pluginsRouter.getInstalled", () => {
-  it("returns platform + tenant rows for a tenant user", async () => {
+  it("returns tenant rows for a tenant user", async () => {
     const rows = [
-      { ...ROW_LIVE, id: "pi_tenant", tenantId: "t_pro", pluginSlug: "google-calendar" },
-      { ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "gdpr-center" },
+      { ...ROW_LIVE, id: "pi_tenant_a", tenantId: "t_pro", pluginSlug: TENANT_PLUGIN },
+      { ...ROW_LIVE, id: "pi_tenant_b", tenantId: "t_pro", pluginSlug: MASTER_ONLY_PLUGIN },
     ];
     const { db } = createDbMock([rows]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
     const r = await caller.getInstalled();
     expect(r.length).toBe(2);
-    expect(r.map((x) => x.id).sort()).toEqual(["pi_platform", "pi_tenant"]);
+    expect(r.map((x) => x.id).sort()).toEqual(["pi_tenant_a", "pi_tenant_b"]);
   });
 
-  it("returns only platform rows for a user with no tenantId", async () => {
-    const rows = [{ ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "gdpr-center" }];
+  it.skip("[Phase 3] returns only platform rows for a user with no tenantId", async () => {
+    // Requires a scope=platform plugin in the registry. None retained.
+    const rows = [{ ...ROW_LIVE, id: "pi_platform", tenantId: null, pluginSlug: "some-platform-plugin-from-phase-3" }];
     const { db } = createDbMock([rows]);
     const caller = createCaller(makeAdminCtx(db) as never);
     const r = await caller.getInstalled();

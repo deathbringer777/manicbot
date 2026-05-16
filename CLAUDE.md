@@ -190,7 +190,9 @@ Billing models: `free | included_in_plan (→ canUse) | paid_addon_monthly | pai
 
 Lock precedence (catalog UI): `coming_soon` > `role_mismatch` > `platform_only` > `plan` > `none`.
 
-Seed catalog: 22 first-party plugins across 6 role buckets — see `manicbot/plugins/registry.ts`.
+Seed catalog (post 2026-05-16 Phase 1 cleanup): **7 retained first-party plugins** (loyalty-stamps, shift-planner, task-board, availability-share, earnings-goal, export-hub, message-templates). 13 prior slugs were either duplicates of already-shipped core features (`google-calendar`, `booking-reminder`, `client-crm-lite`, `quick-notes`) or had their UI folded back into core (`ai-abuse-monitor`, `gdpr-center`, `sla-tracker`, `escalation-playbook`, `kb-search`, `ticket-templates`, `keyboard-shortcuts`, `dark-plus`, `portfolio-gallery`). The fold-into-core work itself ships in a follow-up PR — see [manicbot/plugins/registry.ts](manicbot/plugins/registry.ts) header + [manicbot/admin-app/src/__tests__/plugins-removed-duplicates.test.ts](manicbot/admin-app/src/__tests__/plugins-removed-duplicates.test.ts) for the full removed-slug list and rationale.
+
+The Variant A roadmap (recommended for the next launch slot) adds 10 more plugins on top — including the platform's first `paid_addon_monthly` / `paid_addon_onetime` revenue lines: `sms-reminders` (hybrid BYO / Resale Premium billing), `review-collector`, `instagram-autopost`, `inventory-lite`, `loyalty-stamps` (real rebuild), `gift-cards`, `multi-location`, `accounting-export`, `domain-setup`, `data-migration`. Phase 2 plumbing must land before any of those plugins can ship a real backend — the four `PLUGIN_*_LOADERS` maps in `registry.ts` are currently empty and need to be wired through to the admin-app router and worker.
 
 ---
 

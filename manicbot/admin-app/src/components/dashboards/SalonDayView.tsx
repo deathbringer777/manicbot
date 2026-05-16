@@ -214,6 +214,10 @@ export function SalonDayView({
   const isToday = isoDate === todayIso;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
+  // Mobile scroll indicator — tracks which master column is currently most
+  // visible in the horizontal scroll container.
+  const [activeColIdx, setActiveColIdx] = useState(0);
+
   // Master-visibility state. Source-of-truth precedence:
   //   1. props from the parent (CalendarLeftRail shares the same hook),
   //   2. fallback internal state for legacy callers that don't pass props.
@@ -311,6 +315,20 @@ export function SalonDayView({
     () => allMasterColumns.filter((c) => c.master.chatId === -1 || !hiddenMasterIds.has(c.master.chatId as number)),
     [allMasterColumns, hiddenMasterIds],
   );
+
+  // Mobile column width — matches the min-w-[100px] Tailwind class on each column.
+  const MOBILE_COL_WIDTH = 100;
+
+  // Horizontal scroll handler for the mobile dot indicator.
+  // `masterColumns` is in scope here (defined above).
+  const handleGridScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const sl = e.currentTarget.scrollLeft;
+    const idx = Math.min(
+      masterColumns.length - 1,
+      Math.max(0, Math.floor(sl / MOBILE_COL_WIDTH)),
+    );
+    setActiveColIdx(idx);
+  };
 
   const locale =
     lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU";
@@ -447,14 +465,45 @@ export function SalonDayView({
         </div>
       )}
 
+      {/* Mobile scroll indicator — dots, one per visible master column.
+          Tapping a dot scrolls the grid to that column. Hidden on sm+. */}
+      {masterColumns.length > 1 && (
+        <div className="flex items-center justify-center gap-2 sm:hidden" aria-hidden>
+          {masterColumns.map(({ master, tone }, i) => (
+            <button
+              key={master.chatId}
+              type="button"
+              onClick={() => {
+                scrollerRef.current?.scrollTo({
+                  left: i * MOBILE_COL_WIDTH,
+                  behavior: "smooth",
+                });
+                setActiveColIdx(i);
+              }}
+              className="rounded-full transition-all focus:outline-none"
+              style={{
+                height: 6,
+                width: i === activeColIdx ? 20 : 6,
+                background: i === activeColIdx ? tone.text : tone.border,
+                opacity: i === activeColIdx ? 1 : 0.45,
+              }}
+              title={master.name ?? `#${master.chatId}`}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Hour grid + master columns */}
       {masterColumns.length > 0 && (
         <div
           ref={scrollerRef}
+          onScroll={handleGridScroll}
           className="glass-card rounded-2xl overflow-auto"
           style={{ maxHeight: "calc(100vh - 280px)" }}
         >
-          <div className="flex" style={{ minWidth: 80 + masterColumns.length * 180 }}>
+          {/* minWidth uses 100px per column (mobile-safe). On sm+ screens,
+              sm:min-w-[180px] on each column expands them via flex. */}
+          <div className="flex" style={{ minWidth: 80 + masterColumns.length * MOBILE_COL_WIDTH }}>
             {/* Hour scale */}
             <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
               <div className="h-12 border-b border-slate-200 dark:border-white/10" />
@@ -474,7 +523,7 @@ export function SalonDayView({
               {masterColumns.map(({ master, tone, apts: list }, idx) => (
                 <div
                   key={master.chatId}
-                  className="flex-1 min-w-[180px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative"
+                  className="flex-1 min-w-[100px] sm:min-w-[180px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative"
                   data-testid="day-view-master-column"
                   data-master-id={master.chatId}
                 >

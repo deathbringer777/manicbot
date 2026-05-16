@@ -8,6 +8,7 @@ import {
   Loader2, Plus, Pencil, Trash2, Save, X,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
+  Palette, Phone, Instagram as InstagramIcon, Clock,
 } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
@@ -45,6 +46,13 @@ import { EmptyState } from "~/components/ui/EmptyState";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 import { NAIL_EMOJIS } from "~/lib/appointments";
+import {
+  WEEKDAY_KEYS,
+  DEFAULT_WORK_HOURS,
+  hydrateWorkHours,
+  serializeWorkHours,
+  type WorkHoursState,
+} from "~/lib/workHours";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -676,6 +684,8 @@ function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null 
   return null;
 }
 
+const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const utils = api.useUtils();
@@ -693,6 +703,20 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const [slugChecked, setSlugChecked] = useState<boolean | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const [newPhotoUrl, setNewPhotoUrl] = useState("");
+  // Branding section
+  const [logo, setLogo] = useState("");
+  const [coverPhoto, setCoverPhoto] = useState("");
+  const [brandPrimary, setBrandPrimary] = useState("");
+  const [brandBg, setBrandBg] = useState("");
+  const [brandText, setBrandText] = useState("");
+  // Contacts section
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [instagramUrl, setInstagramUrl] = useState("");
+  // Schedule section
+  const [workHours, setWorkHours] = useState<WorkHoursState>(DEFAULT_WORK_HOURS);
+  // Field-level validation errors (key → message)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const data = profile.data as any;
 
@@ -713,6 +737,19 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       }
       setIsPublic(!!data.publicActive);
       setPhotos(Array.isArray(data.photos) ? data.photos : []);
+      // Branding
+      setLogo(data.logo ?? "");
+      setCoverPhoto(data.coverPhoto ?? "");
+      setBrandPrimary(data.brandPalette?.primary ?? "");
+      setBrandBg(data.brandPalette?.bg ?? "");
+      setBrandText(data.brandPalette?.text ?? "");
+      // Contacts
+      setAddress(data.salon?.address ?? "");
+      setPhone(data.salon?.phone ?? "");
+      setInstagramUrl(data.instagramUrl ?? "");
+      // Schedule
+      setWorkHours(hydrateWorkHours(data.salon?.workHours));
+      setFieldErrors({});
     }
   }, [data, editing]);
 
@@ -758,8 +795,27 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
     return true;
   }
 
+  function validateExtras(): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (logo && !/^https:\/\//.test(logo)) errs.logo = t("salon.publicProfile.urlHttpsError", lang);
+    if (coverPhoto && !/^https:\/\//.test(coverPhoto)) errs.coverPhoto = t("salon.publicProfile.urlHttpsError", lang);
+    if (brandPrimary && !HEX_RE.test(brandPrimary)) errs.brandPrimary = t("salon.publicProfile.hexError", lang);
+    if (brandBg && !HEX_RE.test(brandBg)) errs.brandBg = t("salon.publicProfile.hexError", lang);
+    if (brandText && !HEX_RE.test(brandText)) errs.brandText = t("salon.publicProfile.hexError", lang);
+    if (instagramUrl && !/^https:\/\/(www\.)?instagram\.com\//.test(instagramUrl)) {
+      errs.instagramUrl = t("salon.publicProfile.instagramError", lang);
+    }
+    return errs;
+  }
+
   function handleSave() {
     if (!validateSlug(slug)) return;
+    const extras = validateExtras();
+    if (Object.keys(extras).length) {
+      setFieldErrors(extras);
+      return;
+    }
+    setFieldErrors({});
     // Client-side pre-check: if trying to enable publishing without a ready
     // profile, surface the red banner without round-tripping to the server.
     if (isPublic) {
@@ -774,6 +830,21 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       }
     }
     setPublishError(null);
+
+    // Brand palette: required `primary` per server schema, so only send a
+    // palette object when primary is present. Otherwise emit `null` to clear.
+    let brandPalette: { primary: string; bg?: string; text?: string } | null | undefined;
+    if (brandPrimary) {
+      brandPalette = { primary: brandPrimary };
+      if (brandBg) brandPalette.bg = brandBg;
+      if (brandText) brandPalette.text = brandText;
+    } else if (brandBg || brandText) {
+      // Partial palette without primary — drop silently rather than error.
+      brandPalette = undefined;
+    } else {
+      brandPalette = null;
+    }
+
     update.mutate({
       tenantId,
       slug: slug || undefined,
@@ -784,6 +855,17 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       mapsUrl: mapsUrl.startsWith("http") ? mapsUrl : undefined,
       publicActive: isPublic ? 1 : 0,
       photos,
+      // Branding
+      logo: logo || "",
+      coverPhoto: coverPhoto || "",
+      brandPalette,
+      // Contacts (stored under tenants.salon JSON + tenant_config)
+      address: address || "",
+      phone: phone || "",
+      instagramUrl: instagramUrl || "",
+      // Schedule (per-day JSON string under tenants.salon.workHours +
+      // tenant_config.work_hours).
+      workHours: serializeWorkHours(workHours),
     });
   }
 
@@ -971,6 +1053,145 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               {mapsUrl && !parsedCoords && (
                 <p className="text-xs text-amber-400 mt-1">{t("salon.publicProfile.coordsBad", lang)}</p>
               )}
+            </div>
+
+            {/* Branding section: logo / cover / brand palette */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Palette className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.brandingSection", lang)}</h4>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.logoUrl", lang)}</label>
+                <input value={logo} onChange={(e) => setLogo(e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {fieldErrors.logo && <p className="text-xs text-red-400 mt-1">{fieldErrors.logo}</p>}
+                {logo && /^https:\/\//.test(logo) && (
+                  <img src={logo} alt="logo preview" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 mt-2" />
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.coverUrl", lang)}</label>
+                <input value={coverPhoto} onChange={(e) => setCoverPhoto(e.target.value)}
+                  placeholder="https://example.com/cover.jpg"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {fieldErrors.coverPhoto && <p className="text-xs text-red-400 mt-1">{fieldErrors.coverPhoto}</p>}
+                {coverPhoto && /^https:\/\//.test(coverPhoto) && (
+                  <img src={coverPhoto} alt="cover preview" className="h-16 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700 mt-2" />
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: "brandPrimary", label: t("salon.publicProfile.brandPrimary", lang), value: brandPrimary, setter: setBrandPrimary },
+                  { key: "brandBg", label: t("salon.publicProfile.brandBg", lang), value: brandBg, setter: setBrandBg },
+                  { key: "brandText", label: t("salon.publicProfile.brandText", lang), value: brandText, setter: setBrandText },
+                ].map(({ key, label, value, setter }) => (
+                  <div key={key}>
+                    <label className="text-[10px] text-slate-500 dark:text-slate-400 mb-1 block">{label}</label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="color"
+                        value={HEX_RE.test(value) ? value : "#000000"}
+                        onChange={(e) => setter(e.target.value)}
+                        aria-label={label}
+                        className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent cursor-pointer"
+                      />
+                      <input
+                        value={value}
+                        onChange={(e) => setter(e.target.value)}
+                        placeholder="#000000"
+                        className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-2 text-xs font-mono text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                      />
+                    </div>
+                    {fieldErrors[key] && <p className="text-[10px] text-red-400 mt-1">{fieldErrors[key]}</p>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500">{t("salon.publicProfile.hexHint", lang)}</p>
+            </div>
+
+            {/* Contacts section: address / phone / instagram */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.contactsSection", lang)}</h4>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.address", lang)}</label>
+                <input value={address} onChange={(e) => setAddress(e.target.value)}
+                  placeholder="ul. Marszałkowska 1, Warszawa"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.phone", lang)}</label>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+48 600 000 000"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <InstagramIcon className="h-3.5 w-3.5 text-pink-400" />
+                  {t("salon.publicProfile.instagramUrl", lang)}
+                </label>
+                <input value={instagramUrl} onChange={(e) => setInstagramUrl(e.target.value)}
+                  placeholder="https://instagram.com/your_salon"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {fieldErrors.instagramUrl && <p className="text-xs text-red-400 mt-1">{fieldErrors.instagramUrl}</p>}
+                <p className="text-[10px] text-slate-500 mt-1">{t("salon.publicProfile.instagramHint", lang)}</p>
+              </div>
+            </div>
+
+            {/* Schedule section: per-day work hours */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.scheduleSection", lang)}</h4>
+              </div>
+              <p className="text-[11px] text-slate-500">{t("salon.publicProfile.scheduleHint", lang)}</p>
+              <div className="space-y-2">
+                {WEEKDAY_KEYS.map((day) => {
+                  const value = workHours[day];
+                  const isOff = value === null;
+                  return (
+                    <div key={day} data-testid={`workhours-row-${day}`} className="flex items-center gap-2">
+                      <span className="w-24 shrink-0 text-xs text-slate-700 dark:text-slate-300">{t(`salon.publicProfile.day.${day}`, lang)}</span>
+                      <button
+                        type="button"
+                        aria-label={t("salon.publicProfile.dayOff", lang)}
+                        onClick={() => setWorkHours((prev) => ({
+                          ...prev,
+                          [day]: isOff ? { open: "09:00", close: "18:00" } : null,
+                        }))}
+                        className={`shrink-0 relative h-5 w-9 rounded-full transition-colors ${isOff ? "bg-slate-300 dark:bg-slate-700" : "bg-brand-500"}`}
+                      >
+                        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isOff ? "translate-x-0.5" : "translate-x-[18px]"}`} />
+                      </button>
+                      {isOff ? (
+                        <span className="flex-1 text-xs text-slate-500 italic">{t("salon.publicProfile.dayOff", lang)}</span>
+                      ) : (
+                        <>
+                          <input
+                            type="time"
+                            aria-label={`${t(`salon.publicProfile.day.${day}`, lang)} ${t("salon.publicProfile.opens", lang)}`}
+                            value={value.open}
+                            onChange={(e) => setWorkHours((prev) => ({ ...prev, [day]: { ...value, open: e.target.value } }))}
+                            className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                          />
+                          <span className="text-xs text-slate-500">—</span>
+                          <input
+                            type="time"
+                            aria-label={`${t(`salon.publicProfile.day.${day}`, lang)} ${t("salon.publicProfile.closes", lang)}`}
+                            value={value.close}
+                            onChange={(e) => setWorkHours((prev) => ({ ...prev, [day]: { ...value, close: e.target.value } }))}
+                            className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Photos */}

@@ -180,7 +180,9 @@ function ChatBubble({ from, text }: { from: string; text: string }) {
 
 export function BotFatherGuide() {
   const { lang } = useLang();
-  const [expanded, setExpanded] = useState(true);
+  // Default collapsed — the guide now sits below the connect form,
+  // so the salon owner sees the form first and expands the guide on demand.
+  const [expanded, setExpanded] = useState(false);
   const steps = STEPS[lang] ?? STEPS.en;
 
   return (

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { t, LANGS } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
 import { api } from "~/trpc/react";
@@ -567,6 +568,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
   const { role, previewRole } = useRole();
   const { lang } = useLang();
+  const { prefs: dashboardPrefs } = useDashboardPrefs();
   const activeNavItems = navItems ?? buildGodModeNavItems(lang);
   const displayTitle = title ?? "ManicBot";
   /** Creator in plain God Mode: language + preview mode live on /settings, not in the chrome (avoids clash with Settings tab). */
@@ -576,14 +578,39 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
   useEffect(() => { setAdmin(getAdminInfo()); }, []);
 
-  // Mobile: keep Settings visible because creator preview/language live there.
-  const mobileNavItems = activeNavItems.length <= 5
-    ? activeNavItems
-    : (() => {
-        const settingsItem = activeNavItems.find((item) => item.href === "/settings");
-        const leading = activeNavItems.filter((item) => item.href !== "/settings").slice(0, 4);
-        return settingsItem ? [...leading, settingsItem] : activeNavItems.slice(0, 5);
-      })();
+  // Mobile: keep Settings visible because creator preview/language live
+  // there. Honour the user's saved bottom-nav order from Settings →
+  // Appearance — falls back to the legacy "first 4 + Settings" slice
+  // when no customisation is set, which preserves the previous
+  // behavior byte-for-byte for the zero-prefs case.
+  const mobileNavItems = (() => {
+    const settingsItem =
+      activeNavItems.find((item) => item.href === "/settings") ?? activeNavItems[activeNavItems.length - 1];
+    if (
+      dashboardPrefs.bottomNavLayout === "custom"
+      && dashboardPrefs.bottomNavOrder.length > 0
+    ) {
+      const byHref = new Map(activeNavItems.map((n) => [n.href, n]));
+      const chosen: typeof activeNavItems = [];
+      const seen = new Set<string>();
+      for (const href of dashboardPrefs.bottomNavOrder) {
+        if (seen.has(href)) continue;
+        const item = byHref.get(href);
+        if (!item) continue;
+        seen.add(href);
+        chosen.push(item);
+        if (chosen.length >= 5) break;
+      }
+      if (settingsItem && !seen.has(settingsItem.href)) {
+        if (chosen.length >= 5) chosen.pop();
+        chosen.push(settingsItem);
+      }
+      if (chosen.length > 0) return chosen;
+    }
+    if (activeNavItems.length <= 5) return activeNavItems;
+    const leading = activeNavItems.filter((item) => item.href !== "/settings").slice(0, 4);
+    return settingsItem ? [...leading, settingsItem] : activeNavItems.slice(0, 5);
+  })();
 
   return (
     <div className="flex h-screen w-full flex-col md:flex-row bg-[var(--background)] text-[var(--foreground)] overflow-hidden">

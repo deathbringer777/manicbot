@@ -570,6 +570,40 @@ Password reset:
 
 ---
 
+## Customizable mobile bottom-nav (2026-05-16)
+
+Both shells — `WebShell` (web admin, `lg:` 1024px breakpoint — iPad portrait
+falls into mobile) and `Shell` (Telegram Mini App, `md:` 768px) — now read
+the user's saved bottom-nav order from `useDashboardPrefs()` instead of
+slicing the first 5 nav items themselves.
+
+**Hook:** `manicbot/admin-app/src/lib/useDashboardPrefs.ts` extends the
+`DashboardPrefs` interface with `bottomNavOrder: string[]` and
+`bottomNavLayout: "default" | "custom"`. `BOTTOM_NAV_LIMIT = 5` is the
+documented cap. `setBottomNav(order)` dedupes, clamps, and switches the
+layout flag to `"custom"`; `resetBottomNav()` returns to the role
+default. Persistence is tenant-scoped localStorage — same pattern as
+the existing `hiddenTabs` field, no migration needed.
+
+**Derivation:** `useNavItems()` now returns `mobileNav: NavItem[]` in
+addition to the existing `groups / flat / settings`. `mobileNav` is the
+ordered list rendered in the mobile bottom-bar. When `bottomNavLayout
+=== "default"` it's the legacy "first 4 + Settings" slice (zero
+regression); when `"custom"` it honours `bottomNavOrder`, filters
+against current role-allowed items (so a hidden tab can't resurrect via
+a stale customisation), and always appends Settings as the chrome
+safety belt — the user cannot lock themselves out of the settings panel
+that controls this preference.
+
+**Settings UI:** `AppearanceSection.tsx` gains a fourth section
+"Нижняя навигация (мобильная)" — toggle visibility per item, drag-handle
++ up/down chevrons for reorder, locked Settings row at the top, live
+preview of the bar, "Сбросить в стандартный порядок" button. Drag uses
+inline pointer events (no `dnd-kit` dep). Capacity counter (`N / 5`)
+plus FIFO behaviour at cap with a localized warning string.
+
+---
+
 ## Local checks (before deploy)
 
 ```bash

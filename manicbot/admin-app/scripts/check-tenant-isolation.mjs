@@ -110,13 +110,13 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:937 — bot_id collision check across tenants (intentional global
+  // salon.ts:964 — bot_id collision check across tenants (intentional global
   // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
   // gated; this read confirms the bot isn't already claimed by SOMEONE ELSE
-  // before we accept it. Line drift history: 883 → 913 (PRs #66/#67) →
-  // 920 (public-profile editor + IG URL + workHours cap) →
-  // 937 (URL hardening regexes + comments for logo/coverPhoto/instagramUrl).
-  "src/server/api/routers/salon.ts:937",
+  // before we accept it. Line drift history: 883 → 913 → 920 → 937 → 964
+  // (after the master-invitation imports landed alongside the URL-hardening
+  // regexes from the clients/public-profile PR).
+  "src/server/api/routers/salon.ts:964",
   // tenantStaff.ts:366 — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

@@ -1,0 +1,41 @@
+-- Migration 0065 — web_users.password_encrypted: reversibly-encrypted password
+-- column for salon-owned master accounts.
+--
+-- Why:
+--   • Product requirement: when a salon creates a master account itself
+--     (origin='salon_created'), the account is the SALON's property, not the
+--     master's. The salon owner must be able to retrieve / change the master's
+--     password under OTP gate, and the master themselves must NOT be able to
+--     change their own password (those accounts are managed by the salon).
+--   • Today's `password_hash` is PBKDF2-SHA256 — one-way. We cannot show the
+--     salon the existing password. The new column stores an AES-GCM-encrypted
+--     copy of the plaintext password, gated by the BOT_ENCRYPTION_KEY worker
+--     secret (HKDF subkey label 'master-password-v1', mirroring the
+--     channel_configs pattern).
+--   • Both columns are written together by salon-side flows:
+--       - salon.createMasterAccount: sets password_hash AND password_encrypted
+--       - salon.resetMasterPassword: rotates both
+--       - salon.peekMasterPassword: decrypts password_encrypted under OTP
+--   • Non-salon-created masters (origin='invited_*' / 'self_registered') leave
+--     password_encrypted = NULL. Their password is owned by the master and
+--     follows the standard self-service flow (forgot-password / change-password).
+--
+-- Security trade-off acknowledged (documented in SECURITY_FINDINGS.md):
+--   Reversibly-encrypted password storage IS weaker than one-way hashing alone.
+--   Mitigations:
+--     a) Encryption key is a Worker secret (BOT_ENCRYPTION_KEY), never in
+--        source, never logged.
+--     b) HKDF subkey domain-separation prevents cross-domain reuse.
+--     c) Read access is OTP-gated and audit-logged.
+--     d) ONLY salon-created accounts use this column. Masters who own their
+--        own credentials never have a recoverable copy in D1.
+--   If BOT_ENCRYPTION_KEY ever leaks, this column AND every channel token
+--   become compromised at once. Rotation runbook: /admin/rotate-encryption-key
+--   re-encrypts D1+KV blobs; same procedure covers password_encrypted.
+--
+-- Schema:
+--   password_encrypted: AES-GCM ciphertext, base64-encoded, with the standard
+--   'v1$' version prefix produced by deriveSubkey/encryptToken in
+--   src/utils/security.js. NULL for non-salon-created accounts.
+
+ALTER TABLE web_users ADD COLUMN password_encrypted TEXT;

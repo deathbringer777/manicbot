@@ -1,16 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { AlertCircle, Loader2, X } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { AlertCircle, Loader2, X, CheckCircle2 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { SectionHeader } from "~/components/salon/SalonShared";
 import { t, type Lang } from "~/lib/i18n";
+import { TrialBanner } from "./BillingTab/TrialBanner";
+import { CycleToggle, type BillingCycle } from "./BillingTab/CycleToggle";
+import { PlanCard, type PlanCardData, type PlanId } from "./BillingTab/PlanCard";
+import { SubscriptionManagement } from "./BillingTab/SubscriptionManagement";
+import { EmbeddedCheckoutModal, hasEmbeddedCheckout } from "./BillingTab/EmbeddedCheckoutModal";
 
 interface BillingData {
   plan?: string | null;
   billingStatus?: string | null;
+  trialEndsAt?: number | null;
+  currentPeriodEnd?: number | null;
+  cancelAtPeriodEnd?: number | null;
   nextPaymentDate?: number | null;
+  stripeCustomerId?: string | null;
 }
+
 interface Props {
   tenantId: string;
   billing: {
@@ -21,160 +31,210 @@ interface Props {
   lang: Lang;
 }
 
-const PLAN_PRICES = {
-  monthly: { start: "45 zł", pro: "60 zł", max: "90 zł" },
-  annual: { start: "36 zł", pro: "48 zł", max: "72 zł" },
-} as const;
+// Annual cycle gets a 20% discount → 0.8 of monthly price (rounded down to nearest zł).
+const ANNUAL_DISCOUNT = 0.8;
+
+const SHOWS_MANAGEMENT_FOR = new Set(["active", "grace_period", "past_due", "canceled"]);
 
 export function BillingTabContent({ tenantId, billing, lang }: Props) {
-  const [cycle, setCycle] = useState<"monthly" | "annual">("monthly");
-  const [upgrading, setUpgrading] = useState<string | null>(null);
-  const [billingError, setBillingError] = useState<string>("");
+  const utils = api.useUtils();
+  const plansQuery = api.salon.getPlans.useQuery(undefined, {
+    staleTime: 60_000,
+  });
 
-  const checkout = api.salon.createCheckoutSession.useMutation({
-    onSuccess: (res) => {
-      if (res.url) window.location.href = res.url;
-    },
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [upgrading, setUpgrading] = useState<PlanId | null>(null);
+  const [billingError, setBillingError] = useState<string>("");
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  // Detect return from Stripe Embedded Checkout (?checkout=success) — same pattern as BillingSection.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      setShowSuccess(true);
+      // Clean URL without forcing a reload — preserve tab anchor.
+      const tab = params.get("tab") ?? "billing";
+      window.history.replaceState({}, "", `${window.location.pathname}?tab=${tab}`);
+      void utils.salon.getBillingStatus.invalidate({ tenantId });
+    }
+  }, [tenantId, utils]);
+
+  const embeddedMut = api.salon.createEmbeddedCheckout.useMutation({
+    onSuccess: (res) => setClientSecret(res.clientSecret),
     onError: (e) => {
-      console.error("Checkout failed:", e);
       setBillingError(e.message || t("billing.openFailed", lang));
       setUpgrading(null);
     },
   });
 
-  function upgrade(plan: "start" | "pro" | "max") {
-    setUpgrading(plan);
-    checkout.mutate({ tenantId, plan, locale: lang, billingCycle: cycle });
-  }
+  const redirectMut = api.salon.createCheckoutSession.useMutation({
+    onSuccess: (res) => {
+      if (res.url) window.location.href = res.url;
+    },
+    onError: (e) => {
+      setBillingError(e.message || t("billing.openFailed", lang));
+      setUpgrading(null);
+    },
+  });
 
-  const currentPlan = (billing.data?.plan ?? "start").toLowerCase();
+  const upgrade = useCallback(
+    (plan: PlanId) => {
+      setBillingError("");
+      setUpgrading(plan);
+      if (hasEmbeddedCheckout) {
+        embeddedMut.mutate({ tenantId, plan, locale: lang, billingCycle: cycle });
+      } else {
+        redirectMut.mutate({ tenantId, plan, locale: lang, billingCycle: cycle });
+      }
+    },
+    [embeddedMut, redirectMut, tenantId, lang, cycle],
+  );
+
+  const closeCheckout = useCallback(() => {
+    setClientSecret(null);
+    setUpgrading(null);
+    void utils.salon.getBillingStatus.invalidate({ tenantId });
+  }, [tenantId, utils]);
+
+  const currentPlan = ((billing.data?.plan ?? "start").toLowerCase()) as PlanId;
+  const billingStatus = billing.data?.billingStatus ?? "trialing";
+  const isActiveSub = billingStatus === "active" || billingStatus === "grace_period" || billingStatus === "past_due";
+  // Active paid sub on this exact plan + cycle disables the CTA. Trial users can always click.
+  const currentCycle: BillingCycle = "monthly"; // TODO: derive from subscription metadata once persisted on the server.
+  const isCurrentActive = (plan: PlanId) => isActiveSub && currentPlan === plan && cycle === currentCycle;
+  const showManagement = !!billing.data?.stripeCustomerId && SHOWS_MANAGEMENT_FOR.has(billingStatus);
+
+  // Map server plans → PlanCardData (with localized features + computed annual price).
+  const cards: PlanCardData[] = (plansQuery.data ?? []).map((p) => {
+    const features = ((p.featureList as Record<string, string[]> | undefined)?.[lang]
+      ?? (p.featureList as Record<string, string[]> | undefined)?.en
+      ?? []) as string[];
+    const subtitle = ((p.subtitle as Record<string, string> | undefined)?.[lang]
+      ?? (p.subtitle as Record<string, string> | undefined)?.en
+      ?? "") as string;
+    return {
+      id: p.id as PlanId,
+      name: p.name,
+      monthlyPrice: p.price,
+      annualMonthlyPrice: Math.floor(p.price * ANNUAL_DISCOUNT),
+      currency: p.currency,
+      popular: !!p.popular,
+      subtitle,
+      features,
+    };
+  });
+
+  const monthlyForCurrent = cards.find((c) => c.id === currentPlan)?.monthlyPrice ?? null;
+  const annualForCurrent = cards.find((c) => c.id === currentPlan)?.annualMonthlyPrice ?? null;
+  const currencyForCurrent = cards.find((c) => c.id === currentPlan)?.currency ?? "PLN";
 
   return (
     <div className="space-y-5">
       <SectionHeader title={t("salon.billingTitle", lang)} />
 
-      {billing.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-      {billing.isError && (
-        <div className="glass-card rounded-2xl p-6 text-center">
-          <p className="text-red-400">{t("common.errorLoading", lang)}</p>
+      {billing.isLoading && (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
         </div>
       )}
 
-      {billingError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg">
-          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
-          <p className="text-sm text-red-600 dark:text-red-400">{billingError}</p>
-          <button onClick={() => setBillingError("")} className="ml-auto text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300">
+      {billing.isError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center dark:border-red-900/40 dark:bg-red-900/20">
+          <p className="text-sm text-red-700 dark:text-red-300">{t("common.errorLoading", lang)}</p>
+        </div>
+      )}
+
+      {showSuccess && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/[0.08]">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <p className="flex-1 text-sm font-medium text-emerald-800 dark:text-emerald-200">
+            {t("billing.checkout.success", lang)}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowSuccess(false)}
+            className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300"
+            aria-label={t("common.close", lang)}
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {billing.data && (
-        <div className="glass-card rounded-2xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.plan", lang)}</span>
-            <span className="font-bold text-slate-900 dark:text-white text-lg">{currentPlan.toUpperCase()}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.status", lang)}</span>
-            <span
-              className={`text-sm font-medium px-2.5 py-0.5 rounded-full ${
-                billing.data.billingStatus === "active"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-amber-500/15 text-amber-400"
-              }`}
-            >
-              {t(`billing.${billing.data.billingStatus ?? "trialing"}` as "billing.active", lang)}
-            </span>
-          </div>
-          {billing.data.nextPaymentDate && (
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500 dark:text-slate-400 text-sm">{t("billing.nextPayment", lang)}</span>
-              <span className="text-slate-900 dark:text-white text-sm">
-                {new Date(billing.data.nextPaymentDate * 1000).toLocaleDateString()}
-              </span>
-            </div>
-          )}
+      {billingError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-900/20">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+          <p className="flex-1 text-sm text-red-600 dark:text-red-400">{billingError}</p>
+          <button
+            type="button"
+            onClick={() => setBillingError("")}
+            className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+            aria-label={t("common.close", lang)}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* Upgrade — billing cycle toggle */}
-      <div className="glass-card rounded-2xl p-5 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {billingStatus === "trialing" && billing.data?.trialEndsAt && (
+        <TrialBanner trialEndsAt={billing.data.trialEndsAt} lang={lang} />
+      )}
+
+      {showManagement && (
+        <SubscriptionManagement
+          tenantId={tenantId}
+          plan={billing.data?.plan ?? null}
+          billingStatus={billingStatus}
+          currentPeriodEnd={billing.data?.currentPeriodEnd ?? null}
+          cancelAtPeriodEnd={billing.data?.cancelAtPeriodEnd ?? null}
+          stripeCustomerId={billing.data?.stripeCustomerId ?? null}
+          cycle={cycle}
+          monthlyPrice={monthlyForCurrent}
+          annualMonthlyPrice={annualForCurrent}
+          currency={currencyForCurrent}
+          lang={lang}
+        />
+      )}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[0.02]">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
             {t("billing.changePlan", lang)}
           </h3>
-          <div className="inline-flex items-center rounded-full border border-slate-200 bg-white p-1 text-xs dark:border-white/10 dark:bg-white/[0.04]">
-            <button
-              type="button"
-              onClick={() => setCycle("monthly")}
-              className={`rounded-full px-4 py-1.5 font-medium transition ${
-                cycle === "monthly"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                  : "text-slate-600 dark:text-white/60"
-              }`}
-            >
-              {t("billing.monthly", lang)}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCycle("annual")}
-              className={`relative rounded-full px-4 py-1.5 font-medium transition ${
-                cycle === "annual"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                  : "text-slate-600 dark:text-white/60"
-              }`}
-            >
-              {t("billing.yearly", lang)}
-              <span
-                className="pointer-events-none absolute -right-2 -top-2 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white"
-                style={{ background: "linear-gradient(135deg,#e11d48,#f43f5e)" }}
-              >
-                −20%
-              </span>
-            </button>
-          </div>
+          <CycleToggle value={cycle} onChange={setCycle} lang={lang} />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          {(["start", "pro", "max"] as const).map((p) => (
-            <div
-              key={p}
-              className={`rounded-xl border p-4 transition ${
-                currentPlan === p
-                  ? "border-emerald-400/50 bg-emerald-500/[0.05]"
-                  : "border-slate-200 bg-white/[0.03] dark:border-white/10"
-              }`}
-            >
-              <div className="mb-2 flex items-baseline justify-between">
-                <span className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">{p}</span>
-                {currentPlan === p && (
-                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400">{t("billing.current", lang)}</span>
-                )}
-              </div>
-              <div className="mb-3 font-mono text-2xl font-bold text-slate-900 dark:text-white">
-                {PLAN_PRICES[cycle][p]}
-                <span className="ml-1 text-xs text-slate-500">{t("billing.perMonth", lang)}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => upgrade(p)}
-                disabled={upgrading !== null || (currentPlan === p && cycle === "monthly")}
-                className="w-full rounded-lg py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
-              >
-                {upgrading === p ? "…" : currentPlan === p && cycle === "annual" ? t("billing.switchToYearly", lang) : t("billing.choose", lang)}
-              </button>
-            </div>
-          ))}
-        </div>
-        {cycle === "annual" && (
-          <p className="text-[11px] text-slate-500 dark:text-white/40">
-            {t("billing.yearlyDiscount", lang)}
-          </p>
+        {plansQuery.isLoading ? (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-80 animate-pulse rounded-2xl bg-slate-100 dark:bg-white/[0.04]" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3 sm:gap-3 md:gap-4">
+            {cards.map((card) => (
+              <PlanCard
+                key={card.id}
+                plan={card}
+                cycle={cycle}
+                currentPlan={currentPlan}
+                isCurrentActive={isCurrentActive(card.id)}
+                upgrading={upgrading === card.id}
+                onSelect={upgrade}
+                lang={lang}
+              />
+            ))}
+          </div>
         )}
       </div>
+
+      <EmbeddedCheckoutModal
+        clientSecret={clientSecret}
+        onClose={closeCheckout}
+        lang={lang}
+      />
     </div>
   );
 }

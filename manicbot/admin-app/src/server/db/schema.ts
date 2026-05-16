@@ -1011,3 +1011,29 @@ export const marketingPublishQueue = sqliteTable("marketing_publish_queue", {
   index("idx_mpq_status_attempt").on(t.status, t.lastAttemptAt),
   index("idx_mpq_content_plan").on(t.contentPlanId),
 ]);
+
+// ─── Appointment blocks (migration 0061) ─────────────────────────────────
+// Master-owned non-client occupancy. Two block types:
+//   * reservation — "hold this slot for myself" (no client, no service)
+//   * time_off    — break / day off / vacation; can span multiple days
+//                   via end_date.
+// Conflict semantics enforced in code (`slotsBusy()` helper) so booking
+// flow refuses to overlap a block, and block creation refuses to overlap
+// an existing booking.
+export const appointmentBlocks = sqliteTable("appointment_blocks", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  masterId: integer("master_id").notNull(),
+  type: text("type").notNull(),
+  date: text("date").notNull(),
+  time: text("time").notNull(),
+  durationMin: integer("duration_min").notNull(),
+  endDate: text("end_date"),
+  reason: text("reason"),
+  createdAt: integer("created_at").notNull(),
+  createdBy: text("created_by"),
+  cancelled: integer("cancelled").notNull().default(0),
+}, (t) => [
+  index("idx_apt_blocks_master_date").on(t.tenantId, t.masterId, t.date),
+  index("idx_apt_blocks_tenant_date").on(t.tenantId, t.date),
+]);

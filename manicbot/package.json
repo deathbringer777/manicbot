@@ -11,7 +11,9 @@
 		"migrate": "node scripts/run-migrate.js",
 		"ig-e2e:tenant": "node scripts/create-ig-e2e-tenant.mjs",
 		"seed:test-accounts": "node scripts/seed-test-accounts.mjs --apply",
-		"seed:test-accounts:dry": "node scripts/seed-test-accounts.mjs"
+		"seed:test-accounts:dry": "node scripts/seed-test-accounts.mjs",
+		"seed:calendar-demo": "node scripts/seed-calendar-demo.mjs --apply",
+		"seed:calendar-demo:dry": "node scripts/seed-calendar-demo.mjs"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.20",

@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
-  Loader2, Plus, Pencil, Trash2, Save, X, List, AlignLeft, Columns3, CalendarRange,
+  Loader2, Plus, Pencil, Trash2, Save, X,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
 } from "lucide-react";
@@ -19,6 +19,7 @@ import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
+import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
@@ -34,6 +35,8 @@ import { StaffTab } from "~/components/salon/tabs/StaffTab";
 import { SERVICE_TEMPLATES, type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
+import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDialog";
+import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
@@ -1250,7 +1253,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
   }, [resolvedSalonTab, inWeb, forceTab]);
-  const [aptViewMode, setAptViewMode] = useState<"day" | "week" | "calendar" | "list" | "agenda">("day");
+  // Calendar overhaul (2026-05-16): default flipped from "day" → "week" to
+  // match Google Calendar parity. The previous five-pill switcher (incl.
+  // «Агенда») is replaced with CalendarViewSwitcher; the 5th mode is
+  // collapsed into "list" since the user explicitly noted nobody knows
+  // the word «Агенда». normalizeViewMode handles any persisted "agenda"
+  // value coming back from URL params or localStorage.
+  const [aptViewMode, setAptViewMode] = useState<CalendarViewMode>(() => normalizeViewMode("week"));
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
@@ -1279,7 +1288,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
   const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
-  const apts = api.salon.getAppointments.useQuery({ tenantId }, { enabled: tab === "appointments" && (aptViewMode === "list" || aptViewMode === "agenda") });
+  const apts = api.salon.getAppointments.useQuery({ tenantId }, { enabled: tab === "appointments" && aptViewMode === "list" });
 
   // Calendar data: full month
   const calYear = calViewDate.getFullYear();
@@ -1313,6 +1322,36 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { tenantId, dateFrom: weekFrom, dateTo: weekTo, limit: 200 },
     { enabled: tab === "appointments" && aptViewMode === "week" },
   );
+  // Calendar overhaul (2026-05-16): pull appointment_blocks for the active
+  // day/week range so reservations + time-off bands render in the grid.
+  // Query window: day-mode → single day; week-mode → mon-sun span.
+  const blocksRange = useMemo(() => {
+    if (aptViewMode === "day") {
+      const iso = fmtISO(calViewDate.getFullYear(), calViewDate.getMonth(), calViewDate.getDate());
+      return { dateFrom: iso, dateTo: iso };
+    }
+    if (aptViewMode === "week") return { dateFrom: weekFrom, dateTo: weekTo };
+    return { dateFrom: calDateFrom, dateTo: calDateTo };
+  }, [aptViewMode, calViewDate, weekFrom, weekTo, calDateFrom, calDateTo]);
+  const blocksQuery = api.appointmentBlocks.listByRange.useQuery(
+    { tenantId, dateFrom: blocksRange.dateFrom, dateTo: blocksRange.dateTo },
+    { enabled: tab === "appointments" && (aptViewMode === "day" || aptViewMode === "week") },
+  );
+  const blockRows = useMemo(() => {
+    return (blocksQuery.data?.blocks ?? []).map((b) => ({
+      id: b.id,
+      date: b.date,
+      time: b.time,
+      durationMin: b.durationMin,
+      endDate: b.endDate ?? null,
+      masterId: b.masterId,
+      type: b.type as "reservation" | "time_off",
+      reason: b.reason ?? null,
+    }));
+  }, [blocksQuery.data]);
+  const deleteBlock = api.appointmentBlocks.delete.useMutation({
+    onSuccess: () => { void blocksQuery.refetch(); },
+  });
   const mastersList = api.salon.getMasters.useQuery(
     { tenantId },
     {
@@ -1429,6 +1468,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
   // Sprint 3/4 — manual booking modal state
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  // Calendar overhaul (2026-05-16): two new FAB scenarios — calendar block
+  // (reservation) and break / day-off / vacation (time_off). Both write
+  // to `appointment_blocks` via the new `appointmentBlocks.create` tRPC.
+  const [timeReservationOpen, setTimeReservationOpen] = useState(false);
+  const [timeOffOpen, setTimeOffOpen] = useState(false);
+  // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
+  // TimeReservationDialog). Cleared on dialog close.
+  const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number } | null>(null);
 
   const isTest = useRole().isTest;
 
@@ -1503,21 +1550,28 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       </div>}
 
       {/* Floating quick-add menu — visible on Overview / Appointments / Clients.
-          Booksy-parity: New booking + (soon) Time reservation + (soon) Time off. */}
+          All three scenarios are real backend flows after the 2026-05-16
+          calendar overhaul (no more СКОРО placeholders). */}
       {(tab === "overview" || tab === "appointments" || tab === "clients") && (
         <QuickAddFab
           lang={lang}
           onNewBooking={() => setManualBookingOpen(true)}
+          onTimeReservation={() => setTimeReservationOpen(true)}
+          onTimeOff={() => setTimeOffOpen(true)}
         />
       )}
 
       {manualBookingOpen && (
         <ManualBookingModal
           tenantId={tenantId}
-          onClose={() => setManualBookingOpen(false)}
+          defaultMasterId={dragPrefill?.masterId ?? undefined}
+          defaultDate={dragPrefill?.date}
+          defaultTime={dragPrefill?.time}
+          onClose={() => { setManualBookingOpen(false); setDragPrefill(null); }}
           onCreated={() => {
             apts.refetch();
             todayApts.refetch();
+            void blocksQuery.refetch();
           }}
         />
       )}
@@ -1675,49 +1729,20 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           />
           {/* Main column — header + view */}
           <div className="flex-1 min-w-0 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("salon.appointments", lang)}</h2>
-            <div className="flex items-center gap-2">
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5" data-testid="apt-view-mode-switcher">
-                <button onClick={() => setAptViewMode("day")}
-                  data-testid="apt-view-mode-day"
-                  data-active={aptViewMode === "day" ? "1" : "0"}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "day" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
-                  <Columns3 className="w-3.5 h-3.5" />
-                  {t("salon.cal.day", lang)}
-                </button>
-                <button onClick={() => setAptViewMode("week")}
-                  data-testid="apt-view-mode-week"
-                  data-active={aptViewMode === "week" ? "1" : "0"}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "week" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
-                  <CalendarRange className="w-3.5 h-3.5" />
-                  {t("salon.cal.week", lang)}
-                </button>
-                <button onClick={() => setAptViewMode("calendar")}
-                  data-testid="apt-view-mode-calendar"
-                  data-active={aptViewMode === "calendar" ? "1" : "0"}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "calendar" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
-                  <CalendarDays className="w-3.5 h-3.5" />
-                  {t("salon.cal.calendar", lang)}
-                </button>
-                <button onClick={() => setAptViewMode("agenda")}
-                  data-testid="apt-view-mode-agenda"
-                  data-active={aptViewMode === "agenda" ? "1" : "0"}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "agenda" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
-                  <AlignLeft className="w-3.5 h-3.5" />
-                  {t("salon.cal.agenda", lang)}
-                </button>
-                <button onClick={() => setAptViewMode("list")}
-                  data-testid="apt-view-mode-list"
-                  data-active={aptViewMode === "list" ? "1" : "0"}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aptViewMode === "list" ? "bg-brand-500/20 text-brand-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-200"}`}>
-                  <List className="w-3.5 h-3.5" />
-                  {t("salon.cal.list", lang)}
-                </button>
-              </div>
-            </div>
+          {/* Calendar overhaul (2026-05-16): the duplicated «Записи» H2 lived
+              here next to the inline 5-pill switcher. PageHeader / Shell
+              already shows the page title — we drop the H2 and let the
+              dropdown sit at the right of an empty bar. */}
+          <div className="flex items-center justify-end">
+            <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />
           </div>
 
+          <div
+            key={aptViewMode}
+            data-testid="salon-apt-view-transition"
+            data-mode={aptViewMode}
+            className="apt-view-transition space-y-3"
+          >
           {aptViewMode === "calendar" && (
             <SalonBigCalendar
               apts={calAptsFiltered}
@@ -1747,6 +1772,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               hiddenMasterIds={masterVis.hiddenMasterIds}
               toggleMasterVisible={masterVis.toggleMasterVisible}
               showAllMasters={masterVis.showAllMasters}
+              blocks={blockRows}
+              onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
+              onCreateAt={(info) => {
+                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin });
+                if (info.modifier === "shift") setTimeReservationOpen(true);
+                else setManualBookingOpen(true);
+              }}
             />
           )}
 
@@ -1760,10 +1792,21 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
+              blocks={blockRows}
+              onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
+              onCreateAt={(info) => {
+                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin });
+                if (info.modifier === "shift") setTimeReservationOpen(true);
+                else setManualBookingOpen(true);
+              }}
             />
           )}
 
-          {aptViewMode === "agenda" && (
+          {/* Calendar overhaul (2026-05-16): «Агенда» mode is gone. List
+              mode now uses SalonAgendaView (the dense, GCal-style row
+              renderer) so users get the better visual without learning
+              the word «Агенда» the user explicitly wanted dropped. */}
+          {aptViewMode === "list" && (
             <SalonAgendaView
               apts={aptsFiltered}
               isLoading={apts.isLoading}
@@ -1775,24 +1818,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               filtersActive={filtersActive && (apts.data?.length ?? 0) > 0}
             />
           )}
-
-          {aptViewMode === "list" && (
-            <>
-              {apts.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-              {apts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
-              <div className="space-y-2">
-                {aptsFiltered.map((a: any) => (
-                  <AptCard key={a.id} a={a} lang={lang}
-                    onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
-                    onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
-                ))}
-                {aptsFiltered.length === 0 && (apts.data?.length ?? 0) > 0 && filtersActive && (
-                  <EmptyState icon={CalendarDays} title={t("salon.agenda.allFiltered", lang)} description={t("salon.agenda.allFilteredHint", lang)} />
-                )}
-                {(apts.data?.length ?? 0) === 0 && <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />}
-              </div>
-            </>
-          )}
+          </div>
           </div>
         </div>
         );
@@ -2041,7 +2067,30 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} initialData={svcModal.initialData} />}
       {masterModal === "telegram" && <AddMasterModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
       {masterModal === "create" && <CreateMasterAccountModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
-      {manualBookingOpen && <ManualBookingModal onClose={() => setManualBookingOpen(false)} tenantId={tenantId} />}
+      {/* Calendar overhaul (2026-05-16): the previous duplicate
+          ManualBookingModal mount that lived here at the bottom is
+          superseded by the FAB-section render above (line ~1521) which
+          carries the proper `onCreated` + `dragPrefill` wiring. */}
+      {timeReservationOpen && (
+        <TimeReservationDialog
+          tenantId={tenantId}
+          defaultMasterId={dragPrefill?.masterId ?? undefined}
+          defaultDate={dragPrefill?.date}
+          defaultTime={dragPrefill?.time}
+          defaultDurationMin={dragPrefill?.durationMin}
+          onClose={() => { setTimeReservationOpen(false); setDragPrefill(null); }}
+          onCreated={() => { void apts.refetch(); void todayApts.refetch(); void blocksQuery.refetch(); }}
+        />
+      )}
+      {timeOffOpen && (
+        <TimeOffDialog
+          tenantId={tenantId}
+          defaultMasterId={dragPrefill?.masterId ?? undefined}
+          defaultDate={dragPrefill?.date}
+          onClose={() => { setTimeOffOpen(false); setDragPrefill(null); }}
+          onCreated={() => { void apts.refetch(); void todayApts.refetch(); void blocksQuery.refetch(); }}
+        />
+      )}
       {deleteSvcConfirmModal}
       {removeMasterConfirmModal}
     </Shell>

@@ -18,9 +18,12 @@
  */
 
 import { useMemo, useEffect, useState, useRef } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
+import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
+import type { DragGhost } from "~/lib/calendar/useDragToCreate";
+import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
 const HOUR_START = 8;
@@ -61,6 +64,10 @@ interface Props {
   lang: Lang;
   onAction?: (id: number | string, status: "confirmed" | "cancelled" | "rejected") => void;
   onNoShow?: (id: number | string, noShowBy: "client" | "master") => void;
+  /** Calendar overhaul (2026-05-16) — block rendering + drag-to-create. */
+  blocks?: DayViewBlock[];
+  onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
+  onDeleteBlock?: (id: string) => void;
 }
 
 function pad(n: number): string {
@@ -113,6 +120,9 @@ export function SalonWeekView({
   lang,
   onAction,
   onNoShow,
+  blocks,
+  onCreateAt,
+  onDeleteBlock,
 }: Props) {
   const days = useMemo(() => weekDays(date), [date]);
   const todayIso = fmtIsoDate(new Date());
@@ -173,6 +183,26 @@ export function SalonWeekView({
     }
     return m;
   }, [apts, days]);
+
+  // Blocks grouped by date — same range-aware logic as Day view: a row is
+  // "on" a given iso if its single-day date matches OR its multi-day
+  // [date,endDate] window covers it.
+  const blocksByDate = useMemo(() => {
+    const m = new Map<string, DayViewBlock[]>();
+    for (const b of blocks ?? []) {
+      for (const d of days) {
+        const iso = fmtIsoDate(d);
+        const inRange = b.endDate
+          ? b.date <= iso && b.endDate >= iso
+          : b.date === iso;
+        if (!inRange) continue;
+        const list = m.get(iso) ?? [];
+        list.push(b);
+        m.set(iso, list);
+      }
+    }
+    return m;
+  }, [blocks, days]);
 
   // Auto-scroll to current time when this week contains today.
   useEffect(() => {
@@ -405,11 +435,18 @@ export function SalonWeekView({
                   </div>
 
                   {/* Google-Calendar-style ruled grid: solid hour lines +
-                      dashed half-hour lines + appointment blocks */}
-                  <div
-                    className="relative"
-                    style={{ height: TOTAL_HOURS * HOUR_HEIGHT }}
-                    data-testid="week-view-column-body"
+                      dashed half-hour lines + appointment blocks.
+                      Calendar overhaul (2026-05-16): wrapped in
+                      DragCreateLayer so click/drag opens NewBookingDialog. */}
+                  <DragCreateLayer
+                    date={iso}
+                    masterId={null}
+                    hourHeight={HOUR_HEIGHT}
+                    hourStart={HOUR_START}
+                    hourEnd={HOUR_END}
+                    totalHeight={TOTAL_HOURS * HOUR_HEIGHT}
+                    onCreateAt={onCreateAt}
+                    testIdPrefix="week-view-drag"
                   >
                     {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
                       <div key={`h-${i}`}>
@@ -437,7 +474,7 @@ export function SalonWeekView({
                         <button
                           type="button"
                           key={a.id}
-                          onClick={() => setSelectedApt(a)}
+                          onClick={(e) => { e.stopPropagation(); setSelectedApt(a); }}
                           data-testid="week-view-event"
                           data-apt-id={a.id}
                           className="absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left transition-shadow hover:shadow-lg overflow-hidden"
@@ -459,7 +496,47 @@ export function SalonWeekView({
                         </button>
                       );
                     })}
-                  </div>
+
+                    {/* Blocks (reservation / time_off) — calendar overhaul.
+                        Stacked with appointments; multiple masters' blocks
+                        in the same time window simply layer up. */}
+                    {(blocksByDate.get(iso) ?? []).map((b) => {
+                      const isMultiDay = !!b.endDate && b.endDate !== iso;
+                      const top = isMultiDay ? 0 : timeToTop(b.time);
+                      const height = isMultiDay
+                        ? TOTAL_HOURS * HOUR_HEIGHT
+                        : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
+                      return (
+                        <button
+                          type="button"
+                          key={b.id}
+                          data-testid="week-view-block"
+                          data-block-id={b.id}
+                          data-block-type={b.type}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!onDeleteBlock) return;
+                            if (typeof window !== "undefined" && window.confirm(t("common.deleteConfirm", lang))) {
+                              onDeleteBlock(b.id);
+                            }
+                          }}
+                          className="absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left overflow-hidden border border-dashed flex items-center gap-1 hover:opacity-80 transition-opacity"
+                          style={{
+                            top,
+                            height,
+                            background:
+                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                            borderColor: "rgba(100,116,139,0.6)",
+                            color: "#475569",
+                          }}
+                          title={b.reason ?? (b.type === "reservation" ? "Резерв" : "Перерыв / выходной")}
+                        >
+                          <Lock className="h-2.5 w-2.5 shrink-0" />
+                          <span className="text-[9px] font-medium truncate">{b.reason ?? (b.type === "reservation" ? "Reserved" : "Time off")}</span>
+                        </button>
+                      );
+                    })}
+                  </DragCreateLayer>
                 </div>
               );
             })}

@@ -21,10 +21,6 @@ import { PageHeader } from "~/components/ui/PageHeader";
 import { EmptyState } from "~/components/ui/EmptyState";
 import {
   CalendarDays,
-  AlignLeft,
-  Columns3,
-  CalendarRange,
-  List,
   Download,
   X,
   Search,
@@ -38,8 +34,11 @@ import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
+import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDialog";
+import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
+import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 
-type AptViewMode = "day" | "week" | "calendar" | "agenda" | "list";
+type AptViewMode = CalendarViewMode;
 
 /**
  * Stable djb2-style hash: tenant string id → positive integer.
@@ -84,7 +83,10 @@ function getStatusOf(a: Record<string, unknown>): StatusKey {
 export default function AppointmentsPageClient() {
   const { lang } = useLang();
 
-  const [aptViewMode, setAptViewMode] = useState<AptViewMode>("day");
+  // Calendar overhaul (2026-05-16): default flipped from "day" → "week" to
+  // match Google Calendar parity; the dropdown surface lets us drop the
+  // 5-pill bar entirely and reclaim header width for the page title.
+  const [aptViewMode, setAptViewMode] = useState<AptViewMode>(() => normalizeViewMode("week"));
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<StatusKey>>(new Set());
@@ -94,9 +96,14 @@ export default function AppointmentsPageClient() {
   // God Mode booking modal flow:
   //   Step 1 (showBookingModal=true, bookingTenantId=null)  → tenant picker overlay
   //   Step 2 (showBookingModal=true, bookingTenantId=<id>)  → ManualBookingModal
+  // Calendar overhaul (2026-05-16): same two-step pattern reused for the
+  // new TimeReservation and TimeOff scenarios — pick a tenant first,
+  // then open the dialog. `pendingFabFlow` tracks which dialog to open
+  // once a tenant is chosen.
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingTenantId, setBookingTenantId] = useState<string | null>(null);
   const [tenantSearch, setTenantSearch] = useState("");
+  const [pendingFabFlow, setPendingFabFlow] = useState<"booking" | "reservation" | "timeOff">("booking");
 
   const closebookingModal = () => {
     setShowBookingModal(false);
@@ -151,7 +158,7 @@ export default function AppointmentsPageClient() {
 
   const listApts = api.appointments.getAll.useQuery(
     { limit: 100, offset: 0 },
-    { enabled: aptViewMode === "agenda" || aptViewMode === "list" },
+    { enabled: aptViewMode === "list" },
   );
 
   // ── Adapter: assign each appointment a synthetic masterId = hash(tenantId).
@@ -255,27 +262,6 @@ export default function AppointmentsPageClient() {
   const filtersActive =
     hiddenStatuses.size > 0 || hiddenServiceIds.size > 0 || hiddenTenantHashes.size > 0;
 
-  const viewButton = (
-    mode: AptViewMode,
-    Icon: typeof CalendarDays,
-    label: string,
-  ) => (
-    <button
-      key={mode}
-      onClick={() => setAptViewMode(mode)}
-      data-testid={`apt-view-mode-${mode}`}
-      data-active={aptViewMode === mode ? "1" : "0"}
-      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-        aptViewMode === mode
-          ? "bg-brand-500/20 text-brand-400"
-          : "text-slate-500 dark:text-slate-400 hover:text-slate-200"
-      }`}
-    >
-      <Icon className="w-3.5 h-3.5" />
-      {label}
-    </button>
-  );
-
   return (
     <Shell>
       <div className="space-y-4">
@@ -315,22 +301,21 @@ export default function AppointmentsPageClient() {
           />
 
           <div className="flex-1 min-w-0 space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                {t("gmAppts.title", lang)}
-              </h2>
-              <div
-                className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5"
-                data-testid="apt-view-mode-switcher"
-              >
-                {viewButton("day", Columns3, t("salon.cal.day", lang))}
-                {viewButton("week", CalendarRange, t("salon.cal.week", lang))}
-                {viewButton("calendar", CalendarDays, t("salon.cal.calendar", lang))}
-                {viewButton("agenda", AlignLeft, t("salon.cal.agenda", lang))}
-                {viewButton("list", List, t("salon.cal.list", lang))}
-              </div>
+            {/* Calendar overhaul (2026-05-16): the duplicate page-title
+                H2 lived here next to the inline 5-pill switcher.
+                PageHeader above already renders the title; we drop the
+                H2 and let the switcher dropdown sit at the right of an
+                empty bar. */}
+            <div className="flex items-center justify-end flex-wrap gap-2">
+              <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />
             </div>
 
+            <div
+              key={aptViewMode}
+              data-testid="apt-view-transition"
+              data-mode={aptViewMode}
+              className="apt-view-transition"
+            >
             {aptViewMode === "day" && (
               <SalonDayView
                 date={calViewDate}
@@ -376,19 +361,6 @@ export default function AppointmentsPageClient() {
               />
             )}
 
-            {aptViewMode === "agenda" && (
-              <SalonAgendaView
-                apts={listFiltered}
-                isLoading={listApts.isLoading}
-                lang={lang}
-                onAction={onAction}
-                onNoShow={onNoShow}
-                masters={tenantMasters}
-                serviceNames={{}}
-                filtersActive={filtersActive && listRows.length > 0}
-              />
-            )}
-
             {aptViewMode === "list" && (
               <>
                 {listApts.isLoading ? (
@@ -415,13 +387,17 @@ export default function AppointmentsPageClient() {
                 )}
               </>
             )}
+            </div>
           </div>
         </div>
       </div>
-      {/* FAB — opens booking modal (step 1: pick tenant) */}
+      {/* FAB — three real flows. Each picks a tenant first (step 1), then
+          opens the dialog appropriate to the chosen FAB scenario (step 2). */}
       <QuickAddFab
         lang={lang}
-        onNewBooking={() => setShowBookingModal(true)}
+        onNewBooking={() => { setPendingFabFlow("booking"); setShowBookingModal(true); }}
+        onTimeReservation={() => { setPendingFabFlow("reservation"); setShowBookingModal(true); }}
+        onTimeOff={() => { setPendingFabFlow("timeOff"); setShowBookingModal(true); }}
       />
 
       {/* God Mode booking — Step 1: pick a tenant */}
@@ -493,9 +469,29 @@ export default function AppointmentsPageClient() {
         </div>
       )}
 
-      {/* God Mode booking — Step 2: ManualBookingModal for the selected tenant */}
-      {showBookingModal && bookingTenantId !== null && (
+      {/* God Mode FAB — Step 2: open the dialog for the chosen scenario. */}
+      {showBookingModal && bookingTenantId !== null && pendingFabFlow === "booking" && (
         <ManualBookingModal
+          tenantId={bookingTenantId}
+          onClose={closebookingModal}
+          onCreated={() => {
+            void utils.appointments.getAll.invalidate();
+            closebookingModal();
+          }}
+        />
+      )}
+      {showBookingModal && bookingTenantId !== null && pendingFabFlow === "reservation" && (
+        <TimeReservationDialog
+          tenantId={bookingTenantId}
+          onClose={closebookingModal}
+          onCreated={() => {
+            void utils.appointments.getAll.invalidate();
+            closebookingModal();
+          }}
+        />
+      )}
+      {showBookingModal && bookingTenantId !== null && pendingFabFlow === "timeOff" && (
+        <TimeOffDialog
           tenantId={bookingTenantId}
           onClose={closebookingModal}
           onCreated={() => {

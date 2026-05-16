@@ -25,9 +25,11 @@
  */
 
 import { useMemo, useEffect, useState, useRef } from "react";
-import { ChevronLeft, ChevronRight, Users, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, Eye, EyeOff, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
+import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
+import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
@@ -68,6 +70,23 @@ type AptRow = Record<string, any> & {
   status: string;
 };
 
+/**
+ * Calendar overhaul (2026-05-16): rows from `appointment_blocks` (master
+ * reservations + time-off bands). Rendered inside the same master columns
+ * as appointments but with a hatched grey visual + lock icon + no client
+ * column. Click → caller-supplied `onDeleteBlock` confirmation.
+ */
+export interface DayViewBlock {
+  id: string;
+  date: string;             // YYYY-MM-DD
+  time: string;             // HH:MM
+  durationMin: number;
+  endDate?: string | null;  // multi-day time_off; date <= endDate covers fully
+  masterId: number;
+  type: "reservation" | "time_off";
+  reason?: string | null;
+}
+
 interface Props {
   date: Date;
   setDate: (d: Date) => void;
@@ -86,6 +105,10 @@ interface Props {
   hiddenMasterIds?: Set<number>;
   toggleMasterVisible?: (chatId: number) => void;
   showAllMasters?: () => void;
+  /** Calendar overhaul (2026-05-16) — block rendering + drag-to-create. */
+  blocks?: DayViewBlock[];
+  onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
+  onDeleteBlock?: (id: string) => void;
 }
 
 function pad(n: number): string {
@@ -207,6 +230,9 @@ export function SalonDayView({
   hiddenMasterIds: hiddenMasterIdsProp,
   toggleMasterVisible: toggleMasterVisibleProp,
   showAllMasters: showAllMastersProp,
+  blocks,
+  onCreateAt,
+  onDeleteBlock,
 }: Props) {
   const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
@@ -289,6 +315,24 @@ export function SalonDayView({
     }
     return m;
   }, [apts, isoDate]);
+
+  // Group blocks for this day, by masterId. A block is "on" this day if
+  // either:
+  //   * single-day row → date === isoDate
+  //   * multi-day time_off row → date <= isoDate AND endDate >= isoDate
+  const blocksByMaster = useMemo(() => {
+    const m = new Map<number, DayViewBlock[]>();
+    for (const b of blocks ?? []) {
+      const inRange = b.endDate
+        ? b.date <= isoDate && b.endDate >= isoDate
+        : b.date === isoDate;
+      if (!inRange) continue;
+      const arr = m.get(b.masterId) ?? [];
+      arr.push(b);
+      m.set(b.masterId, arr);
+    }
+    return m;
+  }, [blocks, isoDate]);
 
   // ALL columns (used by the rail to show every master, even hidden ones).
   const allMasterColumns = useMemo(() => {
@@ -541,11 +585,18 @@ export function SalonDayView({
                   </div>
 
                   {/* Body — Google-Calendar-style ruled grid (solid hour lines
-                      + dashed half-hour lines) + flat non-working tint */}
-                  <div
-                    className="relative"
-                    style={{ height: TOTAL_HOURS * HOUR_HEIGHT }}
-                    data-testid="day-view-column-body"
+                      + dashed half-hour lines) + flat non-working tint.
+                      Calendar overhaul (2026-05-16): wrapped in DragCreateLayer
+                      so click/drag inside the empty grid opens NewBookingDialog. */}
+                  <DragCreateLayer
+                    date={isoDate}
+                    masterId={master.chatId === -1 ? null : (master.chatId as number)}
+                    hourHeight={HOUR_HEIGHT}
+                    hourStart={HOUR_START}
+                    hourEnd={HOUR_END}
+                    totalHeight={TOTAL_HOURS * HOUR_HEIGHT}
+                    onCreateAt={master.chatId === -1 ? undefined : onCreateAt}
+                    testIdPrefix="day-view-drag"
                   >
                     {/* Non-working hours — flat darker tint (rendered first,
                         below grid lines + appointments). Skipped for the
@@ -628,7 +679,7 @@ export function SalonDayView({
                         <button
                           type="button"
                           key={a.id}
-                          onClick={() => setSelectedApt(a)}
+                          onClick={(e) => { e.stopPropagation(); setSelectedApt(a); }}
                           data-testid="day-view-event"
                           data-apt-id={a.id}
                           data-selected={isSelected ? "1" : "0"}
@@ -660,7 +711,55 @@ export function SalonDayView({
                         </button>
                       );
                     })}
-                  </div>
+
+                    {/* Blocks (reservation / time_off) — calendar overhaul.
+                        Hatched grey fill, lock icon, no client column. Click
+                        opens a small inline confirm; on confirm calls
+                        `onDeleteBlock` to soft-cancel the row. */}
+                    {(blocksByMaster.get(master.chatId as number) ?? []).map((b) => {
+                      const isMultiDay = !!b.endDate && b.endDate !== isoDate;
+                      const top = isMultiDay ? 0 : timeToTop(b.time);
+                      const height = isMultiDay
+                        ? TOTAL_HOURS * HOUR_HEIGHT
+                        : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
+                      return (
+                        <button
+                          type="button"
+                          key={b.id}
+                          data-testid="day-view-block"
+                          data-block-id={b.id}
+                          data-block-type={b.type}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!onDeleteBlock) return;
+                            // Lightweight inline confirm — keeps the day view
+                            // self-contained without a global confirm modal.
+                            if (typeof window !== "undefined" && window.confirm(t("common.deleteConfirm", lang))) {
+                              onDeleteBlock(b.id);
+                            }
+                          }}
+                          className="absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity"
+                          style={{
+                            top,
+                            height,
+                            background:
+                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                            borderColor: "rgba(100,116,139,0.6)",
+                            color: "#475569",
+                          }}
+                          title={b.reason ?? (b.type === "reservation" ? "Резерв" : "Перерыв / выходной")}
+                        >
+                          <div className="flex items-center gap-1 text-[10px] font-bold tabular-nums">
+                            <Lock className="h-3 w-3" />
+                            {!isMultiDay && <span>{b.time}</span>}
+                          </div>
+                          <div className="text-[10px] font-medium text-slate-700 dark:text-slate-200 truncate">
+                            {b.reason ?? (b.type === "reservation" ? "Reserved" : "Time off")}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </DragCreateLayer>
                 </div>
               ))}
 

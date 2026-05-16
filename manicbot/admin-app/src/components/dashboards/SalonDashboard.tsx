@@ -38,9 +38,6 @@ import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShar
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
-import { SalonSettingsEditor } from "~/components/salon/SalonSettingsEditor";
-import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
-import { PublicProfileEditor } from "~/components/salon/PublicProfileEditor";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
 import { ClientFormModal } from "~/components/salon/tabs/clients/ClientFormModal";

@@ -40,7 +40,6 @@ import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDia
 import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
-import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { useRole } from "~/components/RoleContext";
@@ -59,7 +58,7 @@ import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
@@ -1542,7 +1541,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -1720,7 +1719,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // agenda/list rows.
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
-  const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
+  const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
   const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
@@ -1848,7 +1847,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { key: "clients", label: t("salon.clients", lang), perm: "clients.view" },
     { key: "analytics", label: `📊 ${t("salon.tabs.analytics", lang)}`, perm: null, ownerOnly: true },
     { key: "promo_codes", label: `🎟 ${t("salon.tabs.promoCodes", lang)}`, perm: null, ownerOnly: true },
-    { key: "billing", label: t("salon.billing", lang), perm: "billing.manage" },
     { key: "channels", label: t("salon.tabs.channels", lang), perm: "settings.manage" },
     { key: "reviews", label: t("salon.tabs.reviews", lang), perm: "reviews.view" },
     { key: "public_profile", label: `🌐 ${t("salon.tabs.publicProfile", lang)}`, perm: "branding.manage" },
@@ -2374,11 +2372,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── CLIENTS ── */}
       {tab === "clients" && <ClientsTab tenantId={tenantId} />}
-
-      {/* ── BILLING ── */}
-      {tab === "billing" && (
-        <BillingTabContent tenantId={tenantId} billing={billing} lang={lang} />
-      )}
 
       {/* ── REVIEWS ── */}
       {tab === "reviews" && (

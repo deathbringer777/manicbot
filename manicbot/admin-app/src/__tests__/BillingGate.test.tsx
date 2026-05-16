@@ -24,10 +24,10 @@ describe("BillingGate", () => {
     expect(screen.getByText("Настройки аккаунта")).toBeTruthy();
   });
 
-  it("primary CTA navigates to /billing — the only place to resolve the gate", () => {
+  it("primary CTA navigates to Settings → Биллинг (canonical billing surface for tenant_owner)", () => {
     renderWithLang(<BillingGate />, "ru");
     fireEvent.click(screen.getByText("Активировать подписку"));
-    expect(pushMock).toHaveBeenCalledWith("/billing");
+    expect(pushMock).toHaveBeenCalledWith("/settings?section=billing");
   });
 
   it("secondary CTA navigates to /settings?section=account (escape hatch)", () => {

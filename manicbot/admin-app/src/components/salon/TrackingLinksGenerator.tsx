@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Download, QrCode, Check, Loader2 } from "lucide-react";
+import { Copy, Download, QrCode, Check, Loader2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
@@ -29,6 +29,7 @@ export function TrackingLinksGenerator({
   const [content, setContent] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [showQr, setShowQr] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const build = api.analytics.buildTrackingLinks.useQuery(
     {
@@ -109,35 +110,49 @@ export function TrackingLinksGenerator({
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.channel", lang)}</label>
-            <input
-              value={medium}
-              onChange={(e) => setMedium(e.target.value)}
-              placeholder="cpc / organic / social"
-              className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.campaign", lang)}</label>
             <input
               value={campaign}
               onChange={(e) => setCampaign(e.target.value)}
-              placeholder="spring_2026"
-              className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.content", lang)}</label>
-            <input
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="button_a / creative_1"
+              placeholder={t("tracking.campaign.ph", lang)}
               className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
             />
           </div>
         </div>
+
+        <button
+          type="button"
+          data-testid="tracking-advanced-toggle"
+          data-open={showAdvanced ? "1" : "0"}
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+        >
+          {showAdvanced ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {t("tracking.advanced", lang)}
+        </button>
+
+        {showAdvanced && (
+          <div data-testid="tracking-advanced-fields" className="grid grid-cols-2 gap-3 pt-1">
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.channel", lang)}</label>
+              <input
+                value={medium}
+                onChange={(e) => setMedium(e.target.value)}
+                placeholder={t("tracking.channel.ph", lang)}
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("tracking.content", lang)}</label>
+              <input
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder={t("tracking.content.ph", lang)}
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {build.isLoading && (
@@ -154,6 +169,12 @@ export function TrackingLinksGenerator({
 
       {build.data && (
         <div className="space-y-3">
+          {build.data.token.length > 64 && (
+            <div data-testid="tracking-token-warning" className="rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs px-3 py-2 flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>{t("tracking.tooLong", lang)}</span>
+            </div>
+          )}
           {build.data.links.length === 0 && (
             <div className="glass-card rounded-2xl p-4 text-xs text-slate-500">
               {t("tracking.connectFirst", lang)}
@@ -208,9 +229,6 @@ export function TrackingLinksGenerator({
               </div>
             );
           })}
-          <p className="text-[11px] text-slate-500 dark:text-slate-500 px-1">
-            {t("tracking.token", lang)}: <code className="font-mono">{build.data.token}</code> · {build.data.token.length}/64
-          </p>
         </div>
       )}
     </div>

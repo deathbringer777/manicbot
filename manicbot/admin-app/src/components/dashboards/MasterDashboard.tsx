@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, List as ListIcon } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, List as ListIcon, Ban, ShieldCheck } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -465,29 +465,11 @@ export function MasterDashboard({
 
       {/* CLIENTS */}
       {tab === "clients" && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.myClients", lang)}</h2>
-          {clientsList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-          {clientsList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
-          <div className="space-y-2">
-            {clientsList.data?.map((c: any) => (
-              <div key={c.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300 shrink-0">
-                  {(c.name ?? "?").charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 dark:text-white text-sm">{c.name ?? `#${c.chatId}`}</p>
-                  {c.lastAppointment && (
-                    <p className="text-[10px] text-slate-500">
-                      {t("master.lastApt", lang)} {c.lastAppointment.date}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-            {clientsList.data?.length === 0 && <p className="text-slate-500 text-sm text-center py-8">{t("master.noClients", lang)}</p>}
-          </div>
-        </div>
+        <MasterClientsList
+          tenantId={tenantId}
+          masterId={masterId}
+          clientsList={clientsList}
+        />
       )}
 
       {/* EARNINGS */}
@@ -1112,5 +1094,166 @@ export function MasterDashboard({
         </div>
       )}
     </Shell>
+  );
+}
+
+// ─── Per-master client list with block / unblock action (0062) ────────────────
+//
+// Wraps `master.getMyClients` (existing list of clients who booked this
+// master) and overlays `master.listMyBlockedClients` so the master can
+// toggle a block from the same row. The block list is server-source-of-
+// truth — we don't optimistically mutate the array, just invalidate.
+function MasterClientsList({
+  tenantId,
+  masterId,
+  clientsList,
+}: {
+  tenantId: string;
+  masterId: number;
+  clientsList: ReturnType<typeof api.master.getMyClients.useQuery>;
+}) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const [confirmBlock, setConfirmBlock] = useState<{ chatId: number; name: string | null } | null>(null);
+  const [reason, setReason] = useState("");
+
+  const blocked = api.master.listMyBlockedClients.useQuery({ tenantId, masterId });
+  const block = api.master.blockClient.useMutation({
+    onSuccess: () => {
+      void utils.master.listMyBlockedClients.invalidate({ tenantId, masterId });
+      setConfirmBlock(null);
+      setReason("");
+    },
+  });
+  const unblock = api.master.unblockClient.useMutation({
+    onSuccess: () => {
+      void utils.master.listMyBlockedClients.invalidate({ tenantId, masterId });
+    },
+  });
+
+  const blockedSet = new Set((blocked.data ?? []).map((b: any) => b.clientChatId));
+  // tRPC's runtime Query type doesn't preserve the Drizzle return shape
+  // through the generic helper signature, so we cast to a permissive
+  // array here. Each row is { chatId, name, phone, lastAppointment? }.
+  const clients = (clientsList.data ?? []) as Array<any>;
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.myClients", lang)}</h2>
+      {clientsList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
+      {clientsList.isError && (
+        <div className="glass-card rounded-2xl p-6 text-center">
+          <p className="text-red-400">{t("common.errorLoading", lang)}</p>
+        </div>
+      )}
+      <div className="space-y-2">
+        {clients.map((c: any) => {
+          const isBlocked = blockedSet.has(c.chatId);
+          return (
+            <div key={c.chatId} className="glass-card flex items-center gap-3 rounded-xl p-3">
+              <div
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                  isBlocked
+                    ? "bg-rose-500/15 text-rose-400"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                {(c.name ?? "?").charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                    {c.name ?? `#${c.chatId}`}
+                  </p>
+                  {isBlocked && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-400">
+                      <Ban className="h-3 w-3" />
+                      blocked
+                    </span>
+                  )}
+                </div>
+                {c.lastAppointment && (
+                  <p className="text-[10px] text-slate-500">
+                    {t("master.lastApt", lang)} {c.lastAppointment.date}
+                  </p>
+                )}
+              </div>
+              {isBlocked ? (
+                <button
+                  type="button"
+                  onClick={() => unblock.mutate({ tenantId, masterId, clientChatId: c.chatId })}
+                  disabled={unblock.isPending}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                  data-testid={`master-unblock-${c.chatId}`}
+                >
+                  <ShieldCheck className="h-3 w-3" /> {t("master.block.unblock", lang)}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmBlock({ chatId: c.chatId, name: c.name ?? null })}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300"
+                  data-testid={`master-block-${c.chatId}`}
+                >
+                  <Ban className="h-3 w-3" /> {t("master.block.action", lang)}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {clients.length === 0 && !clientsList.isLoading && (
+          <p className="py-8 text-center text-sm text-slate-500">{t("master.noClients", lang)}</p>
+        )}
+      </div>
+
+      {confirmBlock && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => setConfirmBlock(null)}
+        >
+          <div
+            className="glass-card w-full max-w-sm rounded-2xl border border-rose-500/30 bg-white p-5 shadow-2xl dark:bg-slate-900/95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">
+              {t("master.block.title", lang)}
+            </h3>
+            <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">
+              {confirmBlock.name ?? `#${confirmBlock.chatId}`}
+            </p>
+            <input
+              type="text"
+              placeholder={t("clients.block.reasonPh", lang)}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              className="mb-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setConfirmBlock(null); setReason(""); }}
+                className="flex-1 rounded-lg border border-slate-200 bg-slate-100 py-2 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80"
+              >
+                {t("common.cancel", lang)}
+              </button>
+              <button
+                onClick={() =>
+                  block.mutate({
+                    tenantId,
+                    masterId,
+                    clientChatId: confirmBlock.chatId,
+                    reason: reason.trim() || undefined,
+                  })
+                }
+                disabled={block.isPending}
+                className="flex-1 rounded-lg bg-rose-600 py-2 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {t("master.block.confirm", lang)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

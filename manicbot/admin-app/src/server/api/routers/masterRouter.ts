@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, masterProcedure } from "~/server/api/trpc";
-import { appointments, masters, users, services, tenants } from "~/server/db/schema";
+import { appointments, masters, users, services, tenants, masterClientBlocks } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sanitizeText } from "~/server/security/sanitize";
@@ -478,5 +478,99 @@ export const masterRouter = createTRPCRouter({
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
 
       return { success: true, onVacation: onVacationNow === 1 };
+    }),
+
+  // ── Per-master client blocks (0062: clients overhaul) ──────────────────
+  //
+  // A master may hide specific clients from their own slot picker. The
+  // block is one-sided: it does NOT cancel existing appointments, just
+  // refuses future bookings of (this master × this client). Owners /
+  // system_admin can manage blocks for any master in their tenant.
+
+  /** Block a client for one master. */
+  blockClient: masterProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number().int(),
+      clientChatId: z.number().int(),
+      reason: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+
+      // Verify the client actually exists in this tenant — prevents
+      // accidental blocks against arbitrary chat IDs.
+      const [client] = await ctx.db
+        .select({ chatId: users.chatId })
+        .from(users)
+        .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, input.clientChatId)))
+        .limit(1);
+      if (!client) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "client_not_found" });
+      }
+
+      const blockedBy = ctx.webUser?.webRole === "master" ? input.masterId : input.masterId; // actor recorded as the master being affected — owner-overrides retain this for audit clarity
+      const now = Math.floor(Date.now() / 1000);
+      const reason = input.reason ? sanitizeText(input.reason, 500) : null;
+
+      // INSERT-OR-IGNORE pattern via Drizzle `.onConflictDoNothing` —
+      // double-block is a no-op, not an error.
+      await ctx.db
+        .insert(masterClientBlocks)
+        .values({
+          tenantId: input.tenantId,
+          masterChatId: input.masterId,
+          clientChatId: input.clientChatId,
+          reason,
+          blockedBy,
+          blockedAt: now,
+        })
+        .onConflictDoNothing();
+      return { ok: true };
+    }),
+
+  /** Unblock a client for one master. */
+  unblockClient: masterProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterId: z.number().int(),
+      clientChatId: z.number().int(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      await ctx.db
+        .delete(masterClientBlocks)
+        .where(and(
+          eq(masterClientBlocks.tenantId, input.tenantId),
+          eq(masterClientBlocks.masterChatId, input.masterId),
+          eq(masterClientBlocks.clientChatId, input.clientChatId),
+        ));
+      return { ok: true };
+    }),
+
+  /** List clients this master has blocked, with display names from `users`. */
+  listMyBlockedClients: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      const rows = await ctx.db
+        .select({
+          clientChatId: masterClientBlocks.clientChatId,
+          reason: masterClientBlocks.reason,
+          blockedAt: masterClientBlocks.blockedAt,
+          clientName: users.name,
+          clientPhone: users.phone,
+        })
+        .from(masterClientBlocks)
+        .leftJoin(users, and(
+          eq(users.tenantId, masterClientBlocks.tenantId),
+          eq(users.chatId, masterClientBlocks.clientChatId),
+        ))
+        .where(and(
+          eq(masterClientBlocks.tenantId, input.tenantId),
+          eq(masterClientBlocks.masterChatId, input.masterId),
+        ))
+        .orderBy(desc(masterClientBlocks.blockedAt));
+      return rows;
     }),
 });

@@ -60,6 +60,11 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
   const [clientChatId, setClientChatId] = useState<string>("");
   const [clientName, setClientName] = useState<string>("");
   const [clientPhone, setClientPhone] = useState<string>("");
+  // 0062: new-client branch supports any contact channel. Phone is no
+  // longer required — name + at-least-one-contact is enough.
+  const [clientEmail, setClientEmail] = useState<string>("");
+  const [clientTg, setClientTg] = useState<string>("");
+  const [clientIg, setClientIg] = useState<string>("");
   const [note, setNote] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
 
@@ -86,8 +91,16 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
   }, [clients.data]);
 
   const useExistingClient = clientChatId !== "";
+  // 0062: name + at-least-one-contact. Phone is no longer mandatory —
+  // the salon now accepts walk-ins reachable only via Telegram, Instagram
+  // or email.
+  const hasContact =
+    clientPhone.trim().length >= 6 ||
+    clientEmail.trim().length > 0 ||
+    clientTg.trim().length > 0 ||
+    clientIg.trim().length > 0;
   const newClientValid =
-    useExistingClient || (clientName.trim().length > 0 && clientPhone.trim().length >= 6);
+    useExistingClient || (clientName.trim().length > 0 && hasContact);
   const formValid =
     masterId !== null && serviceId !== "" && date !== "" && time !== "" && newClientValid;
   const submitDisabled = !formValid || create.isPending;
@@ -112,7 +125,10 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
       time,
       clientChatId: useExistingClient ? Number(clientChatId) : undefined,
       clientName: useExistingClient ? undefined : clientName.trim(),
-      clientPhone: useExistingClient ? undefined : clientPhone.trim(),
+      clientPhone: useExistingClient ? undefined : (clientPhone.trim() || undefined),
+      clientEmail: useExistingClient ? undefined : (clientEmail.trim() || undefined),
+      clientTgUsername: useExistingClient ? undefined : (clientTg.trim() || undefined),
+      clientIgUsername: useExistingClient ? undefined : (clientIg.trim() || undefined),
       note: note.trim() || undefined,
     });
   }
@@ -160,21 +176,54 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
           </div>
 
           {!clientChatId && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                type="text"
-                placeholder={t("appointments.manual.clientNamePh", lang)}
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                className={FIELD_BASE}
-              />
-              <input
-                type="tel"
-                placeholder="+48 ..."
-                value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
-                className={FIELD_BASE}
-              />
+            <div className="space-y-2">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  type="text"
+                  placeholder={t("appointments.manual.clientNamePh", lang)}
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className={FIELD_BASE}
+                  data-testid="mb-client-name"
+                />
+                <input
+                  type="tel"
+                  placeholder="+48 ..."
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  className={FIELD_BASE}
+                  data-testid="mb-client-phone"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <input
+                  type="email"
+                  placeholder={t("appointments.manual.emailPh", lang)}
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  className={FIELD_BASE}
+                  data-testid="mb-client-email"
+                />
+                <input
+                  type="text"
+                  placeholder={t("appointments.manual.tgPh", lang)}
+                  value={clientTg}
+                  onChange={(e) => setClientTg(e.target.value)}
+                  className={FIELD_BASE}
+                  data-testid="mb-client-tg"
+                />
+                <input
+                  type="text"
+                  placeholder={t("appointments.manual.igPh", lang)}
+                  value={clientIg}
+                  onChange={(e) => setClientIg(e.target.value)}
+                  className={FIELD_BASE}
+                  data-testid="mb-client-ig"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-white/50">
+                {t("appointments.manual.contactAny", lang)}
+              </p>
             </div>
           )}
 

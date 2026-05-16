@@ -1,12 +1,13 @@
 import { createTRPCRouter, adminProcedure, publicProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { appointments, users, masters, services } from "~/server/db/schema";
+import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
 import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "~/env";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { slotsBusy } from "~/server/api/slotsBusy";
 import { log } from "~/server/utils/logger";
+import { syncMarketingContact } from "~/server/clients/marketingSync";
 
 /**
  * Fire-and-forget call to Worker endpoint to trigger notifications + calendar sync.
@@ -216,15 +217,25 @@ export const appointmentsRouter = createTRPCRouter({
       tenantId: z.string(),
       clientChatId: z.number().int().optional(),
       clientName: z.string().min(1).max(100).optional(),
+      // Phone is no longer strictly required — the client may arrive via
+      // email / Telegram nick / Instagram handle. The refinement below
+      // enforces ≥1 contact.
       clientPhone: z.string().min(6).max(30).optional(),
+      clientEmail: z.union([z.string().email(), z.literal("")]).optional(),
+      clientTgUsername: z.string().max(64).optional(),
+      clientIgUsername: z.string().max(64).optional(),
       masterId: z.number().int(),
       serviceId: z.string().min(1),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       time: z.string().regex(/^\d{2}:\d{2}$/),
       note: z.string().max(500).optional(),
-    }).refine(d => d.clientChatId || (d.clientName && d.clientPhone), {
-      message: "Either clientChatId or (clientName + clientPhone) required",
-    }))
+    }).refine(
+      (d) =>
+        d.clientChatId ||
+        (d.clientName &&
+          (d.clientPhone || (d.clientEmail && d.clientEmail !== "") || d.clientTgUsername || d.clientIgUsername)),
+      { message: "Either clientChatId or (clientName + at least one contact: phone | email | telegram | instagram) required" },
+    ))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
@@ -277,25 +288,89 @@ export const appointmentsRouter = createTRPCRouter({
       }
       const [h, m] = input.time.split(":").map(Number);
 
-      // Resolve or create client
+      // Resolve or create client. New-client branch (0062) accepts any
+      // contact channel (phone | email | telegram | instagram) — name +
+      // at-least-one-contact, validated by the input schema.
+      const normEmail = input.clientEmail && input.clientEmail !== "" ? input.clientEmail.toLowerCase() : null;
+      const normTg = input.clientTgUsername ? input.clientTgUsername.replace(/^@+/, "") : null;
+      const normIg = input.clientIgUsername ? input.clientIgUsername.replace(/^@+/, "") : null;
+
       let chatId = input.clientChatId ?? null;
-      if (!chatId && input.clientName && input.clientPhone) {
+      if (!chatId && input.clientName) {
         // Synthetic negative chatId for manually-created clients (no Telegram ID)
         chatId = -Math.floor(Date.now() / 1000);
+        const nowSecForUser = Math.floor(Date.now() / 1000);
         try {
           await ctx.db.insert(users).values({
             tenantId: input.tenantId,
             chatId,
             name: input.clientName,
-            phone: input.clientPhone,
-            registeredAt: Math.floor(Date.now() / 1000),
+            phone: input.clientPhone ?? null,
+            email: normEmail,
+            tgUsername: normTg,
+            igUsername: normIg,
+            registeredAt: nowSecForUser,
+            updatedAt: nowSecForUser,
             firstSource: "manual_dashboard",
           });
+          // Mirror into the marketing directory so the new lead is
+          // deduped + reachable by future campaigns. Non-fatal on
+          // failure — the booking itself succeeds either way.
+          try {
+            const mcid = await syncMarketingContact(
+              ctx.db,
+              input.tenantId,
+              {
+                chatId,
+                name: input.clientName,
+                phone: input.clientPhone ?? null,
+                email: normEmail,
+                tgUsername: normTg,
+                igUsername: normIg,
+              },
+              "booking_manual",
+              nowSecForUser,
+            );
+            if (mcid) {
+              await ctx.db
+                .update(users)
+                .set({ marketingContactId: mcid })
+                .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, chatId)));
+            }
+          } catch (syncErr) {
+            log.warn("appointments.createManual.marketingSync", {
+              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+          }
         } catch (e) {
           log.error("appointments.createManual", e instanceof Error ? e : new Error(String(e)));
         }
       }
       if (!chatId) throw new TRPCError({ code: "BAD_REQUEST", message: "client_resolution_failed" });
+
+      // 0062: client-block enforcement.
+      // (1) Global tenant-wide block on the user — refuse outright.
+      // (2) Per-master block (master_client_blocks) — refuse this combo only.
+      const [blockedRow] = await ctx.db
+        .select({ isBlockedGlobal: users.isBlockedGlobal })
+        .from(users)
+        .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, chatId)))
+        .limit(1);
+      if (blockedRow?.isBlockedGlobal === 1) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
+      }
+      const [mblock] = await ctx.db
+        .select({ id: masterClientBlocks.id })
+        .from(masterClientBlocks)
+        .where(and(
+          eq(masterClientBlocks.tenantId, input.tenantId),
+          eq(masterClientBlocks.masterChatId, input.masterId),
+          eq(masterClientBlocks.clientChatId, chatId),
+        ))
+        .limit(1);
+      if (mblock) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+      }
 
       // Create appointment
       const aptId = `a${Math.floor(Date.now() / 1000)}_${Math.random().toString(36).slice(2, 8)}`;

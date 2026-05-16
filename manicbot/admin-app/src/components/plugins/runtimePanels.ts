@@ -33,6 +33,7 @@ const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
   "availability-share": () => import("./runtimes/AvailabilityShareRuntime"),
   "earnings-goal": () => import("./runtimes/EarningsGoalRuntime"),
   "message-templates": () => import("./runtimes/MessageTemplatesRuntime"),
+  "loyalty-stamps": () => import("./runtimes/LoyaltyStampsRuntime"),
 };
 
 export function loadRuntime(slug: string): ComponentType<PluginRuntimeProps> | null {

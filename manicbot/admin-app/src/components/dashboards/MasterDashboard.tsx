@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, List as ListIcon, Ban, ShieldCheck } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, Ban, ShieldCheck } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -10,37 +10,16 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { TodayTab } from "~/components/master/tabs/TodayTab";
-import { MonthCalendar } from "~/components/calendar/MonthCalendar";
-import { AptCard } from "~/components/dashboard-ui/AptCard";
+import { ScheduleTab } from "~/components/master/tabs/ScheduleTab";
 import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { Switch } from "~/components/ui/Switch";
 import { useRole } from "~/components/RoleContext";
-import { STATUS_LABELS, APT_BORDER } from "~/lib/appointments";
 
 type Tab = "today" | "schedule" | "clients" | "earnings" | "reviews" | "services" | "profile";
 
-const STATUS_STYLES: Record<string, string> = {
-  confirmed: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
-  pending: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
-  cancelled: "bg-red-500/20 text-red-400 border border-red-500/30",
-  no_show: "bg-orange-500/20 text-orange-400 border border-orange-500/30",
-  done: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
-};
-
 type Period = "week" | "month" | "year";
-
-const NO_SHOW_KEYS = {
-  client: "master.noShow.client",
-  master: "master.noShow.master",
-} as const;
-
-const CANCELLED_BY_KEYS = {
-  client: "master.cancelled.client",
-  master: "master.cancelled.master",
-  admin: "master.cancelled.admin",
-} as const;
 
 function getPeriodDates(period: Period): { from: string; to: string } {
   const now = new Date();
@@ -52,198 +31,11 @@ function getPeriodDates(period: Period): { from: string; to: string } {
   return { from: from.toISOString().slice(0, 10), to };
 }
 
-function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "client") => void }) {
-  const { lang } = useLang();
-  const [hh, mm] = (apt.time ?? "00:00").split(":");
-  const nameWords = (apt.userName ?? "?").trim().split(/\s+/);
-  const initials = nameWords.length >= 2
-    ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
-    : (apt.userName ?? "?").slice(0, 2).toUpperCase();
-  const statusKey = apt.noShow ? "no_show" : apt.cancelled ? "cancelled" : apt.status;
-  const border = APT_BORDER[statusKey] ?? "border-l-slate-700";
-  const noShowKey = NO_SHOW_KEYS[apt.noShowBy as keyof typeof NO_SHOW_KEYS];
-  const cancelledKey = CANCELLED_BY_KEYS[apt.cancelledBy as keyof typeof CANCELLED_BY_KEYS];
-  const statusLabel = statusKey === "no_show"
-    ? (noShowKey ? t(noShowKey, lang) : t("master.noShow.fallback", lang))
-    : statusKey === "cancelled" && cancelledKey
-      ? t(cancelledKey, lang)
-      : (STATUS_LABELS[apt.status] ?? apt.status);
-
-  return (
-    <div className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden`}>
-      <div className="p-3 flex items-center gap-3">
-        <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400">
-          {initials}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{apt.userName ?? `#${apt.chatId}`}</p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{apt.svcId}</p>
-          {apt.cancelReason && (statusKey === "cancelled" || statusKey === "no_show") && (
-            <p className="text-[10px] text-slate-400 mt-0.5 truncate">{apt.cancelReason}</p>
-          )}
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
-            {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
-          </p>
-          <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[statusKey] ?? "bg-slate-700 text-slate-300"}`}>
-            {statusLabel}
-          </span>
-        </div>
-      </div>
-      {onNoShow && apt.status === "confirmed" && !apt.cancelled && !apt.noShow && (
-        <div className="flex border-t border-slate-200 dark:border-white/5">
-          <button onClick={() => onNoShow(apt.id, "client")}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
-            <UserX className="h-3.5 w-3.5" /> {t("master.noShow.client", lang)}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Master's schedule — calendar / list toggle wrapping the same data. */
-function ScheduleTab({
-  tenantId,
-  lang,
-  schedule,
-  canMutate,
-  markNoShowMut,
-}: {
-  tenantId: string;
-  lang: Lang;
-  schedule: { isLoading: boolean; isError: boolean; data?: any[] };
-  canMutate: boolean;
-  markNoShowMut: { mutate: (input: { tenantId: string; id: string; noShowBy: "client" | "master" }) => void };
-}) {
-  const [view, setView] = useState<"calendar" | "list">("calendar");
-  const [calViewDate, setCalViewDate] = useState(() => new Date());
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
-
-  const dayMap: Record<string, any[]> = {};
-  (schedule.data ?? []).forEach((a: any) => {
-    (dayMap[a.date] ??= []).push(a);
-  });
-  const selectedDayApts = selectedDay ? dayMap[selectedDay] ?? [] : [];
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">
-          {t("master.allApts", lang)}
-        </h2>
-        <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 gap-0.5" data-testid="master-schedule-view-switcher">
-          <button
-            type="button"
-            onClick={() => setView("calendar")}
-            data-testid="master-schedule-mode-calendar"
-            data-active={view === "calendar" ? "1" : "0"}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              view === "calendar"
-                ? "bg-brand-500/20 text-brand-400"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            }`}
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            {t("salon.cal.calendar", lang)}
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            data-testid="master-schedule-mode-list"
-            data-active={view === "list" ? "1" : "0"}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              view === "list"
-                ? "bg-brand-500/20 text-brand-400"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            }`}
-          >
-            <ListIcon className="w-3.5 h-3.5" />
-            {t("salon.cal.list", lang)}
-          </button>
-        </div>
-      </div>
-
-      {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
-      {schedule.isError && (
-        <div className="glass-card rounded-2xl p-6 text-center">
-          <p className="text-red-400">{t("common.errorLoading", lang)}</p>
-        </div>
-      )}
-
-      {view === "calendar" && (
-        <>
-          <MonthCalendar
-            apts={schedule.data ?? []}
-            viewDate={calViewDate}
-            setViewDate={(d) => { setCalViewDate(d); setSelectedDay(null); }}
-            selectedDay={selectedDay}
-            setSelectedDay={setSelectedDay}
-            isLoading={schedule.isLoading}
-            lang={lang}
-          />
-          {selectedDay && (
-            <div className="glass-card rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
-                  {new Date(selectedDay + "T12:00:00").toLocaleDateString(
-                    lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU",
-                    { weekday: "long", day: "numeric", month: "long" },
-                  )}
-                  {selectedDayApts.length > 0 && (
-                    <span className="ml-2 text-slate-400 dark:text-slate-500 font-medium">
-                      · {selectedDayApts.length}
-                    </span>
-                  )}
-                </h3>
-                <button
-                  onClick={() => setSelectedDay(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-2">
-                {selectedDayApts.map((a: any) => (
-                  <AptCard
-                    key={a.id}
-                    a={a}
-                    lang={lang}
-                    onNoShow={canMutate
-                      ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
-                      : undefined}
-                  />
-                ))}
-                {selectedDayApts.length === 0 && (
-                  <p className="text-slate-500 text-sm text-center py-4">{t("master.noApts", lang)}</p>
-                )}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {view === "list" && (
-        <div className="space-y-2">
-          {schedule.data?.map((a: any) => (
-            <AptRow
-              key={a.id}
-              apt={a}
-              onNoShow={canMutate
-                ? (id, noShowBy) => markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
-                : undefined}
-            />
-          ))}
-          {schedule.data?.length === 0 && (
-            <p className="text-slate-500 text-sm text-center py-8">{t("master.noApts", lang)}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+// The legacy local AptRow + ScheduleTab (MonthCalendar + AptRow list) were
+// replaced on 2026-05-17 by the modernized SalonDayView/Week/Calendar/Agenda
+// stack — see components/master/tabs/ScheduleTab.tsx. Owners viewing "as
+// master" via the sidebar previewMasterId chip and real masters on their
+// own logins now both land on the same view stack used by SalonDashboard.
 
 export function MasterDashboard({
   tenantId,
@@ -304,7 +96,9 @@ export function MasterDashboard({
   );
   const profile = api.master.getMyProfile.useQuery(
     { tenantId, masterId },
-    { enabled: tab === "profile" || isDelegating }
+    // Schedule tab needs the master's name + workHours for the single-column
+    // SalonDayView header + the non-working-hours tint.
+    { enabled: tab === "profile" || tab === "schedule" || isDelegating }
   );
   const masterReviews = api.reviews.getForSalon.useQuery(
     { tenantId, masterId: String(masterId) },
@@ -453,14 +247,19 @@ export function MasterDashboard({
       {/* TODAY */}
       {tab === "today" && <TodayTab tenantId={tenantId} masterId={masterId} canMutate={canMutate} />}
 
-      {/* SCHEDULE */}
+      {/* SCHEDULE — modernized 2026-05-17: SalonDayView / SalonWeekView /
+          MonthCalendar / SalonAgendaView stack scoped to this master. */}
       {tab === "schedule" && (
         <ScheduleTab
           tenantId={tenantId}
+          masterId={masterId}
           lang={lang}
           schedule={schedule}
           canMutate={canMutate}
           markNoShowMut={markNoShowMut}
+          masterName={(profile.data as any)?.name ?? null}
+          masterWorkHours={(profile.data as any)?.workHours}
+          isDelegating={isDelegating}
         />
       )}
 

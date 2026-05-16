@@ -6,24 +6,144 @@
  *                          how end-users can request deletion of their data)
  *   - /terms            — Terms of Service
  *
- * These MUST be static HTML (not SPA). Meta reviewers and automated
- * crawlers don't execute JS; if they hit a SPA shell they see no content
- * and reject the App Review submission. HEAD requests must also return
- * 200 — Meta's crawler probes via HEAD before GET.
+ * These MUST be static HTML for Meta reviewers and automated crawlers —
+ * they don't execute JS; if they hit a SPA shell they see no content and
+ * reject the App Review submission. HEAD requests must also return 200 —
+ * Meta's crawler probes via HEAD before GET.
+ *
+ * BUT real browsers fall through to the landing SPA so humans see the
+ * same Header / Footer / language switcher as the rest of the site —
+ * no visual "deaf walls". The bot-detection below is intentionally
+ * fail-closed: requires a Mozilla UA AND no known crawler signature.
+ * If we can't be confident the UA is a browser, we serve the static
+ * fallback (which is also styled to match the brand, just in case).
+ *
+ * /data-deletion is the exception — the SPA has no route for it, so it
+ * stays static regardless of UA.
  */
+
+const BOT_PATTERNS = [
+  /\bbot\b/i,
+  /\bcrawl/i,
+  /\bspider/i,
+  /\bheadless/i,
+  /facebookexternalhit/i,
+  /meta-externalagent/i,
+  /WhatsApp/i,
+  /TelegramBot/i,
+  /Slackbot/i,
+  /LinkedInBot/i,
+  /Twitterbot/i,
+  /Discordbot/i,
+  /embedly/i,
+  /\bSlurp\b/i,
+  /SkypeUriPreview/i,
+  /vkShare/i,
+  /Applebot/i,
+];
+
+/**
+ * Real browsers (Chrome / Safari / Firefox / Edge) always set Mozilla/X.X
+ * and never match the crawler signatures above. HEAD is treated as
+ * bot-like regardless of UA — browsers virtually never HEAD a page, and
+ * the Meta crawler probes via HEAD before GET.
+ *
+ * @param {Request} request
+ * @returns {boolean}
+ */
+function looksLikeBrowser(request) {
+  if (request.method !== 'GET') return false;
+  const ua = request.headers.get('user-agent') || '';
+  if (!ua.includes('Mozilla/')) return false;
+  return !BOT_PATTERNS.some((re) => re.test(ua));
+}
 
 const COMMON_STYLE = `<style>
 :root { color-scheme: dark; }
-body { font: 16px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-       max-width: 720px; margin: 40px auto; padding: 0 20px; color: #e4e4e7;
-       background: #0a0a0a; }
-h1 { font-size: 28px; margin-bottom: 8px; }
-h2 { font-size: 20px; margin-top: 32px; border-bottom: 1px solid #27272a; padding-bottom: 6px; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font: 16px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;
+  color: #e4e4e7; background: rgb(5,8,18);
+  min-height: 100vh; display: flex; flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+.site-header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center;
+  height: 64px; padding: 0 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(5,8,18,0.82);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+}
+.brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  text-decoration: none; color: #fff; font-weight: 700;
+  letter-spacing: -0.01em; font-size: 14px;
+}
+.brand-mark {
+  width: 32px; height: 32px; border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  box-shadow: 0 2px 12px -2px rgba(124,58,237,0.4);
+}
+.brand-tld {
+  background: linear-gradient(90deg, #a78bfa, #22d3ee);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+main {
+  flex: 1; width: 100%; max-width: 720px;
+  margin: 0 auto; padding: 48px 24px 64px;
+}
+h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; font-weight: 700; color: #fff; }
+h2 { font-size: 20px; margin: 32px 0 12px; padding-bottom: 6px;
+     border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: 600; color: #fff; }
 p, li { color: #d4d4d8; }
-a { color: #a78bfa; }
-.meta { color: #71717a; font-size: 14px; margin-top: 4px; }
-footer { color: #71717a; font-size: 14px; margin-top: 48px; border-top: 1px solid #27272a; padding-top: 16px; }
+a { color: #a78bfa; text-decoration: underline; text-decoration-color: rgba(167,139,250,0.3);
+    text-underline-offset: 2px; transition: color 150ms; }
+a:hover { color: #c4b5fd; text-decoration-color: rgba(196,181,253,0.6); }
+.meta { color: #71717a; font-size: 14px; margin: 4px 0 0; }
+blockquote { margin: 12px 0; padding: 12px 16px; border-left: 3px solid #7c3aed;
+             background: rgba(124,58,237,0.06); border-radius: 0 8px 8px 0; }
+code { background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;
+       font-size: 0.92em; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
+.site-footer {
+  margin-top: auto; padding: 28px 24px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(5,8,18,0.65);
+}
+.site-footer-inner {
+  max-width: 1152px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 16px;
+}
+.site-footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
+.site-footer nav a { color: rgba(255,255,255,0.4); text-decoration: none; font-size: 14px; }
+.site-footer nav a:hover { color: #c4b5fd; }
+.copy { font-size: 12px; color: rgba(255,255,255,0.25); }
 </style>`;
+
+const SITE_HEADER = `<header class="site-header">
+<a class="brand" href="/">
+<span class="brand-mark" aria-hidden="true"></span>
+<span>ManicBot<span class="brand-tld">.com</span></span>
+</a>
+</header>`;
+
+const SITE_FOOTER = `<footer class="site-footer">
+<div class="site-footer-inner">
+<nav aria-label="Footer">
+<a href="/">Home</a>
+<a href="/privacy">Privacy</a>
+<a href="/terms">Terms</a>
+<a href="/rules">Rules</a>
+<a href="/support">Support</a>
+<a href="/data-deletion">Data deletion</a>
+<a href="mailto:support@manicbot.com">support@manicbot.com</a>
+</nav>
+<span class="copy">&copy; 2026 ManicBot. All rights reserved.</span>
+</div>
+</footer>`;
 
 function htmlResponse(title, body, request) {
   const isHead = request?.method === 'HEAD';
@@ -37,14 +157,11 @@ function htmlResponse(title, body, request) {
 ${COMMON_STYLE}
 </head>
 <body>
+${SITE_HEADER}
+<main>
 ${body}
-<footer>
-ManicBot — automated booking assistant for nail salons.
-Contact: <a href="mailto:support@manicbot.com">support@manicbot.com</a> ·
-<a href="/privacy">Privacy</a> ·
-<a href="/data-deletion">Data deletion</a> ·
-<a href="/terms">Terms</a>
-</footer>
+</main>
+${SITE_FOOTER}
 </body>
 </html>`;
   return new Response(isHead ? null : html, {
@@ -144,7 +261,7 @@ function dataDeletionPage(request) {
 <li>Conversation history rows in our <code>conversations</code> and <code>channel_identities</code> tables</li>
 <li>Booking records in our <code>appointments</code> table (except where law requires retention for accounting — those are anonymized)</li>
 <li>Your phone number, name, and any profile data in our <code>users</code> table</li>
-<li>Cached LLM context — purged from KV with the next memory rotation (≤1 hour)</li>
+<li>Cached LLM context — purged from KV with the next memory rotation (&le;1 hour)</li>
 </ul>
 
 <h2>What we cannot delete</h2>
@@ -192,7 +309,9 @@ function termsPage(request) {
 
 /**
  * Try to handle one of the legal pages. Returns null if the path doesn't
- * match (caller falls through to next handler).
+ * match, or if the path is /privacy or /terms AND the requester looks
+ * like a real browser (in which case the landing SPA serves the page
+ * with the full Header/Footer design — see manicbot-analysis/src/pages/LegalPage.tsx).
  *
  * @param {Request} request
  * @param {URL} url
@@ -204,14 +323,17 @@ export function tryLegalPages(request, url) {
     case '/privacy':
     case '/privacy/':
     case '/privacy.html':
+      if (looksLikeBrowser(request)) return null;
       return privacyPage(request);
     case '/data-deletion':
     case '/data-deletion/':
     case '/data-deletion.html':
+      // No SPA route — always static.
       return dataDeletionPage(request);
     case '/terms':
     case '/terms/':
     case '/terms.html':
+      if (looksLikeBrowser(request)) return null;
       return termsPage(request);
     default:
       return null;

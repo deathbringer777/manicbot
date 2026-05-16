@@ -26,6 +26,8 @@ import {
   CalendarRange,
   List,
   Download,
+  X,
+  Search,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -34,6 +36,8 @@ import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
+import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
+import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 
 type AptViewMode = "day" | "week" | "calendar" | "agenda" | "list";
 
@@ -86,6 +90,19 @@ export default function AppointmentsPageClient() {
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<StatusKey>>(new Set());
   const [hiddenServiceIds, setHiddenServiceIds] = useState<Set<string>>(new Set());
   const [hiddenTenantHashes, setHiddenTenantHashes] = useState<Set<number>>(new Set());
+
+  // God Mode booking modal flow:
+  //   Step 1 (showBookingModal=true, bookingTenantId=null)  → tenant picker overlay
+  //   Step 2 (showBookingModal=true, bookingTenantId=<id>)  → ManualBookingModal
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingTenantId, setBookingTenantId] = useState<string | null>(null);
+  const [tenantSearch, setTenantSearch] = useState("");
+
+  const closebookingModal = () => {
+    setShowBookingModal(false);
+    setBookingTenantId(null);
+    setTenantSearch("");
+  };
 
   const utils = api.useUtils();
 
@@ -401,6 +418,92 @@ export default function AppointmentsPageClient() {
           </div>
         </div>
       </div>
+      {/* FAB — opens booking modal (step 1: pick tenant) */}
+      <QuickAddFab
+        lang={lang}
+        onNewBooking={() => setShowBookingModal(true)}
+      />
+
+      {/* God Mode booking — Step 1: pick a tenant */}
+      {showBookingModal && bookingTenantId === null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) closebookingModal(); }}
+        >
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl shadow-black/40 border border-slate-200 dark:border-white/10 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                {t("gmAppts.pickTenant", lang)}
+              </h2>
+              <button
+                type="button"
+                onClick={closebookingModal}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-4 pt-3 pb-1">
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-2">
+                <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <input
+                  type="search"
+                  value={tenantSearch}
+                  onChange={(e) => setTenantSearch(e.target.value)}
+                  placeholder={t("gmAppts.searchPlaceholder", lang)}
+                  autoFocus
+                  className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Tenant list */}
+            <div className="max-h-72 overflow-y-auto py-2">
+              {(tenantsQ.data ?? [])
+                .filter((tn) =>
+                  (tn.name ?? tn.id).toLowerCase().includes(tenantSearch.toLowerCase()),
+                )
+                .map((tn) => (
+                  <button
+                    key={tn.id}
+                    type="button"
+                    onClick={() => setBookingTenantId(tn.id)}
+                    className="w-full text-left px-5 py-2.5 text-sm text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
+                  >
+                    {tn.name ?? tn.id}
+                  </button>
+                ))}
+              {tenantsQ.isLoading && (
+                <p className="text-center text-xs text-slate-400 py-4">…</p>
+              )}
+              {!tenantsQ.isLoading &&
+                (tenantsQ.data ?? []).filter((tn) =>
+                  (tn.name ?? tn.id).toLowerCase().includes(tenantSearch.toLowerCase()),
+                ).length === 0 && (
+                  <p className="text-center text-xs text-slate-400 py-4">
+                    {t("gmAppts.empty", lang)}
+                  </p>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* God Mode booking — Step 2: ManualBookingModal for the selected tenant */}
+      {showBookingModal && bookingTenantId !== null && (
+        <ManualBookingModal
+          tenantId={bookingTenantId}
+          onClose={closebookingModal}
+          onCreated={() => {
+            void utils.appointments.getAll.invalidate();
+            closebookingModal();
+          }}
+        />
+      )}
     </Shell>
   );
 }

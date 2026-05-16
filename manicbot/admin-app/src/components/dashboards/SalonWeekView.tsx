@@ -9,6 +9,11 @@
  * columns. Each appointment block shows time + client + service + the
  * master's color stripe; clicking opens the AptCard drawer below.
  *
+ * Mobile (<640px): shows a 3-day sliding window instead of all 7 days at
+ * once. The week-level prev/next navigation in the header still moves full
+ * weeks; the dot-indicator row below the header shifts the 3-day window
+ * within the current week. Today is auto-centered on week navigation.
+ *
  * Per §12.1 of the Booksy comparison plan — Week view item.
  */
 
@@ -21,6 +26,7 @@ const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row 
 const HOUR_START = 8;
 const HOUR_END = 22;
 const TOTAL_HOURS = HOUR_END - HOUR_START;
+const MOBILE_COLS = 3; // days visible at once on narrow screens
 
 const MASTER_PALETTE = [
   { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" },
@@ -113,6 +119,38 @@ export function SalonWeekView({
   const weekHasToday = days.some((d) => fmtIsoDate(d) === todayIso);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Mobile 3-day sliding window ──────────────────────────────────────────
+  // isMobile is false during SSR; set to true by the matchMedia effect so
+  // the initial paint is always full-week (avoids hydration mismatch).
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileOffset, setMobileOffset] = useState(0); // 0–4 (days[offset..offset+3])
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // Auto-center today when the user navigates to a different week.
+  // On weeks that don't contain today, start from Monday (offset=0).
+  useEffect(() => {
+    const todayIdx = days.findIndex((d) => fmtIsoDate(d) === todayIso);
+    if (todayIdx >= 0) {
+      // Center today: offset = todayIdx - 1, clamped to valid range [0, 4].
+      setMobileOffset(Math.max(0, Math.min(7 - MOBILE_COLS, todayIdx - 1)));
+    } else {
+      setMobileOffset(0);
+    }
+  }, [days]); // intentionally omit todayIso — changes only at midnight, not worth the complexity
+
+  // Visible days: 3 on mobile, all 7 on desktop.
+  const visibleDays = isMobile ? days.slice(mobileOffset, mobileOffset + MOBILE_COLS) : days;
+
+  // Today's column index within the *visible* slice — needed for now-line position.
+  const visibleTodayColumnIndex = visibleDays.findIndex((d) => fmtIsoDate(d) === todayIso);
+
   // Master color lookup — same palette mapping as Day view, by master index.
   const masterColor = useMemo(() => {
     const map = new Map<number, (typeof MASTER_PALETTE)[number]>();
@@ -163,8 +201,12 @@ export function SalonWeekView({
     return () => window.clearInterval(interval);
   }, [weekHasToday]);
   const currentTimeTop = ((nowMinutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
-  const currentTimeVisible = weekHasToday && nowMinutes >= HOUR_START * 60 && nowMinutes < HOUR_END * 60;
-  const todayColumnIndex = days.findIndex((d) => fmtIsoDate(d) === todayIso);
+  // Show the now-line only when today is within the visible window.
+  const currentTimeVisible =
+    weekHasToday &&
+    nowMinutes >= HOUR_START * 60 &&
+    nowMinutes < HOUR_END * 60 &&
+    visibleTodayColumnIndex >= 0;
 
   const locale =
     lang === "ua" ? "uk-UA" : lang === "pl" ? "pl-PL" : lang === "en" ? "en-US" : "ru-RU";
@@ -192,6 +234,9 @@ export function SalonWeekView({
     }
     return `${first.toLocaleDateString(locale, { day: "numeric", month: "short" })} – ${last.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}`;
   })();
+
+  // Column pixel width: narrower on mobile so 3 columns fit comfortably.
+  const colWidth = isMobile ? 100 : 140;
 
   return (
     <div className="space-y-3" data-testid="salon-week-view">
@@ -230,6 +275,64 @@ export function SalonWeekView({
         </div>
       </div>
 
+      {/* Mobile 3-day window navigator — dots + left/right arrows.
+          Hidden on sm+ screens where the full 7-day grid is shown. */}
+      {isMobile && (
+        <div className="flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={() => setMobileOffset((o) => Math.max(0, o - 1))}
+            disabled={mobileOffset === 0}
+            data-testid="week-view-mobile-prev"
+            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-30"
+            aria-label={t("salon.week.prev", lang)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+
+          {/* 7 dots — pill shape for the 3 visible, small circle for the rest.
+              Tapping a dot jumps to a window starting at that day. */}
+          <div className="flex items-center gap-1.5" role="tablist" aria-label="Day selector">
+            {days.map((day, i) => {
+              const isVisible = i >= mobileOffset && i < mobileOffset + MOBILE_COLS;
+              const isToday = fmtIsoDate(day) === todayIso;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  role="tab"
+                  aria-selected={isVisible}
+                  onClick={() => setMobileOffset(Math.max(0, Math.min(7 - MOBILE_COLS, i)))}
+                  className={`rounded-full transition-all ${
+                    isVisible
+                      ? "h-1.5 w-4"
+                      : "h-1.5 w-1.5"
+                  } ${
+                    isToday
+                      ? "bg-brand-500"
+                      : isVisible
+                      ? "bg-slate-500 dark:bg-slate-400"
+                      : "bg-slate-300 dark:bg-slate-600"
+                  }`}
+                  title={day.toLocaleDateString(locale, { weekday: "short", day: "numeric" })}
+                />
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileOffset((o) => Math.min(7 - MOBILE_COLS, o + 1))}
+            disabled={mobileOffset >= 7 - MOBILE_COLS}
+            data-testid="week-view-mobile-next"
+            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-30"
+            aria-label={t("salon.week.next", lang)}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Empty state when no apts in the entire week */}
       {aptsByDate.size === 0 && !isLoading && (
         <div className="glass-card rounded-2xl py-12 px-4 text-center" data-testid="week-view-empty">
@@ -239,13 +342,16 @@ export function SalonWeekView({
         </div>
       )}
 
-      {/* Hour grid + 7 day columns */}
+      {/* Hour grid + visible day columns (3 on mobile, 7 on desktop) */}
       <div
         ref={scrollerRef}
         className="glass-card rounded-2xl overflow-auto"
         style={{ maxHeight: "calc(100vh - 280px)" }}
       >
-        <div className="flex" style={{ minWidth: 80 + 7 * 140 }}>
+        <div
+          className="flex"
+          style={{ minWidth: 80 + visibleDays.length * colWidth }}
+        >
           {/* Hour scale */}
           <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
             <div className="h-12 border-b border-slate-200 dark:border-white/10" />
@@ -260,18 +366,17 @@ export function SalonWeekView({
             ))}
           </div>
 
-          {/* 7 day columns */}
+          {/* Visible day columns */}
           <div className="flex-1 flex relative">
-            {days.map((day, dayIdx) => {
+            {visibleDays.map((day, visIdx) => {
               const iso = fmtIsoDate(day);
               const isTodayCol = iso === todayIso;
               const list = aptsByDate.get(iso) ?? [];
               return (
                 <div
                   key={iso}
-                  className={`flex-1 min-w-[140px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative ${
-                    isTodayCol ? "bg-brand-500/[0.025] dark:bg-brand-500/[0.04]" : ""
-                  }`}
+                  className={`flex-1 border-r border-slate-200 dark:border-white/10 last:border-r-0 relative`}
+                  style={{ minWidth: colWidth }}
                   data-testid="week-view-day-column"
                   data-day={iso}
                 >
@@ -357,15 +462,15 @@ export function SalonWeekView({
               );
             })}
 
-            {/* Current-time red line — drawn over today's column only */}
-            {currentTimeVisible && todayColumnIndex >= 0 && (
+            {/* Current-time red line — drawn over today's visible column only */}
+            {currentTimeVisible && visibleTodayColumnIndex >= 0 && (
               <div
                 data-testid="week-view-now-line"
                 className="absolute pointer-events-none z-20"
                 style={{
                   top: 48 + currentTimeTop,
-                  left: `${(todayColumnIndex / 7) * 100}%`,
-                  width: `${100 / 7}%`,
+                  left: `${(visibleTodayColumnIndex / visibleDays.length) * 100}%`,
+                  width: `${100 / visibleDays.length}%`,
                 }}
               >
                 <div className="h-px bg-red-500/80" />

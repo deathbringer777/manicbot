@@ -1220,6 +1220,7 @@ const translations = {
   "gmAppts.ofPagination":       { ru: "из",                     ua: "із",                     en: "of",                     pl: "z" },
   "gmAppts.prev":               { ru: "Назад",                  ua: "Назад",                  en: "Prev",                   pl: "Wstecz" },
   "gmAppts.next":               { ru: "Вперёд",                 ua: "Вперед",                 en: "Next",                   pl: "Dalej" },
+  "gmAppts.pickTenant":         { ru: "Выберите салон",          ua: "Виберіть салон",          en: "Pick a salon",           pl: "Wybierz salon" },
 
   // ── God Mode: Channels page ────────────────────────────────────────────────
   "gmChannels.title":           { ru: "Каналы",                 ua: "Канали",                 en: "Channels",               pl: "Kanały" },

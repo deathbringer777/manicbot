@@ -29,8 +29,9 @@ describe('mintWsToken + verifyWsToken roundtrip', () => {
   it('rejects a tampered payload', async () => {
     const tok = await mintWsToken(SECRET, { tenantId: 't_a', webUserId: 'w_owner' });
     const [payload, sig] = tok.split('.');
-    // Flip a single char in the payload
-    const tamperedPayload = payload.slice(0, -1) + (payload.slice(-1) === 'A' ? 'B' : 'A');
+    // Flip the first char of the payload — avoids the b64 padding-bit edge
+    // case where flipping the last char doesn't change the decoded byte.
+    const tamperedPayload = (payload[0] === 'A' ? 'B' : 'A') + payload.slice(1);
     const tamperedTok = `${tamperedPayload}.${sig}`;
     expect(await verifyWsToken(SECRET, tamperedTok)).toBeNull();
   });
@@ -38,7 +39,8 @@ describe('mintWsToken + verifyWsToken roundtrip', () => {
   it('rejects a tampered signature', async () => {
     const tok = await mintWsToken(SECRET, { tenantId: 't_a', webUserId: 'w_owner' });
     const [payload, sig] = tok.split('.');
-    const tamperedSig = sig.slice(0, -1) + (sig.slice(-1) === 'A' ? 'B' : 'A');
+    // Same reasoning as the payload case: flip first char, not last.
+    const tamperedSig = (sig[0] === 'A' ? 'B' : 'A') + sig.slice(1);
     expect(await verifyWsToken(SECRET, `${payload}.${tamperedSig}`)).toBeNull();
   });
 

@@ -541,6 +541,26 @@ export const roleChangeRequests = sqliteTable("role_change_requests", {
   index("idx_rcr_status").on(t.status, t.createdAt),
 ]);
 
+// ─── Ownership-transfer tokens ─────────────────────────────────────────────
+
+export const ownershipTransferTokens = sqliteTable("ownership_transfer_tokens", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  fromUserId: text("from_user_id").notNull(),
+  toUserId: text("to_user_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  cancelledAt: integer("cancelled_at"),
+  createdAt: integer("created_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+}, (t) => [
+  index("idx_ott_tenant_created").on(t.tenantId, t.createdAt),
+  index("idx_ott_token_hash").on(t.tokenHash),
+  index("idx_ott_user").on(t.fromUserId, t.createdAt),
+]);
+
 // ─── D1-based rate limiting ─────────────────────────────────────────────────
 
 export const rateLimits = sqliteTable("rate_limits", {
@@ -1291,4 +1311,65 @@ export const referralEvents = sqliteTable("referral_events", {
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_ref_events_referral").on(t.referralId, t.createdAt),
+]);
+
+// ─── Reminders plugin (migration 0070) ──────────────────────────────────
+// Definitions live here; expansion + delivery happen worker-side
+// (plugins/reminders/cron.js + src/services/userNotify.js). Recurrence
+// is stored as JSON validated by zod at the tRPC boundary; channelsJson
+// is a subset of ['inapp', 'telegram'].
+export const pluginReminders = sqliteTable("plugin_reminders", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  createdByWebUserId: text("created_by_web_user_id").notNull(),
+  targetMasterId: integer("target_master_id"),
+  kind: text("kind").notNull().default("reminder"),
+  title: text("title").notNull(),
+  note: text("note"),
+  startsOn: text("starts_on").notNull(),
+  time: text("time").notNull(),
+  recurrenceJson: text("recurrence_json").notNull(),
+  channelsJson: text("channels_json").notNull().default('["inapp"]'),
+  archivedAt: integer("archived_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_reminders_tenant_active").on(t.tenantId, t.startsOn),
+  index("idx_reminders_target").on(t.tenantId, t.targetMasterId, t.startsOn),
+]);
+
+// Idempotent fire log. The UNIQUE (reminder_id, fires_at_epoch) is the
+// contract — INSERT OR IGNORE in the cron handler short-circuits dupes.
+export const pluginReminderFires = sqliteTable("plugin_reminder_fires", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  reminderId: text("reminder_id").notNull().references(() => pluginReminders.id, { onDelete: "cascade" }),
+  firesAtEpoch: integer("fires_at_epoch").notNull(),
+  firedAtEpoch: integer("fired_at_epoch"),
+  deliveryState: text("delivery_state").notNull().default("pending"),
+  deliveryError: text("delivery_error"),
+}, (t) => [
+  uniqueIndex("uq_reminder_fires_occurrence").on(t.reminderId, t.firesAtEpoch),
+]);
+
+// ─── User notifications (migration 0070) ────────────────────────────────
+// Platform-wide in-app feed driving the header bell. Generic by design —
+// `kind` is the discriminator (e.g. 'reminder.fired', future: 'checklist.due').
+// `(web_user_id, source_slug, source_id, kind)` partial unique index dedups
+// on cron retry.
+export const userNotifications = sqliteTable("user_notifications", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  webUserId: text("web_user_id").notNull(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  link: text("link"),
+  sourceSlug: text("source_slug"),
+  sourceId: text("source_id"),
+  readAt: integer("read_at"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_user_notifications_unread").on(t.webUserId, t.createdAt),
+  index("idx_user_notifications_recent").on(t.webUserId, t.createdAt),
+  uniqueIndex("uq_user_notifications_source").on(t.webUserId, t.sourceSlug, t.sourceId, t.kind),
 ]);

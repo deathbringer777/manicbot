@@ -68,6 +68,9 @@ import reviewCollectorManifest from "./review-collector/manifest";
 // ── Variant A (Phase 3) — operations plugins ────────────────────────────────
 import inventoryLiteManifest from "./inventory-lite/manifest";
 
+// ── productivity / cron-backed (first plugin wired to phasePluginCron) ──────
+import remindersManifest from "./reminders/manifest";
+
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
@@ -87,6 +90,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   reviewCollectorManifest,
   // Variant A operations
   inventoryLiteManifest,
+  // productivity / cron-backed (first plugin wired to phasePluginCron)
+  remindersManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

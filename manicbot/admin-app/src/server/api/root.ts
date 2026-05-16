@@ -38,6 +38,8 @@ import { clientsRouter } from "~/server/api/routers/clients";
 import { otpRouter } from "~/server/api/routers/otp";
 import { referralsRouter } from "~/server/api/routers/referrals";
 import { messengerRouter } from "~/server/api/routers/messenger";
+import { pluginRemindersRouter } from "~/server/api/routers/pluginReminders";
+import { notificationsRouter } from "~/server/api/routers/notifications";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -63,6 +65,7 @@ export const appRouter = createTRPCRouter({
   reviews: reviewsRouter,
   analytics: analyticsRouter,
   roleChangeRequests: roleChangeRequestsRouter,
+  ownership: ownershipRouter,
   onboarding: onboardingRouter,
   promoCodes: promoCodesRouter,
   stampCard: stampCardRouter,
@@ -79,6 +82,8 @@ export const appRouter = createTRPCRouter({
   otp: otpRouter,
   referrals: referralsRouter,
   messenger: messengerRouter,
+  pluginReminders: pluginRemindersRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

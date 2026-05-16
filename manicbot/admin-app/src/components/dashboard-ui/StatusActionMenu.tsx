@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useId } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, CheckCircle2, XCircle, UserX, AlertTriangle } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { STATUS_STYLES } from "~/lib/appointments";
@@ -28,8 +29,10 @@ export interface StatusActionMenuProps {
 export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }: StatusActionMenuProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const menuId = useId();
 
   const items: MenuItem[] = [];
@@ -86,11 +89,21 @@ export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }:
     triggerRef.current?.focus();
   }, []);
 
+  const updatePos = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setMenuPos({
+      top: rect.bottom + 4,
+      right: Math.max(0, window.innerWidth - rect.right),
+    });
+  }, []);
+
   const openMenu = useCallback(() => {
     if (!interactive) return;
+    updatePos();
     setActiveIndex(0);
     setOpen(true);
-  }, [interactive]);
+  }, [interactive, updatePos]);
 
   const selectIndex = useCallback(
     (idx: number) => {
@@ -102,11 +115,17 @@ export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }:
     [items, close],
   );
 
-  // Outside-click + Escape close.
+  // Outside-click close. The menu is portaled to document.body so it's
+  // not a DOM descendant of containerRef; guard must accept clicks inside
+  // either the trigger wrapper or the floating menu.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        !containerRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false);
         setActiveIndex(-1);
       }
@@ -114,6 +133,23 @@ export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }:
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
+
+  // Recompute on resize, close on scroll — fixed positioning would
+  // otherwise leave a stale floater detached from the trigger.
+  useEffect(() => {
+    if (!open) return;
+    const onResize = () => updatePos();
+    const onScroll = () => {
+      setOpen(false);
+      setActiveIndex(-1);
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open, updatePos]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!open) {
@@ -140,7 +176,7 @@ export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }:
     }
   };
 
-  const pillClass = `inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 transition ${
+  const pillClass = `inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full mt-1 transition ${
     STATUS_STYLES[statusKey] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
   }`;
 
@@ -151,6 +187,40 @@ export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }:
       </span>
     );
   }
+
+  const menu = (
+    <ul
+      ref={menuRef}
+      role="menu"
+      id={menuId}
+      data-testid="status-pill-menu"
+      aria-hidden={!open}
+      style={menuPos ? { top: menuPos.top, right: menuPos.right } : undefined}
+      className={`fixed z-50 min-w-[180px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-xs shadow-lg dark:border-white/10 dark:bg-slate-900${
+        open ? "" : " hidden"
+      }`}
+    >
+      {items.map((item, i) => {
+        const Icon = item.icon;
+        return (
+          <li
+            key={item.key}
+            role="menuitem"
+            data-testid={`status-action-${item.key}`}
+            data-active={activeIndex === i || undefined}
+            onClick={() => selectIndex(i)}
+            onMouseEnter={() => setActiveIndex(i)}
+            className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 font-medium ${item.tone} ${
+              activeIndex === i ? "bg-slate-100 dark:bg-white/10" : ""
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{item.label}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 
   return (
     <div ref={containerRef} className="relative inline-block" onKeyDown={handleKeyDown}>
@@ -165,37 +235,9 @@ export function StatusActionMenu({ statusKey, label, lang, onAction, onNoShow }:
         className={`${pillClass} cursor-pointer hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-transparent focus:ring-current/40`}
       >
         <span>{label}</span>
-        <ChevronDown size={10} className={`shrink-0 transition-transform${open ? " rotate-180" : ""}`} />
+        <ChevronDown size={12} className={`shrink-0 transition-transform${open ? " rotate-180" : ""}`} />
       </button>
-      <ul
-        role="menu"
-        id={menuId}
-        data-testid="status-pill-menu"
-        aria-hidden={!open}
-        className={`absolute right-0 top-full z-30 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-xs shadow-lg dark:border-white/10 dark:bg-slate-900${
-          open ? "" : " hidden"
-        }`}
-      >
-        {items.map((item, i) => {
-          const Icon = item.icon;
-          return (
-            <li
-              key={item.key}
-              role="menuitem"
-              data-testid={`status-action-${item.key}`}
-              data-active={activeIndex === i || undefined}
-              onClick={() => selectIndex(i)}
-              onMouseEnter={() => setActiveIndex(i)}
-              className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 font-medium ${item.tone} ${
-                activeIndex === i ? "bg-slate-100 dark:bg-white/10" : ""
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{item.label}</span>
-            </li>
-          );
-        })}
-      </ul>
+      {typeof document !== "undefined" ? createPortal(menu, document.body) : null}
     </div>
   );
 }

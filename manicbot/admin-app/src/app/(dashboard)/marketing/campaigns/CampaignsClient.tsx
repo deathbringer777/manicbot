@@ -3,9 +3,20 @@
 import { MarketingShell, StubCard } from "../MarketingShell";
 import { api } from "~/trpc/react";
 import { Mail } from "lucide-react";
+import { useMarketingScope } from "../useMarketingScope";
 
 export default function CampaignsClient() {
-  const listQ = (api as any).marketing.campaignsList.useQuery({ channel: "email" });
+  const { mode, tenantId } = useMarketingScope();
+
+  const adminListQ = api.marketing.campaignsList.useQuery(
+    { channel: "email" },
+    { enabled: mode === "admin" },
+  );
+  const tenantListQ = api.marketingTenant.campaignsList.useQuery(
+    { tenantId: tenantId ?? "", channel: "email" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const listQ = mode === "admin" ? adminListQ : tenantListQ;
 
   return (
     <MarketingShell title="Marketing • Campaigns" subtitle="Broadcast email campaigns to contacts and leads">

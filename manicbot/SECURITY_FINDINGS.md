@@ -180,7 +180,7 @@ The atomic single-statement fix (`ON CONFLICT DO UPDATE SET count = CASE WHEN wi
 
 - Re-keying `BOT_ENCRYPTION_KEY` — has its own runbook (`scripts/rotate-bot-encryption-key.js`).
 - Penetration-testing the live deployment — source-level audit only.
-- Refactoring marketing module to be tenant-scoped — by design it is `system_admin` God Mode CRM (`adminProcedure`); cross-tenant access is the intended behaviour.
+- ~~Refactoring marketing module to be tenant-scoped — by design it is `system_admin` God Mode CRM (`adminProcedure`); cross-tenant access is the intended behaviour.~~ **Superseded (2026-05-16, PR 1 of marketing roadmap):** the original `marketing` router stays adminProcedure / God Mode global view, but a sibling **`marketingTenant`** router (`routers/marketingTenant.ts`) now serves the salon-owner / tenant_manager / personal-master surface with `protectedProcedure + assertTenantOwner + eq(table.tenantId, input.tenantId)` on every WHERE clause. Cross-tenant isolation verified by `__tests__/marketingTenant-router.test.ts` (FORBIDDEN on cross-tenant stats/contacts/templates/providers; cross-tenant row write blocked by per-row tenantId verification in `contactUpdate` and `templateUpdate`). `marketing.ts` remains in `scripts/check-tenant-isolation.mjs` SKIP_FILES because that file is still cross-tenant by design; the new `marketingTenant.ts` is scanned and passes (`✅ Scanned 35 router file(s); no missing tenantId predicates.`).
 
 ---
 

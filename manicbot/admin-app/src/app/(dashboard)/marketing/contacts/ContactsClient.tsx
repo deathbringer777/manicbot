@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "~/trpc/react";
 import { MarketingShell } from "../MarketingShell";
 import { Loader2, Mail, Phone, Search, Ban } from "lucide-react";
+import { useMarketingScope } from "../useMarketingScope";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -15,7 +16,17 @@ function fmtDate(ts?: number | null) {
 export default function ContactsClient() {
   const [search, setSearch] = useState("");
   const [subscribedOnly, setSubscribedOnly] = useState(false);
-  const listQ = (api as any).marketing.contactsList.useQuery({ search, subscribedOnly, limit: 100, offset: 0 });
+  const { mode, tenantId } = useMarketingScope();
+
+  const adminListQ = api.marketing.contactsList.useQuery(
+    { search, subscribedOnly, limit: 100, offset: 0 },
+    { enabled: mode === "admin" },
+  );
+  const tenantListQ = api.marketingTenant.contactsList.useQuery(
+    { tenantId: tenantId ?? "", search, subscribedOnly, limit: 100, offset: 0 },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const listQ = mode === "admin" ? adminListQ : tenantListQ;
 
   return (
     <MarketingShell title="Marketing • Contacts" subtitle="CRM база: лиды, клиенты салонов, web-users">

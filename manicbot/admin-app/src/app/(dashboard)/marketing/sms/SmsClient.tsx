@@ -3,9 +3,17 @@
 import { MarketingShell, StubCard } from "../MarketingShell";
 import { api } from "~/trpc/react";
 import { MessageSquare, Zap } from "lucide-react";
+import { useMarketingScope } from "../useMarketingScope";
 
 export default function SmsClient() {
-  const providersQ = (api as any).marketing.providersList.useQuery();
+  const { mode, tenantId } = useMarketingScope();
+
+  const adminProvidersQ = api.marketing.providersList.useQuery(undefined, { enabled: mode === "admin" });
+  const tenantProvidersQ = api.marketingTenant.providersList.useQuery(
+    { tenantId: tenantId ?? "" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const providersQ = mode === "admin" ? adminProvidersQ : tenantProvidersQ;
   const brevo = providersQ.data?.find((p: any) => p.name === "brevo");
 
   return (

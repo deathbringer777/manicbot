@@ -285,7 +285,7 @@ function termsPage(request) {
   return htmlResponse(
     'Terms of Service',
     `<h1>Terms of Service</h1>
-<p class="meta">Effective date: 2026-05-14</p>
+<p class="meta">Effective date: 2026-05-16</p>
 
 <h2>1. Service</h2>
 <p>ManicBot provides an automated booking assistant that nail salons install on their Telegram, Instagram, WhatsApp, and web channels. Salons subscribe on the Start (45 zł), Pro (60 zł), or Max (90 zł) monthly plans.</p>
@@ -305,7 +305,10 @@ function termsPage(request) {
 <h2>6. Changes</h2>
 <p>We may update these Terms with 30 days' email notice. Continued use after the effective date constitutes acceptance.</p>
 
-<h2>7. Contact</h2>
+<h2>7. Referral program</h2>
+<p>Active subscribers can share a referral link. The invited salon gets 20% off their first month (or 10% off yearly). The inviter receives one free month of subscription per confirmed referral — confirmed means the invited salon paid their first invoice past the trial. The cap is 6 free months per rolling year. Rewards are reversed if the invited salon refunds or cancels within the first month. Self-referrals, fake accounts, and public-channel spam result in reward cancellation and code suspension.</p>
+
+<h2>8. Contact</h2>
 <p><a href="mailto:support@manicbot.com">support@manicbot.com</a></p>`,
     request,
   );

@@ -37,6 +37,8 @@ const COPY = {
     friendDetail: "20% off первого месяца или 10% off годовой подписки",
     youGet: "Вы получаете",
     youDetail: "1 бесплатный месяц за каждого подтверждённого друга (макс. 6 в год)",
+    legalPrefix: "В соответствии с ",
+    legalLinkText: "правилами пользования",
     stats: "Статистика",
     invited: "Приглашено",
     confirmed: "Подтверждено",
@@ -73,6 +75,8 @@ const COPY = {
     friendDetail: "20% off першого місяця або 10% off річної підписки",
     youGet: "Ви отримуєте",
     youDetail: "1 безкоштовний місяць за кожного підтвердженого друга (макс. 6 на рік)",
+    legalPrefix: "Згідно з ",
+    legalLinkText: "правилами користування",
     stats: "Статистика",
     invited: "Запрошено",
     confirmed: "Підтверджено",
@@ -109,6 +113,8 @@ const COPY = {
     friendDetail: "20% off their first month or 10% off yearly",
     youGet: "You get",
     youDetail: "1 free month per confirmed friend (max 6 per year)",
+    legalPrefix: "As described in the ",
+    legalLinkText: "terms of use",
     stats: "Stats",
     invited: "Invited",
     confirmed: "Confirmed",
@@ -145,6 +151,8 @@ const COPY = {
     friendDetail: "20% zniżki w pierwszym miesiącu lub 10% zniżki rocznie",
     youGet: "Ty dostajesz",
     youDetail: "1 darmowy miesiąc za każdego potwierdzonego znajomego (maks. 6 rocznie)",
+    legalPrefix: "Zgodnie z ",
+    legalLinkText: "zasadami korzystania",
     stats: "Statystyki",
     invited: "Zaproszeni",
     confirmed: "Potwierdzeni",
@@ -324,6 +332,18 @@ export function ReferralsSection() {
             <p className="mt-1 text-sm text-cyan-900 dark:text-cyan-100">{c.youDetail}</p>
           </div>
         </div>
+
+        <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-400">
+          {c.legalPrefix}
+          <a
+            href="/rules"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-200"
+          >
+            {c.legalLinkText}
+          </a>
+        </p>
       </section>
 
       {/* Counters */}

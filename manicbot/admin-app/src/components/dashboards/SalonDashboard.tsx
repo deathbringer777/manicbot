@@ -1644,12 +1644,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         ))}
       </div>}
 
-      {/* Floating quick-add menu — Appointments tab only. The owner explicitly
-          asked to keep this off Overview / Clients (and every other tab) so the
-          home page isn't dominated by a CTA that doesn't make sense on most
-          surfaces. New bookings are a record-keeping operation, not a navigation
-          aid. */}
-      {tab === "appointments" && (
+      {/* Floating quick-add menu — Appointments and Clients tabs only.
+          User feedback (2026-05-16): keep this OFF the Overview tab and
+          every other section — a "+ Новая запись" CTA over Settings or
+          Billing is just noise. The same FAB switches to "+ Add client"
+          mode when the user is on the Clients tab (handled by the
+          QuickAddFab `mode` prop and the dedicated `ClientFormModal`
+          below). */}
+      {(tab === "appointments" || tab === "clients") && (
         <QuickAddFab
           lang={lang}
           mode={tab === "clients" ? "client" : "booking"}

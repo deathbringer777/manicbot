@@ -40,6 +40,12 @@ export const env = createEnv({
       .default("development"),
     /** Mirror of Worker var: "1" when the IG autopilot cron phase is live. */
     MARKETING_AUTOPILOT_ENABLED: z.string().optional(),
+    /**
+     * Shared HMAC secret for messenger WebSocket tokens. Must match the
+     * Worker secret of the same name — the Worker verifies tokens minted
+     * here on /ws/messenger upgrade.
+     */
+    WS_TOKEN_SECRET: z.string().optional(),
   },
 
   client: {
@@ -71,6 +77,7 @@ export const env = createEnv({
     STRIPE_PRICE_MAX_ANNUAL: process.env.STRIPE_PRICE_MAX_ANNUAL,
     NODE_ENV: process.env.NODE_ENV,
     MARKETING_AUTOPILOT_ENABLED: process.env.MARKETING_AUTOPILOT_ENABLED,
+    WS_TOKEN_SECRET: process.env.WS_TOKEN_SECRET,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,

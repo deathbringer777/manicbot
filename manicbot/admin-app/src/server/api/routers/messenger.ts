@@ -34,6 +34,7 @@ import {
   assertMessengerTenantAccess,
   assertThreadMember,
 } from "~/server/api/messenger/access";
+import { mintWsToken } from "~/lib/wsToken";
 import { env } from "~/env";
 import { log } from "~/server/utils/logger";
 
@@ -599,6 +600,27 @@ export const messengerRouter = createTRPCRouter({
         .set({ archived: input.archived ? 1 : 0 })
         .where(eq(threads.id, input.threadId));
       return { ok: true };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  REALTIME — issue a short-lived WS token (Phase 3)
+  // ═══════════════════════════════════════════════════════════════
+  issueWsToken: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertMessengerTenantAccess(ctx, input.tenantId);
+      const secret = env.WS_TOKEN_SECRET;
+      if (!secret) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "WS_TOKEN_SECRET not configured — realtime disabled",
+        });
+      }
+      const token = await mintWsToken(secret, {
+        tenantId: input.tenantId,
+        webUserId: ctx.webUser!.id,
+      });
+      return { token, ttlSec: 60 };
     }),
 
   // ═══════════════════════════════════════════════════════════════

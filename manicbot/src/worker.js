@@ -17,6 +17,8 @@ import { tryLegalPages } from './http/legalPagesHttp.js';
 import { tryStripe } from './http/stripeHttp.js';
 import { tryAdminKeyRoutes } from './http/adminKeyHttp.js';
 import { tryMessengerOutboundRoute } from './http/messengerOutboundHttp.js';
+import { tryMessengerWsRoute } from './http/messengerWsHttp.js';
+export { MessengerHub } from './durable/messengerHub.js';
 import { tryLeadRoutes } from './http/leadsHttp.js';
 import { tryGoogle } from './http/googleHttp.js';
 import { tryAdminPanel } from './http/adminPanelHttp.js';
@@ -356,6 +358,11 @@ export default {
     // Bearer-keyed; routed before any browser-facing handlers.
     res = await tryMessengerOutboundRoute(request, env, url);
     if (res) return addSecurityHeaders(res);
+
+    // WebSocket upgrade for the realtime messenger (Phase 3). Forwards to
+    // the per-tenant MessengerHub Durable Object after JWT verification.
+    res = await tryMessengerWsRoute(request, env, url);
+    if (res) return res; // WS upgrade — never wrap with browser headers
 
     res = await tryLeadRoutes(request, env, url, executionCtx);
     if (res) return addSecurityHeaders(res);

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, MessageSquare } from "lucide-react";
 import { useMessagesTenantId } from "./useMessagesTenantId";
+import { useMessengerSocket } from "~/hooks/useMessengerSocket";
 import { ThreadList } from "./_components/ThreadList";
 import { ThreadView } from "./_components/ThreadView";
 import { NewThreadModal } from "./_components/NewThreadModal";
@@ -11,6 +12,10 @@ export default function MessagesClient() {
   const { tenantId, isSystemAdminNoPreview } = useMessagesTenantId();
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  // Phase 3 — best-effort WebSocket subscription. Polling on each tRPC
+  // query stays as the fallback when the socket fails or WS_TOKEN_SECRET
+  // is unset, so the UI never goes dark.
+  useMessengerSocket(tenantId);
 
   if (isSystemAdminNoPreview) {
     return (

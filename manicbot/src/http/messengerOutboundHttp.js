@@ -36,6 +36,7 @@ import { TelegramAdapter } from '../channels/telegram.js';
 import { WhatsAppAdapter } from '../channels/whatsapp.js';
 import { InstagramAdapter } from '../channels/instagram.js';
 import { isWithinMessageWindow } from '../handlers/inbound.js';
+import { publishToMessengerHub } from './messengerWsHttp.js';
 
 function bad(status, error, extra) {
   return Response.json({ ok: false, error, ...(extra ?? {}) }, { status });
@@ -193,6 +194,16 @@ export async function tryMessengerOutboundRoute(request, env, url) {
     externalMsgId: externalMsgId ? String(externalMsgId) : '',
     replyToMessageId: replyToMessageId ?? null,
   });
+
+  // Phase 3 — broadcast the outbound delivery to other open /messages tabs
+  // (e.g. another owner browser session, or the same user on a phone).
+  await publishToMessengerHub(env, tenantId, {
+    type: 'message.new',
+    threadId,
+    messageId: appended?.messageId ?? null,
+    kind: 'client_conv',
+    direction: 'outbound',
+  }).catch(() => undefined);
 
   return Response.json({
     ok: true,

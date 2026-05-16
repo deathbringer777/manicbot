@@ -15,6 +15,7 @@ import { nowSec } from '../utils/time.js';
 import { randomId } from '../utils/security.js';
 import { getLang, setLang } from '../services/chat.js';
 import { upsertClientConvThreadForInbound } from '../services/messengerThreads.js';
+import { publishToMessengerHub } from '../http/messengerWsHttp.js';
 import { log } from '../utils/logger.js';
 
 const VALID_INBOUND_LANGS = new Set(['ru', 'en', 'ua', 'pl']);
@@ -67,7 +68,7 @@ export async function handleInbound(ctx, inbound) {
     // not 500 the webhook.
     if (!inbound.callbackData) {
       try {
-        await upsertClientConvThreadForInbound(ctx, {
+        const result = await upsertClientConvThreadForInbound(ctx, {
           tenantId: inbound.tenantId,
           channelType: inbound.channel,
           channelUserId: String(inbound.channelUserId ?? ''),
@@ -75,6 +76,17 @@ export async function handleInbound(ctx, inbound) {
           body: inbound.text ?? '',
           externalMsgId: inbound.messageId ?? null,
         });
+        // Phase 3 — push to MessengerHub DO for live fan-out to open
+        // /messages tabs. Best-effort, polling fallback (5s) covers
+        // misses.
+        if (result?.threadId) {
+          await publishToMessengerHub(ctx, inbound.tenantId, {
+            type: 'message.new',
+            threadId: result.threadId,
+            messageId: result.messageId,
+            kind: 'client_conv',
+          }).catch(() => undefined);
+        }
       } catch (e) {
         log.error('handlers.inbound',
           e instanceof Error ? e : new Error(String(e?.message)),

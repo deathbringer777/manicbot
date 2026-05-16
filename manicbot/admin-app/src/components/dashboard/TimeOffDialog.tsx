@@ -23,6 +23,7 @@ import { Coffee, X } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
 
 type Kind = "break" | "dayoff" | "vacation";
 
@@ -192,18 +193,17 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
         <form onSubmit={submit} className="px-5 py-4 space-y-4 text-sm">
           <div>
             <label className={LABEL}>{t("appointments.manual.master", lang)}</label>
-            <select
-              data-testid="block-master"
-              className={FIELD}
-              value={masterId ?? ""}
-              onChange={(e) => setMasterId(Number(e.target.value) || null)}
+            <Select
+              testIdPrefix="block-master"
+              value={masterId == null ? "" : String(masterId)}
+              onChange={(v) => setMasterId(v ? Number(v) : null)}
               disabled={defaultMasterId != null}
-            >
-              <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
-              {(masters.data ?? []).map((m) => (
-                <option key={m.chatId} value={m.chatId}>{m.name || `#${m.chatId}`}</option>
-              ))}
-            </select>
+              placeholder={t("appointments.manual.pickPlaceholder", lang)}
+              options={(masters.data ?? []).map((m) => ({
+                value: String(m.chatId),
+                label: m.name || `#${m.chatId}`,
+              }))}
+            />
           </div>
 
           {/* break-mode fields */}

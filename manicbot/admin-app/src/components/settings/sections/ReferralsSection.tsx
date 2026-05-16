@@ -14,9 +14,14 @@
  */
 
 import { useState } from "react";
-import { Copy, Gift, Loader2, RefreshCw, Share2 } from "lucide-react";
+import { Award, Copy, Gift, Loader2, MessageCircle, RefreshCw, Send, Share2 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
+
+// Milestone thresholds — confirmed-referral counts that unlock a badge.
+// Aligns with the CFO-locked cap (6 rewards / 12mo) — last milestone is 10
+// as an aspirational marker even though the practical ceiling per year is 6.
+const MILESTONES = [1, 3, 5, 10] as const;
 
 const COPY = {
   ru: {
@@ -48,6 +53,12 @@ const COPY = {
     rewards: "Награды",
     forbidden: "Реферальная программа доступна только владельцам и индивидуальным мастерам.",
     error: "Не удалось загрузить данные",
+    milestones: "Достижения",
+    milestoneLabel: "{n} приглашённых",
+    shareWhatsApp: "WhatsApp",
+    shareTelegram: "Telegram",
+    shareIG: "Instagram",
+    shareTemplate: "Привет! Я пользуюсь ManicBot для записи клиентов — заходит. Тебе тоже даст 20% off первого месяца:",
   },
   ua: {
     title: "Поділитися з другом",
@@ -78,6 +89,12 @@ const COPY = {
     rewards: "Винагороди",
     forbidden: "Реферальна програма доступна тільки власникам та індивідуальним майстрам.",
     error: "Не вдалося завантажити дані",
+    milestones: "Досягнення",
+    milestoneLabel: "{n} запрошених",
+    shareWhatsApp: "WhatsApp",
+    shareTelegram: "Telegram",
+    shareIG: "Instagram",
+    shareTemplate: "Привіт! Я користуюся ManicBot для запису клієнтів — заходить. Тобі також дасть 20% off першого місяця:",
   },
   en: {
     title: "Refer a friend",
@@ -108,6 +125,12 @@ const COPY = {
     rewards: "Rewards",
     forbidden: "Referrals are only available to owners and independent masters.",
     error: "Could not load data",
+    milestones: "Milestones",
+    milestoneLabel: "{n} invited",
+    shareWhatsApp: "WhatsApp",
+    shareTelegram: "Telegram",
+    shareIG: "Instagram",
+    shareTemplate: "Hey! I'm using ManicBot to manage bookings — really good. You'll get 20% off your first month with my link:",
   },
   pl: {
     title: "Poleć znajomemu",
@@ -138,6 +161,12 @@ const COPY = {
     rewards: "Nagrody",
     forbidden: "Polecenia są dostępne tylko dla właścicieli i niezależnych mistrzów.",
     error: "Nie udało się załadować danych",
+    milestones: "Osiągnięcia",
+    milestoneLabel: "{n} zaproszonych",
+    shareWhatsApp: "WhatsApp",
+    shareTelegram: "Telegram",
+    shareIG: "Instagram",
+    shareTemplate: "Cześć! Korzystam z ManicBot do umawiania klientów — naprawdę dobre. Dostaniesz 20% zniżki w pierwszym miesiącu:",
   },
 };
 
@@ -312,11 +341,79 @@ export function ReferralsSection() {
         </div>
       </section>
 
+      {/* Milestones — only render once at least 1 invite (any status) exists,
+          so the empty state stays clean. Auto-hides at 4/4 unlocked unless
+          there are extra unlocked badges to show. */}
+      {counters.rewarded > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[0.03]">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+            <Award className="h-4 w-4 text-amber-500" />
+            {c.milestones}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {MILESTONES.map((n) => {
+              const unlocked = counters.rewarded >= n;
+              return (
+                <div
+                  key={n}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition ${
+                    unlocked
+                      ? "border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200"
+                      : "border border-slate-200 bg-slate-50 text-slate-400 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-500"
+                  }`}
+                  title={c.milestoneLabel.replace("{n}", String(n))}
+                >
+                  <Award className={`h-3 w-3 ${unlocked ? "text-amber-500" : "text-slate-400"}`} />
+                  {c.milestoneLabel.replace("{n}", String(n))}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Invited friends */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[0.03]">
         <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">{c.invitedFriends}</h3>
         {invited.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">{c.noInvitedFriends}</p>
+          <>
+            <p className="py-4 text-center text-xs text-slate-500 dark:text-slate-400">{c.noInvitedFriends}</p>
+            {shareUrl && (
+              <div className="flex flex-wrap justify-center gap-2 pt-2">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`${c.shareTemplate} ${shareUrl}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  {c.shareWhatsApp}
+                </a>
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(c.shareTemplate)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {c.shareTelegram}
+                </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(`${c.shareTemplate} ${shareUrl}`);
+                    } catch { /* ignore */ }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
+                  title={c.shareIG}
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                  {c.shareIG}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {invited.map((row) => (

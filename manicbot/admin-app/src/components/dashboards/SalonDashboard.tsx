@@ -38,6 +38,7 @@ import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDialog";
 import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
+import { ReferralOverviewTeaser } from "~/components/dashboard/ReferralOverviewTeaser";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 import { TestBadge } from "~/components/ui/TestBadge";
@@ -1695,6 +1696,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
+          <ReferralOverviewTeaser />
           {dashPrefs.showTodayApts && (
             <>
               {todayApts.isLoading && (

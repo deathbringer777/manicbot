@@ -120,13 +120,15 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      // Mobile: full-width bottom-sheet (items-end) — easier one-hand reach
+      // on tall phones. Tablet+: centered card.
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="glass-card w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-900/95"
+        className="glass-card w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-slate-900/95 sm:rounded-2xl sm:p-5"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "90vh" }}
+        style={{ maxHeight: "92vh" }}
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -247,11 +249,14 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
             </p>
           )}
 
-          <div className="flex gap-3 pt-2">
+          {/* Sticky submit row on mobile (44px touch targets) so it stays
+              visible while the user fills the tall form. Falls back to a
+              normal in-flow row on tablet+. */}
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pt-2 dark:border-white/5 dark:bg-slate-900/95 sm:dark:bg-transparent">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-lg border border-slate-200 bg-slate-100 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:bg-white/[0.08]"
+              className="flex-1 rounded-lg border border-slate-200 bg-slate-100 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:bg-white/[0.08] sm:py-2.5"
             >
               {t("common.cancel", lang)}
             </button>
@@ -261,8 +266,8 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
               data-testid="cf-submit"
               className={
                 !valid || pending
-                  ? "flex-1 cursor-not-allowed rounded-lg bg-slate-200 py-2.5 text-sm font-semibold text-slate-400 dark:bg-slate-700 dark:text-slate-500"
-                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
+                  ? "flex-1 cursor-not-allowed rounded-lg bg-slate-200 py-3 text-sm font-semibold text-slate-400 dark:bg-slate-700 dark:text-slate-500 sm:py-2.5"
+                  : "flex-1 rounded-lg py-3 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90 sm:py-2.5"
               }
               style={!valid || pending ? undefined : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
             >

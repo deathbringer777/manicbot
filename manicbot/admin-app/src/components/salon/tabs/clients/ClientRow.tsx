@@ -58,15 +58,24 @@ export function ClientRow({ c, onClick }: Props) {
         .slice(0, 3)
     : [];
 
+  // Mobile (<sm): show only the single most-useful contact line truncated +
+  // small icon row for additional channels. Tablet+: show all known
+  // channels inline.
+  const primaryContact =
+    c.phone
+    ?? c.email
+    ?? (c.tgUsername ? `@${c.tgUsername}` : null)
+    ?? (c.igUsername ? `@${c.igUsername}` : null);
+
   return (
     <button
       type="button"
       onClick={onClick}
       data-testid={`client-row-${c.chatId}`}
-      className="glass-card group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:border-brand-500/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+      className="glass-card group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:border-brand-500/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500/40 active:scale-[0.99]"
     >
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold sm:h-10 sm:w-10 ${
           c.isBlockedGlobal
             ? "bg-rose-500/15 text-rose-400"
             : "bg-gradient-to-br from-brand-500/20 to-violet-500/20 text-brand-400"
@@ -76,32 +85,37 @@ export function ClientRow({ c, onClick }: Props) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
             {c.name ?? `#${c.chatId}`}
           </p>
           {c.lifetimeVisits >= 5 && (
             <Star
-              className="h-3.5 w-3.5 text-amber-400 fill-amber-400 shrink-0"
+              className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400"
               aria-label="loyal-client"
             />
           )}
           {c.isBlockedGlobal === 1 && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-400">
-              <Ban className="h-3 w-3" /> blocked
-            </span>
+            <Ban
+              className="h-3.5 w-3.5 shrink-0 text-rose-400"
+              aria-label="blocked"
+            />
           )}
         </div>
 
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
-          {c.phone && <span>{c.phone}</span>}
-          {c.email && (
-            <span className="hidden sm:inline truncate max-w-[160px]">{c.email}</span>
-          )}
-          {c.tgUsername && <span className="text-sky-500">@{c.tgUsername}</span>}
-          {c.igUsername && <span className="text-pink-500">@{c.igUsername}</span>}
-          {channelIcons.length > 0 && (
-            <span className="inline-flex items-center gap-0.5 sm:hidden">
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
+          {/* Mobile: single truncated contact line. */}
+          <span className="truncate sm:hidden">{primaryContact ?? "—"}</span>
+          {/* Tablet+: inline list of every known channel. */}
+          <span className="hidden flex-wrap items-center gap-x-2 gap-y-1 sm:flex">
+            {c.phone && <span>{c.phone}</span>}
+            {c.email && <span className="max-w-[160px] truncate">{c.email}</span>}
+            {c.tgUsername && <span className="text-sky-500">@{c.tgUsername}</span>}
+            {c.igUsername && <span className="text-pink-500">@{c.igUsername}</span>}
+          </span>
+          {/* Mobile icon row — only shown when there's more than 1 channel. */}
+          {channelIcons.length > 1 && (
+            <span className="inline-flex shrink-0 items-center gap-0.5 sm:hidden">
               {channelIcons}
             </span>
           )}
@@ -122,10 +136,12 @@ export function ClientRow({ c, onClick }: Props) {
       </div>
 
       <div className="shrink-0 text-right text-[11px] text-slate-500">
-        <div className="font-semibold text-slate-700 dark:text-slate-200">
+        <div className="text-base font-semibold leading-tight text-slate-700 dark:text-slate-200 sm:text-sm">
           {c.lifetimeVisits}
         </div>
-        <div>{formatLastVisit(c.lastVisitAt, "ru")}</div>
+        {/* Last-visit date drops off on the narrowest mobile widths to
+            keep the row from line-wrapping with long client names. */}
+        <div className="hidden sm:block">{formatLastVisit(c.lastVisitAt, "ru")}</div>
       </div>
     </button>
   );

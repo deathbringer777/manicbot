@@ -1178,24 +1178,31 @@ function MasterClientsList({
                   </p>
                 )}
               </div>
+              {/* Block / Unblock button — icon-only on mobile (saves
+                  horizontal space), icon + label on tablet+. aria-label
+                  keeps it accessible to screen readers regardless. */}
               {isBlocked ? (
                 <button
                   type="button"
                   onClick={() => unblock.mutate({ tenantId, masterId, clientChatId: c.chatId })}
                   disabled={unblock.isPending}
-                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                  aria-label={t("master.block.unblock", lang)}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 sm:h-auto sm:w-auto sm:px-2 sm:py-1"
                   data-testid={`master-unblock-${c.chatId}`}
                 >
-                  <ShieldCheck className="h-3 w-3" /> {t("master.block.unblock", lang)}
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 sm:h-3 sm:w-3" />
+                  <span className="hidden sm:inline">{t("master.block.unblock", lang)}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => setConfirmBlock({ chatId: c.chatId, name: c.name ?? null })}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300"
+                  aria-label={t("master.block.action", lang)}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-[11px] font-medium text-slate-600 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 sm:h-auto sm:w-auto sm:px-2 sm:py-1"
                   data-testid={`master-block-${c.chatId}`}
                 >
-                  <Ban className="h-3 w-3" /> {t("master.block.action", lang)}
+                  <Ban className="h-3.5 w-3.5 shrink-0 sm:h-3 sm:w-3" />
+                  <span className="hidden sm:inline">{t("master.block.action", lang)}</span>
                 </button>
               )}
             </div>
@@ -1208,11 +1215,11 @@ function MasterClientsList({
 
       {confirmBlock && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setConfirmBlock(null)}
         >
           <div
-            className="glass-card w-full max-w-sm rounded-2xl border border-rose-500/30 bg-white p-5 shadow-2xl dark:bg-slate-900/95"
+            className="glass-card w-full max-w-sm rounded-t-2xl border border-rose-500/30 bg-white p-4 shadow-2xl dark:bg-slate-900/95 sm:rounded-2xl sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">

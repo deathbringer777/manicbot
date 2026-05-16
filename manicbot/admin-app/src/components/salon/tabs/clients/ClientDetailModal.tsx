@@ -77,11 +77,11 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
   return (
     <>
       <div
-        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
         onClick={onClose}
       >
         <div
-          className="glass-card w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-900/95"
+          className="glass-card w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-slate-900/95 sm:rounded-2xl sm:p-5"
           onClick={(e) => e.stopPropagation()}
           style={{ maxHeight: "92vh" }}
         >
@@ -119,8 +119,9 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
             </button>
           </div>
 
-          {/* Tab pills */}
-          <div className="mb-4 flex gap-1.5">
+          {/* Tab pills — horizontally scrollable to handle long locale
+              labels (Ukrainian "Блокування") on narrow mobile. */}
+          <div className="-mx-1 mb-4 flex gap-1.5 overflow-x-auto px-1 scrollbar-none">
             {([
               ["profile", t("clients.detail.tabProfile", lang)],
               ["history", t("clients.detail.tabHistory", lang)],
@@ -131,7 +132,7 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
                 type="button"
                 onClick={() => setTab(key)}
                 data-testid={`cd-tab-${key}`}
-                className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                className={`shrink-0 rounded-xl px-3 py-2 text-xs font-medium transition ${
                   tab === key
                     ? "bg-brand-500/20 text-brand-400 border border-brand-500/30"
                     : "text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5"
@@ -164,37 +165,43 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
                 </div>
               )}
 
+              {/* Action row — each button is flex-1 on mobile (touch-friendly,
+                  equal width) and shrinks to natural width on tablet+. */}
               <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-white/5">
                 <button
                   onClick={() => setEditOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 sm:flex-initial"
                   data-testid="cd-edit"
                 >
-                  <Edit2 className="h-3 w-3" /> {t("clients.action.edit", lang)}
+                  <Edit2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t("clients.action.edit", lang)}</span>
                 </button>
                 {!isBlocked ? (
                   <button
                     onClick={() => setConfirmBlock(true)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 sm:flex-initial"
                     data-testid="cd-block"
                   >
-                    <Ban className="h-3 w-3" /> {t("clients.action.blockGlobal", lang)}
+                    <Ban className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("clients.action.blockGlobal", lang)}</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => setBlock.mutate({ tenantId, chatId, blocked: false })}
-                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-600 dark:text-emerald-400 sm:flex-initial"
                     data-testid="cd-unblock"
                   >
-                    <ShieldCheck className="h-3 w-3" /> {t("clients.action.unblockGlobal", lang)}
+                    <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{t("clients.action.unblockGlobal", lang)}</span>
                   </button>
                 )}
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className="ml-auto inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400"
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 sm:ml-auto sm:flex-initial"
                   data-testid="cd-delete"
                 >
-                  <Trash2 className="h-3 w-3" /> {t("clients.action.delete", lang)}
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t("clients.action.delete", lang)}</span>
                 </button>
               </div>
 

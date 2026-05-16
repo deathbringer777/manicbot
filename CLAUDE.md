@@ -422,12 +422,12 @@ Password reset:
 
 ```bash
 cd manicbot/
-npm test                     # Worker Vitest (~1139 tests)
+npm test                     # Worker Vitest (~2038 tests, 150 files)
 npm run check-schema         # D1: table + column parity between schema.sql and Drizzle schema.ts
 
 cd admin-app/
 npm run typecheck
-npm test                     # Mini App Vitest (~268 tests)
+npm test                     # Mini App Vitest (~3635 tests, 116 files)
 ```
 
 GitHub Actions `test` job runs the same checks (Worker tests + `check-schema` + admin-app typecheck + tests) before Worker/Pages deploys.

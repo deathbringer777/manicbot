@@ -56,6 +56,8 @@ import {
 } from "~/lib/workHours";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
 import { toast } from "~/lib/toast";
+import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
+import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -1566,7 +1568,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
   const [showTemplates, setShowTemplates] = useState(false);
-  const [masterModal, setMasterModal] = useState<"telegram" | "create" | null>(null);
+  const [masterModal, setMasterModal] = useState<"telegram" | "create" | "invite" | null>(null);
   const [deleteSvcConfirm, setDeleteSvcConfirm] = useState<{ active: boolean; svcId: string | null }>({ active: false, svcId: null });
   const [removeMasterConfirm, setRemoveMasterConfirm] = useState<{ active: boolean; chatId: string | null }>({ active: false, chatId: null });
 
@@ -2457,6 +2459,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} initialData={svcModal.initialData} />}
       {masterModal === "telegram" && <AddMasterModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
       {masterModal === "create" && <CreateMasterAccountModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
+      {masterModal === "invite" && <InviteByEmailModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
+
+      {/* Bottom-right FAB on the Masters tab (3 add-master flows). The
+          existing top-right buttons remain during the transition. */}
+      {tab === "masters" && (
+        <AddMasterFab
+          onPick={(kind: AddMasterPick) => {
+            if (kind === "create_account") setMasterModal("create");
+            else if (kind === "add_telegram") setMasterModal("telegram");
+            else if (kind === "invite_email") setMasterModal("invite");
+          }}
+        />
+      )}
       {/* Calendar overhaul (2026-05-16): the previous duplicate
           ManualBookingModal mount that lived here at the bottom is
           superseded by the FAB-section render above (line ~1521) which

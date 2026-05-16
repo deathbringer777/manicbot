@@ -351,7 +351,7 @@ export async function sendMasterInviteNewUserEmail(
 ): Promise<SendEmailResult> {
   const { masterInviteNewUserHtml, masterInviteNewUserText, getInviteNewUserSubject } =
     await import("./templates");
-  const registerUrl = `${baseUrl()}/register?invite=${encodeURIComponent(token)}`;
+  const registerUrl = `${baseUrl()}/register/invite/${encodeURIComponent(token)}`;
   return sendResendEmail({
     to,
     subject: getInviteNewUserSubject(lang, salonName),

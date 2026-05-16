@@ -416,6 +416,60 @@ follow-up; it's harmless because the stat grid is unconditionally gone
 from `SalonDashboard.tsx`.
 
 
+### Appointment status transitions (Day-view detail panel — 2026-05-16)
+
+Single dispatch path for every status flip on the rich
+`AppointmentDetailPanel`. Previously the panel called
+`api.appointments.updateStatus` + `markNoShow` — both `adminProcedure`
+(system_admin / support / technical_support only), so every click from a
+salon owner silently 403'd. The fix introduces tenant-scoped equivalents
+and routes new "done" / "no-show" actions through a unified Worker
+dispatcher so post-visit copy lives in ONE place (the marketing module
+override or the built-in default), never duplicated across routers.
+
+**tRPC (admin-app):**
+- `salon.confirmAppointment` (tenantOwnerProcedure) — `pending → confirmed`
+- `salon.rejectAppointment` (tenantOwnerProcedure) — `pending → rejected`
+- `salon.markDone` (tenantOwnerProcedure) — `confirmed → done`,
+  **refuses with `cannot_mark_done_before_start` if `apt.ts > now`**
+- `salon.markNoShow` / `salon.cancelAppointment` — existing; now also fire
+  `notifyWorker` so the client gets the correct message instead of silent
+  D1 write.
+- `master.confirmAppointment` / `master.markDone` — symmetric for the
+  master role, enforcing the per-master IDOR guard
+  (`assertCallerIsMaster`) when the caller is a salon-employed master.
+- `appointments.updateStatus` / `appointments.markNoShow` stay
+  `adminProcedure` (the legacy God Mode `/appointments` page still uses
+  them). Don't reach for them from tenant-scoped UI.
+
+**Worker (`POST /admin/appointment-action`):**
+- New actions: `done`, `no_show_client`, `no_show_master`. Each routes
+  through `src/services/appointmentAutomations.js`
+  → `dispatchAppointmentAutomation(ctx, apt, eventType)`.
+- The dispatcher does deterministic side-effects (`lifetime_visits++` on
+  done, reminder cleanup, analytics_events row), counts matching
+  `marketing_automations` rows (for the marketing engine wired in a
+  follow-up), and ALWAYS sends a built-in default unless the caller
+  passes `{ suppressDefault: true }` (sentinel for a marketing-automation
+  override in PR 3+).
+- Default copy per event lives once in `appointmentAutomations.js`:
+  thank-you+review for `appointment.done`, apology+rebook button for
+  `appointment.no_show_master`, **silent** for
+  `appointment.no_show_client` (the client may take offense at "you
+  didn't show"; the dispatcher still writes the analytics row).
+- Unknown actions now return `400 UNKNOWN_APPOINTMENT_ACTION`.
+
+**Shared helper:** `~/server/utils/notifyWorker.ts` (typed
+`AppointmentAction` union). Lifted out of `appointments.ts` so
+salon/master/appointments routers can all import without circular deps.
+
+**Frontend:** `AppointmentDetailPanel.tsx` — pill-buttons disabled while
+any mutation is pending; "Mark Done" disabled until `apt.ts <= now` with
+a tooltip; errors mapped to localized strings
+(`salon.day.panel.doneNotYet` / `invalidStatusTransition`). Buttons stack
+into a 2-column grid on phones (`grid-cols-2 sm:flex`) with `min-h-11`
+tap targets.
+
 ### Drag-to-reschedule (Day / Week calendar grids)
 
 Google-Calendar-style drag-to-move on appointment blocks in

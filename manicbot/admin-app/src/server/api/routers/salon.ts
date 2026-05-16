@@ -19,6 +19,7 @@ import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/masterPasswordVault";
 import { log } from "~/server/utils/logger";
+import { notifyWorker } from "~/server/utils/notifyWorker";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import {
   sendMasterInviteEmail,
@@ -308,6 +309,8 @@ export const salonRouter = createTRPCRouter({
         status: "no_show",
         cancelReason: input.comment ? sanitizeText(input.comment, 500) : null,
       }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      const action = input.noShowBy === "client" ? "no_show_client" : "no_show_master";
+      notifyWorker(action, input.id, input.tenantId, null).catch(() => {});
       return { success: true };
     }),
 
@@ -327,6 +330,113 @@ export const salonRouter = createTRPCRouter({
         status: "cancelled",
         cancelReason: input.comment ? sanitizeText(input.comment, 500) : null,
       }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      notifyWorker("cancel", input.id, input.tenantId, null).catch(() => {});
+      return { success: true };
+    }),
+
+  /**
+   * pending → confirmed. Mirrors `appointments.updateStatus` (God Mode)
+   * but tenant-scoped. Fires Worker action=confirm so the client gets
+   * the existing "ваша запись подтверждена" message and Google Calendar
+   * syncs the event.
+   */
+  confirmAppointment: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const [row] = await ctx.db
+        .select({ status: appointments.status, cancelled: appointments.cancelled })
+        .from(appointments)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+      }
+      if (row.cancelled || (row.status !== "pending" && row.status !== "confirmed")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_status_transition" });
+      }
+      await ctx.db
+        .update(appointments)
+        .set({ status: "confirmed" })
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      notifyWorker("confirm", input.id, input.tenantId, null).catch(() => {});
+      return { success: true };
+    }),
+
+  /**
+   * pending → rejected. Fires Worker action=reject so the client receives
+   * the "запись отклонена, перебронируйте" prompt with a rebook button.
+   */
+  rejectAppointment: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      comment: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const [row] = await ctx.db
+        .select({ status: appointments.status, cancelled: appointments.cancelled })
+        .from(appointments)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+      }
+      if (row.cancelled || row.status !== "pending") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_status_transition" });
+      }
+      await ctx.db.update(appointments).set({
+        status: "rejected",
+        rejectComment: input.comment ? sanitizeText(input.comment, 500) : "",
+      }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      notifyWorker("reject", input.id, input.tenantId, null).catch(() => {});
+      return { success: true };
+    }),
+
+  /**
+   * confirmed → done. Refuses if `apt.ts` is still in the future (per
+   * product decision: cannot mark an appointment complete before its
+   * start). The Worker fans out the default thank-you / review-request
+   * via the marketing-automations dispatcher; if no automation row is
+   * enabled the Worker falls back to a built-in default. Side-effects
+   * (lifetime_visits++, last_visit_at, reminder cleanup) live in the
+   * Worker so they apply uniformly to all callers.
+   */
+  markDone: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const [row] = await ctx.db
+        .select({
+          status: appointments.status,
+          cancelled: appointments.cancelled,
+          ts: appointments.ts,
+        })
+        .from(appointments)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+      }
+      if (row.cancelled || (row.status !== "confirmed" && row.status !== "pending")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_status_transition" });
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (row.ts > nowSec) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_done_before_start" });
+      }
+      await ctx.db
+        .update(appointments)
+        .set({ status: "done" })
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      notifyWorker("done", input.id, input.tenantId, null).catch(() => {});
       return { success: true };
     }),
 

@@ -3,9 +3,17 @@
 import { MarketingShell, StubCard } from "../MarketingShell";
 import { api } from "~/trpc/react";
 import { FileText } from "lucide-react";
+import { useMarketingScope } from "../useMarketingScope";
 
 export default function TemplatesClient() {
-  const listQ = (api as any).marketing.templatesList.useQuery({});
+  const { mode, tenantId } = useMarketingScope();
+
+  const adminListQ = api.marketing.templatesList.useQuery({}, { enabled: mode === "admin" });
+  const tenantListQ = api.marketingTenant.templatesList.useQuery(
+    { tenantId: tenantId ?? "" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const listQ = mode === "admin" ? adminListQ : tenantListQ;
 
   return (
     <MarketingShell title="Marketing • Templates" subtitle="Email and SMS templates with merge variables">

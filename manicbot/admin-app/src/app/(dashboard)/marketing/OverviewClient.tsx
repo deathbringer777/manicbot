@@ -5,6 +5,7 @@ import { api } from "~/trpc/react";
 import { Users, Mail, MessageSquare, Megaphone, Activity } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { useMarketingScope } from "./useMarketingScope";
 
 function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: any }) {
   return (
@@ -20,9 +21,24 @@ function Metric({ label, value, icon: Icon }: { label: string; value: string | n
 
 export default function OverviewClient() {
   const { lang } = useLang();
-  const statsQ = (api as any).marketing.stats.useQuery();
-  const providersQ = (api as any).marketing.providersList.useQuery();
+  const { mode, tenantId } = useMarketingScope();
 
+  // Dual queries: only one fires (enabled flag), the other stays disabled.
+  // Satisfies React rules-of-hooks while routing tenant_owner → tenant router
+  // and sysadmin (no preview) → admin router.
+  const adminStatsQ = api.marketing.stats.useQuery(undefined, { enabled: mode === "admin" });
+  const tenantStatsQ = api.marketingTenant.stats.useQuery(
+    { tenantId: tenantId ?? "" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const adminProvidersQ = api.marketing.providersList.useQuery(undefined, { enabled: mode === "admin" });
+  const tenantProvidersQ = api.marketingTenant.providersList.useQuery(
+    { tenantId: tenantId ?? "" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+
+  const statsQ = mode === "admin" ? adminStatsQ : tenantStatsQ;
+  const providersQ = mode === "admin" ? adminProvidersQ : tenantProvidersQ;
   const s = statsQ.data;
 
   return (

@@ -311,6 +311,17 @@ Telegram Mini App opens
 | `support` / `technical_support` | Support Dashboard | `SupportDashboard.tsx`                               |
 
 
+### Path Whitelist (when `{children}` renders instead of the role dashboard)
+
+`(dashboard)/layout.tsx` swaps in the role-specific dashboard (`SalonDashboard` / `MasterDashboard` / `SupportDashboard`) for every URL **except** a small whitelist that renders the page-level `{children}` instead. Whitelisted paths:
+
+- `/settings` (account / appearance / bot / billing / help — common to all roles)
+- `/plugins`, `/plugins/*`, `/plugin/*` (Plugin Marketplace catalog, detail, runtime)
+- `/marketing`, `/marketing/*` (Marketing module — `MarketingShell` with 7-tab sub-nav)
+
+When adding a new top-level module that should not be intercepted by the role dashboard, extend the whitelist in `(dashboard)/layout.tsx` (currently four mirror blocks: `tenant_owner` / `tenant_manager` / `master` / `support`+`technical_support`). The whitelist logic is exercised by `src/__tests__/marketing-routing.test.ts`.
+
+
 ### tRPC procedures
 
 - `**publicProcedure**` — no Telegram user required.
@@ -342,7 +353,8 @@ Telegram Mini App opens
 | `provisioning`   | `routers/provisioning.ts`   | adminProcedure                                                                                                  |
 | `settings`       | `routers/settings.ts`       | adminProcedure                                                                                                  |
 | `system`         | `routers/system.ts`         | adminProcedure                                                                                                  |
-| `marketing`      | `routers/marketing.ts`      | adminProcedure (God Mode CRM: contacts, segments, templates, campaigns, providers)                              |
+| `marketing`      | `routers/marketing.ts`      | adminProcedure (God Mode global CRM view — cross-tenant by design; UI consumed only by system_admin without a preview)                              |
+| `marketingTenant`| `routers/marketingTenant.ts`| protected + `assertTenantOwner` — every procedure takes `tenantId` and filters every WHERE by `tenant_id`. Sibling to `marketing` for the salon-owner / tenant_manager / personal-master / sysadmin-previewing surface served by `/marketing/*`. Phase-1 surface: stats, contacts list/update, segments CRUD, templates CRUD, campaigns CRUD, providers (read-only), automations (stub). Send paths (`campaignSendNow`) still stubbed — real fan-out lands in PR 3 of the marketing roadmap.                              |
 | `consent`        | `routers/consent.ts`        | mixed: `record` is public + rate-limited (anonymous landing visitors must log decisions); `getRecentDecisions` and `getCategoryAcceptanceRates` are admin (system_admin / support / technical_support). Pure helpers in `server/api/consent/consentLogic.ts`. |
 
 

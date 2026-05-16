@@ -373,6 +373,81 @@ When adding a new top-level module that should not be intercepted by the role da
 | `dashboards/MasterDashboard.tsx`  | Master: Today, Schedule, Clients, Earnings, Profile                                |
 | `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close                       |
 | `salon/IGHealthCard.tsx`          | Live Instagram channel state (4-color: healthy / warning / needs_attention / broken). Reads `salon.getInstagramHealth` — fuses `channel_configs.active`, last `message_windows.last_user_message_at`, token age, and any open `error_events` IG row. Surfaces the silent-drop case where a dead Page token auto-flips `channel_configs.active = 0` and the resolver stops matching inbound webhooks. |
+| `dashboard-ui/AptCard.tsx`        | Appointment row used in agenda lists + today's-card. Right-side status pill is a `StatusActionMenu` trigger (not three inline buttons). Terminal rows (`cancelled / rejected / no_show / done`) stay visible but render with `opacity-50` + a non-interactive pill. |
+| `dashboard-ui/StatusActionMenu.tsx` | Dropdown menu surface for `AptCard`. Per-status action matrix: `pending` → Confirm / Reject; `confirmed` → Cancel / Client no-show / Master no-show; terminal → read-only. Mirrors `FilterDropdown`'s keyboard-nav + outside-click pattern. |
+| `dashboard/OnboardingChecklist.tsx` | Single setup checklist on the Overview tab. Replaces the legacy two-widget stack (`OnboardingChecklist` + `ProfileCompletenessCard`) — `STEP_IDS` is 10 items, auto-hides at 10/10. The four new ids (`fill_description / add_logo / add_cover / activate_public`) are derived from the `tenants` table by `onboarding.getStatus`. |
+
+
+### Salon Dashboard 2026-05-16 cleanup
+
+Overview tab was over-busy with two stacked setup widgets + a 4-card stat
+grid + a global "+ Новая запись" FAB that bled onto unrelated tabs. The
+2026-05-16 cleanup:
+
+- **Merged** `ProfileCompletenessCard` into `OnboardingChecklist`; the
+  card + its test are deleted. `STEP_IDS` extended 6 → 10. Auto-hides
+  when 10/10 done.
+- **Removed** the stat grid (today / masters / open tickets / billing
+  plan). The same numbers live in their dedicated tabs and the sidebar
+  badge; the Overview tab is for setup progress + today's schedule, not
+  KPIs.
+- **Today's appointments** card uncapped (no more "+5 записи" expander)
+  and sorted descending by time.
+- **`+ Новая запись` FAB** restricted to `tab === "appointments"` only.
+- **`AptCard`** redesigned: three inline action buttons replaced by the
+  status pill itself (a `StatusActionMenu` dropdown). Cancelled / no-show
+  / rejected / done rows are dimmed (`opacity-50`) but not removed —
+  matches Google Calendar's "show but de-emphasize" pattern.
+
+The `dashPrefs.hiddenStatCards` preference field stays in
+`useDashboardPrefs.ts` (and `AppearanceSection` still renders the
+toggles) but they no longer affect the dashboard. Cleaning that up is a
+follow-up; it's harmless because the stat grid is unconditionally gone
+from `SalonDashboard.tsx`.
+
+
+### Drag-to-reschedule (Day / Week calendar grids)
+
+Google-Calendar-style drag-to-move on appointment blocks in
+`SalonDayView` and `SalonWeekView`. Snaps to 15-min increments, supports
+cross-master and cross-day drops, optimistic UI with rollback on slot
+conflict.
+
+**tRPC:** `appointments.rescheduleAppointment` (input: `tenantId`,
+`appointmentId`, `newDate`, `newTime`, optional `newMasterId`). Re-uses
+`slotsBusy({ excludeAppointmentId })` for the conflict guard, refuses
+terminal rows (`appointment_terminal`), resets `syncRetries /
+syncRetryAfter / syncLastError` so `phaseGcalSync` re-syncs the Google
+Calendar event at the new time, and re-arms `remH24 / remH2 = 0` so the
+reminder cron fires for the new time, not the old one. Worker notify is
+intentionally NOT triggered — small reschedules during the day shouldn't
+spam clients with "your appointment moved" messages.
+
+**Frontend primitives:**
+- [lib/calendar/useDragToMove.ts](manicbot/admin-app/src/lib/calendar/useDragToMove.ts) — hook
+  (mirror of `useDragToCreate`) wired to a single appointment block.
+  `bindBlock()` returns `onPointerDown + touchAction: 'none'` for each
+  block; `ghost` + `draggingId` drive the dragging-source fade and the
+  destination ghost. Column resolution at pointer position uses
+  `document.elementsFromPoint().closest('[data-day]')`.
+- [components/dashboards/SalonDayView.tsx](manicbot/admin-app/src/components/dashboards/SalonDayView.tsx) — each master column carries
+  `data-day={isoDate}` + `data-master-id={chatId}` (synthetic
+  Unassigned column `chatId=-1` deliberately omits `data-day` so it's
+  not a drop target).
+- [components/dashboards/SalonWeekView.tsx](manicbot/admin-app/src/components/dashboards/SalonWeekView.tsx) — each day column carries
+  `data-day={iso}` only. Cross-master moves are not possible in the
+  Week view by design (the column is per-day, not per-master).
+- [components/dashboards/SalonDashboard.tsx](manicbot/admin-app/src/components/dashboards/SalonDashboard.tsx) — owns the `rescheduleApt`
+  mutation + a local `pendingMoves` state. `applyPendingMoves()` layers
+  in-flight moves onto the appointment arrays before they reach the
+  views so the dragged block visually settles at the new slot
+  immediately; the mutation's `onSettled` invalidates the cache to
+  land canonical data.
+
+**Permissions:** owner can move any appointment to any master. Master
+role (web session) can only move their OWN appointments and cannot
+reassign to another master — same role-scoping rule as
+`appointments.createManual`.
 
 
 ### Web User Authentication (`server/auth/`, `server/email/`)

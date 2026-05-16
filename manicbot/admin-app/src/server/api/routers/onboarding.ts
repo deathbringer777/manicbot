@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
-import { tenantOnboarding, services, bots, masters, appointments } from "~/server/db/schema";
+import { tenantOnboarding, services, bots, masters, appointments, tenants } from "~/server/db/schema";
 import { eq, sql, and, isNotNull, ne } from "drizzle-orm";
 
 const STEP_IDS = [
@@ -19,6 +19,10 @@ const STEP_IDS = [
   "set_schedule",
   "share_link",
   "first_booking",
+  "fill_description",
+  "add_logo",
+  "add_cover",
+  "activate_public",
 ] as const;
 type StepId = (typeof STEP_IDS)[number];
 
@@ -35,7 +39,7 @@ export const onboardingRouter = createTRPCRouter({
 
       // Derive completed steps from real tenant data in parallel.
       // share_link uses markStep (manual — triggered when user copies/shares the link).
-      const [svcRows, botRows, masterRows, aptRows, manualRow] = await Promise.all([
+      const [svcRows, botRows, masterRows, aptRows, manualRow, tenantRow] = await Promise.all([
         ctx.db.select({ n: sql<number>`count(*)` }).from(services)
           .where(and(eq(services.tenantId, tid), eq(services.active, 1))),
         ctx.db.select({ n: sql<number>`count(*)` }).from(bots)
@@ -46,6 +50,12 @@ export const onboardingRouter = createTRPCRouter({
           .where(eq(appointments.tenantId, tid)),
         ctx.db.select().from(tenantOnboarding)
           .where(eq(tenantOnboarding.tenantId, tid)).limit(1),
+        ctx.db.select({
+          description: tenants.description,
+          logo: tenants.logo,
+          coverPhoto: tenants.coverPhoto,
+          publicActive: tenants.publicActive,
+        }).from(tenants).where(eq(tenants.id, tid)).limit(1),
       ]);
 
       const manualSteps: StepId[] = manualRow[0] ? JSON.parse(manualRow[0].completedSteps) : [];
@@ -61,6 +71,9 @@ export const onboardingRouter = createTRPCRouter({
           ne(masters.workHours, "null"),
         ));
 
+      const tenantInfo = tenantRow[0];
+      const hasNonEmpty = (v: string | null | undefined) => !!(v && v.trim().length > 0);
+
       const completed: StepId[] = [];
       if ((svcRows[0]?.n ?? 0) > 0) completed.push("add_service");
       if ((botRows[0]?.n ?? 0) > 0) completed.push("connect_bot");
@@ -68,6 +81,10 @@ export const onboardingRouter = createTRPCRouter({
       if ((scheduleRows[0]?.n ?? 0) > 0) completed.push("set_schedule");
       if (manualSteps.includes("share_link")) completed.push("share_link");
       if ((aptRows[0]?.n ?? 0) > 0) completed.push("first_booking");
+      if (hasNonEmpty(tenantInfo?.description)) completed.push("fill_description");
+      if (hasNonEmpty(tenantInfo?.logo)) completed.push("add_logo");
+      if (hasNonEmpty(tenantInfo?.coverPhoto)) completed.push("add_cover");
+      if ((tenantInfo?.publicActive ?? 0) === 1) completed.push("activate_public");
 
       const allDone = STEP_IDS.every(s => completed.includes(s));
       return {

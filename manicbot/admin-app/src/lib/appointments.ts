@@ -22,6 +22,15 @@ export const APT_BORDER: Record<string, string> = {
   done:      "border-l-brand-500",
 };
 
+export const STATUS_STYLES: Record<string, string> = {
+  confirmed: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20",
+  pending:   "bg-amber-500/15 text-amber-400 border border-amber-500/20",
+  cancelled: "bg-red-500/15 text-red-400 border border-red-500/20",
+  rejected:  "bg-red-500/15 text-red-400 border border-red-500/20",
+  no_show:   "bg-orange-500/15 text-orange-400 border border-orange-500/20",
+  done:      "bg-brand-500/15 text-brand-400 border border-brand-500/20",
+};
+
 export const NAIL_EMOJIS: string[] = [
   '💅','💆','💇','✂️','🪮','🌸','✨','💎','🌺','🫧',
   '🧴','🧼','🪷','💜','🤍','🎀','🫶','⭐','🌟','💫',

@@ -2,25 +2,28 @@
 /**
  * ManualBookingModal — validation feedback contract.
  *
- * The "Создать запись" button used to silently grey out without telling the
- * user which field was incomplete. After the 2026-05-16 fix the modal now:
- *   - shows an explicit hint under the master / service dropdowns when the
- *     tenant has none configured yet (so the user knows to set them up first)
- *   - shows a per-issue list under the form once the user has started typing,
- *     so the disabled state is no longer a black box.
+ * The bottom-of-form per-issue list ("Чтобы создать запись:" with bullet
+ * points) was removed 2026-05-16 per user feedback — the disabled submit
+ * button is signal enough, and the explicit list cluttered the dialog
+ * after every other piece of validation context was already inline
+ * (placeholders, dropdown empty states, slot-conflict error banner).
  *
- * These tests pin both behaviors so we don't regress back to silent failure.
+ * What we still pin:
+ *   - The two inline per-dropdown empty-state hints
+ *     (`manual-booking-need-masters` / `manual-booking-need-services`)
+ *     which appear under each select when the tenant has nothing to
+ *     pick yet. Those are useful even with a clean form — the user
+ *     can't progress without filling them in elsewhere.
+ *
+ * What we explicitly do NOT pin any more:
+ *   - `manual-booking-issues` — gone. A regression that re-adds the
+ *     amber bullet list at the bottom of the form should NOT make
+ *     this file go green.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LangContext } from "~/components/LangContext";
 import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
-
-// ── tRPC mocks ────────────────────────────────────────────────────────────
-//
-// Each test controls what `getMasters`/`getServices` return by mutating the
-// mutable refs below before render. `createManual` is a noop — these tests
-// only exercise client-side validation feedback.
 
 const mastersRef: { data: Array<{ chatId: number; name: string }>; isLoading: boolean } = {
   data: [],
@@ -90,47 +93,13 @@ describe("ManualBookingModal — empty masters/services hints", () => {
   });
 });
 
-describe("ManualBookingModal — per-issue feedback for disabled submit", () => {
-  it("stays silent before the user types anything (no issue spam on open)", () => {
+describe("ManualBookingModal — bottom 'fix to continue' hint is gone", () => {
+  it("does NOT render the amber bullet list, even after the user starts typing", () => {
     mastersRef.data = [{ chatId: 1, name: "Анна" }];
     servicesRef.data = [{ svcId: "s1", names: JSON.stringify({ ru: "Маникюр" }), duration: 60, price: 100 }];
     renderModal();
+    const nameInput = screen.getByPlaceholderText("Имя клиента") as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "a" } });
     expect(screen.queryByTestId("manual-booking-issues")).toBeNull();
-  });
-
-  it("reveals the per-issue list once the user starts filling the form", () => {
-    mastersRef.data = [{ chatId: 1, name: "Анна" }];
-    servicesRef.data = [{ svcId: "s1", names: JSON.stringify({ ru: "Маникюр" }), duration: 60, price: 100 }];
-    renderModal();
-
-    // Type a 3-char name — clientName is no longer empty, so feedback should
-    // appear and call out everything else that is still missing.
-    const nameInput = screen.getByPlaceholderText("Имя клиента") as HTMLInputElement;
-    fireEvent.change(nameInput, { target: { value: "a" } });
-
-    const issues = screen.getByTestId("manual-booking-issues");
-    expect(issues).toBeTruthy();
-    const text = issues.textContent ?? "";
-    // Must list the still-missing fields (master/service/date/time/phone).
-    expect(text).toContain("выберите мастера");
-    expect(text).toContain("выберите услугу");
-    expect(text).toContain("укажите дату");
-    expect(text).toContain("укажите время");
-    expect(text).toContain("телефон от 6 символов");
-  });
-
-  it("does NOT pin master/service issues when the lists themselves are empty (the per-dropdown hint covers that)", () => {
-    // Empty masters AND services — issues list should not double up on those
-    // four lines (we already show a dedicated empty-state hint per dropdown).
-    mastersRef.data = [];
-    servicesRef.data = [];
-    renderModal();
-
-    const nameInput = screen.getByPlaceholderText("Имя клиента") as HTMLInputElement;
-    fireEvent.change(nameInput, { target: { value: "a" } });
-
-    const issues = screen.getByTestId("manual-booking-issues");
-    expect(issues.textContent ?? "").not.toContain("выберите мастера");
-    expect(issues.textContent ?? "").not.toContain("выберите услугу");
   });
 });

@@ -91,30 +91,13 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
     masterId !== null && serviceId !== "" && date !== "" && time !== "" && newClientValid;
   const submitDisabled = !formValid || create.isPending;
 
-  const hasMasters = !masters.isLoading && (masters.data?.length ?? 0) > 0;
-  const hasServices = !services.isLoading && (services.data?.length ?? 0) > 0;
+  // mastersEmpty / servicesEmpty drive the inline "you need to add a
+  // master/service first" empty-state hints rendered under each dropdown
+  // (separate UX from the bottom-of-form `manual-booking-issues` list
+  // which was removed 2026-05-16 per user feedback — the disabled submit
+  // button is signal enough that something is missing).
   const mastersEmpty = !masters.isLoading && (masters.data?.length ?? 0) === 0;
   const servicesEmpty = !services.isLoading && (services.data?.length ?? 0) === 0;
-
-  const hasStartedFilling =
-    useExistingClient ||
-    clientName.length > 0 ||
-    clientPhone.length > 0 ||
-    masterId !== null ||
-    serviceId !== "" ||
-    date !== "" ||
-    time !== "" ||
-    note.length > 0;
-
-  const issues: string[] = [];
-  if (masterId === null && hasMasters) issues.push(t("appointments.manual.issues.master", lang));
-  if (serviceId === "" && hasServices) issues.push(t("appointments.manual.issues.service", lang));
-  if (date === "") issues.push(t("appointments.manual.issues.date", lang));
-  if (time === "") issues.push(t("appointments.manual.issues.time", lang));
-  if (!useExistingClient) {
-    if (clientName.trim().length === 0) issues.push(t("appointments.manual.issues.clientName", lang));
-    if (clientPhone.trim().length < 6) issues.push(t("appointments.manual.issues.clientPhone", lang));
-  }
 
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -275,20 +258,6 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
             <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-300">
               {err}
             </p>
-          )}
-
-          {hasStartedFilling && submitDisabled && !create.isPending && issues.length > 0 && (
-            <div
-              data-testid="manual-booking-issues"
-              className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300"
-            >
-              <p className="mb-0.5 font-semibold">{t("appointments.manual.fixToContinue", lang)}</p>
-              <ul className="list-disc pl-4 space-y-0.5">
-                {issues.map((msg) => (
-                  <li key={msg}>{msg}</li>
-                ))}
-              </ul>
-            </div>
           )}
 
           <div className="flex gap-3 pt-2">

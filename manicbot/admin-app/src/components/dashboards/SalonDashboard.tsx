@@ -2170,6 +2170,18 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 else setManualBookingOpen(true);
               }}
               onMoveAppointment={handleMoveAppointment}
+              tenantId={tenantId}
+              services={
+                (svcList.data ?? []).map((s) => ({
+                  svcId: s.svcId,
+                  names: s.names ?? null,
+                  duration: s.duration,
+                  price: typeof s.price === "number" ? s.price : Number(s.price ?? 0),
+                }))
+              }
+              onUpdated={() => {
+                void utils.salon.getAppointments.invalidate();
+              }}
             />
           )}
 

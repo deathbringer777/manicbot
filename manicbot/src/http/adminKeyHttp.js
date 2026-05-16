@@ -930,7 +930,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     try {
-      const { action, appointmentId, tenantId, confirmedBy } = await request.json();
+      const { action, appointmentId, tenantId, confirmedBy, oldDate, oldTime } = await request.json();
       if (!action || !appointmentId || !tenantId) {
         return Response.json({ error: 'action, appointmentId, tenantId required' }, { status: 400 });
       }
@@ -1001,6 +1001,23 @@ export async function tryAdminKeyRoutes(request, env, url) {
         const { notifyStaffAptCancelled } = await import('../notifications.js');
         await notifyStaffAptCancelled(ctx, apt);
         notified = true;
+      } else if (action === 'reschedule') {
+        // Notify the client their appointment moved to a new slot. The
+        // admin-app mutation sends the prior date/time so the message
+        // shows "Was X → Now Y" instead of just the current values.
+        const { sendAptRescheduledToClient } = await import('../notifications.js');
+        await sendAptRescheduledToClient(ctx, apt, oldDate || null, oldTime || null);
+        notified = true;
+        const { canUse } = await import('../billing/features.js');
+        if (canUse(ctx, 'calendar')) {
+          try {
+            const { syncAppointmentCalendar } = await import('../services/google-calendar-oauth.js');
+            await syncAppointmentCalendar(ctx, apt);
+            calendarSynced = true;
+          } catch (e) {
+            log.error('http.adminKey', e instanceof Error ? e : new Error(String(e.message)), { action: 'appointment_calendar_sync_reschedule' });
+          }
+        }
       }
 
       return Response.json({ ok: true, action, appointmentId, notified, calendarSynced });

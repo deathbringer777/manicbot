@@ -7,6 +7,7 @@ export default {
 
   apt_pending: '⏳ <b>Заявку прийнято!</b>\n\nМи отримали вашу заявку:\n\n{svc}\n📅 {dt}\n\nМайстер підтвердить запис найближчим часом. Ми повідомимо! 📲',
   apt_rejected: '❌ <b>Запис не підтверджено</b>\n\n{svc}\n📅 {dt}',
+  apt_rescheduled: '🔄 <b>Запис перенесено</b>\n\n{svc}\n\n❌ Було: {oldDt}\n✅ Стало: <b>{newDt}</b>\n\nЧекаємо вас! 💅',
   apt_reject_cmt: '\n\n💬 <i>{comment}</i>',
   apt_rebook: '\n\nБажаєте обрати інший час?',
   apt_counter: '💬 <b>Майстер пропонує інший час:</b>\n\n{svc}\n📅 {d}\n🕐 <b>{newtime}</b>',

@@ -51,8 +51,8 @@ export function EmailVerificationPopup() {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="glass-card rounded-2xl p-6 max-w-sm w-full space-y-4 relative border border-red-500/20 shadow-2xl">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4">
+      <div className="rounded-2xl p-6 max-w-sm w-full space-y-4 relative border border-red-500/20 bg-white shadow-2xl ring-1 ring-black/5 dark:bg-slate-900 dark:ring-white/5">
         <button
           onClick={dismiss}
           className="absolute top-3 right-3 text-slate-400 hover:text-slate-200 transition-colors"

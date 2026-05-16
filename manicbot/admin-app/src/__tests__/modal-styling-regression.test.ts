@@ -28,6 +28,9 @@ const MODAL_FILES = [
   "src/components/salon/tabs/clients/ClientFormModal.tsx",
   "src/components/salon/tabs/clients/ClientDetailModal.tsx",
   "src/components/salon/tabs/clients/ImportClientsModal.tsx",
+  "src/components/dashboard/TimeOffDialog.tsx",
+  "src/components/dashboard/TimeReservationDialog.tsx",
+  "src/components/EmailVerificationPopup.tsx",
 ];
 
 function read(rel: string): string {

@@ -108,6 +108,10 @@ export default function DashboardLayout({
   // /settings is always rendered as {children} so SettingsPageClient mounts for all roles.
   const isSettingsPage = pathname === "/settings";
   const isPluginsPage = pathname === "/plugins" || pathname.startsWith("/plugins/") || pathname.startsWith("/plugin/");
+  // /marketing is its own module (MarketingShell with sub-nav). Whitelisting it lets
+  // /marketing/page.tsx render for tenant_owner / tenant_manager instead of being
+  // intercepted by SalonDashboard.
+  const isMarketingPage = pathname === "/marketing" || pathname.startsWith("/marketing/");
 
   // Gate: block dashboard content if email is not verified (except /settings)
   function wrapWithEmailGate(content: React.ReactNode) {
@@ -145,7 +149,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage
+            isSettingsPage || isPluginsPage || isMarketingPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
@@ -166,7 +170,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage
+            isSettingsPage || isPluginsPage || isMarketingPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
@@ -184,7 +188,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage
+            isSettingsPage || isPluginsPage || isMarketingPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="master" />
@@ -202,7 +206,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage || isPluginsPage
+            isSettingsPage || isPluginsPage || isMarketingPage
               ? children
               : <SupportDashboard />,
           )}

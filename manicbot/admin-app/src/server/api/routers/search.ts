@@ -77,12 +77,14 @@ export const searchRouter = createTRPCRouter({
           .select({
             id: marketingContacts.id,
             email: marketingContacts.email,
+            phone: marketingContacts.phone,
             name: marketingContacts.name,
           })
           .from(marketingContacts)
           .where(
             or(
-              sql`lower(${marketingContacts.email}) like ${like}`,
+              sql`lower(coalesce(${marketingContacts.email}, '')) like ${like}`,
+              sql`coalesce(${marketingContacts.phone}, '') like ${like}`,
               sql`lower(coalesce(${marketingContacts.name}, '')) like ${like}`,
             ),
           )
@@ -118,11 +120,15 @@ export const searchRouter = createTRPCRouter({
         });
       }
       for (const c of contactsRows) {
+        // 0062: marketing_contacts.email is now nullable (phone-first
+        // salon clients sync into the directory without an email). Fall
+        // back to phone or contact-id label so the search result still
+        // renders a usable title.
         hits.push({
           kind: "contact",
           id: String(c.id),
-          title: c.name ?? c.email,
-          subtitle: c.email,
+          title: c.name ?? c.email ?? c.phone ?? `Contact ${c.id}`,
+          subtitle: c.email ?? c.phone ?? null,
           href: `/marketing/contacts?id=${encodeURIComponent(String(c.id))}`,
         });
       }

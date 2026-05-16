@@ -27,7 +27,6 @@ import googleCalendarManifest from "./google-calendar/manifest";
 
 // ── tenant_owner ────────────────────────────────────────────────────────────
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
-import birthdayCampaignsManifest from "./birthday-campaigns/manifest";
 
 // ── tenant_manager ──────────────────────────────────────────────────────────
 import shiftPlannerManifest from "./shift-planner/manifest";
@@ -46,8 +45,6 @@ import slaTrackerManifest from "./sla-tracker/manifest";
 import kbSearchManifest from "./kb-search/manifest";
 
 // ── universal ───────────────────────────────────────────────────────────────
-import commandPaletteManifest from "./command-palette/manifest";
-import activityFeedManifest from "./activity-feed/manifest";
 import keyboardShortcutsManifest from "./keyboard-shortcuts/manifest";
 import darkPlusManifest from "./dark-plus/manifest";
 import exportHubManifest from "./export-hub/manifest";
@@ -65,7 +62,6 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   googleCalendarManifest,
   // tenant_owner
   loyaltyStampsManifest,
-  birthdayCampaignsManifest,
   // tenant_manager
   shiftPlannerManifest,
   taskBoardManifest,
@@ -80,8 +76,6 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   slaTrackerManifest,
   kbSearchManifest,
   // universal
-  commandPaletteManifest,
-  activityFeedManifest,
   keyboardShortcutsManifest,
   darkPlusManifest,
   exportHubManifest,

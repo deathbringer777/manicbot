@@ -1,12 +1,13 @@
 import { createTRPCRouter, adminProcedure, publicProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { appointments, users, masters, services } from "~/server/db/schema";
+import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
 import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { env } from "~/env";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { slotsBusy } from "~/server/api/slotsBusy";
 import { log } from "~/server/utils/logger";
+import { syncMarketingContact } from "~/server/clients/marketingSync";
 
 /**
  * Fire-and-forget call to Worker endpoint to trigger notifications + calendar sync.
@@ -216,15 +217,25 @@ export const appointmentsRouter = createTRPCRouter({
       tenantId: z.string(),
       clientChatId: z.number().int().optional(),
       clientName: z.string().min(1).max(100).optional(),
+      // Phone is no longer strictly required — the client may arrive via
+      // email / Telegram nick / Instagram handle. The refinement below
+      // enforces ≥1 contact.
       clientPhone: z.string().min(6).max(30).optional(),
+      clientEmail: z.union([z.string().email(), z.literal("")]).optional(),
+      clientTgUsername: z.string().max(64).optional(),
+      clientIgUsername: z.string().max(64).optional(),
       masterId: z.number().int(),
       serviceId: z.string().min(1),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       time: z.string().regex(/^\d{2}:\d{2}$/),
       note: z.string().max(500).optional(),
-    }).refine(d => d.clientChatId || (d.clientName && d.clientPhone), {
-      message: "Either clientChatId or (clientName + clientPhone) required",
-    }))
+    }).refine(
+      (d) =>
+        d.clientChatId ||
+        (d.clientName &&
+          (d.clientPhone || (d.clientEmail && d.clientEmail !== "") || d.clientTgUsername || d.clientIgUsername)),
+      { message: "Either clientChatId or (clientName + at least one contact: phone | email | telegram | instagram) required" },
+    ))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
@@ -241,6 +252,38 @@ export const appointmentsRouter = createTRPCRouter({
             code: "FORBIDDEN",
             message: "Masters can only book on their own calendar",
           });
+        }
+      }
+
+      // 0062 — fail-fast block check for existing clients. New-client
+      // bookings (input.clientChatId omitted) can't be blocked yet
+      // because the row doesn't exist, so we defer the post-resolve
+      // check below. For existing clients we want the clearest error
+      // message — refuse the booking up-front before spending queries
+      // on slot-conflict and service-duration lookups.
+      if (input.clientChatId != null) {
+        const [existingClient] = await ctx.db
+          .select({ isBlockedGlobal: users.isBlockedGlobal })
+          .from(users)
+          .where(and(
+            eq(users.tenantId, input.tenantId),
+            eq(users.chatId, input.clientChatId),
+          ))
+          .limit(1);
+        if (existingClient?.isBlockedGlobal === 1) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
+        }
+        const [earlyMblock] = await ctx.db
+          .select({ id: masterClientBlocks.id })
+          .from(masterClientBlocks)
+          .where(and(
+            eq(masterClientBlocks.tenantId, input.tenantId),
+            eq(masterClientBlocks.masterChatId, input.masterId),
+            eq(masterClientBlocks.clientChatId, input.clientChatId),
+          ))
+          .limit(1);
+        if (earlyMblock) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
         }
       }
 
@@ -277,25 +320,89 @@ export const appointmentsRouter = createTRPCRouter({
       }
       const [h, m] = input.time.split(":").map(Number);
 
-      // Resolve or create client
+      // Resolve or create client. New-client branch (0062) accepts any
+      // contact channel (phone | email | telegram | instagram) — name +
+      // at-least-one-contact, validated by the input schema.
+      const normEmail = input.clientEmail && input.clientEmail !== "" ? input.clientEmail.toLowerCase() : null;
+      const normTg = input.clientTgUsername ? input.clientTgUsername.replace(/^@+/, "") : null;
+      const normIg = input.clientIgUsername ? input.clientIgUsername.replace(/^@+/, "") : null;
+
       let chatId = input.clientChatId ?? null;
-      if (!chatId && input.clientName && input.clientPhone) {
+      if (!chatId && input.clientName) {
         // Synthetic negative chatId for manually-created clients (no Telegram ID)
         chatId = -Math.floor(Date.now() / 1000);
+        const nowSecForUser = Math.floor(Date.now() / 1000);
         try {
           await ctx.db.insert(users).values({
             tenantId: input.tenantId,
             chatId,
             name: input.clientName,
-            phone: input.clientPhone,
-            registeredAt: Math.floor(Date.now() / 1000),
+            phone: input.clientPhone ?? null,
+            email: normEmail,
+            tgUsername: normTg,
+            igUsername: normIg,
+            registeredAt: nowSecForUser,
+            updatedAt: nowSecForUser,
             firstSource: "manual_dashboard",
           });
+          // Mirror into the marketing directory so the new lead is
+          // deduped + reachable by future campaigns. Non-fatal on
+          // failure — the booking itself succeeds either way.
+          try {
+            const mcid = await syncMarketingContact(
+              ctx.db,
+              input.tenantId,
+              {
+                chatId,
+                name: input.clientName,
+                phone: input.clientPhone ?? null,
+                email: normEmail,
+                tgUsername: normTg,
+                igUsername: normIg,
+              },
+              "booking_manual",
+              nowSecForUser,
+            );
+            if (mcid) {
+              await ctx.db
+                .update(users)
+                .set({ marketingContactId: mcid })
+                .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, chatId)));
+            }
+          } catch (syncErr) {
+            log.warn("appointments.createManual.marketingSync", {
+              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+          }
         } catch (e) {
           log.error("appointments.createManual", e instanceof Error ? e : new Error(String(e)));
         }
       }
       if (!chatId) throw new TRPCError({ code: "BAD_REQUEST", message: "client_resolution_failed" });
+
+      // 0062: client-block enforcement.
+      // (1) Global tenant-wide block on the user — refuse outright.
+      // (2) Per-master block (master_client_blocks) — refuse this combo only.
+      const [blockedRow] = await ctx.db
+        .select({ isBlockedGlobal: users.isBlockedGlobal })
+        .from(users)
+        .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, chatId)))
+        .limit(1);
+      if (blockedRow?.isBlockedGlobal === 1) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
+      }
+      const [mblock] = await ctx.db
+        .select({ id: masterClientBlocks.id })
+        .from(masterClientBlocks)
+        .where(and(
+          eq(masterClientBlocks.tenantId, input.tenantId),
+          eq(masterClientBlocks.masterChatId, input.masterId),
+          eq(masterClientBlocks.clientChatId, chatId),
+        ))
+        .limit(1);
+      if (mblock) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+      }
 
       // Create appointment
       const aptId = `a${Math.floor(Date.now() / 1000)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -346,5 +453,170 @@ export const appointmentsRouter = createTRPCRouter({
       } catch { /* non-fatal */ }
 
       return { ok: true, appointmentId: aptId };
+    }),
+
+  /**
+   * rescheduleAppointment — move an existing booking to a new time slot
+   * (and/or master) without going through the full create flow. Powers
+   * Google-Calendar-style drag-to-reschedule from the Day/Week grids.
+   *
+   * Behaviour:
+   *   - Slot-conflict guard via shared `slotsBusy()` with
+   *     `excludeAppointmentId` so the appointment doesn't collide with
+   *     itself.
+   *   - Resets `syncRetries / syncRetryAfter / syncLastError` so the next
+   *     `phaseGcalSync` cron picks the row back up and updates the linked
+   *     Google Calendar event at the new time. The Google event_id is
+   *     preserved on the row so the sync becomes a PATCH, not a re-create.
+   *   - Re-arms the reminder flags (`remH24 / remH2 = 0`) so the cron fires
+   *     reminders for the NEW time, not the old one.
+   *   - Worker notify is intentionally NOT called here — drag-to-reschedule
+   *     happens frequently during the day and we don't want to spam the
+   *     client with a "your appointment moved" message every time the
+   *     owner nudges a block by 15 minutes. Adding an explicit "notify
+   *     client" action stays as a future, opt-in follow-up.
+   */
+  rescheduleAppointment: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      appointmentId: z.string().min(1),
+      newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      newTime: z.string().regex(/^\d{2}:\d{2}$/),
+      newMasterId: z.number().int().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Load the appointment up front — we need its current master/service
+      // both for the conflict check (service duration) and for the master
+      // role-scoping rule below.
+      const [apt] = await ctx.db
+        .select()
+        .from(appointments)
+        .where(and(
+          eq(appointments.id, input.appointmentId),
+          eq(appointments.tenantId, input.tenantId),
+        ))
+        .limit(1);
+      if (!apt) throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+
+      // Refuse to move terminal rows — cancelled / rejected / no-show /
+      // done bookings shouldn't be revivable by a drag gesture.
+      if (apt.cancelled === 1 || apt.noShow === 1 || apt.status === "rejected" || apt.status === "done") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "appointment_terminal" });
+      }
+
+      const newMasterId = input.newMasterId ?? apt.masterId;
+      if (newMasterId == null) throw new TRPCError({ code: "BAD_REQUEST", message: "master_required" });
+
+      // Role scoping: masters can only move bookings on their own calendar
+      // and can't reassign to another master. Mirrors `createManual`.
+      if (ctx.webUser?.webRole === "master") {
+        const [masterRow] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)))
+          .limit(1);
+        if (!masterRow || masterRow.chatId !== apt.masterId || newMasterId !== apt.masterId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Masters can only reschedule on their own calendar",
+          });
+        }
+      }
+
+      // No-op short-circuit: if nothing actually changed, return early so
+      // we don't pay the conflict check + sync-reset cost.
+      if (
+        apt.date === input.newDate &&
+        apt.time === input.newTime &&
+        apt.masterId === newMasterId
+      ) {
+        return { ok: true, appointmentId: apt.id, unchanged: true };
+      }
+
+      // Resolve service duration for the conflict check.
+      const [svc] = await ctx.db
+        .select()
+        .from(services)
+        .where(and(
+          eq(services.tenantId, input.tenantId),
+          eq(services.svcId, apt.svcId),
+        ))
+        .limit(1);
+      const durationMin = svc?.duration ?? 60;
+
+      const busy = await slotsBusy({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        masterId: newMasterId,
+        date: input.newDate,
+        startTime: input.newTime,
+        durationMin,
+        excludeAppointmentId: apt.id,
+      });
+      if (busy.busy) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "slot_conflict",
+          cause: busy.conflict,
+        });
+      }
+
+      const [h, m] = input.newTime.split(":").map(Number);
+      const [y, mo, d] = input.newDate.split("-").map(Number);
+      const newTs = Math.floor(Date.UTC(y!, mo! - 1, d!, h!, m!) / 1000);
+
+      try {
+        await ctx.db
+          .update(appointments)
+          .set({
+            date: input.newDate,
+            time: input.newTime,
+            ts: newTs,
+            masterId: newMasterId,
+            // Re-queue Google Calendar sync — googleEventId stays so the
+            // sync handler PATCHes the existing event instead of creating
+            // a duplicate.
+            syncRetries: 0,
+            syncRetryAfter: null,
+            syncLastError: null,
+            // Re-arm reminders so they fire at the new time.
+            remH24: 0,
+            remH2: 0,
+          })
+          .where(and(
+            eq(appointments.id, apt.id),
+            eq(appointments.tenantId, input.tenantId),
+          ));
+      } catch (e) {
+        if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? ""))) {
+          throw new TRPCError({ code: "CONFLICT", message: "slot_conflict" });
+        }
+        throw e;
+      }
+
+      // Analytics event — best-effort, mirrors createManual.
+      try {
+        const d1 = (ctx as unknown as { db: { $client?: { prepare?: (s: string) => { bind: (...a: unknown[]) => { run: () => Promise<unknown> } } } } }).db.$client;
+        const actorId = String(ctx.webUser?.id ?? "unknown");
+        const now = Math.floor(Date.now() / 1000);
+        const props = JSON.stringify({
+          source: "drag_reschedule",
+          appointmentId: apt.id,
+          fromDate: apt.date,
+          fromTime: apt.time,
+          fromMasterId: apt.masterId,
+          toDate: input.newDate,
+          toTime: input.newTime,
+          toMasterId: newMasterId,
+        });
+        if (d1?.prepare) {
+          await d1.prepare("INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at) VALUES (?, ?, ?, ?, ?)")
+            .bind(input.tenantId, actorId, "booking.rescheduled", props, now).run();
+        }
+      } catch { /* non-fatal */ }
+
+      return { ok: true, appointmentId: apt.id, unchanged: false };
     }),
 });

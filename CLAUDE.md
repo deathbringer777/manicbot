@@ -106,6 +106,7 @@ Recent migrations:
 - `0055_analytics_promo_dedup.sql` — partial UNIQUE index on `analytics_events(tenant_id, user_id, event, date(created_at, 'unixepoch'))` where `event = 'promo.returning_candidate'`. Closes P1-1: the `processBirthdayAndReturningPromos` cron used to dump a duplicate row every 15 min for 30 days per eligible client; with `INSERT OR IGNORE` + this index, dupes are silent.
 - `0056_error_events.sql` — `error_events` table for the in-house God Mode error monitor. Worker `captureError()` (`src/utils/errorCapture.js`) writes here with 1h dedup on `fingerprint` (FNV-1a of error_name + message + path); admin-app `/errors` page reads/resolves rows via the `errorEvents` tRPC router. `source` is bucketed to the enum `worker | admin-app | cron | edge | unknown`; the raw caller location is preserved in `context.source_raw`. Indexed for the dashboard filters: `(severity, last_seen)`, `(fingerprint)`, `(tenant_id, last_seen)`, `(resolved_at, last_seen)`.
 - `0057_error_events_extend.sql` — extends `error_events` with **status lifecycle** (`open | resolved | ignored | snoozed`, default `open`), `snooze_until`, `assignee_id`, `resolved_by`, `tags_json`, `environment` (default `production`), `release`, `error_type`, `url`, `method`, `request_id`, `sample_json`, `users_affected`, `title`. The 0056 1h-dedup window is replaced by status-aware dedup: one row per (fingerprint, tenant_id); a new fire on a `resolved` issue flips status back to `open` (**regression** signal — surfaced as the `regressed` flag on `errorEvents.list` rows and a 24h counter in `errorEvents.stats`). `ignored` issues bump count silently; `snoozed` reopen automatically once `snooze_until` passes. tRPC additions: `setStatus`, `snooze`, `assign`, `setTags`; `stats` returns `byStatus` + `regressions24h`; `resolve` now sets `resolved_by` from `ctx.webUser.id`. Indexes: `(status, last_seen)`, `(assignee_id, status, last_seen)`. Backfill: rows with `resolved_at IS NOT NULL` get `status='resolved'`; `title` filled from `substr(message,1,200)`.
+- `0062_clients_overhaul.sql` — Salon Clients tab overhaul. Extends `users` with multi-channel contact (`email`, `ig_username`, `notes`, `tags`), CRM fields (`marketing_contact_id`, `is_blocked_global` + `_reason` + `_at`, `lifetime_visits`, `last_visit_at`), and soft-delete (`updated_at`, `deleted_at`). Adds `users_fts` FTS5 virtual table + INSERT/UPDATE/DELETE triggers mirroring the 0054 `tenant_fts` pattern (keystroke search across name/phone/tg/email/ig/tags). New `master_client_blocks` table powers per-master blacklists (enforced in Worker `services/appointments.js` `saveApt` via the new `BLOCKED_GLOBAL`/`BLOCKED_FOR_MASTER` sentinels — Telegram callback handler in `src/handlers/callback.js` short-circuits both sentinels to a neutral "no slots" reply so the block reason is not leaked to the client). Rebuilds `marketing_contacts` so `email` is **nullable** and the previously platform-wide UNIQUE on `email` is replaced by per-tenant `(tenant_id, email)` + `(tenant_id, phone)` partial UNIQUE indexes — fixes the cross-tenant email collision bug (SECURITY_FINDINGS N7) that forced synthetic email workarounds. Adds `linked_user_chat_id` on `marketing_contacts` for the bidirectional link between salon clients and the marketing directory. New tRPC `clients` router (list/get/create/update/delete/setGlobalBlock/exportCsv/importCsv/csvTemplate/tagSuggestions) is the primary surface; new master-side procedures `master.blockClient` / `unblockClient` / `listMyBlockedClients`. Sync helper at `~/server/clients/marketingSync.ts` is invoked from `appointments.createManual` + the clients router; CSV import/export uses `~/server/clients/csv.ts`. UI lives in `components/salon/tabs/ClientsTab.tsx` (replaces the read-only legacy tab) + `components/salon/tabs/clients/{ClientFormModal, ClientDetailModal, ImportClientsModal, ClientRow}`. The salon-dashboard floating FAB switches to single-action "+ Add client" on the Clients tab (`QuickAddFab mode="client"`). `ManualBookingModal` now accepts phone/email/Telegram/Instagram as alternative contacts when creating a new client (server-side fail-fast block check runs before slot-conflict for existing-client bookings). `MasterDashboard` Clients tab gains per-row Block / Unblock buttons backed by `master_client_blocks`. Modals dropped the `glass-card` translucent utility in favour of solid `bg-white` / `dark:bg-slate-900` with `z-[100]` overlays (`bg-slate-950/70 backdrop-blur-md`) to sit definitively above Shell's sticky header (z-30/40) and bottom nav (z-50). Test coverage: `clients-router.test.ts`, `clients-tenant-isolation.test.ts`, `marketing-sync.test.ts`, `csv-clients.test.ts`, `master-blocks.test.ts`, `appointments-block-enforcement.test.ts`, `modal-styling-regression.test.ts`, `ClientFormModal.test.tsx`, `ClientRow.test.tsx`, `ClientsTab.test.tsx`, `QuickAddFab.test.tsx`, `client-block-booking.test.js` (Worker), `callback-block-sentinel-handling.test.js` (Worker static-check). Pre-flight check before applying (caller's responsibility): no `(tenant_id, email)` duplicates exist in `marketing_contacts` — otherwise the migration fails loud.
 
 ---
 
@@ -311,6 +312,17 @@ Telegram Mini App opens
 | `support` / `technical_support` | Support Dashboard | `SupportDashboard.tsx`                               |
 
 
+### Path Whitelist (when `{children}` renders instead of the role dashboard)
+
+`(dashboard)/layout.tsx` swaps in the role-specific dashboard (`SalonDashboard` / `MasterDashboard` / `SupportDashboard`) for every URL **except** a small whitelist that renders the page-level `{children}` instead. Whitelisted paths:
+
+- `/settings` (account / appearance / bot / billing / help — common to all roles)
+- `/plugins`, `/plugins/*`, `/plugin/*` (Plugin Marketplace catalog, detail, runtime)
+- `/marketing`, `/marketing/*` (Marketing module — `MarketingShell` with 7-tab sub-nav)
+
+When adding a new top-level module that should not be intercepted by the role dashboard, extend the whitelist in `(dashboard)/layout.tsx` (currently four mirror blocks: `tenant_owner` / `tenant_manager` / `master` / `support`+`technical_support`). The whitelist logic is exercised by `src/__tests__/marketing-routing.test.ts`.
+
+
 ### tRPC procedures
 
 - `**publicProcedure**` — no Telegram user required.
@@ -342,7 +354,8 @@ Telegram Mini App opens
 | `provisioning`   | `routers/provisioning.ts`   | adminProcedure                                                                                                  |
 | `settings`       | `routers/settings.ts`       | adminProcedure                                                                                                  |
 | `system`         | `routers/system.ts`         | adminProcedure                                                                                                  |
-| `marketing`      | `routers/marketing.ts`      | adminProcedure (God Mode CRM: contacts, segments, templates, campaigns, providers)                              |
+| `marketing`      | `routers/marketing.ts`      | adminProcedure (God Mode global CRM view — cross-tenant by design; UI consumed only by system_admin without a preview)                              |
+| `marketingTenant`| `routers/marketingTenant.ts`| protected + `assertTenantOwner` — every procedure takes `tenantId` and filters every WHERE by `tenant_id`. Sibling to `marketing` for the salon-owner / tenant_manager / personal-master / sysadmin-previewing surface served by `/marketing/*`. Phase-1 surface: stats, contacts list/update, segments CRUD, templates CRUD, campaigns CRUD, providers (read-only), automations (stub). Send paths (`campaignSendNow`) still stubbed — real fan-out lands in PR 3 of the marketing roadmap.                              |
 | `consent`        | `routers/consent.ts`        | mixed: `record` is public + rate-limited (anonymous landing visitors must log decisions); `getRecentDecisions` and `getCategoryAcceptanceRates` are admin (system_admin / support / technical_support). Pure helpers in `server/api/consent/consentLogic.ts`. |
 
 
@@ -361,6 +374,81 @@ Telegram Mini App opens
 | `dashboards/SupportDashboard.tsx` | Support: Ticket list + detail + reply + Claim/Escalate/Close                       |
 | `salon/IGHealthCard.tsx`          | Live Instagram channel state (4-color: healthy / warning / needs_attention / broken). Reads `salon.getInstagramHealth` — fuses `channel_configs.active`, last `message_windows.last_user_message_at`, token age, and any open `error_events` IG row. Surfaces the silent-drop case where a dead Page token auto-flips `channel_configs.active = 0` and the resolver stops matching inbound webhooks. |
 | `salon/SalonChannelsTab.tsx`      | Salon-dashboard «Каналы» tab — 4 sub-tabs (Telegram / Instagram / WhatsApp / Веб-чат). Connect forms live on top; the «Как подключить …» guide (`BotFatherGuide`, `MetaGuide`) is always at the BOTTOM and starts collapsed. WhatsApp tab shows a green/amber status pill derived from `salon.getChannels` (presence of the WA row = Meta finished the verify-token handshake). «Веб-чат» sub-tab is the AI-chat surface — URL + QR point to `https://manicbot.com/salon/{slug}/chat`, with a same-origin `<iframe loading="lazy">` preview of the actual `/chat` page below. Embedding works because `middleware.ts` emits `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` for `/salon/<slug>/chat` only (everything else stays DENY). |
+| `dashboard-ui/AptCard.tsx`        | Appointment row used in agenda lists + today's-card. Right-side status pill is a `StatusActionMenu` trigger (not three inline buttons). Terminal rows (`cancelled / rejected / no_show / done`) stay visible but render with `opacity-50` + a non-interactive pill. |
+| `dashboard-ui/StatusActionMenu.tsx` | Dropdown menu surface for `AptCard`. Per-status action matrix: `pending` → Confirm / Reject; `confirmed` → Cancel / Client no-show / Master no-show; terminal → read-only. Mirrors `FilterDropdown`'s keyboard-nav + outside-click pattern. |
+| `dashboard/OnboardingChecklist.tsx` | Single setup checklist on the Overview tab. Replaces the legacy two-widget stack (`OnboardingChecklist` + `ProfileCompletenessCard`) — `STEP_IDS` is 10 items, auto-hides at 10/10. The four new ids (`fill_description / add_logo / add_cover / activate_public`) are derived from the `tenants` table by `onboarding.getStatus`. |
+
+
+### Salon Dashboard 2026-05-16 cleanup
+
+Overview tab was over-busy with two stacked setup widgets + a 4-card stat
+grid + a global "+ Новая запись" FAB that bled onto unrelated tabs. The
+2026-05-16 cleanup:
+
+- **Merged** `ProfileCompletenessCard` into `OnboardingChecklist`; the
+  card + its test are deleted. `STEP_IDS` extended 6 → 10. Auto-hides
+  when 10/10 done.
+- **Removed** the stat grid (today / masters / open tickets / billing
+  plan). The same numbers live in their dedicated tabs and the sidebar
+  badge; the Overview tab is for setup progress + today's schedule, not
+  KPIs.
+- **Today's appointments** card uncapped (no more "+5 записи" expander)
+  and sorted descending by time.
+- **`+ Новая запись` FAB** restricted to `tab === "appointments"` only.
+- **`AptCard`** redesigned: three inline action buttons replaced by the
+  status pill itself (a `StatusActionMenu` dropdown). Cancelled / no-show
+  / rejected / done rows are dimmed (`opacity-50`) but not removed —
+  matches Google Calendar's "show but de-emphasize" pattern.
+
+The `dashPrefs.hiddenStatCards` preference field stays in
+`useDashboardPrefs.ts` (and `AppearanceSection` still renders the
+toggles) but they no longer affect the dashboard. Cleaning that up is a
+follow-up; it's harmless because the stat grid is unconditionally gone
+from `SalonDashboard.tsx`.
+
+
+### Drag-to-reschedule (Day / Week calendar grids)
+
+Google-Calendar-style drag-to-move on appointment blocks in
+`SalonDayView` and `SalonWeekView`. Snaps to 15-min increments, supports
+cross-master and cross-day drops, optimistic UI with rollback on slot
+conflict.
+
+**tRPC:** `appointments.rescheduleAppointment` (input: `tenantId`,
+`appointmentId`, `newDate`, `newTime`, optional `newMasterId`). Re-uses
+`slotsBusy({ excludeAppointmentId })` for the conflict guard, refuses
+terminal rows (`appointment_terminal`), resets `syncRetries /
+syncRetryAfter / syncLastError` so `phaseGcalSync` re-syncs the Google
+Calendar event at the new time, and re-arms `remH24 / remH2 = 0` so the
+reminder cron fires for the new time, not the old one. Worker notify is
+intentionally NOT triggered — small reschedules during the day shouldn't
+spam clients with "your appointment moved" messages.
+
+**Frontend primitives:**
+- [lib/calendar/useDragToMove.ts](manicbot/admin-app/src/lib/calendar/useDragToMove.ts) — hook
+  (mirror of `useDragToCreate`) wired to a single appointment block.
+  `bindBlock()` returns `onPointerDown + touchAction: 'none'` for each
+  block; `ghost` + `draggingId` drive the dragging-source fade and the
+  destination ghost. Column resolution at pointer position uses
+  `document.elementsFromPoint().closest('[data-day]')`.
+- [components/dashboards/SalonDayView.tsx](manicbot/admin-app/src/components/dashboards/SalonDayView.tsx) — each master column carries
+  `data-day={isoDate}` + `data-master-id={chatId}` (synthetic
+  Unassigned column `chatId=-1` deliberately omits `data-day` so it's
+  not a drop target).
+- [components/dashboards/SalonWeekView.tsx](manicbot/admin-app/src/components/dashboards/SalonWeekView.tsx) — each day column carries
+  `data-day={iso}` only. Cross-master moves are not possible in the
+  Week view by design (the column is per-day, not per-master).
+- [components/dashboards/SalonDashboard.tsx](manicbot/admin-app/src/components/dashboards/SalonDashboard.tsx) — owns the `rescheduleApt`
+  mutation + a local `pendingMoves` state. `applyPendingMoves()` layers
+  in-flight moves onto the appointment arrays before they reach the
+  views so the dragged block visually settles at the new slot
+  immediately; the mutation's `onSettled` invalidates the cache to
+  land canonical data.
+
+**Permissions:** owner can move any appointment to any master. Master
+role (web session) can only move their OWN appointments and cannot
+reassign to another master — same role-scoping rule as
+`appointments.createManual`.
 
 
 ### Web User Authentication (`server/auth/`, `server/email/`)

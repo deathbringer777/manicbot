@@ -23,6 +23,7 @@ import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
+import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
@@ -68,6 +69,8 @@ interface Props {
   blocks?: DayViewBlock[];
   onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
   onDeleteBlock?: (id: string) => void;
+  /** Drag-to-reschedule: fires when the user drops a block on a new slot. */
+  onMoveAppointment?: (move: MoveCommit) => void;
 }
 
 function pad(n: number): string {
@@ -123,7 +126,18 @@ export function SalonWeekView({
   blocks,
   onCreateAt,
   onDeleteBlock,
+  onMoveAppointment,
 }: Props) {
+  // Drag-to-reschedule — one hook instance owns the cross-column ghost
+  // state. The Week view doesn't pin masters to columns, so commit will
+  // always have `toMasterId === fromMasterId` here; the hook still resolves
+  // it generically for Day-view parity.
+  const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
+    hourHeight: HOUR_HEIGHT,
+    hourStart: HOUR_START,
+    hourEnd: HOUR_END,
+    onCommit: (c) => onMoveAppointment?.(c),
+  });
   const days = useMemo(() => weekDays(date), [date]);
   const todayIso = fmtIsoDate(new Date());
   const weekHasToday = days.some((d) => fmtIsoDate(d) === todayIso);
@@ -469,21 +483,41 @@ export function SalonWeekView({
                         (typeof a.masterId === "number" && masterColor.get(a.masterId)) || fallbackTone;
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
                       const isNoShow = !!a.noShow;
-                      const opacity = isCancelled || isNoShow ? 0.45 : 1;
+                      const isTerminal = isCancelled || isNoShow || a.status === "done";
+                      const isDraggingSelf = draggingId === a.id;
+                      const baseOpacity = isCancelled || isNoShow ? 0.45 : 1;
+                      // While the user drags THIS block, fade the source so
+                      // the only visible "real" copy is the ghost.
+                      const opacity = isDraggingSelf ? baseOpacity * 0.3 : baseOpacity;
+                      // Terminal rows can't be moved (matches the
+                      // mutation's guard) — fall back to a plain button.
+                      const drag = !isTerminal && onMoveAppointment
+                        ? bindBlock({
+                            appointmentId: a.id,
+                            date: iso,
+                            masterId: null,
+                            time: a.time,
+                            durationMin: a.duration ?? 60,
+                          })
+                        : null;
                       return (
                         <button
                           type="button"
                           key={a.id}
                           onClick={(e) => { e.stopPropagation(); setSelectedApt(a); }}
+                          onPointerDown={drag?.onPointerDown}
                           data-testid="week-view-event"
                           data-apt-id={a.id}
-                          className="absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left transition-shadow hover:shadow-lg overflow-hidden"
+                          className={`absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left transition-shadow hover:shadow-lg overflow-hidden ${
+                            drag ? "cursor-grab active:cursor-grabbing" : ""
+                          }`}
                           style={{
                             top,
                             height,
                             background: tone.bg,
                             borderLeft: `3px solid ${tone.border}`,
                             opacity,
+                            ...(drag?.style ?? {}),
                           }}
                           title={`${a.time} ${a.userName ?? ""}`.trim()}
                         >
@@ -496,6 +530,29 @@ export function SalonWeekView({
                         </button>
                       );
                     })}
+
+                    {/* Drag-to-reschedule ghost — rendered in the column
+                        currently under the cursor, NOT necessarily the
+                        source column. The hook commits the new (date,
+                        masterId, time) on pointerup. */}
+                    {moveGhost && moveGhost.date === iso && (
+                      <div
+                        aria-hidden
+                        data-testid="week-view-move-ghost"
+                        className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none flex flex-col items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-100"
+                        style={{
+                          top: moveGhost.top,
+                          height: moveGhost.height,
+                          background: "rgba(124,58,237,0.22)",
+                          borderColor: "rgba(124,58,237,0.7)",
+                          zIndex: 30,
+                        }}
+                      >
+                        <span className="tabular-nums leading-none">
+                          {`${String(Math.floor(moveGhost.startMin / 60)).padStart(2, "0")}:${String(moveGhost.startMin % 60).padStart(2, "0")}`}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Blocks (reservation / time_off) — calendar overhaul.
                         Stacked with appointments; multiple masters' blocks

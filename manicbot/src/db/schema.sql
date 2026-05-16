@@ -67,11 +67,53 @@ CREATE TABLE IF NOT EXISTS users (
   first_medium TEXT,
   first_touch_at INTEGER,
   dob TEXT,
+  email TEXT,
+  ig_username TEXT,
+  notes TEXT,
+  tags TEXT,
+  marketing_contact_id INTEGER,
+  is_blocked_global INTEGER NOT NULL DEFAULT 0,
+  blocked_global_reason TEXT,
+  blocked_global_at INTEGER,
+  updated_at INTEGER,
+  deleted_at INTEGER,
+  lifetime_visits INTEGER NOT NULL DEFAULT 0,
+  last_visit_at INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_users_tenant_dob ON users(tenant_id, dob);
 CREATE INDEX IF NOT EXISTS idx_user_username ON users(tenant_id, tg_username);
 CREATE INDEX IF NOT EXISTS idx_user_phone ON users(tenant_id, phone);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_email ON users(tenant_id, email);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_ig ON users(tenant_id, ig_username);
+CREATE INDEX IF NOT EXISTS idx_users_marketing_id ON users(marketing_contact_id);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_blocked ON users(tenant_id, is_blocked_global);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_deleted ON users(tenant_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_last_visit ON users(tenant_id, last_visit_at);
+
+-- FTS5 index over the user list. Kept in sync via the users_fts_ai/au/ad
+-- triggers installed by migration 0062. Search blob is lower(name + phone
+-- + tg + email + ig + tags). Used by salon-dashboard Clients tab and the
+-- public-side autocomplete when an owner looks up a customer mid-flow.
+CREATE VIRTUAL TABLE IF NOT EXISTS users_fts USING fts5(
+  tenant_id UNINDEXED,
+  chat_id UNINDEXED,
+  search_text,
+  tokenize='unicode61 remove_diacritics 1'
+);
+
+CREATE TABLE IF NOT EXISTS master_client_blocks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  master_chat_id INTEGER NOT NULL,
+  client_chat_id INTEGER NOT NULL,
+  reason TEXT,
+  blocked_by INTEGER NOT NULL,
+  blocked_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcb_uniq ON master_client_blocks(tenant_id, master_chat_id, client_chat_id);
+CREATE INDEX IF NOT EXISTS idx_mcb_client ON master_client_blocks(tenant_id, client_chat_id);
+CREATE INDEX IF NOT EXISTS idx_mcb_master ON master_client_blocks(tenant_id, master_chat_id);
 
 CREATE TABLE IF NOT EXISTS user_origins (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -641,7 +683,7 @@ CREATE TABLE IF NOT EXISTS email_subscribers (
 
 CREATE TABLE IF NOT EXISTS marketing_contacts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL,
+  email TEXT,
   name TEXT,
   phone TEXT,
   source TEXT,
@@ -657,13 +699,26 @@ CREATE TABLE IF NOT EXISTS marketing_contacts (
   brevo_contact_id TEXT,
   unsubscribe_token TEXT,
   locale TEXT,
-  lifecycle_stage TEXT
+  lifecycle_stage TEXT,
+  linked_user_chat_id INTEGER
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_email ON marketing_contacts(email);
+-- Per-tenant unique (replaces the broken platform-wide UNIQUE that caused
+-- cross-tenant email collisions). Partial — applies only to rows with a
+-- real email; phone-first clients land with NULL email.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_tenant_email
+  ON marketing_contacts(tenant_id, email)
+  WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_tenant_phone
+  ON marketing_contacts(tenant_id, phone)
+  WHERE phone IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_marketing_contacts_phone ON marketing_contacts(phone);
 CREATE INDEX IF NOT EXISTS idx_marketing_contacts_last_seen ON marketing_contacts(last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_marketing_contacts_tenant ON marketing_contacts(tenant_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_unsub_tok ON marketing_contacts(unsubscribe_token);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_contacts_unsub_tok
+  ON marketing_contacts(unsubscribe_token)
+  WHERE unsubscribe_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_mc_linked_user
+  ON marketing_contacts(tenant_id, linked_user_chat_id);
 
 CREATE TABLE IF NOT EXISTS marketing_segments (
   id TEXT PRIMARY KEY,

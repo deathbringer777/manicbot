@@ -30,6 +30,7 @@ import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
+import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
@@ -109,6 +110,10 @@ interface Props {
   blocks?: DayViewBlock[];
   onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
   onDeleteBlock?: (id: string) => void;
+  /** Drag-to-reschedule: fires when the user drops a block on a new slot.
+   *  Day view supports cross-master drag (drop on a different master's
+   *  column reassigns the booking). */
+  onMoveAppointment?: (move: MoveCommit) => void;
 }
 
 function pad(n: number): string {
@@ -233,7 +238,18 @@ export function SalonDayView({
   blocks,
   onCreateAt,
   onDeleteBlock,
+  onMoveAppointment,
 }: Props) {
+  // Drag-to-reschedule — single hook owns the cross-column ghost state.
+  // Both the date+master pair are resolved from the column under the
+  // cursor, so dropping on a different master's column reassigns the
+  // booking server-side via newMasterId.
+  const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
+    hourHeight: HOUR_HEIGHT,
+    hourStart: HOUR_START,
+    hourEnd: HOUR_END,
+    onCommit: (c) => onMoveAppointment?.(c),
+  });
   const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
   const todayIso = fmtIsoDate(new Date());
@@ -570,6 +586,11 @@ export function SalonDayView({
                   className="flex-1 min-w-[100px] sm:min-w-[180px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative"
                   data-testid="day-view-master-column"
                   data-master-id={master.chatId}
+                  // data-day attribute is what useDragToMove keys off to
+                  // resolve the column under the cursor. Skipping it on
+                  // the synthetic Unassigned column (-1) makes that
+                  // column non-draggable as a drop target.
+                  {...(master.chatId !== -1 ? { "data-day": isoDate } : {})}
                 >
                   {/* Header */}
                   <div className="h-12 flex items-center gap-2 px-3 border-b border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm">
@@ -673,25 +694,43 @@ export function SalonDayView({
                       const height = durationToHeight(a.duration);
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
                       const isNoShow = !!a.noShow;
-                      const opacity = isCancelled || isNoShow ? 0.45 : 1;
+                      const isTerminal = isCancelled || isNoShow || a.status === "done";
                       const isSelected = selectedApt?.id === a.id;
+                      const isDraggingSelf = draggingId === a.id;
+                      const baseOpacity = isCancelled || isNoShow ? 0.45 : 1;
+                      // Fade the source block while the ghost is shown.
+                      const opacity = isDraggingSelf ? baseOpacity * 0.3 : baseOpacity;
+                      // Terminal rows + the synthetic Unassigned column
+                      // are not drop targets — skip the drag wire-up.
+                      const drag =
+                        !isTerminal && master.chatId !== -1 && onMoveAppointment
+                          ? bindBlock({
+                              appointmentId: a.id,
+                              date: isoDate,
+                              masterId: master.chatId as number,
+                              time: a.time,
+                              durationMin: a.duration ?? 60,
+                            })
+                          : null;
                       return (
                         <button
                           type="button"
                           key={a.id}
                           onClick={(e) => { e.stopPropagation(); setSelectedApt(a); }}
+                          onPointerDown={drag?.onPointerDown}
                           data-testid="day-view-event"
                           data-apt-id={a.id}
                           data-selected={isSelected ? "1" : "0"}
                           className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left transition-all overflow-hidden ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-white/20 hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
                             isSelected ? "ring-2 ring-offset-1 shadow-md" : ""
-                          }`}
+                          } ${drag ? "cursor-grab active:cursor-grabbing" : ""}`}
                           style={{
                             top,
                             height,
                             background: tone.bg,
                             borderLeft: `3px solid ${tone.border}`,
                             opacity,
+                            ...(drag?.style ?? {}),
                           }}
                           title={`${a.time} ${a.userName ?? ""}`.trim()}
                         >
@@ -711,6 +750,31 @@ export function SalonDayView({
                         </button>
                       );
                     })}
+
+                    {/* Drag-to-reschedule ghost — rendered in whichever
+                        master column is currently under the cursor. The
+                        column resolution happens inside useDragToMove via
+                        data-day + data-master-id on the column wrapper. */}
+                    {moveGhost &&
+                      moveGhost.date === isoDate &&
+                      moveGhost.masterId === (master.chatId as number) && (
+                        <div
+                          aria-hidden
+                          data-testid="day-view-move-ghost"
+                          className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none flex flex-col items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-100"
+                          style={{
+                            top: moveGhost.top,
+                            height: moveGhost.height,
+                            background: "rgba(124,58,237,0.22)",
+                            borderColor: "rgba(124,58,237,0.7)",
+                            zIndex: 30,
+                          }}
+                        >
+                          <span className="tabular-nums leading-none">
+                            {`${String(Math.floor(moveGhost.startMin / 60)).padStart(2, "0")}:${String(moveGhost.startMin % 60).padStart(2, "0")}`}
+                          </span>
+                        </div>
+                      )}
 
                     {/* Blocks (reservation / time_off) — calendar overhaul.
                         Hatched grey fill, lock icon, no client column. Click

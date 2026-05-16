@@ -859,6 +859,7 @@ CREATE TABLE IF NOT EXISTS tenant_member_permissions (
 );
 CREATE INDEX IF NOT EXISTS idx_tmp_user ON tenant_member_permissions (web_user_id);
 CREATE INDEX IF NOT EXISTS idx_tmp_tenant ON tenant_member_permissions (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tmp_tenant_user ON tenant_member_permissions (tenant_id, web_user_id);
 
 CREATE TABLE IF NOT EXISTS tenant_action_requests (
   id           TEXT    PRIMARY KEY,

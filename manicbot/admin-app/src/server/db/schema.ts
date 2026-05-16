@@ -827,6 +827,7 @@ export const tenantMemberPermissions = sqliteTable("tenant_member_permissions", 
 }, (t) => [
   index("idx_tmp_user").on(t.webUserId),
   index("idx_tmp_tenant").on(t.tenantId),
+  index("idx_tmp_tenant_user").on(t.tenantId, t.webUserId),
 ]);
 
 export const tenantActionRequests = sqliteTable("tenant_action_requests", {

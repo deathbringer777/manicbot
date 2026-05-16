@@ -110,21 +110,24 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:913 — bot_id collision check across tenants (intentional global
+  // salon.ts:937 — bot_id collision check across tenants (intentional global
   // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
   // gated; this read confirms the bot isn't already claimed by SOMEONE ELSE
-  // before we accept it. Line drifted from 883 → 913 after PRs #66/#67.
-  "src/server/api/routers/salon.ts:913",
-  // tenantStaff.ts:366 — permissionElevationCodes lookup by primary key.
+  // before we accept it. Line drifted 883 → 913 (PRs #66/#67) → 937 (PR-A
+  // permission unification 0063 added the createMasterAccount perm-grant
+  // block).
+  "src/server/api/routers/salon.ts:937",
+  // tenantStaff.ts:381 — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization
-  // is by ownerUserId.
-  "src/server/api/routers/tenantStaff.ts:366",
-  // tenantStaff.ts:525 — tenantActionRequests query. The `where` variable is
-  // built two lines above (line 521-522) and DOES include eq(table.tenantId,
-  // input.tenantId). The scanner's 800-char window misses the prior
-  // assignment.
-  "src/server/api/routers/tenantStaff.ts:525",
+  // is by ownerUserId. Line drifted 366 → 381 after listMembers extension
+  // for masters (PR-A).
+  "src/server/api/routers/tenantStaff.ts:381",
+  // tenantStaff.ts:540 — tenantActionRequests query. The `where` variable is
+  // built two lines above and DOES include eq(table.tenantId, input.tenantId).
+  // The scanner's 800-char window misses the prior assignment. Line drifted
+  // 525 → 540 after listMembers extension for masters (PR-A).
+  "src/server/api/routers/tenantStaff.ts:540",
 ]);
 
 function listRouterFiles(dir) {

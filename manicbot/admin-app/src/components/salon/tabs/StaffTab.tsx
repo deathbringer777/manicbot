@@ -18,6 +18,7 @@ interface Props {
 }
 
 const PERMISSION_LABELS: Record<PermissionKey, string> = {
+  // tenant_manager defaults
   "appointments.view": "Просмотр записей",
   "appointments.manage": "Управление записями",
   "chat.inbox": "Чат с клиентами",
@@ -25,12 +26,29 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   "services.view": "Просмотр услуг",
   "masters.view": "Просмотр мастеров",
   "reviews.view": "Просмотр отзывов",
+  // master defaults (own-scope)
+  "appointments.view_own": "Свои записи",
+  "appointments.manage_own": "Свои записи: редактировать",
+  "clients.view_own": "Свои клиенты",
+  "earnings.view_own": "Свой доход",
+  // cross-master
+  "appointments.view_peers": "Записи коллег",
+  "appointments.create_for_peer": "Запись на коллегу",
+  "clients.view_peers": "Клиенты коллег",
+  // manager extensions
+  "analytics.view": "Аналитика",
+  "reviews.manage": "Управление отзывами",
+  "plugins.view": "Маркетплейс плагинов",
+  // sensitive
   "services.manage": "Редактирование услуг",
   "masters.manage": "Управление мастерами",
   "branding.manage": "Бренд и профиль",
   "billing.manage": "Оплата и подписка",
   "settings.manage": "Настройки салона",
   "staff.manage": "Управление персоналом",
+  "earnings.view_peers": "Доход коллег",
+  "plugins.manage": "Установка плагинов",
+  "referrals.view_tenant": "Реферальная программа",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -74,13 +92,13 @@ export function StaffTab({ tenantId }: Props) {
       {/* Staff list */}
       <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
         <header className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-200">Администраторы салона</h3>
+          <h3 className="text-sm font-bold text-slate-200">Персонал салона</h3>
           <button
             onClick={() => setShowInvite(true)}
             className="flex items-center gap-1.5 rounded-xl bg-brand-500/20 border border-brand-500/30 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/30"
           >
             <UserPlus className="h-3.5 w-3.5" />
-            Пригласить
+            Пригласить админа
           </button>
         </header>
 
@@ -88,8 +106,9 @@ export function StaffTab({ tenantId }: Props) {
           <div className="h-20 animate-pulse rounded-xl bg-slate-800/50" />
         ) : !members.data?.length ? (
           <p className="py-6 text-center text-xs text-slate-500">
-            Администраторов пока нет. Пригласите сотрудника — по умолчанию у него ограниченный доступ
-            (записи + чат). Сильные права выдаются с подтверждением по email.
+            Здесь видны администраторы и мастера с веб-доступом. Пригласите админа выше —
+            по умолчанию ограниченные права (записи + чат). Мастеров пригласите во вкладке «Мастера».
+            Сильные права (биллинг, бренд, плагины) выдаются с подтверждением по email.
           </p>
         ) : (
           <div className="space-y-3">
@@ -144,11 +163,13 @@ function MemberRow({
     id: string;
     email: string;
     name: string | null;
+    role: string;
     emailVerified: number | null;
     permissions: PermissionKey[];
   };
   onElevationRequired: (info: { elevationId: string; targetEmail: string; permissions: PermissionKey[] }) => void;
 }) {
+  const isMaster = member.role === "master";
   const { lang } = useLang();
   const utils = api.useUtils();
   const [selected, setSelected] = useState<Set<PermissionKey>>(new Set(member.permissions));
@@ -193,6 +214,16 @@ function MemberRow({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-white">{member.name ?? member.email}</p>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                isMaster
+                  ? "bg-purple-500/20 text-purple-300"
+                  : "bg-sky-500/20 text-sky-300"
+              }`}
+              title={isMaster ? "Мастер" : "Администратор"}
+            >
+              {isMaster ? "Мастер" : "Админ"}
+            </span>
             {member.emailVerified ? (
               <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">
                 <CheckCircle className="h-3 w-3" /> verified
@@ -205,13 +236,18 @@ function MemberRow({
           </div>
           <p className="truncate text-[11px] text-slate-500">{member.email}</p>
         </div>
-        <button
-          onClick={() => setConfirmRevoke(true)}
-          className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
-          title="Отозвать"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {/* Revoke only safe for managers — masters need cleanup of `masters`
+            table too, which the legacy revokeMember does not do. Owner uses
+            the Masters tab to remove a master. */}
+        {!isMaster && (
+          <button
+            onClick={() => setConfirmRevoke(true)}
+            className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+            title="Отозвать"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <ConfirmDialog
         open={confirmRevoke}

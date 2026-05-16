@@ -2,8 +2,9 @@ import { z } from "zod";
 import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
-  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents,
+  appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
 } from "~/server/db/schema";
+import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession } from "~/server/lib/stripe";
@@ -751,6 +752,9 @@ export const salonRouter = createTRPCRouter({
       tenantId: z.string(),
       name: z.string().min(1).max(200),
       email: z.string().email().optional(),
+      // Permission template applied on creation. Defaults to MASTER_DEFAULT
+      // (the 5 own-scope keys). Owner can change via the Staff tab later.
+      permissionTemplate: z.enum(["default", "stylist_plus", "read_only", "custom"]).default("default"),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -814,11 +818,31 @@ export const salonRouter = createTRPCRouter({
         .values({ tenantId: input.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
         .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
 
+      // Grant default permission set so the salon-invited master can access
+      // the unified admin permission system (0063). 'custom' = no rows; owner
+      // configures via Staff tab. Other templates pull from PERMISSION_TEMPLATES.
+      let permsToGrant: PermissionKey[] = [];
+      if (input.permissionTemplate === "default") permsToGrant = MASTER_DEFAULT;
+      else if (input.permissionTemplate === "stylist_plus") permsToGrant = PERMISSION_TEMPLATES.stylist_plus;
+      else if (input.permissionTemplate === "read_only") permsToGrant = PERMISSION_TEMPLATES.read_only;
+      for (const p of permsToGrant) {
+        await ctx.db.insert(tenantMemberPermissions).values({
+          tenantId: input.tenantId,
+          webUserId: id,
+          permission: p,
+          grantedAt: now,
+          grantedBy: ctx.webUser!.id,
+        }).onConflictDoUpdate({
+          target: [tenantMemberPermissions.tenantId, tenantMemberPermissions.webUserId, tenantMemberPermissions.permission],
+          set: { grantedAt: now, grantedBy: ctx.webUser!.id },
+        });
+      }
+
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null,
         action: "tenant.master.create",
         tenantId: input.tenantId,
-        detail: `masterId=${syntheticChatId} webUserId=${id}`,
+        detail: `masterId=${syntheticChatId} webUserId=${id} template=${input.permissionTemplate}`,
         ip: ctxIp(ctx),
       });
       // #P1-5 (relax.md §5) — send the master-invite email ONLY when the

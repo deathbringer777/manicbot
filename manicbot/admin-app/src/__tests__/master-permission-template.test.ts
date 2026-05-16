@@ -1,5 +1,5 @@
 /**
- * Migration 0063 — permission system unification.
+ * Migration 0068 — permission system unification.
  *
  * salon.createMasterAccount now accepts an optional `permissionTemplate`
  * that auto-grants a permission set to the salon-invited master so they
@@ -51,7 +51,7 @@ function permissionRowsFrom(insertCalls: Array<{ values: any }>): PermissionKey[
     .map((v) => v.permission as PermissionKey);
 }
 
-describe("salon.createMasterAccount permission templates (migration 0063)", () => {
+describe("salon.createMasterAccount permission templates (migration 0068)", () => {
   const createCaller = createCallerFactory(salonRouter);
 
   beforeEach(() => {

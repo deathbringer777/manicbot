@@ -1,4 +1,6 @@
--- 0063_permission_keys_extension.sql — permission system unification.
+-- 0068_permission_keys_extension.sql — permission system unification.
+-- (Originally numbered 0063 in PR-A — renumbered to 0068 to avoid collision
+-- with 0063_master_origin_and_archive.sql that landed on main first.)
 --
 -- The `tenant_member_permissions` table already supports any web_user row
 -- (it's keyed by (tenant_id, web_user_id, permission)). This migration is
@@ -22,7 +24,7 @@ SELECT
   m.web_user_id,
   p.permission,
   CAST(strftime('%s', 'now') AS INTEGER),
-  'migration:0063'
+  'migration:0068'
 FROM masters m
 CROSS JOIN (
   SELECT 'appointments.view_own'    AS permission UNION ALL

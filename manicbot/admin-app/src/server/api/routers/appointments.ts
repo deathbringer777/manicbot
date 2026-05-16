@@ -12,8 +12,18 @@ import { syncMarketingContact } from "~/server/clients/marketingSync";
 /**
  * Fire-and-forget call to Worker endpoint to trigger notifications + calendar sync.
  * Non-blocking: errors are logged but don't affect the mutation response.
+ *
+ * `extra` carries action-specific payload — e.g. the previous date/time for
+ * a reschedule action so the Worker can render "Was X → Now Y" in the client
+ * message via `sendAptRescheduledToClient`.
  */
-async function notifyWorker(action: string, appointmentId: string, tenantId: string, confirmedBy?: string | number | null) {
+async function notifyWorker(
+  action: string,
+  appointmentId: string,
+  tenantId: string,
+  confirmedBy?: string | number | null,
+  extra?: Record<string, unknown>,
+) {
   const workerUrl = env.WORKER_PUBLIC_URL;
   const adminKey = env.ADMIN_KEY;
   if (!workerUrl || !adminKey) {
@@ -25,7 +35,7 @@ async function notifyWorker(action: string, appointmentId: string, tenantId: str
     const resp = await fetch(`${workerUrl}/admin/appointment-action`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
-      body: JSON.stringify({ action, appointmentId, tenantId, confirmedBy }),
+      body: JSON.stringify({ action, appointmentId, tenantId, confirmedBy, ...(extra ?? {}) }),
     });
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
@@ -473,8 +483,9 @@ export const appointmentsRouter = createTRPCRouter({
    *   - Worker notify is intentionally NOT called here — drag-to-reschedule
    *     happens frequently during the day and we don't want to spam the
    *     client with a "your appointment moved" message every time the
-   *     owner nudges a block by 15 minutes. Adding an explicit "notify
-   *     client" action stays as a future, opt-in follow-up.
+   *     owner nudges a block by 15 minutes. The explicit "Save" flow in
+   *     the detail panel uses `appointments.update` (below) which DOES
+   *     notify — separation by user intent.
    */
   rescheduleAppointment: publicProcedure
     .input(z.object({
@@ -618,5 +629,163 @@ export const appointmentsRouter = createTRPCRouter({
       } catch { /* non-fatal */ }
 
       return { ok: true, appointmentId: apt.id, unchanged: false };
+    }),
+
+  /**
+   * Tenant-scoped edit for an existing appointment — powers the rich
+   * detail panel on the salon day view (reschedule / change master /
+   * change service from one place).
+   *
+   * Unlike `rescheduleAppointment` (silent, frequent, drag-driven), `update`
+   * represents an EXPLICIT user save and DOES fire the Worker notify — the
+   * client gets an `apt_rescheduled` "Was X → Now Y" message when the slot
+   * actually moves. No-op saves and note-only changes (when we add a note
+   * column) skip the notify.
+   *
+   * Authorization mirrors `createManual`: `assertTenantOwner` (covers
+   * `tenant_owner`, `system_admin`, and `master` on personal tenants).
+   * Salon-employed masters land at FORBIDDEN — by design the owner
+   * reshuffles bookings in a multi-master salon.
+   */
+  update: publicProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        masterId: z.number().int().optional(),
+        serviceId: z.string().min(1).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Load the current row + tenant so we can authorize before mutating.
+      const [current] = await ctx.db
+        .select({
+          id: appointments.id,
+          tenantId: appointments.tenantId,
+          date: appointments.date,
+          time: appointments.time,
+          masterId: appointments.masterId,
+          svcId: appointments.svcId,
+        })
+        .from(appointments)
+        .where(eq(appointments.id, input.id))
+        .limit(1);
+      if (!current) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+      }
+
+      await assertTenantOwner(ctx, current.tenantId);
+
+      // Cross-tenant guards — never trust the input. masterId/serviceId
+      // must belong to the same tenant as the appointment.
+      if (input.masterId !== undefined && input.masterId !== current.masterId) {
+        const [m] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(eq(masters.tenantId, current.tenantId), eq(masters.chatId, input.masterId)))
+          .limit(1);
+        if (!m) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "master_not_in_tenant" });
+        }
+      }
+      let nextSvcDuration: number | null = null;
+      if (input.serviceId !== undefined && input.serviceId !== current.svcId) {
+        const [s] = await ctx.db
+          .select({ svcId: services.svcId, duration: services.duration })
+          .from(services)
+          .where(and(eq(services.tenantId, current.tenantId), eq(services.svcId, input.serviceId)))
+          .limit(1);
+        if (!s) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "service_not_in_tenant" });
+        }
+        nextSvcDuration = s.duration;
+      }
+
+      // Resolve the effective post-update tuple.
+      const nextDate = input.date ?? current.date;
+      const nextTime = input.time ?? current.time;
+      const nextMaster = input.masterId ?? current.masterId;
+      const nextSvc = input.serviceId ?? current.svcId;
+
+      const slotChanged =
+        nextDate !== current.date
+        || nextTime !== current.time
+        || nextMaster !== current.masterId
+        || nextSvc !== current.svcId;
+
+      // Only run the conflict check when the slot actually moves — a save
+      // that touches only metadata (none today; reserved for future fields)
+      // should never trip on its own row.
+      if (slotChanged && nextMaster != null) {
+        // Need the duration of the post-update service to size the busy window.
+        let durationMin = nextSvcDuration;
+        if (durationMin == null) {
+          const [s] = await ctx.db
+            .select({ duration: services.duration })
+            .from(services)
+            .where(and(eq(services.tenantId, current.tenantId), eq(services.svcId, nextSvc)))
+            .limit(1);
+          if (!s) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "service_not_in_tenant" });
+          }
+          durationMin = s.duration;
+        }
+        const busy = await slotsBusy({
+          db: ctx.db,
+          tenantId: current.tenantId,
+          masterId: nextMaster,
+          date: nextDate,
+          startTime: nextTime,
+          durationMin,
+          excludeAppointmentId: current.id,
+        });
+        if (busy.busy) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "slot_conflict",
+            cause: busy.conflict,
+          });
+        }
+      }
+
+      // Recompute `ts` from date+time so list ORDER BY ts stays correct
+      // after a reschedule. Matches the formula used by `createManual`.
+      const [yyyy, mm, dd] = nextDate.split("-").map(Number);
+      const [hh, mi] = nextTime.split(":").map(Number);
+      const nextTs = Math.floor(Date.UTC(yyyy!, mm! - 1, dd!, hh!, mi!) / 1000);
+
+      const updates: Record<string, string | number | null> = {
+        date: nextDate,
+        time: nextTime,
+        masterId: nextMaster ?? null,
+        svcId: nextSvc,
+        ts: nextTs,
+      };
+      await ctx.db.update(appointments).set(updates).where(eq(appointments.id, current.id));
+
+      // Notify Worker only when the client-visible slot actually moved.
+      // Sends apt_rescheduled with prior date/time so the message reads
+      // "Was X → Now Y". Fire-and-forget; failure logs and does not
+      // bubble.
+      if (slotChanged) {
+        notifyWorker(
+          "reschedule",
+          current.id,
+          current.tenantId,
+          null,
+          { oldDate: current.date, oldTime: current.time },
+        ).catch(() => {});
+      }
+
+      return {
+        ok: true,
+        id: current.id,
+        date: nextDate,
+        time: nextTime,
+        masterId: nextMaster,
+        svcId: nextSvc,
+        notified: slotChanged,
+      };
     }),
 });

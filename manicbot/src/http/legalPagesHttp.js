@@ -213,7 +213,11 @@ function privacyPage(request) {
 <h2>7. Cookies</h2>
 <p>The public landing page sets a single technical cookie for theme preference. The salon admin panel sets a session cookie for authentication. No tracking, no third-party advertising cookies. Cookie consent is recorded in our <code>cookie_consent_log</code> per ePrivacy Directive.</p>
 
-<h2>8. Contact</h2>
+<h2>8. Google API Services User Data</h2>
+<p>ManicBot's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+<p>When a salon owner connects a Google Calendar, ManicBot uses the Google Calendar API to (a) read busy time blocks from the calendar so unavailable slots are hidden from clients booking through our bots, and (b) create, update, and delete Calendar events for appointments booked through our service. Data accessed via Google APIs is used solely to provide the booking-sync feature, is never sold, is not used to train any AI / ML model, is not used for advertising, and is not shared with third parties beyond what is strictly required to deliver the feature. We request only the narrowest scopes necessary: <code>calendar.events</code> (manage events ManicBot creates) and <code>calendar.readonly</code> (read busy blocks). We never read event titles or descriptions of events we did not create.</p>
+
+<h2>9. Contact</h2>
 <p><a href="mailto:support@manicbot.com">support@manicbot.com</a></p>`,
     request,
   );

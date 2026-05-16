@@ -110,18 +110,18 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:998 — bot_id collision check across tenants (intentional global
-  // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
-  // gated; this read confirms the bot isn't already claimed by SOMEONE ELSE
-  // before we accept it. Line drifted 883 → 913 (PRs #66/#67) → 937 (PR-A
-  // permission unification 0063 added the createMasterAccount perm-grant
-  // block) → 998 (PR-B referral program added the maybeAttachReferral helper).
-  "src/server/api/routers/salon.ts:998",
-  // tenantStaff.ts:381 — permissionElevationCodes lookup by primary key.
+  // salon.ts:<LINE> — bot_id collision check across tenants (intentional
+  // global lookup, cross-tenant by design). The procedure is
+  // tenantOwnerProcedure-gated; this read confirms the bot isn't already
+  // claimed by SOMEONE ELSE before we accept it. Line drift history: 883
+  // (initial) → 913 → 920 → 937 → 964 (master-invitation imports +
+  // URL-hardening regexes from clients/public-profile PR) → current
+  // (after PR-A permission unification + PR-B referral helpers merged).
+  "src/server/api/routers/salon.ts:1049",
+  // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization
-  // is by ownerUserId. Line drifted 366 → 381 after listMembers extension
-  // for masters (PR-A).
+  // is by ownerUserId. Line drifted after listMembers extension for masters (PR-A).
   "src/server/api/routers/tenantStaff.ts:381",
   // tenantStaff.ts:540 — tenantActionRequests query. The `where` variable is
   // built two lines above and DOES include eq(table.tenantId, input.tenantId).

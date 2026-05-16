@@ -3,6 +3,7 @@ import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
+  masterInvitations,
 } from "~/server/db/schema";
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
@@ -10,15 +11,25 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
 import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
+import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/masterPasswordVault";
 import { log } from "~/server/utils/logger";
 import { writeAudit, ctxIp } from "~/server/security/audit";
-import { sendMasterInviteEmail } from "~/server/email/emailService";
+import {
+  sendMasterInviteEmail,
+  sendMasterInviteExistingUserEmail,
+  sendMasterInviteNewUserEmail,
+  sendMasterPasswordResetByOwnerEmail,
+} from "~/server/email/emailService";
+import { generateToken, hashToken } from "~/server/auth/tokens";
+import { requireOtpConfirmation } from "~/server/auth/otp";
+import { checkRateLimit } from "~/server/auth/rateLimit";
+import type { Lang } from "~/lib/i18n";
 
 const tenantIdInput = z.object({ tenantId: z.string() });
 
@@ -238,6 +249,7 @@ export const salonRouter = createTRPCRouter({
       logoR2Key: tenantRow[0]?.logoR2Key ?? null,
       coverR2Key: tenantRow[0]?.coverR2Key ?? null,
       brandPalette,
+      instagramUrl: tenantRow[0]?.instagramUrl ?? null,
     };
   }),
 
@@ -429,8 +441,13 @@ export const salonRouter = createTRPCRouter({
       mapsUrl: z.string().max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
       photos: z.array(z.string()).optional(),
-      logo: z.string().url().optional().or(z.literal("")),
-      coverPhoto: z.string().url().optional().or(z.literal("")),
+      // Restrict to https-only URLs — `z.string().url()` alone permits
+      // `javascript:` / `data:` schemes (WHATWG URL parses them). These fields
+      // flow into og:image, JSON-LD and `<img src>`; even where the browser
+      // currently de-fangs them, future renders into `<a href>` would turn
+      // the gap into stored XSS. See salon-update-profile-security.test.ts.
+      logo: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
+      coverPhoto: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
       // Branding v2
       displayName: z.string().min(1).max(120).optional().or(z.literal("")),
       logoR2Key: z.string().max(256).optional().or(z.literal("")),
@@ -443,6 +460,19 @@ export const salonRouter = createTRPCRouter({
         })
         .nullable()
         .optional(),
+      // SECURITY: must be a real instagram.com https URL — otherwise a malicious
+      // tenant_owner can store `javascript:fetch(...)` and turn the public
+      // salon page's <a href={instagramUrl}> link into stored XSS for every
+      // visitor. See salon-update-profile-security.test.ts.
+      instagramUrl: z
+        .string()
+        .regex(
+          /^https:\/\/(www\.)?instagram\.com\//i,
+          "Instagram URL must start with https://instagram.com/ or https://www.instagram.com/",
+        )
+        .max(300)
+        .optional()
+        .or(z.literal("")),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -477,7 +507,9 @@ export const salonRouter = createTRPCRouter({
       try { existing = tenantRow[0]!.salon ? JSON.parse(tenantRow[0]!.salon!) : {}; } catch { /* ignore malformed JSON */ }
       if (input.address !== undefined) existing.address = sanitizeText(input.address, 300);
       if (input.phone !== undefined) existing.phone = sanitizeText(input.phone, 50);
-      if (input.workHours !== undefined) existing.workHours = sanitizeText(input.workHours, 200);
+      // 500-char cap so a per-weekday JSON (~250 chars) fits while still
+      // bounding the field. Legacy "09:00 – 18:00" strings remain valid.
+      if (input.workHours !== undefined) existing.workHours = sanitizeText(input.workHours, 500);
       if (input.workHoursFrom !== undefined || input.workHoursTo !== undefined) {
         const wh: Record<string, unknown> =
           typeof existing.workHours === "object" && existing.workHours !== null
@@ -505,6 +537,9 @@ export const salonRouter = createTRPCRouter({
       if (input.coverR2Key !== undefined) tenantUpdate.coverR2Key = input.coverR2Key || null;
       if (input.brandPalette !== undefined) {
         tenantUpdate.brandPalette = input.brandPalette ? JSON.stringify(input.brandPalette) : null;
+      }
+      if (input.instagramUrl !== undefined) {
+        tenantUpdate.instagramUrl = input.instagramUrl ? sanitizeText(input.instagramUrl, 300) : null;
       }
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 
@@ -693,6 +728,8 @@ export const salonRouter = createTRPCRouter({
         tenantId: input.tenantId,
         chatId: input.chatId,
         name: sanitizeText(input.name, 200),
+        // 0062: chat-id based adds (Telegram identity owned by the master).
+        origin: "invited_telegram",
       });
       // Also assign tenant_roles entry so master can access the mini-app
       const now = Math.floor(Date.now() / 1000);
@@ -839,6 +876,17 @@ export const salonRouter = createTRPCRouter({
       const password = Array.from(pwArr).map(b => chars[b % chars.length]).join("");
 
       const passwordHash = await hashPassword(password);
+      // 0065: salon-owned accounts also keep a reversibly-encrypted copy of
+      // the plaintext so the owner can peek/reset via OTP. Fail closed if
+      // BOT_ENCRYPTION_KEY is unset — refusing to create rather than storing
+      // half the data the salon needs to manage the account.
+      const passwordEncrypted = await encryptMasterPassword(password, env.BOT_ENCRYPTION_KEY ?? null);
+      if (!passwordEncrypted) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "BOT_ENCRYPTION_KEY is not configured; salon-owned master accounts require it.",
+        });
+      }
       const id = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
 
@@ -851,6 +899,7 @@ export const salonRouter = createTRPCRouter({
         id,
         email: login,
         passwordHash,
+        passwordEncrypted, // 0065: owner-recoverable plaintext (AES-GCM)
         role: "master",
         tenantId: input.tenantId,
         name: sanitizedName,
@@ -864,6 +913,7 @@ export const salonRouter = createTRPCRouter({
       // isSynthetic=1 because chatId is synthetic — 0052 migration adds
       // an explicit flag so cron post-visit + Telegram-dependent jobs
       // skip these rows.
+      // 0062: origin='salon_created' — salon owns this account fully.
       await ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: syntheticChatId,
@@ -872,6 +922,7 @@ export const salonRouter = createTRPCRouter({
         addedAt: now,
         webUserId: id,
         isSynthetic: 1,
+        origin: "salon_created",
       });
 
       // Assign tenant_roles
@@ -1577,5 +1628,477 @@ export const salonRouter = createTRPCRouter({
         igBusinessId: cfg.igBusinessId,
         updatedAt: cfg.updatedAt,
       };
+    }),
+
+  // ─── Masters tab overhaul (migrations 0062-0066) ──────────────────────────
+
+  /**
+   * Invite a master by email. Two scenarios decided at send time:
+   *   - existing_user → email links to /invitations/{id}; recipient logs in
+   *     to accept (session auth = security, no token needed).
+   *   - new_user      → email contains a magic /register?invite=<token> link;
+   *     hashed token in D1, raw token only in the email body.
+   *
+   * Rate-limit: 10 invitations / hour per inviter web_user.
+   * Personal-tenant guard: rejects (no one else to invite — single-human tenant).
+   */
+  sendMasterInvitation: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      email: z.string().email().max(254),
+      displayName: z.string().min(1).max(200).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const inviter = ctx.webUser;
+      if (!inviter?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // Personal-tenant guard.
+      const tenantRow = await ctx.db
+        .select({ name: tenants.name, isPersonal: tenants.isPersonal })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      if (!tenantRow[0]) throw new TRPCError({ code: "NOT_FOUND", message: "tenant_not_found" });
+      if (tenantRow[0].isPersonal === 1) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "personal_tenant_cannot_invite" });
+      }
+
+      // Rate-limit per inviter.
+      const rl = await checkRateLimit(
+        ctx.db,
+        `invite:${inviter.id}`,
+        "master_invite",
+        10,
+        60 * 60 * 1000,
+      );
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "rate_limited" });
+      }
+
+      const email = input.email.trim().toLowerCase();
+      const now = Math.floor(Date.now() / 1000);
+
+      // Resolve scenario.
+      const existingUser = await ctx.db
+        .select({ id: webUsers.id, lang: webUsers.lang })
+        .from(webUsers)
+        .where(eq(webUsers.email, email))
+        .limit(1);
+      const scenario: "existing_user" | "new_user" =
+        existingUser.length > 0 ? "existing_user" : "new_user";
+
+      // Token only used in scenario=new_user. For existing_user we still
+      // store a hash (random unused value) so the column stays NOT NULL.
+      const rawToken = generateToken();
+      const tokenHash = await hashToken(rawToken);
+      const invitationId = crypto.randomUUID();
+
+      try {
+        await ctx.db.insert(masterInvitations).values({
+          id: invitationId,
+          tenantId: input.tenantId,
+          email,
+          inviterUserId: inviter.id,
+          invitedName: input.displayName ? sanitizeText(input.displayName, 200) : null,
+          tokenHash,
+          tokenExpiresAt: now + 7 * 24 * 60 * 60, // 7 days
+          status: "pending",
+          scenario,
+          createdAt: now,
+        });
+      } catch (e) {
+        const msg = String((e as Error)?.message ?? "");
+        if (/UNIQUE constraint failed/i.test(msg)) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "invitation_already_pending",
+          });
+        }
+        throw e;
+      }
+
+      const salonName = tenantRow[0].name ?? "ManicBot";
+      const lang = ((existingUser[0]?.lang as Lang | null) ?? "en") as Lang;
+
+      // Fire-and-forget email. Caller still sees success state when D1 row
+      // landed; the email outcome lands in logs.
+      if (scenario === "existing_user") {
+        void sendMasterInviteExistingUserEmail(email, invitationId, salonName, lang).catch((e) =>
+          log.error("salon.invite.existing", e instanceof Error ? e : new Error(String(e))),
+        );
+      } else {
+        void sendMasterInviteNewUserEmail(email, rawToken, salonName, lang).catch((e) =>
+          log.error("salon.invite.new", e instanceof Error ? e : new Error(String(e))),
+        );
+      }
+
+      await writeAudit(ctx.db, {
+        actor: inviter.email ?? null,
+        action: "tenant.master.invite",
+        tenantId: input.tenantId,
+        detail: `email=${email} scenario=${scenario}`,
+        ip: ctxIp(ctx),
+      });
+
+      return { invitationId, scenario };
+    }),
+
+  /** Returns pending invitations for the masters-tab strip. */
+  listMasterInvitations: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      status: z.enum(["pending", "accepted", "revoked", "expired"]).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select({
+          id: masterInvitations.id,
+          email: masterInvitations.email,
+          invitedName: masterInvitations.invitedName,
+          status: masterInvitations.status,
+          scenario: masterInvitations.scenario,
+          tokenExpiresAt: masterInvitations.tokenExpiresAt,
+          createdAt: masterInvitations.createdAt,
+        })
+        .from(masterInvitations)
+        .where(and(
+          eq(masterInvitations.tenantId, input.tenantId),
+          input.status ? eq(masterInvitations.status, input.status) : eq(masterInvitations.status, "pending"),
+        ))
+        .orderBy(desc(masterInvitations.createdAt));
+      return rows;
+    }),
+
+  /** Cancel a pending invitation. No OTP — until accepted, this is a no-op
+   *  on the recipient side. The unique partial index automatically frees the
+   *  (tenantId, email) slot for a fresh invitation. */
+  revokeMasterInvitation: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), invitationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = Math.floor(Date.now() / 1000);
+      const result = await ctx.db
+        .update(masterInvitations)
+        .set({ status: "revoked", revokedAt: now })
+        .where(and(
+          eq(masterInvitations.id, input.invitationId),
+          eq(masterInvitations.tenantId, input.tenantId),
+          eq(masterInvitations.status, "pending"),
+        ));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "tenant.master.invite.revoke",
+        tenantId: input.tenantId,
+        detail: `invitationId=${input.invitationId}`,
+        ip: ctxIp(ctx),
+      });
+      return { ok: true, result };
+    }),
+
+  /**
+   * Archive a master (soft-delete). OTP-gated.
+   * Does NOT cancel future appointments — owner reassigns separately.
+   */
+  archiveMaster: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterChatId: z.number(),
+      otpCode: z.string().length(6),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "archive_master",
+        payload: { tenantId: input.tenantId, masterChatId: input.masterChatId },
+        code: input.otpCode,
+      });
+
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db
+        .update(masters)
+        .set({ archivedAt: now })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.archive",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId}`,
+        ip: ctxIp(ctx),
+      });
+      return { ok: true };
+    }),
+
+  /** Restore an archived master. OTP-gated. */
+  unarchiveMaster: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterChatId: z.number(),
+      otpCode: z.string().length(6),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "unarchive_master",
+        payload: { tenantId: input.tenantId, masterChatId: input.masterChatId },
+        code: input.otpCode,
+      });
+
+      await ctx.db
+        .update(masters)
+        .set({ archivedAt: null })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.unarchive",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId}`,
+        ip: ctxIp(ctx),
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * Reset a salon-owned master's password. OTP-gated. Generates a fresh
+   * password, hashes + encrypts both columns, emails the plaintext directly
+   * to the master. The salon owner never sees the new value in the response.
+   * Refuses on origin != 'salon_created' (account is owned by the master).
+   */
+  resetMasterPassword: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterChatId: z.number(),
+      otpCode: z.string().length(6),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "reset_master_password",
+        payload: { tenantId: input.tenantId, masterChatId: input.masterChatId },
+        code: input.otpCode,
+      });
+
+      // Master + linked web_user lookup.
+      const masterRow = await ctx.db
+        .select({
+          origin: masters.origin,
+          webUserId: masters.webUserId,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      const m = masterRow[0];
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+      if (m.origin !== "salon_created") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "not_owned_by_salon" });
+      }
+      if (!m.webUserId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "master_has_no_web_user" });
+      }
+
+      const userRow = await ctx.db
+        .select({ email: webUsers.email, lang: webUsers.lang })
+        .from(webUsers)
+        .where(eq(webUsers.id, m.webUserId))
+        .limit(1);
+      if (!userRow[0]?.email) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "master_has_no_email" });
+      }
+
+      // Generate fresh password.
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+      const pwArr = crypto.getRandomValues(new Uint8Array(16));
+      const newPassword = Array.from(pwArr).map((b) => chars[b % chars.length]).join("");
+      const passwordHash = await hashPassword(newPassword);
+      const passwordEncrypted = await encryptMasterPassword(newPassword, env.BOT_ENCRYPTION_KEY ?? null);
+      if (!passwordEncrypted) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "encryption_key_missing",
+        });
+      }
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db
+        .update(webUsers)
+        .set({
+          passwordHash,
+          passwordEncrypted,
+          passwordChangedAt: now, // invalidates existing JWTs
+          updatedAt: now,
+        })
+        .where(eq(webUsers.id, m.webUserId));
+
+      const tenantRow = await ctx.db
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      const salonName = tenantRow[0]?.name ?? "ManicBot";
+      const lang = ((userRow[0]?.lang as Lang | null) ?? "en") as Lang;
+
+      void sendMasterPasswordResetByOwnerEmail(userRow[0].email, newPassword, salonName, lang).catch(
+        (e) =>
+          log.error(
+            "salon.resetMasterPassword.email",
+            e instanceof Error ? e : new Error(String(e)),
+          ),
+      );
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.password.reset",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId} (password emailed to master, salon never sees it)`,
+        ip: ctxIp(ctx),
+      });
+
+      // Mask email in response so the salon UI can show "sent to a***@example.com".
+      const e = userRow[0].email;
+      const at = e.indexOf("@");
+      const masked = at > 1 ? `${e[0]}***${e.slice(at - 1)}` : e;
+      return { ok: true, emailSentTo: masked };
+    }),
+
+  /**
+   * Decrypt and return a salon-owned master's plaintext password. OTP-gated.
+   * Audit-logged. ONLY for origin='salon_created' accounts. The returned
+   * value is the actual password — the salon owner is expected to copy it
+   * once and the UI must not persist it.
+   */
+  peekMasterPassword: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterChatId: z.number(),
+      otpCode: z.string().length(6),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "peek_master_password",
+        payload: { tenantId: input.tenantId, masterChatId: input.masterChatId },
+        code: input.otpCode,
+      });
+
+      const masterRow = await ctx.db
+        .select({ origin: masters.origin, webUserId: masters.webUserId })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      const m = masterRow[0];
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+      if (m.origin !== "salon_created") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "not_owned_by_salon" });
+      }
+      if (!m.webUserId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "master_has_no_web_user" });
+      }
+
+      const userRow = await ctx.db
+        .select({ passwordEncrypted: webUsers.passwordEncrypted })
+        .from(webUsers)
+        .where(eq(webUsers.id, m.webUserId))
+        .limit(1);
+      const blob = userRow[0]?.passwordEncrypted;
+      if (!blob) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "password_not_vaulted",
+        });
+      }
+      const plain = await decryptMasterPassword(blob, env.BOT_ENCRYPTION_KEY ?? null);
+      if (!plain) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "decrypt_failed",
+        });
+      }
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.password.peek",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId}`,
+        ip: ctxIp(ctx),
+      });
+
+      return { password: plain };
+    }),
+
+  /** Master detail for the profile drawer (read-only context). */
+  getMasterDetail: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), masterChatId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          name: masters.name,
+          tgUsername: masters.tgUsername,
+          bio: masters.bio,
+          photo: masters.photo,
+          portfolio: masters.portfolio,
+          workHours: masters.workHours,
+          workDays: masters.workDays,
+          publicHidden: masters.publicHidden,
+          active: masters.active,
+          archivedAt: masters.archivedAt,
+          origin: masters.origin,
+          isSynthetic: masters.isSynthetic,
+          webUserId: masters.webUserId,
+          // Joined web_users fields (LEFT JOIN below via subquery — kept simple)
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      const m = rows[0];
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+
+      let webUserInfo: {
+        email: string;
+        emailVerified: number;
+        lastLoginAt: number | null;
+        hasVaultedPassword: boolean;
+      } | null = null;
+      if (m.webUserId) {
+        const u = await ctx.db
+          .select({
+            email: webUsers.email,
+            emailVerified: webUsers.emailVerified,
+            lastLoginAt: webUsers.lastLoginAt,
+            passwordEncrypted: webUsers.passwordEncrypted,
+          })
+          .from(webUsers)
+          .where(eq(webUsers.id, m.webUserId))
+          .limit(1);
+        if (u[0]) {
+          webUserInfo = {
+            email: u[0].email,
+            emailVerified: u[0].emailVerified,
+            lastLoginAt: u[0].lastLoginAt,
+            hasVaultedPassword: u[0].passwordEncrypted !== null,
+          };
+        }
+      }
+
+      return { ...m, webUser: webUserInfo };
     }),
 });

@@ -1,5 +1,5 @@
 /**
- * Phase 2 + Permission unification (migration 0063):
+ * Phase 2 + Permission unification (migration 0068, originally 0063 in PR-A):
  *   Per-(tenant, web-user) permission gates for both `tenant_manager` and
  *   non-personal `master` roles.
  *
@@ -8,7 +8,7 @@
  *   - master on a PERSONAL tenant bypasses (they own it).
  *   - master on a NON-personal tenant is checked against
  *     `tenant_member_permissions` — same flow as tenant_manager. This is the
- *     0063 change: salon-invited masters can now be granted scoped admin
+ *     PR-A change: salon-invited masters can now be granted scoped admin
  *     permissions (view_peers, create_for_peer, etc.) instead of being
  *     hard-FORBIDDEN.
  *
@@ -160,7 +160,7 @@ export async function assertPermission(
   if (role === "tenant_owner" && ctx.webUser.tenantId === tenantId) return;
 
   // Masters: personal tenant bypasses; non-personal falls through to the
-  // permission-row check (same path as tenant_manager). This is the 0063
+  // permission-row check (same path as tenant_manager). This is the PR-A
   // change — previously non-personal masters hit a hard FORBIDDEN.
   if (role === "master" && ctx.webUser.tenantId === tenantId) {
     const [t] = await ctx.db

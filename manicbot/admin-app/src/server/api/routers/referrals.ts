@@ -1,5 +1,5 @@
 /**
- * Referral program tRPC router (PR-B / migration 0064).
+ * Referral program tRPC router (PR-B / migration 0069).
  *
  * Eligibility — only self-registered customer accounts can generate codes:
  *   - tenant_owner of any tenant (personal or salon)

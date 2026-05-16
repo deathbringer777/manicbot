@@ -1,5 +1,5 @@
 /**
- * Referral program Worker webhook handlers (PR-B / migration 0064).
+ * Referral program Worker webhook handlers (PR-B / migration 0069).
  *
  * Hooked into ../billing/webhooks.js dispatcher:
  *   - invoice.paid / invoice.payment_succeeded → handleReferralInvoicePaid

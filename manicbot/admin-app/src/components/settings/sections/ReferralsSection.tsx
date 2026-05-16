@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Referrals settings section (PR-B / migration 0064).
+ * Referrals settings section (PR-B / migration 0069).
  *
  * Surface for self-registered owners + personal-tenant masters to:
  *   - see + copy + share their personal referral code / URL

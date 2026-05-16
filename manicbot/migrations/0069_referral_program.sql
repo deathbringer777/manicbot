@@ -1,4 +1,5 @@
--- 0064_referral_program.sql — Referral program tables (PR-B).
+-- 0069_referral_program.sql — Referral program tables (PR-B).
+-- (Originally 0064 — renumbered to 0069 after merging main's 0064–0067.)
 --
 -- Four tables form the referral graph + reward lifecycle:
 --   1. referral_codes  — one active shareable code per eligible web_user

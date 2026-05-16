@@ -1,5 +1,5 @@
 /**
- * PR-B / migration 0064 — referrals tRPC router.
+ * PR-B / migration 0069 — referrals tRPC router.
  *
  * Covers the eligibility matrix, code auto-generation, dashboard counters
  * (rolling 12mo cap math), validateCode rate limiting, and the

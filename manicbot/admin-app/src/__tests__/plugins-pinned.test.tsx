@@ -109,23 +109,23 @@ describe("pinned storage helpers (tenant-scoped localStorage cache)", () => {
 
 describe("cross-tenant isolation — localStorage", () => {
   it("pins written for tenant A are not visible from tenant B", () => {
-    writePinned(["sms", "quick-notes"], "tenant_A");
-    writePinned(["google-calendar"], "tenant_B");
+    writePinned(["sms", "task-board"], "tenant_A");
+    writePinned(["export-hub"], "tenant_B");
 
-    expect(readPinned("tenant_A")).toEqual(["sms", "quick-notes"]);
-    expect(readPinned("tenant_B")).toEqual(["google-calendar"]);
+    expect(readPinned("tenant_A")).toEqual(["sms", "task-board"]);
+    expect(readPinned("tenant_B")).toEqual(["export-hub"]);
     expect(readPinned("tenant_B")).not.toContain("sms");
-    expect(readPinned("tenant_A")).not.toContain("google-calendar");
+    expect(readPinned("tenant_A")).not.toContain("export-hub");
   });
 
   it("usePinnedPlugins mirrors server data to the correct tenant-scoped key", async () => {
     mockTenantId = "tenant_X";
-    mockPinnedData = ["quick-notes"];
+    mockPinnedData = ["task-board"];
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
       const key = "manicbot_pinned_plugins_tenant_X";
       const stored = JSON.parse(window.localStorage.getItem(key) ?? "[]") as string[];
-      expect(stored).toContain("quick-notes");
+      expect(stored).toContain("task-board");
       // The global (non-scoped) key must remain untouched
       expect(window.localStorage.getItem("manicbot_pinned_plugins")).toBeNull();
     });
@@ -134,14 +134,14 @@ describe("cross-tenant isolation — localStorage", () => {
   it("switching tenantId reads from a different localStorage bucket", async () => {
     // Seed two buckets
     window.localStorage.setItem("manicbot_pinned_plugins_tenant_A", JSON.stringify(["sms"]));
-    window.localStorage.setItem("manicbot_pinned_plugins_tenant_B", JSON.stringify(["google-calendar"]));
+    window.localStorage.setItem("manicbot_pinned_plugins_tenant_B", JSON.stringify(["export-hub"]));
 
     mockTenantId = "tenant_A";
     expect(readPinned(mockTenantId)).toContain("sms");
-    expect(readPinned(mockTenantId)).not.toContain("google-calendar");
+    expect(readPinned(mockTenantId)).not.toContain("export-hub");
 
     mockTenantId = "tenant_B";
-    expect(readPinned(mockTenantId)).toContain("google-calendar");
+    expect(readPinned(mockTenantId)).toContain("export-hub");
     expect(readPinned(mockTenantId)).not.toContain("sms");
   });
 });
@@ -157,11 +157,11 @@ describe("usePinnedPlugins — server-backed (mocked tRPC)", () => {
 
   it("mirrors server truth to localStorage for next-paint seeding", async () => {
     mockTenantId = "tenant_A";
-    mockPinnedData = ["quick-notes"];
+    mockPinnedData = ["task-board"];
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
       const key = "manicbot_pinned_plugins_tenant_A";
-      expect(JSON.parse(window.localStorage.getItem(key) ?? "[]")).toEqual(["quick-notes"]);
+      expect(JSON.parse(window.localStorage.getItem(key) ?? "[]")).toEqual(["task-board"]);
     });
   });
 

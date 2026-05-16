@@ -11,6 +11,11 @@
  *   - be client components (`"use client"`)
  *   - take a single `{ installationId }: { installationId: string }` prop
  *   - call `api.plugins.updateSettings` on save
+ *
+ * 2026-05-16 — emptied during the marketplace cleanup (google-calendar
+ * settings panel was the sole entry; the underlying capability now lives
+ * in the core `googleCalendar.ts` router). Phase 2 plumbing will re-add
+ * entries here as new plugins ship their own settings panels.
  */
 
 import dynamic from "next/dynamic";
@@ -26,12 +31,7 @@ type PanelLoader = () => Promise<{ default: ComponentType<PluginPanelProps> }>;
  * Map of `componentId` (as declared in manifest) → dynamic import.
  * When a plugin ships a settings UI, add one entry here.
  */
-const PANEL_LOADERS: Record<string, PanelLoader> = {
-  "google-calendar.SettingsPanel": () =>
-    import("../plugins/runtimes/GoogleCalendarRuntime") as Promise<{
-      default: ComponentType<PluginPanelProps>;
-    }>,
-};
+const PANEL_LOADERS: Record<string, PanelLoader> = {};
 
 /**
  * Returns a Next.js-wrapped component for the given plugin componentId,

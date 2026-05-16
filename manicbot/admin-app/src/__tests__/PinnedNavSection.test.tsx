@@ -68,29 +68,29 @@ afterEach(() => cleanup());
 
 describe("PinnedNavSection — transient open plugin row", () => {
   it("renders open plugin as transient item when on /plugin/<slug> and not pinned", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const row = screen.getByTestId("open-plugin-nav-item");
     expect(row).not.toBeNull();
-    expect(row.getAttribute("href")).toBe("/plugin/quick-notes");
+    expect(row.getAttribute("href")).toBe("/plugin/loyalty-stamps");
     // Pin button (always-visible) is queryable by its localized title.
     expect(screen.getByTitle("Закрепить")).not.toBeNull();
   });
 
   it("does NOT render transient item when slug is already pinned (no duplicate)", () => {
-    mockPathname = "/plugin/quick-notes";
-    mockPinned = ["quick-notes"];
+    mockPathname = "/plugin/loyalty-stamps";
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTestId("open-plugin-nav-item")).toBeNull();
-    // Exactly one row references quick-notes (the pinned one).
-    const all = screen.getAllByRole("link").filter((el) => el.getAttribute("href") === "/plugin/quick-notes");
+    // Exactly one row references loyalty-stamps (the pinned one).
+    const all = screen.getAllByRole("link").filter((el) => el.getAttribute("href") === "/plugin/loyalty-stamps");
     expect(all.length).toBe(1);
   });
 
   it("does NOT render transient item when pathname is not /plugin/<slug>", () => {
     mockPinned = [];
-    for (const path of ["/dashboard", "/plugins", "/plugins/quick-notes", "/settings"]) {
+    for (const path of ["/dashboard", "/plugins", "/plugins/loyalty-stamps", "/settings"]) {
       mockPathname = path;
       cleanup();
       renderWithLang(<PinnedNavSection />);
@@ -114,35 +114,35 @@ describe("PinnedNavSection — transient open plugin row", () => {
   });
 
   it("clicking Pin on transient item calls togglePin mutation with the slug", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     fireEvent.click(screen.getByTitle("Закрепить"));
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith({ slug: "quick-notes" });
+    expect(mockMutate).toHaveBeenCalledWith({ slug: "loyalty-stamps" });
   });
 
   it("after Pin click + state propagation, transient row gives way to a pinned row", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTestId("open-plugin-nav-item")).not.toBeNull();
 
     fireEvent.click(screen.getByTitle("Закрепить"));
-    expect(mockMutate).toHaveBeenCalledWith({ slug: "quick-notes" });
+    expect(mockMutate).toHaveBeenCalledWith({ slug: "loyalty-stamps" });
 
     // Simulate optimistic update: server-side state now contains the slug.
     // Re-render to pick up the new mockPinned value.
     cleanup();
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTestId("open-plugin-nav-item")).toBeNull();
     const pinned = screen.getByTestId("pinned-nav-item");
-    expect(pinned.getAttribute("data-slug")).toBe("quick-notes");
+    expect(pinned.getAttribute("data-slug")).toBe("loyalty-stamps");
   });
 
   it("transient row shows the accent active highlight", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const link = screen.getByTestId("open-plugin-nav-item");
@@ -152,7 +152,7 @@ describe("PinnedNavSection — transient open plugin row", () => {
   });
 
   it("transient row label uses the italic class (locks the visual choice)", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const link = screen.getByTestId("open-plugin-nav-item");
@@ -162,15 +162,15 @@ describe("PinnedNavSection — transient open plugin row", () => {
   });
 
   it("href ignores query string and hash on /plugin/<slug>", () => {
-    mockPathname = "/plugin/quick-notes?ref=x#top";
+    mockPathname = "/plugin/loyalty-stamps?ref=x#top";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const row = screen.getByTestId("open-plugin-nav-item");
-    expect(row.getAttribute("href")).toBe("/plugin/quick-notes");
+    expect(row.getAttribute("href")).toBe("/plugin/loyalty-stamps");
   });
 
   it("collapsed mode hides the Pin button on transient row (icon only)", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection collapsed />);
     // Row still rendered, but Pin button (always-visible in expanded mode) is suppressed.
@@ -183,7 +183,7 @@ describe("PinnedNavSection — transient open plugin row", () => {
 
 describe("PinnedNavSection — header behavior", () => {
   it("section header is hidden when only transient item is present", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByText("Закреплённое")).toBeNull();
@@ -191,7 +191,7 @@ describe("PinnedNavSection — header behavior", () => {
 
   it("section header renders when at least one pinned item exists", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByText("Закреплённое")).not.toBeNull();
   });
@@ -201,8 +201,8 @@ describe("PinnedNavSection — header behavior", () => {
 
 describe("PinnedNavSection — active highlight on pinned row", () => {
   it("pinned row receives accent active highlight when pathname matches its href", () => {
-    mockPathname = "/plugin/quick-notes";
-    mockPinned = ["quick-notes"];
+    mockPathname = "/plugin/loyalty-stamps";
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     const row = screen.getByTestId("pinned-nav-item");
     const cls = row.className;
@@ -212,7 +212,7 @@ describe("PinnedNavSection — active highlight on pinned row", () => {
 
   it("pinned row does NOT get active highlight when pathname differs", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     const row = screen.getByTestId("pinned-nav-item");
     expect(row.className).not.toContain("bg-accent-500/10");
@@ -230,7 +230,7 @@ describe("PinnedNavSection — Pin button localization", () => {
   ];
   for (const { lang, expected } of cases) {
     it(`renders Pin button title in ${lang}`, () => {
-      mockPathname = "/plugin/quick-notes";
+      mockPathname = "/plugin/loyalty-stamps";
       mockPinned = [];
       renderWithLang(<PinnedNavSection />, lang);
       expect(screen.getByTitle(expected)).not.toBeNull();
@@ -239,7 +239,7 @@ describe("PinnedNavSection — Pin button localization", () => {
 
   it("pinned row Unpin button localizes to ua", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />, "ua");
     expect(screen.getByTitle("Відкріпити")).not.toBeNull();
   });
@@ -249,11 +249,11 @@ describe("PinnedNavSection — Pin button localization", () => {
 
 describe("PinnedNavSection — pathname regex edge cases", () => {
   it("captures only the first segment for /plugin/<slug>/sub/path", () => {
-    mockPathname = "/plugin/quick-notes/sub/page";
+    mockPathname = "/plugin/loyalty-stamps/sub/page";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const row = screen.getByTestId("open-plugin-nav-item");
-    expect(row.getAttribute("href")).toBe("/plugin/quick-notes");
+    expect(row.getAttribute("href")).toBe("/plugin/loyalty-stamps");
   });
 
   it("returns no transient for /plugin (no slug)", () => {
@@ -271,7 +271,7 @@ describe("PinnedNavSection — pathname regex edge cases", () => {
   });
 
   it("returns no transient for catalog detail /plugins/<slug> (plural)", () => {
-    mockPathname = "/plugins/quick-notes";
+    mockPathname = "/plugins/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTestId("open-plugin-nav-item")).toBeNull();
@@ -290,7 +290,7 @@ describe("PinnedNavSection — empty-state precedence", () => {
   });
 
   it("hides empty-state when transient is present, even with showEmpty=true", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection showEmpty />);
     expect(screen.queryByTestId("pinned-nav-empty")).toBeNull();
@@ -299,7 +299,7 @@ describe("PinnedNavSection — empty-state precedence", () => {
 
   it("hides empty-state when pinned items exist, even with showEmpty=true", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection showEmpty />);
     expect(screen.queryByTestId("pinned-nav-empty")).toBeNull();
     expect(screen.queryByTestId("pinned-nav-section")).not.toBeNull();
@@ -310,7 +310,7 @@ describe("PinnedNavSection — empty-state precedence", () => {
 
 describe("PinnedNavSection — Pin/Unpin button isolation", () => {
   it("transient row renders Pin but NOT Unpin", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTitle("Закрепить")).not.toBeNull();
@@ -319,15 +319,15 @@ describe("PinnedNavSection — Pin/Unpin button isolation", () => {
 
   it("pinned row renders Unpin but NOT always-visible Pin", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTitle("Открепить")).not.toBeNull();
     expect(screen.queryByTitle("Закрепить")).toBeNull();
   });
 
   it("transient + pinned together: both buttons coexist on different slugs", () => {
-    mockPathname = "/plugin/google-calendar";
-    mockPinned = ["quick-notes"];
+    mockPathname = "/plugin/task-board";
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     expect(screen.queryByTestId("open-plugin-nav-item")).not.toBeNull();
     expect(screen.queryByTestId("pinned-nav-item")).not.toBeNull();
@@ -340,7 +340,7 @@ describe("PinnedNavSection — Pin/Unpin button isolation", () => {
 
 describe("PinnedNavSection — button visibility classes", () => {
   it("Pin button on transient row is always visible (no opacity-0 class)", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const btn = screen.getByTitle("Закрепить");
@@ -349,7 +349,7 @@ describe("PinnedNavSection — button visibility classes", () => {
 
   it("Unpin button on pinned row is hover-only (opacity-0 group-hover:opacity-100)", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     const btn = screen.getByTitle("Открепить");
     expect(btn.className).toContain("opacity-0");
@@ -362,24 +362,24 @@ describe("PinnedNavSection — button visibility classes", () => {
 describe("PinnedNavSection — multiple pinned items", () => {
   it("renders pinned items in the order returned by listPinned", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes", "google-calendar", "task-board"];
+    mockPinned = ["loyalty-stamps", "task-board", "task-board"];
     renderWithLang(<PinnedNavSection />);
     const rows = screen.getAllByTestId("pinned-nav-item");
     expect(rows.length).toBe(3);
-    expect(rows[0]!.getAttribute("data-slug")).toBe("quick-notes");
-    expect(rows[1]!.getAttribute("data-slug")).toBe("google-calendar");
+    expect(rows[0]!.getAttribute("data-slug")).toBe("loyalty-stamps");
+    expect(rows[1]!.getAttribute("data-slug")).toBe("task-board");
     expect(rows[2]!.getAttribute("data-slug")).toBe("task-board");
   });
 
   it("skips pinned slugs that are unknown to the registry (no crash)", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes", "fake-slug-xyz", "google-calendar"];
+    mockPinned = ["loyalty-stamps", "fake-slug-xyz", "task-board"];
     renderWithLang(<PinnedNavSection />);
     const rows = screen.getAllByTestId("pinned-nav-item");
     expect(rows.length).toBe(2);
     expect(rows.map((r) => r.getAttribute("data-slug"))).toEqual([
-      "quick-notes",
-      "google-calendar",
+      "loyalty-stamps",
+      "task-board",
     ]);
   });
 });
@@ -388,24 +388,24 @@ describe("PinnedNavSection — multiple pinned items", () => {
 
 describe("PinnedNavSection — icon tint", () => {
   it("transient row icon receives manifest tint as inline color style", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
-    // quick-notes manifest declares icon tint "#f59e0b" (amber).
+    // loyalty-stamps manifest declares icon tint "#eab308" (yellow/gold).
     const link = screen.getByTestId("open-plugin-nav-item");
     const icon = link.querySelector("svg");
     expect(icon).not.toBeNull();
-    expect(icon!.getAttribute("style")).toMatch(/color:\s*(#f59e0b|rgb\(245,\s*158,\s*11\))/i);
+    expect(icon!.getAttribute("style")).toMatch(/color:\s*(#eab308|rgb\(234,\s*179,\s*8\))/i);
   });
 
   it("pinned row icon receives manifest tint as inline color style", () => {
     mockPathname = "/dashboard";
-    mockPinned = ["quick-notes"];
+    mockPinned = ["loyalty-stamps"];
     renderWithLang(<PinnedNavSection />);
     const link = screen.getByTestId("pinned-nav-item");
     const icon = link.querySelector("svg");
     expect(icon).not.toBeNull();
-    expect(icon!.getAttribute("style")).toMatch(/color:\s*(#f59e0b|rgb\(245,\s*158,\s*11\))/i);
+    expect(icon!.getAttribute("style")).toMatch(/color:\s*(#eab308|rgb\(234,\s*179,\s*8\))/i);
   });
 });
 
@@ -413,7 +413,7 @@ describe("PinnedNavSection — icon tint", () => {
 
 describe("PinnedNavSection — transient row composition", () => {
   it("transient row label keeps italic class even while active", () => {
-    mockPathname = "/plugin/quick-notes";
+    mockPathname = "/plugin/loyalty-stamps";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const link = screen.getByTestId("open-plugin-nav-item");
@@ -423,10 +423,10 @@ describe("PinnedNavSection — transient row composition", () => {
   });
 
   it("transient row carries data-slug matching the URL slug", () => {
-    mockPathname = "/plugin/google-calendar?ref=x";
+    mockPathname = "/plugin/task-board?ref=x";
     mockPinned = [];
     renderWithLang(<PinnedNavSection />);
     const link = screen.getByTestId("open-plugin-nav-item");
-    expect(link.getAttribute("data-slug")).toBe("google-calendar");
+    expect(link.getAttribute("data-slug")).toBe("task-board");
   });
 });

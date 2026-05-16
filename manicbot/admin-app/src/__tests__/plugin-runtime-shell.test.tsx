@@ -8,6 +8,10 @@
  *   - localized fields follow the active LangContext
  *   - the optional flash banner is rendered with the correct kind
  *   - unknown slugs degrade gracefully (Puzzle fallback, no crash)
+ *
+ * 2026-05-16 — the Google Calendar logo assertion was removed alongside the
+ * plugin; task-board is the substituted reference manifest because it ships
+ * a runtime and has localized strings in all 4 supported languages.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -32,56 +36,46 @@ function renderShell(slug: string, lang: Lang = "ru", flash: { kind: "ok" | "err
 
 describe("PluginRuntimeShell", () => {
   it("renders the localized name + tagline from the manifest", () => {
-    renderShell("google-calendar", "en");
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Google Calendar");
-    expect(screen.getByText("Sync appointments with Google Calendar in real time")).toBeTruthy();
+    renderShell("task-board", "en");
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Task Board");
+    expect(screen.getByText("Kanban board for internal to-dos")).toBeTruthy();
   });
 
   it("switches name/tagline when LangContext changes", () => {
-    const { rerender } = renderShell("google-calendar", "ru");
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Google Календарь");
+    const { rerender } = renderShell("task-board", "ru");
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Доска задач");
 
     rerender(
       <LangContext.Provider value={{ lang: "pl", setLang: () => {} }}>
-        <PluginRuntimeShell slug="google-calendar">
+        <PluginRuntimeShell slug="task-board">
           <div />
         </PluginRuntimeShell>
       </LangContext.Provider>
     );
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Kalendarz Google");
-  });
-
-  it("renders the official Google Calendar SVG (PluginIcon GoogleCalendar branch)", () => {
-    const { container } = renderShell("google-calendar", "ru");
-    const svg = container.querySelector("[data-testid='plugin-runtime-shell'] svg");
-    expect(svg).not.toBeNull();
-    // The official logo uses Google's brand red. The hand-rolled "ugly" runtime
-    // logo did NOT include this colour — guarding against regression.
-    const html = container.innerHTML.toLowerCase();
-    expect(html).toContain("#ea4335");
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Tablica zadań");
   });
 
   it("renders the flash banner with the right kind", () => {
-    renderShell("google-calendar", "ru", { kind: "ok", text: "All good" });
+    renderShell("task-board", "ru", { kind: "ok", text: "All good" });
     const flash = screen.getByTestId("plugin-runtime-flash");
     expect(flash.getAttribute("data-kind")).toBe("ok");
     expect(flash.textContent).toContain("All good");
 
     cleanup();
 
-    renderShell("google-calendar", "ru", { kind: "err", text: "Boom" });
+    renderShell("task-board", "ru", { kind: "err", text: "Boom" });
     const errFlash = screen.getByTestId("plugin-runtime-flash");
     expect(errFlash.getAttribute("data-kind")).toBe("err");
     expect(errFlash.textContent).toContain("Boom");
   });
 
   it("does not render a flash banner when flash is null", () => {
-    renderShell("google-calendar", "ru", null);
+    renderShell("task-board", "ru", null);
     expect(screen.queryByTestId("plugin-runtime-flash")).toBeNull();
   });
 
   it("renders the runtime children inside the content slot", () => {
-    renderShell("google-calendar", "ru");
+    renderShell("task-board", "ru");
     expect(screen.getByTestId("runtime-content").textContent).toBe("payload");
   });
 

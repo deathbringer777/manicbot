@@ -270,7 +270,7 @@ export const DEMO_CHAT_SRC = `
     '.mb-photo-dot:focus-visible{outline:2px solid var(--mb-bubble-user);outline-offset:2px}' +
     '@media (prefers-reduced-motion:reduce){.mb-photo-nav,.mb-photo-dot{transition:none}}' +
     // Composer — compact, fits nicely at the bottom of the iPhone screen
-    '.mb-composer{display:flex;gap:6px;padding:6px 10px 14px;border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
+    '.mb-composer{display:flex;gap:6px;padding:6px 10px max(14px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--mb-composer-border);background:var(--mb-bg);flex-shrink:0}' +
     '.mb-composer input{flex:1;min-width:0;border:1px solid var(--mb-btn-border);border-radius:999px;padding:7px 12px;font:inherit;font-size:11.5px;background:var(--mb-input-bg);color:var(--mb-input-text);outline:none}' +
     '.mb-composer input::placeholder{color:var(--mb-input-placeholder)}' +
     '.mb-composer input:focus{border-color:var(--mb-bubble-user)}' +
@@ -1022,6 +1022,32 @@ export const DEMO_CHAT_SRC = `
   }
 
   function scrollToBottom() { feed.scrollTop = feed.scrollHeight; }
+
+  // iOS soft keyboard handling: visualViewport shrinks when the keyboard opens,
+  // but layout viewport (window.innerHeight) does not. Without this, position:absolute
+  // inset:0 ignores the keyboard and the composer + reply buttons disappear under it.
+  if (window.visualViewport) {
+    var _origPosition = root.style.position;
+    var onVvResize = function () {
+      var vvh = window.visualViewport.height;
+      var layoutH = window.innerHeight || document.documentElement.clientHeight;
+      var diff = layoutH - vvh;
+      if (diff > 80) {
+        root.style.height = vvh + 'px';
+        root.style.position = 'fixed';
+        root.style.top = (window.visualViewport.offsetTop || 0) + 'px';
+        root.style.bottom = '';
+      } else {
+        root.style.height = '';
+        root.style.position = _origPosition;
+        root.style.top = '';
+        root.style.bottom = '';
+      }
+      scrollToBottom();
+    };
+    window.visualViewport.addEventListener('resize', onVvResize);
+    window.visualViewport.addEventListener('scroll', onVvResize);
+  }
 
   composer.addEventListener('submit', function (e) {
     e.preventDefault();

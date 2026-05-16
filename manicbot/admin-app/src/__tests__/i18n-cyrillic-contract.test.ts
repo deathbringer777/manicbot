@@ -40,6 +40,15 @@ const KEYS: TranslationKey[] = [
   "appointments.manual.note",
   "appointments.manual.create",
   "appointments.manual.creating",
+  "appointments.manual.fixToContinue",
+  "appointments.manual.issues.master",
+  "appointments.manual.issues.service",
+  "appointments.manual.issues.date",
+  "appointments.manual.issues.time",
+  "appointments.manual.issues.clientName",
+  "appointments.manual.issues.clientPhone",
+  "appointments.manual.needMasters",
+  "appointments.manual.needServices",
 
   // Common
   "common.add",

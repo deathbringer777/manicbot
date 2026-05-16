@@ -86,6 +86,31 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
     masterId !== null && serviceId !== "" && date !== "" && time !== "" && newClientValid;
   const submitDisabled = !formValid || create.isPending;
 
+  const hasMasters = !masters.isLoading && (masters.data?.length ?? 0) > 0;
+  const hasServices = !services.isLoading && (services.data?.length ?? 0) > 0;
+  const mastersEmpty = !masters.isLoading && (masters.data?.length ?? 0) === 0;
+  const servicesEmpty = !services.isLoading && (services.data?.length ?? 0) === 0;
+
+  const hasStartedFilling =
+    useExistingClient ||
+    clientName.length > 0 ||
+    clientPhone.length > 0 ||
+    masterId !== null ||
+    serviceId !== "" ||
+    date !== "" ||
+    time !== "" ||
+    note.length > 0;
+
+  const issues: string[] = [];
+  if (masterId === null && hasMasters) issues.push(t("appointments.manual.issues.master", lang));
+  if (serviceId === "" && hasServices) issues.push(t("appointments.manual.issues.service", lang));
+  if (date === "") issues.push(t("appointments.manual.issues.date", lang));
+  if (time === "") issues.push(t("appointments.manual.issues.time", lang));
+  if (!useExistingClient) {
+    if (clientName.trim().length === 0) issues.push(t("appointments.manual.issues.clientName", lang));
+    if (clientPhone.trim().length < 6) issues.push(t("appointments.manual.issues.clientPhone", lang));
+  }
+
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
@@ -170,7 +195,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
                 className={FIELD_BASE}
                 value={masterId ?? ""}
                 onChange={(e) => setMasterId(Number(e.target.value) || null)}
-                disabled={defaultMasterId != null}
+                disabled={defaultMasterId != null || mastersEmpty}
               >
                 <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
                 {(masters.data ?? []).map((m) => (
@@ -179,6 +204,14 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
                   </option>
                 ))}
               </select>
+              {mastersEmpty && (
+                <p
+                  data-testid="manual-booking-need-masters"
+                  className="mt-1 text-[11px] text-amber-600 dark:text-amber-400"
+                >
+                  {t("appointments.manual.needMasters", lang)}
+                </p>
+              )}
             </div>
             <div>
               <label className={LABEL}>{t("appointments.manual.service", lang)}</label>
@@ -186,6 +219,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
                 className={FIELD_BASE}
                 value={serviceId}
                 onChange={(e) => setServiceId(e.target.value)}
+                disabled={servicesEmpty}
               >
                 <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
                 {(services.data ?? []).map((s) => {
@@ -199,6 +233,14 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
                   );
                 })}
               </select>
+              {servicesEmpty && (
+                <p
+                  data-testid="manual-booking-need-services"
+                  className="mt-1 text-[11px] text-amber-600 dark:text-amber-400"
+                >
+                  {t("appointments.manual.needServices", lang)}
+                </p>
+              )}
             </div>
           </div>
 
@@ -228,6 +270,20 @@ export function ManualBookingModal({ tenantId, defaultMasterId, onClose, onCreat
             <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-300">
               {err}
             </p>
+          )}
+
+          {hasStartedFilling && submitDisabled && !create.isPending && issues.length > 0 && (
+            <div
+              data-testid="manual-booking-issues"
+              className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300"
+            >
+              <p className="mb-0.5 font-semibold">{t("appointments.manual.fixToContinue", lang)}</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                {issues.map((msg) => (
+                  <li key={msg}>{msg}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <div className="flex gap-3 pt-2">

@@ -678,6 +678,15 @@ const translations = {
   "appointments.manual.clear":           { ru: "Очистить",         ua: "Очистити",         en: "Clear",      pl: "Wyczyść" },
   "appointments.manual.now":             { ru: "Сейчас",           ua: "Зараз",            en: "Now",        pl: "Teraz" },
   "appointments.manual.datePh":          { ru: "дд.мм.гггг",       ua: "дд.мм.рррр",       en: "dd/mm/yyyy", pl: "dd.mm.rrrr" },
+  "appointments.manual.fixToContinue":   { ru: "Чтобы создать запись:",      ua: "Щоб створити запис:",      en: "To create the booking:",         pl: "Aby utworzyć rezerwację:" },
+  "appointments.manual.issues.master":         { ru: "выберите мастера",       ua: "виберіть майстра",       en: "pick a master",                pl: "wybierz mistrza" },
+  "appointments.manual.issues.service":        { ru: "выберите услугу",        ua: "виберіть послугу",       en: "pick a service",               pl: "wybierz usługę" },
+  "appointments.manual.issues.date":           { ru: "укажите дату",           ua: "вкажіть дату",           en: "set a date",                   pl: "ustaw datę" },
+  "appointments.manual.issues.time":           { ru: "укажите время",          ua: "вкажіть час",            en: "set a time",                   pl: "ustaw godzinę" },
+  "appointments.manual.issues.clientName":     { ru: "укажите имя клиента",    ua: "вкажіть ім'я клієнта",   en: "enter the client's name",      pl: "podaj imię klienta" },
+  "appointments.manual.issues.clientPhone":    { ru: "телефон от 6 символов",  ua: "телефон від 6 символів", en: "phone needs 6+ characters",    pl: "telefon min. 6 znaków" },
+  "appointments.manual.needMasters":      { ru: "Сначала добавьте мастера в разделе «Мастера».",   ua: "Спочатку додайте майстра в розділі «Майстри».",   en: "Add a master in the Masters tab first.",   pl: "Najpierw dodaj mistrza w zakładce «Mistrzowie»." },
+  "appointments.manual.needServices":     { ru: "Сначала добавьте услугу в разделе «Услуги».",     ua: "Спочатку додайте послугу в розділі «Послуги».",   en: "Add a service in the Services tab first.", pl: "Najpierw dodaj usługę w zakładce «Usługi»." },
 
   // ── Master dashboard — appointment status / period labels ───────────────────
   "master.noShow.client":                { ru: "Клиент не пришёл", ua: "Клієнт не прийшов", en: "Client no-show", pl: "Klient się nie pojawił" },

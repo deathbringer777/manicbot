@@ -151,6 +151,44 @@ function buildShareUrl(code: string): string {
   return `${base.replace(/\/$/, "")}/register?ref=${encodeURIComponent(code)}`;
 }
 
+/**
+ * Find or create the caller's active referral code. Idempotent — if a row
+ * with `is_active = 1` already exists, returns it; otherwise inserts a new
+ * one with collision-retry. Used by both `getMyCode` and `getMyDashboard`
+ * so the share UI is never empty for eligible callers.
+ *
+ * The eligibility gate (assertReferralEligible) MUST run before this — we
+ * trust the webUserId + tenantId here without re-checking.
+ */
+async function ensureActiveReferralCode(
+  db: ReturnType<typeof import("~/server/db").getDb>,
+  args: { webUserId: string; tenantId: string; seed: string },
+): Promise<{ code: string }> {
+  const existing = await db
+    .select({ code: referralCodes.code })
+    .from(referralCodes)
+    .where(and(eq(referralCodes.ownerWebUserId, args.webUserId), eq(referralCodes.isActive, 1)))
+    .limit(1);
+  if (existing.length > 0) return { code: existing[0]!.code };
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = generateReferralCode(args.seed);
+    try {
+      await db.insert(referralCodes).values({
+        code,
+        ownerWebUserId: args.webUserId,
+        ownerTenantId: args.tenantId,
+        isActive: 1,
+        createdAt: nowSec(),
+      });
+      return { code };
+    } catch {
+      // PK / partial-unique collision — retry with new randomness.
+    }
+  }
+  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not generate a unique referral code" });
+}
+
 // ── Router ─────────────────────────────────────────────────────────────────
 
 const ROLLING_12_MO_SEC = 365 * 24 * 3600;
@@ -162,35 +200,12 @@ export const referralsRouter = createTRPCRouter({
    */
   getMyCode: protectedProcedure.query(async ({ ctx }) => {
     const { webUserId, tenantId } = await assertReferralEligible(ctx);
-
-    const existing = await ctx.db
-      .select({ code: referralCodes.code })
-      .from(referralCodes)
-      .where(and(eq(referralCodes.ownerWebUserId, webUserId), eq(referralCodes.isActive, 1)))
-      .limit(1);
-    if (existing.length > 0) {
-      const code = existing[0]!.code;
-      return { code, shareUrl: buildShareUrl(code) };
-    }
-
-    // Generate a fresh code; retry on rare collision.
-    const seed = ctx.webUser!.email;
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const code = generateReferralCode(seed);
-      try {
-        await ctx.db.insert(referralCodes).values({
-          code,
-          ownerWebUserId: webUserId,
-          ownerTenantId: tenantId,
-          isActive: 1,
-          createdAt: nowSec(),
-        });
-        return { code, shareUrl: buildShareUrl(code) };
-      } catch {
-        // PRIMARY KEY / partial-unique collision — retry with new randomness.
-      }
-    }
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not generate a unique referral code" });
+    const { code } = await ensureActiveReferralCode(ctx.db, {
+      webUserId,
+      tenantId,
+      seed: ctx.webUser!.email,
+    });
+    return { code, shareUrl: buildShareUrl(code) };
   }),
 
   /**
@@ -199,7 +214,16 @@ export const referralsRouter = createTRPCRouter({
    * applies — staff accounts get FORBIDDEN.
    */
   getMyDashboard: protectedProcedure.query(async ({ ctx }) => {
-    const { webUserId } = await assertReferralEligible(ctx);
+    const { webUserId, tenantId } = await assertReferralEligible(ctx);
+
+    // Auto-create the caller's active code on first dashboard visit so the
+    // share UI is never empty for eligible callers. Idempotent — if a row
+    // already exists with is_active=1, nothing is written.
+    await ensureActiveReferralCode(ctx.db, {
+      webUserId,
+      tenantId,
+      seed: ctx.webUser!.email,
+    });
 
     const [codeRow] = await ctx.db
       .select({ code: referralCodes.code })

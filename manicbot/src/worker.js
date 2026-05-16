@@ -127,21 +127,28 @@ function logWorkerError(label, request, url, error, extra = {}) {
 /**
  * Append standard security headers to any outgoing response.
  *
- * #S-08 — the previous CSP set only `frame-ancestors 'none'`, leaving
- * inline-script and 3rd-party connect surfaces wide open. This default is
- * applied to every Worker-served response (HTML admin panel, /setup wizard,
- * landing proxy fall-throughs, etc.). The admin-app on Pages installs its
- * own per-request nonce CSP via middleware.ts; this header is the floor
- * for everything else served directly by the Worker.
+ * This is a *floor*, not an overwriter. Each header is set only if the
+ * response doesn't already carry one — so the admin-app proxy (which
+ * runs its own per-route middleware on Cloudflare Pages, e.g.
+ * `X-Frame-Options: SAMEORIGIN` for `/salon/{slug}/chat` to make the
+ * salon-dashboard chat preview iframe render) keeps its choices, while
+ * Worker-served responses (HTML admin panel, /setup wizard, landing
+ * proxy fall-throughs, calendar .ics, embed JS, Stripe success page,
+ * etc.) get the strict defaults. The CSP slot already used this pattern;
+ * the rest of the headers now match.
  */
-function addSecurityHeaders(resp) {
+export function addSecurityHeaders(resp) {
   const h = new Headers(resp.headers);
-  h.set('X-Content-Type-Options', 'nosniff');
-  h.set('X-Frame-Options', 'DENY');
-  h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self), usb=()');
-  h.set('Cross-Origin-Opener-Policy', 'same-origin');
+  if (!h.has('X-Content-Type-Options')) h.set('X-Content-Type-Options', 'nosniff');
+  if (!h.has('X-Frame-Options')) h.set('X-Frame-Options', 'DENY');
+  if (!h.has('Referrer-Policy')) h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (!h.has('Strict-Transport-Security')) {
+    h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  if (!h.has('Permissions-Policy')) {
+    h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self), usb=()');
+  }
+  if (!h.has('Cross-Origin-Opener-Policy')) h.set('Cross-Origin-Opener-Policy', 'same-origin');
   if (!h.has('Content-Security-Policy')) {
     // Strict default. The Worker mostly serves: the embed widget script,
     // small HTML admin pages (/setup, /admin/*), Stripe success page,

@@ -255,6 +255,38 @@ export const appointmentsRouter = createTRPCRouter({
         }
       }
 
+      // 0062 — fail-fast block check for existing clients. New-client
+      // bookings (input.clientChatId omitted) can't be blocked yet
+      // because the row doesn't exist, so we defer the post-resolve
+      // check below. For existing clients we want the clearest error
+      // message — refuse the booking up-front before spending queries
+      // on slot-conflict and service-duration lookups.
+      if (input.clientChatId != null) {
+        const [existingClient] = await ctx.db
+          .select({ isBlockedGlobal: users.isBlockedGlobal })
+          .from(users)
+          .where(and(
+            eq(users.tenantId, input.tenantId),
+            eq(users.chatId, input.clientChatId),
+          ))
+          .limit(1);
+        if (existingClient?.isBlockedGlobal === 1) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
+        }
+        const [earlyMblock] = await ctx.db
+          .select({ id: masterClientBlocks.id })
+          .from(masterClientBlocks)
+          .where(and(
+            eq(masterClientBlocks.tenantId, input.tenantId),
+            eq(masterClientBlocks.masterChatId, input.masterId),
+            eq(masterClientBlocks.clientChatId, input.clientChatId),
+          ))
+          .limit(1);
+        if (earlyMblock) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+        }
+      }
+
       // Resolve service duration for slot-conflict check
       const svcRows = await ctx.db
         .select()

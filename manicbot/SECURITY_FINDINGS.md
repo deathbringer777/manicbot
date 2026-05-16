@@ -184,6 +184,52 @@ The atomic single-statement fix (`ON CONFLICT DO UPDATE SET count = CASE WHEN wi
 
 ---
 
+## 2026-05-16 — N7 RESOLVED · `marketing_contacts` cross-tenant email collision
+
+**Status:** RESOLVED in migration `0062_clients_overhaul.sql` (commit on branch `claude/festive-gauss-a8e42b`).
+
+**Severity (when found):** medium. The `marketing_contacts.email` column carried a platform-wide `UNIQUE` index (`idx_marketing_contacts_email`) that ignored `tenant_id`. Two salons with the same client email could not both register that lead — the second tenant's INSERT silently failed or merged into the first tenant's row, depending on the call site. Plus several read paths (`leadsRouter.marketingList`, `marketing.contactsList`) did not filter by `tenant_id`, so a tenant_owner page could surface contacts from other tenants if they ever shared the same email.
+
+**Fix:**
+
+- Dropped `idx_marketing_contacts_email` (platform-wide UNIQUE).
+- Added `idx_marketing_contacts_tenant_email` (partial UNIQUE on `(tenant_id, email) WHERE email IS NOT NULL`) and a matching `idx_marketing_contacts_tenant_phone`.
+- Made `marketing_contacts.email` nullable so phone-only salon clients no longer require synthetic placeholder emails.
+- Added back-link column `marketing_contacts.linked_user_chat_id` for bidirectional sync with `users.marketing_contact_id`.
+- All new client-write paths (`clients.create`, `clients.update`, `clients.importCsv`, `appointments.createManual`) call `syncMarketingContact(db, tenantId, ...)`. The helper looks up existing rows ONLY within the caller's tenant — cross-tenant linking is now structurally impossible.
+
+**Regression tests pinned:**
+
+- `manicbot/admin-app/src/__tests__/clients-tenant-isolation.test.ts` — every public procedure on `clients` rejects cross-tenant input with FORBIDDEN.
+- `manicbot/admin-app/src/__tests__/marketing-sync.test.ts` — sync helper looks up by `(tenant_id, *)` only.
+
+**Pre-flight check** required when applying migration 0062 to production D1:
+```sql
+SELECT tenant_id, email, COUNT(*) c FROM marketing_contacts
+WHERE email IS NOT NULL GROUP BY tenant_id, email HAVING c > 1;
+```
+Must return 0 rows. Migration fails loud if duplicates exist.
+
+---
+
+## 2026-05-16 — N8 RESOLVED · Worker booking handler crashed on new block-sentinel return types
+
+**Status:** RESOLVED on branch `claude/festive-gauss-a8e42b` (commit `84754a6` and follow-ups).
+
+**Severity:** medium (DoS-class for the Telegram bot booking path).
+
+`services/appointments.js saveApt()` was extended in 0062 to return two new sentinel objects — `BLOCKED_GLOBAL` and `BLOCKED_FOR_MASTER` — in addition to the existing `SLOT_TAKEN`. The Telegram-side booking handler in `src/handlers/callback.js` only special-cased `SLOT_TAKEN`; for the new sentinels it would fall through and access `apt.id` on the frozen sentinel object, throwing `TypeError: Cannot read properties of undefined (reading 'id')` and breaking the booking flow for any blocked client. (Admin-app's `appointments.createManual` was unaffected — it never sees the sentinel and uses TRPCError throws instead.)
+
+**Fix:** Telegram handler now imports both sentinels and short-circuits to a neutral "no slots" reply (we deliberately don't surface the block reason to the client). The admin-app side enforces blocks before the slot-conflict check via `client_blocked_global` / `client_blocked_for_master` TRPCError messages.
+
+**Regression tests pinned:**
+
+- `manicbot/test/client-block-booking.test.js` — `saveApt` returns the right sentinel for global and per-master blocks; an unrelated master in the same tenant remains bookable.
+- `manicbot/test/callback-block-sentinel-handling.test.js` — static check on `src/handlers/callback.js` that both sentinels are imported and both branches handled.
+- `manicbot/admin-app/src/__tests__/appointments-block-enforcement.test.ts` — admin-app side `client_blocked_global` / `client_blocked_for_master` TRPCError surfaces.
+
+---
+
 ## Diff vs v2 (2026-04-25) — final after Phase 1–4 remediation
 
 - **Closed (verified-fixed):** H2, H3, H4, H5, M1, M2, M4, M5, M6, M7, L1, L2 (intentional), L3, L4, L5, N1, N2, N3, N4, N5, N6, email-change TOCTOU

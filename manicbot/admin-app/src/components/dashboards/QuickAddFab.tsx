@@ -1,26 +1,23 @@
 "use client";
 
 /**
- * QuickAddFab — floating bottom-right action button for the appointments
- * tab. Three-action menu (calendar overhaul, 2026-05-16):
+ * QuickAddFab — floating bottom-right action button.
  *
+ * Mode `booking` (default — Overview / Appointments tabs):
  *   ┌─────────────────────────────┐
- *   │ + Новая запись              │  → opens NewBookingDialog (existing
- *   │                                  ManualBookingModal)
- *   │ ⏸  Резерв времени           │  → opens TimeReservationDialog
- *   │ ☕ Перерыв / выходной        │  → opens TimeOffDialog
+ *   │ + Новая запись              │  → onNewBooking
+ *   │ ⏸  Резерв времени           │  → onTimeReservation
+ *   │ ☕ Перерыв / выходной        │  → onTimeOff
  *   └─────────────────────────────┘
  *
- * All three actions are now wired to real backend flows (the secondary
- * two used to render `СКОРО` placeholders before migration 0061 added
- * `appointment_blocks`). If a parent forgets to wire `onTimeReservation`
- * or `onTimeOff` we keep the row enabled but no-op the click — the FAB
- * will surface the bug visually instead of pretending the feature isn't
- * shipped.
+ * Mode `client` (0062 — Clients tab): single-action FAB. The menu sheet
+ * is bypassed entirely — clicking the FAB fires `onAddClient` directly.
+ * This addresses the UX bug where the salon owner could not create a
+ * client without first creating an appointment.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, X, Coffee, PauseCircle, type LucideIcon } from "lucide-react";
+import { Plus, X, Coffee, PauseCircle, UserPlus, type LucideIcon } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 
 interface Action {
@@ -30,14 +27,25 @@ interface Action {
   description: string;
 }
 
+export type QuickAddMode = "booking" | "client";
+
 interface Props {
   lang: Lang;
-  onNewBooking: () => void;
+  mode?: QuickAddMode;
+  onNewBooking?: () => void;
   onTimeReservation?: () => void;
   onTimeOff?: () => void;
+  onAddClient?: () => void;
 }
 
-export function QuickAddFab({ lang, onNewBooking, onTimeReservation, onTimeOff }: Props) {
+export function QuickAddFab({
+  lang,
+  mode = "booking",
+  onNewBooking,
+  onTimeReservation,
+  onTimeOff,
+  onAddClient,
+}: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -86,10 +94,30 @@ export function QuickAddFab({ lang, onNewBooking, onTimeReservation, onTimeOff }
 
   const handleClick = (a: Action) => {
     setOpen(false);
-    if (a.id === "newBooking") onNewBooking();
+    if (a.id === "newBooking") onNewBooking?.();
     else if (a.id === "timeReservation") onTimeReservation?.();
     else if (a.id === "timeOff") onTimeOff?.();
   };
+
+  // Clients-mode: short-circuit to single action — no menu, no toggle.
+  if (mode === "client") {
+    return (
+      <div ref={containerRef} className="fixed bottom-24 right-4 z-40 sm:bottom-6 sm:right-6">
+        <button
+          type="button"
+          onClick={() => onAddClient?.()}
+          data-testid="quick-add-fab"
+          data-mode="client"
+          className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(124,58,237,0.55)] transition hover:scale-105 active:scale-95 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
+          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+          aria-label={t("clients.action.add", lang)}
+        >
+          <UserPlus className="h-6 w-6 sm:hidden" />
+          <span className="hidden sm:inline">+ {t("clients.action.add", lang)}</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="fixed bottom-24 right-4 z-40 sm:bottom-6 sm:right-6">

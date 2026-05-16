@@ -155,6 +155,53 @@ export async function loadDayAppointments(ctx, date, masterId = null) {
  */
 export const SLOT_TAKEN = Object.freeze({ slotTaken: true });
 
+/**
+ * Booking-block sentinels — returned by saveApt() when migration 0062
+ * client-block rules refuse the booking:
+ *   * BLOCKED_GLOBAL — `users.is_blocked_global = 1`. Salon-owner level
+ *     denial: this client cannot book ANY master in the tenant.
+ *   * BLOCKED_FOR_MASTER — a row in `master_client_blocks` matches the
+ *     (master, client) pair. Per-master denial: the client cannot book
+ *     THIS master, but can still book other masters in the same tenant.
+ *
+ * Callers should map both to a friendly "this slot is no longer available"
+ * message — we deliberately avoid leaking the block reason to the client
+ * via the bot UI.
+ */
+export const BLOCKED_GLOBAL = Object.freeze({ blockedGlobal: true });
+export const BLOCKED_FOR_MASTER = Object.freeze({ blockedForMaster: true });
+
+/**
+ * Check whether a (client, master) pair is allowed to book.
+ * Returns one of: `null` (allowed), `BLOCKED_GLOBAL`, `BLOCKED_FOR_MASTER`.
+ *
+ * D1-only; the KV legacy path has no block tables and falls through.
+ */
+export async function checkBookingBlock(ctx, clientCid, masterCid) {
+  if (!ctx?.db || !ctx?.tenantId) return null;
+  if (clientCid == null) return null;
+
+  const globalRow = await dbGet(
+    ctx,
+    'SELECT is_blocked_global FROM users WHERE tenant_id = ? AND chat_id = ?',
+    ctx.tenantId,
+    clientCid,
+  );
+  if (globalRow && globalRow.is_blocked_global === 1) return BLOCKED_GLOBAL;
+
+  if (masterCid != null) {
+    const masterRow = await dbGet(
+      ctx,
+      'SELECT 1 FROM master_client_blocks WHERE tenant_id = ? AND master_chat_id = ? AND client_chat_id = ? LIMIT 1',
+      ctx.tenantId,
+      masterCid,
+      clientCid,
+    );
+    if (masterRow) return BLOCKED_FOR_MASTER;
+  }
+  return null;
+}
+
 export async function saveApt(ctx, apt) {
   // Preview-mode short-circuit: landing demo tenant must not write real
   // appointments. Return a synthetic doc so the confirmation UI still renders
@@ -248,6 +295,14 @@ export async function saveApt(ctx, apt) {
     }
     return apt;
   }
+
+  // 0062: client-block guard. Refuse the booking up-front when the client
+  // is globally blocked in this tenant OR when this specific master has
+  // hidden the client. Sentinels surface the precise reason so callers can
+  // tailor the user-facing message (bot flow shows a generic "this master
+  // is not accepting new bookings right now" — see handlers/message.js).
+  const blocked = await checkBookingBlock(ctx, apt.chatId, apt.masterId ?? null);
+  if (blocked) return blocked;
 
   const countRow = await dbGet(ctx,
     'SELECT COUNT(*) as cnt FROM appointments WHERE tenant_id = ? AND chat_id = ? AND cancelled = 0 AND ts > ?',

@@ -66,10 +66,47 @@ export const users = sqliteTable("users", {
   firstMedium: text("first_medium"),
   firstTouchAt: integer("first_touch_at"),
   dob: text("dob"),
+  // 0062: clients tab overhaul — multi-channel contact, CRM fields, soft-delete.
+  email: text("email"),
+  igUsername: text("ig_username"),
+  notes: text("notes"),
+  tags: text("tags"),
+  marketingContactId: integer("marketing_contact_id"),
+  isBlockedGlobal: integer("is_blocked_global").notNull().default(0),
+  blockedGlobalReason: text("blocked_global_reason"),
+  blockedGlobalAt: integer("blocked_global_at"),
+  updatedAt: integer("updated_at"),
+  deletedAt: integer("deleted_at"),
+  lifetimeVisits: integer("lifetime_visits").notNull().default(0),
+  lastVisitAt: integer("last_visit_at"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
   index("idx_users_tenant_dob").on(t.tenantId, t.dob),
   index("idx_user_phone").on(t.tenantId, t.phone),
+  index("idx_users_tenant_email").on(t.tenantId, t.email),
+  index("idx_users_tenant_ig").on(t.tenantId, t.igUsername),
+  index("idx_users_marketing_id").on(t.marketingContactId),
+  index("idx_users_tenant_blocked").on(t.tenantId, t.isBlockedGlobal),
+  index("idx_users_tenant_deleted").on(t.tenantId, t.deletedAt),
+  index("idx_users_tenant_last_visit").on(t.tenantId, t.lastVisitAt),
+]);
+
+// 0062: per-master client blacklist. A master can hide specific clients
+// from their own booking flow (`tenant_id + master_chat_id + client_chat_id`
+// row marks the client invisible to that master). Tenant_owner-level
+// global blocks live on `users.is_blocked_global` instead.
+export const masterClientBlocks = sqliteTable("master_client_blocks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  masterChatId: integer("master_chat_id").notNull(),
+  clientChatId: integer("client_chat_id").notNull(),
+  reason: text("reason"),
+  blockedBy: integer("blocked_by").notNull(),
+  blockedAt: integer("blocked_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_mcb_uniq").on(t.tenantId, t.masterChatId, t.clientChatId),
+  index("idx_mcb_client").on(t.tenantId, t.clientChatId),
+  index("idx_mcb_master").on(t.tenantId, t.masterChatId),
 ]);
 
 export const userOrigins = sqliteTable("user_origins", {
@@ -617,7 +654,10 @@ export const emailSubscribers = sqliteTable("email_subscribers", {
 
 export const marketingContacts = sqliteTable("marketing_contacts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  email: text("email").notNull(),
+  // 0062: email is now nullable so phone-first salon clients can sync into
+  // the marketing directory. The platform-wide UNIQUE on `email` was also
+  // dropped in favour of a per-tenant UNIQUE (idx_marketing_contacts_tenant_email).
+  email: text("email"),
   name: text("name"),
   phone: text("phone"),
   source: text("source"),
@@ -634,12 +674,15 @@ export const marketingContacts = sqliteTable("marketing_contacts", {
   unsubscribeToken: text("unsubscribe_token"),
   locale: text("locale"),
   lifecycleStage: text("lifecycle_stage"),
+  linkedUserChatId: integer("linked_user_chat_id"),
 }, (t) => [
-  uniqueIndex("idx_marketing_contacts_email").on(t.email),
+  uniqueIndex("idx_marketing_contacts_tenant_email").on(t.tenantId, t.email),
+  uniqueIndex("idx_marketing_contacts_tenant_phone").on(t.tenantId, t.phone),
   index("idx_marketing_contacts_phone").on(t.phone),
   index("idx_marketing_contacts_last_seen").on(t.lastSeenAt),
   index("idx_marketing_contacts_tenant").on(t.tenantId),
   uniqueIndex("idx_marketing_contacts_unsub_tok").on(t.unsubscribeToken),
+  index("idx_mc_linked_user").on(t.tenantId, t.linkedUserChatId),
 ]);
 
 export const marketingSegments = sqliteTable("marketing_segments", {

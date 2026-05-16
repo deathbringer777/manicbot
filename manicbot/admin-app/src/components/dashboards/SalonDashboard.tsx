@@ -31,6 +31,7 @@ import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
+import { ClientFormModal } from "~/components/salon/tabs/clients/ClientFormModal";
 import { StaffTab } from "~/components/salon/tabs/StaffTab";
 import { SERVICE_TEMPLATES, type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
@@ -1468,6 +1469,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
   // Sprint 3/4 — manual booking modal state
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  // 0062: Clients tab overhaul — FAB switches to "+ Add client" on the
+  // Clients tab and opens this dedicated form (no appointment required).
+  const [clientFormOpen, setClientFormOpen] = useState(false);
   // Calendar overhaul (2026-05-16): two new FAB scenarios — calendar block
   // (reservation) and break / day-off / vacation (time_off). Both write
   // to `appointment_blocks` via the new `appointmentBlocks.create` tRPC.
@@ -1555,9 +1559,22 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {(tab === "overview" || tab === "appointments" || tab === "clients") && (
         <QuickAddFab
           lang={lang}
+          mode={tab === "clients" ? "client" : "booking"}
           onNewBooking={() => setManualBookingOpen(true)}
           onTimeReservation={() => setTimeReservationOpen(true)}
           onTimeOff={() => setTimeOffOpen(true)}
+          onAddClient={() => setClientFormOpen(true)}
+        />
+      )}
+
+      {/* 0062: dedicated "create client" form, mounted globally so the
+          FAB on the Clients tab can fire it without depending on tab
+          render order. */}
+      {clientFormOpen && (
+        <ClientFormModal
+          tenantId={tenantId}
+          onClose={() => setClientFormOpen(false)}
+          onSaved={() => setClientFormOpen(false)}
         />
       )}
 

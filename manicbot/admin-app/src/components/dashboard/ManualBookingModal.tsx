@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useRef, type FormEvent } from "react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
 
 interface Props {
   tenantId: string;
@@ -143,18 +144,19 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
         <form onSubmit={submit} className="space-y-4 text-sm">
           <div>
             <label className={LABEL}>{t("appointments.manual.client", lang)}</label>
-            <select
-              className={FIELD_BASE}
+            <Select
+              testIdPrefix="mb-client"
               value={clientChatId}
-              onChange={(e) => setClientChatId(e.target.value)}
-            >
-              <option value="">{t("appointments.manual.newClient", lang)}</option>
-              {clientOptions.map((c) => (
-                <option key={c.chatId} value={c.chatId}>
-                  {c.name || t("appointments.manual.noName", lang)} {c.phone ? `· ${c.phone}` : ""}
-                </option>
-              ))}
-            </select>
+              onChange={setClientChatId}
+              options={[
+                { value: "", label: t("appointments.manual.newClient", lang) },
+                ...clientOptions.map((c) => ({
+                  value: String(c.chatId),
+                  label: c.name || t("appointments.manual.noName", lang),
+                  sublabel: c.phone || undefined,
+                })),
+              ]}
+            />
           </div>
 
           {!clientChatId && (
@@ -179,19 +181,17 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className={LABEL}>{t("appointments.manual.master", lang)}</label>
-              <select
-                className={FIELD_BASE}
-                value={masterId ?? ""}
-                onChange={(e) => setMasterId(Number(e.target.value) || null)}
+              <Select
+                testIdPrefix="mb-master"
+                value={masterId == null ? "" : String(masterId)}
+                onChange={(v) => setMasterId(v ? Number(v) : null)}
                 disabled={defaultMasterId != null || mastersEmpty}
-              >
-                <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
-                {(masters.data ?? []).map((m) => (
-                  <option key={m.chatId} value={m.chatId}>
-                    {m.name || `#${m.chatId}`}
-                  </option>
-                ))}
-              </select>
+                placeholder={t("appointments.manual.pickPlaceholder", lang)}
+                options={(masters.data ?? []).map((m) => ({
+                  value: String(m.chatId),
+                  label: m.name || `#${m.chatId}`,
+                }))}
+              />
               {mastersEmpty && (
                 <p
                   data-testid="manual-booking-need-masters"
@@ -203,24 +203,23 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
             </div>
             <div>
               <label className={LABEL}>{t("appointments.manual.service", lang)}</label>
-              <select
-                className={FIELD_BASE}
+              <Select
+                testIdPrefix="mb-service"
                 value={serviceId}
-                onChange={(e) => setServiceId(e.target.value)}
+                onChange={setServiceId}
                 disabled={servicesEmpty}
-              >
-                <option value="">{t("appointments.manual.pickPlaceholder", lang)}</option>
-                {(services.data ?? []).map((s) => {
+                placeholder={t("appointments.manual.pickPlaceholder", lang)}
+                options={(services.data ?? []).map((s) => {
                   const label = typeof s.names === "string"
                     ? (() => { try { const j = JSON.parse(s.names as string); return j.ru || j.en || s.svcId; } catch { return s.svcId; } })()
                     : s.svcId;
-                  return (
-                    <option key={s.svcId} value={s.svcId}>
-                      {label} · {s.duration} min · {s.price}
-                    </option>
-                  );
+                  return {
+                    value: s.svcId,
+                    label,
+                    sublabel: `${s.duration} min · ${s.price}`,
+                  };
                 })}
-              </select>
+              />
               {servicesEmpty && (
                 <p
                   data-testid="manual-booking-need-services"

@@ -18,12 +18,14 @@ import { t } from "~/lib/i18n";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { api } from "~/trpc/react";
 import { relativeTime } from "~/lib/appointments";
+import { Button } from "~/components/ui/Button";
+import { Pill, type PillTone } from "~/components/ui/Pill";
 
-const STATUS_STYLES: Record<string, string> = {
-  open: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
-  claimed: "bg-brand-500/20 text-brand-400 border border-brand-500/30",
-  escalated: "bg-red-500/20 text-red-400 border border-red-500/30",
-  closed: "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400",
+const STATUS_TONES: Record<string, PillTone> = {
+  open: "amber",
+  claimed: "brand",
+  escalated: "red",
+  closed: "slate",
 };
 
 type View = "list" | "detail" | "create";
@@ -110,17 +112,20 @@ export function HelpSection() {
         {showTourReplay && (
           <>
             <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
-              <Map className="w-4 h-4 text-violet-400 shrink-0" />
+              <Map className="w-4 h-4 text-violet-500 dark:text-violet-400 shrink-0" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.tourReplay", lang)}</h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.tourReplayDesc", lang)}</p>
-            <button
+            <Button
               type="button"
+              tone="violet"
+              variant="soft"
+              size="md"
               onClick={() => window.dispatchEvent(new CustomEvent(TOUR_REPLAY_EVENT))}
-              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-violet-500/35 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-200 hover:bg-violet-500/20 transition-colors"
+              className="w-full sm:w-auto"
             >
               {t("settings.tourReplay", lang)}
-            </button>
+            </Button>
           </>
         )}
       </section>
@@ -136,14 +141,17 @@ export function HelpSection() {
           {/* ── LIST VIEW ── */}
           {view === "list" && (
             <div className="space-y-3">
-              <button
+              <Button
                 type="button"
+                tone="emerald"
+                variant="soft"
+                size="md"
                 onClick={() => setView("create")}
-                className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20 transition-colors"
+                leadingIcon={<Plus className="w-4 h-4" />}
+                className="w-full sm:w-auto"
               >
-                <Plus className="w-4 h-4" />
                 {t("settings.newTicket", lang)}
-              </button>
+              </Button>
 
               {myTickets.isLoading && (
                 <div className="flex justify-center py-4">
@@ -169,9 +177,14 @@ export function HelpSection() {
                               <p className="font-medium text-slate-900 dark:text-white text-sm truncate">
                                 {ticket.id}
                               </p>
-                              <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLES[ticket.status] ?? ""}`}>
+                              <Pill
+                                tone={STATUS_TONES[ticket.status] ?? "slate"}
+                                variant="soft"
+                                size="xs"
+                                className="shrink-0"
+                              >
                                 {t(`status.${ticket.status}` as any, lang) ?? ticket.status}
-                              </span>
+                              </Pill>
                             </div>
                             <p className="text-[11px] text-slate-500 truncate">
                               {relativeTime(ticket.updatedAt)}
@@ -238,15 +251,18 @@ export function HelpSection() {
                   />
                 </div>
                 {createTicket.error && (
-                  <p className="text-xs text-red-400">{createTicket.error.message}</p>
+                  <p className="text-xs text-red-700 dark:text-red-400">{createTicket.error.message}</p>
                 )}
-                <button
+                <Button
                   type="submit"
+                  tone="emerald"
+                  variant="soft"
+                  size="md"
                   disabled={createTicket.isPending || !subject.trim() || !message.trim()}
-                  className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="w-full sm:w-auto"
                 >
                   {createTicket.isPending ? t("settings.saving", lang) : t("settings.supportSend", lang)}
-                </button>
+                </Button>
               </form>
             </div>
           )}
@@ -274,9 +290,13 @@ export function HelpSection() {
                   {/* Header */}
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-slate-500 font-mono">{selectedTicketId}</p>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_STYLES[ticketDetail.data.ticket.status] ?? ""}`}>
+                    <Pill
+                      tone={STATUS_TONES[ticketDetail.data.ticket.status] ?? "slate"}
+                      variant="soft"
+                      size="xs"
+                    >
                       {t(`status.${ticketDetail.data.ticket.status}` as any, lang) ?? ticketDetail.data.ticket.status}
-                    </span>
+                    </Pill>
                   </div>
 
                   {/* Messages */}
@@ -288,16 +308,16 @@ export function HelpSection() {
                         <div key={msg.id} className={`flex ${isSupport ? "justify-start" : "justify-end"}`}>
                           <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 ${
                             isSupport
-                              ? "bg-brand-500/10 text-slate-800 dark:text-slate-200 border border-brand-500/20"
+                              ? "bg-brand-100 dark:bg-brand-500/10 text-slate-800 dark:text-slate-200 border border-brand-200 dark:border-brand-500/20"
                               : "bg-slate-100 dark:bg-white/[0.05] text-slate-800 dark:text-slate-200"
                           }`}>
-                            <p className="text-[10px] font-medium mb-0.5 ${isSupport ? 'text-brand-400' : 'text-slate-400'}">
+                            <p className={`text-[10px] font-medium mb-0.5 ${isSupport ? "text-brand-700 dark:text-brand-400" : "text-slate-500 dark:text-slate-400"}`}>
                               {isSupport ? t("settings.supportTeam", lang) : t("settings.you", lang)}
                             </p>
                             <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
                             {att?.startsWith("http") && (
                               <a href={att} target="_blank" rel="noopener noreferrer"
-                                className="text-xs text-sky-400 underline mt-1 block truncate">{att}</a>
+                                className="text-xs text-sky-700 dark:text-sky-400 underline mt-1 block truncate">{att}</a>
                             )}
                             <p className="text-[10px] text-slate-500 mt-1">{relativeTime(msg.createdAt)}</p>
                           </div>
@@ -316,14 +336,16 @@ export function HelpSection() {
                         rows={2}
                         className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
                       />
-                      <button
+                      <Button
                         type="button"
+                        tone="brand"
+                        variant="soft"
+                        size="md"
                         onClick={() => replyMut.mutate({ ticketId: selectedTicketId, text: replyText.trim() })}
                         disabled={replyMut.isPending || !replyText.trim()}
-                        className="flex items-center justify-center px-3 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 disabled:opacity-50 hover:opacity-80 transition-opacity"
                       >
                         {replyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <p className="text-xs text-slate-500 text-center py-2">{t("settings.ticketClosed", lang)}</p>

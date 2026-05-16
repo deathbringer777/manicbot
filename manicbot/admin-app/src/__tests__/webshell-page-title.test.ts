@@ -56,8 +56,8 @@ describe("WebShell.getPageTitle — top-bar resolves to the active tab/page", ()
       expect(getPageTitle("/dashboard", search, flat, "ru")).toBe(expected);
     });
 
-    it("bare /dashboard with no tab still resolves to 'Дашборд'", () => {
-      expect(getPageTitle("/dashboard", "", flat, "ru")).toBe("Дашборд");
+    it("bare /dashboard with no tab still resolves to 'Домой'", () => {
+      expect(getPageTitle("/dashboard", "", flat, "ru")).toBe("Домой");
     });
 
     it("non-tab paths still resolve via prefix (e.g. /marketing → Маркетинг)", () => {
@@ -96,8 +96,8 @@ describe("WebShell.getPageTitle — top-bar resolves to the active tab/page", ()
       expect(getPageTitle(pathname, "", flat, "en")).toBe(expected);
     });
 
-    it("/dashboard → Dashboard (system_admin home)", () => {
-      expect(getPageTitle("/dashboard", "", flat, "en")).toBe("Dashboard");
+    it("/dashboard → Home (system_admin home)", () => {
+      expect(getPageTitle("/dashboard", "", flat, "en")).toBe("Home");
     });
 
     it("/dashboard?tab=role-requests → Role Requests", () => {
@@ -135,7 +135,7 @@ describe("WebShell.getPageTitle — top-bar resolves to the active tab/page", ()
         const flat = flatNavForRole(role, "ru");
         const title = getPageTitle("/dashboard", "?tab=clients", flat, "ru");
         expect(title).toBe("Клиенты");
-        expect(title).not.toBe("Дашборд");
+        expect(title).not.toBe("Домой");
       },
     );
   });

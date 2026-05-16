@@ -16,7 +16,7 @@ import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 /**
  * Sidebar tabs that can be toggled. `navKey` matches the sidebar's tNav key
  * so labels here render identically to what the user sees in the sidebar
- * (avoids "Тариф" vs "Биллинг" / "Обзор" vs "Дашборд" mismatches).
+ * (avoids "Тариф" vs "Биллинг" / "Обзор" vs "Домой" mismatches).
  */
 const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; navKey: string }[] = [
   { tab: "appointments",   icon: CalendarDays,  navKey: "Appointments" },

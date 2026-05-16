@@ -257,12 +257,25 @@ export function createMockD1() {
             tenant_roles: ['tenant_id', 'chat_id'], services: ['tenant_id', 'svc_id'],
             tenant_config: ['tenant_id', 'key'], blocked_users: ['tenant_id', 'chat_id'],
             stripe_customers: ['customer_id'], appointments: ['id'],
+            // Migration 0063: idempotency claim for fired reminders.
+            plugin_reminder_fires: ['reminder_id', 'fires_at_epoch'],
+            // Migration 0063: per-source dedup of bell notifications. The
+            // real DB index is partial (only when source_slug + source_id
+            // are non-null); we approximate by skipping rows where either
+            // is null (treat them as never colliding).
+            user_notifications: ['web_user_id', 'source_slug', 'source_id', 'kind'],
           };
           const pkCols = pkMap[parsed.table] || [parsed.cols[0]];
+          // Partial-index approximation for user_notifications: rows where
+          // source_slug or source_id are null bypass dedup entirely.
+          if (parsed.table === 'user_notifications' && (row.source_slug == null || row.source_id == null)) {
+            table.push(row);
+            return { success: true, meta: { changes: 1 } };
+          }
           const exists = table.some(r => pkCols.every(pk => r[pk] === row[pk]));
-          if (exists) return { success: true };
+          if (exists) return { success: true, meta: { changes: 0 } };
           table.push(row);
-          return { success: true };
+          return { success: true, meta: { changes: 1 } };
         }
         if (isUpsert) {
           // Balanced parenthesised group so `(tenant_id, COALESCE(master_id, -1), date)`

@@ -6,6 +6,7 @@ import {
   ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera, MessageCircle,
 } from "lucide-react";
 import { TestBadge } from "~/components/ui/TestBadge";
+import { decodePerDayWorkHours } from "~/lib/workHours";
 
 type WorkHours = { from?: number; to?: number } | string | null;
 
@@ -54,7 +55,15 @@ const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 function formatHours(wh: WorkHours): string {
   if (!wh) return "Уточните у салона";
-  if (typeof wh === "string") return wh;
+  if (typeof wh === "string") {
+    // If it's the per-day JSON, render a compact summary of weekdays vs weekend.
+    const perDay = decodePerDayWorkHours(wh);
+    if (perDay) {
+      const mon = perDay[0];
+      return mon ? `${mon.open} – ${mon.close}` : "Выходной";
+    }
+    return wh;
+  }
   if (typeof wh === "object" && wh !== null) {
     const { from, to } = wh as { from?: number | string; to?: number | string };
     if (from !== undefined && to !== undefined) {
@@ -433,18 +442,34 @@ export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
                 <CalendarDays className="h-4 w-4 text-violet-600 dark:text-brand-400" />
                 Режим работы
               </h3>
-              {profile.workHours ? (
-                <div className="space-y-1 text-sm">
-                  {["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"].map((day, i) => (
-                    <div key={day} className="flex justify-between">
-                      <span className={`text-slate-500 dark:text-slate-400 ${i >= 5 ? "text-slate-400 dark:text-slate-500" : ""}`}>{day}</span>
-                      <span className={`font-medium ${i >= 5 ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"}`}>
-                        {i < 5 ? formatHours(profile.workHours) : i === 5 ? formatHours(profile.workHours) : "Выходной"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
+              {profile.workHours ? (() => {
+                // Prefer per-day shape when present so each row reflects the
+                // actual schedule the salon owner configured. Fall back to the
+                // legacy "same hours Mon-Sat, Sun off" rendering otherwise.
+                const perDay = typeof profile.workHours === "string"
+                  ? decodePerDayWorkHours(profile.workHours)
+                  : null;
+                const FULL_DAY_NAMES = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+                return (
+                  <div className="space-y-1 text-sm">
+                    {FULL_DAY_NAMES.map((day, i) => {
+                      const slot = perDay ? perDay[i] : null;
+                      const display = perDay
+                        ? (slot ? `${slot.open} – ${slot.close}` : "Выходной")
+                        : (i < 6 ? formatHours(profile.workHours) : "Выходной");
+                      const dim = perDay ? slot === null : i >= 6;
+                      return (
+                        <div key={day} className="flex justify-between">
+                          <span className={`text-slate-500 dark:text-slate-400 ${dim ? "text-slate-400 dark:text-slate-500" : ""}`}>{day}</span>
+                          <span className={`font-medium ${dim ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"}`}>
+                            {display}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })() : (
                 <p className="text-sm text-slate-500">Уточните режим работы по телефону</p>
               )}
             </div>

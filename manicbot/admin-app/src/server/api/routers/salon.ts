@@ -176,6 +176,7 @@ export const salonRouter = createTRPCRouter({
       logoR2Key: tenantRow[0]?.logoR2Key ?? null,
       coverR2Key: tenantRow[0]?.coverR2Key ?? null,
       brandPalette,
+      instagramUrl: tenantRow[0]?.instagramUrl ?? null,
     };
   }),
 
@@ -367,8 +368,13 @@ export const salonRouter = createTRPCRouter({
       mapsUrl: z.string().max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
       photos: z.array(z.string()).optional(),
-      logo: z.string().url().optional().or(z.literal("")),
-      coverPhoto: z.string().url().optional().or(z.literal("")),
+      // Restrict to https-only URLs — `z.string().url()` alone permits
+      // `javascript:` / `data:` schemes (WHATWG URL parses them). These fields
+      // flow into og:image, JSON-LD and `<img src>`; even where the browser
+      // currently de-fangs them, future renders into `<a href>` would turn
+      // the gap into stored XSS. See salon-update-profile-security.test.ts.
+      logo: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
+      coverPhoto: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
       // Branding v2
       displayName: z.string().min(1).max(120).optional().or(z.literal("")),
       logoR2Key: z.string().max(256).optional().or(z.literal("")),
@@ -381,6 +387,19 @@ export const salonRouter = createTRPCRouter({
         })
         .nullable()
         .optional(),
+      // SECURITY: must be a real instagram.com https URL — otherwise a malicious
+      // tenant_owner can store `javascript:fetch(...)` and turn the public
+      // salon page's <a href={instagramUrl}> link into stored XSS for every
+      // visitor. See salon-update-profile-security.test.ts.
+      instagramUrl: z
+        .string()
+        .regex(
+          /^https:\/\/(www\.)?instagram\.com\//i,
+          "Instagram URL must start with https://instagram.com/ or https://www.instagram.com/",
+        )
+        .max(300)
+        .optional()
+        .or(z.literal("")),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -415,7 +434,9 @@ export const salonRouter = createTRPCRouter({
       try { existing = tenantRow[0]!.salon ? JSON.parse(tenantRow[0]!.salon!) : {}; } catch { /* ignore malformed JSON */ }
       if (input.address !== undefined) existing.address = sanitizeText(input.address, 300);
       if (input.phone !== undefined) existing.phone = sanitizeText(input.phone, 50);
-      if (input.workHours !== undefined) existing.workHours = sanitizeText(input.workHours, 200);
+      // 500-char cap so a per-weekday JSON (~250 chars) fits while still
+      // bounding the field. Legacy "09:00 – 18:00" strings remain valid.
+      if (input.workHours !== undefined) existing.workHours = sanitizeText(input.workHours, 500);
       if (input.workHoursFrom !== undefined || input.workHoursTo !== undefined) {
         const wh: Record<string, unknown> =
           typeof existing.workHours === "object" && existing.workHours !== null
@@ -443,6 +464,9 @@ export const salonRouter = createTRPCRouter({
       if (input.coverR2Key !== undefined) tenantUpdate.coverR2Key = input.coverR2Key || null;
       if (input.brandPalette !== undefined) {
         tenantUpdate.brandPalette = input.brandPalette ? JSON.stringify(input.brandPalette) : null;
+      }
+      if (input.instagramUrl !== undefined) {
+        tenantUpdate.instagramUrl = input.instagramUrl ? sanitizeText(input.instagramUrl, 300) : null;
       }
       await ctx.db.update(tenants).set(tenantUpdate).where(eq(tenants.id, input.tenantId));
 

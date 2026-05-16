@@ -52,15 +52,29 @@ function isStaticPublicRoute(pathname: string): boolean {
   );
 }
 
+/**
+ * Pages that the salon-dashboard «Веб-чат» tab embeds via a same-origin
+ * iframe. These need `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN`
+ * so the preview renders; everything else stays DENY to block clickjacking.
+ * Match shape: `/salon/<slug>/chat` only (NOT `/salon/<slug>` or arbitrary
+ * `/chat`-suffixed paths).
+ */
+function isSameOriginEmbeddableRoute(pathname: string): boolean {
+  return /^\/salon\/[^/]+\/chat(\/.*)?$/.test(pathname);
+}
+
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const usesNonce = !isStaticPublicRoute(pathname);
   const nonce = usesNonce ? generateNonce() : "";
+  const embeddable = isSameOriginEmbeddableRoute(pathname);
 
   // ── Content-Security-Policy ──────────────────────────────────────────────
   const scriptSrc = usesNonce
     ? `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com https://js.stripe.com`
     : `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://js.stripe.com`;
+
+  const frameAncestors = embeddable ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
 
   const csp = [
     "default-src 'self'",
@@ -70,7 +84,7 @@ export function middleware(request: NextRequest) {
     "font-src 'self' data:",
     "connect-src 'self' https://api.stripe.com https://*.manicbot.com https://challenges.cloudflare.com https://core.telegram.org https://*.telegram.org",
     "frame-src https://challenges.cloudflare.com https://js.stripe.com",
-    "frame-ancestors 'none'",
+    frameAncestors,
     "object-src 'none'",
     "base-uri 'self'",
     // Google OAuth: form POST to /api/auth/signin/google returns a 302 to
@@ -101,7 +115,11 @@ export function middleware(request: NextRequest) {
   }
   res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   res.headers.set("X-Content-Type-Options", "nosniff");
-  res.headers.set("X-Frame-Options", "DENY");
+  // Legacy header — supersedes CSP frame-ancestors only in old IE/Edge.
+  // SAMEORIGIN on the embeddable chat route mirrors `frame-ancestors 'self'`
+  // above so the dashboard preview iframe renders on browsers that still
+  // honour X-Frame-Options ahead of CSP.
+  res.headers.set("X-Frame-Options", embeddable ? "SAMEORIGIN" : "DENY");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set(
     "Permissions-Policy",

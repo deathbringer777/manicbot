@@ -41,14 +41,20 @@ describe('seo', () => {
       expect(entries.find((e) => e.loc === '/register')).toBeUndefined();
     });
 
-    it('includes blog article slugs', () => {
+    it('includes blog article slugs (all 10 articles, May 2026 SEO sweep)', () => {
       const slugs = entries.filter((e) => e.loc.startsWith('/blog/')).map((e) => e.loc);
+      // Original 6 (rewritten long-form in 4 langs).
       expect(slugs).toContain('/blog/automate-salon-booking');
       expect(slugs).toContain('/blog/reduce-no-shows');
       expect(slugs).toContain('/blog/nail-trends-2026');
       expect(slugs).toContain('/blog/whatsapp-instagram-channels');
       expect(slugs).toContain('/blog/google-calendar-sync');
       expect(slugs).toContain('/blog/first-client-in-10-minutes');
+      // New articles authored in May 2026 from latest beauty/AI research.
+      expect(slugs).toContain('/blog/channels-compared-2026');
+      expect(slugs).toContain('/blog/nail-clients-survey-2026');
+      expect(slugs).toContain('/blog/ai-receptionist-247');
+      expect(slugs).toContain('/blog/dynamic-pricing-salon');
     });
 
     it('every entry has lastmod, priority, changefreq', () => {
@@ -84,9 +90,14 @@ describe('seo', () => {
       it('preserves the per-article BLOG_ARTICLES lastmod (not today)', () => {
         const today = '2099-01-01';
         const fresh = buildStaticSitemapEntries(today);
+        // automate-salon-booking was rewritten long-form in May 2026; its
+        // hardcoded lastmod matches the rewrite date, not today.
         const post = fresh.find((e) => e.loc === '/blog/automate-salon-booking');
-        expect(post.lastmod).toBe('2026-04-01');
+        expect(post.lastmod).toBe('2026-05-16');
         expect(post.lastmod).not.toBe(today);
+        // A newly-authored article keeps its publish date as lastmod.
+        const fresh2 = fresh.find((e) => e.loc === '/blog/channels-compared-2026');
+        expect(fresh2.lastmod).toBe('2026-05-15');
       });
 
       it('emits varied lastmod values across routes (not all the same today)', () => {

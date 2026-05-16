@@ -1,45 +1,108 @@
 /**
- * Lock down relax.md §3 P0-4: blog articles must clear Google's helpful-
- * content threshold (~700 words minimum to rank). Three articles were
- * expanded as part of the SEO sweep:
- *   - automate-salon-booking (all 4 langs)
- *   - reduce-no-shows (RU)
- *   - nail-trends-2026 (RU)
+ * Word-count + structure guard for the blog corpus.
  *
- * If anyone trims them back below 700 words, this test screams.
+ * Background — Google's helpful-content threshold for blog detail pages is
+ * ~700 words in English (Slavic languages carry more meaning per word, so
+ * ~600 hits the same density). Below that, even well-targeted posts fail to
+ * rank against competitors who write long-form.
+ *
+ * After the May-2026 SEO sweep we rewrote every article in all four
+ * languages so they all clear the bar. This test pins the minimum so the
+ * next person who "tightens" the copy gets a loud failure instead of a
+ * silent SEO regression.
+ *
+ * Per-language minimums:
+ *   English  ≥ 700 words
+ *   Slavic / Polish ≥ 600 words
  */
 import { describe, it, expect } from "vitest";
-import { BLOG_ARTICLES } from "~/content/blog/articles";
+import { BLOG_ARTICLES, type BlogArticle } from "~/content/blog/articles";
+import type { Lang } from "~/lib/i18n";
 
 const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
-// Per-language minimums.
-// English ~700 (Google's helpful-content floor).
-// Slavic languages carry more meaning per word, so ~600 hits the same density.
-const EXPANDED = {
-  "automate-salon-booking": { ru: 600, ua: 600, en: 700, pl: 600 },
-  "reduce-no-shows": { ru: 600 },
-  "nail-trends-2026": { ru: 600 },
-} as const;
+const MIN_WORDS: Record<Lang, number> = { en: 700, ru: 600, ua: 600, pl: 600 };
 
-describe("relax.md §3 P0-4: expanded blog bodies", () => {
-  for (const [slug, langs] of Object.entries(EXPANDED)) {
-    for (const [lang, min] of Object.entries(langs)) {
-      it(`${slug}/${lang} has at least ${min} words`, () => {
-        const article = BLOG_ARTICLES.find((a) => a.slug === slug);
-        expect(article).toBeDefined();
-        const body = article!.bodies[lang as "ru" | "ua" | "en" | "pl"];
-        const wc = wordCount(body);
-        expect(wc, `${slug}/${lang} has only ${wc} words`).toBeGreaterThanOrEqual(min);
+describe("blog content length (helpful-content threshold)", () => {
+  for (const article of BLOG_ARTICLES) {
+    for (const lang of ["ru", "ua", "en", "pl"] as Lang[]) {
+      it(`${article.slug}/${lang} has at least ${MIN_WORDS[lang]} words`, () => {
+        const wc = wordCount(article.bodies[lang]);
+        expect(wc, `${article.slug}/${lang} has only ${wc} words`).toBeGreaterThanOrEqual(
+          MIN_WORDS[lang],
+        );
       });
     }
   }
+});
 
-  it("expanded articles use H2 subheadings (## ...) — required for SERP TOC eligibility", () => {
-    for (const slug of Object.keys(EXPANDED)) {
-      const article = BLOG_ARTICLES.find((a) => a.slug === slug)!;
-      const headings = (article.bodies.ru.match(/^##\s+/gm) ?? []).length;
-      expect(headings, `${slug} (ru) has only ${headings} H2 headings`).toBeGreaterThanOrEqual(3);
+describe("blog content structure (SERP-ready)", () => {
+  for (const article of BLOG_ARTICLES) {
+    it(`${article.slug} has ≥ 3 H2 headings in every language`, () => {
+      for (const lang of ["ru", "ua", "en", "pl"] as Lang[]) {
+        const headings = (article.bodies[lang].match(/^##\s+/gm) ?? []).length;
+        expect(
+          headings,
+          `${article.slug} (${lang}) has only ${headings} H2 headings`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
+});
+
+describe("blog cover images", () => {
+  for (const article of BLOG_ARTICLES) {
+    it(`${article.slug} has a hero image with localized alt text`, () => {
+      expect(article.coverImage.url, `${article.slug}: coverImage.url missing`).toBeTruthy();
+      // Cover URL must be a real https URL we'll render in <Image />.
+      expect(article.coverImage.url).toMatch(/^https:\/\//);
+      for (const lang of ["ru", "ua", "en", "pl"] as Lang[]) {
+        expect(
+          article.coverImage.alt[lang],
+          `${article.slug}: missing alt text for ${lang}`,
+        ).toBeTruthy();
+      }
+    });
+  }
+});
+
+describe("blog corpus invariants", () => {
+  it("contains the 10 articles seeded in May 2026", () => {
+    const slugs = BLOG_ARTICLES.map((a: BlogArticle) => a.slug).sort();
+    expect(slugs).toEqual(
+      [
+        "ai-receptionist-247",
+        "automate-salon-booking",
+        "channels-compared-2026",
+        "dynamic-pricing-salon",
+        "first-client-in-10-minutes",
+        "google-calendar-sync",
+        "nail-clients-survey-2026",
+        "nail-trends-2026",
+        "reduce-no-shows",
+        "whatsapp-instagram-channels",
+      ].sort(),
+    );
+  });
+
+  it("uses unique slugs (no accidental duplicates)", () => {
+    const slugs = BLOG_ARTICLES.map((a: BlogArticle) => a.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  it("every article has dates in YYYY-MM-DD form", () => {
+    for (const a of BLOG_ARTICLES) {
+      expect(a.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      if (a.updated) expect(a.updated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it("`updated` is never earlier than `date`", () => {
+    for (const a of BLOG_ARTICLES) {
+      if (!a.updated) continue;
+      expect(a.updated >= a.date, `${a.slug}: updated (${a.updated}) < date (${a.date})`).toBe(
+        true,
+      );
     }
   });
 });

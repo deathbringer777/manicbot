@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Calendar, Tag } from "lucide-react";
 import { useLang } from "~/components/LangContext";
@@ -50,29 +51,26 @@ const UI: Record<
   },
 };
 
+/** Category-specific styling used for tag badges across the blog. */
 export const CATEGORY_STYLE: Record<
   BlogCategory,
-  { gradient: string; emoji: string; badge: string }
+  { badge: string; accent: string }
 > = {
   tips: {
-    gradient: "from-violet-500 via-purple-600 to-violet-700",
-    emoji: "💅",
     badge: "bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+    accent: "from-violet-500/80 via-violet-700/40 to-transparent",
   },
   product: {
-    gradient: "from-cyan-500 via-blue-500 to-cyan-700",
-    emoji: "🤖",
     badge: "bg-cyan-50 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300",
+    accent: "from-cyan-500/80 via-cyan-700/40 to-transparent",
   },
   business: {
-    gradient: "from-amber-400 via-orange-500 to-amber-600",
-    emoji: "📊",
     badge: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    accent: "from-amber-500/80 via-orange-700/40 to-transparent",
   },
   trends: {
-    gradient: "from-pink-500 via-rose-400 to-fuchsia-600",
-    emoji: "✨",
     badge: "bg-pink-50 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
+    accent: "from-pink-500/80 via-rose-700/40 to-transparent",
   },
 };
 
@@ -80,6 +78,11 @@ function formatDate(iso: string, lang: Lang) {
   const d = new Date(iso);
   const locales: Record<Lang, string> = { ru: "ru-RU", ua: "uk-UA", en: "en-GB", pl: "pl-PL" };
   return d.toLocaleDateString(locales[lang], { day: "numeric", month: "long", year: "numeric" });
+}
+
+function readingMinutes(body: string): number {
+  const words = body.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
 }
 
 export function BlogClient() {
@@ -94,7 +97,7 @@ export function BlogClient() {
   }, [filter]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 pb-20 animate-fade-in">
+    <div className="mx-auto max-w-6xl px-4 py-10 pb-20 animate-fade-in">
       {/* Header */}
       <div className="text-center mb-10">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400 mb-2">
@@ -143,25 +146,29 @@ export function BlogClient() {
           {copy.noResults}
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {articles.map((article) => {
             const style = CATEGORY_STYLE[article.categoryKey];
+            const mins = readingMinutes(article.bodies[lang] ?? article.bodies.ru);
             return (
               <Link
                 key={article.slug}
                 href={`/blog/${article.slug}`}
                 className="group rounded-2xl border border-slate-200/90 bg-white shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 dark:border-white/[0.08] dark:bg-slate-900/50 overflow-hidden flex flex-col"
               >
-                {/* Cover */}
-                <div
-                  className={`relative aspect-[16/9] bg-gradient-to-br ${style.gradient} flex items-center justify-center overflow-hidden`}
-                >
-                  <div className="absolute inset-0 opacity-20">
-                    <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
-                    <div className="absolute -bottom-4 -left-4 h-24 w-24 rounded-full bg-black/20 blur-2xl" />
-                  </div>
-                  <div className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.8)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:40px_40px]" />
-                  <span className="relative text-5xl select-none drop-shadow-lg">{style.emoji}</span>
+                {/* Cover image */}
+                <div className="relative aspect-[16/9] overflow-hidden bg-slate-100 dark:bg-slate-800">
+                  <Image
+                    src={article.coverImage.url}
+                    alt={article.coverImage.alt[lang] ?? article.coverImage.alt.en}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    unoptimized
+                  />
+                  <div
+                    className={`pointer-events-none absolute inset-0 bg-gradient-to-t ${style.accent} opacity-70`}
+                  />
                 </div>
 
                 {/* Content */}
@@ -176,6 +183,9 @@ export function BlogClient() {
                     <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
                       <Calendar className="h-3 w-3" />
                       {formatDate(article.date, lang)}
+                    </span>
+                    <span className="inline-flex items-center text-[11px] text-slate-400 dark:text-white/30">
+                      · {mins} min
                     </span>
                   </div>
 

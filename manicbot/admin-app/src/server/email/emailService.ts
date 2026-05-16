@@ -321,3 +321,86 @@ export async function sendSupportReplyEmail(
     text: supportReplyEmailText(options, lang),
   });
 }
+
+// ─── Masters-tab overhaul: 4 new senders ─────────────────────────────────
+
+/** Scenario A: web_user already exists → in-app accept link. */
+export async function sendMasterInviteExistingUserEmail(
+  to: string,
+  invitationId: string,
+  salonName: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const { masterInviteExistingUserHtml, masterInviteExistingUserText, getInviteExistingUserSubject } =
+    await import("./templates");
+  const acceptUrl = `${baseUrl()}/invitations/${encodeURIComponent(invitationId)}`;
+  return sendResendEmail({
+    to,
+    subject: getInviteExistingUserSubject(lang, salonName),
+    html: masterInviteExistingUserHtml({ salonName, acceptUrl }, lang),
+    text: masterInviteExistingUserText({ salonName, acceptUrl }, lang),
+  });
+}
+
+/** Scenario B: no web_user → magic-link register with invite token. */
+export async function sendMasterInviteNewUserEmail(
+  to: string,
+  token: string,
+  salonName: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const { masterInviteNewUserHtml, masterInviteNewUserText, getInviteNewUserSubject } =
+    await import("./templates");
+  const registerUrl = `${baseUrl()}/register?invite=${encodeURIComponent(token)}`;
+  return sendResendEmail({
+    to,
+    subject: getInviteNewUserSubject(lang, salonName),
+    html: masterInviteNewUserHtml({ salonName, registerUrl }, lang),
+    text: masterInviteNewUserText({ salonName, registerUrl }, lang),
+  });
+}
+
+/**
+ * Owner triggered a password reset for a salon-owned master account.
+ * The new plaintext lands directly in the master's inbox — the owner never
+ * sees it. Caller MUST NOT log this password.
+ */
+export async function sendMasterPasswordResetByOwnerEmail(
+  to: string,
+  newPassword: string,
+  salonName: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const {
+    masterPasswordResetByOwnerHtml,
+    masterPasswordResetByOwnerText,
+    getPasswordResetByOwnerSubject,
+  } = await import("./templates");
+  const loginUrl = `${baseUrl()}/login`;
+  return sendResendEmail({
+    to,
+    subject: getPasswordResetByOwnerSubject(lang, salonName),
+    html: masterPasswordResetByOwnerHtml({ salonName, newPassword, loginUrl }, lang),
+    text: masterPasswordResetByOwnerText({ salonName, newPassword, loginUrl }, lang),
+  });
+}
+
+/**
+ * Generic OTP for destructive mutations. `actionLabel` is the localized
+ * human-readable summary ("Archive master Olga" / "Reset password for Anna")
+ * shown in the email body. Pair with auth.requestActionOtp() server-side.
+ */
+export async function sendActionOtpEmail(
+  to: string,
+  code: string,
+  actionLabel: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const { actionOtpEmailHtml, actionOtpEmailText, getActionOtpSubject } = await import("./templates");
+  return sendResendEmail({
+    to,
+    subject: getActionOtpSubject(lang),
+    html: actionOtpEmailHtml({ code, actionLabel }, lang),
+    text: actionOtpEmailText({ code, actionLabel }, lang),
+  });
+}

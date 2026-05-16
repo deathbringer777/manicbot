@@ -1215,11 +1215,11 @@ function MasterClientsList({
 
       {confirmBlock && (
         <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-4"
           onClick={() => setConfirmBlock(null)}
         >
           <div
-            className="glass-card w-full max-w-sm rounded-t-2xl border border-rose-500/30 bg-white p-4 shadow-2xl dark:bg-slate-900/95 sm:rounded-2xl sm:p-5"
+            className="w-full max-w-sm rounded-t-2xl border border-rose-500/30 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">

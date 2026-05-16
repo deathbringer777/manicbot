@@ -135,13 +135,23 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      // z-[100] guarantees the modal sits above Shell's sticky header
+      // (z-30 desktop, z-40 mobile) and bottom nav (z-50). The dimmer
+      // uses slate-950/70 + backdrop-blur-md so the page reads as a
+      // single muted background rather than the older "muddy" look from
+      // the bg-black/50 overlay leaking through `glass-card` translucency.
+      // Mobile bottom-sheet on small viewports; centered card on tablet+.
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="glass-card w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-slate-900/95"
+        // Solid surface — no `glass-card` here. The globals.css `glass-card`
+        // utility uses rgba(248,250,252,0.85) which fights with bg-white
+        // and renders the dialog as a translucent grey panel. Modals must
+        // read as opaque tiles, not floating glass.
+        className="w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "90vh" }}
+        style={{ maxHeight: "92vh" }}
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">

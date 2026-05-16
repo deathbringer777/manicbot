@@ -120,13 +120,17 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
 
   return (
     <div
-      // Mobile: full-width bottom-sheet (items-end) — easier one-hand reach
-      // on tall phones. Tablet+: centered card.
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      // Mobile: full-width bottom-sheet (items-end). Tablet+: centered card.
+      // z-[100] beats Shell's sticky header (z-30/40) + bottom nav (z-50).
+      // slate-950/70 overlay + backdrop-blur-md = clean unified backdrop
+      // instead of muddy bg-black/50 leaking through translucent cards.
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="glass-card w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-slate-900/95 sm:rounded-2xl sm:p-5"
+        // Solid card — no `glass-card` (its rgba(248,250,252,0.85) overrides
+        // bg-white and renders as translucent grey).
+        className="w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-5"
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "92vh" }}
       >

@@ -14,9 +14,11 @@
  * router/lifecycle/worker/ui files, then add one import line below.
  *
  * 2026-05-16 cleanup — dropped 13 slugs that duplicated already-shipped core
- * features or were pure marketing stubs:
+ * features or were pure marketing stubs. `google-calendar` was later
+ * RESTORED as a marketplace-only facade over the existing core OAuth flow
+ * (`googleCalendar.ts` router + `GoogleCalendarRuntime.tsx`); the surviving
+ * DELETED list is 12.
  *   DELETED (capability already in core):
- *     - google-calendar          → admin-app `googleCalendar.ts` router
  *     - booking-reminder         → worker `phaseReminders` cron
  *     - client-crm-lite          → admin-app `clients.ts` router (0062)
  *     - quick-notes              → subset of task-board
@@ -57,6 +59,9 @@ import exportHubManifest from "./export-hub/manifest";
 // ── master + tenant_owner ───────────────────────────────────────────────────
 import messageTemplatesManifest from "./message-templates/manifest";
 
+// ── tenant_owner + tenant_manager + master (core-backed facade) ─────────────
+import googleCalendarManifest from "./google-calendar/manifest";
+
 // ── Variant A (Phase 3) — growth plugins ────────────────────────────────────
 import reviewCollectorManifest from "./review-collector/manifest";
 
@@ -76,6 +81,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   exportHubManifest,
   // master + tenant_owner
   messageTemplatesManifest,
+  // tenant_owner + tenant_manager + master (core-backed facade)
+  googleCalendarManifest,
   // Variant A growth
   reviewCollectorManifest,
   // Variant A operations

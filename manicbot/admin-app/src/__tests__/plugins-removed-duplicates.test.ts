@@ -7,11 +7,13 @@ import { listManifests, getPlugin } from "@plugins/index";
  * re-enters, the cleanup gets caught by CI instead of regressing live.
  *
  * 2026-05-16 cleanup added 13 more slugs that either duplicated already-shipped
- * core capabilities (google-calendar, booking-reminder, client-crm-lite,
- * quick-notes) or whose UI got folded back into core (ai-abuse-monitor,
- * gdpr-center, sla-tracker, escalation-playbook, kb-search, ticket-templates,
- * keyboard-shortcuts, dark-plus, portfolio-gallery). See the
- * `manicbot/plugins/registry.ts` header for the full rationale.
+ * core capabilities (booking-reminder, client-crm-lite, quick-notes) or whose
+ * UI got folded back into core (ai-abuse-monitor, gdpr-center, sla-tracker,
+ * escalation-playbook, kb-search, ticket-templates, keyboard-shortcuts,
+ * dark-plus, portfolio-gallery). `google-calendar` was initially in the
+ * dropped list but was later restored as a marketplace facade over the
+ * existing core OAuth flow — it is NOT in REMOVED_DUPLICATE_SLUGS below.
+ * See the `manicbot/plugins/registry.ts` header for the full rationale.
  *
  * `sms-reminders` stays in this list until Phase 3 of the catalog roadmap
  * lands the real implementation; once that PR ships, remove the line.
@@ -27,7 +29,9 @@ const REMOVED_DUPLICATE_SLUGS = [
   "birthday-campaigns",   // Marketing module (0032) + phasePromos cron already handle birthday promos
   "multi-lang-bot",       // orphan — never registered, never imported
   // 2026-05-16 catalog audit — Phase 1 cleanup:
-  "google-calendar",      // duplicated by core `googleCalendar.ts` router
+  // NOTE: `google-calendar` was in the original cleanup list but was
+  // restored as a marketplace facade over the core OAuth flow — do NOT
+  // re-add it here.
   "booking-reminder",     // duplicated by worker `phaseReminders` cron
   "client-crm-lite",      // duplicated by core `clients.ts` router (0062)
   "quick-notes",          // subset of task-board

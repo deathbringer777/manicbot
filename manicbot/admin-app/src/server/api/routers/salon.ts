@@ -368,8 +368,13 @@ export const salonRouter = createTRPCRouter({
       mapsUrl: z.string().max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
       photos: z.array(z.string()).optional(),
-      logo: z.string().url().optional().or(z.literal("")),
-      coverPhoto: z.string().url().optional().or(z.literal("")),
+      // Restrict to https-only URLs — `z.string().url()` alone permits
+      // `javascript:` / `data:` schemes (WHATWG URL parses them). These fields
+      // flow into og:image, JSON-LD and `<img src>`; even where the browser
+      // currently de-fangs them, future renders into `<a href>` would turn
+      // the gap into stored XSS. See salon-update-profile-security.test.ts.
+      logo: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
+      coverPhoto: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
       // Branding v2
       displayName: z.string().min(1).max(120).optional().or(z.literal("")),
       logoR2Key: z.string().max(256).optional().or(z.literal("")),
@@ -382,7 +387,19 @@ export const salonRouter = createTRPCRouter({
         })
         .nullable()
         .optional(),
-      instagramUrl: z.string().max(300).optional().or(z.literal("")),
+      // SECURITY: must be a real instagram.com https URL — otherwise a malicious
+      // tenant_owner can store `javascript:fetch(...)` and turn the public
+      // salon page's <a href={instagramUrl}> link into stored XSS for every
+      // visitor. See salon-update-profile-security.test.ts.
+      instagramUrl: z
+        .string()
+        .regex(
+          /^https:\/\/(www\.)?instagram\.com\//i,
+          "Instagram URL must start with https://instagram.com/ or https://www.instagram.com/",
+        )
+        .max(300)
+        .optional()
+        .or(z.literal("")),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

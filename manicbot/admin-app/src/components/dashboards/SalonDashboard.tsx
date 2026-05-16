@@ -51,6 +51,7 @@ import {
   DEFAULT_WORK_HOURS,
   hydrateWorkHours,
   serializeWorkHours,
+  decodePerDayWorkHours,
   type WorkHoursState,
 } from "~/lib/workHours";
 
@@ -797,12 +798,15 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 
   function validateExtras(): Record<string, string> {
     const errs: Record<string, string> = {};
-    if (logo && !/^https:\/\//.test(logo)) errs.logo = t("salon.publicProfile.urlHttpsError", lang);
-    if (coverPhoto && !/^https:\/\//.test(coverPhoto)) errs.coverPhoto = t("salon.publicProfile.urlHttpsError", lang);
+    // Mirror the server regexes in `salon.updateSalonProfile` — keep client +
+    // server in lockstep so the form blocks before round-trip and bad payloads
+    // can't slip past a customised client either.
+    if (logo && !/^https:\/\//i.test(logo)) errs.logo = t("salon.publicProfile.urlHttpsError", lang);
+    if (coverPhoto && !/^https:\/\//i.test(coverPhoto)) errs.coverPhoto = t("salon.publicProfile.urlHttpsError", lang);
     if (brandPrimary && !HEX_RE.test(brandPrimary)) errs.brandPrimary = t("salon.publicProfile.hexError", lang);
     if (brandBg && !HEX_RE.test(brandBg)) errs.brandBg = t("salon.publicProfile.hexError", lang);
     if (brandText && !HEX_RE.test(brandText)) errs.brandText = t("salon.publicProfile.hexError", lang);
-    if (instagramUrl && !/^https:\/\/(www\.)?instagram\.com\//.test(instagramUrl)) {
+    if (instagramUrl && !/^https:\/\/(www\.)?instagram\.com\//i.test(instagramUrl)) {
       errs.instagramUrl = t("salon.publicProfile.instagramError", lang);
     }
     return errs;
@@ -965,6 +969,8 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
             { label: t("common.description", lang), value: data?.description, icon: null },
             { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
+            { label: t("salon.publicProfile.address", lang), value: data?.salon?.address, icon: MapPin },
+            { label: t("salon.publicProfile.phone", lang), value: data?.salon?.phone, icon: Phone },
           ].map(({ label, value, icon: Icon }) => value ? (
             <div key={label} className="flex items-start gap-3">
               {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
@@ -974,12 +980,85 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           ) : null)}
+          {data?.instagramUrl && (
+            <div className="flex items-start gap-3">
+              <InstagramIcon className="h-4 w-4 text-pink-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">{t("salon.publicProfile.instagramUrl", lang)}</p>
+                <a href={data.instagramUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-brand-400 hover:underline break-all">
+                  {data.instagramUrl}
+                </a>
+              </div>
+            </div>
+          )}
           {(data?.logo || data?.coverPhoto) && (
             <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
               {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
               {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
             </div>
           )}
+          {/* Brand palette swatches */}
+          {(data?.brandPalette?.primary || data?.brandPalette?.bg || data?.brandPalette?.text) && (
+            <div className="flex items-center gap-2 border-t border-slate-200 dark:border-white/5 pt-3">
+              <Palette className="h-4 w-4 text-slate-500 shrink-0" />
+              <p className="text-xs text-slate-500 mr-1">{t("salon.publicProfile.brandingSection", lang)}:</p>
+              {(["primary", "bg", "text"] as const).map((k) => {
+                const c = data.brandPalette?.[k];
+                if (!c) return null;
+                return (
+                  <span key={k} className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                    <span className="h-4 w-4 rounded border border-slate-200 dark:border-slate-700 shadow-sm shrink-0" style={{ backgroundColor: c }} aria-label={`${k} ${c}`} />
+                    {c}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {/* Work hours summary — only rendered when the value is parsable
+              (per-day JSON, legacy short string, or legacy {from,to}). */}
+          {data?.salon?.workHours && (() => {
+            const wh = data.salon.workHours as unknown;
+            const perDay = typeof wh === "string" ? decodePerDayWorkHours(wh) : null;
+            const dayLabels = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+            let legacyLine: string | null = null;
+            if (!perDay) {
+              if (typeof wh === "string" && wh.trim()) legacyLine = wh;
+              else if (wh && typeof wh === "object") {
+                const obj = wh as { from?: number | string; to?: number | string };
+                if (obj.from !== undefined && obj.to !== undefined) {
+                  const fmt = (v: number | string) => typeof v === "string" ? v : `${v}:00`;
+                  legacyLine = `${fmt(obj.from)} – ${fmt(obj.to)}`;
+                }
+              }
+            }
+            if (!perDay && !legacyLine) return null;
+            return (
+              <div className="border-t border-slate-200 dark:border-white/5 pt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="h-4 w-4 text-slate-500" />
+                  <p className="text-xs text-slate-500">{t("salon.publicProfile.scheduleSection", lang)}</p>
+                </div>
+                {perDay ? (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs pl-6">
+                    {dayLabels.map((d, i) => {
+                      const slot = perDay[i];
+                      return (
+                        <div key={d} className="flex justify-between">
+                          <span className="text-slate-500">{t(`salon.publicProfile.day.${d}`, lang)}</span>
+                          <span className={slot ? "text-slate-900 dark:text-white font-medium" : "text-slate-400"}>
+                            {slot ? `${slot.open}–${slot.close}` : t("salon.publicProfile.dayOff", lang)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-900 dark:text-white pl-6">{legacyLine}</p>
+                )}
+              </div>
+            );
+          })()}
           {photos.length > 0 && (
             <div>
               <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>

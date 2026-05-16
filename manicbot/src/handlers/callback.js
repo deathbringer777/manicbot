@@ -22,6 +22,7 @@ import { createCheckoutSession, createPortalSession } from '../billing/stripe.js
 import { getTenant } from '../tenant/storage.js';
 import { showPlatformAdminPanel, showPlatformTenantsList, showPlatformTenantInfo, showPlatformSupportList, showPlatformLinks, showGrantRoleMenu, showPlatformTechSupportList } from '../ui/sysadmin.js';
 import { createReview, getReviewByApt, getReviewById, updateReviewText, addReviewPhoto } from '../services/reviews.js';
+import { maybeSendReviewCta } from '../plugins/reviewCollectorCta.js';
 import { addSupport, removeSupport, addTechnicalSupport, removeTechnicalSupport } from '../admin/provisioning.js';
 import { getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent, removeTenantSupportAgent } from '../roles/roles.js';
 import {
@@ -1230,10 +1231,14 @@ export async function onCb(ctx, cb) {
     if (!apt || String(apt.chat_id || apt.chatId) !== String(cid)) return;
     const reviewId = await createReview(ctx, { aptId, chatId: cid, masterId: apt.master_id || apt.masterId, rating });
     await answerCb(ctx, cb.id, `${rating}⭐`);
-    return send(ctx, cid, fill(t(lg, 'review_thanks'), { rating }), { reply_markup: { inline_keyboard: [
+    await send(ctx, cid, fill(t(lg, 'review_thanks'), { rating }), { reply_markup: { inline_keyboard: [
       [{ text: t(lg, 'review_add_comment'), callback_data: `revc:${reviewId}` }],
       [{ text: t(lg, 'review_skip_comment'), callback_data: `revd:${reviewId}` }],
     ] } });
+    // review-collector plugin: append Google/Yandex CTA for happy clients (4-5⭐)
+    // when the tenant has installed + configured it. Silent no-op otherwise.
+    await maybeSendReviewCta(ctx, cid, rating);
+    return;
   }
 
   // Review: user wants to add comment

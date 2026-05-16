@@ -57,6 +57,9 @@ import exportHubManifest from "./export-hub/manifest";
 // ── master + tenant_owner ───────────────────────────────────────────────────
 import messageTemplatesManifest from "./message-templates/manifest";
 
+// ── Variant A (Phase 3) — growth plugins ────────────────────────────────────
+import reviewCollectorManifest from "./review-collector/manifest";
+
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
@@ -70,6 +73,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   exportHubManifest,
   // master + tenant_owner
   messageTemplatesManifest,
+  // Variant A growth
+  reviewCollectorManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

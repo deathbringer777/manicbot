@@ -34,6 +34,7 @@ const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
   "earnings-goal": () => import("./runtimes/EarningsGoalRuntime"),
   "message-templates": () => import("./runtimes/MessageTemplatesRuntime"),
   "loyalty-stamps": () => import("./runtimes/LoyaltyStampsRuntime"),
+  "review-collector": () => import("./runtimes/ReviewCollectorRuntime"),
 };
 
 export function loadRuntime(slug: string): ComponentType<PluginRuntimeProps> | null {

@@ -355,6 +355,10 @@ const translations = {
   "onboarding.checklist.set_schedule":   { ru: "Настройте расписание",         ua: "Налаштуйте розклад",            en: "Set the schedule",               pl: "Ustaw harmonogram" },
   "onboarding.checklist.share_link":     { ru: "Поделитесь ссылкой",           ua: "Поділіться посиланням",         en: "Share your link",                pl: "Udostępnij link" },
   "onboarding.checklist.first_booking":  { ru: "Примите первую запись",        ua: "Прийміть перший запис",         en: "Take your first booking",        pl: "Przyjmij pierwszą rezerwację" },
+  "onboarding.checklist.fill_description": { ru: "Добавьте описание салона",    ua: "Додайте опис салону",           en: "Add a salon description",        pl: "Dodaj opis salonu" },
+  "onboarding.checklist.add_logo":       { ru: "Загрузите логотип",            ua: "Завантажте логотип",            en: "Upload a logo",                  pl: "Wgraj logo" },
+  "onboarding.checklist.add_cover":      { ru: "Загрузите обложку",            ua: "Завантажте обкладинку",         en: "Upload a cover photo",           pl: "Wgraj zdjęcie tła" },
+  "onboarding.checklist.activate_public":{ ru: "Активируйте публичный профиль", ua: "Активуйте публічний профіль",  en: "Activate your public profile",   pl: "Aktywuj profil publiczny" },
 
   // ── Appointments quick actions ──────────────────────────────────────────────
   "appointments.newBooking":             { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
@@ -679,6 +683,9 @@ const translations = {
   // ── Manual booking modal ────────────────────────────────────────────────────
   "appointments.manual.title":           { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
   "appointments.manual.slotConflict":    { ru: "Это время уже занято у выбранного мастера.", ua: "Цей час уже зайнятий у обраного майстра.", en: "This time slot is already booked for the selected master.", pl: "Ten termin jest już zajęty u wybranego mistrza." },
+  "salon.reschedule.success":            { ru: "Запись перенесена", ua: "Запис перенесений", en: "Appointment rescheduled", pl: "Wizyta przeniesiona" },
+  "salon.reschedule.conflict":           { ru: "Слот занят — выберите другое время", ua: "Слот зайнятий — оберіть інший час", en: "Slot is busy — pick a different time", pl: "Termin zajęty — wybierz inny" },
+  "salon.reschedule.failed":             { ru: "Не удалось перенести запись", ua: "Не вдалося перенести запис", en: "Could not reschedule the appointment", pl: "Nie udało się przenieść wizyty" },
   "appointments.manual.somethingWrong":  { ru: "Что-то пошло не так", ua: "Щось пішло не так", en: "Something went wrong", pl: "Coś poszło nie tak" },
   "appointments.manual.fillRequired":    { ru: "Заполните мастера, услугу, дату и время.", ua: "Заповніть майстра, послугу, дату й час.", en: "Pick a master, service, date and time.", pl: "Wybierz mistrza, usługę, datę i czas." },
   "appointments.manual.pickClient":      { ru: "Выберите клиента или укажите имя и телефон нового.", ua: "Виберіть клієнта або вкажіть ім'я і телефон нового.", en: "Pick a client or enter the new client's name and phone.", pl: "Wybierz klienta lub podaj imię i telefon nowego." },

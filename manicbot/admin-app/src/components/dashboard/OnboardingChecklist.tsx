@@ -9,12 +9,16 @@ interface Props {
 }
 
 const STEPS = [
-  { id: "add_service" as const,    labelKey: "onboarding.checklist.add_service" as const,    href: "?tab=services" },
-  { id: "connect_bot" as const,    labelKey: "onboarding.checklist.connect_bot" as const,    href: "?tab=channels" },
-  { id: "invite_master" as const,  labelKey: "onboarding.checklist.invite_master" as const,  href: "?tab=masters" },
-  { id: "set_schedule" as const,   labelKey: "onboarding.checklist.set_schedule" as const,   href: "?tab=masters" },
-  { id: "share_link" as const,     labelKey: "onboarding.checklist.share_link" as const,     href: "?tab=channels" },
-  { id: "first_booking" as const,  labelKey: "onboarding.checklist.first_booking" as const,  href: "?tab=appointments" },
+  { id: "add_service" as const,      labelKey: "onboarding.checklist.add_service" as const,      href: "?tab=services" },
+  { id: "connect_bot" as const,      labelKey: "onboarding.checklist.connect_bot" as const,      href: "?tab=channels" },
+  { id: "invite_master" as const,    labelKey: "onboarding.checklist.invite_master" as const,    href: "?tab=masters" },
+  { id: "set_schedule" as const,     labelKey: "onboarding.checklist.set_schedule" as const,     href: "?tab=masters" },
+  { id: "share_link" as const,       labelKey: "onboarding.checklist.share_link" as const,       href: "?tab=channels" },
+  { id: "first_booking" as const,    labelKey: "onboarding.checklist.first_booking" as const,    href: "?tab=appointments" },
+  { id: "fill_description" as const, labelKey: "onboarding.checklist.fill_description" as const, href: "?tab=settings" },
+  { id: "add_logo" as const,         labelKey: "onboarding.checklist.add_logo" as const,         href: "?tab=settings" },
+  { id: "add_cover" as const,        labelKey: "onboarding.checklist.add_cover" as const,        href: "?tab=public_profile" },
+  { id: "activate_public" as const,  labelKey: "onboarding.checklist.activate_public" as const,  href: "?tab=public_profile" },
 ];
 
 export function OnboardingChecklist({ tenantId }: Props) {

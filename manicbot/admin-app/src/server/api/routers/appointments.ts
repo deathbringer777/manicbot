@@ -347,4 +347,169 @@ export const appointmentsRouter = createTRPCRouter({
 
       return { ok: true, appointmentId: aptId };
     }),
+
+  /**
+   * rescheduleAppointment — move an existing booking to a new time slot
+   * (and/or master) without going through the full create flow. Powers
+   * Google-Calendar-style drag-to-reschedule from the Day/Week grids.
+   *
+   * Behaviour:
+   *   - Slot-conflict guard via shared `slotsBusy()` with
+   *     `excludeAppointmentId` so the appointment doesn't collide with
+   *     itself.
+   *   - Resets `syncRetries / syncRetryAfter / syncLastError` so the next
+   *     `phaseGcalSync` cron picks the row back up and updates the linked
+   *     Google Calendar event at the new time. The Google event_id is
+   *     preserved on the row so the sync becomes a PATCH, not a re-create.
+   *   - Re-arms the reminder flags (`remH24 / remH2 = 0`) so the cron fires
+   *     reminders for the NEW time, not the old one.
+   *   - Worker notify is intentionally NOT called here — drag-to-reschedule
+   *     happens frequently during the day and we don't want to spam the
+   *     client with a "your appointment moved" message every time the
+   *     owner nudges a block by 15 minutes. Adding an explicit "notify
+   *     client" action stays as a future, opt-in follow-up.
+   */
+  rescheduleAppointment: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      appointmentId: z.string().min(1),
+      newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      newTime: z.string().regex(/^\d{2}:\d{2}$/),
+      newMasterId: z.number().int().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Load the appointment up front — we need its current master/service
+      // both for the conflict check (service duration) and for the master
+      // role-scoping rule below.
+      const [apt] = await ctx.db
+        .select()
+        .from(appointments)
+        .where(and(
+          eq(appointments.id, input.appointmentId),
+          eq(appointments.tenantId, input.tenantId),
+        ))
+        .limit(1);
+      if (!apt) throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+
+      // Refuse to move terminal rows — cancelled / rejected / no-show /
+      // done bookings shouldn't be revivable by a drag gesture.
+      if (apt.cancelled === 1 || apt.noShow === 1 || apt.status === "rejected" || apt.status === "done") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "appointment_terminal" });
+      }
+
+      const newMasterId = input.newMasterId ?? apt.masterId;
+      if (newMasterId == null) throw new TRPCError({ code: "BAD_REQUEST", message: "master_required" });
+
+      // Role scoping: masters can only move bookings on their own calendar
+      // and can't reassign to another master. Mirrors `createManual`.
+      if (ctx.webUser?.webRole === "master") {
+        const [masterRow] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)))
+          .limit(1);
+        if (!masterRow || masterRow.chatId !== apt.masterId || newMasterId !== apt.masterId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Masters can only reschedule on their own calendar",
+          });
+        }
+      }
+
+      // No-op short-circuit: if nothing actually changed, return early so
+      // we don't pay the conflict check + sync-reset cost.
+      if (
+        apt.date === input.newDate &&
+        apt.time === input.newTime &&
+        apt.masterId === newMasterId
+      ) {
+        return { ok: true, appointmentId: apt.id, unchanged: true };
+      }
+
+      // Resolve service duration for the conflict check.
+      const [svc] = await ctx.db
+        .select()
+        .from(services)
+        .where(and(
+          eq(services.tenantId, input.tenantId),
+          eq(services.svcId, apt.svcId),
+        ))
+        .limit(1);
+      const durationMin = svc?.duration ?? 60;
+
+      const busy = await slotsBusy({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        masterId: newMasterId,
+        date: input.newDate,
+        startTime: input.newTime,
+        durationMin,
+        excludeAppointmentId: apt.id,
+      });
+      if (busy.busy) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "slot_conflict",
+          cause: busy.conflict,
+        });
+      }
+
+      const [h, m] = input.newTime.split(":").map(Number);
+      const [y, mo, d] = input.newDate.split("-").map(Number);
+      const newTs = Math.floor(Date.UTC(y!, mo! - 1, d!, h!, m!) / 1000);
+
+      try {
+        await ctx.db
+          .update(appointments)
+          .set({
+            date: input.newDate,
+            time: input.newTime,
+            ts: newTs,
+            masterId: newMasterId,
+            // Re-queue Google Calendar sync — googleEventId stays so the
+            // sync handler PATCHes the existing event instead of creating
+            // a duplicate.
+            syncRetries: 0,
+            syncRetryAfter: null,
+            syncLastError: null,
+            // Re-arm reminders so they fire at the new time.
+            remH24: 0,
+            remH2: 0,
+          })
+          .where(and(
+            eq(appointments.id, apt.id),
+            eq(appointments.tenantId, input.tenantId),
+          ));
+      } catch (e) {
+        if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? ""))) {
+          throw new TRPCError({ code: "CONFLICT", message: "slot_conflict" });
+        }
+        throw e;
+      }
+
+      // Analytics event — best-effort, mirrors createManual.
+      try {
+        const d1 = (ctx as unknown as { db: { $client?: { prepare?: (s: string) => { bind: (...a: unknown[]) => { run: () => Promise<unknown> } } } } }).db.$client;
+        const actorId = String(ctx.webUser?.id ?? "unknown");
+        const now = Math.floor(Date.now() / 1000);
+        const props = JSON.stringify({
+          source: "drag_reschedule",
+          appointmentId: apt.id,
+          fromDate: apt.date,
+          fromTime: apt.time,
+          fromMasterId: apt.masterId,
+          toDate: input.newDate,
+          toTime: input.newTime,
+          toMasterId: newMasterId,
+        });
+        if (d1?.prepare) {
+          await d1.prepare("INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at) VALUES (?, ?, ?, ?, ?)")
+            .bind(input.tenantId, actorId, "booking.rescheduled", props, now).run();
+        }
+      } catch { /* non-fatal */ }
+
+      return { ok: true, appointmentId: apt.id, unchanged: false };
+    }),
 });

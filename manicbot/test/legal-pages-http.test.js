@@ -201,4 +201,35 @@ describe('tryLegalPages', () => {
     expect(body).toMatch(/calendar\.events/);
     expect(body).toMatch(/calendar\.readonly/);
   });
+
+  // Referral program ToS — referral footer in /settings?section=referrals
+  // links to /rules (admin SPA, 4 lang) AND to the static /terms for Meta
+  // crawlers. Both must stay in sync — these assertions pin the static side.
+  describe('Terms — Referral program section', () => {
+    it('Effective date is bumped to 2026-05-16', async () => {
+      const res = tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'));
+      const body = await res.text();
+      expect(body).toContain('Effective date: 2026-05-16');
+    });
+
+    it('contains a "Referral program" section with the reward & clawback terms', async () => {
+      const res = tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'));
+      const body = await res.text();
+      expect(body).toContain('<h2>7. Referral program</h2>');
+      // Core reward terms (so removing them on a rewrite fails the test loud)
+      expect(body).toMatch(/20% off their first month/);
+      expect(body).toMatch(/one free month/i);
+      expect(body).toMatch(/6 free months/);
+      expect(body).toMatch(/Rewards are reversed/i);
+      expect(body).toMatch(/Self-referrals/i);
+    });
+
+    it('Contact section is renumbered to 8.', async () => {
+      const res = tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'));
+      const body = await res.text();
+      expect(body).toContain('<h2>8. Contact</h2>');
+      // Old "7. Contact" must be gone — guards against half-renumbered states.
+      expect(body).not.toContain('<h2>7. Contact</h2>');
+    });
+  });
 });

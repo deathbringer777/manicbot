@@ -43,6 +43,7 @@ import { ReferralOverviewTeaser } from "~/components/dashboard/ReferralOverviewT
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { EmptyState } from "~/components/ui/EmptyState";
+import { Switch } from "~/components/ui/Switch";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 import { NAIL_EMOJIS } from "~/lib/appointments";
@@ -1088,10 +1089,12 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               <p className="text-sm font-medium text-slate-900 dark:text-white">{t("salon.publicProfile.showInCatalog", lang)}</p>
               <p className="text-xs text-slate-500">{t("salon.publicProfile.findInSearch", lang)}</p>
             </div>
-            <button onClick={() => setIsPublic((v) => !v)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-700"}`}>
-              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch
+              checked={isPublic}
+              onChange={setIsPublic}
+              aria-label={t("salon.publicProfile.showInCatalog", lang)}
+              data-testid="public-profile-visibility-toggle"
+            />
           </div>
 
           <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
@@ -1239,17 +1242,16 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   return (
                     <div key={day} data-testid={`workhours-row-${day}`} className="flex items-center gap-2">
                       <span className="w-24 shrink-0 text-xs text-slate-700 dark:text-slate-300">{t(`salon.publicProfile.day.${day}`, lang)}</span>
-                      <button
-                        type="button"
-                        aria-label={t("salon.publicProfile.dayOff", lang)}
-                        onClick={() => setWorkHours((prev) => ({
+                      <Switch
+                        size="sm"
+                        checked={!isOff}
+                        onChange={(next) => setWorkHours((prev) => ({
                           ...prev,
-                          [day]: isOff ? { open: "09:00", close: "18:00" } : null,
+                          [day]: next ? { open: "09:00", close: "18:00" } : null,
                         }))}
-                        className={`shrink-0 relative h-5 w-9 rounded-full transition-colors ${isOff ? "bg-slate-300 dark:bg-slate-700" : "bg-brand-500"}`}
-                      >
-                        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isOff ? "translate-x-0.5" : "translate-x-[18px]"}`} />
-                      </button>
+                        aria-label={t("salon.publicProfile.workingDay", lang)}
+                        data-testid={`workhours-toggle-${day}`}
+                      />
                       {isOff ? (
                         <span className="flex-1 text-xs text-slate-500 italic">{t("salon.publicProfile.dayOff", lang)}</span>
                       ) : (

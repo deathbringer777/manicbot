@@ -11,6 +11,7 @@ import { useRole } from "~/components/RoleContext";
 import { t, type Lang } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
+import { Switch } from "~/components/ui/Switch";
 
 /**
  * Sidebar tabs that can be toggled. `navKey` matches the sidebar's tNav key
@@ -31,24 +32,6 @@ const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; navKey: string }[] = [
 
 function tabLabel(navKey: string, lang: Lang): string {
   return tNav(navKey, lang);
-}
-
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-        on ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
-      }`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-          on ? "translate-x-6" : "translate-x-1"
-        }`}
-      />
-    </button>
-  );
 }
 
 export function AppearanceSection() {
@@ -115,7 +98,11 @@ export function AppearanceSection() {
                 <span className={`text-sm flex-1 transition-colors ${visible ? "text-slate-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
                   {tabLabel(navKey, lang)}
                 </span>
-                <Toggle on={visible} onToggle={() => toggleTab(tab)} />
+                <Switch
+                  checked={visible}
+                  onChange={() => toggleTab(tab)}
+                  aria-label={tabLabel(navKey, lang)}
+                />
               </div>
             );
           })}
@@ -141,7 +128,11 @@ export function AppearanceSection() {
             <span className={`text-sm flex-1 transition-colors ${prefs.showTodayApts ? "text-slate-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-500"}`}>
               {t("settings.todayAptsList", lang)}
             </span>
-            <Toggle on={prefs.showTodayApts} onToggle={() => setShowTodayApts(!prefs.showTodayApts)} />
+            <Switch
+              checked={prefs.showTodayApts}
+              onChange={setShowTodayApts}
+              aria-label={t("settings.todayAptsList", lang)}
+            />
           </div>
         </div>
       </section>

@@ -431,6 +431,7 @@ const translations = {
   "salon.publicProfile.opens":           { ru: "Открытие", ua: "Відкриття", en: "Opens", pl: "Otwarcie" },
   "salon.publicProfile.closes":          { ru: "Закрытие", ua: "Закриття", en: "Closes", pl: "Zamknięcie" },
   "salon.publicProfile.dayOff":          { ru: "Выходной", ua: "Вихідний", en: "Day off", pl: "Wolny" },
+  "salon.publicProfile.workingDay":      { ru: "Рабочий день", ua: "Робочий день", en: "Working day", pl: "Dzień roboczy" },
   "salon.publicProfile.day.mon":         { ru: "Понедельник", ua: "Понеділок", en: "Monday", pl: "Poniedziałek" },
   "salon.publicProfile.day.tue":         { ru: "Вторник", ua: "Вівторок", en: "Tuesday", pl: "Wtorek" },
   "salon.publicProfile.day.wed":         { ru: "Среда", ua: "Середа", en: "Wednesday", pl: "Środa" },

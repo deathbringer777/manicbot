@@ -15,6 +15,7 @@ import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { TestBadge } from "~/components/ui/TestBadge";
+import { Switch } from "~/components/ui/Switch";
 import { useRole } from "~/components/RoleContext";
 import { STATUS_LABELS, APT_BORDER } from "~/lib/appointments";
 
@@ -1021,22 +1022,17 @@ export function MasterDashboard({
                     {t("delegation.toggleDesc", lang)}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => updateDelegation.mutate({
+                <Switch
+                  tone="emerald"
+                  checked={!!allowDelegation}
+                  onChange={(next) => updateDelegation.mutate({
                     tenantId,
                     masterId,
-                    allowDelegation: allowDelegation ? 0 : 1,
+                    allowDelegation: next ? 1 : 0,
                   })}
                   disabled={updateDelegation.isPending}
-                  className={`relative flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
-                    allowDelegation ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
-                  }`}
-                >
-                  <span className={`absolute h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    allowDelegation ? "translate-x-6" : "translate-x-1"
-                  }`} />
-                </button>
+                  aria-label={t("delegation.toggleLabel", lang)}
+                />
               </div>
               <p className={`text-xs flex items-center gap-1.5 ${allowDelegation ? "text-emerald-500" : "text-slate-500"}`}>
                 {allowDelegation

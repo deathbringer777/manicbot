@@ -37,6 +37,7 @@ import { marketingAutopilotRouter } from "~/server/api/routers/marketingAutopilo
 import { clientsRouter } from "~/server/api/routers/clients";
 import { otpRouter } from "~/server/api/routers/otp";
 import { referralsRouter } from "~/server/api/routers/referrals";
+import { messengerRouter } from "~/server/api/routers/messenger";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -77,6 +78,7 @@ export const appRouter = createTRPCRouter({
   clients: clientsRouter,
   otp: otpRouter,
   referrals: referralsRouter,
+  messenger: messengerRouter,
 });
 
 export type AppRouter = typeof appRouter;

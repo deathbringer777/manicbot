@@ -416,8 +416,8 @@ export function MasterDashboard({
       {isDelegating && (
         <div className={`mb-4 flex items-center gap-3 rounded-2xl px-4 py-3 ${
           allowDelegation
-            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
-            : "bg-amber-500/10 border border-amber-500/20 text-amber-300"
+            ? "bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300"
+            : "bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-300"
         }`}>
           <Eye className="h-4 w-4 shrink-0" />
           <div className="flex-1 min-w-0">

@@ -234,8 +234,8 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
           inSettings ? "w-full justify-between px-3 py-3" : "px-2.5 py-1.5"
         } ${
           activePreview
-            ? "bg-amber-500/20 border border-amber-500/30 text-amber-300"
-            : "bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10"
+            ? "bg-amber-100 border border-amber-300 text-amber-800 dark:bg-amber-500/20 dark:border-amber-500/30 dark:text-amber-300"
+            : "bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
         }`}
       >
         <span className="flex items-center gap-1.5 min-w-0">
@@ -403,8 +403,8 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
             onClick={() => setLang(code)}
             className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-medium transition-all ${
               lang === code
-                ? "bg-brand-500/20 border-brand-500/40 text-brand-300"
-                : "bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10"
+                ? "bg-brand-100 border-brand-300 text-brand-800 dark:bg-brand-500/20 dark:border-brand-500/40 dark:text-brand-300"
+                : "bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
             }`}
           >
             <span className="text-2xl leading-none">{flag}</span>
@@ -437,8 +437,8 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
                   onClick={() => { setLang(code); setOpen(false); }}
                   className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all ${
                     lang === code
-                      ? "bg-brand-500/20 border border-brand-500/40 text-brand-300"
-                      : "bg-white/5 border border-transparent text-slate-400 hover:text-white hover:bg-white/10"
+                      ? "bg-brand-100 border border-brand-300 text-brand-800 dark:bg-brand-500/20 dark:border-brand-500/40 dark:text-brand-300"
+                      : "bg-slate-100 border border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
                   }`}
                 >
                   <span className="text-base">{flag}</span>
@@ -618,7 +618,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
                 <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-brand-400" : ""}`} />
                 <span>{item.label}</span>
                 {isSettingsHub && (
-                  <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                  <span className="ml-auto rounded-full border border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
                     Mode
                   </span>
                 )}

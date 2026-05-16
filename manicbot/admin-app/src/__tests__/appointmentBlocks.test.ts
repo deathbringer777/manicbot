@@ -128,7 +128,7 @@ describe("appointmentBlocksRouter", () => {
       expect(res.ok).toBe(true);
       expect(res.id).toMatch(/^b\d+_/);
       expect(dbMock.insertCalls).toHaveLength(1);
-      expect(dbMock.insertCalls[0].values).toMatchObject({
+      expect(dbMock.insertCalls[0]!.values).toMatchObject({
         tenantId: TENANT,
         masterId: 1,
         type: "reservation",
@@ -160,7 +160,7 @@ describe("appointmentBlocksRouter", () => {
       expect(res.ok).toBe(true);
       // 3 days * 2 selects (apts, blocks) = 6 select calls.
       expect(dbMock.db.select).toHaveBeenCalledTimes(6);
-      expect(dbMock.insertCalls[0].values.endDate).toBe("2026-05-22");
+      expect(dbMock.insertCalls[0]!.values.endDate).toBe("2026-05-22");
     });
 
     it("rejects endDate before date", async () => {
@@ -197,7 +197,7 @@ describe("appointmentBlocksRouter", () => {
       const res = await caller.delete({ tenantId: TENANT, id: "blk_xyz" });
       expect(res.ok).toBe(true);
       expect(dbMock.updateCalls).toHaveLength(1);
-      expect(dbMock.updateCalls[0].values).toEqual({ cancelled: 1 });
+      expect(dbMock.updateCalls[0]!.values).toEqual({ cancelled: 1 });
       // No raw DELETEs — preserve audit trail.
       expect(dbMock.deleteCalls).toHaveLength(0);
     });

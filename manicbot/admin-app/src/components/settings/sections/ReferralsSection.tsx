@@ -60,7 +60,7 @@ const COPY = {
     shareWhatsApp: "WhatsApp",
     shareTelegram: "Telegram",
     shareIG: "Instagram",
-    shareTemplate: "Привет! Я пользуюсь ManicBot для записи клиентов — заходит. Тебе тоже даст 20% off первого месяца:",
+    shareTemplate: "Привет! Записываю клиентов через ManicBot — реально удобно (TG/WA/IG, напоминания, Google Calendar). По моей ссылке тебе 20% off первого месяца:",
   },
   ua: {
     title: "Поділитися з другом",
@@ -98,7 +98,7 @@ const COPY = {
     shareWhatsApp: "WhatsApp",
     shareTelegram: "Telegram",
     shareIG: "Instagram",
-    shareTemplate: "Привіт! Я користуюся ManicBot для запису клієнтів — заходить. Тобі також дасть 20% off першого місяця:",
+    shareTemplate: "Привіт! Записую клієнтів через ManicBot — реально зручно (TG/WA/IG, нагадування, Google Calendar). За моїм посиланням тобі 20% off першого місяця:",
   },
   en: {
     title: "Refer a friend",
@@ -136,7 +136,7 @@ const COPY = {
     shareWhatsApp: "WhatsApp",
     shareTelegram: "Telegram",
     shareIG: "Instagram",
-    shareTemplate: "Hey! I'm using ManicBot to manage bookings — really good. You'll get 20% off your first month with my link:",
+    shareTemplate: "Hey! I run my client bookings through ManicBot — really nice (TG/WA/IG, reminders, Google Calendar sync). My link gets you 20% off your first month:",
   },
   pl: {
     title: "Poleć znajomemu",
@@ -174,7 +174,7 @@ const COPY = {
     shareWhatsApp: "WhatsApp",
     shareTelegram: "Telegram",
     shareIG: "Instagram",
-    shareTemplate: "Cześć! Korzystam z ManicBot do umawiania klientów — naprawdę dobre. Dostaniesz 20% zniżki w pierwszym miesiącu:",
+    shareTemplate: "Cześć! Umawiam klientów przez ManicBota — naprawdę wygodne (TG/WA/IG, przypomnienia, Google Calendar). Z mojego linku dostaniesz 20% zniżki w pierwszym miesiącu:",
   },
 };
 
@@ -242,13 +242,21 @@ export function ReferralsSection() {
   const d = dashboard.data;
   const { invited, rewards, counters, code, shareUrl } = d;
 
+  // Append the inviter's UI language to the share URL so:
+  //   1. The /register page generates OG/Twitter metadata in that language
+  //      (Telegram, WhatsApp, Slack, iMessage previews match the message language).
+  //   2. LangContext on the landing page auto-switches to it for the invitee.
+  // Server-side buildShareUrl() stays language-agnostic — the lang is a
+  // per-share concern, not a property of the code itself.
+  const shareUrlLocalized = shareUrl ? `${shareUrl}&lang=${lang}` : null;
+
   const onShare = async () => {
-    if (!shareUrl) return;
+    if (!shareUrlLocalized) return;
     try {
       if (navigator.share) {
-        await navigator.share({ url: shareUrl, title: c.title, text: c.friendDetail });
+        await navigator.share({ url: shareUrlLocalized, title: c.title, text: c.friendDetail });
       } else {
-        await navigator.clipboard.writeText(shareUrl);
+        await navigator.clipboard.writeText(shareUrlLocalized);
       }
     } catch {
       /* user cancelled */
@@ -300,14 +308,14 @@ export function ReferralsSection() {
               </div>
             </div>
 
-            {shareUrl && (
+            {shareUrlLocalized && (
               <div>
                 <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{c.yourLink}</p>
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-300">
-                    {shareUrl}
+                    {shareUrlLocalized}
                   </span>
-                  <CopyButton value={shareUrl} label={c.copy} copiedLabel={c.copied} />
+                  <CopyButton value={shareUrlLocalized} label={c.copy} copiedLabel={c.copied} />
                   <button
                     type="button"
                     onClick={onShare}
@@ -398,10 +406,10 @@ export function ReferralsSection() {
         {invited.length === 0 ? (
           <>
             <p className="py-4 text-center text-xs text-slate-500 dark:text-slate-400">{c.noInvitedFriends}</p>
-            {shareUrl && (
+            {shareUrlLocalized && (
               <div className="flex flex-wrap justify-center gap-2 pt-2">
                 <a
-                  href={`https://wa.me/?text=${encodeURIComponent(`${c.shareTemplate} ${shareUrl}`)}`}
+                  href={`https://wa.me/?text=${encodeURIComponent(`${c.shareTemplate} ${shareUrlLocalized}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500"
@@ -410,7 +418,7 @@ export function ReferralsSection() {
                   {c.shareWhatsApp}
                 </a>
                 <a
-                  href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(c.shareTemplate)}`}
+                  href={`https://t.me/share/url?url=${encodeURIComponent(shareUrlLocalized)}&text=${encodeURIComponent(c.shareTemplate)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500"
@@ -422,7 +430,7 @@ export function ReferralsSection() {
                   type="button"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(`${c.shareTemplate} ${shareUrl}`);
+                      await navigator.clipboard.writeText(`${c.shareTemplate} ${shareUrlLocalized}`);
                     } catch { /* ignore */ }
                   }}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"

@@ -105,4 +105,20 @@ describe("Google Calendar runtime", () => {
     const { container } = renderRuntime("t_test");
     expect(container.firstChild).not.toBeNull();
   });
+
+  // Required by Google OAuth verification for sensitive scopes: the consent
+  // surface must show a "Limited Use" disclaimer in close proximity to the
+  // permission grant. Reviewers grep for the policy URL on this exact page.
+  it("DisconnectedState shows Google API Services User Data Policy disclaimer", () => {
+    renderRuntime("t_test");
+    const disclaimer = screen.getByTestId("gcal-google-api-disclaimer");
+    expect(disclaimer.textContent).toMatch(/Limited Use/);
+    const link = disclaimer.querySelector("a");
+    expect(link?.getAttribute("href")).toBe(
+      "https://developers.google.com/terms/api-services-user-data-policy"
+    );
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.textContent).toContain("Google API Services User Data Policy");
+  });
 });

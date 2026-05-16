@@ -37,7 +37,11 @@ type TR = {
   disconnect: string; confirmDisconnect: string;
   justConnected: string;
   errorGeneric: string; errorDenied: string; errorNoCalendar: string;
+  googleApiDisclaimer: string;
 };
+
+const GOOGLE_API_POLICY_URL = "https://developers.google.com/terms/api-services-user-data-policy";
+const GOOGLE_API_POLICY_NAME = "Google API Services User Data Policy";
 const COPY: Record<Lang, TR> = {
   ru: {
     disconnectedHeadline: "Подключите Google Календарь",
@@ -58,6 +62,8 @@ const COPY: Record<Lang, TR> = {
     errorGeneric: "Не удалось подключить Google Календарь. Попробуйте ещё раз.",
     errorDenied: "Доступ отменён в Google. Подключение не завершено.",
     errorNoCalendar: "В этом Google-аккаунте нет календаря с правом записи.",
+    googleApiDisclaimer:
+      "ManicBot использует информацию, получаемую из Google API, в соответствии с {policy}, включая требования Limited Use.",
   },
   ua: {
     disconnectedHeadline: "Підключіть Google Календар",
@@ -78,6 +84,8 @@ const COPY: Record<Lang, TR> = {
     errorGeneric: "Не вдалося підключити Google Календар. Спробуйте ще раз.",
     errorDenied: "Доступ скасовано в Google. Підключення не завершено.",
     errorNoCalendar: "У цьому Google-акаунті немає календаря з правом запису.",
+    googleApiDisclaimer:
+      "ManicBot використовує інформацію, отриману з Google API, відповідно до {policy}, включно з вимогами Limited Use.",
   },
   en: {
     disconnectedHeadline: "Connect Google Calendar",
@@ -98,6 +106,8 @@ const COPY: Record<Lang, TR> = {
     errorGeneric: "Couldn't connect Google Calendar. Please try again.",
     errorDenied: "Access denied in Google. Connection not completed.",
     errorNoCalendar: "No writable calendar on this Google account.",
+    googleApiDisclaimer:
+      "ManicBot's use of information received from Google APIs adheres to the {policy}, including the Limited Use requirements.",
   },
   pl: {
     disconnectedHeadline: "Podłącz Kalendarz Google",
@@ -118,8 +128,31 @@ const COPY: Record<Lang, TR> = {
     errorGeneric: "Nie udało się podłączyć Kalendarza Google. Spróbuj ponownie.",
     errorDenied: "Dostęp odrzucony w Google. Połączenie nie zakończone.",
     errorNoCalendar: "Na tym koncie Google nie ma kalendarza z prawem zapisu.",
+    googleApiDisclaimer:
+      "ManicBot wykorzystuje informacje otrzymane z interfejsów API Google zgodnie z {policy}, w tym wymaganiami Limited Use.",
   },
 };
+
+function GoogleApiDisclaimer({ template }: { template: string }) {
+  const parts = template.split("{policy}");
+  return (
+    <p
+      data-testid="gcal-google-api-disclaimer"
+      className="text-xs text-slate-500 dark:text-slate-400 mt-4 leading-relaxed"
+    >
+      {parts[0]}
+      <a
+        href={GOOGLE_API_POLICY_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline decoration-slate-400/60 hover:text-slate-700 dark:hover:text-slate-300"
+      >
+        {GOOGLE_API_POLICY_NAME}
+      </a>
+      {parts[1] ?? ""}
+    </p>
+  );
+}
 
 function pickLang(raw: string | undefined | null): Lang {
   if (raw === "ua" || raw === "en" || raw === "pl") return raw;
@@ -299,6 +332,9 @@ function DisconnectedState({
           </>
         )}
       </button>
+      <div className="max-w-md mx-auto mt-5">
+        <GoogleApiDisclaimer template={tr.googleApiDisclaimer} />
+      </div>
     </div>
   );
 }
@@ -357,6 +393,8 @@ function ConnectedState({
           </span>
         </Row>
       </dl>
+
+      <GoogleApiDisclaimer template={tr.googleApiDisclaimer} />
 
       <div className="flex items-center justify-between mt-6 pt-5 border-t border-slate-100 dark:border-white/5">
         <label className="inline-flex items-center gap-3 cursor-pointer select-none">

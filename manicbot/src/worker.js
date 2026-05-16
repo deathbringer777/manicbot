@@ -29,6 +29,7 @@ import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
+import { handleHealthRequest } from './http/healthHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
 import { captureError } from './utils/errorCapture.js';
@@ -279,6 +280,13 @@ export default {
       const gate = requireAdminAppConfigured(request, env, url);
       if (gate) return addSecurityHeaders(gate);
       return addSecurityHeaders(await proxyToAdminApp(request, env, url));
+    }
+
+    // Public liveness probe for external uptime monitors.
+    // See src/http/healthHttp.js — fixed shape, no D1/KV, no env echo.
+    // Routed before any heavy resolution so a stuck binding never takes it down.
+    if (url.pathname === '/api/health') {
+      return addSecurityHeaders(handleHealthRequest(request));
     }
 
     // Landing analytics ingest (CORS-enabled, consent-gated server-side).

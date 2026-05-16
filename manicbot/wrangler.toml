@@ -137,3 +137,20 @@ bucket_name = "manicbot-marketing-assets"
 
 [ai]
 binding = "AI"
+
+# ─── Workers Logs (head sampling) ──────────────────────────────────────────
+# Enabled pre-launch so prod errors surface in the Cloudflare dashboard +
+# `wrangler tail`. Pair with the in-house captureError() → D1 error_events
+# (God Mode /errors) — this gives us a second pane of glass at low cost.
+#
+# A crash that happens BEFORE captureError gets to write (e.g. in
+# validateSecurityConfig at startup, or inside the captureError path
+# itself) is invisible to /errors but visible here. That's the reason
+# this block is non-negotiable in production — see
+# test/wrangler-observability-invariant.test.js.
+#
+# head_sampling_rate = 1 means every invocation is logged. Drop to 0.1
+# once we cross ~1M req/day to keep billing in check.
+[observability]
+enabled = true
+head_sampling_rate = 1

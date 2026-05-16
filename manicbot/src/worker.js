@@ -16,6 +16,7 @@ import { tryLanding } from './http/landingHttp.js';
 import { tryLegalPages } from './http/legalPagesHttp.js';
 import { tryStripe } from './http/stripeHttp.js';
 import { tryAdminKeyRoutes } from './http/adminKeyHttp.js';
+import { tryMessengerOutboundRoute } from './http/messengerOutboundHttp.js';
 import { tryLeadRoutes } from './http/leadsHttp.js';
 import { tryGoogle } from './http/googleHttp.js';
 import { tryAdminPanel } from './http/adminPanelHttp.js';
@@ -349,6 +350,11 @@ export default {
     if (res) return res; // Stripe webhook — no browser headers needed
 
     res = await tryAdminKeyRoutes(request, env, url);
+    if (res) return addSecurityHeaders(res);
+
+    // Internal messenger relay (admin-app → Worker → channel adapter).
+    // Bearer-keyed; routed before any browser-facing handlers.
+    res = await tryMessengerOutboundRoute(request, env, url);
     if (res) return addSecurityHeaders(res);
 
     res = await tryLeadRoutes(request, env, url, executionCtx);

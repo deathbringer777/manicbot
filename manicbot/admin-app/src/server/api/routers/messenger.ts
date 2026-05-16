@@ -34,6 +34,8 @@ import {
   assertMessengerTenantAccess,
   assertThreadMember,
 } from "~/server/api/messenger/access";
+import { env } from "~/env";
+import { log } from "~/server/utils/logger";
 
 // ─── Validation ────────────────────────────────────────────────────
 
@@ -50,6 +52,52 @@ function nowSec(): number {
 function preview(body: string): string {
   const oneLine = body.replace(/\s+/g, " ").trim();
   return oneLine.length > PREVIEW_MAX ? oneLine.slice(0, PREVIEW_MAX) : oneLine;
+}
+
+/**
+ * Relay a client_conv reply through the Worker → channel adapter.
+ *
+ * Returns:
+ *   { ok: true, externalMsgId } on successful send
+ *   { ok: false, error } on channel/transport/permission failure
+ *
+ * Never throws — the admin-app already wrote the thread_messages row before
+ * we call this, so the staff message is preserved even if the relay fails.
+ * UI surfaces the error chip so the user can retry / switch to a template.
+ */
+async function relayToWorker(args: {
+  tenantId: string;
+  threadId: string;
+  body: string;
+  replyToMessageId?: string;
+}): Promise<{ ok: true; externalMsgId: string | null } | { ok: false; error: string }> {
+  const workerUrl = env.WORKER_PUBLIC_URL;
+  const adminKey = env.ADMIN_KEY;
+  if (!workerUrl || !adminKey) {
+    log.warn("messenger.relay", {
+      message: "WORKER_PUBLIC_URL or ADMIN_KEY not set — skipping outbound relay",
+    });
+    return { ok: false, error: "relay_not_configured" };
+  }
+  try {
+    const resp = await fetch(`${workerUrl.replace(/\/$/, "")}/admin/messenger-outbound`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
+      body: JSON.stringify(args),
+    });
+    const data = await resp.json().catch(() => null) as
+      | { ok: boolean; external_msg_id?: string | null; error?: string }
+      | null;
+    if (!resp.ok || !data?.ok) {
+      const error = data?.error ?? `relay_${resp.status}`;
+      log.warn("messenger.relay", { message: "Worker relay failed", error, status: resp.status });
+      return { ok: false, error };
+    }
+    return { ok: true, externalMsgId: data.external_msg_id ?? null };
+  } catch (e) {
+    log.error("messenger.relay", e instanceof Error ? e : new Error(String(e)));
+    return { ok: false, error: "relay_network_error" };
+  }
 }
 
 // ─── Router ────────────────────────────────────────────────────────
@@ -290,12 +338,33 @@ export const messengerRouter = createTRPCRouter({
           ),
         );
 
-      // Phase 2: if thread.kind === 'client_conv' AND !isInternalNote, call
-      // Worker /admin/messenger-outbound here to actually send through the
-      // channel adapter. Phase 3: also publish to MESSENGER_HUB DO for WS
-      // fan-out.
+      // Phase 2 — relay to Worker → channel adapter for client_conv threads.
+      // Internal notes never relay (they're staff-only by design). Phase 3
+      // will also publish to MESSENGER_HUB DO for WebSocket fan-out.
+      let relay: { ok: true; externalMsgId: string | null } | { ok: false; error: string } | null = null;
+      if (thread.kind === "client_conv" && !isInternalNote) {
+        relay = await relayToWorker({
+          tenantId: input.tenantId,
+          threadId: input.threadId,
+          body,
+          replyToMessageId: input.replyToMessageId,
+        });
+        if (relay.ok && relay.externalMsgId) {
+          // Stamp the channel-side message id onto our row so dedup +
+          // delivery confirmation work later.
+          await ctx.db
+            .update(threadMessages)
+            .set({ externalMsgId: relay.externalMsgId })
+            .where(
+              and(
+                eq(threadMessages.id, id),
+                eq(threadMessages.tenantId, input.tenantId),
+              ),
+            );
+        }
+      }
 
-      return { id, createdAt: now };
+      return { id, createdAt: now, relay };
     }),
 
   // ═══════════════════════════════════════════════════════════════

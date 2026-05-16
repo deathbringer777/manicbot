@@ -375,6 +375,127 @@ describe("messengerRouter.sendMessage", () => {
     expect((insert!.values as Record<string, unknown>).isInternalNote).toBe(0);
   });
 
+  it("does NOT relay to Worker for staff_dm threads (no client_conv)", async () => {
+    const dbMock = createDbMock([
+      [
+        {
+          id: "th_1",
+          tenantId: "t_a",
+          kind: "staff_dm",
+          title: null,
+          clientConversationId: null,
+          dmKey: "x:y",
+          createdByWebUserId: "w_x",
+          createdAt: 1,
+          lastMessageAt: 2,
+          lastMessagePreview: null,
+          archived: 0,
+        },
+      ],
+      [
+        {
+          threadId: "th_1",
+          memberKind: "web_user",
+          memberRef: "w_owner",
+          role: "member",
+          joinedAt: 1,
+          mutedUntil: null,
+          lastReadMessageId: null,
+          lastReadAt: null,
+        },
+      ],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_a") as never);
+    const out = await caller.sendMessage({
+      tenantId: "t_a",
+      threadId: "th_1",
+      body: "staff to staff",
+    });
+    // staff_dm never relays → relay must be null
+    expect(out.relay).toBeNull();
+  });
+
+  it("relay fires for client_conv when isInternalNote=false; returns relay_not_configured when env unset", async () => {
+    // The test setup mocks `~/env` without WORKER_PUBLIC_URL / ADMIN_KEY, so
+    // relayToWorker short-circuits to { ok: false, error: 'relay_not_configured' }.
+    const dbMock = createDbMock([
+      [
+        {
+          id: "th_c",
+          tenantId: "t_a",
+          kind: "client_conv",
+          title: null,
+          clientConversationId: "conv_1",
+          dmKey: null,
+          createdByWebUserId: null,
+          createdAt: 1,
+          lastMessageAt: 2,
+          lastMessagePreview: null,
+          archived: 0,
+        },
+      ],
+      [
+        {
+          threadId: "th_c",
+          memberKind: "web_user",
+          memberRef: "w_owner",
+          role: "member",
+          joinedAt: 1,
+          mutedUntil: null,
+          lastReadMessageId: null,
+          lastReadAt: null,
+        },
+      ],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_a") as never);
+    const out = await caller.sendMessage({
+      tenantId: "t_a",
+      threadId: "th_c",
+      body: "ping the client",
+    });
+    expect(out.relay).toEqual({ ok: false, error: "relay_not_configured" });
+  });
+
+  it("relay is NULL when isInternalNote=true on client_conv (internal notes never relay)", async () => {
+    const dbMock = createDbMock([
+      [
+        {
+          id: "th_c",
+          tenantId: "t_a",
+          kind: "client_conv",
+          title: null,
+          clientConversationId: "conv_1",
+          dmKey: null,
+          createdByWebUserId: null,
+          createdAt: 1,
+          lastMessageAt: 2,
+          lastMessagePreview: null,
+          archived: 0,
+        },
+      ],
+      [
+        {
+          threadId: "th_c",
+          memberKind: "web_user",
+          memberRef: "w_owner",
+          role: "member",
+          joinedAt: 1,
+          mutedUntil: null,
+          lastReadMessageId: null,
+          lastReadAt: null,
+        },
+      ],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_a") as never);
+    const out = await caller.sendMessage({
+      tenantId: "t_a",
+      threadId: "th_c",
+      body: "secret staff note",
+      isInternalNote: true,
+    });
+    expect(out.relay).toBeNull();
+  });
+
   it("preserves is_internal_note=1 on client_conv threads", async () => {
     const dbMock = createDbMock([
       [

@@ -1,8 +1,29 @@
 "use client";
 
 import { useRef, useState, type KeyboardEvent } from "react";
-import { Send, StickyNote } from "lucide-react";
+import { Send, StickyNote, AlertTriangle } from "lucide-react";
 import { api } from "~/trpc/react";
+
+function describeRelayError(code: string): string {
+  switch (code) {
+    case "outside_message_window":
+      return "Окно 24 ч закрыто — нужен шаблон";
+    case "channel_token_unavailable":
+      return "Токен канала недоступен";
+    case "channel_send_failed":
+      return "Канал отклонил отправку";
+    case "thread_not_found_or_not_client_conv":
+      return "Тред не привязан к каналу";
+    case "channel_not_supported":
+      return "Канал не поддерживает ответ";
+    case "relay_not_configured":
+      return "Relay не настроен на сервере";
+    case "relay_network_error":
+      return "Сеть не дотянулась до Worker";
+    default:
+      return code;
+  }
+}
 
 interface Props {
   tenantId: string;
@@ -15,12 +36,14 @@ interface Props {
 export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSent }: Props) {
   const [body, setBody] = useState("");
   const [isInternalNote, setIsInternalNote] = useState(false);
+  const [relayError, setRelayError] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const utils = api.useUtils();
 
   const sendMutation = api.messenger.sendMessage.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setBody("");
+      setRelayError(result.relay && !result.relay.ok ? result.relay.error : null);
       // Refresh thread + inbox
       await Promise.all([
         utils.messenger.getThread.invalidate({ tenantId, threadId }),
@@ -122,6 +145,15 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
       {sendMutation.error && (
         <p className="px-3 pb-2 text-[10px] text-red-500">
           {sendMutation.error.message}
+        </p>
+      )}
+      {relayError && (
+        <p
+          className="flex items-center gap-1 px-3 pb-2 text-[10px] text-amber-600 dark:text-amber-400"
+          data-testid="relay-error"
+        >
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          Сообщение сохранено, но не отправлено клиенту: {describeRelayError(relayError)}
         </p>
       )}
     </div>

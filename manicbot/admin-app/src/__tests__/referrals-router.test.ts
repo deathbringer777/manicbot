@@ -128,7 +128,8 @@ describe("referrals.getMyDashboard counters", () => {
     ];
 
     const mock = createDbMock([
-      [{ code: "OWNE-AB23K" }], // active code lookup
+      [{ code: "OWNE-AB23K" }], // ensureActiveReferralCode: existing lookup → hit, no insert
+      [{ code: "OWNE-AB23K" }], // dashboard codeRow lookup
       inviteRows,                // invited rows
       rewardRows,                // reward rows
     ]);
@@ -151,6 +152,36 @@ describe("referrals.getMyDashboard counters", () => {
     // Invitee names should be masked.
     expect(out.invited[0]!.inviteeMaskedName).toMatch(/^Anna K\.?$/);
     expect(out.invited[3]!.inviteeMaskedName).toMatch(/^Bad A\.?$/);
+
+    // No insert — code already existed.
+    expect(mock.insertCalls.length).toBe(0);
+  });
+
+  it("auto-creates active code for tenant_owner on first dashboard visit", async () => {
+    // First-time user: no code row yet. ensureActiveReferralCode should
+    // insert one, then the dashboard codeRow lookup returns it.
+    const mock = createDbMock([
+      [],                            // ensureActiveReferralCode: existing lookup → empty (forces insert)
+      [{ code: "OWNE-AB23K" }],      // dashboard codeRow lookup → row just inserted
+      [],                            // invited rows
+      [],                            // reward rows
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(mock.db, TENANT));
+
+    const out = await caller.getMyDashboard();
+    expect(out.code).toBeTruthy();
+    expect(out.code).toMatch(/^[A-Z]{4}-[A-Z0-9]{5}$/);
+    expect(out.shareUrl).toContain("?ref=");
+    expect(out.counters.pending).toBe(0);
+    expect(out.invited).toEqual([]);
+
+    // Exactly one insert into referral_codes with isActive=1.
+    expect(mock.insertCalls.length).toBe(1);
+    expect(mock.insertCalls[0]!.values).toMatchObject({
+      ownerWebUserId: "w_owner",
+      ownerTenantId: TENANT,
+      isActive: 1,
+    });
   });
 });
 

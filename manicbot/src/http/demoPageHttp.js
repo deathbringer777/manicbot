@@ -16,7 +16,7 @@ const HTML = `<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>ManicBot — Демо</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -189,6 +189,9 @@ const HTML = `<!DOCTYPE html>
     .chat-header .info small::before{content:"";width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,.2)}
 
     #mb-demo{flex:1;min-height:0;overflow:hidden}
+    @supports (padding-bottom: env(safe-area-inset-bottom)){
+      #mb-demo{padding-bottom:env(safe-area-inset-bottom)}
+    }
 
     @media(max-width:380px){
       .iphone{width:272px;border-radius:48px}

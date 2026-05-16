@@ -39,6 +39,7 @@ import { markReviewRequested } from '../services/reviews.js';
 import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manager.js';
 import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
+import { runCampaignSend as runMarketingCampaign } from '../services/marketing/sender.js';
 
 // Per-phase idempotency window (seconds). The 15-min cron tick fires every
 // 900 s; phases with windowSec > 900 will skip most ticks.
@@ -50,6 +51,9 @@ export const PHASE_WINDOWS = Object.freeze({
   promos: 24 * 60 * 60,       // 24 h
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
+  // PR-A marketing send dispatch — tight window because we want scheduled
+  // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
+  marketingDispatch: 60,
 });
 
 /**
@@ -701,6 +705,76 @@ export async function phaseRetention(ctx, tenantId, _now) {
   }
 }
 
+// ─── PR-A: Marketing campaign dispatch ───────────────────────────────────
+/**
+ * Pick up `marketing_campaigns` that are due and fan them out via the
+ * worker-side sender. Two queues:
+ *
+ *   1. status='scheduled' AND scheduled_at <= nowSec   (planned sends)
+ *   2. status='sending' AND started_at < nowSec - 30m  (crashed-mid-fanout)
+ *
+ * Both run through `runCampaignSend` which is idempotent at the
+ * (campaign, contact) level — re-running it on a partially-sent campaign
+ * will only insert send rows for contacts that don't yet have one.
+ * Limit of 10 campaigns per cron tick to keep CPU bounded.
+ */
+export async function phaseMarketingDispatch(ctx, nowMs) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  const MAX_PER_TICK = 10;
+  const STUCK_SEC = 30 * 60;
+
+  const nowS = Math.floor((nowMs ?? Date.now()) / 1000);
+  const stuckCutoff = nowS - STUCK_SEC;
+
+  let due = [];
+  try {
+    due = await dbAll(ctx,
+      `SELECT id FROM marketing_campaigns
+       WHERE tenant_id = ?
+         AND (
+           (status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?)
+           OR (status = 'sending' AND coalesce(started_at, 0) < ?)
+         )
+       ORDER BY scheduled_at ASC NULLS LAST, updated_at ASC
+       LIMIT ?`,
+      ctx.tenantId, nowS, stuckCutoff, MAX_PER_TICK);
+  } catch (e) {
+    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)),
+      { action: 'marketing_dispatch_query' });
+    return;
+  }
+
+  if (due.length === 0) return;
+
+  for (const row of due) {
+    try {
+      const r = await runMarketingCampaign(ctx, ctx.tenantId, row.id);
+      void logEvent(ctx, 'cron.marketing_dispatch.sent', {
+        level: r.ok ? 'info' : 'warn',
+        tenantId: ctx.tenantId,
+        message: `marketing dispatch ${row.id}: ${r.status} sent=${r.sent} failed=${r.failed} deferred=${r.deferred}`,
+        campaignId: row.id,
+        sent: r.sent,
+        failed: r.failed,
+        deferred: r.deferred,
+        finalStatus: r.status,
+        error: r.error,
+      });
+    } catch (e) {
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)),
+        { action: 'marketing_dispatch', campaignId: row.id });
+      void logEvent(ctx, 'cron.phase.error', {
+        level: 'error',
+        tenantId: ctx.tenantId,
+        message: `marketing dispatch ${row.id} threw: ${e?.message ?? 'unknown'}`,
+        phase: 'marketingDispatch',
+        campaignId: row.id,
+        error: e?.message?.slice(0, 200),
+      });
+    }
+  }
+}
+
 /**
  * Thin orchestrator. Each phase runs inside `runPhase` which:
  *   - Checks the idempotency window (skip if last-run was inside the window).
@@ -778,6 +852,10 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'promos', () => phasePromos(ctx, now));
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
+    // PR-A: marketing campaign dispatch. Picks up status='scheduled' rows
+    // whose scheduled_at <= now, plus rebooks any campaign stuck in
+    // status='sending' for >30min (crashed mid-fan-out).
+    await runPhase(ctx, 'marketingDispatch', () => phaseMarketingDispatch(ctx, now));
     // Referral reward 12-month expiry sweep. Idempotent — `runPhase` enforces
     // a 24h gap via `cron:phase:referral_expiry:last`, and individual reward
     // reversals carry an Idempotency-Key to Stripe.

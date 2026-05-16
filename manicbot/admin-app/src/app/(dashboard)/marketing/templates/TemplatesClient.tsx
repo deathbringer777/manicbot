@@ -1,11 +1,17 @@
 "use client";
 
-import { MarketingShell, StubCard } from "../MarketingShell";
+import { useState } from "react";
+import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
-import { FileText } from "lucide-react";
+import { FileText, Pencil, Trash2, Plus } from "lucide-react";
 import { useMarketingScope } from "../useMarketingScope";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
+import { TemplateFormModal, type TemplateInitial } from "~/components/marketing/TemplateFormModal";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 
 export default function TemplatesClient() {
+  const { lang } = useLang();
   const { mode, tenantId } = useMarketingScope();
 
   const adminListQ = api.marketing.templatesList.useQuery({}, { enabled: mode === "admin" });
@@ -15,34 +21,151 @@ export default function TemplatesClient() {
   );
   const listQ = mode === "admin" ? adminListQ : tenantListQ;
 
+  const utils = api.useUtils();
+  function invalidate() {
+    if (mode === "admin") void utils.marketing.templatesList.invalidate();
+    else if (tenantId) void utils.marketingTenant.templatesList.invalidate({ tenantId });
+  }
+
+  const adminDelete = api.marketing.templateDelete.useMutation({ onSuccess: invalidate });
+  const tenantDelete = api.marketingTenant.templateDelete.useMutation({ onSuccess: invalidate });
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<TemplateInitial | null>(null);
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+
+  const scope = mode === "admin"
+    ? ({ mode: "admin" } as const)
+    : tenantId
+      ? ({ mode: "tenant", tenantId } as const)
+      : null;
+
+  function doDelete() {
+    if (!deleting) return;
+    if (mode === "admin") {
+      adminDelete.mutate({ id: deleting.id });
+    } else if (tenantId) {
+      tenantDelete.mutate({ tenantId, id: deleting.id });
+    }
+    setDeleting(null);
+  }
+
   return (
-    <MarketingShell title="Marketing • Templates" subtitle="Email and SMS templates with merge variables">
-      <StubCard
-        title="Message Templates"
-        description="Reusable HTML email and plain-text SMS templates. Use {{name}}, {{salon}}, and other merge variables to personalize content."
-      >
+    <MarketingShell title="Marketing • Templates" subtitle={t("marketing.template.subtitle", lang)}>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("marketing.template.cardTitle", lang)}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {t("marketing.template.cardDescription", lang)}
+            </p>
+          </div>
+          {scope && (
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
+              data-testid="tpl-new"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("marketing.template.create", lang)}
+            </button>
+          )}
+        </div>
+
         {listQ.isLoading ? (
-          <div className="text-xs text-slate-500 py-4 text-center">Loading…</div>
+          <div className="text-xs text-slate-500 py-4 text-center">{t("common.loading", lang)}…</div>
         ) : listQ.data?.length ? (
-          <ul className="space-y-1.5 mt-2">
-            {listQ.data.map((t: any) => (
-              <li key={t.id} className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs">
-                <div>
-                  <div className="font-semibold text-slate-900 dark:text-slate-100">{t.name}</div>
-                  <div className="text-[10px] text-slate-500">{t.channel} • {t.locale ?? "multi"}</div>
+          <ul className="space-y-1.5">
+            {listQ.data.map((row: any) => (
+              <li
+                key={row.id}
+                className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs"
+              >
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                    {row.name}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800/60 mr-1.5">
+                      {row.channel}
+                    </span>
+                    {row.locale ?? "multi"} • <span className="font-mono">{row.id}</span>
+                  </div>
                 </div>
-                <span className="text-[10px] text-slate-500 font-mono">{t.id}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditing({
+                      id: row.id,
+                      name: row.name,
+                      channel: row.channel,
+                      subject: row.subject ?? null,
+                      body: row.body ?? "",
+                      locale: row.locale ?? null,
+                    })}
+                    className="rounded p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    aria-label={t("common.edit", lang)}
+                    title={t("common.edit", lang)}
+                    data-testid={`tpl-edit-${row.id}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleting({ id: row.id, name: row.name })}
+                    className="rounded p-1.5 text-slate-500 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                    aria-label={t("common.delete", lang)}
+                    title={t("common.delete", lang)}
+                    data-testid={`tpl-delete-${row.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
         ) : (
           <div className="text-center py-8 text-slate-500">
             <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
-            <div className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">No templates yet</div>
-            <div className="text-xs text-slate-500">Template creation and editing coming in Phase 2</div>
+            <div className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              {t("marketing.template.empty.title", lang)}
+            </div>
+            <div className="text-xs text-slate-500">
+              {t("marketing.template.empty.subtitle", lang)}
+            </div>
           </div>
         )}
-      </StubCard>
+      </div>
+
+      {showCreate && scope && (
+        <TemplateFormModal
+          scope={scope}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => setShowCreate(false)}
+        />
+      )}
+      {editing && scope && (
+        <TemplateFormModal
+          scope={scope}
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => setEditing(null)}
+        />
+      )}
+      <ConfirmDialog
+        open={!!deleting}
+        tone="danger"
+        title={t("marketing.template.delete.title", lang)}
+        description={deleting
+          ? t("marketing.template.delete.description", lang).replace("{name}", deleting.name)
+          : ""}
+        confirmLabel={t("common.delete", lang)}
+        onConfirm={doDelete}
+        onCancel={() => setDeleting(null)}
+      />
     </MarketingShell>
   );
 }

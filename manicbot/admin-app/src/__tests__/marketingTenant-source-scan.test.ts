@@ -68,10 +68,24 @@ describe("marketingTenant.ts source scan: invariants per procedure", () => {
     const names = procedures.map((p) => p.name).sort();
     expect(names).toEqual(
       [
+        // PR-A: 4 new procs landed (activity, campaignAudiencePreview,
+        // campaignSendsList, campaignStats); campaignSendNow is no longer
+        // a stub but still appears here. PR-B: full automation CRUD +
+        // runNow + toggle (automationsList stayed but now returns real
+        // rows from D1 instead of `[]`).
+        "activity",
+        "automationCreate",
+        "automationDelete",
+        "automationRunNow",
+        "automationToggle",
+        "automationUpdate",
         "automationsList",
+        "campaignAudiencePreview",
         "campaignCreate",
         "campaignDelete",
         "campaignSendNow",
+        "campaignSendsList",
+        "campaignStats",
         "campaignsList",
         "contactUpdate",
         "contactsList",

@@ -4,6 +4,7 @@ import { appointments, masters, users, services, tenants, masterClientBlocks } f
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sanitizeText } from "~/server/security/sanitize";
+import { notifyWorker } from "~/server/utils/notifyWorker";
 
 /** Assert caller is master on a personal (independent) tenant — allows service/config management */
 async function assertPersonalMaster(ctx: any, tenantId: string) {
@@ -258,6 +259,95 @@ export const masterRouter = createTRPCRouter({
         noShowBy: input.noShowBy,
         status: "no_show",
       }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      const action = input.noShowBy === "client" ? "no_show_client" : "no_show_master";
+      notifyWorker(action, input.id, input.tenantId, null).catch(() => {});
+      return { success: true };
+    }),
+
+  /**
+   * Tenant-scoped pending → confirmed for the master surface. Mirrors
+   * `salon.confirmAppointment` but enforces the master IDOR guard when
+   * the caller is a salon-employed master.
+   */
+  confirmAppointment: masterProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      const [row] = await ctx.db
+        .select({
+          status: appointments.status,
+          cancelled: appointments.cancelled,
+          masterId: appointments.masterId,
+        })
+        .from(appointments)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+      }
+      if (ctx.webUser?.webRole === "master") {
+        if (row.masterId == null) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Unassigned appointment — only the salon owner can confirm it" });
+        }
+        await assertCallerIsMaster(ctx, input.tenantId, row.masterId);
+      }
+      if (row.cancelled || (row.status !== "pending" && row.status !== "confirmed")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_status_transition" });
+      }
+      await ctx.db
+        .update(appointments)
+        .set({ status: "confirmed" })
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      notifyWorker("confirm", input.id, input.tenantId, null).catch(() => {});
+      return { success: true };
+    }),
+
+  /**
+   * Tenant-scoped confirmed → done for the master surface. Refuses if the
+   * appointment time hasn't passed yet (product decision: cannot mark an
+   * appointment complete before its start).
+   */
+  markDone: masterProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertMaster(ctx, input.tenantId);
+      const [row] = await ctx.db
+        .select({
+          status: appointments.status,
+          cancelled: appointments.cancelled,
+          ts: appointments.ts,
+          masterId: appointments.masterId,
+        })
+        .from(appointments)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+      }
+      if (ctx.webUser?.webRole === "master") {
+        if (row.masterId == null) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Unassigned appointment — only the salon owner can mark it" });
+        }
+        await assertCallerIsMaster(ctx, input.tenantId, row.masterId);
+      }
+      if (row.cancelled || (row.status !== "confirmed" && row.status !== "pending")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_status_transition" });
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (row.ts > nowSec) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_done_before_start" });
+      }
+      await ctx.db
+        .update(appointments)
+        .set({ status: "done" })
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
+      notifyWorker("done", input.id, input.tenantId, null).catch(() => {});
       return { success: true };
     }),
 

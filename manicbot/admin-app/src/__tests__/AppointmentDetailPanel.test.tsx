@@ -22,9 +22,12 @@ import type { SelectedAppointment } from "~/components/dashboard-ui/AppointmentD
 // ── tRPC mocks ──────────────────────────────────────────────────────────────
 
 const updateMutate = vi.fn();
-const updateStatusMutate = vi.fn();
+const confirmAptMutate = vi.fn();
+const markDoneMutate = vi.fn();
 const markNoShowMutate = vi.fn();
+const cancelAptMutate = vi.fn();
 let updateOnError: ((e: { message: string }) => void) | undefined;
+let lastMarkNoShowVars: { noShowBy?: string } | undefined;
 
 vi.mock("~/trpc/react", () => ({
   api: {
@@ -35,11 +38,26 @@ vi.mock("~/trpc/react", () => ({
           return { mutate: updateMutate, isPending: false };
         },
       },
-      updateStatus: {
-        useMutation: () => ({ mutate: updateStatusMutate, isPending: false }),
+    },
+    salon: {
+      confirmAppointment: {
+        useMutation: () => ({ mutate: confirmAptMutate, isPending: false }),
+      },
+      markDone: {
+        useMutation: () => ({ mutate: markDoneMutate, isPending: false }),
       },
       markNoShow: {
-        useMutation: () => ({ mutate: markNoShowMutate, isPending: false }),
+        useMutation: () => ({
+          mutate: (vars: { noShowBy: string }) => {
+            lastMarkNoShowVars = vars;
+            markNoShowMutate(vars);
+          },
+          isPending: false,
+          variables: lastMarkNoShowVars,
+        }),
+      },
+      cancelAppointment: {
+        useMutation: () => ({ mutate: cancelAptMutate, isPending: false }),
       },
     },
   },
@@ -61,10 +79,14 @@ vi.mock("~/lib/appointments", () => ({
 
 import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDetailPanel";
 
+// Past date so the "Mark Done" button is enabled by default. The server-
+// side `salon.markDone` refuses when `apt.ts > now`; the panel mirrors
+// that check client-side so a future date would render "Done" disabled
+// and our click assertions would silently no-op.
 const baseSelected: SelectedAppointment = {
   id: "apt_42",
   tenantId: "t_demo",
-  date: "2026-05-16",
+  date: "2020-01-15",
   time: "14:00",
   duration: 60,
   status: "confirmed",
@@ -109,9 +131,12 @@ describe("AppointmentDetailPanel", () => {
   afterEach(() => {
     cleanup();
     updateMutate.mockReset();
-    updateStatusMutate.mockReset();
+    confirmAptMutate.mockReset();
+    markDoneMutate.mockReset();
     markNoShowMutate.mockReset();
+    cancelAptMutate.mockReset();
     updateOnError = undefined;
+    lastMarkNoShowVars = undefined;
   });
 
   describe("read mode (default)", () => {
@@ -162,28 +187,37 @@ describe("AppointmentDetailPanel", () => {
   });
 
   describe("status quick actions", () => {
-    it("'Done' calls updateStatus({ status: 'done' })", () => {
+    it("'Done' calls salon.markDone({ tenantId, id })", () => {
       renderPanel();
       fireEvent.click(screen.getByTestId("panel-done"));
-      expect(updateStatusMutate).toHaveBeenCalledWith({ id: "apt_42", status: "done" });
+      expect(markDoneMutate).toHaveBeenCalledWith({ tenantId: "t_demo", id: "apt_42" });
     });
 
-    it("'Confirm' on pending calls updateStatus({ status: 'confirmed' })", () => {
+    it("'Done' button is disabled when the appointment is still in the future", () => {
+      // Future date — `salon.markDone` would 400 with cannot_mark_done_before_start.
+      const futureYear = new Date().getFullYear() + 1;
+      renderPanel({ date: `${futureYear}-01-15` });
+      const btn = screen.getByTestId("panel-done") as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      expect(btn.dataset.canMarkDone).toBe("0");
+    });
+
+    it("'Confirm' on pending calls salon.confirmAppointment({ tenantId, id })", () => {
       renderPanel({ status: "pending" });
       fireEvent.click(screen.getByTestId("panel-confirm"));
-      expect(updateStatusMutate).toHaveBeenCalledWith({ id: "apt_42", status: "confirmed" });
+      expect(confirmAptMutate).toHaveBeenCalledWith({ tenantId: "t_demo", id: "apt_42" });
     });
 
-    it("'Client no-show' calls markNoShow({ noShowBy: 'client' })", () => {
+    it("'Client no-show' calls salon.markNoShow({ tenantId, id, noShowBy: 'client' })", () => {
       renderPanel();
       fireEvent.click(screen.getByTestId("panel-client-no-show"));
-      expect(markNoShowMutate).toHaveBeenCalledWith({ id: "apt_42", noShowBy: "client" });
+      expect(markNoShowMutate).toHaveBeenCalledWith({ tenantId: "t_demo", id: "apt_42", noShowBy: "client" });
     });
 
-    it("'Master no-show' calls markNoShow({ noShowBy: 'master' })", () => {
+    it("'Master no-show' calls salon.markNoShow({ tenantId, id, noShowBy: 'master' })", () => {
       renderPanel();
       fireEvent.click(screen.getByTestId("panel-master-no-show"));
-      expect(markNoShowMutate).toHaveBeenCalledWith({ id: "apt_42", noShowBy: "master" });
+      expect(markNoShowMutate).toHaveBeenCalledWith({ tenantId: "t_demo", id: "apt_42", noShowBy: "master" });
     });
   });
 
@@ -249,7 +283,7 @@ describe("AppointmentDetailPanel", () => {
       // the 2026-09-09 we typed earlier. This is the snapshot-revert contract.
       fireEvent.click(screen.getByTestId("panel-edit"));
       const dateAfterReopen = screen.getByTestId("panel-edit-date") as HTMLInputElement;
-      expect(dateAfterReopen.value).toBe("2026-05-16");
+      expect(dateAfterReopen.value).toBe("2020-01-15");
     });
 
     it("surfaces 'slot_conflict' from the server as a localized inline error", () => {
@@ -282,7 +316,7 @@ describe("AppointmentDetailPanel", () => {
       expect(dlg.textContent).toMatch(/Отменить запись\?/i);
     });
 
-    it("confirming the dialog calls updateStatus({ status: 'cancelled' })", () => {
+    it("confirming the dialog calls salon.cancelAppointment({ cancelledBy: 'admin' })", () => {
       renderPanel();
       fireEvent.click(screen.getByTestId("panel-delete"));
       // Scope to the modal dialog — the page also has a panel-delete button
@@ -290,9 +324,10 @@ describe("AppointmentDetailPanel", () => {
       const dlg = screen.getByRole("dialog");
       const confirmBtn = within(dlg).getByRole("button", { name: /^Удалить$/i });
       fireEvent.click(confirmBtn);
-      expect(updateStatusMutate).toHaveBeenCalledWith({
+      expect(cancelAptMutate).toHaveBeenCalledWith({
+        tenantId: "t_demo",
         id: "apt_42",
-        status: "cancelled",
+        cancelledBy: "admin",
         comment: expect.any(String),
       });
     });

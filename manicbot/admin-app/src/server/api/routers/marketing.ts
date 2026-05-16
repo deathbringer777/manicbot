@@ -20,6 +20,7 @@ import {
   marketingSends,
   marketingProviders,
   marketingConsentLog,
+  marketingAutomations,
 } from "~/server/db/schema";
 import { listProviders, getProvider } from "~/server/marketing/providers";
 import type { ProviderName } from "~/server/marketing/providers";
@@ -486,10 +487,132 @@ export const marketingRouter = createTRPCRouter({
     }),
 
   // ═══════════════════════════════════════════════════════════════
-  //  AUTOMATIONS (phase 2 stubs — CRUD only)
+  //  AUTOMATIONS (PR-B: real CRUD + manual Run Now — God Mode)
   // ═══════════════════════════════════════════════════════════════
-  automationsList: adminProcedure.query(async () => {
-    // Intentionally returns an empty list until automations are built out.
-    return [] as Array<{ id: string; name: string; triggerType: string; enabled: boolean }>;
-  }),
+  automationsList: adminProcedure
+    .input(z.object({ tenantId: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      if (input?.tenantId) {
+        return ctx.db.select().from(marketingAutomations)
+          .where(eq(marketingAutomations.tenantId, input.tenantId))
+          .orderBy(desc(marketingAutomations.updatedAt));
+      }
+      return ctx.db.select().from(marketingAutomations)
+        .orderBy(desc(marketingAutomations.updatedAt));
+    }),
+
+  automationCreate: adminProcedure
+    .input(z.object({
+      tenantId: z.string().nullable().optional(),
+      name: z.string().min(1).max(120),
+      triggerType: z.string().min(1).max(64),
+      triggerConfigJson: z.string().optional(),
+      stepsJson: z.string().min(1),
+      enabled: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const id = rid("auto");
+      const t = now();
+      await ctx.db.insert(marketingAutomations).values({
+        id,
+        tenantId: input.tenantId ?? null,
+        name: sanitizeText(input.name, 120),
+        triggerType: sanitizeText(input.triggerType, 64),
+        triggerConfigJson: input.triggerConfigJson ?? null,
+        stepsJson: input.stepsJson,
+        enabled: input.enabled ? 1 : 0,
+        createdAt: t,
+        updatedAt: t,
+      });
+      return { id };
+    }),
+
+  automationUpdate: adminProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      triggerType: z.string().optional(),
+      triggerConfigJson: z.string().nullable().optional(),
+      stepsJson: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const patch: Record<string, unknown> = { updatedAt: now() };
+      if (input.name !== undefined) patch.name = sanitizeText(input.name, 120);
+      if (input.triggerType !== undefined) patch.triggerType = sanitizeText(input.triggerType, 64);
+      if (input.triggerConfigJson !== undefined) patch.triggerConfigJson = input.triggerConfigJson;
+      if (input.stepsJson !== undefined) patch.stepsJson = input.stepsJson;
+      await ctx.db.update(marketingAutomations).set(patch).where(eq(marketingAutomations.id, input.id));
+      return { ok: true };
+    }),
+
+  automationToggle: adminProcedure
+    .input(z.object({ id: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.update(marketingAutomations)
+        .set({ enabled: input.enabled ? 1 : 0, updatedAt: now() })
+        .where(eq(marketingAutomations.id, input.id));
+      return { ok: true };
+    }),
+
+  automationDelete: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(marketingAutomations).where(eq(marketingAutomations.id, input.id));
+      return { ok: true };
+    }),
+
+  automationRunNow: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db.select().from(marketingAutomations)
+        .where(eq(marketingAutomations.id, input.id)).limit(1);
+      const auto = rows[0];
+      if (!auto) return { ok: false as const, error: "automation_not_found" as const };
+
+      let steps: Array<{ type: string; templateId?: string; segmentId?: string | null; channel?: string }> = [];
+      try {
+        const v = JSON.parse(auto.stepsJson);
+        if (Array.isArray(v)) steps = v;
+      } catch {
+        return { ok: false as const, error: "invalid_steps_json" as const };
+      }
+      const step = steps[0];
+      if (!step || !step.templateId) return { ok: false as const, error: "no_send_step" as const };
+
+      const tNow = now();
+      const cmpId = `cmp_auto_${auto.id}_${tNow}`;
+      const channel = (step.channel as "email" | "sms" | "whatsapp" | undefined) ?? "email";
+      await ctx.db.insert(marketingCampaigns).values({
+        id: cmpId,
+        tenantId: auto.tenantId,
+        name: `[automation] ${auto.name}`,
+        channel,
+        segmentId: step.segmentId ?? null,
+        templateId: step.templateId,
+        status: "draft",
+        createdAt: tNow,
+        updatedAt: tNow,
+      });
+
+      const r = await runCampaignSend({
+        db: ctx.db,
+        tenantId: auto.tenantId,
+        campaignId: cmpId,
+      });
+      await ctx.db.update(marketingAutomations)
+        .set({ updatedAt: tNow })
+        .where(eq(marketingAutomations.id, auto.id));
+
+      return {
+        ok: r.ok,
+        automationId: auto.id,
+        campaignId: cmpId,
+        total: r.total,
+        sent: r.sent,
+        failed: r.failed,
+        deferred: r.deferred,
+        status: r.campaignStatus,
+        error: r.error,
+      };
+    }),
 });

@@ -25,6 +25,7 @@ import {
   marketingSends,
   marketingProviders,
   marketingConsentLog,
+  marketingAutomations,
 } from "~/server/db/schema";
 import { listProviders } from "~/server/marketing/providers";
 import { runCampaignSend } from "~/server/marketing/sender";
@@ -588,13 +589,188 @@ export const marketingTenantRouter = createTRPCRouter({
     }),
 
   // ═══════════════════════════════════════════════════════════════
-  //  AUTOMATIONS (phase 2 stub — empty list until PR 5)
+  //  AUTOMATIONS (PR-B: real CRUD + manual Run Now)
+  //  Trigger-based engine (cron sweep of birthday / inactive_30d / etc.)
+  //  is a follow-up — only manual Run Now is wired here.
   // ═══════════════════════════════════════════════════════════════
   automationsList: protectedProcedure
     .input(z.object({ tenantId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      return [] as Array<{ id: string; name: string; triggerType: string; enabled: boolean }>;
+      return ctx.db.select().from(marketingAutomations)
+        .where(eq(marketingAutomations.tenantId, input.tenantId))
+        .orderBy(desc(marketingAutomations.updatedAt));
+    }),
+
+  automationCreate: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      name: z.string().min(1).max(120),
+      triggerType: z.string().min(1).max(64),
+      triggerConfigJson: z.string().optional(),
+      stepsJson: z.string().min(1),
+      enabled: z.boolean().default(false),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const id = rid("auto");
+      const t = now();
+      await ctx.db.insert(marketingAutomations).values({
+        id,
+        tenantId: input.tenantId,
+        name: sanitizeText(input.name, 120),
+        triggerType: sanitizeText(input.triggerType, 64),
+        triggerConfigJson: input.triggerConfigJson ?? null,
+        stepsJson: input.stepsJson,
+        enabled: input.enabled ? 1 : 0,
+        createdAt: t,
+        updatedAt: t,
+      });
+      return { id };
+    }),
+
+  automationUpdate: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      id: z.string(),
+      name: z.string().optional(),
+      triggerType: z.string().optional(),
+      triggerConfigJson: z.string().nullable().optional(),
+      stepsJson: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const existing = await ctx.db
+        .select({ tenantId: marketingAutomations.tenantId })
+        .from(marketingAutomations)
+        .where(eq(marketingAutomations.id, input.id))
+        .limit(1);
+      if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (existing[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Automation belongs to a different tenant" });
+      }
+
+      const patch: Record<string, unknown> = { updatedAt: now() };
+      if (input.name !== undefined) patch.name = sanitizeText(input.name, 120);
+      if (input.triggerType !== undefined) patch.triggerType = sanitizeText(input.triggerType, 64);
+      if (input.triggerConfigJson !== undefined) patch.triggerConfigJson = input.triggerConfigJson;
+      if (input.stepsJson !== undefined) patch.stepsJson = input.stepsJson;
+      await ctx.db.update(marketingAutomations).set(patch).where(eq(marketingAutomations.id, input.id));
+      return { ok: true };
+    }),
+
+  automationToggle: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      id: z.string(),
+      enabled: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const existing = await ctx.db
+        .select({ tenantId: marketingAutomations.tenantId })
+        .from(marketingAutomations)
+        .where(eq(marketingAutomations.id, input.id))
+        .limit(1);
+      if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (existing[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      await ctx.db.update(marketingAutomations)
+        .set({ enabled: input.enabled ? 1 : 0, updatedAt: now() })
+        .where(eq(marketingAutomations.id, input.id));
+      return { ok: true };
+    }),
+
+  automationDelete: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db.delete(marketingAutomations)
+        .where(and(eq(marketingAutomations.id, input.id), eq(marketingAutomations.tenantId, input.tenantId)));
+      return { ok: true };
+    }),
+
+  /**
+   * Manual fire: takes a saved automation, materialises a one-shot synthetic
+   * campaign from its first `send_email` step, and runs `runCampaignSend`.
+   * Trigger-based scheduling (cron) is out of scope for PR-B.
+   *
+   * `stepsJson` v1 shape: `[{type:'send_email', templateId, segmentId?}]`.
+   * Only the first step is consumed; multi-step sequences ship later.
+   */
+  automationRunNow: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const rows = await ctx.db.select().from(marketingAutomations)
+        .where(and(eq(marketingAutomations.id, input.id), eq(marketingAutomations.tenantId, input.tenantId)))
+        .limit(1);
+      const auto = rows[0];
+      if (!auto) throw new TRPCError({ code: "NOT_FOUND" });
+
+      let steps: Array<{ type: string; templateId?: string; segmentId?: string | null; channel?: string }> = [];
+      try {
+        const v = JSON.parse(auto.stepsJson);
+        if (Array.isArray(v)) steps = v;
+      } catch {
+        return { ok: false as const, error: "invalid_steps_json" };
+      }
+      const step = steps[0];
+      if (!step || !step.templateId) {
+        return { ok: false as const, error: "no_send_step" };
+      }
+
+      // Materialise a one-shot campaign and run it inline. The campaign
+      // carries the automation id in its name so the activity feed can
+      // attribute the send.
+      const tNow = now();
+      const cmpId = `cmp_auto_${auto.id}_${tNow}`;
+      const channel = (step.channel as "email" | "sms" | "whatsapp" | undefined) ?? "email";
+      await ctx.db.insert(marketingCampaigns).values({
+        id: cmpId,
+        tenantId: input.tenantId,
+        name: `[automation] ${auto.name}`,
+        channel,
+        segmentId: step.segmentId ?? null,
+        templateId: step.templateId,
+        status: "draft",
+        createdAt: tNow,
+        updatedAt: tNow,
+      });
+
+      const r = await runCampaignSend({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        campaignId: cmpId,
+      });
+
+      // Bump updatedAt — the UI sorts by it so a recently-run automation
+      // rises to the top of the list. A proper `last_run_at` column waits
+      // for the cron engine migration in a follow-up PR. The WHERE clause
+      // re-applies the tenant guard for the source-scan invariant.
+      await ctx.db.update(marketingAutomations)
+        .set({ updatedAt: tNow })
+        .where(and(
+          eq(marketingAutomations.id, auto.id),
+          eq(marketingAutomations.tenantId, input.tenantId),
+        ));
+
+      return {
+        ok: r.ok,
+        automationId: auto.id,
+        campaignId: cmpId,
+        total: r.total,
+        sent: r.sent,
+        failed: r.failed,
+        deferred: r.deferred,
+        status: r.campaignStatus,
+        error: r.error,
+      };
     }),
 });
 

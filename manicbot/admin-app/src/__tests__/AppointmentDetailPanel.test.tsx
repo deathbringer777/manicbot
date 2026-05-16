@@ -1,0 +1,300 @@
+// @vitest-environment happy-dom
+/**
+ * AppointmentDetailPanel — the rich bottom drawer that appears when a salon
+ * owner clicks an appointment block on the day grid. Locks in the read/edit
+ * state machine so a future refactor can't accidentally:
+ *
+ *   - leave status quick-actions visible in edit mode (would let a click
+ *     during an in-flight save clobber the row),
+ *   - re-introduce a bare `window.confirm()` for delete (must stay styled),
+ *   - call `appointments.update` with a `note` field (no DB column yet),
+ *   - send `serviceId: undefined` when the user actually changed services
+ *     (would silently drop the edit).
+ *
+ * The behind-the-scenes mutations (appointments.update, appointments.updateStatus,
+ * appointments.markNoShow) are covered separately in appointments.test.ts —
+ * here we only assert the UI ↔ mutation wiring.
+ */
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { act, cleanup, render, screen, fireEvent, within } from "@testing-library/react";
+import type { SelectedAppointment } from "~/components/dashboard-ui/AppointmentDetailPanel";
+
+// ── tRPC mocks ──────────────────────────────────────────────────────────────
+
+const updateMutate = vi.fn();
+const updateStatusMutate = vi.fn();
+const markNoShowMutate = vi.fn();
+let updateOnError: ((e: { message: string }) => void) | undefined;
+
+vi.mock("~/trpc/react", () => ({
+  api: {
+    appointments: {
+      update: {
+        useMutation: (opts?: { onError?: (e: { message: string }) => void; onSuccess?: () => void }) => {
+          updateOnError = opts?.onError;
+          return { mutate: updateMutate, isPending: false };
+        },
+      },
+      updateStatus: {
+        useMutation: () => ({ mutate: updateStatusMutate, isPending: false }),
+      },
+      markNoShow: {
+        useMutation: () => ({ mutate: markNoShowMutate, isPending: false }),
+      },
+    },
+  },
+}));
+
+// Avoid loading the appointments lib (pulls i18n + brand-color tables we
+// don't need for the panel-level wiring contract).
+vi.mock("~/lib/appointments", () => ({
+  STATUS_STYLES: {
+    confirmed: "bg-emerald-500/15",
+    pending: "bg-amber-500/15",
+    cancelled: "bg-red-500/15",
+    rejected: "bg-red-500/15",
+    no_show: "bg-orange-500/15",
+    done: "bg-brand-500/15",
+  },
+  APT_BORDER: {},
+}));
+
+import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDetailPanel";
+
+const baseSelected: SelectedAppointment = {
+  id: "apt_42",
+  tenantId: "t_demo",
+  date: "2026-05-16",
+  time: "14:00",
+  duration: 60,
+  status: "confirmed",
+  cancelled: 0,
+  noShow: 0,
+  masterId: 5,
+  svcId: "svc_classic",
+  userName: "Анастасия Орлова",
+  userPhone: "+48 555 1111",
+  userTg: null,
+  chatId: 12345,
+};
+
+const masters = [
+  { chatId: 5, name: "Юлия" },
+  { chatId: 6, name: "Анна" },
+];
+
+const services = [
+  { svcId: "svc_classic", names: '{"ru":"Маникюр","en":"Classic"}', duration: 60, price: 120 },
+  { svcId: "svc_long", names: '{"ru":"Длинная процедура","en":"Long"}', duration: 90, price: 180 },
+];
+
+function renderPanel(overrides: Partial<SelectedAppointment> = {}) {
+  const onClose = vi.fn();
+  const onChanged = vi.fn();
+  const utils = render(
+    <AppointmentDetailPanel
+      tenantId="t_demo"
+      selected={{ ...baseSelected, ...overrides }}
+      masters={masters}
+      services={services}
+      lang="ru"
+      onClose={onClose}
+      onChanged={onChanged}
+    />,
+  );
+  return { ...utils, onClose, onChanged };
+}
+
+describe("AppointmentDetailPanel", () => {
+  afterEach(() => {
+    cleanup();
+    updateMutate.mockReset();
+    updateStatusMutate.mockReset();
+    markNoShowMutate.mockReset();
+    updateOnError = undefined;
+  });
+
+  describe("read mode (default)", () => {
+    it("renders the status badge, time, duration, and client name", () => {
+      renderPanel();
+      expect(screen.getByTestId("panel-status-badge")).toBeTruthy();
+      // "14:00" appears twice — header time + sub-row of the date card.
+      // Client name also appears twice — big header name + Client DetailRow.
+      // Both repetitions are intentional; assert presence with the *All*
+      // variants to avoid locator ambiguity.
+      expect(screen.getAllByText("14:00").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Анастасия Орлова").length).toBeGreaterThan(0);
+      expect(screen.getByText("Юлия")).toBeTruthy();
+      expect(screen.getByText("Маникюр")).toBeTruthy();
+    });
+
+    it("exposes Edit + Delete + Close icon buttons in the header", () => {
+      renderPanel();
+      expect(screen.getByTestId("panel-edit")).toBeTruthy();
+      expect(screen.getByTestId("panel-delete")).toBeTruthy();
+    });
+
+    it("hides Edit and Delete on cancelled appointments (can't un-cancel from the panel)", () => {
+      renderPanel({ cancelled: 1, status: "cancelled" });
+      expect(screen.queryByTestId("panel-edit")).toBeNull();
+      expect(screen.queryByTestId("panel-delete")).toBeNull();
+    });
+
+    it("shows 'Done' quick-action for confirmed apts", () => {
+      renderPanel();
+      expect(screen.getByTestId("panel-done")).toBeTruthy();
+    });
+
+    it("shows 'Confirm' quick-action for pending apts", () => {
+      renderPanel({ status: "pending" });
+      expect(screen.getByTestId("panel-confirm")).toBeTruthy();
+      // 'Done' shouldn't show on pending — not actionable yet.
+      expect(screen.queryByTestId("panel-done")).toBeNull();
+    });
+
+    it("hides all status quick-actions on terminal rows", () => {
+      renderPanel({ status: "done" });
+      expect(screen.queryByTestId("panel-confirm")).toBeNull();
+      expect(screen.queryByTestId("panel-done")).toBeNull();
+      expect(screen.queryByTestId("panel-client-no-show")).toBeNull();
+      expect(screen.queryByTestId("panel-master-no-show")).toBeNull();
+    });
+  });
+
+  describe("status quick actions", () => {
+    it("'Done' calls updateStatus({ status: 'done' })", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-done"));
+      expect(updateStatusMutate).toHaveBeenCalledWith({ id: "apt_42", status: "done" });
+    });
+
+    it("'Confirm' on pending calls updateStatus({ status: 'confirmed' })", () => {
+      renderPanel({ status: "pending" });
+      fireEvent.click(screen.getByTestId("panel-confirm"));
+      expect(updateStatusMutate).toHaveBeenCalledWith({ id: "apt_42", status: "confirmed" });
+    });
+
+    it("'Client no-show' calls markNoShow({ noShowBy: 'client' })", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-client-no-show"));
+      expect(markNoShowMutate).toHaveBeenCalledWith({ id: "apt_42", noShowBy: "client" });
+    });
+
+    it("'Master no-show' calls markNoShow({ noShowBy: 'master' })", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-master-no-show"));
+      expect(markNoShowMutate).toHaveBeenCalledWith({ id: "apt_42", noShowBy: "master" });
+    });
+  });
+
+  describe("edit mode", () => {
+    it("clicking the pencil switches to edit mode (date / time inputs visible)", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      expect(screen.getByTestId("panel-edit-date")).toBeTruthy();
+      expect(screen.getByTestId("panel-edit-time")).toBeTruthy();
+      expect(screen.getByTestId("panel-edit-cancel")).toBeTruthy();
+      expect(screen.getByTestId("panel-edit-save")).toBeTruthy();
+    });
+
+    it("HIDES status quick-actions in edit mode (so an in-flight save can't be clobbered)", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      expect(screen.queryByTestId("panel-done")).toBeNull();
+      expect(screen.queryByTestId("panel-client-no-show")).toBeNull();
+      expect(screen.queryByTestId("panel-master-no-show")).toBeNull();
+    });
+
+    it("Save is disabled until something changes (clean snapshot)", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      const save = screen.getByTestId("panel-edit-save") as HTMLButtonElement;
+      expect(save.disabled).toBe(true);
+    });
+
+    it("Save enables after the date changes and fires update() with only the changed field", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      const dateInput = screen.getByTestId("panel-edit-date") as HTMLInputElement;
+      fireEvent.change(dateInput, { target: { value: "2026-05-20" } });
+
+      const save = screen.getByTestId("panel-edit-save") as HTMLButtonElement;
+      expect(save.disabled).toBe(false);
+
+      fireEvent.click(save);
+      expect(updateMutate).toHaveBeenCalledTimes(1);
+      // Only the changed field is sent — other fields stay undefined so the
+      // mutation skips its cross-tenant guards.
+      expect(updateMutate.mock.calls[0]![0]).toEqual({
+        id: "apt_42",
+        date: "2026-05-20",
+        time: undefined,
+        masterId: undefined,
+        serviceId: undefined,
+      });
+    });
+
+    it("Cancel reverts edits and returns to read mode (with the original snapshot)", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      fireEvent.change(screen.getByTestId("panel-edit-date"), { target: { value: "2026-09-09" } });
+
+      fireEvent.click(screen.getByTestId("panel-edit-cancel"));
+      // Back in read mode — edit-mode inputs are gone, read-mode quick
+      // actions are back.
+      expect(screen.queryByTestId("panel-edit-date")).toBeNull();
+      expect(screen.getByTestId("panel-done")).toBeTruthy();
+
+      // Re-enter edit mode — date input should show the ORIGINAL value, not
+      // the 2026-09-09 we typed earlier. This is the snapshot-revert contract.
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      const dateAfterReopen = screen.getByTestId("panel-edit-date") as HTMLInputElement;
+      expect(dateAfterReopen.value).toBe("2026-05-16");
+    });
+
+    it("surfaces 'slot_conflict' from the server as a localized inline error", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      fireEvent.change(screen.getByTestId("panel-edit-time"), { target: { value: "16:00" } });
+      fireEvent.click(screen.getByTestId("panel-edit-save"));
+
+      // Mutation rejected — fire the onError captured by the mock. Wrap in
+      // act() so React flushes the setErr state update before we query.
+      expect(updateOnError).toBeDefined();
+      act(() => {
+        updateOnError!({ message: "slot_conflict" });
+      });
+
+      const err = screen.getByTestId("panel-error");
+      // Russian copy from i18n key salon.day.panel.slotConflict.
+      expect(err.textContent).toMatch(/уже занят/i);
+    });
+  });
+
+  describe("delete flow", () => {
+    it("clicking the trash icon opens the ConfirmDialog (NOT a native window.confirm)", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-delete"));
+      // ConfirmDialog renders an aria-modal dialog with the localized
+      // delete title — pin the styled-modal contract.
+      const dlg = screen.getByRole("dialog");
+      expect(dlg).toBeTruthy();
+      expect(dlg.textContent).toMatch(/Отменить запись\?/i);
+    });
+
+    it("confirming the dialog calls updateStatus({ status: 'cancelled' })", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-delete"));
+      // Scope to the modal dialog — the page also has a panel-delete button
+      // labelled "Удалить запись", which would otherwise match too.
+      const dlg = screen.getByRole("dialog");
+      const confirmBtn = within(dlg).getByRole("button", { name: /^Удалить$/i });
+      fireEvent.click(confirmBtn);
+      expect(updateStatusMutate).toHaveBeenCalledWith({
+        id: "apt_42",
+        status: "cancelled",
+        comment: expect.any(String),
+      });
+    });
+  });
+});

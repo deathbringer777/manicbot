@@ -25,6 +25,13 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
+import {
+  applyPendingStatusChanges as mergeStatusPatches,
+  buildCancelPatch,
+  buildStatusChangePatch,
+  buildNoShowPatch,
+  type PendingStatusPatches,
+} from "~/lib/optimisticStatusMerge";
 import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
@@ -1728,11 +1735,61 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
   const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
 
+  // Optimistic status state — mirrors `pendingMoves` below, but for status
+  // mutations (confirm / cancel / reject / no-show). Without this the click
+  // → mutate → invalidate → refetch round-trip takes 300–800 ms, during
+  // which the AptCard is visually unchanged and the user reads it as
+  // "nothing happened". Patch shape + merge live in `optimisticStatusMerge`
+  // so AptCard's read contract stays pinned by a unit test.
+  const [pendingStatusChanges, setPendingStatusChanges] = useState<PendingStatusPatches>({});
+
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
-    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+    onMutate: ({ appointmentId, status }) => {
+      setPendingStatusChanges((prev) => ({
+        ...prev,
+        [appointmentId]: status === "cancelled"
+          ? buildCancelPatch()
+          : buildStatusChangePatch(status),
+      }));
+    },
+    onError: (err) => {
+      toast.error(t("salon.apt.statusUpdateFailed", lang), err?.message || undefined);
+    },
+    onSuccess: () => {
+      toast.success(t("salon.apt.statusUpdated", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingStatusChanges((prev) => {
+        const next = { ...prev };
+        delete next[vars.appointmentId];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
   });
   const markNoShow = api.salon.markNoShow.useMutation({
-    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+    onMutate: ({ id, noShowBy }) => {
+      setPendingStatusChanges((prev) => ({
+        ...prev,
+        [id]: buildNoShowPatch(noShowBy),
+      }));
+    },
+    onError: (err) => {
+      toast.error(t("salon.apt.noShowFailed", lang), err?.message || undefined);
+    },
+    onSuccess: () => {
+      toast.success(t("salon.apt.statusUpdated", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingStatusChanges((prev) => {
+        const next = { ...prev };
+        delete next[vars.id];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
   });
 
   // Drag-to-reschedule optimistic state.
@@ -1801,6 +1858,15 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       return { ...r, date: patch.date, time: patch.time, masterId: patch.masterId || r.masterId, ts };
     });
   };
+
+  // Layer in-flight status mutations onto the appointment arrays — twin of
+  // applyPendingMoves, but for confirm/cancel/no-show. The merged row gets
+  // the new status + cancelled/noShow flags so AptCard.statusKey flips
+  // instantly to the terminal state and the card dims. Merge logic lives in
+  // `~/lib/optimisticStatusMerge` (unit-tested) — this closure just plugs
+  // the current `pendingStatusChanges` state into it.
+  const applyPendingStatusChanges = (rows: any[] | undefined): any[] =>
+    mergeStatusPatches(rows, pendingStatusChanges);
 
   const handleMoveAppointment = (move: MoveCommit) => {
     if (move.toMasterId == null) {
@@ -2016,7 +2082,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                       {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
                     </button>
                   </div>
-                  {[...todayApts.data]
+                  {[...applyPendingStatusChanges(todayApts.data)]
                     .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
                     .map((a: any) => (
                       <AptCard key={a.id} a={a} lang={lang}
@@ -2081,14 +2147,17 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           hiddenServiceIds.size > 0 ||
           masterVis.hiddenMasterIds.size > 0;
 
-        const aptsFiltered = (apts.data ?? []).filter(filterApt);
+        const aptsFiltered = applyPendingStatusChanges((apts.data ?? []).filter(filterApt));
         // applyPendingMoves layers in-flight drag-reschedules on top of the
         // server snapshot so the dragged block visually settles into its
         // new slot immediately (the cache invalidate in onSettled will
         // overwrite with canonical data once the mutation resolves).
-        const dayAptsFiltered = applyPendingMoves((dayApts.data ?? []).filter(filterApt));
-        const weekAptsFiltered = applyPendingMoves((weekApts.data ?? []).filter(filterApt));
-        const calAptsFiltered = (calApts.data ?? []).filter(filterApt);
+        // applyPendingStatusChanges does the same for confirm/cancel/no-show
+        // mutations — without it the user reads the 300–800 ms refetch gap
+        // as "nothing happened" after clicking the status dropdown.
+        const dayAptsFiltered = applyPendingMoves(applyPendingStatusChanges((dayApts.data ?? []).filter(filterApt)));
+        const weekAptsFiltered = applyPendingMoves(applyPendingStatusChanges((weekApts.data ?? []).filter(filterApt)));
+        const calAptsFiltered = applyPendingStatusChanges((calApts.data ?? []).filter(filterApt));
 
         return (
         <div className="flex flex-col lg:flex-row gap-4">

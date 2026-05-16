@@ -377,6 +377,8 @@ interface ArticleJsonLdInput {
   description: string;
   slug: string;
   datePublished: string;
+  /** Defaults to `datePublished` when not provided. */
+  dateModified?: string;
   image?: string;
   authors?: string[];
 }
@@ -384,14 +386,15 @@ interface ArticleJsonLdInput {
 /** Build an Article JSON-LD payload for a blog post. */
 export function articleJsonLd(input: ArticleJsonLdInput) {
   const url = canonicalUrl(`/blog/${input.slug}`);
+  const image = normaliseOgImage(input.image ?? DEFAULT_OG_IMAGE);
   return {
     "@context": "https://schema.org",
     "@type": "Article",
     headline: input.title,
     description: input.description,
-    image: input.image ?? DEFAULT_OG_IMAGE,
+    image,
     datePublished: input.datePublished,
-    dateModified: input.datePublished,
+    dateModified: input.dateModified ?? input.datePublished,
     author: (input.authors && input.authors.length > 0
       ? input.authors.map((name) => ({ "@type": "Person", name }))
       : [{ "@type": "Organization", name: SITE_NAME }]),

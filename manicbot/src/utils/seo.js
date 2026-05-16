@@ -57,12 +57,16 @@ const ADMIN_APP_PUBLIC_ROUTES = [
  * @type {Array<{ slug: string; lastmod: string }>}
  */
 const BLOG_ARTICLES = [
-  { slug: 'automate-salon-booking',      lastmod: '2026-04-01' },
-  { slug: 'reduce-no-shows',             lastmod: '2026-03-15' },
-  { slug: 'nail-trends-2026',            lastmod: '2026-03-01' },
-  { slug: 'whatsapp-instagram-channels', lastmod: '2026-02-20' },
-  { slug: 'google-calendar-sync',        lastmod: '2026-02-10' },
-  { slug: 'first-client-in-10-minutes',  lastmod: '2026-02-01' },
+  { slug: 'channels-compared-2026',      lastmod: '2026-05-15' },
+  { slug: 'nail-clients-survey-2026',    lastmod: '2026-05-12' },
+  { slug: 'ai-receptionist-247',         lastmod: '2026-05-08' },
+  { slug: 'dynamic-pricing-salon',       lastmod: '2026-05-01' },
+  { slug: 'automate-salon-booking',      lastmod: '2026-05-16' },
+  { slug: 'reduce-no-shows',             lastmod: '2026-05-16' },
+  { slug: 'nail-trends-2026',            lastmod: '2026-05-16' },
+  { slug: 'whatsapp-instagram-channels', lastmod: '2026-05-16' },
+  { slug: 'google-calendar-sync',        lastmod: '2026-05-16' },
+  { slug: 'first-client-in-10-minutes',  lastmod: '2026-05-16' },
 ];
 
 /**
@@ -79,7 +83,7 @@ export const ROUTE_LASTMOD = {
   '/':         '2026-04-01',
   '/help':     '2026-03-15',
   '/search':   '2026-05-01',
-  '/blog':     '2026-04-15',
+  '/blog':     '2026-05-16',
   '/privacy':  '2025-12-01',
   '/terms':    '2025-12-01',
   '/cookies':  '2026-04-15',
@@ -151,7 +155,9 @@ export function buildStaticSitemapEntries(today = todayIso()) {
     // of the sitemap; the matching Disallow directives stay in robots.txt.
     ...BLOG_ARTICLES.map((a) => ({
       loc: `/blog/${a.slug}`,
-      priority: '0.6',
+      // Long-form, indexable content with image — bump up from the previous
+      // 0.6 placeholder so Google treats blog detail pages closer to landing.
+      priority: '0.7',
       changefreq: 'monthly',
       lastmod: a.lastmod,
     })),

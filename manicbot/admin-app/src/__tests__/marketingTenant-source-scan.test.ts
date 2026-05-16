@@ -68,10 +68,17 @@ describe("marketingTenant.ts source scan: invariants per procedure", () => {
     const names = procedures.map((p) => p.name).sort();
     expect(names).toEqual(
       [
+        // PR-A: 4 new procs landed (activity, campaignAudiencePreview,
+        // campaignSendsList, campaignStats); campaignSendNow is no longer
+        // a stub but still appears here.
+        "activity",
         "automationsList",
+        "campaignAudiencePreview",
         "campaignCreate",
         "campaignDelete",
         "campaignSendNow",
+        "campaignSendsList",
+        "campaignStats",
         "campaignsList",
         "contactUpdate",
         "contactsList",

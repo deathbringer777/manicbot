@@ -1,14 +1,15 @@
 /**
  * Marketing module router — God Mode CRM + campaigns.
  *
- * Phase 1 skeleton: all procedures compile and pass adminProcedure guard,
- * but send/execute paths are stubs (return `{ ok: true, stub: true }`). The
- * intent is to lock the API surface so UI can be built against it; real
- * execution (Brevo/Resend fan-out, SMS billing gate, webhooks) lands later.
+ * Phase 2 (PR-A): real send via runCampaignSend, audience preview,
+ * per-campaign stats. God-mode mirror of `marketingTenant.ts` — same
+ * procs but no tenant_id WHERE clause, since adminProcedure already gates
+ * to system_admin.
  */
 
 import { z } from "zod";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { sanitizeText, sanitizeHtml } from "~/server/security/sanitize";
 import {
@@ -18,9 +19,12 @@ import {
   marketingCampaigns,
   marketingSends,
   marketingProviders,
+  marketingConsentLog,
 } from "~/server/db/schema";
 import { listProviders, getProvider } from "~/server/marketing/providers";
 import type { ProviderName } from "~/server/marketing/providers";
+import { runCampaignSend } from "~/server/marketing/sender";
+import { resolveAudience } from "~/server/marketing/audience";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
 const CAMPAIGN_STATUS = z.enum(["draft", "scheduled", "sending", "sent", "paused", "failed"]);
@@ -30,6 +34,14 @@ function now() {
 }
 function rid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+/** PII-safe email preview for the audience sample — `jo***@gmail.com`. */
+function redactEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const [local, domain] = email.split("@");
+  if (!domain) return null;
+  const head = (local ?? "").slice(0, 2);
+  return `${head}***@${domain}`;
 }
 
 export const marketingRouter = createTRPCRouter({
@@ -271,19 +283,146 @@ export const marketingRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  /** Stub — actual fan-out lands in phase 2. For now returns an audit trail. */
+  /**
+   * Send the campaign now (God Mode). Delegates to `runCampaignSend()`.
+   * Inline cap 500; tail deferred to worker cron.
+   */
   campaignSendNow: adminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const row = await ctx.db.select().from(marketingCampaigns)
         .where(eq(marketingCampaigns.id, input.id)).limit(1);
       const c = row[0];
-      if (!c) return { ok: false, error: "campaign_not_found" as const };
+      if (!c) return { ok: false as const, error: "campaign_not_found" as const };
+
+      const r = await runCampaignSend({
+        db: ctx.db,
+        tenantId: c.tenantId,
+        campaignId: input.id,
+      });
       return {
-        ok: false,
-        stub: true,
-        message: "Send-now is a stub in phase 1. Campaigns are stored but no emails/SMS are dispatched yet.",
-        campaignId: c.id,
+        ok: r.ok,
+        campaignId: input.id,
+        total: r.total,
+        sent: r.sent,
+        failed: r.failed,
+        deferred: r.deferred,
+        status: r.campaignStatus,
+        error: r.error,
+      };
+    }),
+
+  /** Per-campaign aggregate stats from `marketing_sends` — God Mode. */
+  campaignStats: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cmp = await ctx.db.select({
+        id: marketingCampaigns.id,
+        status: marketingCampaigns.status,
+      }).from(marketingCampaigns).where(eq(marketingCampaigns.id, input.id)).limit(1);
+      if (!cmp[0]) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const rows = await ctx.db.select({
+        status: marketingSends.status,
+        count: sql<number>`count(*)`,
+      })
+        .from(marketingSends)
+        .where(eq(marketingSends.campaignId, input.id))
+        .groupBy(marketingSends.status);
+
+      const byStatus: Record<string, number> = {};
+      let total = 0;
+      for (const r of rows) {
+        byStatus[r.status] = Number(r.count);
+        total += Number(r.count);
+      }
+      return {
+        campaignStatus: cmp[0].status,
+        queued: byStatus.queued ?? 0,
+        sent: byStatus.sent ?? 0,
+        failed: byStatus.failed ?? 0,
+        delivered: byStatus.delivered ?? 0,
+        opened: byStatus.opened ?? 0,
+        clicked: byStatus.clicked ?? 0,
+        bounced: byStatus.bounced ?? 0,
+        total,
+      };
+    }),
+
+  /** Per-recipient sends detail — God Mode, paginated. */
+  campaignSendsList: adminProcedure
+    .input(z.object({
+      id: z.string(),
+      limit: z.number().int().min(1).max(500).default(100),
+      offset: z.number().int().min(0).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.select().from(marketingSends)
+        .where(eq(marketingSends.campaignId, input.id))
+        .orderBy(desc(marketingSends.queuedAt))
+        .limit(input.limit)
+        .offset(input.offset);
+    }),
+
+  /** Audience preview — God Mode requires a tenantId since segments are tenant-scoped. */
+  campaignAudiencePreview: adminProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      segmentId: z.string().nullable().optional(),
+      channel: CHANNEL,
+    }))
+    .query(async ({ ctx, input }) => {
+      const { contacts, totalCount } = await resolveAudience({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        segmentId: input.segmentId ?? null,
+        channel: input.channel,
+        limit: 3,
+      });
+      return {
+        count: totalCount,
+        sample: contacts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          email: redactEmail(c.email),
+        })),
+      };
+    }),
+
+  /** Platform-wide 7-day activity summary (God Mode). */
+  activity: adminProcedure
+    .input(z.object({ days: z.number().int().min(1).max(90).default(7) }))
+    .query(async ({ ctx, input }) => {
+      const since = now() - input.days * 86400;
+      const [campaignsRow, contactsRow, sendsFailedRow, unsubsRow] = await Promise.all([
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingCampaigns)
+          .where(and(
+            eq(marketingCampaigns.status, "sent"),
+            sql`coalesce(${marketingCampaigns.finishedAt}, ${marketingCampaigns.updatedAt}) >= ${since}`,
+          )),
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingContacts)
+          .where(sql`${marketingContacts.firstSeenAt} >= ${since}`),
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingSends)
+          .where(and(
+            eq(marketingSends.status, "failed"),
+            sql`${marketingSends.queuedAt} >= ${since}`,
+          )),
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingConsentLog)
+          .where(and(
+            eq(marketingConsentLog.event, "unsubscribed"),
+            sql`${marketingConsentLog.createdAt} >= ${since}`,
+          )),
+      ]);
+      return {
+        days: input.days,
+        campaignsSent: Number(campaignsRow[0]?.count ?? 0),
+        contactsAdded: Number(contactsRow[0]?.count ?? 0),
+        sendsFailed: Number(sendsFailedRow[0]?.count ?? 0),
+        unsubscribes: Number(unsubsRow[0]?.count ?? 0),
       };
     }),
 

@@ -6,8 +6,9 @@
  * each query by `tenant_id = ?` so a tenant_owner / personal master / sysadmin
  * previewing a tenant only ever sees their own data.
  *
- * Phase 1: CRUD surface only. Send paths (`campaignSendNow`) still stub —
- * real send execution lands in PR 3 of the marketing roadmap.
+ * Phase 2 (PR-A): real send via runCampaignSend (Resend), audience preview,
+ * per-campaign stats + sends detail, 7-day activity widget. Automations CRUD
+ * still stub — lands in PR-B alongside SMS.
  */
 
 import { z } from "zod";
@@ -23,8 +24,11 @@ import {
   marketingCampaigns,
   marketingSends,
   marketingProviders,
+  marketingConsentLog,
 } from "~/server/db/schema";
 import { listProviders } from "~/server/marketing/providers";
+import { runCampaignSend } from "~/server/marketing/sender";
+import { resolveAudience } from "~/server/marketing/audience";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
 const CAMPAIGN_STATUS = z.enum(["draft", "scheduled", "sending", "sent", "paused", "failed"]);
@@ -34,6 +38,14 @@ function now() {
 }
 function rid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+/** PII-safe email preview for the audience sample — `jo***@gmail.com`. */
+function redactEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const [local, domain] = email.split("@");
+  if (!domain) return null;
+  const head = (local ?? "").slice(0, 2);
+  return `${head}***@${domain}`;
 }
 
 export const marketingTenantRouter = createTRPCRouter({
@@ -350,22 +362,197 @@ export const marketingTenantRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  /** Stub — actual fan-out lands in PR 3 of the marketing roadmap. */
+  /**
+   * Send the campaign now. Inline-runs `runCampaignSend()` for audiences up to
+   * 500; larger audiences leave the campaign in `sending` for the worker cron
+   * to drain. Caller MUST verify the tenant owns the campaign via
+   * `assertTenantOwner`; the sender double-checks `tenant_id` defense in depth.
+   */
   campaignSendNow: protectedProcedure
     .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
+      // Defense-in-depth: confirm the campaign row belongs to the caller's
+      // tenant BEFORE delegating to the sender (which also checks).
       const row = await ctx.db.select().from(marketingCampaigns)
         .where(and(eq(marketingCampaigns.id, input.id), eq(marketingCampaigns.tenantId, input.tenantId)))
         .limit(1);
       const c = row[0];
-      if (!c) return { ok: false, error: "campaign_not_found" as const };
+      if (!c) return { ok: false as const, error: "campaign_not_found" as const };
+
+      const r = await runCampaignSend({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        campaignId: input.id,
+      });
       return {
-        ok: false,
-        stub: true,
-        message: "Send-now is not yet wired for tenant-scoped campaigns. Real send pipeline ships in PR 3.",
-        campaignId: c.id,
+        ok: r.ok,
+        campaignId: input.id,
+        total: r.total,
+        sent: r.sent,
+        failed: r.failed,
+        deferred: r.deferred,
+        status: r.campaignStatus,
+        error: r.error,
+      };
+    }),
+
+  /**
+   * Per-campaign aggregate stats from `marketing_sends`, scoped to the
+   * caller's tenant via a campaign-tenant precheck.
+   */
+  campaignStats: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Verify the campaign belongs to the caller's tenant.
+      const cmp = await ctx.db.select({
+        id: marketingCampaigns.id,
+        tenantId: marketingCampaigns.tenantId,
+        status: marketingCampaigns.status,
+        statsJson: marketingCampaigns.statsJson,
+      }).from(marketingCampaigns)
+        .where(and(eq(marketingCampaigns.id, input.id), eq(marketingCampaigns.tenantId, input.tenantId)))
+        .limit(1);
+      if (!cmp[0]) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const rows = await ctx.db.select({
+        status: marketingSends.status,
+        count: sql<number>`count(*)`,
+      })
+        .from(marketingSends)
+        .innerJoin(marketingCampaigns, eq(marketingSends.campaignId, marketingCampaigns.id))
+        .where(and(eq(marketingSends.campaignId, input.id), eq(marketingCampaigns.tenantId, input.tenantId)))
+        .groupBy(marketingSends.status);
+
+      const byStatus: Record<string, number> = {};
+      let total = 0;
+      for (const r of rows) {
+        byStatus[r.status] = Number(r.count);
+        total += Number(r.count);
+      }
+      return {
+        campaignStatus: cmp[0].status,
+        queued: byStatus.queued ?? 0,
+        sent: byStatus.sent ?? 0,
+        failed: byStatus.failed ?? 0,
+        delivered: byStatus.delivered ?? 0,
+        opened: byStatus.opened ?? 0,
+        clicked: byStatus.clicked ?? 0,
+        bounced: byStatus.bounced ?? 0,
+        total,
+      };
+    }),
+
+  /** Per-recipient sends detail — paginated. */
+  campaignSendsList: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      id: z.string(),
+      limit: z.number().int().min(1).max(500).default(100),
+      offset: z.number().int().min(0).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const cmp = await ctx.db.select({ tenantId: marketingCampaigns.tenantId })
+        .from(marketingCampaigns)
+        .where(and(eq(marketingCampaigns.id, input.id), eq(marketingCampaigns.tenantId, input.tenantId)))
+        .limit(1);
+      if (!cmp[0]) throw new TRPCError({ code: "NOT_FOUND" });
+
+      return ctx.db.select().from(marketingSends)
+        .innerJoin(marketingCampaigns, eq(marketingSends.campaignId, marketingCampaigns.id))
+        .where(and(eq(marketingSends.campaignId, input.id), eq(marketingCampaigns.tenantId, input.tenantId)))
+        .orderBy(desc(marketingSends.queuedAt))
+        .limit(input.limit)
+        .offset(input.offset);
+    }),
+
+  /**
+   * Preview the audience for a candidate (segmentId, channel) tuple. Used by
+   * the "Создать кампанию" form to show "Будет отправлено N писем" before the
+   * user confirms.
+   */
+  campaignAudiencePreview: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      segmentId: z.string().nullable().optional(),
+      channel: CHANNEL,
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const { contacts, totalCount } = await resolveAudience({
+        db: ctx.db,
+        tenantId: input.tenantId,
+        segmentId: input.segmentId ?? null,
+        channel: input.channel,
+        limit: 3,
+      });
+      return {
+        count: totalCount,
+        sample: contacts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          email: redactEmail(c.email),
+        })),
+      };
+    }),
+
+  /**
+   * 7-day activity summary for the Overview tab. Counts campaigns sent, new
+   * contacts added, sends that failed, and unsubscribes in the window.
+   */
+  activity: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      days: z.number().int().min(1).max(90).default(7),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const since = now() - input.days * 86400;
+
+      const [campaignsRow, contactsRow, sendsFailedRow, unsubsRow] = await Promise.all([
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingCampaigns)
+          .where(and(
+            eq(marketingCampaigns.tenantId, input.tenantId),
+            eq(marketingCampaigns.status, "sent"),
+            sql`coalesce(${marketingCampaigns.finishedAt}, ${marketingCampaigns.updatedAt}) >= ${since}`,
+          )),
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingContacts)
+          .where(and(
+            eq(marketingContacts.tenantId, input.tenantId),
+            sql`${marketingContacts.firstSeenAt} >= ${since}`,
+          )),
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingSends)
+          .innerJoin(marketingCampaigns, eq(marketingSends.campaignId, marketingCampaigns.id))
+          .where(and(
+            eq(marketingCampaigns.tenantId, input.tenantId),
+            eq(marketingSends.status, "failed"),
+            sql`${marketingSends.queuedAt} >= ${since}`,
+          )),
+        ctx.db.select({ count: sql<number>`count(*)` })
+          .from(marketingConsentLog)
+          .innerJoin(marketingContacts, eq(marketingConsentLog.contactId, marketingContacts.id))
+          .where(and(
+            eq(marketingContacts.tenantId, input.tenantId),
+            eq(marketingConsentLog.event, "unsubscribed"),
+            sql`${marketingConsentLog.createdAt} >= ${since}`,
+          )),
+      ]);
+
+      return {
+        days: input.days,
+        campaignsSent: Number(campaignsRow[0]?.count ?? 0),
+        contactsAdded: Number(contactsRow[0]?.count ?? 0),
+        sendsFailed: Number(sendsFailedRow[0]?.count ?? 0),
+        unsubscribes: Number(unsubsRow[0]?.count ?? 0),
       };
     }),
 

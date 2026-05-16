@@ -29,6 +29,7 @@ import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
+import { handleUnsubscribeRequest } from './http/unsubscribeHttp.js';
 import { handleHealthRequest } from './http/healthHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
@@ -287,6 +288,16 @@ export default {
     // Routed before any heavy resolution so a stuck binding never takes it down.
     if (url.pathname === '/api/health') {
       return addSecurityHeaders(handleHealthRequest(request));
+    }
+
+    // PR-A: public unsubscribe endpoint. `/u/{token}` is reached from the
+    // footer of every marketing email; the handler flips the contact's
+    // `unsubscribed=1` and appends a `marketing_consent_log` row. Public
+    // by design — token-only, no auth, GET-only.
+    if (request.method === 'GET' && url.pathname.startsWith('/u/')) {
+      const token = url.pathname.slice('/u/'.length).split('/')[0] ?? '';
+      const res = await handleUnsubscribeRequest(request, token, env);
+      return addSecurityHeaders(res);
     }
 
     // Landing analytics ingest (CORS-enabled, consent-gated server-side).

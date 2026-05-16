@@ -712,27 +712,26 @@ async function findClientByPriority(
   tenantId: string,
   row: ParsedClientRow,
 ): Promise<ClientRow | null> {
-  const tenant = eq(users.tenantId, tenantId);
   const notDeleted = isNull(users.deletedAt);
 
   if (row.email) {
     const [r] = await db.select().from(users)
-      .where(and(tenant, notDeleted, eq(users.email, row.email))).limit(1);
+      .where(and(eq(users.tenantId, tenantId), notDeleted, eq(users.email, row.email))).limit(1);
     if (r) return r as ClientRow;
   }
   if (row.phone) {
     const [r] = await db.select().from(users)
-      .where(and(tenant, notDeleted, eq(users.phone, row.phone))).limit(1);
+      .where(and(eq(users.tenantId, tenantId), notDeleted, eq(users.phone, row.phone))).limit(1);
     if (r) return r as ClientRow;
   }
   if (row.tgUsername) {
     const [r] = await db.select().from(users)
-      .where(and(tenant, notDeleted, eq(users.tgUsername, row.tgUsername))).limit(1);
+      .where(and(eq(users.tenantId, tenantId), notDeleted, eq(users.tgUsername, row.tgUsername))).limit(1);
     if (r) return r as ClientRow;
   }
   if (row.igUsername) {
     const [r] = await db.select().from(users)
-      .where(and(tenant, notDeleted, eq(users.igUsername, row.igUsername))).limit(1);
+      .where(and(eq(users.tenantId, tenantId), notDeleted, eq(users.igUsername, row.igUsername))).limit(1);
     if (r) return r as ClientRow;
   }
   return null;

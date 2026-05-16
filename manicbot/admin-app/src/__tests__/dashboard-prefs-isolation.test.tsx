@@ -22,6 +22,7 @@ import { useDashboardPrefs, loadDashboardPrefs, saveDashboardPrefs, dashboardPre
 import { api } from "~/trpc/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
+import SuperJSON from "superjson";
 
 function makeWrapper(tenantId: string | null) {
   const value: RoleContextValue = {
@@ -51,17 +52,15 @@ function makeWrapper(tenantId: string | null) {
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   const trpcClient = api.createClient({
-    links: [httpBatchLink({ url: "http://test.invalid/api/trpc" })],
+    links: [httpBatchLink({ url: "http://test.invalid/api/trpc", transformer: SuperJSON })],
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      React.createElement(
-        api.Provider,
-        { client: trpcClient, queryClient },
-        React.createElement(RoleContext.Provider, { value }, children),
-      ),
+    return (
+      <QueryClientProvider client={queryClient}>
+        <api.Provider client={trpcClient} queryClient={queryClient}>
+          <RoleContext.Provider value={value}>{children}</RoleContext.Provider>
+        </api.Provider>
+      </QueryClientProvider>
     );
   };
 }

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { webUsers, auditLog, tenants, masters, tenantConfig } from "~/server/db/schema";
+import { webUsers, auditLog, tenants, masters, tenantConfig, tenantRoles, masterInvitations } from "~/server/db/schema";
 import type { Lang } from "~/lib/i18n";
 import { and, eq } from "drizzle-orm";
+import { assertTenantMember } from "~/server/api/tenantAccess";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { generateToken, hashToken, timingSafeEqualHex } from "~/server/auth/tokens";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
@@ -1035,6 +1036,9 @@ export const webUsersRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       if (!ctx.webUser) return {};
+      // Tenant-membership guard: a user from tenant A must not be able to
+      // probe tenant B's config table. assertTenantMember throws on mismatch.
+      await assertTenantMember(ctx, input.tenantId);
       const key = `ui_prefs:user:${ctx.webUser.id}`;
       const [row] = await ctx.db
         .select({ value: tenantConfig.value })
@@ -1063,6 +1067,10 @@ export const webUsersRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // Tenant-membership guard: writes must target a tenant the caller
+      // belongs to. Without this, any logged-in user could spam tenant_config
+      // rows in any tenant.
+      await assertTenantMember(ctx, input.tenantId);
       const serialized = JSON.stringify(input.prefs);
       if (serialized.length > 8 * 1024) {
         // 8 KB hard cap; the sidebar prefs payload is < 1 KB in practice.
@@ -1078,5 +1086,252 @@ export const webUsersRouter = createTRPCRouter({
           set: { value: serialized },
         });
       return { ok: true as const };
+    }),
+
+  // ─── Master invitations (migration 0063) ────────────────────────────────
+
+  /**
+   * Public preview for the /register?invite=<token> page. Returns the
+   * invitation email (so the register form can pre-fill + lock) and salon
+   * name (banner) WITHOUT requiring authentication. Token must hash to a
+   * pending row and not be expired.
+   *
+   * Rate-limited by token-prefix-hash to prevent enumeration. We don't reveal
+   * existence vs invalid — both paths return null.
+   */
+  getInvitationPreview: publicProcedure
+    .input(z.object({ token: z.string().min(8).max(200) }))
+    .query(async ({ ctx, input }) => {
+      const tokenHash = await hashToken(input.token);
+      const now = Math.floor(Date.now() / 1000);
+      const rows = await ctx.db
+        .select({
+          id: masterInvitations.id,
+          email: masterInvitations.email,
+          tenantId: masterInvitations.tenantId,
+          tokenExpiresAt: masterInvitations.tokenExpiresAt,
+          status: masterInvitations.status,
+          scenario: masterInvitations.scenario,
+        })
+        .from(masterInvitations)
+        .where(eq(masterInvitations.tokenHash, tokenHash))
+        .limit(1);
+      const inv = rows[0];
+      if (!inv || inv.status !== "pending" || inv.scenario !== "new_user" || inv.tokenExpiresAt < now) {
+        return null;
+      }
+      const tenantRow = await ctx.db
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, inv.tenantId))
+        .limit(1);
+      return {
+        email: inv.email,
+        salonName: tenantRow[0]?.name ?? "ManicBot",
+      };
+    }),
+
+  /**
+   * Scenario A — accept an existing-user invitation. The caller is already
+   * logged in; their session email must match the invitation email. On
+   * success, creates a `masters` row (origin='invited_email') bound to the
+   * existing web_user, inserts a tenant_roles row, and marks the invitation
+   * accepted.
+   */
+  acceptInvitationExistingUser: protectedProcedure
+    .input(z.object({ invitationId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const caller = ctx.webUser;
+      if (!caller?.email) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const now = Math.floor(Date.now() / 1000);
+      const rows = await ctx.db
+        .select({
+          id: masterInvitations.id,
+          tenantId: masterInvitations.tenantId,
+          email: masterInvitations.email,
+          status: masterInvitations.status,
+          tokenExpiresAt: masterInvitations.tokenExpiresAt,
+        })
+        .from(masterInvitations)
+        .where(eq(masterInvitations.id, input.invitationId))
+        .limit(1);
+      const inv = rows[0];
+      if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "invitation_not_found" });
+      if (inv.status !== "pending") {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "invitation_not_pending" });
+      }
+      if (inv.tokenExpiresAt < now) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "invitation_expired" });
+      }
+      if (caller.email.toLowerCase() !== inv.email.toLowerCase()) {
+        // Don't leak the invitation target — generic mismatch.
+        throw new TRPCError({ code: "FORBIDDEN", message: "email_mismatch" });
+      }
+
+      // Synthetic chatId (same convention as createMasterAccount).
+      const syntheticChatId =
+        10_000_000_000 + (parseInt(caller.id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
+
+      // Insert masters row; tolerate the case where the caller is already a
+      // master of this tenant by surfacing CONFLICT.
+      try {
+        await ctx.db.insert(masters).values({
+          tenantId: inv.tenantId,
+          chatId: syntheticChatId,
+          name: caller.email.split("@")[0]!.slice(0, 200),
+          active: 1,
+          addedAt: now,
+          webUserId: caller.id,
+          isSynthetic: 1,
+          origin: "invited_email",
+        });
+      } catch (e) {
+        const msg = String((e as Error)?.message ?? "");
+        if (/UNIQUE constraint failed/i.test(msg)) {
+          // Already a master — mark invitation accepted anyway and return.
+        } else {
+          throw e;
+        }
+      }
+
+      await ctx.db
+        .insert(tenantRoles)
+        .values({ tenantId: inv.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
+        .onConflictDoUpdate({
+          target: [tenantRoles.tenantId, tenantRoles.chatId],
+          set: { role: "master", createdAt: now },
+        });
+
+      await ctx.db
+        .update(masterInvitations)
+        .set({ status: "accepted", acceptedAt: now, acceptedMasterId: syntheticChatId })
+        .where(eq(masterInvitations.id, inv.id));
+
+      await writeAudit(ctx.db, {
+        actor: caller.email,
+        action: "tenant.master.invite.accept_existing",
+        tenantId: inv.tenantId,
+        detail: `invitationId=${inv.id} masterChatId=${syntheticChatId}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
+
+      return { tenantId: inv.tenantId, masterChatId: syntheticChatId };
+    }),
+
+  /**
+   * Scenario B — accept a new-user invitation by token. Public procedure (the
+   * caller is registering, has no session yet). Creates a fresh web_user
+   * (role=master, email_verified=1 since the token IS the verification),
+   * masters row, tenant_roles row, and returns a one-time loginToken so the
+   * UI can auto-log in.
+   *
+   * Does NOT create a personal tenant — the invited master joins the
+   * inviter's tenant only.
+   */
+  acceptInvitationByToken: publicProcedure
+    .input(z.object({
+      token: z.string().min(8).max(200),
+      password: z.string().min(12).max(200),
+      name: z.string().min(1).max(200),
+      lang: z.enum(["ru", "ua", "en", "pl"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const tokenHash = await hashToken(input.token);
+      const now = Math.floor(Date.now() / 1000);
+      const rows = await ctx.db
+        .select({
+          id: masterInvitations.id,
+          tenantId: masterInvitations.tenantId,
+          email: masterInvitations.email,
+          status: masterInvitations.status,
+          tokenExpiresAt: masterInvitations.tokenExpiresAt,
+          scenario: masterInvitations.scenario,
+        })
+        .from(masterInvitations)
+        .where(eq(masterInvitations.tokenHash, tokenHash))
+        .limit(1);
+      const inv = rows[0];
+      if (!inv || inv.status !== "pending" || inv.scenario !== "new_user" || inv.tokenExpiresAt < now) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "invitation_invalid" });
+      }
+
+      // Reject if a web_user already exists for that email — the invite
+      // scenario was set at send time, so a race (someone registered between
+      // send + accept) is a clear PRECONDITION_FAILED. The salon owner needs
+      // to revoke + resend, which will pick existing_user.
+      const existing = await ctx.db
+        .select({ id: webUsers.id })
+        .from(webUsers)
+        .where(eq(webUsers.email, inv.email))
+        .limit(1);
+      if (existing.length) {
+        throw new TRPCError({ code: "CONFLICT", message: "email_already_registered" });
+      }
+
+      const id = crypto.randomUUID();
+      const passwordHash = await hashPassword(input.password);
+      const syntheticChatId =
+        10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
+
+      await ctx.db.insert(webUsers).values({
+        id,
+        email: inv.email,
+        passwordHash,
+        // No passwordEncrypted: this user owns their own password.
+        role: "master",
+        tenantId: inv.tenantId,
+        name: input.name,
+        lang: input.lang ?? "en",
+        emailVerified: 1, // token IS the verification — invite-only flow.
+        tosAcceptedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await ctx.db.insert(masters).values({
+        tenantId: inv.tenantId,
+        chatId: syntheticChatId,
+        name: input.name,
+        active: 1,
+        addedAt: now,
+        webUserId: id,
+        isSynthetic: 1,
+        origin: "invited_email",
+      });
+
+      await ctx.db
+        .insert(tenantRoles)
+        .values({ tenantId: inv.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
+        .onConflictDoUpdate({
+          target: [tenantRoles.tenantId, tenantRoles.chatId],
+          set: { role: "master", createdAt: now },
+        });
+
+      await ctx.db
+        .update(masterInvitations)
+        .set({ status: "accepted", acceptedAt: now, acceptedMasterId: syntheticChatId })
+        .where(eq(masterInvitations.id, inv.id));
+
+      // Mint a one-time login token (mirror existing post-verify flow).
+      const loginToken = generateToken();
+      const loginTokenHash = await hashToken(loginToken);
+      await ctx.db
+        .update(webUsers)
+        .set({
+          loginTokenHash,
+          loginTokenExpiresAt: now + 5 * 60, // 5-min one-shot
+        })
+        .where(eq(webUsers.id, id));
+
+      await writeAudit(ctx.db, {
+        actor: inv.email,
+        action: "tenant.master.invite.accept_new",
+        tenantId: inv.tenantId,
+        detail: `invitationId=${inv.id} masterChatId=${syntheticChatId} webUserId=${id}`,
+        ip: clientIp(ctx as { headers?: Headers | null }),
+      });
+
+      return { loginToken, tenantId: inv.tenantId };
     }),
 });

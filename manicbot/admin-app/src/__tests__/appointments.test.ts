@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("~/server/db", () => ({ getDb: () => null }));
 
+// rescheduleAppointment tests mock slotsBusy directly so the conflict
+// behaviour is exercised without seeding a fake appointments+blocks
+// schema in the in-memory db mock.
+const slotsBusyMock = vi.fn();
+vi.mock("~/server/api/slotsBusy", () => ({
+  slotsBusy: (...args: any[]) => slotsBusyMock(...args),
+}));
+
 // Must be mocked before importing the router so notifyWorker picks up test values
 vi.mock("~/env", () => ({
   env: {
@@ -20,6 +28,7 @@ import {
   makeAdminCtx,
   makeUnauthCtx,
   makeForbiddenWebCtx,
+  makeTenantOwnerCtx,
 } from "./helpers/db-mock";
 
 describe("appointmentsRouter", () => {
@@ -306,6 +315,359 @@ describe("appointmentsRouter", () => {
       await caller.markNoShow({ id: "apt_1", noShowBy: "client" });
 
       expect(dbMock.updateCalls[0]?.values.cancelReason).toBeNull();
+    });
+  });
+
+  // ── rescheduleAppointment ────────────────────────────────────────────────
+  //
+  // Powers Google-Calendar-style drag-to-reschedule from the salon
+  // dashboard. The matrix: terminal-row guard, NOT_FOUND, slot conflict,
+  // master role scoping, no-op short-circuit, and the happy path that
+  // resets Google Calendar sync + reminder flags.
+  describe("rescheduleAppointment", () => {
+    beforeEach(() => {
+      // Default: slot is free unless a test overrides.
+      slotsBusyMock.mockReset().mockResolvedValue({ busy: false });
+    });
+
+    const baseApt = {
+      id: "apt_1",
+      tenantId: "t_demo",
+      date: "2026-05-20",
+      time: "10:00",
+      ts: 0,
+      masterId: 100,
+      svcId: "manicure",
+      status: "confirmed",
+      cancelled: 0,
+      noShow: 0,
+    };
+
+    it("updates date/time/masterId and resets Google + reminder flags on the happy path", async () => {
+      const dbMock = createDbMock([
+        [baseApt],
+        [{ svcId: "manicure", duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const res = await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-21",
+        newTime: "14:30",
+        newMasterId: 200,
+      });
+
+      expect(res.ok).toBe(true);
+      expect(res.unchanged).toBe(false);
+      const vals = dbMock.updateCalls[0]?.values!;
+      expect(vals.date).toBe("2026-05-21");
+      expect(vals.time).toBe("14:30");
+      expect(vals.masterId).toBe(200);
+      // Google Calendar sync reset so phaseGcalSync re-syncs the event.
+      expect(vals.syncRetries).toBe(0);
+      expect(vals.syncRetryAfter).toBeNull();
+      expect(vals.syncLastError).toBeNull();
+      // Reminders re-armed so they fire at the new time, not the old one.
+      expect(vals.remH24).toBe(0);
+      expect(vals.remH2).toBe(0);
+      // ts recomputed from new date+time (UTC) — should be a positive int.
+      expect(typeof vals.ts).toBe("number");
+      expect(vals.ts).toBeGreaterThan(0);
+    });
+
+    it("keeps existing masterId when newMasterId is omitted", async () => {
+      const dbMock = createDbMock([
+        [baseApt],
+        [{ svcId: "manicure", duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-21",
+        newTime: "11:00",
+      });
+
+      expect(dbMock.updateCalls[0]?.values.masterId).toBe(100);
+    });
+
+    it("short-circuits when nothing actually changed", async () => {
+      const dbMock = createDbMock([[baseApt]]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const res = await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: baseApt.date,
+        newTime: baseApt.time,
+        newMasterId: baseApt.masterId,
+      });
+
+      expect(res.ok).toBe(true);
+      expect(res.unchanged).toBe(true);
+      expect(dbMock.updateCalls).toHaveLength(0);
+      expect(slotsBusyMock).not.toHaveBeenCalled();
+    });
+
+    it("throws NOT_FOUND when the appointment doesn't exist", async () => {
+      const dbMock = createDbMock([[]]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await expect(
+        caller.rescheduleAppointment({
+          tenantId: "t_demo",
+          appointmentId: "apt_missing",
+          newDate: "2026-05-21",
+          newTime: "10:00",
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("refuses to move terminal rows (cancelled / rejected / no_show / done)", async () => {
+      for (const terminal of [
+        { ...baseApt, cancelled: 1 },
+        { ...baseApt, noShow: 1 },
+        { ...baseApt, status: "rejected" },
+        { ...baseApt, status: "done" },
+      ]) {
+        const dbMock = createDbMock([[terminal]]);
+        const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+        await expect(
+          caller.rescheduleAppointment({
+            tenantId: "t_demo",
+            appointmentId: "apt_1",
+            newDate: "2026-05-21",
+            newTime: "10:00",
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "appointment_terminal" });
+      }
+    });
+
+    it("throws CONFLICT when slotsBusy reports a collision and skips the UPDATE", async () => {
+      slotsBusyMock.mockResolvedValueOnce({
+        busy: true,
+        conflict: { kind: "appointment", id: "apt_other" },
+      });
+      const dbMock = createDbMock([
+        [baseApt],
+        [{ svcId: "manicure", duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await expect(
+        caller.rescheduleAppointment({
+          tenantId: "t_demo",
+          appointmentId: "apt_1",
+          newDate: "2026-05-21",
+          newTime: "14:30",
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT", message: "slot_conflict" });
+      expect(dbMock.updateCalls).toHaveLength(0);
+    });
+
+    it("passes excludeAppointmentId so the row doesn't collide with itself", async () => {
+      const dbMock = createDbMock([
+        [baseApt],
+        [{ svcId: "manicure", duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-21",
+        newTime: "10:30",
+      });
+
+      expect(slotsBusyMock).toHaveBeenCalledWith(
+        expect.objectContaining({ excludeAppointmentId: "apt_1" }),
+      );
+    });
+
+    it("falls back to a 60-min default when the service is missing from the catalog", async () => {
+      const dbMock = createDbMock([
+        [baseApt],
+        [], // services SELECT returns empty
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-21",
+        newTime: "10:30",
+      });
+
+      expect(slotsBusyMock).toHaveBeenCalledWith(
+        expect.objectContaining({ durationMin: 60 }),
+      );
+    });
+  });
+
+  // ── update — tenant-scoped explicit save (reschedule + change master /
+  //   service + opt-in client notify). Separate from rescheduleAppointment
+  //   above which is the silent drag-to-move path.
+  describe("update", () => {
+    beforeEach(() => {
+      // slotsBusy is mocked at file scope; reset per test.
+      slotsBusyMock.mockReset().mockResolvedValue({ busy: false });
+    });
+
+    const baseRow = {
+      id: "apt_1",
+      tenantId: "t_demo",
+      date: "2026-05-16",
+      time: "14:00",
+      masterId: 5,
+      svcId: "svc_classic",
+    };
+
+    it("throws NOT_FOUND when the appointment does not exist", async () => {
+      const dbMock = createDbMock([[]]); // empty fetch
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await expect(
+        caller.update({ id: "apt_missing", time: "15:00" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("throws FORBIDDEN when caller is a tenant_owner of a different tenant", async () => {
+      const dbMock = createDbMock([[{ ...baseRow, tenantId: "t_other" }]]);
+      // makeForbiddenWebCtx has tenantId='t_demo' — mismatch with t_other.
+      const caller = createCaller(makeForbiddenWebCtx(dbMock.db) as never);
+
+      await expect(
+        caller.update({ id: "apt_1", time: "15:00" }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("rejects master assignment when masterId is not in the appointment's tenant", async () => {
+      const dbMock = createDbMock([
+        [baseRow], // fetch current
+        [],        // master cross-tenant select → empty
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await expect(
+        caller.update({ id: "apt_1", masterId: 99 }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it("rejects service assignment when serviceId is not in the appointment's tenant", async () => {
+      const dbMock = createDbMock([
+        [baseRow], // fetch current
+        [],        // service cross-tenant select → empty
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await expect(
+        caller.update({ id: "apt_1", serviceId: "svc_unknown" }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it("no-op save (every field matches current) does NOT trigger a Worker notify", async () => {
+      const dbMock = createDbMock([
+        [baseRow], // fetch current — nothing else (no slot check, no x-tenant)
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const result = await caller.update({
+        id: "apt_1",
+        date: baseRow.date,
+        time: baseRow.time,
+        masterId: baseRow.masterId,
+        serviceId: baseRow.svcId,
+      });
+
+      expect(result.notified).toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(slotsBusyMock).not.toHaveBeenCalled();
+    });
+
+    it("rescheduling (date change only) fires Worker notify with action=reschedule + prior date/time", async () => {
+      const dbMock = createDbMock([
+        [baseRow],            // fetch current
+        [{ duration: 60 }],   // fallback service-duration lookup for slot check
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const result = await caller.update({ id: "apt_1", date: "2026-05-18" });
+
+      expect(result.notified).toBe(true);
+      // notifyWorker is fire-and-forget — let the microtask queue drain.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/admin/appointment-action"),
+        expect.objectContaining({ method: "POST" }),
+      );
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body.action).toBe("reschedule");
+      expect(body.appointmentId).toBe("apt_1");
+      expect(body.tenantId).toBe("t_demo");
+      expect(body.oldDate).toBe(baseRow.date);
+      expect(body.oldTime).toBe(baseRow.time);
+    });
+
+    it("update sets ts to the recomputed UTC seconds for the new date+time", async () => {
+      const dbMock = createDbMock([
+        [baseRow],
+        [{ duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await caller.update({ id: "apt_1", date: "2026-05-18", time: "10:30" });
+
+      const ts = Math.floor(Date.UTC(2026, 4 /* May */, 18, 10, 30) / 1000);
+      expect(dbMock.updateCalls[0]?.values).toMatchObject({
+        date: "2026-05-18",
+        time: "10:30",
+        ts,
+      });
+    });
+
+    it("throws CONFLICT when slotsBusy reports a collision (and skips the UPDATE)", async () => {
+      slotsBusyMock.mockResolvedValueOnce({
+        busy: true,
+        conflict: { kind: "appointment", id: "apt_other" },
+      });
+      const dbMock = createDbMock([
+        [baseRow],
+        [{ duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await expect(
+        caller.update({ id: "apt_1", time: "16:00" }),
+      ).rejects.toMatchObject({ code: "CONFLICT", message: "slot_conflict" });
+      expect(dbMock.updateCalls).toHaveLength(0);
+    });
+
+    it("system_admin caller bypasses tenant-owner cross-check (assertTenantOwner short-circuits)", async () => {
+      const dbMock = createDbMock([
+        [{ ...baseRow, tenantId: "t_unrelated" }],
+        [{ duration: 30 }],
+      ]);
+      // makeAdminCtx is system_admin — assertTenantOwner returns immediately
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const result = await caller.update({ id: "apt_1", time: "16:00" });
+
+      expect(result.ok).toBe(true);
+      expect(result.notified).toBe(true);
+    });
+
+    it("tenant_owner with matching tenantId can update (no Forbidden)", async () => {
+      const dbMock = createDbMock([
+        [baseRow],
+        [{ duration: 60 }],
+      ]);
+      const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_demo") as never);
+
+      const result = await caller.update({ id: "apt_1", time: "16:30" });
+
+      expect(result.ok).toBe(true);
     });
   });
 });

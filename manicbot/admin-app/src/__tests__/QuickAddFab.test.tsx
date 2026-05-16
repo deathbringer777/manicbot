@@ -102,4 +102,29 @@ describe("QuickAddFab", () => {
       unmount();
     }
   });
+
+  // ── Clients-tab single-action mode (0062) ────────────────────────────────
+  describe('mode="client"', () => {
+    it("renders no menu — click fires onAddClient immediately", () => {
+      const onAddClient = vi.fn();
+      renderWithLang(
+        <QuickAddFab lang="en" mode="client" onAddClient={onAddClient} />,
+        "en",
+      );
+      // No menu before click.
+      expect(screen.queryByTestId("quick-add-menu")).toBeNull();
+      fireEvent.click(screen.getByTestId("quick-add-fab"));
+      // Still no menu — direct action.
+      expect(screen.queryByTestId("quick-add-menu")).toBeNull();
+      expect(onAddClient).toHaveBeenCalledTimes(1);
+    });
+
+    it("FAB carries data-mode='client' for QA assertions", () => {
+      renderWithLang(
+        <QuickAddFab lang="en" mode="client" onAddClient={() => undefined} />,
+        "en",
+      );
+      expect(screen.getByTestId("quick-add-fab").getAttribute("data-mode")).toBe("client");
+    });
+  });
 });

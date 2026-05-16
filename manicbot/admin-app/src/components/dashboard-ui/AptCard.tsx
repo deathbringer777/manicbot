@@ -1,19 +1,11 @@
 "use client";
 
-import { CheckCircle2, XCircle, UserX, AlertTriangle } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { APT_BORDER } from "~/lib/appointments";
+import { STATUS_STYLES } from "~/lib/appointments";
+import { StatusActionMenu } from "~/components/dashboard-ui/StatusActionMenu";
 
-export { APT_BORDER };
-
-export const STATUS_STYLES: Record<string, string> = {
-  confirmed: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20",
-  pending: "bg-amber-500/15 text-amber-400 border border-amber-500/20",
-  cancelled: "bg-red-500/15 text-red-400 border border-red-500/20",
-  rejected: "bg-red-500/15 text-red-400 border border-red-500/20",
-  no_show: "bg-orange-500/15 text-orange-400 border border-orange-500/20",
-  done: "bg-brand-500/15 text-brand-400 border border-brand-500/20",
-};
+export { APT_BORDER, STATUS_STYLES };
 
 const NO_SHOW_LABELS: Record<string, string> = {
   client: "Клиент не пришёл",
@@ -35,13 +27,28 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
   const [hh, mm] = (a.time ?? "00:00").split(":");
   const statusKey = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
   const border = APT_BORDER[statusKey] ?? "border-l-slate-700";
+  const isTerminal = a.cancelled || a.noShow || a.status === "rejected" || a.status === "done";
   const nameWords = (a.userName ?? "?").trim().split(/\s+/);
   const initials = nameWords.length >= 2
     ? (nameWords[0]![0]! + nameWords[1]![0]!).toUpperCase()
     : (a.userName ?? "?").slice(0, 2).toUpperCase();
 
+  const statusLabel =
+    statusKey === "no_show"
+      ? (NO_SHOW_LABELS[a.noShowBy] ?? "Не пришёл")
+      : statusKey === "cancelled" && a.cancelledBy
+        ? (CANCELLED_BY_LABELS[a.cancelledBy] ?? t(`status.${a.status}` as any, lang))
+        : t(`status.${a.status}` as any, lang);
+
   return (
-    <div className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden`}>
+    <div
+      className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden transition ${
+        isTerminal ? "opacity-50" : ""
+      }`}
+      data-testid="apt-card"
+      data-status={statusKey}
+      data-terminal={isTerminal ? "1" : "0"}
+    >
       <div className="p-3 flex items-start gap-3">
         <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400 mt-0.5">
           {initials}
@@ -56,13 +63,13 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
               <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
                 {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
               </p>
-              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-1 ${STATUS_STYLES[statusKey] ?? "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>
-                {statusKey === "no_show"
-                  ? (NO_SHOW_LABELS[a.noShowBy] ?? "Не пришёл")
-                  : statusKey === "cancelled" && a.cancelledBy
-                    ? (CANCELLED_BY_LABELS[a.cancelledBy] ?? t(`status.${a.status}` as any, lang))
-                    : t(`status.${a.status}` as any, lang)}
-              </span>
+              <StatusActionMenu
+                statusKey={statusKey}
+                label={statusLabel}
+                lang={lang}
+                onAction={onAction ? (status) => onAction(a.id, status) : undefined}
+                onNoShow={onNoShow ? (by) => onNoShow(a.id, by) : undefined}
+              />
             </div>
           </div>
           {a.cancelReason && (statusKey === "cancelled" || statusKey === "no_show") && (
@@ -72,45 +79,6 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
           )}
         </div>
       </div>
-      {onAction && a.status === "pending" && !a.cancelled && !a.noShow && (
-        <div className="flex border-t border-slate-200 dark:border-white/5">
-          <button onClick={() => onAction(a.id, "confirmed")}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/10 transition-colors">
-            <CheckCircle2 className="h-3.5 w-3.5" /> {t("action.confirm", lang)}
-          </button>
-          <div className="w-px bg-slate-200 dark:bg-white/5" />
-          <button onClick={() => onAction(a.id, "rejected")}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400 text-xs font-semibold hover:bg-red-500/10 transition-colors">
-            <XCircle className="h-3.5 w-3.5" /> {t("action.reject", lang)}
-          </button>
-        </div>
-      )}
-      {a.status === "confirmed" && !a.cancelled && !a.noShow && (
-        <div className="flex border-t border-slate-200 dark:border-white/5">
-          {onAction && (
-            <>
-              <button onClick={() => onAction(a.id, "cancelled")}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-400/60 text-xs font-medium hover:bg-red-500/10 transition-colors">
-                <XCircle className="h-3.5 w-3.5" /> {t("action.cancel", lang)}
-              </button>
-              <div className="w-px bg-slate-200 dark:bg-white/5" />
-            </>
-          )}
-          {onNoShow && (
-            <>
-              <button onClick={() => onNoShow(a.id, "client")}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
-                <UserX className="h-3.5 w-3.5" /> Клиент не пришёл
-              </button>
-              <div className="w-px bg-slate-200 dark:bg-white/5" />
-              <button onClick={() => onNoShow(a.id, "master")}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-orange-400/70 text-xs font-medium hover:bg-orange-500/10 transition-colors">
-                <AlertTriangle className="h-3.5 w-3.5" /> Мастер не пришёл
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }

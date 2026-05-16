@@ -66,10 +66,47 @@ export const users = sqliteTable("users", {
   firstMedium: text("first_medium"),
   firstTouchAt: integer("first_touch_at"),
   dob: text("dob"),
+  // 0062: clients tab overhaul — multi-channel contact, CRM fields, soft-delete.
+  email: text("email"),
+  igUsername: text("ig_username"),
+  notes: text("notes"),
+  tags: text("tags"),
+  marketingContactId: integer("marketing_contact_id"),
+  isBlockedGlobal: integer("is_blocked_global").notNull().default(0),
+  blockedGlobalReason: text("blocked_global_reason"),
+  blockedGlobalAt: integer("blocked_global_at"),
+  updatedAt: integer("updated_at"),
+  deletedAt: integer("deleted_at"),
+  lifetimeVisits: integer("lifetime_visits").notNull().default(0),
+  lastVisitAt: integer("last_visit_at"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
   index("idx_users_tenant_dob").on(t.tenantId, t.dob),
   index("idx_user_phone").on(t.tenantId, t.phone),
+  index("idx_users_tenant_email").on(t.tenantId, t.email),
+  index("idx_users_tenant_ig").on(t.tenantId, t.igUsername),
+  index("idx_users_marketing_id").on(t.marketingContactId),
+  index("idx_users_tenant_blocked").on(t.tenantId, t.isBlockedGlobal),
+  index("idx_users_tenant_deleted").on(t.tenantId, t.deletedAt),
+  index("idx_users_tenant_last_visit").on(t.tenantId, t.lastVisitAt),
+]);
+
+// 0062: per-master client blacklist. A master can hide specific clients
+// from their own booking flow (`tenant_id + master_chat_id + client_chat_id`
+// row marks the client invisible to that master). Tenant_owner-level
+// global blocks live on `users.is_blocked_global` instead.
+export const masterClientBlocks = sqliteTable("master_client_blocks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  masterChatId: integer("master_chat_id").notNull(),
+  clientChatId: integer("client_chat_id").notNull(),
+  reason: text("reason"),
+  blockedBy: integer("blocked_by").notNull(),
+  blockedAt: integer("blocked_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_mcb_uniq").on(t.tenantId, t.masterChatId, t.clientChatId),
+  index("idx_mcb_client").on(t.tenantId, t.clientChatId),
+  index("idx_mcb_master").on(t.tenantId, t.masterChatId),
 ]);
 
 export const userOrigins = sqliteTable("user_origins", {
@@ -116,12 +153,26 @@ export const masters = sqliteTable("masters", {
   publicHidden: integer("public_hidden").notNull().default(0),
   vacationFrom: integer("vacation_from"),
   vacationUntil: integer("vacation_until"),
+  /**
+   * 0062: account-origin model. Distinguishes how this master arrived on the
+   * tenant. Drives the salon vs master ownership of profile fields.
+   *   - salon_created    : created via salon.createMasterAccount (salon owns
+   *                        credentials, can peek/reset password via vault).
+   *   - invited_email    : added via salon.sendMasterInvitation; master owns.
+   *   - invited_telegram : added via salon.addMaster; master owns.
+   *   - self_registered  : web-registered with role=master + personal tenant.
+   */
+  origin: text("origin").notNull().default("salon_created"),
+  /** 0062: nullable soft-delete tombstone. NULL = active. */
+  archivedAt: integer("archived_at"),
 }, (t) => [
   index("idx_master_tenant").on(t.tenantId),
   index("idx_master_web_user_id").on(t.webUserId),
   index("idx_master_tenant_web_user").on(t.tenantId, t.webUserId),
   index("idx_masters_calendar_visibility").on(t.tenantId, t.calendarVisibility),
   index("idx_masters_vacation_until").on(t.vacationUntil),
+  index("idx_masters_active").on(t.tenantId),
+  index("idx_masters_tenant_origin").on(t.tenantId, t.origin),
 ]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {
@@ -418,6 +469,13 @@ export const webUsers = sqliteTable("web_users", {
   passwordResetTokenHash: text("password_reset_token_hash"),
   verificationTokenHash: text("verification_token_hash"),
   emailChangeTokenHash: text("email_change_token_hash"),
+  /**
+   * 0065: reversibly-encrypted plaintext password for salon-owned master
+   * accounts. AES-GCM ciphertext (BOT_ENCRYPTION_KEY + HKDF label
+   * 'master-password-v1'). NULL for accounts the master owns themselves.
+   * Salon owners read this via salon.peekMasterPassword under OTP gate.
+   */
+  passwordEncrypted: text("password_encrypted"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [
@@ -637,7 +695,10 @@ export const emailSubscribers = sqliteTable("email_subscribers", {
 
 export const marketingContacts = sqliteTable("marketing_contacts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  email: text("email").notNull(),
+  // 0062: email is now nullable so phone-first salon clients can sync into
+  // the marketing directory. The platform-wide UNIQUE on `email` was also
+  // dropped in favour of a per-tenant UNIQUE (idx_marketing_contacts_tenant_email).
+  email: text("email"),
   name: text("name"),
   phone: text("phone"),
   source: text("source"),
@@ -654,12 +715,15 @@ export const marketingContacts = sqliteTable("marketing_contacts", {
   unsubscribeToken: text("unsubscribe_token"),
   locale: text("locale"),
   lifecycleStage: text("lifecycle_stage"),
+  linkedUserChatId: integer("linked_user_chat_id"),
 }, (t) => [
-  uniqueIndex("idx_marketing_contacts_email").on(t.email),
+  uniqueIndex("idx_marketing_contacts_tenant_email").on(t.tenantId, t.email),
+  uniqueIndex("idx_marketing_contacts_tenant_phone").on(t.tenantId, t.phone),
   index("idx_marketing_contacts_phone").on(t.phone),
   index("idx_marketing_contacts_last_seen").on(t.lastSeenAt),
   index("idx_marketing_contacts_tenant").on(t.tenantId),
   uniqueIndex("idx_marketing_contacts_unsub_tok").on(t.unsubscribeToken),
+  index("idx_mc_linked_user").on(t.tenantId, t.linkedUserChatId),
 ]);
 
 export const marketingSegments = sqliteTable("marketing_segments", {
@@ -1056,4 +1120,127 @@ export const appointmentBlocks = sqliteTable("appointment_blocks", {
 }, (t) => [
   index("idx_apt_blocks_master_date").on(t.tenantId, t.masterId, t.date),
   index("idx_apt_blocks_tenant_date").on(t.tenantId, t.date),
+]);
+
+// ─── Master invitations (migration 0063) ─────────────────────────────────────
+// Pending invitations sent by salon owners to add a master by email. Two
+// scenarios captured at send time: existing_user (web_user already exists,
+// landed via /invitations/[id]) or new_user (magic link with token →
+// /register?invite=<token>).
+export const masterInvitations = sqliteTable("master_invitations", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  email: text("email").notNull(),
+  inviterUserId: text("inviter_user_id").notNull(),
+  invitedName: text("invited_name"),
+  /** SHA-256 hash of the one-time invite token (raw token only stored in
+   *  the email; never written to D1). Used by accept-by-token lookup. */
+  tokenHash: text("token_hash").notNull(),
+  tokenExpiresAt: integer("token_expires_at").notNull(),
+  /** pending | accepted | revoked | expired (lazy-flipped by reads). */
+  status: text("status").notNull().default("pending"),
+  /** existing_user | new_user — snapshot at send time. */
+  scenario: text("scenario").notNull(),
+  acceptedAt: integer("accepted_at"),
+  acceptedMasterId: integer("accepted_master_id"),
+  revokedAt: integer("revoked_at"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_master_invitations_unique_pending").on(t.tenantId, t.email),
+  index("idx_master_invitations_token").on(t.tokenHash),
+  index("idx_master_invitations_tenant_status").on(t.tenantId, t.status, t.createdAt),
+]);
+
+// ─── Global OTP codes (migration 0064) ───────────────────────────────────────
+// Generic OTP store for destructive / role-escalation mutations. One row per
+// (web_user_id, action, payload_hash). Caller emails a 6-digit code to the
+// actor's own email, then verifies inline via requireOtpConfirmation().
+export const globalOtpCodes = sqliteTable("global_otp_codes", {
+  id: text("id").primaryKey(),
+  webUserId: text("web_user_id").notNull(),
+  /** Action name, e.g. 'archive_master', 'reset_master_password'. */
+  action: text("action").notNull(),
+  /** SHA-256 hex of canonicalized JSON payload — binds the code to a single
+   *  operation so replay-with-different-args is impossible. */
+  payloadHash: text("payload_hash").notNull(),
+  /** SHA-256 hex of the 6-digit code. */
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_global_otp_user_action").on(t.webUserId, t.action, t.expiresAt),
+]);
+
+// ─── Internal messenger (migration 0066) ─────────────────────────────────────
+// Unified inbox: staff DMs + groups + mirrored client channel conversations.
+// See migrations/0066_messenger.sql for the design and the bridge to the
+// existing `conversations` table via client_conversation_id.
+export const threads = sqliteTable("threads", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  /** staff_dm | staff_group | client_conv | system */
+  kind: text("kind").notNull(),
+  title: text("title"),
+  /** FK to conversations.id when kind='client_conv'; NULL otherwise. */
+  clientConversationId: text("client_conversation_id"),
+  /** For kind='staff_dm': sorted "<minId>:<maxId>" of the two web_user ids.
+   *  Powers the partial UNIQUE index that prevents duplicate DMs. */
+  dmKey: text("dm_key"),
+  createdByWebUserId: text("created_by_web_user_id"),
+  createdAt: integer("created_at").notNull(),
+  lastMessageAt: integer("last_message_at"),
+  /** Denormalized excerpt of the most recent message body for inbox list
+   *  rendering without a JOIN to thread_messages. ≤200 chars. */
+  lastMessagePreview: text("last_message_preview"),
+  archived: integer("archived").notNull().default(0),
+}, (t) => [
+  index("idx_threads_tenant_last").on(t.tenantId, t.lastMessageAt),
+  index("idx_threads_tenant_kind_archived").on(t.tenantId, t.kind, t.archived, t.lastMessageAt),
+  uniqueIndex("idx_threads_dm_unique").on(t.tenantId, t.dmKey),
+  uniqueIndex("idx_threads_client_conv_unique").on(t.tenantId, t.clientConversationId),
+]);
+
+export const threadMembers = sqliteTable("thread_members", {
+  threadId: text("thread_id").notNull(),
+  /** web_user | external_client */
+  memberKind: text("member_kind").notNull(),
+  /** web_users.id for member_kind=web_user; '<channelType>:<channelUserId>'
+   *  (e.g. 'tg:12345', 'ig:17841...') for member_kind=external_client. */
+  memberRef: text("member_ref").notNull(),
+  role: text("role").notNull().default("member"),
+  joinedAt: integer("joined_at").notNull(),
+  mutedUntil: integer("muted_until"),
+  lastReadMessageId: text("last_read_message_id"),
+  lastReadAt: integer("last_read_at"),
+}, (t) => [
+  primaryKey({ columns: [t.threadId, t.memberKind, t.memberRef] }),
+  index("idx_thread_members_ref").on(t.memberKind, t.memberRef, t.lastReadAt),
+]);
+
+export const threadMessages = sqliteTable("thread_messages", {
+  /** ULID — lexicographic order = chronological. Enables cursor pagination
+   *  via (thread_id, id < cursor) without a separate created_at index. */
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  /** Denormalized for tenant isolation defense-in-depth on the largest table. */
+  tenantId: text("tenant_id").notNull(),
+  /** web_user | external_client | system */
+  senderKind: text("sender_kind").notNull(),
+  senderRef: text("sender_ref").notNull(),
+  body: text("body").notNull(),
+  attachmentsJson: text("attachments_json"),
+  /** 1 = visible only to staff (not relayed to external channel). */
+  isInternalNote: integer("is_internal_note").notNull().default(0),
+  /** External-side message id (TG msg id / WA wamid / IG mid) for outbound
+   *  delivery confirmation and inbound dedup. */
+  externalMsgId: text("external_msg_id"),
+  replyToMessageId: text("reply_to_message_id"),
+  createdAt: integer("created_at").notNull(),
+  editedAt: integer("edited_at"),
+  deletedAt: integer("deleted_at"),
+}, (t) => [
+  index("idx_thread_messages_thread").on(t.threadId, t.id),
+  index("idx_thread_messages_tenant_created").on(t.tenantId, t.createdAt),
 ]);

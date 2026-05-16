@@ -27,9 +27,13 @@
 import { useMemo, useEffect, useState, useRef } from "react";
 import { ChevronLeft, ChevronRight, Users, Eye, EyeOff, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
+import { useNowTicker } from "~/lib/useNowTicker";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
+import { AppointmentDetailPanel, type SelectedAppointment } from "~/components/dashboard-ui/AppointmentDetailPanel";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
+import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
@@ -109,6 +113,20 @@ interface Props {
   blocks?: DayViewBlock[];
   onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
   onDeleteBlock?: (id: string) => void;
+  /** Drag-to-reschedule: fires when the user drops a block on a new slot.
+   *  Day view supports cross-master drag (drop on a different master's
+   *  column reassigns the booking). */
+  onMoveAppointment?: (move: MoveCommit) => void;
+  /**
+   * Rich detail panel — when `tenantId` + `services` are provided the
+   * bottom drawer becomes `<AppointmentDetailPanel/>` with read/edit
+   * modes. Without them, the view falls back to the legacy `AptCard`
+   * inline view (status-only actions, no edit). `onUpdated` lets the
+   * parent refetch apts after a save / status change / delete.
+   */
+  tenantId?: string;
+  services?: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
+  onUpdated?: () => void;
 }
 
 function pad(n: number): string {
@@ -233,12 +251,31 @@ export function SalonDayView({
   blocks,
   onCreateAt,
   onDeleteBlock,
+  onMoveAppointment,
+  tenantId,
+  services,
+  onUpdated,
 }: Props) {
+  // Drag-to-reschedule — single hook owns the cross-column ghost state.
+  // Both the date+master pair are resolved from the column under the
+  // cursor, so dropping on a different master's column reassigns the
+  // booking server-side via newMasterId.
+  const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
+    hourHeight: HOUR_HEIGHT,
+    hourStart: HOUR_START,
+    hourEnd: HOUR_END,
+    onCommit: (c) => onMoveAppointment?.(c),
+  });
   const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
+  const [blockToDelete, setBlockToDelete] = useState<string | null>(null);
   const todayIso = fmtIsoDate(new Date());
   const isToday = isoDate === todayIso;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  // Single now-ticker for both the red marker line and past-event dimming.
+  // 60s cadence — the grid resolution is minutes, no point ticking faster.
+  const nowMs = useNowTicker(60_000);
 
   // Mobile scroll indicator — tracks which master column is currently most
   // visible in the horizontal scroll container.
@@ -396,20 +433,49 @@ export function SalonDayView({
   const goToday = () => setDate(new Date());
 
   // Current-time red line — only on today, only inside visible range.
-  const [nowMinutes, setNowMinutes] = useState(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  });
-  useEffect(() => {
-    if (!isToday) return;
-    const interval = window.setInterval(() => {
-      const now = new Date();
-      setNowMinutes(now.getHours() * 60 + now.getMinutes());
-    }, 60_000);
-    return () => window.clearInterval(interval);
-  }, [isToday]);
+  // Sourced from useNowTicker so red line + past-event dimming move in lockstep.
+  const nowDate = useMemo(() => new Date(nowMs), [nowMs]);
+  const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
   const currentTimeTop = ((nowMinutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
   const currentTimeVisible = isToday && nowMinutes >= HOUR_START * 60 && nowMinutes < HOUR_END * 60;
+
+  // Per-appointment "is in the past" lookup. An appointment is past when
+  // its end time (start + svc duration) is before now. We collapse the
+  // calc into a Map keyed by apt id so the render loop is a Map.get(id)
+  // and the closure can stay slim. Same approach for blocks below.
+  const aptIsPast = useMemo(() => {
+    const map = new Map<number | string, boolean>();
+    for (const a of apts) {
+      if (a.date !== isoDate) continue;
+      // Parse "HH:MM" + duration → absolute LOCAL ms (using Date(y,m,d,h,m)
+      // rather than Date.UTC) so a 14:00 appointment in Warsaw counts as
+      // past at 14:31 local — not 14:31 UTC. Mirrors the .getHours() math
+      // already used for the red `now` line marker.
+      const [hh, mm] = (a.time ?? "00:00").split(":").map(Number);
+      const [y, mo, d] = isoDate.split("-").map(Number);
+      const localStartMs = new Date(y!, mo! - 1, d!, hh!, mm!).getTime();
+      const dur = typeof a.duration === "number" && a.duration > 0 ? a.duration : 60;
+      map.set(a.id, localStartMs + dur * 60_000 < nowMs);
+    }
+    return map;
+  }, [apts, isoDate, nowMs]);
+
+  const blockIsPast = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const b of blocks ?? []) {
+      // Multi-day blocks: past only when the END date is before today.
+      if (b.endDate && b.endDate !== isoDate) {
+        map.set(b.id, b.endDate < todayIso);
+        continue;
+      }
+      const [hh, mm] = (b.time ?? "00:00").split(":").map(Number);
+      const [y, mo, d] = b.date.split("-").map(Number);
+      const localStartMs = new Date(y!, mo! - 1, d!, hh!, mm!).getTime();
+      const dur = b.durationMin > 0 ? b.durationMin : 30;
+      map.set(b.id, localStartMs + dur * 60_000 < nowMs);
+    }
+    return map;
+  }, [blocks, isoDate, todayIso, nowMs]);
 
   return (
     <div className="space-y-3" data-testid="salon-day-view">
@@ -570,6 +636,11 @@ export function SalonDayView({
                   className="flex-1 min-w-[100px] sm:min-w-[180px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative"
                   data-testid="day-view-master-column"
                   data-master-id={master.chatId}
+                  // data-day attribute is what useDragToMove keys off to
+                  // resolve the column under the cursor. Skipping it on
+                  // the synthetic Unassigned column (-1) makes that
+                  // column non-draggable as a drop target.
+                  {...(master.chatId !== -1 ? { "data-day": isoDate } : {})}
                 >
                   {/* Header */}
                   <div className="h-12 flex items-center gap-2 px-3 border-b border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm">
@@ -673,25 +744,53 @@ export function SalonDayView({
                       const height = durationToHeight(a.duration);
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
                       const isNoShow = !!a.noShow;
-                      const opacity = isCancelled || isNoShow ? 0.45 : 1;
+                      const isTerminal = isCancelled || isNoShow || a.status === "done";
+                      const isPast = aptIsPast.get(a.id) === true;
+                      // Hierarchy: cancelled/no-show always read as "discarded"
+                      // (opacity-40, more aggressive than past). Pure past
+                      // events get a lighter wash so their brand color still
+                      // signals confirmed/pending/done.
+                      const dimClass = isCancelled || isNoShow
+                        ? "opacity-40"
+                        : isPast
+                          ? "opacity-70 saturate-50"
+                          : "";
                       const isSelected = selectedApt?.id === a.id;
+                      const isDraggingSelf = draggingId === a.id;
+                      // Fade the source block while its drag ghost is shown.
+                      const dragOpacity = isDraggingSelf ? 0.3 : undefined;
+                      // Terminal rows + the synthetic Unassigned column
+                      // are not drop targets — skip the drag wire-up.
+                      const drag =
+                        !isTerminal && master.chatId !== -1 && onMoveAppointment
+                          ? bindBlock({
+                              appointmentId: a.id,
+                              date: isoDate,
+                              masterId: master.chatId as number,
+                              time: a.time,
+                              durationMin: a.duration ?? 60,
+                            })
+                          : null;
                       return (
                         <button
                           type="button"
                           key={a.id}
                           onClick={(e) => { e.stopPropagation(); setSelectedApt(a); }}
+                          onPointerDown={drag?.onPointerDown}
                           data-testid="day-view-event"
                           data-apt-id={a.id}
                           data-selected={isSelected ? "1" : "0"}
-                          className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left transition-all overflow-hidden ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-white/20 hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
+                          data-past={isPast ? "1" : "0"}
+                          className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left transition-all overflow-hidden ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-white/20 hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${dimClass} ${
                             isSelected ? "ring-2 ring-offset-1 shadow-md" : ""
-                          }`}
+                          } ${drag ? "cursor-grab active:cursor-grabbing" : ""}`}
                           style={{
                             top,
                             height,
                             background: tone.bg,
                             borderLeft: `3px solid ${tone.border}`,
-                            opacity,
+                            ...(dragOpacity !== undefined ? { opacity: dragOpacity } : {}),
+                            ...(drag?.style ?? {}),
                           }}
                           title={`${a.time} ${a.userName ?? ""}`.trim()}
                         >
@@ -712,16 +811,44 @@ export function SalonDayView({
                       );
                     })}
 
+                    {/* Drag-to-reschedule ghost — rendered in whichever
+                        master column is currently under the cursor. The
+                        column resolution happens inside useDragToMove via
+                        data-day + data-master-id on the column wrapper. */}
+                    {moveGhost &&
+                      moveGhost.date === isoDate &&
+                      moveGhost.masterId === (master.chatId as number) && (
+                        <div
+                          aria-hidden
+                          data-testid="day-view-move-ghost"
+                          className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none flex flex-col items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-100"
+                          style={{
+                            top: moveGhost.top,
+                            height: moveGhost.height,
+                            background: "rgba(124,58,237,0.22)",
+                            borderColor: "rgba(124,58,237,0.7)",
+                            zIndex: 30,
+                          }}
+                        >
+                          <span className="tabular-nums leading-none">
+                            {`${String(Math.floor(moveGhost.startMin / 60)).padStart(2, "0")}:${String(moveGhost.startMin % 60).padStart(2, "0")}`}
+                          </span>
+                        </div>
+                      )}
+
                     {/* Blocks (reservation / time_off) — calendar overhaul.
                         Hatched grey fill, lock icon, no client column. Click
-                        opens a small inline confirm; on confirm calls
-                        `onDeleteBlock` to soft-cancel the row. */}
+                        opens a styled ConfirmDialog (replaces the old
+                        window.confirm); on confirm calls `onDeleteBlock`
+                        to soft-cancel the row. */}
                     {(blocksByMaster.get(master.chatId as number) ?? []).map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== isoDate;
                       const top = isMultiDay ? 0 : timeToTop(b.time);
                       const height = isMultiDay
                         ? TOTAL_HOURS * HOUR_HEIGHT
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
+                      const isPast = blockIsPast.get(b.id) === true;
+                      const dimClass = isPast ? "opacity-70 saturate-50" : "";
                       return (
                         <button
                           type="button"
@@ -729,16 +856,13 @@ export function SalonDayView({
                           data-testid="day-view-block"
                           data-block-id={b.id}
                           data-block-type={b.type}
+                          data-past={isPast ? "1" : "0"}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!onDeleteBlock) return;
-                            // Lightweight inline confirm — keeps the day view
-                            // self-contained without a global confirm modal.
-                            if (typeof window !== "undefined" && window.confirm(t("common.deleteConfirm", lang))) {
-                              onDeleteBlock(b.id);
-                            }
+                            setBlockToDelete(b.id);
                           }}
-                          className="absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity"
+                          className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity ${dimClass}`}
                           style={{
                             top,
                             height,
@@ -779,8 +903,45 @@ export function SalonDayView({
         </div>
       )}
 
-      {/* Selected appointment — bottom drawer */}
-      {selectedApt && (
+      {/* Selected appointment — rich detail panel when consumer wires the
+          tenantId + services props (SalonDashboard does); otherwise the
+          legacy AptCard inline view (AppointmentsPageClient). */}
+      {selectedApt && tenantId && services ? (
+        <AppointmentDetailPanel
+          tenantId={tenantId}
+          selected={
+            {
+              id: selectedApt.id,
+              tenantId,
+              date: selectedApt.date,
+              time: selectedApt.time,
+              duration: typeof selectedApt.duration === "number" ? selectedApt.duration : null,
+              status: selectedApt.status,
+              cancelled: selectedApt.cancelled ?? null,
+              noShow: selectedApt.noShow ?? null,
+              noShowBy: selectedApt.noShowBy ?? null,
+              cancelledBy: selectedApt.cancelledBy ?? null,
+              cancelReason: selectedApt.cancelReason ?? null,
+              masterId: selectedApt.masterId ?? null,
+              svcId: selectedApt.svcId ?? null,
+              userName: selectedApt.userName ?? null,
+              userPhone: selectedApt.userPhone ?? null,
+              userTg: selectedApt.userTg ?? null,
+              chatId: selectedApt.chatId ?? null,
+            } satisfies SelectedAppointment
+          }
+          masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
+          services={services}
+          lang={lang}
+          onClose={() => setSelectedApt(null)}
+          onChanged={() => {
+            onUpdated?.();
+            // Drop the local selection — parent's refetch will rehydrate
+            // with the updated row and the user can reopen the panel.
+            setSelectedApt(null);
+          }}
+        />
+      ) : selectedApt ? (
         <div
           className="glass-card rounded-2xl p-4 space-y-3"
           data-testid="day-view-selected"
@@ -799,7 +960,22 @@ export function SalonDayView({
           </div>
           <AptCard a={selectedApt} lang={lang} onAction={onAction} onNoShow={onNoShow} />
         </div>
-      )}
+      ) : null}
+
+      {/* Styled confirm for block deletion — replaces window.confirm. */}
+      <ConfirmDialog
+        open={blockToDelete !== null}
+        title={t("salon.day.deleteBlockTitle", lang)}
+        description={t("salon.day.deleteBlockDesc", lang)}
+        confirmLabel={t("common.delete", lang)}
+        cancelLabel={t("common.cancel", lang)}
+        tone="danger"
+        onConfirm={() => {
+          if (blockToDelete && onDeleteBlock) onDeleteBlock(blockToDelete);
+          setBlockToDelete(null);
+        }}
+        onCancel={() => setBlockToDelete(null)}
+      />
     </div>
   );
 }

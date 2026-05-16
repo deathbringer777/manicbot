@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  ArrowLeft, Loader2, CheckCircle2, Tag, Users, AlertTriangle, Power,
+  ArrowLeft, Loader2, CheckCircle2, Check, Tag, Users, AlertTriangle, Power,
   Pin, PinOff, Settings as SettingsIcon, ExternalLink, ToggleLeft, ToggleRight,
 } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -218,9 +218,9 @@ export default function PluginDetailClient() {
               disabled={locked}
               onClick={() => setModalOpen(true)}
               data-testid="plugin-detail-install"
-              className="px-3 py-1.5 text-xs rounded-xl bg-brand-500 text-white border border-brand-600 hover:bg-brand-600 disabled:opacity-50 inline-flex items-center gap-1.5"
+              className="px-5 sm:px-6 py-2.5 text-sm font-semibold rounded-full bg-brand-500 text-white border border-brand-600 hover:bg-brand-600 shadow-sm hover:shadow transition disabled:opacity-50 inline-flex items-center gap-2"
             >
-              <CheckCircle2 size={12} /> {t("plugins.card.install", lang)}
+              <CheckCircle2 size={16} /> {t("plugins.card.install", lang)}
             </button>
           )}
         </div>
@@ -250,24 +250,34 @@ export default function PluginDetailClient() {
         </p>
       </section>
 
-      <section className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-white dark:bg-slate-900/50">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 inline-flex items-center gap-1"><Tag size={12} /> {t("plugins.detail.category", lang)}</div>
-          <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">{t(`plugins.cat.${card.category}` as never, lang)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-white dark:bg-slate-900/50">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400">
-            {t("plugins.detail.billingBlock", lang)}
+      <section className="mt-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/50 overflow-hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 dark:divide-white/10">
+          <div className="px-4 py-5 sm:p-6 flex flex-col items-center text-center">
+            <div className="text-[11px] uppercase tracking-wider text-slate-400 inline-flex items-center gap-1">
+              <Tag size={12} /> {t("plugins.detail.category", lang)}
+            </div>
+            <div className="mt-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+              {t(`plugins.cat.${card.category}` as never, lang)}
+            </div>
           </div>
-          <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">{card.billingLabel}</div>
-        </div>
-        <div
-          className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-white dark:bg-slate-900/50"
-          data-testid="plugin-detail-available-for"
-        >
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 inline-flex items-center gap-1"><Users size={12} /> {t("plugins.detail.availableFor", lang)}</div>
-          <div className="mt-1 text-xs text-slate-700 dark:text-slate-200 leading-snug">
-            {availableForLabels}
+          <div className="px-4 py-5 sm:p-6 flex flex-col items-center text-center">
+            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+              {t("plugins.detail.billingBlock", lang)}
+            </div>
+            <div className="mt-2 text-base font-semibold text-slate-800 dark:text-slate-100">
+              {card.billingLabel}
+            </div>
+          </div>
+          <div
+            data-testid="plugin-detail-available-for"
+            className="px-4 py-5 sm:p-6 flex flex-col items-center text-center"
+          >
+            <div className="text-[11px] uppercase tracking-wider text-slate-400 inline-flex items-center gap-1">
+              <Users size={12} /> {t("plugins.detail.availableFor", lang)}
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug">
+              {availableForLabels}
+            </div>
           </div>
         </div>
       </section>
@@ -291,22 +301,29 @@ export default function PluginDetailClient() {
       {manifest.permissions.length > 0 && (
         <section className="mt-6">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {t("plugins.install.permissions", lang)}
+            {t("plugins.detail.dataAccess", lang)}
           </h2>
-          <ul className="mt-2 space-y-1">
-            {manifest.permissions.map((p) => (
-              <li
-                key={p.key}
-                className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2"
-              >
-                <span className={`inline-block w-1.5 h-1.5 rounded-full ${p.sensitive ? "bg-amber-500" : "bg-emerald-500"}`} />
-                <code className="font-mono">{p.key}</code>
-                <span className="text-[10px] uppercase tracking-wider text-slate-400">{p.scope}</span>
-                {p.sensitive && (
-                  <span className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">sensitive</span>
-                )}
-              </li>
-            ))}
+          <ul className="mt-3 space-y-2">
+            {[...manifest.permissions]
+              .sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "read" ? -1 : 1))
+              .map((p) => {
+                const i18nKey = `plugins.perm.${p.key}` as never;
+                const label = t(i18nKey, lang);
+                const isLocalized = label !== i18nKey;
+                return (
+                  <li
+                    key={p.key}
+                    className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2"
+                  >
+                    <Check size={16} className="mt-0.5 shrink-0 text-emerald-500" />
+                    {isLocalized ? (
+                      <span>{label}</span>
+                    ) : (
+                      <code className="font-mono text-xs">{p.key}</code>
+                    )}
+                  </li>
+                );
+              })}
           </ul>
         </section>
       )}

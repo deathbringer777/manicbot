@@ -7,6 +7,7 @@ export default {
 
   apt_pending: '⏳ <b>Request accepted!</b>\n\nWe received your request:\n\n{svc}\n📅 {dt}\n\nThe specialist will confirm shortly. We\'ll let you know! 📲',
   apt_rejected: '❌ <b>Appointment not confirmed</b>\n\n{svc}\n📅 {dt}',
+  apt_rescheduled: '🔄 <b>Appointment rescheduled</b>\n\n{svc}\n\n❌ Was: {oldDt}\n✅ Now: <b>{newDt}</b>\n\nSee you soon! 💅',
   apt_reject_cmt: '\n\n💬 <i>{comment}</i>',
   apt_rebook: '\n\nWould you like to choose another time?',
   apt_counter: '💬 <b>Specialist suggests another time:</b>\n\n{svc}\n📅 {d}\n🕐 <b>{newtime}</b>',

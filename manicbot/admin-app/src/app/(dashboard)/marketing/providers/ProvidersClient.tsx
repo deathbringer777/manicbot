@@ -6,6 +6,7 @@ import { api } from "~/trpc/react";
 import { Loader2, Activity, Zap, ZapOff } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { useMarketingScope } from "../useMarketingScope";
 
 type HealthResult = {
   status: "ok" | "not_configured" | "degraded" | "down";
@@ -24,18 +25,30 @@ function fmtDate(ts?: number | null) {
 export default function ProvidersClient() {
   const { lang } = useLang();
   const utils = api.useUtils();
-  const listQ = (api as any).marketing.providersList.useQuery();
+  const { mode, tenantId } = useMarketingScope();
+
+  // Tenant view is read-only — provider config + health-check + toggle stay
+  // God Mode. Tenants see provider status but cannot mutate platform state.
+  const adminListQ = api.marketing.providersList.useQuery(undefined, { enabled: mode === "admin" });
+  const tenantListQ = api.marketingTenant.providersList.useQuery(
+    { tenantId: tenantId ?? "" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const listQ = mode === "admin" ? adminListQ : tenantListQ;
+
   const [lastCheck, setLastCheck] = useState<Record<string, HealthResult>>({});
 
-  const checkMut = (api as any).marketing.providerHealthCheck.useMutation({
+  const checkMut = api.marketing.providerHealthCheck.useMutation({
     onSuccess: (data: any, variables: any) => {
       setLastCheck((p) => ({ ...p, [variables.name]: data }));
-      (utils as any).marketing.providersList.invalidate();
+      utils.marketing.providersList.invalidate();
     },
   });
-  const toggleMut = (api as any).marketing.providerToggle.useMutation({
-    onSuccess: () => (utils as any).marketing.providersList.invalidate(),
+  const toggleMut = api.marketing.providerToggle.useMutation({
+    onSuccess: () => utils.marketing.providersList.invalidate(),
   });
+
+  const canMutate = mode === "admin";
 
   return (
     <MarketingShell title="Marketing • Providers" subtitle="Email/SMS транспорт: Brevo, Resend, Twilio">
@@ -92,40 +105,44 @@ export default function ProvidersClient() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1.5 shrink-0">
-                    <button
-                      onClick={() => checkMut.mutate({ name: p.name })}
-                      disabled={checkMut.isPending}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
-                    >
-                      <Activity className="h-3.5 w-3.5" />
-                      Проверить
-                    </button>
-                    <button
-                      onClick={() => toggleMut.mutate({ name: p.name, enabled: !p.db?.enabled })}
-                      disabled={toggleMut.isPending}
-                      className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md border transition-colors disabled:opacity-50 ${
-                        p.db?.enabled
-                          ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30"
-                          : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                      }`}
-                    >
-                      {p.db?.enabled ? <ZapOff className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
-                      {p.db?.enabled ? "Отключить" : "Включить"}
-                    </button>
-                  </div>
+                  {canMutate && (
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <button
+                        onClick={() => checkMut.mutate({ name: p.name })}
+                        disabled={checkMut.isPending}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
+                      >
+                        <Activity className="h-3.5 w-3.5" />
+                        Проверить
+                      </button>
+                      <button
+                        onClick={() => toggleMut.mutate({ name: p.name, enabled: !p.db?.enabled })}
+                        disabled={toggleMut.isPending}
+                        className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md border transition-colors disabled:opacity-50 ${
+                          p.db?.enabled
+                            ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                            : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                        }`}
+                      >
+                        {p.db?.enabled ? <ZapOff className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
+                        {p.db?.enabled ? "Отключить" : "Включить"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
 
-          <div className="text-[11px] text-slate-500 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-3">
-            <b>Env vars (Cloudflare Pages):</b><br/>
-            <code className="text-slate-700 dark:text-slate-300">BREVO_API_KEY</code> — Brevo API ключ (xkeysib-…)<br/>
-            <code className="text-slate-700 dark:text-slate-300">BREVO_FROM</code> — отправитель email (<code>ManicBot &lt;noreply@manicbot.com&gt;</code>)<br/>
-            <code className="text-slate-700 dark:text-slate-300">BREVO_SMS_SENDER</code> — SMS sender ID (до 11 символов)<br/>
-            <code className="text-slate-700 dark:text-slate-300">RESEND_API_KEY</code>, <code className="text-slate-700 dark:text-slate-300">RESEND_FROM</code> — активны для транзакционных писем
-          </div>
+          {canMutate && (
+            <div className="text-[11px] text-slate-500 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-3">
+              <b>Env vars (Cloudflare Pages):</b><br/>
+              <code className="text-slate-700 dark:text-slate-300">BREVO_API_KEY</code> — Brevo API ключ (xkeysib-…)<br/>
+              <code className="text-slate-700 dark:text-slate-300">BREVO_FROM</code> — отправитель email (<code>ManicBot &lt;noreply@manicbot.com&gt;</code>)<br/>
+              <code className="text-slate-700 dark:text-slate-300">BREVO_SMS_SENDER</code> — SMS sender ID (до 11 символов)<br/>
+              <code className="text-slate-700 dark:text-slate-300">RESEND_API_KEY</code>, <code className="text-slate-700 dark:text-slate-300">RESEND_FROM</code> — активны для транзакционных писем
+            </div>
+          )}
         </div>
       )}
     </MarketingShell>

@@ -134,6 +134,35 @@ export async function sendAptConfirmedToClient(ctx, apt) {
   }
 }
 
+/**
+ * Notify the client that a salon owner moved their appointment to a new slot.
+ *
+ * Triggered by the admin-app `appointments.update` mutation via POST
+ * `/admin/appointment-action` action="reschedule". The Worker is the single
+ * source of truth for channel routing (TG/IG/WA) and language resolution,
+ * so the mutation only fires the webhook — the message body is rendered here.
+ *
+ * `oldDate` / `oldTime` are the values BEFORE the update (passed through the
+ * webhook); `apt` already holds the new ones from `getAptById`.
+ */
+export async function sendAptRescheduledToClient(ctx, apt, oldDate, oldTime) {
+  const lg = (await getLang(ctx, apt.chatId)) || 'ru';
+  const svc = svcName(ctx, lg, apt.svcId);
+  const newDt = fmtDT(lg, apt.date, apt.time);
+  // Old date/time may be missing for a master-only or service-only update —
+  // fall back to the current values so the message still makes sense.
+  const oldDt = oldDate && oldTime ? fmtDT(lg, oldDate, oldTime) : newDt;
+  const body = fill(t(lg, 'apt_rescheduled'), { svc, oldDt, newDt });
+  await send(ctx, apt.chatId, body);
+  const ics = makeICS(ctx, apt, lg);
+  if (ics) await sendIcs(ctx, apt.chatId, ics, 'manicure.ics', '');
+  const calUrl = await makeCalendarUrl(ctx, apt.id);
+  if (calUrl) {
+    const linkText = { ru: '📅 Обновить в календаре', en: '📅 Update in calendar', pl: '📅 Zaktualizuj w kalendarzu', ua: '📅 Оновити в календарі' };
+    await send(ctx, apt.chatId, `<a href="${calUrl}">${linkText[lg] || linkText.ru}</a>`, { parse_mode: 'HTML' });
+  }
+}
+
 export async function confirmAllPendingApts(ctx, cid) {
   if (!await canManageApt(ctx, cid)) return 0;
   const pending = await getAllPendingApts(ctx);

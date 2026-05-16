@@ -3,8 +3,8 @@
 import { useState } from "react";
 import {
   Loader2, Bot, CheckCircle, ExternalLink, Unplug,
-  Instagram, MessageCircle, Globe, Copy, Check,
-  Eye, EyeOff, Download, QrCode,
+  Instagram, MessageCircle, Globe,
+  Download, QrCode, Sparkles,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
@@ -156,9 +156,9 @@ function TelegramTab({ tenantId }: { tenantId: string }) {
     );
   }
 
+  // Connect form on top, "how to" guide collapsed at the bottom.
   return (
     <div className="space-y-4">
-      <BotFatherGuide />
       <section className="glass-card rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-2xl bg-brand-500/10 flex items-center justify-center">
@@ -181,6 +181,7 @@ function TelegramTab({ tenantId }: { tenantId: string }) {
           </button>
         </form>
       </section>
+      <BotFatherGuide />
     </div>
   );
 }
@@ -244,9 +245,9 @@ function InstagramTab({ tenantId }: { tenantId: string }) {
     { label: t("channels.igBusinessId", lang), value: businessId, onChange: setBusinessId, placeholder: "25881183...", required: false },
   ] as const;
 
+  // Connect form on top, "how to connect" guide collapsed at the bottom.
   return (
     <div className="space-y-4">
-      <MetaGuide channel="instagram" />
       <section className="glass-card rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-2xl bg-pink-500/10 flex items-center justify-center">
@@ -273,6 +274,7 @@ function InstagramTab({ tenantId }: { tenantId: string }) {
           </button>
         </form>
       </section>
+      <MetaGuide channel="instagram" />
     </div>
   );
 }
@@ -286,6 +288,9 @@ function WhatsAppTab({ tenantId }: { tenantId: string }) {
   const channels = api.salon.getChannels.useQuery({ tenantId });
   const hints = api.salon.getMetaChannelHints.useQuery({ tenantId });
   const waChannel = channels.data?.find((c) => c.channelType === "whatsapp");
+  // Activation derived purely from the existence of a WA channel row in D1 —
+  // support flips this when Meta acknowledges the verify-token handshake.
+  const activated = !!waChannel;
 
   const disconnectMut = api.salon.disconnectChannel.useMutation({
     onSuccess: () => { void channels.refetch(); void utils.salon.getChannels.invalidate({ tenantId }); },
@@ -296,8 +301,23 @@ function WhatsAppTab({ tenantId }: { tenantId: string }) {
 
   return (
     <div className="space-y-4">
-      <MetaGuide channel="whatsapp" />
+      {/* Status pill (read-only, derived from getChannels) */}
+      <div
+        data-testid="wa-status-pill"
+        className={`rounded-xl px-3 py-2.5 text-[11px] font-medium border flex items-start gap-2 ${
+          activated
+            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+            : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+        }`}
+      >
+        {activated
+          ? <CheckCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+          : <MessageCircle className="h-3.5 w-3.5 shrink-0 mt-px" />}
+        <span>{activated ? t("channels.waStatusActivated", lang) : t("channels.waStatusPending", lang)}</span>
+      </div>
 
+      {/* Webhook URL + Verify token (always at the top so it's the first thing
+          the user sees when entering Meta Business Manager). */}
       <section className="glass-card rounded-2xl p-5 space-y-3">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">Webhook</h3>
         {hints.data ? (
@@ -337,15 +357,23 @@ function WhatsAppTab({ tenantId }: { tenantId: string }) {
           {error && <p className="text-xs text-red-400">{error}</p>}
         </section>
       )}
+
+      {/* "How to connect" guide always at the bottom, collapsed by default. */}
+      <MetaGuide channel="whatsapp" />
     </div>
   );
 }
 
-// ─── Web Profile ─────────────────────────────────────────────────────────────
+// ─── Web Chat ────────────────────────────────────────────────────────────────
 
-function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicActive?: boolean }) {
+/**
+ * WebChatTab — surfaces the salon's AI chat URL (`/salon/{slug}/chat`),
+ * a QR pointing to the same URL, and a live iframe preview. The chat
+ * backend (POST /chat/init|send, GET /chat/poll) is owned by the Worker.
+ */
+function WebChatTab({ slug, publicActive }: { slug?: string | null; publicActive?: boolean }) {
   const { lang } = useLang();
-  const publicUrl = slug ? `https://manicbot.com/salon/${slug}` : null;
+  const chatUrl = slug ? `https://manicbot.com/salon/${slug}/chat` : null;
 
   if (!slug) {
     return (
@@ -355,9 +383,9 @@ function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicAct
             <Globe className="h-5 w-5 text-sky-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webNotSet", lang)}</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.noSlugTitle", lang)}</h3>
             <p className="text-[11px] text-slate-500">
-              {t("channels.setupWebInTab", lang)}{" "}
+              {t("channels.webChat.noSlugHint", lang)}{" "}
               <Link href="/dashboard?tab=public_profile" className="text-sky-400 hover:underline">{t("channels.webProfileTabLink", lang)}</Link>
             </p>
           </div>
@@ -368,30 +396,32 @@ function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicAct
 
   return (
     <div className="space-y-4">
-      {/* Status */}
+      {/* Status + chat URL */}
       <section className="glass-card rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-3">
           <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${publicActive ? "bg-emerald-500/15" : "bg-slate-500/15"}`}>
-            <Globe className={`h-5 w-5 ${publicActive ? "text-emerald-400" : "text-slate-400"}`} />
+            <Sparkles className={`h-5 w-5 ${publicActive ? "text-emerald-400" : "text-slate-400"}`} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webProfile", lang)}</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.title", lang)}</h3>
             <p className={`text-[11px] ${publicActive ? "text-emerald-400" : "text-slate-500"}`}>
               {publicActive ? t("channels.published", lang) : t("channels.hiddenFromCatalog", lang)}
             </p>
           </div>
-          <a href={publicUrl!} target="_blank" rel="noopener noreferrer"
+          <a href={chatUrl!} target="_blank" rel="noopener noreferrer"
             className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
             {t("channels.open", lang)} <ExternalLink className="h-3 w-3" />
           </a>
         </div>
 
-        {/* URL */}
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("channels.webChat.hint", lang)}</p>
+
+        {/* Chat URL */}
         <div>
-          <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">{t("channels.profileUrl", lang)}</p>
+          <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">{t("channels.webChat.chatUrl", lang)}</p>
           <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/40 rounded-xl px-3 py-2">
-            <code className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate">{publicUrl}</code>
-            <CopyBtn value={publicUrl!} />
+            <code className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate">{chatUrl}</code>
+            <CopyBtn value={chatUrl!} />
           </div>
         </div>
       </section>
@@ -402,17 +432,17 @@ function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicAct
           <QrCode className="h-4 w-4 text-slate-400" />
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.qrCode", lang)}</h3>
         </div>
-        <p className="text-[11px] text-slate-500">{t("channels.qrHint", lang)}</p>
+        <p className="text-[11px] text-slate-500">{t("channels.webChat.qrHint", lang)}</p>
         <div className="flex flex-col items-center gap-3">
-          <div className="bg-white p-4 rounded-2xl" data-qr-wrapper="web-profile">
-            <QRCodeSVG value={publicUrl!} size={200} level="M" />
+          <div className="bg-white p-4 rounded-2xl" data-qr-wrapper="web-chat">
+            <QRCodeSVG value={chatUrl!} size={200} level="M" />
           </div>
           <button
             type="button"
             onClick={() => {
-              const wrapper = document.querySelector('[data-qr-wrapper="web-profile"]');
+              const wrapper = document.querySelector('[data-qr-wrapper="web-chat"]');
               const svg = wrapper?.querySelector("svg") as SVGSVGElement | null;
-              downloadQrPng(svg, `qr-${slug}.png`);
+              downloadQrPng(svg, `qr-chat-${slug}.png`);
             }}
             className="flex items-center gap-2 text-xs px-4 py-2 rounded-xl bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-colors font-medium"
           >
@@ -420,6 +450,30 @@ function WebProfileTab({ slug, publicActive }: { slug?: string | null; publicAct
             {t("channels.downloadPng", lang)}
           </button>
         </div>
+      </section>
+
+      {/* Live preview — same-origin iframe of the actual /chat page. */}
+      <section className="glass-card rounded-2xl p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.preview", lang)}</h3>
+        </div>
+        <p className="text-[11px] text-slate-500">{t("channels.webChat.previewHint", lang)}</p>
+        {publicActive ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-900/50">
+            <iframe
+              data-testid="web-chat-preview"
+              src={chatUrl!}
+              title={t("channels.webChat.preview", lang)}
+              loading="lazy"
+              className="w-full h-[480px] sm:h-[560px] border-0"
+            />
+          </div>
+        ) : (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-3 text-[11px] text-amber-400">
+            {t("channels.webChat.publishToSeePreview", lang)}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -481,7 +535,7 @@ export function SalonChannelsTab({
       {active === "telegram" && <TelegramTab tenantId={tenantId} />}
       {active === "instagram" && <InstagramTab tenantId={tenantId} />}
       {active === "whatsapp" && <WhatsAppTab tenantId={tenantId} />}
-      {active === "web" && <WebProfileTab slug={slug} publicActive={publicActive} />}
+      {active === "web" && <WebChatTab slug={slug} publicActive={publicActive} />}
     </div>
   );
 }

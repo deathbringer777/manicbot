@@ -7,6 +7,7 @@ export default {
 
   apt_pending: '⏳ <b>Zgłoszenie przyjęte!</b>\n\nOtrzymaliśmy Twoje zgłoszenie:\n\n{svc}\n📅 {dt}\n\nSpecjalista wkrótce potwierdzi. Powiadomimy Cię! 📲',
   apt_rejected: '❌ <b>Wizyta nie potwierdzona</b>\n\n{svc}\n📅 {dt}',
+  apt_rescheduled: '🔄 <b>Wizyta przeniesiona</b>\n\n{svc}\n\n❌ Było: {oldDt}\n✅ Teraz: <b>{newDt}</b>\n\nDo zobaczenia! 💅',
   apt_reject_cmt: '\n\n💬 <i>{comment}</i>',
   apt_rebook: '\n\nChcesz wybrać inny termin?',
   apt_counter: '💬 <b>Specjalista proponuje inny termin:</b>\n\n{svc}\n📅 {d}\n🕐 <b>{newtime}</b>',

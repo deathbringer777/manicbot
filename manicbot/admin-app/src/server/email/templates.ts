@@ -1204,3 +1204,317 @@ export function ownershipTransferCompletedNewOwnerEmailHtml(opts: {
     getEmailCopy(opts.lang).footer,
   );
 }
+
+// ─── Masters-tab overhaul: 4 new templates (commit cb2383f migrations) ──────
+//
+// These templates are kept inline (function-local i18n) rather than extending
+// the `emailCopy` type so the schema-foundation PR doesn't grow it for every
+// micro-string. Keys: salonInviteExisting, salonInviteNew, passwordResetByOwner,
+// actionOtp. Each function ships ru/ua/en/pl copy; English is the fallback.
+
+type InviteCopy = {
+  subject: string;
+  heading: string;
+  body: string;
+  cta: string;
+  note: string;
+};
+
+function inviteExistingUserCopy(lang: Lang, salonName: string): InviteCopy {
+  const sn = salonName || "ManicBot";
+  switch (lang) {
+    case "ru":
+      return {
+        subject: `${sn} приглашает вас стать мастером — ManicBot`,
+        heading: "Приглашение в салон",
+        body: `${sn} приглашает вас присоединиться как мастер. Откройте панель, чтобы принять приглашение.`,
+        cta: "Открыть приглашение",
+        note: "Приглашение действительно 7 дней.",
+      };
+    case "ua":
+      return {
+        subject: `${sn} запрошує вас стати майстром — ManicBot`,
+        heading: "Запрошення в салон",
+        body: `${sn} запрошує вас приєднатися як майстер. Відкрийте панель, щоб прийняти запрошення.`,
+        cta: "Відкрити запрошення",
+        note: "Запрошення дійсне 7 днів.",
+      };
+    case "pl":
+      return {
+        subject: `${sn} zaprasza Cię jako mistrza — ManicBot`,
+        heading: "Zaproszenie do salonu",
+        body: `${sn} zaprasza Cię do dołączenia jako mistrz. Otwórz panel, aby zaakceptować zaproszenie.`,
+        cta: "Otwórz zaproszenie",
+        note: "Zaproszenie jest ważne przez 7 dni.",
+      };
+    default:
+      return {
+        subject: `${sn} invited you to join as a master — ManicBot`,
+        heading: "Salon invitation",
+        body: `${sn} invited you to join their team as a master. Open the dashboard to accept.`,
+        cta: "Open invitation",
+        note: "This invitation expires in 7 days.",
+      };
+  }
+}
+
+function inviteNewUserCopy(lang: Lang, salonName: string): InviteCopy {
+  const sn = salonName || "ManicBot";
+  switch (lang) {
+    case "ru":
+      return {
+        subject: `${sn} приглашает вас в ManicBot`,
+        heading: "Регистрация мастера",
+        body: `${sn} приглашает вас стать мастером в ManicBot. Создайте аккаунт по ссылке ниже — ваш email уже заполнен.`,
+        cta: "Зарегистрироваться",
+        note: "Ссылка одноразовая и действует 7 дней.",
+      };
+    case "ua":
+      return {
+        subject: `${sn} запрошує вас у ManicBot`,
+        heading: "Реєстрація майстра",
+        body: `${sn} запрошує вас стати майстром у ManicBot. Створіть акаунт за посиланням нижче — ваш email вже вписаний.`,
+        cta: "Зареєструватися",
+        note: "Посилання одноразове і дійсне 7 днів.",
+      };
+    case "pl":
+      return {
+        subject: `${sn} zaprasza Cię do ManicBot`,
+        heading: "Rejestracja mistrza",
+        body: `${sn} zaprasza Cię, abyś dołączył jako mistrz w ManicBot. Utwórz konto za pomocą poniższego linku — Twój email jest już wpisany.`,
+        cta: "Zarejestruj się",
+        note: "Link jest jednorazowy i ważny przez 7 dni.",
+      };
+    default:
+      return {
+        subject: `${sn} invited you to ManicBot`,
+        heading: "Master registration",
+        body: `${sn} invited you to join ManicBot as a master. Create your account via the link below — your email is pre-filled.`,
+        cta: "Register",
+        note: "This link is single-use and expires in 7 days.",
+      };
+  }
+}
+
+/** Scenario A — recipient already has a web_users account. */
+export function masterInviteExistingUserHtml(
+  options: { salonName: string; acceptUrl: string },
+  lang: Lang,
+): string {
+  const c = inviteExistingUserCopy(lang, options.salonName);
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + ctaButton(options.acceptUrl, c.cta) + muted(c.note),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function masterInviteExistingUserText(
+  options: { salonName: string; acceptUrl: string },
+  lang: Lang,
+): string {
+  const c = inviteExistingUserCopy(lang, options.salonName);
+  return [c.heading, "", c.body, "", options.acceptUrl, "", c.note, "", stripTags(getEmailCopy(lang).footer)].join("\n");
+}
+
+/** Scenario B — no web_users row; recipient registers via magic link. */
+export function masterInviteNewUserHtml(
+  options: { salonName: string; registerUrl: string },
+  lang: Lang,
+): string {
+  const c = inviteNewUserCopy(lang, options.salonName);
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + ctaButton(options.registerUrl, c.cta) + muted(c.note),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function masterInviteNewUserText(
+  options: { salonName: string; registerUrl: string },
+  lang: Lang,
+): string {
+  const c = inviteNewUserCopy(lang, options.salonName);
+  return [c.heading, "", c.body, "", options.registerUrl, "", c.note, "", stripTags(getEmailCopy(lang).footer)].join("\n");
+}
+
+type PasswordResetByOwnerCopy = {
+  subject: string;
+  heading: string;
+  body: string;
+  yourPassword: string;
+  cta: string;
+  warning: string;
+};
+
+function passwordResetByOwnerCopy(lang: Lang, salonName: string): PasswordResetByOwnerCopy {
+  const sn = salonName || "ManicBot";
+  switch (lang) {
+    case "ru":
+      return {
+        subject: `Ваш пароль был обновлён — ${sn}`,
+        heading: "Новый пароль",
+        body: `Владелец салона «${sn}» сбросил ваш пароль. Используйте новый пароль ниже для входа.`,
+        yourPassword: "Ваш новый пароль:",
+        cta: "Войти в кабинет",
+        warning: "Если это не вы или вы не знаете этот салон — свяжитесь с поддержкой.",
+      };
+    case "ua":
+      return {
+        subject: `Ваш пароль було оновлено — ${sn}`,
+        heading: "Новий пароль",
+        body: `Власник салону «${sn}» скинув ваш пароль. Використайте новий пароль нижче для входу.`,
+        yourPassword: "Ваш новий пароль:",
+        cta: "Увійти в кабінет",
+        warning: "Якщо це не ви або ви не знаєте цей салон — звʼяжіться з підтримкою.",
+      };
+    case "pl":
+      return {
+        subject: `Twoje hasło zostało zmienione — ${sn}`,
+        heading: "Nowe hasło",
+        body: `Właściciel salonu „${sn}" zresetował Twoje hasło. Użyj nowego hasła poniżej, aby się zalogować.`,
+        yourPassword: "Twoje nowe hasło:",
+        cta: "Zaloguj się",
+        warning: "Jeśli to nie Ty lub nie znasz tego salonu — skontaktuj się z pomocą.",
+      };
+    default:
+      return {
+        subject: `Your password was reset — ${sn}`,
+        heading: "New password",
+        body: `The owner of "${sn}" has reset your password. Use the new password below to log in.`,
+        yourPassword: "Your new password:",
+        cta: "Sign in",
+        warning: "If this wasn't you, or you don't recognize this salon, contact support.",
+      };
+  }
+}
+
+/** Salon owner triggered a password reset; the new plaintext is emailed
+ *  directly to the master. The salon never sees the new password. */
+export function masterPasswordResetByOwnerHtml(
+  options: { salonName: string; newPassword: string; loginUrl: string },
+  lang: Lang,
+): string {
+  const c = passwordResetByOwnerCopy(lang, options.salonName);
+  const codeBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:14px 24px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:18px;font-weight:700;color:#ffffff;letter-spacing:1.5px;user-select:all;-webkit-user-select:all;cursor:text;">${options.newPassword}</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.yourPassword}</div>
+  </div>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + codeBlock + ctaButton(options.loginUrl, c.cta) + muted(c.warning),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function masterPasswordResetByOwnerText(
+  options: { salonName: string; newPassword: string; loginUrl: string },
+  lang: Lang,
+): string {
+  const c = passwordResetByOwnerCopy(lang, options.salonName);
+  return [
+    c.heading,
+    "",
+    c.body,
+    "",
+    `${c.yourPassword} ${options.newPassword}`,
+    "",
+    options.loginUrl,
+    "",
+    c.warning,
+    "",
+    stripTags(getEmailCopy(lang).footer),
+  ].join("\n");
+}
+
+type ActionOtpCopy = {
+  subject: string;
+  heading: string;
+  body: string;
+  expires: string;
+  ignore: string;
+  copy: string;
+};
+
+function actionOtpCopy(lang: Lang, actionLabel: string): ActionOtpCopy {
+  switch (lang) {
+    case "ru":
+      return {
+        subject: "Код подтверждения — ManicBot",
+        heading: "Код подтверждения",
+        body: `Введите этот код для подтверждения действия: «${actionLabel}».`,
+        expires: "Код действителен 15 минут.",
+        ignore: "Если вы не запрашивали действие — проигнорируйте письмо и смените пароль.",
+        copy: "Нажмите, чтобы скопировать код",
+      };
+    case "ua":
+      return {
+        subject: "Код підтвердження — ManicBot",
+        heading: "Код підтвердження",
+        body: `Введіть цей код для підтвердження дії: «${actionLabel}».`,
+        expires: "Код дійсний 15 хвилин.",
+        ignore: "Якщо ви не запитували дію — проігноруйте лист і змініть пароль.",
+        copy: "Натисніть, щоб скопіювати код",
+      };
+    case "pl":
+      return {
+        subject: "Kod potwierdzający — ManicBot",
+        heading: "Kod potwierdzający",
+        body: `Wprowadź ten kod, aby potwierdzić działanie: „${actionLabel}".`,
+        expires: "Kod jest ważny przez 15 minut.",
+        ignore: "Jeśli nie żądałeś tej akcji — zignoruj wiadomość i zmień hasło.",
+        copy: "Kliknij, aby skopiować kod",
+      };
+    default:
+      return {
+        subject: "Confirmation code — ManicBot",
+        heading: "Confirmation code",
+        body: `Enter this code to confirm: "${actionLabel}".`,
+        expires: "This code expires in 15 minutes.",
+        ignore: "If you did not request this action, ignore this email and change your password.",
+        copy: "Click to copy the code",
+      };
+  }
+}
+
+/** Generic OTP code sent for any destructive/role-escalation mutation.
+ *  Caller passes a localized action label ("Archive master Olga") and the
+ *  6-digit code from requestActionOtp(). */
+export function actionOtpEmailHtml(
+  options: { code: string; actionLabel: string },
+  lang: Lang,
+): string {
+  const c = actionOtpCopy(lang, options.actionLabel);
+  const codeBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${options.code}</div>
+    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
+  </div>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + codeBlock + muted(c.expires) + muted(c.ignore),
+    getEmailCopy(lang).footer,
+  );
+}
+
+export function actionOtpEmailText(
+  options: { code: string; actionLabel: string },
+  lang: Lang,
+): string {
+  const c = actionOtpCopy(lang, options.actionLabel);
+  return [c.heading, "", c.body, "", options.code, "", c.expires, c.ignore, "", stripTags(getEmailCopy(lang).footer)].join("\n");
+}
+
+// Subject helpers for sender wrappers — exported so emailService.ts can pull
+// without re-importing the lang switch.
+export function getInviteExistingUserSubject(lang: Lang, salonName: string): string {
+  return inviteExistingUserCopy(lang, salonName).subject;
+}
+export function getInviteNewUserSubject(lang: Lang, salonName: string): string {
+  return inviteNewUserCopy(lang, salonName).subject;
+}
+export function getPasswordResetByOwnerSubject(lang: Lang, salonName: string): string {
+  return passwordResetByOwnerCopy(lang, salonName).subject;
+}
+export function getActionOtpSubject(lang: Lang): string {
+  return actionOtpCopy(lang, "").subject;
+}

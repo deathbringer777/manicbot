@@ -21,6 +21,40 @@
 - Worker (`manicbot/`): **104 test files / 1612 tests passing**, `check-schema` OK (57 tables match)
 - Admin-app (`manicbot/admin-app/`): **77 test files / 3111 tests passing** (+5 files, +59 tests vs baseline), `tsc --noEmit` clean, `check-tenant-isolation` clean
 
+Subsequent post-baseline: Worker now at 150 files / 2062 tests; Admin-app at 123 files / 3774 tests; `check-schema` OK (67 tables). `check-tenant-isolation` allowlist updated through line drift only (see ARN-1 below).
+
+---
+
+## Design-level trade-offs accepted (2026-05-16)
+
+### V1 — Salon-owned master passwords stored reversibly 🟦 ACCEPTED-RISK
+**Where:** `web_users.password_encrypted` (migration 0065), `server/security/masterPasswordVault.ts`, `salon.peekMasterPassword`, `salon.resetMasterPassword`.
+
+**What:** For master accounts created directly by a salon owner via `salon.createMasterAccount` (origin='salon_created'), we keep an AES-GCM encrypted copy of the plaintext password alongside the standard PBKDF2 hash. The salon owner can decrypt-and-display it under an email OTP gate (`peek_master_password` action) or rotate it (`reset_master_password` action — the new plaintext is emailed directly to the master; the salon never sees the new value in the response).
+
+**Why accepted:** Product requirement — salon-created accounts are treated as the salon's property (the master receives credentials FROM the salon, didn't choose them, can't change them, can only be archived). Reversibility lets the owner recover credentials if the master mislaid them, without inflicting a full password-reset flow on a working employee. Authentication still uses `password_hash` only; the encrypted column is auxiliary.
+
+**Mitigations:**
+- Encryption key (`BOT_ENCRYPTION_KEY`) is a Worker secret, never in source, never logged. Same key the channel-token + Google-refresh-token vaults use; rotation runbook (`/admin/rotate-encryption-key`) covers this column.
+- HKDF subkey label `master-password-v1` domain-separates from other vault uses, so a single-vault leak doesn't cross-contaminate.
+- Read access via `salon.peekMasterPassword` is gated by a fresh 6-digit email OTP (15-min TTL, payload-bound — see V2 below). Audit-logged as `tenant.master.password.peek`.
+- Only `origin='salon_created'` accounts populate this column. Masters who registered themselves or accepted an email invitation leave it NULL — their password is owned by them, not the salon.
+
+**Residual risk:** If `BOT_ENCRYPTION_KEY` leaks, every encrypted master password becomes recoverable. Same blast radius as the channel-token leak (every WA/IG/TG token). Treat key rotation as the recovery path.
+
+### V2 — Reversible password peek/reset gated by single-action email OTP 🟦 ACCEPTED-RISK
+**Where:** `auth/otp.ts requireOtpConfirmation`, `global_otp_codes` table (migration 0064).
+
+**What:** Sensitive `salon.*` mutations (archive/unarchive master, reset/peek master password) require the caller to first call `otp.request({ action, payload })`, receive a 6-digit code via email, and pass it back as `otpCode`. The code is hashed in D1, payload-bound (SHA-256 of canonical JSON), 15-min TTL, max 5 attempts, single-use (consumed_at).
+
+**Why accepted:** Stronger than no gate (a stolen session alone cannot peek a master password) but weaker than hardware-bound 2FA (a phishing-stage email compromise + session compromise can both occur). Operator-side mitigation: the OTP destination is the salon owner's verified email; multi-factor for that email account is the operator's responsibility.
+
+**Mitigations:**
+- Per-(user, action) rate limit at 5 issuances per 10 min (`otp_request`).
+- Per-row attempts counter caps brute-force at 5 wrong codes.
+- Payload hash binds the code to a single operation (no replay across master ids).
+- Action whitelist on the issuance side (`archive_master`, `unarchive_master`, `reset_master_password`, `peek_master_password`) — clients cannot prompt arbitrary OTP emails.
+
 ---
 
 ## Secrets Status
@@ -180,7 +214,53 @@ The atomic single-statement fix (`ON CONFLICT DO UPDATE SET count = CASE WHEN wi
 
 - Re-keying `BOT_ENCRYPTION_KEY` — has its own runbook (`scripts/rotate-bot-encryption-key.js`).
 - Penetration-testing the live deployment — source-level audit only.
-- Refactoring marketing module to be tenant-scoped — by design it is `system_admin` God Mode CRM (`adminProcedure`); cross-tenant access is the intended behaviour.
+- ~~Refactoring marketing module to be tenant-scoped — by design it is `system_admin` God Mode CRM (`adminProcedure`); cross-tenant access is the intended behaviour.~~ **Superseded (2026-05-16, PR 1 of marketing roadmap):** the original `marketing` router stays adminProcedure / God Mode global view, but a sibling **`marketingTenant`** router (`routers/marketingTenant.ts`) now serves the salon-owner / tenant_manager / personal-master surface with `protectedProcedure + assertTenantOwner + eq(table.tenantId, input.tenantId)` on every WHERE clause. Cross-tenant isolation verified by `__tests__/marketingTenant-router.test.ts` (FORBIDDEN on cross-tenant stats/contacts/templates/providers; cross-tenant row write blocked by per-row tenantId verification in `contactUpdate` and `templateUpdate`). `marketing.ts` remains in `scripts/check-tenant-isolation.mjs` SKIP_FILES because that file is still cross-tenant by design; the new `marketingTenant.ts` is scanned and passes (`✅ Scanned 35 router file(s); no missing tenantId predicates.`).
+
+---
+
+## 2026-05-16 — N7 RESOLVED · `marketing_contacts` cross-tenant email collision
+
+**Status:** RESOLVED in migration `0062_clients_overhaul.sql` (commit on branch `claude/festive-gauss-a8e42b`).
+
+**Severity (when found):** medium. The `marketing_contacts.email` column carried a platform-wide `UNIQUE` index (`idx_marketing_contacts_email`) that ignored `tenant_id`. Two salons with the same client email could not both register that lead — the second tenant's INSERT silently failed or merged into the first tenant's row, depending on the call site. Plus several read paths (`leadsRouter.marketingList`, `marketing.contactsList`) did not filter by `tenant_id`, so a tenant_owner page could surface contacts from other tenants if they ever shared the same email.
+
+**Fix:**
+
+- Dropped `idx_marketing_contacts_email` (platform-wide UNIQUE).
+- Added `idx_marketing_contacts_tenant_email` (partial UNIQUE on `(tenant_id, email) WHERE email IS NOT NULL`) and a matching `idx_marketing_contacts_tenant_phone`.
+- Made `marketing_contacts.email` nullable so phone-only salon clients no longer require synthetic placeholder emails.
+- Added back-link column `marketing_contacts.linked_user_chat_id` for bidirectional sync with `users.marketing_contact_id`.
+- All new client-write paths (`clients.create`, `clients.update`, `clients.importCsv`, `appointments.createManual`) call `syncMarketingContact(db, tenantId, ...)`. The helper looks up existing rows ONLY within the caller's tenant — cross-tenant linking is now structurally impossible.
+
+**Regression tests pinned:**
+
+- `manicbot/admin-app/src/__tests__/clients-tenant-isolation.test.ts` — every public procedure on `clients` rejects cross-tenant input with FORBIDDEN.
+- `manicbot/admin-app/src/__tests__/marketing-sync.test.ts` — sync helper looks up by `(tenant_id, *)` only.
+
+**Pre-flight check** required when applying migration 0062 to production D1:
+```sql
+SELECT tenant_id, email, COUNT(*) c FROM marketing_contacts
+WHERE email IS NOT NULL GROUP BY tenant_id, email HAVING c > 1;
+```
+Must return 0 rows. Migration fails loud if duplicates exist.
+
+---
+
+## 2026-05-16 — N8 RESOLVED · Worker booking handler crashed on new block-sentinel return types
+
+**Status:** RESOLVED on branch `claude/festive-gauss-a8e42b` (commit `84754a6` and follow-ups).
+
+**Severity:** medium (DoS-class for the Telegram bot booking path).
+
+`services/appointments.js saveApt()` was extended in 0062 to return two new sentinel objects — `BLOCKED_GLOBAL` and `BLOCKED_FOR_MASTER` — in addition to the existing `SLOT_TAKEN`. The Telegram-side booking handler in `src/handlers/callback.js` only special-cased `SLOT_TAKEN`; for the new sentinels it would fall through and access `apt.id` on the frozen sentinel object, throwing `TypeError: Cannot read properties of undefined (reading 'id')` and breaking the booking flow for any blocked client. (Admin-app's `appointments.createManual` was unaffected — it never sees the sentinel and uses TRPCError throws instead.)
+
+**Fix:** Telegram handler now imports both sentinels and short-circuits to a neutral "no slots" reply (we deliberately don't surface the block reason to the client). The admin-app side enforces blocks before the slot-conflict check via `client_blocked_global` / `client_blocked_for_master` TRPCError messages.
+
+**Regression tests pinned:**
+
+- `manicbot/test/client-block-booking.test.js` — `saveApt` returns the right sentinel for global and per-master blocks; an unrelated master in the same tenant remains bookable.
+- `manicbot/test/callback-block-sentinel-handling.test.js` — static check on `src/handlers/callback.js` that both sentinels are imported and both branches handled.
+- `manicbot/admin-app/src/__tests__/appointments-block-enforcement.test.ts` — admin-app side `client_blocked_global` / `client_blocked_for_master` TRPCError surfaces.
 
 ---
 

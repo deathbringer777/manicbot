@@ -9,6 +9,7 @@ export default {
   // Appointment status notifications (to client)
   apt_pending: '⏳ <b>Заявка принята!</b>\n\nМы получили вашу заявку:\n\n{svc}\n📅 {dt}\n\nМастер подтвердит запись в ближайшее время. Мы сообщим! 📲',
   apt_rejected: '❌ <b>Запись не подтверждена</b>\n\n{svc}\n📅 {dt}',
+  apt_rescheduled: '🔄 <b>Запись перенесена</b>\n\n{svc}\n\n❌ Было: {oldDt}\n✅ Стало: <b>{newDt}</b>\n\nЖдём вас! 💅',
   apt_reject_cmt: '\n\n💬 <i>{comment}</i>',
   apt_rebook: '\n\nЖелаете выбрать другое время?',
   apt_counter: '💬 <b>Мастер предлагает другое время:</b>\n\n{svc}\n📅 {d}\n🕐 <b>{newtime}</b>',

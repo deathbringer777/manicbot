@@ -4,10 +4,11 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
-  CreditCard, Settings, ChevronLeft, ChevronRight, AlertCircle,
+  Settings, ChevronLeft, ChevronRight, AlertCircle,
   Loader2, Plus, Pencil, Trash2, Save, X,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
+  Palette, Phone, Instagram as InstagramIcon, Clock,
 } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
@@ -17,7 +18,6 @@ import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
-import { ProfileCompletenessCard } from "~/components/dashboards/ProfileCompletenessCard";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
@@ -25,7 +25,7 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
-import { StatCard, AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
+import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
@@ -34,6 +34,7 @@ import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
 import { PublicProfileEditor } from "~/components/salon/PublicProfileEditor";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
+import { ClientFormModal } from "~/components/salon/tabs/clients/ClientFormModal";
 import { StaffTab } from "~/components/salon/tabs/StaffTab";
 import { SERVICE_TEMPLATES, type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
@@ -48,6 +49,18 @@ import { EmptyState } from "~/components/ui/EmptyState";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 import { NAIL_EMOJIS } from "~/lib/appointments";
+import {
+  WEEKDAY_KEYS,
+  DEFAULT_WORK_HOURS,
+  hydrateWorkHours,
+  serializeWorkHours,
+  decodePerDayWorkHours,
+  type WorkHoursState,
+} from "~/lib/workHours";
+import type { MoveCommit } from "~/lib/calendar/useDragToMove";
+import { toast } from "~/lib/toast";
+import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
+import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -628,7 +641,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
   const [showTemplates, setShowTemplates] = useState(false);
-  const [masterModal, setMasterModal] = useState<"telegram" | "create" | null>(null);
+  const [masterModal, setMasterModal] = useState<"telegram" | "create" | "invite" | null>(null);
   const [deleteSvcConfirm, setDeleteSvcConfirm] = useState<{ active: boolean; svcId: string | null }>({ active: false, svcId: null });
   const [removeMasterConfirm, setRemoveMasterConfirm] = useState<{ active: boolean; chatId: string | null }>({ active: false, chatId: null });
 
@@ -792,6 +805,96 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const markNoShow = api.salon.markNoShow.useMutation({
     onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
   });
+
+  // Drag-to-reschedule optimistic state.
+  //   pendingMoves holds in-flight (id → new {date,time,masterId}) so we can
+  //   patch the rendered appointment arrays without waiting for the server
+  //   round-trip. Cleared in onSettled regardless of success/error — on
+  //   success the cache refetch lands the canonical data; on error we
+  //   surface a toast and let the cache restore the original slot.
+  const [pendingMoves, setPendingMoves] = useState<Record<string, { date: string; time: string; masterId: number }>>({});
+  const rescheduleApt = api.appointments.rescheduleAppointment.useMutation({
+    onMutate: (vars) => {
+      setPendingMoves((prev) => ({
+        ...prev,
+        [vars.appointmentId]: {
+          date: vars.newDate,
+          time: vars.newTime,
+          masterId: vars.newMasterId ?? 0,
+        },
+      }));
+    },
+    onError: (err, vars) => {
+      const msg = err?.message ?? "";
+      if (msg === "slot_conflict") {
+        toast.error(t("salon.reschedule.conflict", lang));
+      } else if (msg === "appointment_terminal") {
+        toast.error(t("salon.reschedule.failed", lang));
+      } else {
+        toast.error(t("salon.reschedule.failed", lang), msg || undefined);
+      }
+      // Snapshot rollback: removing the entry restores the source slot
+      // visually until the next query refetch confirms.
+      setPendingMoves((prev) => {
+        const next = { ...prev };
+        delete next[vars.appointmentId];
+        return next;
+      });
+    },
+    onSuccess: () => {
+      toast.success(t("salon.reschedule.success", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingMoves((prev) => {
+        const next = { ...prev };
+        delete next[vars.appointmentId];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
+  });
+
+  // Apply pending optimistic moves on top of the appointment arrays before
+  // they reach the views. Same patch runs for Day/Week/calendar caches so
+  // the dragged block visually settles into its new slot immediately.
+  const applyPendingMoves = (rows: any[] | undefined): any[] => {
+    if (!rows) return [];
+    const ids = Object.keys(pendingMoves);
+    if (ids.length === 0) return rows;
+    return rows.map((r) => {
+      const patch = pendingMoves[String(r.id)];
+      if (!patch) return r;
+      // Recompute `ts` so cross-day moves don't desync the agenda sort.
+      const [hh, mm] = patch.time.split(":").map(Number);
+      const [y, mo, d] = patch.date.split("-").map(Number);
+      const ts = Math.floor(Date.UTC(y!, mo! - 1, d!, hh!, mm!) / 1000);
+      return { ...r, date: patch.date, time: patch.time, masterId: patch.masterId || r.masterId, ts };
+    });
+  };
+
+  const handleMoveAppointment = (move: MoveCommit) => {
+    if (move.toMasterId == null) {
+      // Week view drops carry masterId=null (the column is per-day). The
+      // mutation needs an explicit masterId, so fall back to the row's
+      // current one. Looking it up via the patched arrays would be racy;
+      // omitting newMasterId tells the server to keep masterId unchanged.
+      rescheduleApt.mutate({
+        tenantId,
+        appointmentId: String(move.appointmentId),
+        newDate: move.toDate,
+        newTime: move.toTime,
+      });
+      return;
+    }
+    rescheduleApt.mutate({
+      tenantId,
+      appointmentId: String(move.appointmentId),
+      newDate: move.toDate,
+      newTime: move.toTime,
+      newMasterId: move.toMasterId,
+    });
+  };
   const removeMaster = api.salon.removeMaster.useMutation({
     onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
@@ -832,6 +935,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
   // Sprint 3/4 — manual booking modal state
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  // 0062: Clients tab overhaul — FAB switches to "+ Add client" on the
+  // Clients tab and opens this dedicated form (no appointment required).
+  const [clientFormOpen, setClientFormOpen] = useState(false);
   // Calendar overhaul (2026-05-16): two new FAB scenarios — calendar block
   // (reservation) and break / day-off / vacation (time_off). Both write
   // to `appointment_blocks` via the new `appointmentBlocks.create` tRPC.
@@ -913,15 +1019,32 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         ))}
       </div>}
 
-      {/* Floating quick-add menu — visible on Overview / Appointments / Clients.
-          All three scenarios are real backend flows after the 2026-05-16
-          calendar overhaul (no more СКОРО placeholders). */}
-      {(tab === "overview" || tab === "appointments" || tab === "clients") && (
+      {/* Floating quick-add menu — Appointments and Clients tabs only.
+          User feedback (2026-05-16): keep this OFF the Overview tab and
+          every other section — a "+ Новая запись" CTA over Settings or
+          Billing is just noise. The same FAB switches to "+ Add client"
+          mode when the user is on the Clients tab (handled by the
+          QuickAddFab `mode` prop and the dedicated `ClientFormModal`
+          below). */}
+      {(tab === "appointments" || tab === "clients") && (
         <QuickAddFab
           lang={lang}
+          mode={tab === "clients" ? "client" : "booking"}
           onNewBooking={() => setManualBookingOpen(true)}
           onTimeReservation={() => setTimeReservationOpen(true)}
           onTimeOff={() => setTimeOffOpen(true)}
+          onAddClient={() => setClientFormOpen(true)}
+        />
+      )}
+
+      {/* 0062: dedicated "create client" form, mounted globally so the
+          FAB on the Clients tab can fire it without depending on tab
+          render order. */}
+      {clientFormOpen && (
+        <ClientFormModal
+          tenantId={tenantId}
+          onClose={() => setClientFormOpen(false)}
+          onSaved={() => setClientFormOpen(false)}
         />
       )}
 
@@ -940,39 +1063,15 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         />
       )}
 
-      {/* ── OVERVIEW ── */}
+      {/* ── OVERVIEW ──
+          The Overview tab is now a focused two-card surface:
+          (1) the merged setup checklist (auto-hides when 10/10 done) and
+          (2) today's appointments sorted descending — no stat grid, no
+          secondary wizard. Per-section pages own their own stats; the home
+          page is for setup progress and what's on the schedule now. */}
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
-          {overview.data?.profileCompleteness && (
-            <ProfileCompletenessCard
-              lang={lang}
-              signals={overview.data.profileCompleteness}
-              onJumpToTab={(target) => setTab(target as Tab)}
-            />
-          )}
-          {overview.isLoading ? (
-            <div className="grid grid-cols-2 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-20 animate-pulse" />)}</div>
-          ) : overview.isError ? (
-            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>
-          ) : overview.data && (
-            <div className="grid grid-cols-2 gap-3">
-              {!dashPrefs.hiddenStatCards.includes("todayAppointments") && (
-                <StatCard label={t("salon.todayApts", lang)} value={overview.data.todayAppointments} icon={CalendarDays} color="bg-brand-500/20 text-brand-400" />
-              )}
-              {!dashPrefs.hiddenStatCards.includes("activeMasters") && (
-                <StatCard label={t("salon.activeMasters", lang)} value={overview.data.activeMasters} icon={Scissors} color="bg-purple-500/20 text-purple-400" />
-              )}
-              {!dashPrefs.hiddenStatCards.includes("openTickets") && (
-                <StatCard label={t("salon.openTickets", lang)} value={overview.data.openTickets} icon={AlertCircle} color="bg-amber-500/20 text-amber-400" />
-              )}
-              {!dashPrefs.hiddenStatCards.includes("billingPlan") && (
-                <StatCard label={t("billing.plan", lang)} value={overview.data.plan?.toUpperCase() ?? "START"}
-                  sub={t(`billing.${overview.data.billingStatus ?? "trialing"}` as any, lang)}
-                  icon={CreditCard} color="bg-emerald-500/20 text-emerald-400" />
-              )}
-            </div>
-          )}
           {dashPrefs.showTodayApts && (
             <>
               {todayApts.isLoading && (
@@ -988,17 +1087,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                       {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
                     </button>
                   </div>
-                  {todayApts.data.slice(0, 4).map((a: any) => (
-                    <AptCard key={a.id} a={a} lang={lang}
-                      onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
-                      onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
-                  ))}
-                  {todayApts.data.length > 4 && (
-                    <button onClick={() => setTab("appointments")}
-                      className="w-full text-xs text-slate-500 text-center py-2 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                      +{todayApts.data.length - 4} {t("salon.appointments", lang).toLowerCase()}
-                    </button>
-                  )}
+                  {[...todayApts.data]
+                    .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
+                    .map((a: any) => (
+                      <AptCard key={a.id} a={a} lang={lang}
+                        onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+                        onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
+                    ))}
                 </div>
               )}
               {todayApts.data?.length === 0 && (
@@ -1058,8 +1153,12 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           masterVis.hiddenMasterIds.size > 0;
 
         const aptsFiltered = (apts.data ?? []).filter(filterApt);
-        const dayAptsFiltered = (dayApts.data ?? []).filter(filterApt);
-        const weekAptsFiltered = (weekApts.data ?? []).filter(filterApt);
+        // applyPendingMoves layers in-flight drag-reschedules on top of the
+        // server snapshot so the dragged block visually settles into its
+        // new slot immediately (the cache invalidate in onSettled will
+        // overwrite with canonical data once the mutation resolves).
+        const dayAptsFiltered = applyPendingMoves((dayApts.data ?? []).filter(filterApt));
+        const weekAptsFiltered = applyPendingMoves((weekApts.data ?? []).filter(filterApt));
         const calAptsFiltered = (calApts.data ?? []).filter(filterApt);
 
         return (
@@ -1143,6 +1242,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 if (info.modifier === "shift") setTimeReservationOpen(true);
                 else setManualBookingOpen(true);
               }}
+              onMoveAppointment={handleMoveAppointment}
+              tenantId={tenantId}
+              services={
+                (svcList.data ?? []).map((s) => ({
+                  svcId: s.svcId,
+                  names: s.names ?? null,
+                  duration: s.duration,
+                  price: typeof s.price === "number" ? s.price : Number(s.price ?? 0),
+                }))
+              }
+              onUpdated={() => {
+                void utils.salon.getAppointments.invalidate();
+              }}
             />
           )}
 
@@ -1163,6 +1275,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 if (info.modifier === "shift") setTimeReservationOpen(true);
                 else setManualBookingOpen(true);
               }}
+              onMoveAppointment={handleMoveAppointment}
             />
           )}
 
@@ -1431,6 +1544,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {svcModal.open && <ServiceModal svc={svcModal.svc} onClose={() => setSvcModal({ open: false, svc: null })} tenantId={tenantId} initialData={svcModal.initialData} />}
       {masterModal === "telegram" && <AddMasterModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
       {masterModal === "create" && <CreateMasterAccountModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
+      {masterModal === "invite" && <InviteByEmailModal onClose={() => setMasterModal(null)} tenantId={tenantId} />}
+
+      {/* Bottom-right FAB on the Masters tab (3 add-master flows). The
+          existing top-right buttons remain during the transition. */}
+      {tab === "masters" && (
+        <AddMasterFab
+          onPick={(kind: AddMasterPick) => {
+            if (kind === "create_account") setMasterModal("create");
+            else if (kind === "add_telegram") setMasterModal("telegram");
+            else if (kind === "invite_email") setMasterModal("invite");
+          }}
+        />
+      )}
       {/* Calendar overhaul (2026-05-16): the previous duplicate
           ManualBookingModal mount that lived here at the bottom is
           superseded by the FAB-section render above (line ~1521) which

@@ -27,6 +27,7 @@ import { promoCodesRouter } from "~/server/api/routers/promoCodes";
 import { stampCardRouter } from "~/server/api/routers/stampCard";
 import { leadsRouter } from "~/server/api/routers/leads";
 import { marketingRouter } from "~/server/api/routers/marketing";
+import { marketingTenantRouter } from "~/server/api/routers/marketingTenant";
 import { tenantStaffRouter } from "~/server/api/routers/tenantStaff";
 import { pluginsRouter } from "~/server/api/routers/plugins";
 import { searchRouter } from "~/server/api/routers/search";
@@ -34,6 +35,8 @@ import { consentRouter } from "~/server/api/routers/consent";
 import { errorEventsRouter } from "~/server/api/routers/errorEvents";
 import { marketingAutopilotRouter } from "~/server/api/routers/marketingAutopilot";
 import { ownershipRouter } from "~/server/api/routers/ownership";
+import { clientsRouter } from "~/server/api/routers/clients";
+import { otpRouter } from "~/server/api/routers/otp";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -65,12 +68,15 @@ export const appRouter = createTRPCRouter({
   stampCard: stampCardRouter,
   leads: leadsRouter,
   marketing: marketingRouter,
+  marketingTenant: marketingTenantRouter,
   tenantStaff: tenantStaffRouter,
   plugins: pluginsRouter,
   search: searchRouter,
   consent: consentRouter,
   errorEvents: errorEventsRouter,
   marketingAutopilot: marketingAutopilotRouter,
+  clients: clientsRouter,
+  otp: otpRouter,
 });
 
 export type AppRouter = typeof appRouter;

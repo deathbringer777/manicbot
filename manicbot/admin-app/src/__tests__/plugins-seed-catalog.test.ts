@@ -94,9 +94,12 @@ describe("Seeded catalog — role coverage matrix", () => {
     expect(n).toBeGreaterThanOrEqual(5);
   });
 
-  it("has at least 5 universal plugins (available for 5+ roles)", () => {
+  it("has at least 4 universal plugins (available for 5+ roles)", () => {
+    // PR #84 (drop 4 duplicate plugins) intentionally tightened the catalog
+    // from 24 → 20 plugins; universal count moved from 5 → 4 as a result.
+    // Keep the floor here so a future drop is still caught.
     const universal = realPlugins.filter((m) => m.availableForRoles.length >= 5);
-    expect(universal.length).toBeGreaterThanOrEqual(5);
+    expect(universal.length).toBeGreaterThanOrEqual(4);
   });
 });
 

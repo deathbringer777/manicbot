@@ -25,8 +25,10 @@ import {
 import type { Lang } from "~/lib/i18n";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 
-/* ── In-memory request rate-limit (per webUser) ───────────────────────────── */
+/* ── In-memory rate-limits ────────────────────────────────────────────────── */
 
+// `requestTransfer` — per-webUser. Five attempts per hour is plenty for
+// legitimate use, well below any pattern that suggests automated abuse.
 const initRl = new Map<string, { count: number; resetAt: number }>();
 const INIT_MAX = 5;
 const INIT_WINDOW = 60 * 60 * 1000;
@@ -39,6 +41,26 @@ function checkInitRl(userId: string): boolean {
     return true;
   }
   if (entry.count >= INIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+// `confirmTransfer` — per-IP defense-in-depth against brute-forcing 32-char
+// tokens. Tokens have ~190 bits of entropy so brute force is infeasible, but
+// 20 attempts per 10 min per IP still blocks a misbehaving script before it
+// burns through D1 read quotas.
+const confirmRl = new Map<string, { count: number; resetAt: number }>();
+const CONFIRM_MAX = 20;
+const CONFIRM_WINDOW = 10 * 60 * 1000;
+
+function checkConfirmRl(ip: string): boolean {
+  const now = Date.now();
+  const entry = confirmRl.get(ip);
+  if (!entry || now > entry.resetAt) {
+    confirmRl.set(ip, { count: 1, resetAt: now + CONFIRM_WINDOW });
+    return true;
+  }
+  if (entry.count >= CONFIRM_MAX) return false;
   entry.count++;
   return true;
 }
@@ -217,6 +239,10 @@ export const ownershipRouter = createTRPCRouter({
   confirmTransfer: publicProcedure
     .input(z.object({ token: z.string().min(16).max(128) }))
     .mutation(async ({ ctx, input }) => {
+      const ip = clientIp(ctx as { headers?: Headers | null });
+      if (!checkConfirmRl(ip)) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many confirmation attempts" });
+      }
       const tokenHash = await hashToken(input.token);
       const [row] = await ctx.db
         .select()
@@ -300,7 +326,7 @@ export const ownershipRouter = createTRPCRouter({
         actor: fromUser.email,
         action: "ownership_transferred",
         detail: `from=${fromUser.email} to=${toUser.email}${targetWasMaster ? "" : " (target was non-master)"}`,
-        ip: clientIp(ctx as { headers?: Headers | null }),
+        ip,
         createdAt: nowSec,
       });
 

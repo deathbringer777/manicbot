@@ -10,15 +10,20 @@ import {
 import { useLang } from "~/components/LangContext";
 import { t, type TranslationKey } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
+import { useMarketingScope } from "./useMarketingScope";
 
-const SUB_NAV: Array<{ href: string; icon: LucideIcon; labelKey: TranslationKey }> = [
+type SubNavItem = { href: string; icon: LucideIcon; labelKey: TranslationKey; adminOnly?: boolean };
+
+// `providers` is admin-only by design — see `marketingTenant.providersList`
+// for the rationale (no provider-name leak on the tenant surface).
+const SUB_NAV: Array<SubNavItem> = [
   { href: "/marketing",              icon: Megaphone,     labelKey: "marketing.nav.overview" },
   { href: "/marketing/contacts",     icon: Users,         labelKey: "marketing.nav.contacts" },
   { href: "/marketing/campaigns",    icon: Mail,          labelKey: "marketing.nav.campaigns" },
   { href: "/marketing/sms",          icon: MessageSquare, labelKey: "marketing.nav.sms" },
   { href: "/marketing/automations",  icon: Workflow,      labelKey: "marketing.nav.automations" },
   { href: "/marketing/templates",    icon: FileText,      labelKey: "marketing.nav.templates" },
-  { href: "/marketing/providers",    icon: Plug,          labelKey: "marketing.nav.providers" },
+  { href: "/marketing/providers",    icon: Plug,          labelKey: "marketing.nav.providers", adminOnly: true },
 ];
 
 export function MarketingShell({
@@ -32,13 +37,16 @@ export function MarketingShell({
 }) {
   const pathname = usePathname();
   const { lang } = useLang();
+  const { mode } = useMarketingScope();
   const resolvedTitle = title ?? tNav("Marketing", lang);
   const resolvedSubtitle = subtitle ?? `${t("marketing.nav.contacts", lang)} · ${t("marketing.nav.campaigns", lang)} · ${t("marketing.nav.automations", lang)}`;
+
+  const visibleNav = SUB_NAV.filter((item) => !item.adminOnly || mode === "admin");
 
   return (
     <Shell title={resolvedTitle} subtitle={resolvedSubtitle}>
       <div className="flex flex-wrap gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-3 mb-5 overflow-x-auto">
-        {SUB_NAV.map(({ href, icon: Icon, labelKey }) => {
+        {visibleNav.map(({ href, icon: Icon, labelKey }) => {
           const label = t(labelKey, lang);
           const active =
             href === "/marketing" ? pathname === "/marketing" : pathname?.startsWith(href);

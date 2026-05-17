@@ -325,12 +325,15 @@ describe("marketingTenantRouter.campaignAudiencePreview", () => {
 describe("marketingTenantRouter.providersList read-only", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns the listed providers for a tenant_owner", async () => {
+  it("returns aggregate-only capability flags (never per-provider names)", async () => {
     const { db } = createDbMock([[]]); // providers table is empty
     const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
     const out = await caller.providersList({ tenantId: "t_a" });
-    // listProviders mock returns [] above
-    expect(out).toEqual([]);
+    // Tenant surface MUST NOT leak provider names — see procedure comment.
+    expect(out).toEqual({ canSendEmail: false, canSendSms: false });
+    // Defence-in-depth: the response shape must not even mention "name".
+    expect(JSON.stringify(out)).not.toMatch(/\bname\b/i);
+    expect(JSON.stringify(out)).not.toMatch(/brevo|resend|twilio/i);
   });
 
   it("FORBIDDEN when caller is from another tenant", async () => {

@@ -1611,6 +1611,8 @@ const translations = {
   "marketing.overview.unsubscribes":      { ru: "Отписались",             ua: "Відписалися",            en: "Unsubscribes",           pl: "Wypisali się" },
   "marketing.overview.providersTitle":    { ru: "Провайдеры",             ua: "Провайдери",             en: "Providers",              pl: "Dostawcy" },
   "marketing.overview.providersDescription": { ru: "Подробности и переключение — на вкладке Провайдеры.", ua: "Деталі і перемикання — на вкладці Провайдери.", en: "Details and toggle — see the Providers tab.", pl: "Szczegóły i przełączanie — zakładka Dostawcy." },
+  "marketing.providers.adminOnly.title":  { ru: "Раздел доступен только администратору", ua: "Розділ доступний лише адміністратору", en: "Admin-only section", pl: "Sekcja tylko dla administratora" },
+  "marketing.providers.adminOnly.body":   { ru: "Транспорт писем и SMS настраивает платформа. Эта страница недоступна владельцам салонов.", ua: "Транспорт листів і SMS налаштовує платформа. Ця сторінка недоступна власникам салонів.", en: "Email and SMS transport is managed by the platform. This page is not available to salon owners.", pl: "Transport e-mail i SMS jest zarządzany przez platformę. Ta strona nie jest dostępna dla właścicieli salonów." },
 
   // ── Marketing — Templates ──────────────────────────────────────────────────
   "marketing.template.subtitle":          { ru: "Email и SMS шаблоны с merge-переменными", ua: "Email і SMS шаблони з merge-змінними", en: "Email and SMS templates with merge variables", pl: "Szablony e-mail i SMS ze zmiennymi merge" },

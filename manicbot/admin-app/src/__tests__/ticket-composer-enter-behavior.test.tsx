@@ -116,6 +116,13 @@ vi.mock("~/trpc/react", () => {
         replyToMyTicket: {
           useMutation: () => ({ mutate: helpReplyMutate, isPending: false }),
         },
+        mintTicketUploadToken: {
+          useMutation: () => ({
+            mutate: vi.fn(),
+            mutateAsync: vi.fn(async () => ({ token: "tok", uploadUrl: "https://w/x" })),
+            isPending: false,
+          }),
+        },
         // SupportDashboard (platform staff)
         getAllTickets: {
           useQuery: () => ({ data: [ticket], isLoading: false, isError: false, isRefetching: false }),

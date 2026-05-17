@@ -35,8 +35,14 @@ import {
   assertThreadMember,
 } from "~/server/api/messenger/access";
 import { mintWsToken } from "~/lib/wsToken";
+import { signUploadToken } from "~/server/lib/uploadToken";
 import { env } from "~/env";
 import { log } from "~/server/utils/logger";
+
+// ─── Attachment limits ─────────────────────────────────────────────
+
+const MAX_ATTACHMENTS_PER_MESSAGE = 4;
+const MAX_ATTACHMENT_URL_LEN = 2000;
 
 // ─── Validation ────────────────────────────────────────────────────
 
@@ -287,6 +293,17 @@ export const messengerRouter = createTRPCRouter({
         body: z.string().min(1).max(MESSAGE_BODY_MAX),
         isInternalNote: z.boolean().default(false),
         replyToMessageId: z.string().optional(),
+        // Up to N image attachments. URLs must be CDN URLs minted via
+        // `mintAttachmentUploadToken` — we don't validate origin here
+        // (anti-SSRF lives in the read path: `<img src>` is browser-fetched),
+        // but the URL is bounded to keep the JSON blob small.
+        attachments: z
+          .array(z.object({
+            url: z.string().url().max(MAX_ATTACHMENT_URL_LEN),
+            kind: z.literal("image").default("image"),
+          }))
+          .max(MAX_ATTACHMENTS_PER_MESSAGE)
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -306,6 +323,14 @@ export const messengerRouter = createTRPCRouter({
       const id = ulid();
       const now = nowSec();
 
+      // Attachments are stored as JSON: { attachments: [{ url, kind }, …] }.
+      // Wrapped in an object (not a raw array) so we can extend the schema
+      // with metadata fields later without breaking older readers.
+      const attachmentsJson =
+        input.attachments && input.attachments.length > 0
+          ? JSON.stringify({ attachments: input.attachments })
+          : null;
+
       await ctx.db.insert(threadMessages).values({
         id,
         threadId: input.threadId,
@@ -313,7 +338,7 @@ export const messengerRouter = createTRPCRouter({
         senderKind: "web_user",
         senderRef: webUserId,
         body,
-        attachmentsJson: null,
+        attachmentsJson,
         isInternalNote,
         externalMsgId: null,
         replyToMessageId: input.replyToMessageId ?? null,
@@ -621,6 +646,52 @@ export const messengerRouter = createTRPCRouter({
         webUserId: ctx.webUser!.id,
       });
       return { token, ttlSec: 60 };
+    }),
+
+  /**
+   * Mint a short-lived HMAC-signed upload token for the Worker's
+   * `/upload/asset` endpoint, scoped to `chat_attachment` + the caller's
+   * tenant + thread membership. Returns `{ token, uploadUrl }`.
+   *
+   * The client POSTs the image file (PNG/JPEG/WEBP ≤2 MB) directly to the
+   * Worker, gets back a CDN URL, then includes that URL in the next
+   * `sendMessage` call via the `attachments` array.
+   *
+   * Authorization: `assertThreadMember` — the caller must already be a member
+   * of the thread (system_admin bypass still requires tenant match per
+   * `assertMessengerTenantAccess` inside `assertThreadMember`).
+   */
+  mintAttachmentUploadToken: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      threadId: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+
+      if (!env.UPLOAD_TOKEN_SECRET) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "UPLOAD_TOKEN_SECRET not configured on admin-app",
+        });
+      }
+      if (!env.WORKER_PUBLIC_URL) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "WORKER_PUBLIC_URL not configured on admin-app",
+        });
+      }
+
+      const token = await signUploadToken({
+        tid: input.tenantId,
+        kind: "chat_attachment",
+        secret: env.UPLOAD_TOKEN_SECRET,
+      });
+      const base = env.WORKER_PUBLIC_URL.replace(/\/$/, "");
+      return {
+        token,
+        uploadUrl: `${base}/upload/asset?t=${encodeURIComponent(token)}&kind=chat_attachment`,
+      };
     }),
 
   // ═══════════════════════════════════════════════════════════════

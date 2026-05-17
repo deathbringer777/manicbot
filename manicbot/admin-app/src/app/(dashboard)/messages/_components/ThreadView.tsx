@@ -17,6 +17,25 @@ function fmtFull(ts: number): string {
   return `${d.toLocaleDateString()} ${hh}:${mm}`;
 }
 
+/**
+ * `thread_messages.attachments_json` is `{ attachments: [{ url, kind }, …] }`
+ * — see `messenger.sendMessage`. Returns an empty array for null / invalid
+ * JSON / unrecognised shape so the renderer never throws on malformed rows.
+ */
+function parseAttachments(raw: unknown): Array<{ url: string; kind: string }> {
+  if (!raw || typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw) as { attachments?: Array<{ url?: unknown; kind?: unknown }> };
+    if (!parsed || !Array.isArray(parsed.attachments)) return [];
+    return parsed.attachments.flatMap((a) => {
+      if (typeof a?.url !== "string") return [];
+      return [{ url: a.url, kind: typeof a.kind === "string" ? a.kind : "image" }];
+    });
+  } catch {
+    return [];
+  }
+}
+
 export function ThreadView({ tenantId, threadId }: Props) {
   const utils = api.useUtils();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -138,6 +157,11 @@ export function ThreadView({ tenantId, threadId }: Props) {
                 : m.senderKind === "external_client"
                   ? "Клиент"
                   : "Система";
+            const atts = parseAttachments((m as { attachmentsJson?: unknown }).attachmentsJson);
+            // Body is "(вложение)" placeholder when the user sent an
+            // attachment without text — hide it in the bubble so the image
+            // stands alone.
+            const showBody = m.body && m.body !== "(вложение)";
             return (
               <div
                 key={m.id}
@@ -178,7 +202,29 @@ export function ThreadView({ tenantId, threadId }: Props) {
                       заметка
                     </p>
                   )}
-                  <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                  {atts.length > 0 && (
+                    <div className={`flex flex-wrap gap-1.5 ${showBody ? "mb-1.5" : ""}`}>
+                      {atts.map((a, idx) => (
+                        <a
+                          key={`${a.url}-${idx}`}
+                          href={a.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block overflow-hidden rounded-lg border border-white/10"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={a.url}
+                            alt="attachment"
+                            className="max-h-56 max-w-[240px] w-auto object-cover"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {showBody && (
+                    <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                  )}
                   <p
                     className={`mt-0.5 text-right text-[9px] ${
                       isOwn ? "text-white/70" : "text-slate-400"

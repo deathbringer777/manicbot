@@ -5,6 +5,8 @@ import { eq, desc, or, like, and, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sendSupportReplyEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
+import { signUploadToken } from "~/server/lib/uploadToken";
+import { env } from "~/env";
 import type { Lang } from "~/lib/i18n";
 import { notifyWebUser, notifyManyWebUsers } from "~/server/services/notifyWebUser";
 
@@ -255,7 +257,11 @@ export const supportRouter = createTRPCRouter({
 
   /** Reply to own ticket (reopens if closed) */
   replyToMyTicket: protectedProcedure
-    .input(z.object({ ticketId: z.string(), text: z.string().min(1).max(5000) }))
+    .input(z.object({
+      ticketId: z.string(),
+      text: z.string().min(1).max(5000),
+      attachmentUrl: z.string().max(2000).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const filter = myTicketsFilter(ctx);
       const rows = await ctx.db
@@ -269,6 +275,7 @@ export const supportRouter = createTRPCRouter({
         ticketId: input.ticketId,
         sender: userSenderId(ctx),
         text: input.text,
+        attachmentUrl: input.attachmentUrl ?? null,
         createdAt: now,
       });
       const updates: Record<string, any> = { updatedAt: now };
@@ -294,6 +301,77 @@ export const supportRouter = createTRPCRouter({
       );
 
       return { ok: true };
+    }),
+
+  /**
+   * Mint a short-lived HMAC-signed upload token for the Worker's
+   * `/upload/asset` endpoint, scoped to `chat_attachment` and the ticket's
+   * tenant. The client uses this to upload an image (PNG/JPEG/WEBP, ≤2 MB)
+   * directly to R2 via the Worker, then includes the returned CDN URL in
+   * the next `replyToTicket` / `replyToMyTicket` call.
+   *
+   * Authorization rule: the caller must be either
+   *   - support staff (system_admin / support / technical_support), OR
+   *   - the ticket's owner (created by them per `myTicketsFilter`)
+   *
+   * Tenant scoping: the upload's R2 key is `t/{tid}/chat_attachment-{sha}.{ext}`
+   * where `tid` = `ticket.tenant_id`. If the ticket has no tenant (rare —
+   * platform-staff-created tickets only), we use the `_platform` sentinel.
+   */
+  mintTicketUploadToken: protectedProcedure
+    .input(z.object({ ticketId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // Resolve the ticket so we can decide tenant scope + authorization.
+      const ticketRows = await ctx.db
+        .select({
+          id: platformTickets.id,
+          tenantId: platformTickets.tenantId,
+          clientName: platformTickets.clientName,
+        })
+        .from(platformTickets)
+        .where(eq(platformTickets.id, input.ticketId))
+        .limit(1);
+      if (!ticketRows.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Ticket not found" });
+      }
+      const ticket = ticketRows[0]!;
+
+      const role = ctx.webUser.webRole;
+      const isSupportStaff = role === "system_admin" || role === "support" || role === "technical_support";
+      // Tickets are keyed to the creator by `clientName` (= their email).
+      // `replyToMyTicket` uses this exact check via `myTicketsFilter`.
+      const isOwner = !!ctx.webUser.email && ticket.clientName === ctx.webUser.email;
+
+      if (!isSupportStaff && !isOwner) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized for this ticket" });
+      }
+
+      if (!env.UPLOAD_TOKEN_SECRET) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "UPLOAD_TOKEN_SECRET not configured on admin-app",
+        });
+      }
+      if (!env.WORKER_PUBLIC_URL) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "WORKER_PUBLIC_URL not configured on admin-app",
+        });
+      }
+
+      const tid = ticket.tenantId ?? "_platform";
+      const token = await signUploadToken({
+        tid,
+        kind: "chat_attachment",
+        secret: env.UPLOAD_TOKEN_SECRET,
+      });
+      const base = env.WORKER_PUBLIC_URL.replace(/\/$/, "");
+      return {
+        token,
+        uploadUrl: `${base}/upload/asset?t=${encodeURIComponent(token)}&kind=chat_attachment`,
+      };
     }),
 
   /** Create a support ticket — available to any authenticated user (tenant_owner, master, etc.) */

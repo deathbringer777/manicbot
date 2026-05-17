@@ -1,12 +1,19 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
-import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle, ChevronRight, Search } from "lucide-react";
+import { useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle, ChevronRight, Search, X } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { relativeTime } from "~/lib/appointments";
+import { ChatAttachButton } from "~/components/chat/ChatAttachButton";
+import {
+  uploadChatAttachment,
+  validateChatAttachmentFile,
+  describeChatAttachmentError,
+  ChatAttachmentUploadError,
+} from "~/lib/chatAttachments";
 
 const STATUS_STYLES: Record<string, string> = {
   open: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
@@ -30,6 +37,9 @@ export function SupportDashboard() {
   const [filter, setFilter] = useState<FilterStatus>("open");
   const [replyText, setReplyText] = useState("");
   const [replyAttachmentUrl, setReplyAttachmentUrl] = useState("");
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [pasteUploading, setPasteUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [searchQ, setSearchQ] = useState("");
 
   const supportNavItems: NavItem[] = [
@@ -60,9 +70,78 @@ export function SupportDashboard() {
     onSuccess: () => {
       setReplyText("");
       setReplyAttachmentUrl("");
+      setAttachmentError(null);
       utils.support.getTicket.invalidate();
     },
   });
+
+  const mintTokenMut = api.support.mintTicketUploadToken.useMutation();
+
+  async function mintTokenForTicket() {
+    if (!selectedId) throw new Error("no ticket selected");
+    return await mintTokenMut.mutateAsync({ ticketId: selectedId });
+  }
+
+  async function uploadOne(file: File) {
+    const validation = validateChatAttachmentFile(file);
+    if (validation) {
+      setAttachmentError(describeChatAttachmentError(validation));
+      return;
+    }
+    setAttachmentError(null);
+    setPasteUploading(true);
+    try {
+      const { uploadUrl } = await mintTokenForTicket();
+      const url = await uploadChatAttachment(file, uploadUrl);
+      setReplyAttachmentUrl(url);
+    } catch (e) {
+      const code = e instanceof ChatAttachmentUploadError ? e.code : "upload_failed";
+      setAttachmentError(describeChatAttachmentError(code as never));
+    } finally {
+      setPasteUploading(false);
+    }
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]!;
+      if (it.kind === "file") {
+        const f = it.getAsFile();
+        if (f) {
+          e.preventDefault();
+          void uploadOne(f);
+          return;
+        }
+      }
+    }
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = e.dataTransfer?.files?.[0];
+    if (f) void uploadOne(f);
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      setIsDragging(true);
+    }
+  }
+
+  function submitReply() {
+    const trimmed = replyText.trim();
+    if (!selectedId || reply.isPending) return;
+    if (!trimmed && !replyAttachmentUrl.trim()) return;
+    reply.mutate({
+      ticketId: selectedId,
+      text: trimmed || "(вложение)",
+      attachmentUrl: replyAttachmentUrl.trim() || undefined,
+    });
+  }
 
   const filterLabels: Record<FilterStatus, string> = {
     all: t("support.all", lang),
@@ -132,7 +211,11 @@ export function SupportDashboard() {
               <div className="space-y-2">
                 {ticketDetail.data.messages.map((msg: any) => {
                   const isSupport = typeof msg.sender === "string" && msg.sender.startsWith("support:");
-                  const att = msg.attachmentUrl as string | null | undefined;
+                  const att = (msg.attachmentUrl ?? "") as string;
+                  const attIsImage = att.startsWith("http") &&
+                    /\.(png|jpe?g|webp)(\?|$)/i.test(att);
+                  const attIsHttp = att.startsWith("http");
+                  const attIsTg = att.startsWith("telegram:");
                   return (
                     <div key={msg.id} className={`flex ${isSupport ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
@@ -141,7 +224,22 @@ export function SupportDashboard() {
                           : "glass-card text-slate-800 dark:text-slate-200"
                       }`}>
                         <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
-                        {att?.startsWith("http") && (
+                        {attIsImage && (
+                          <a
+                            href={att}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 block overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={att}
+                              alt="attachment"
+                              className="max-h-64 w-auto object-contain"
+                            />
+                          </a>
+                        )}
+                        {attIsHttp && !attIsImage && (
                           <a
                             href={att}
                             target="_blank"
@@ -151,7 +249,7 @@ export function SupportDashboard() {
                             {att}
                           </a>
                         )}
-                        {att?.startsWith("telegram:") && (
+                        {attIsTg && (
                           <p className="text-[10px] text-slate-500 mt-1">Вложение в Telegram (откройте диалог в боте)</p>
                         )}
                         <p className="text-[10px] text-slate-500 mt-1">{relativeTime(msg.createdAt)}</p>
@@ -166,7 +264,46 @@ export function SupportDashboard() {
 
               {/* Reply input */}
               {ticketDetail.data.ticket.status !== "closed" && (
-                <div className="space-y-2 pt-2">
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  className={`space-y-2 pt-2 rounded-xl transition-colors ${
+                    isDragging
+                      ? "ring-2 ring-brand-500/60 ring-offset-2 ring-offset-white dark:ring-offset-slate-900"
+                      : ""
+                  }`}
+                >
+                  {replyAttachmentUrl && (
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-2">
+                      {/\.(png|jpe?g|webp)(\?|$)/i.test(replyAttachmentUrl) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={replyAttachmentUrl} alt="preview" className="h-12 w-12 rounded object-cover" />
+                      ) : (
+                        <div className="h-12 w-12 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] text-slate-500">URL</div>
+                      )}
+                      <span className="flex-1 text-xs text-slate-500 dark:text-slate-400 truncate" title={replyAttachmentUrl}>
+                        {replyAttachmentUrl}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setReplyAttachmentUrl("")}
+                        className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        aria-label="Убрать вложение"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {attachmentError && (
+                    <p className="text-xs text-red-600 dark:text-red-400">{attachmentError}</p>
+                  )}
+                  {pasteUploading && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Загружаю изображение…
+                    </p>
+                  )}
                   <input
                     type="url"
                     value={replyAttachmentUrl}
@@ -179,34 +316,29 @@ export function SupportDashboard() {
                       data-testid="support-ticket-reply-input"
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
+                      onPaste={handlePaste}
                       onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
-                        // Enter sends; Shift+Enter inserts a newline. Matches the
-                        // /messages composer + tenant ticket reply behavior.
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
-                          const trimmed = replyText.trim();
-                          if (trimmed && !reply.isPending) {
-                            reply.mutate({
-                              ticketId: selectedId,
-                              text: trimmed,
-                              attachmentUrl: replyAttachmentUrl.trim() || undefined,
-                            });
-                          }
+                          submitReply();
                         }
                       }}
                       placeholder={t("support.replyPlaceholder", lang)}
                       rows={2}
                       className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
                     />
+                    <ChatAttachButton
+                      mintToken={mintTokenForTicket}
+                      onUploaded={(url) => {
+                        setReplyAttachmentUrl(url);
+                        setAttachmentError(null);
+                      }}
+                      onError={(msg) => setAttachmentError(msg)}
+                      disabled={reply.isPending}
+                    />
                     <button
-                      onClick={() =>
-                        reply.mutate({
-                          ticketId: selectedId,
-                          text: replyText,
-                          attachmentUrl: replyAttachmentUrl.trim() || undefined,
-                        })
-                      }
-                      disabled={reply.isPending || !replyText.trim()}
+                      onClick={submitReply}
+                      disabled={reply.isPending || (!replyText.trim() && !replyAttachmentUrl.trim())}
                       className="flex items-center justify-center h-full px-3 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 disabled:opacity-50 hover:opacity-80 transition-opacity"
                     >
                       {reply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

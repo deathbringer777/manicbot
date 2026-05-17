@@ -13,8 +13,8 @@
  * so virtualization isn't worth the complexity yet.
  */
 
-import { useState, useMemo, useEffect } from "react";
-import { Loader2, Search, Upload, Download, Users, X } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Loader2, Search, Upload, Download, Users, X, ChevronDown } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
@@ -86,14 +86,31 @@ export function ClientsTab({ tenantId }: Props) {
   });
 
   const [isExporting, setIsExporting] = useState(false);
-  async function runExport() {
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close the export dropdown on outside click — mirrors the `FilterDropdown`
+  // pattern used elsewhere in the dashboard.
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    function handler(e: MouseEvent) {
+      if (!exportMenuRef.current?.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [exportMenuOpen]);
+
+  async function runExport(format: "manicbot" | "google" | "apple") {
+    setExportMenuOpen(false);
     setIsExporting(true);
     try {
       // exportCsv is a `.query()` (no side-effects on the server beyond a
       // SELECT), so we call it imperatively via the tRPC utils proxy
       // instead of wiring up a fake `useQuery({ enabled: false }) + refetch`.
-      const r = await utils.clients.exportCsv.fetch({ tenantId, filters: activeFilters });
-      const blob = new Blob([r.data], { type: "text/csv;charset=utf-8" });
+      const r = await utils.clients.exportCsv.fetch({ tenantId, filters: activeFilters, format });
+      const blob = new Blob([r.data], { type: r.mime ?? "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -149,16 +166,58 @@ export function ClientsTab({ tenantId }: Props) {
             <Upload className="h-3.5 w-3.5 shrink-0" />
             <span>{t("clients.action.import", lang)}</span>
           </button>
-          <button
-            type="button"
-            onClick={runExport}
-            disabled={isExporting}
-            data-testid="clients-export"
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 sm:flex-initial"
-          >
-            <Download className="h-3.5 w-3.5 shrink-0" />
-            <span>{isExporting ? "…" : t("clients.action.export", lang)}</span>
-          </button>
+          <div ref={exportMenuRef} className="relative flex-1 sm:flex-initial">
+            <button
+              type="button"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              disabled={isExporting}
+              data-testid="clients-export"
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200"
+            >
+              <Download className="h-3.5 w-3.5 shrink-0" />
+              <span>{isExporting ? "…" : t("clients.action.export", lang)}</span>
+              <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+            </button>
+            {exportMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900"
+              >
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  {t("clients.export.menuTitle", lang)}
+                </p>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => runExport("manicbot")}
+                  data-testid="clients-export-manicbot"
+                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  {t("clients.export.format.manicbot", lang)}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => runExport("google")}
+                  data-testid="clients-export-google"
+                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  {t("clients.export.format.google", lang)}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => runExport("apple")}
+                  data-testid="clients-export-apple"
+                  className="block w-full px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  {t("clients.export.format.apple", lang)}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

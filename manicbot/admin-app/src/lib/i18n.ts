@@ -918,6 +918,22 @@ const translations = {
   "clients.delete.confirm":             { ru: "Удалить клиента? Личные данные будут стёрты, но записи останутся в истории.", ua: "Видалити клієнта? Особисті дані будуть стерті, але записи залишаться в історії.", en: "Delete this client? Personal data will be scrubbed but bookings stay in history.", pl: "Usunąć tego klienta? Dane osobowe zostaną wymazane, ale rezerwacje pozostaną w historii." },
   "clients.block.confirm":              { ru: "Заблокировать клиента для всего салона?", ua: "Заблокувати клієнта для всього салону?", en: "Block this client across the whole salon?", pl: "Zablokować klienta w całym salonie?" },
   "clients.block.reasonPh":             { ru: "Причина (необяз.)", ua: "Причина (необов'язково)", en: "Reason (optional)", pl: "Powód (opcjonalnie)" },
+
+  // ── Clients avatar picker (0072) ────────────────────────────────────────────
+  "clients.avatar.title":               { ru: "Аватар клиента", ua: "Аватар клієнта", en: "Client avatar", pl: "Awatar klienta" },
+  "clients.avatar.tabEmoji":            { ru: "Эмодзи", ua: "Емодзі", en: "Emoji", pl: "Emoji" },
+  "clients.avatar.tabPhoto":            { ru: "Фото", ua: "Фото", en: "Photo", pl: "Zdjęcie" },
+  "clients.avatar.uploadPhoto":         { ru: "Загрузить фото", ua: "Завантажити фото", en: "Upload photo", pl: "Prześlij zdjęcie" },
+  "clients.avatar.replacePhoto":        { ru: "Заменить фото", ua: "Замінити фото", en: "Replace photo", pl: "Zamień zdjęcie" },
+  "clients.avatar.photoHint":           { ru: "PNG, JPEG или WebP до 2 МБ. Фото автоматически обрезается под круг.", ua: "PNG, JPEG або WebP до 2 МБ. Фото автоматично обрізається під коло.", en: "PNG, JPEG or WebP up to 2 MB. The photo is auto-cropped to a circle.", pl: "PNG, JPEG lub WebP do 2 MB. Zdjęcie jest automatycznie kadrowane do koła." },
+  "clients.avatar.resetDefault":        { ru: "Сбросить аватар", ua: "Скинути аватар", en: "Reset avatar", pl: "Resetuj awatar" },
+  "clients.avatar.tooltip":             { ru: "Нажмите, чтобы выбрать аватар", ua: "Натисніть, щоб обрати аватар", en: "Click to choose avatar", pl: "Kliknij, aby wybrać awatar" },
+
+  // ── Clients export format menu (0072) ───────────────────────────────────────
+  "clients.export.format.manicbot":     { ru: "ManicBot CSV", ua: "ManicBot CSV", en: "ManicBot CSV", pl: "ManicBot CSV" },
+  "clients.export.format.google":       { ru: "Google Контакты (CSV)", ua: "Google Контакти (CSV)", en: "Google Contacts (CSV)", pl: "Kontakty Google (CSV)" },
+  "clients.export.format.apple":        { ru: "Apple Контакты (vCard)", ua: "Apple Контакти (vCard)", en: "Apple Contacts (vCard)", pl: "Kontakty Apple (vCard)" },
+  "clients.export.menuTitle":           { ru: "Формат экспорта", ua: "Формат експорту", en: "Export format", pl: "Format eksportu" },
   "master.block.title":                 { ru: "Заблокировать клиента?", ua: "Заблокувати клієнта?", en: "Block this client?", pl: "Zablokować klienta?" },
   "master.block.action":                { ru: "Не работать с клиентом", ua: "Не працювати з клієнтом", en: "Don't work with client", pl: "Nie pracuj z tym klientem" },
   "master.block.confirm":               { ru: "Заблокировать", ua: "Заблокувати", en: "Block", pl: "Zablokuj" },

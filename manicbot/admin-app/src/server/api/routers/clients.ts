@@ -46,9 +46,10 @@ import {
 } from "~/server/clients/marketingSync";
 import {
   parseClientsCsv,
-  clientsToCsv,
+  clientsToFormat,
   CLIENT_CSV_TEMPLATE,
   type ParsedClientRow,
+  type ExportFormat,
 } from "~/server/clients/csv";
 import { sanitizeText } from "~/server/security/sanitize";
 import { log } from "~/server/utils/logger";
@@ -68,6 +69,17 @@ const contactsSchema = z.object({
   tgUsername: z.string().max(64).nullable().optional(),
   igUsername: z.string().max(64).nullable().optional(),
 });
+
+// 0072 avatar fields. Emoji is short (we cap at 20 to leave room for ZWJ
+// sequences like 👩‍🎤); avatarUrl must be an https R2 URL minted via
+// salon.mintUploadToken — anything else is rejected at the boundary.
+const avatarEmojiSchema = z.string().min(1).max(20).nullable().optional();
+const avatarUrlSchema = z
+  .string()
+  .regex(/^https:\/\//i, "URL must start with https://")
+  .max(2048)
+  .nullable()
+  .optional();
 
 const filterSchema = z.object({
   hasPhone: z.boolean().optional(),
@@ -128,6 +140,9 @@ interface ClientRow {
   registeredAt: number | null;
   updatedAt: number | null;
   deletedAt: number | null;
+  avatarEmoji: string | null;
+  avatarUrl: string | null;
+  avatarR2Key: string | null;
 }
 
 // ─── Router ──────────────────────────────────────────────────────────────────
@@ -286,6 +301,8 @@ export const clientsRouter = createTRPCRouter({
       tags: z.string().max(500).nullable().optional(),
       notes: z.string().max(2000).nullable().optional(),
       dob: dobSchema,
+      avatarEmoji: avatarEmojiSchema,
+      avatarUrl: avatarUrlSchema,
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -315,6 +332,8 @@ export const clientsRouter = createTRPCRouter({
         tags: safeTags,
         notes: safeNotes,
         dob: input.dob ?? null,
+        avatarEmoji: input.avatarEmoji ?? null,
+        avatarUrl: input.avatarUrl ?? null,
         registeredAt: now,
         updatedAt: now,
         firstSource: "salon_dashboard_manual",
@@ -363,6 +382,8 @@ export const clientsRouter = createTRPCRouter({
         tags: z.string().max(500).nullable().optional(),
         notes: z.string().max(2000).nullable().optional(),
         dob: dobSchema,
+        avatarEmoji: avatarEmojiSchema,
+        avatarUrl: avatarUrlSchema,
       }),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -393,6 +414,17 @@ export const clientsRouter = createTRPCRouter({
       if (p.tags !== undefined) updates.tags = p.tags ? sanitizeText(p.tags, 500) : null;
       if (p.notes !== undefined) updates.notes = p.notes ? sanitizeText(p.notes, 2000) : null;
       if (p.dob !== undefined) updates.dob = p.dob ?? null;
+      // Avatar: picking either field clears the other (the picker enforces
+      // this on the client too; we re-enforce here so direct API callers
+      // can't store both at once).
+      if (p.avatarEmoji !== undefined) {
+        updates.avatarEmoji = p.avatarEmoji;
+        if (p.avatarEmoji) updates.avatarUrl = null;
+      }
+      if (p.avatarUrl !== undefined) {
+        updates.avatarUrl = p.avatarUrl;
+        if (p.avatarUrl) updates.avatarEmoji = null;
+      }
 
       await ctx.db
         .update(users)
@@ -491,6 +523,11 @@ export const clientsRouter = createTRPCRouter({
     .input(z.object({
       tenantId: z.string(),
       filters: filterSchema.optional(),
+      // 0072: format dispatch. Default "manicbot" preserves the legacy
+      // contract (existing callers don't pass `format` and still get our
+      // canonical CSV). "google" emits Google Contacts CSV, "apple" emits
+      // a multi-card vCard 3.0 file with `.vcf` extension.
+      format: z.enum(["manicbot", "google", "apple"]).optional(),
     }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -510,27 +547,35 @@ export const clientsRouter = createTRPCRouter({
       const rows = await ctx.db
         .select()
         .from(users)
+        // tenant-isolation: conditions[0] pins eq(users.tenantId, input.tenantId).
         .where(and(...conditions))
         .orderBy(desc(users.lastVisitAt))
         .limit(10_000);
 
-      const csv = clientsToCsv((rows as ClientRow[]).map((r) => ({
-        name: r.name,
-        phone: r.phone,
-        email: r.email,
-        tgUsername: r.tgUsername,
-        igUsername: r.igUsername,
-        tags: r.tags,
-        notes: r.notes,
-        dob: r.dob,
-        lifetimeVisits: r.lifetimeVisits,
-        lastVisitAt: r.lastVisitAt,
-      })));
+      const format: ExportFormat = input.format ?? "manicbot";
+      const artifact = clientsToFormat(
+        (rows as ClientRow[]).map((r) => ({
+          name: r.name,
+          phone: r.phone,
+          email: r.email,
+          tgUsername: r.tgUsername,
+          igUsername: r.igUsername,
+          tags: r.tags,
+          notes: r.notes,
+          dob: r.dob,
+          lifetimeVisits: r.lifetimeVisits,
+          lastVisitAt: r.lastVisitAt,
+        })),
+        format,
+      );
 
       const stamp = new Date().toISOString().slice(0, 10);
+      const suffix =
+        format === "google" ? "_google" : format === "apple" ? "_apple" : "";
       return {
-        data: csv,
-        filename: `clients_${input.tenantId}_${stamp}.csv`,
+        data: artifact.data,
+        mime: artifact.mime,
+        filename: `clients_${input.tenantId}_${stamp}${suffix}.${artifact.extension}`,
       };
     }),
 

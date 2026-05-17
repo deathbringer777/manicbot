@@ -118,7 +118,7 @@ export function ImportClientsModal({ tenantId, onClose }: Props) {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.vcf,text/csv,text/vcard,text/x-vcard"
             className="hidden"
             onChange={(e) => onFile(e.target.files?.[0])}
           />

@@ -8,7 +8,7 @@
  *   3. Save `url` + `key` to the tenant via `api.salon.updateSalonProfile.mutate(...)`
  */
 
-export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo";
+export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo" | "client_avatar";
 
 export interface UploadResult {
   ok: true;

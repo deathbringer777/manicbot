@@ -9,6 +9,7 @@
  * inside the detail modal — no inline dropdowns to keep the row clean.
  */
 import { Phone, Mail, Send, Instagram, Ban, Star } from "lucide-react";
+import { resolveAvatarEmoji } from "~/lib/clientAvatar";
 
 export interface ClientRowData {
   chatId: number;
@@ -21,6 +22,9 @@ export interface ClientRowData {
   lifetimeVisits: number;
   lastVisitAt: number | null;
   isBlockedGlobal: number;
+  // 0072 avatar fields. Either may be null — UI falls back to the default emoji.
+  avatarEmoji?: string | null;
+  avatarUrl?: string | null;
 }
 
 interface Props {
@@ -42,7 +46,6 @@ function formatLastVisit(unix: number | null, lang: string): string {
 }
 
 export function ClientRow({ c, onClick }: Props) {
-  const initial = (c.name ?? "?").charAt(0).toUpperCase();
   const channelIcons = [
     c.phone && <Phone key="ph" className="h-3 w-3 text-slate-400" aria-label="phone" />,
     c.email && <Mail key="em" className="h-3 w-3 text-slate-400" aria-label="email" />,
@@ -75,13 +78,24 @@ export function ClientRow({ c, onClick }: Props) {
       className="glass-card group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:border-brand-500/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500/40 active:scale-[0.99]"
     >
       <div
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold sm:h-10 sm:w-10 ${
+        className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full text-xl font-bold sm:h-10 sm:w-10 sm:text-lg ${
           c.isBlockedGlobal
             ? "bg-rose-500/15 text-rose-400"
             : "bg-gradient-to-br from-brand-500/20 to-violet-500/20 text-brand-400"
         }`}
+        data-testid={`client-row-avatar-${c.chatId}`}
       >
-        {initial}
+        {c.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={c.avatarUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <span>{resolveAvatarEmoji(c.avatarEmoji ?? null)}</span>
+        )}
       </div>
 
       <div className="min-w-0 flex-1">

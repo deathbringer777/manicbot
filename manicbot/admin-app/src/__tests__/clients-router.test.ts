@@ -211,6 +211,46 @@ describe("clientsRouter", () => {
       });
       expect(inserts[0]!.values.email).toBe("foo@bar.com");
     });
+
+    // 0072 — avatar fields.
+    it("persists avatarEmoji on insert when provided", async () => {
+      const { db, inserts } = buildDb([]);
+      const caller = createCaller(makeCtx(db) as never);
+      await caller.create({
+        tenantId: TENANT,
+        name: "K",
+        contacts: { phone: "+48000" },
+        avatarEmoji: "👸",
+      });
+      expect(inserts[0]!.values.avatarEmoji).toBe("👸");
+      expect(inserts[0]!.values.avatarUrl).toBeNull();
+    });
+
+    it("persists avatarUrl on insert when provided", async () => {
+      const { db, inserts } = buildDb([]);
+      const caller = createCaller(makeCtx(db) as never);
+      await caller.create({
+        tenantId: TENANT,
+        name: "K",
+        contacts: { phone: "+48000" },
+        avatarUrl: "https://r2.example.com/t/x.webp",
+      });
+      expect(inserts[0]!.values.avatarUrl).toBe("https://r2.example.com/t/x.webp");
+      expect(inserts[0]!.values.avatarEmoji).toBeNull();
+    });
+
+    it("rejects non-https avatarUrl at the Zod boundary", async () => {
+      const { db } = buildDb([]);
+      const caller = createCaller(makeCtx(db) as never);
+      await expect(
+        caller.create({
+          tenantId: TENANT,
+          name: "K",
+          contacts: { phone: "+48000" },
+          avatarUrl: "javascript:alert(1)" as never,
+        }),
+      ).rejects.toBeTruthy();
+    });
   });
 
   // ─── delete (soft + PII scrub) ─────────────────────────────────────────────

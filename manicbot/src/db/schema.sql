@@ -79,6 +79,11 @@ CREATE TABLE IF NOT EXISTS users (
   deleted_at INTEGER,
   lifetime_visits INTEGER NOT NULL DEFAULT 0,
   last_visit_at INTEGER,
+  -- 0072: client avatar (emoji + photo). UI shows photo when avatar_url
+  -- is set, otherwise the saved emoji, otherwise a default '👩'.
+  avatar_emoji TEXT,
+  avatar_url TEXT,
+  avatar_r2_key TEXT,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_users_tenant_dob ON users(tenant_id, dob);

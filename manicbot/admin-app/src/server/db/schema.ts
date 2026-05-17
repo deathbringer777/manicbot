@@ -79,6 +79,11 @@ export const users = sqliteTable("users", {
   deletedAt: integer("deleted_at"),
   lifetimeVisits: integer("lifetime_visits").notNull().default(0),
   lastVisitAt: integer("last_visit_at"),
+  // 0072: client avatar — emoji and/or uploaded photo. UI shows the photo
+  // when avatarUrl is set, otherwise the saved emoji, otherwise '👩'.
+  avatarEmoji: text("avatar_emoji"),
+  avatarUrl: text("avatar_url"),
+  avatarR2Key: text("avatar_r2_key"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
   index("idx_users_tenant_dob").on(t.tenantId, t.dob),

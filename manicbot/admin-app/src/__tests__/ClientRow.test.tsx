@@ -2,8 +2,9 @@
 /**
  * ClientRow — Clients-tab list row render contract.
  *
- * Pins the 0062 behaviour:
- *   * Initial letter avatar with rose-tinted variant for globally-blocked.
+ * Pins the 0062 + 0072 behaviour:
+ *   * Avatar is the saved emoji (default 👩) or an uploaded photo;
+ *     rose-tinted background variant for globally-blocked clients.
  *   * Mobile shows ONE truncated primary contact line + icon row for
  *     additional channels; tablet+ shows phone/email/tg/ig inline.
  *     (We assert the markup via the sm:hidden / sm:inline classes — the
@@ -33,10 +34,36 @@ const BASE: ClientRowData = {
 afterEach(cleanup);
 
 describe("ClientRow", () => {
-  it("renders the avatar initial in upper-case", () => {
+  it("renders the default 👩 emoji in the avatar when none is saved", () => {
     render(<ClientRow c={{ ...BASE, name: "karina" }} onClick={() => {}} />);
-    const row = screen.getByTestId(`client-row-${BASE.chatId}`);
-    expect(row.textContent).toContain("K");
+    const avatar = screen.getByTestId(`client-row-avatar-${BASE.chatId}`);
+    expect(avatar.textContent).toContain("👩");
+  });
+
+  it("renders the saved emoji when avatarEmoji is set", () => {
+    render(
+      <ClientRow
+        c={{ ...BASE, name: "Karina", avatarEmoji: "👸" }}
+        onClick={() => {}}
+      />,
+    );
+    const avatar = screen.getByTestId(`client-row-avatar-${BASE.chatId}`);
+    expect(avatar.textContent).toContain("👸");
+    expect(avatar.textContent).not.toContain("👩");
+  });
+
+  it("renders an <img> when avatarUrl is set (photo wins over emoji)", () => {
+    render(
+      <ClientRow
+        c={{ ...BASE, name: "Karina", avatarEmoji: "👸", avatarUrl: "https://example.com/a.webp" }}
+        onClick={() => {}}
+      />,
+    );
+    const img = screen
+      .getByTestId(`client-row-avatar-${BASE.chatId}`)
+      .querySelector("img");
+    expect(img).toBeTruthy();
+    expect(img?.getAttribute("src")).toBe("https://example.com/a.webp");
   });
 
   it("falls back to #chatId when name is null", () => {
@@ -55,7 +82,7 @@ describe("ClientRow", () => {
 
   it("paints the avatar rose-tinted when client is globally blocked", () => {
     render(<ClientRow c={{ ...BASE, isBlockedGlobal: 1 }} onClick={() => {}} />);
-    const avatar = screen.getByTestId(`client-row-${BASE.chatId}`).querySelector("div");
+    const avatar = screen.getByTestId(`client-row-avatar-${BASE.chatId}`);
     expect(avatar?.className ?? "").toMatch(/bg-rose-500\/15/);
   });
 

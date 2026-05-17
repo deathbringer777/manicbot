@@ -18,6 +18,8 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { ClientFormModal, type InitialClient } from "./ClientFormModal";
+import { ClientAvatarPicker } from "./ClientAvatarPicker";
+import { resolveAvatarEmoji } from "~/lib/clientAvatar";
 
 interface Props {
   tenantId: string;
@@ -37,6 +39,7 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
   const { lang } = useLang();
   const [tab, setTab] = useState<"profile" | "history" | "blocks">("profile");
   const [editOpen, setEditOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [blockReason, setBlockReason] = useState("");
@@ -73,6 +76,8 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
 
   const c = detail.data.client;
   const isBlocked = c.isBlockedGlobal === 1;
+  const avatarUrl = (c as { avatarUrl?: string | null }).avatarUrl ?? null;
+  const avatarEmoji = (c as { avatarEmoji?: string | null }).avatarEmoji ?? null;
 
   return (
     <>
@@ -87,9 +92,28 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
         >
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-500/20 to-violet-500/20 text-base font-bold text-brand-400">
-                {(c.name ?? "?").charAt(0).toUpperCase()}
-              </div>
+              <button
+                type="button"
+                onClick={() => setAvatarOpen(true)}
+                aria-label={t("clients.avatar.tooltip", lang)}
+                title={t("clients.avatar.tooltip", lang)}
+                data-testid="cd-avatar-trigger"
+                className="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-brand-500/20 to-violet-500/20 text-2xl font-bold text-brand-400 ring-1 ring-brand-500/15 transition hover:ring-brand-500/40 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              >
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{resolveAvatarEmoji(avatarEmoji)}</span>
+                )}
+                <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/55 text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                  {t("clients.avatar.tabEmoji", lang)} / {t("clients.avatar.tabPhoto", lang)}
+                </span>
+              </button>
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -333,6 +357,21 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
           } satisfies InitialClient}
           onClose={() => setEditOpen(false)}
           onSaved={() => setEditOpen(false)}
+        />
+      )}
+
+      {avatarOpen && (
+        <ClientAvatarPicker
+          tenantId={tenantId}
+          chatId={c.chatId}
+          currentEmoji={avatarEmoji}
+          currentUrl={avatarUrl}
+          onClose={() => setAvatarOpen(false)}
+          onSaved={() => {
+            void utils.clients.get.invalidate({ tenantId, chatId });
+            void utils.clients.list.invalidate({ tenantId });
+            setAvatarOpen(false);
+          }}
         />
       )}
     </>

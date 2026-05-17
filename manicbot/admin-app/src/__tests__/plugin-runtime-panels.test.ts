@@ -8,9 +8,13 @@ import { hasRuntime, loadRuntime, listRuntimeSlugs } from "~/components/plugins/
 import { listManifests } from "@plugins/index";
 
 describe("plugin runtime registry", () => {
-  it("lists at least 7 runtime panels", () => {
+  it("lists at least 3 runtime panels (one per major retained-plugin role bucket)", () => {
+    // After the 2026-05-16 cleanup, the retained runtimes are: task-board,
+    // export-hub, availability-share, earnings-goal, message-templates.
+    // Phase 3 will add several more (sms-reminders runtime, etc.). The
+    // floor lives at 3 so a future trim of retained plugins is caught.
     const slugs = listRuntimeSlugs();
-    expect(slugs.length).toBeGreaterThanOrEqual(7);
+    expect(slugs.length).toBeGreaterThanOrEqual(3);
   });
 
   it("every registered slug corresponds to a real plugin in the seed catalog", () => {
@@ -43,10 +47,10 @@ describe("plugin runtime registry", () => {
   it("every manifest with status='live' either has a runtime or is documented as background", () => {
     // Soft guarantee: at least the live plugins that ship interactive UI
     // must have a runtime registered. Live background plugins without a
-    // runtime are allowed (e.g. ai-abuse-monitor runs on cron).
+    // runtime are allowed (loyalty-stamps runs on cron, no UI).
     const live = listManifests().filter((m) => m.status === "live");
     const withRuntime = live.filter((m) => hasRuntime(m.slug));
-    expect(withRuntime.length).toBeGreaterThanOrEqual(5);
+    expect(withRuntime.length).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -72,13 +76,10 @@ describe("Friendly plugin names — no tech jargon for non-admin roles", () => {
     }
   });
 
-  it("key technical-sounding manifests got renamed", () => {
-    const sla = listManifests().find((m) => m.slug === "sla-tracker")!;
-    expect(sla.name.ru).not.toContain("SLA");
-    const aiab = listManifests().find((m) => m.slug === "ai-abuse-monitor")!;
-    expect(aiab.name.ru.toLowerCase()).not.toContain("abuse");
-    const gdpr = listManifests().find((m) => m.slug === "gdpr-center")!;
-    expect(gdpr.name.ru).not.toContain("GDPR");
-    // revenue-intelligence was removed (duplicated God Mode billing analytics); gdpr-center verified above
-  });
+  // 2026-05-16 — sla-tracker / ai-abuse-monitor / gdpr-center were removed
+  // from the catalog and their capabilities folded into core UI. The original
+  // "key technical-sounding manifests got renamed" assertion no longer has
+  // anything to assert against. Removed without replacement; the broader
+  // "tenant-facing plugins have friendly names" guard above still holds for
+  // the retained 7.
 });

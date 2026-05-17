@@ -12,18 +12,35 @@
  *
  * To add a plugin: create `manicbot/plugins/<slug>/manifest.ts` + optional
  * router/lifecycle/worker/ui files, then add one import line below.
+ *
+ * 2026-05-16 cleanup — dropped 13 slugs that duplicated already-shipped core
+ * features or were pure marketing stubs. `google-calendar` was later
+ * RESTORED as a marketplace-only facade over the existing core OAuth flow
+ * (`googleCalendar.ts` router + `GoogleCalendarRuntime.tsx`); the surviving
+ * DELETED list is 12.
+ *   DELETED (capability already in core):
+ *     - booking-reminder         → worker `phaseReminders` cron
+ *     - client-crm-lite          → admin-app `clients.ts` router (0062)
+ *     - quick-notes              → subset of task-board
+ *   FOLDED INTO CORE (capability moves out of marketplace into core UI):
+ *     - ai-abuse-monitor         → God Mode `/errors` filter tab
+ *     - gdpr-center              → `consent.ts` + `/admin/gdpr` page
+ *     - sla-tracker              → Support dashboard SLA tab
+ *     - escalation-playbook      → Support dashboard playbook tab
+ *     - kb-search                → Support dashboard FTS search
+ *     - ticket-templates         → Support reply composer
+ *     - keyboard-shortcuts       → `(dashboard)/layout.tsx` global hook
+ *     - dark-plus                → `AppearanceSection` extra themes
+ *     - portfolio-gallery        → public salon + master profile (uses
+ *                                  existing `cover_photo` / `portfolio` cols)
+ *
+ * The 7 retained plugins below are genuinely modular and stay in the
+ * marketplace. Variant A from the catalog strategy adds 10 more on top.
  */
 
 import type { PluginManifest, PluginModule } from "./types";
 
 // ─── Manifest imports ────────────────────────────────────────────────────────
-
-// ── system_admin ────────────────────────────────────────────────────────────
-import aiAbuseMonitorManifest from "./ai-abuse-monitor/manifest";
-import gdprCenterManifest from "./gdpr-center/manifest";
-
-// ── productivity / integrations ─────────────────────────────────────────────
-import googleCalendarManifest from "./google-calendar/manifest";
 
 // ── tenant_owner ────────────────────────────────────────────────────────────
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
@@ -33,56 +50,48 @@ import shiftPlannerManifest from "./shift-planner/manifest";
 import taskBoardManifest from "./task-board/manifest";
 
 // ── master ──────────────────────────────────────────────────────────────────
-import portfolioGalleryManifest from "./portfolio-gallery/manifest";
-import clientCrmLiteManifest from "./client-crm-lite/manifest";
 import availabilityShareManifest from "./availability-share/manifest";
 import earningsGoalManifest from "./earnings-goal/manifest";
 
-// ── support / technical_support ─────────────────────────────────────────────
-import ticketTemplatesManifest from "./ticket-templates/manifest";
-import escalationPlaybookManifest from "./escalation-playbook/manifest";
-import slaTrackerManifest from "./sla-tracker/manifest";
-import kbSearchManifest from "./kb-search/manifest";
-
 // ── universal ───────────────────────────────────────────────────────────────
-import keyboardShortcutsManifest from "./keyboard-shortcuts/manifest";
-import darkPlusManifest from "./dark-plus/manifest";
 import exportHubManifest from "./export-hub/manifest";
-import quickNotesManifest from "./quick-notes/manifest";
 
 // ── master + tenant_owner ───────────────────────────────────────────────────
-import bookingReminderManifest from "./booking-reminder/manifest";
 import messageTemplatesManifest from "./message-templates/manifest";
 
+// ── tenant_owner + tenant_manager + master (core-backed facade) ─────────────
+import googleCalendarManifest from "./google-calendar/manifest";
+
+// ── Variant A (Phase 3) — growth plugins ────────────────────────────────────
+import reviewCollectorManifest from "./review-collector/manifest";
+
+// ── Variant A (Phase 3) — operations plugins ────────────────────────────────
+import inventoryLiteManifest from "./inventory-lite/manifest";
+
+// ── productivity / cron-backed (first plugin wired to phasePluginCron) ──────
+import remindersManifest from "./reminders/manifest";
+
 const RAW_MANIFESTS: readonly PluginManifest[] = [
-  // system_admin
-  aiAbuseMonitorManifest,
-  gdprCenterManifest,
-  // productivity / integrations
-  googleCalendarManifest,
   // tenant_owner
   loyaltyStampsManifest,
   // tenant_manager
   shiftPlannerManifest,
   taskBoardManifest,
   // master
-  portfolioGalleryManifest,
-  clientCrmLiteManifest,
   availabilityShareManifest,
   earningsGoalManifest,
-  // support
-  ticketTemplatesManifest,
-  escalationPlaybookManifest,
-  slaTrackerManifest,
-  kbSearchManifest,
   // universal
-  keyboardShortcutsManifest,
-  darkPlusManifest,
   exportHubManifest,
-  quickNotesManifest,
   // master + tenant_owner
-  bookingReminderManifest,
   messageTemplatesManifest,
+  // tenant_owner + tenant_manager + master (core-backed facade)
+  googleCalendarManifest,
+  // Variant A growth
+  reviewCollectorManifest,
+  // Variant A operations
+  inventoryLiteManifest,
+  // productivity / cron-backed (first plugin wired to phasePluginCron)
+  remindersManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

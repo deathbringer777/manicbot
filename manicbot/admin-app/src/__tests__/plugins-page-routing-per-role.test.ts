@@ -37,8 +37,8 @@ describe("/plugins routing across roles", () => {
     expect(renderedContent(role, "/dashboard")).toBe("dashboard");
   });
 
-  it("/plugins/quick-notes loads as page children for tenant_owner", () => {
-    expect(renderedContent("tenant_owner", "/plugins/quick-notes")).toBe("children");
+  it("/plugins/task-board loads as page children for tenant_owner", () => {
+    expect(renderedContent("tenant_owner", "/plugins/task-board")).toBe("children");
   });
 
   it("/settings always renders children regardless of role", () => {

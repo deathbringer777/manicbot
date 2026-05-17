@@ -19,15 +19,16 @@ type AdminEvent = {
   data?: Record<string, unknown>;
 };
 
-// Color coding by type prefix
+// Color coding by type prefix. Paired light + dark variants so badges stay
+// readable in both themes (see contrast-static-scan test).
 function getTypeStyle(type: string): string {
-  if (type.startsWith("error")) return "bg-red-500/15 text-red-300 border-red-500/20";
-  if (type.startsWith("booking")) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/20";
-  if (type.startsWith("auth")) return "bg-violet-500/15 text-violet-300 border-violet-500/20";
-  if (type.startsWith("webhook")) return "bg-blue-500/15 text-blue-300 border-blue-500/20";
-  if (type.startsWith("stripe")) return "bg-cyan-500/15 text-cyan-300 border-cyan-500/20";
-  if (type.startsWith("channel")) return "bg-amber-500/15 text-amber-300 border-amber-500/20";
-  return "bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600/30";
+  if (type.startsWith("error")) return "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/20";
+  if (type.startsWith("booking")) return "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/20";
+  if (type.startsWith("auth")) return "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/20";
+  if (type.startsWith("webhook")) return "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/20";
+  if (type.startsWith("stripe")) return "bg-cyan-100 text-cyan-700 border-cyan-300 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/20";
+  if (type.startsWith("channel")) return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/20";
+  return "bg-slate-200 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600/30";
 }
 
 function LevelBadge({ level }: { level: EventLevel }) {
@@ -254,9 +255,9 @@ export default function EventsPageClient() {
               className={`text-[11px] px-2.5 py-1 rounded-lg border font-semibold transition-colors ${
                 levelFilter === value
                   ? value === "error"
-                    ? "text-red-300 border-red-500/50 bg-red-500/15"
+                    ? "text-red-700 border-red-300 bg-red-100 dark:text-red-300 dark:border-red-500/50 dark:bg-red-500/15"
                     : value === "warn"
-                    ? "text-amber-300 border-amber-500/50 bg-amber-500/15"
+                    ? "text-amber-800 border-amber-300 bg-amber-100 dark:text-amber-300 dark:border-amber-500/50 dark:bg-amber-500/15"
                     : value === "info"
                     ? "text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-500/50 bg-slate-100 dark:bg-slate-700/50"
                     : "text-slate-900 dark:text-white border-slate-200 dark:border-slate-500 bg-slate-100 dark:bg-slate-700"

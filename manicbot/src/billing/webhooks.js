@@ -22,6 +22,10 @@ import {
   handleAddonInvoiceFailed,
   handleAddonSubscriptionCanceled,
 } from './pluginWebhooks.js';
+import {
+  handleReferralInvoicePaid,
+  handleReferralSubscriptionDeleted,
+} from './referralWebhooks.js';
 
 // #P1-5 (relax.md §5) — plan tier order is the single source of truth for
 // upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
@@ -251,6 +255,8 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     if (type === 'customer.subscription.deleted') {
       try { await handleAddonSubscriptionCanceled(ctx, sub); }
       catch (e) { log.error('plugin-webhook', e, { event: 'addon_sub_canceled' }); }
+      try { await handleReferralSubscriptionDeleted(ctx, sub); }
+      catch (e) { log.error('referral-webhook', e instanceof Error ? e : new Error(String(e?.message)), { event: 'referral_sub_deleted' }); }
     }
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
     let tenantId = sub.metadata?.tenantId || await resolveTenantIdByCustomer(ctx, customerId);
@@ -305,6 +311,11 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     const invoice = body.data?.object;
     try { await handleAddonInvoicePaid(ctx, invoice); }
     catch (e) { log.error('plugin-webhook', e, { event: 'addon_invoice_paid' }); }
+    // Referral program: fire ONLY the reward path (fraud + customer_balance
+    // credit) when the subscription metadata carries a referralId. Best-
+    // effort — never block the Stripe 200 on referral processing.
+    try { await handleReferralInvoicePaid(ctx, invoice); }
+    catch (e) { log.error('referral-webhook', e instanceof Error ? e : new Error(String(e?.message)), { event: 'referral_invoice_paid' }); }
     const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
     if (customerId) {
       const tenantId = await resolveTenantIdByCustomer(ctx, customerId);

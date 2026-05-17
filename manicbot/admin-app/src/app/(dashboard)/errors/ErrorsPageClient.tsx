@@ -85,18 +85,18 @@ const STATUS_OPTIONS: Array<{ value: Status | "regressed" | "all"; label: string
 function severityBadge(severity: string) {
   if (severity === "fatal")
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-300 bg-red-500/15 px-1.5 py-0.5 rounded-md border border-red-500/30 shrink-0">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 dark:text-red-300 dark:bg-red-500/15 dark:border-red-500/30 px-1.5 py-0.5 rounded-md shrink-0">
         <AlertOctagon className="w-2.5 h-2.5" /> FATAL
       </span>
     );
   if (severity === "error")
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-300 bg-orange-500/15 px-1.5 py-0.5 rounded-md border border-orange-500/30 shrink-0">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-700 bg-orange-100 border border-orange-300 dark:text-orange-300 dark:bg-orange-500/15 dark:border-orange-500/30 px-1.5 py-0.5 rounded-md shrink-0">
         <AlertCircle className="w-2.5 h-2.5" /> ERROR
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded-md border border-amber-500/30 shrink-0">
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 dark:text-amber-300 dark:bg-amber-500/15 dark:border-amber-500/30 px-1.5 py-0.5 rounded-md shrink-0">
       <AlertTriangle className="w-2.5 h-2.5" /> WARN
     </span>
   );
@@ -120,7 +120,7 @@ function relativeTime(ts: number): string {
 function statusBadge(status: string, regressed: boolean) {
   if (regressed) {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-300 bg-pink-500/15 px-1.5 py-0.5 rounded-md border border-pink-500/30 shrink-0">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-pink-700 bg-pink-100 border border-pink-300 dark:text-pink-300 dark:bg-pink-500/15 dark:border-pink-500/30 px-1.5 py-0.5 rounded-md shrink-0">
         <Zap className="w-2.5 h-2.5" /> REGRESSED
       </span>
     );

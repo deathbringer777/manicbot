@@ -890,6 +890,7 @@ CREATE TABLE IF NOT EXISTS tenant_member_permissions (
 );
 CREATE INDEX IF NOT EXISTS idx_tmp_user ON tenant_member_permissions (web_user_id);
 CREATE INDEX IF NOT EXISTS idx_tmp_tenant ON tenant_member_permissions (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tmp_tenant_user ON tenant_member_permissions (tenant_id, web_user_id);
 
 CREATE TABLE IF NOT EXISTS tenant_action_requests (
   id           TEXT    PRIMARY KEY,
@@ -1136,9 +1137,9 @@ CREATE INDEX IF NOT EXISTS idx_apt_blocks_tenant_date
   ON appointment_blocks(tenant_id, date)
   WHERE cancelled = 0;
 
--- ─── Master invitations (migration 0063) ─────────────────────────────────
+-- ─── Master invitations (migration 0064) ─────────────────────────────────
 -- Pending invitations sent by salon owners to add a master by email.
--- See migrations/0063_master_invitations.sql for the rationale.
+-- See migrations/0064_master_invitations.sql for the rationale.
 CREATE TABLE IF NOT EXISTS master_invitations (
   id                 TEXT PRIMARY KEY,
   tenant_id          TEXT NOT NULL,
@@ -1161,9 +1162,9 @@ CREATE INDEX IF NOT EXISTS idx_master_invitations_token
 CREATE INDEX IF NOT EXISTS idx_master_invitations_tenant_status
   ON master_invitations(tenant_id, status, created_at);
 
--- ─── Global OTP codes (migration 0064) ───────────────────────────────────
+-- ─── Global OTP codes (migration 0065) ───────────────────────────────────
 -- Generic OTP store for destructive / role-escalation mutations.
--- See migrations/0064_global_otp_codes.sql for the full design.
+-- See migrations/0065_global_otp_codes.sql for the full design.
 CREATE TABLE IF NOT EXISTS global_otp_codes (
   id            TEXT PRIMARY KEY,
   web_user_id   TEXT NOT NULL,
@@ -1178,9 +1179,9 @@ CREATE TABLE IF NOT EXISTS global_otp_codes (
 CREATE INDEX IF NOT EXISTS idx_global_otp_user_action
   ON global_otp_codes(web_user_id, action, expires_at);
 
--- ─── Internal messenger (migration 0066) ─────────────────────────────────
+-- ─── Internal messenger (migration 0067) ─────────────────────────────────
 -- Unified inbox: staff DMs + groups + mirrored client channel conversations.
--- See migrations/0066_messenger.sql for the design and join-to-conversations.
+-- See migrations/0067_messenger.sql for the design and join-to-conversations.
 CREATE TABLE IF NOT EXISTS threads (
   id                       TEXT PRIMARY KEY,
   tenant_id                TEXT NOT NULL,
@@ -1237,3 +1238,144 @@ CREATE INDEX IF NOT EXISTS idx_thread_messages_thread
   ON thread_messages(thread_id, id);
 CREATE INDEX IF NOT EXISTS idx_thread_messages_tenant_created
   ON thread_messages(tenant_id, created_at);
+
+-- ─── Referral Program (migration 0069) ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS referral_codes (
+  code              TEXT    PRIMARY KEY,
+  owner_web_user_id TEXT    NOT NULL,
+  owner_tenant_id   TEXT    NOT NULL,
+  is_active         INTEGER NOT NULL DEFAULT 1,
+  created_at        INTEGER NOT NULL,
+  rotated_at        INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_referral_codes_owner
+  ON referral_codes (owner_web_user_id, is_active);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_referral_codes_active_one
+  ON referral_codes (owner_web_user_id) WHERE is_active = 1;
+
+CREATE TABLE IF NOT EXISTS referrals (
+  id                          TEXT    PRIMARY KEY,
+  referrer_web_user_id        TEXT    NOT NULL,
+  referrer_tenant_id          TEXT    NOT NULL,
+  invitee_web_user_id         TEXT    NOT NULL,
+  invitee_tenant_id           TEXT    NOT NULL,
+  code                        TEXT    NOT NULL,
+  status                      TEXT    NOT NULL,
+  invitee_discount_kind       TEXT,
+  invitee_discount_applied_at INTEGER,
+  first_invoice_paid_at       INTEGER,
+  reward_id                   TEXT,
+  invitee_payment_method_fp   TEXT,
+  fraud_flags                 TEXT,
+  created_at                  INTEGER NOT NULL,
+  updated_at                  INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ref_invitee_one_active
+  ON referrals (invitee_web_user_id) WHERE status != 'invalidated';
+CREATE INDEX IF NOT EXISTS idx_ref_referrer
+  ON referrals (referrer_web_user_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_ref_fingerprint
+  ON referrals (invitee_payment_method_fp) WHERE invitee_payment_method_fp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ref_status
+  ON referrals (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_ref_code
+  ON referrals (code);
+
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  id                          TEXT    PRIMARY KEY,
+  referrer_web_user_id        TEXT    NOT NULL,
+  referrer_tenant_id          TEXT    NOT NULL,
+  referral_id                 TEXT,
+  kind                        TEXT    NOT NULL,
+  amount_grosz                INTEGER NOT NULL,
+  stripe_customer_id          TEXT    NOT NULL,
+  stripe_balance_transaction  TEXT,
+  applied_at                  INTEGER,
+  expires_at                  INTEGER NOT NULL,
+  status                      TEXT    NOT NULL,
+  created_at                  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rewards_referrer
+  ON referral_rewards (referrer_web_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_rewards_expiry
+  ON referral_rewards (status, expires_at);
+
+CREATE TABLE IF NOT EXISTS referral_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  referral_id TEXT,
+  reward_id   TEXT,
+  event       TEXT    NOT NULL,
+  metadata    TEXT,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ref_events_referral
+  ON referral_events (referral_id, created_at);
+
+-- ─── Reminders plugin (migration 0070) ───────────────────────────────────
+-- One row per reminder/routine definition. Recurrence is stored as JSON;
+-- validation lives at the tRPC boundary. starts_on + time are the anchor.
+CREATE TABLE IF NOT EXISTS plugin_reminders (
+  id                       TEXT PRIMARY KEY,
+  tenant_id                TEXT NOT NULL,
+  created_by_web_user_id   TEXT NOT NULL,
+  target_master_id         INTEGER,
+  kind                     TEXT NOT NULL DEFAULT 'reminder'
+                           CHECK (kind IN ('reminder','routine')),
+  title                    TEXT NOT NULL,
+  note                     TEXT,
+  starts_on                TEXT NOT NULL,
+  time                     TEXT NOT NULL,
+  recurrence_json          TEXT NOT NULL,
+  channels_json            TEXT NOT NULL DEFAULT '["inapp"]',
+  archived_at              INTEGER,
+  created_at               INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at               INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_tenant_active
+  ON plugin_reminders(tenant_id, starts_on) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_reminders_target
+  ON plugin_reminders(tenant_id, target_master_id, starts_on) WHERE archived_at IS NULL;
+
+-- Idempotency claim + fire log. The (reminder_id, fires_at_epoch) UNIQUE
+-- index IS the contract — INSERT OR IGNORE in the cron loop returns
+-- changes=0 on duplicate, which is how the second cron tick at the same
+-- minute knows not to re-fire.
+CREATE TABLE IF NOT EXISTS plugin_reminder_fires (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  reminder_id     TEXT NOT NULL REFERENCES plugin_reminders(id) ON DELETE CASCADE,
+  fires_at_epoch  INTEGER NOT NULL,
+  fired_at_epoch  INTEGER,
+  delivery_state  TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (delivery_state IN ('pending','sent','failed')),
+  delivery_error  TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reminder_fires_occurrence
+  ON plugin_reminder_fires(reminder_id, fires_at_epoch);
+
+-- ─── User notifications (migration 0070) ─────────────────────────────────
+-- Platform-wide in-app feed consumed by the header bell. Generic by design
+-- — reminders is the first writer but any future feature (checklists,
+-- billing alerts) shares the same surface. The partial UNIQUE on
+-- (web_user_id, source_slug, source_id, kind) dedups bell entries on
+-- repeated cron-handler invocations.
+CREATE TABLE IF NOT EXISTS user_notifications (
+  id            TEXT PRIMARY KEY,
+  tenant_id     TEXT,
+  web_user_id   TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  body          TEXT,
+  link          TEXT,
+  source_slug   TEXT,
+  source_id     TEXT,
+  read_at       INTEGER,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_user_notifications_unread
+  ON user_notifications(web_user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_notifications_recent
+  ON user_notifications(web_user_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_notifications_source
+  ON user_notifications(web_user_id, source_slug, source_id, kind)
+  WHERE source_slug IS NOT NULL AND source_id IS NOT NULL;

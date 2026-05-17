@@ -138,6 +138,25 @@ bucket_name = "manicbot-marketing-assets"
 [ai]
 binding = "AI"
 
+# ─── Durable Object: MessengerHub (Phase 3 / migration 0067) ────────────────
+# Per-tenant fan-out hub for the internal messenger. Holds open WebSocket
+# connections from /messages tabs and rebroadcasts `message.new` /
+# `thread.updated` frames published by the Worker on inbound + outbound
+# messenger events.
+#
+# Pattern reference: `src/durable/messengerHub.js`. Uses hibernatable
+# WebSocket API so an idle tenant doesn't burn CPU.
+#
+# First-deploy migration (required for a NEW DO class). After this is in
+# place, subsequent deploys reuse the class without further migrations.
+[[durable_objects.bindings]]
+name = "MESSENGER_HUB"
+class_name = "MessengerHub"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["MessengerHub"]
+
 # ─── Workers Logs (head sampling) ──────────────────────────────────────────
 # Enabled pre-launch so prod errors surface in the Cloudflare dashboard +
 # `wrangler tail`. Pair with the in-house captureError() → D1 error_events

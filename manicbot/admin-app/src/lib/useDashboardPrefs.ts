@@ -6,7 +6,6 @@ import { api } from "~/trpc/react";
 
 export interface DashboardPrefs {
   hiddenTabs: string[];
-  hiddenStatCards: string[];
   showTodayApts: boolean;
   defaultTab: string;
   /** Ordered list of tab ids that determines sidebar render order. Items not
@@ -16,23 +15,43 @@ export interface DashboardPrefs {
   /** Tab ids pinned to the top of the sidebar (max 5). Pinned items always
    *  render before non-pinned items, in pin-order. */
   pinnedTabs: string[];
+  /**
+   * User-chosen order of bottom-nav items (mobile + iPad portrait).
+   * Each entry is an `href` from the nav config. When `bottomNavLayout`
+   * is `"default"`, this list is IGNORED and the shells fall back to the
+   * legacy "first 5 + Settings" slice. Cap is enforced by `setBottomNav`,
+   * not at the schema layer, so older payloads with a longer list don't
+   * crash on load.
+   */
+  bottomNavOrder: string[];
+  /**
+   * `"default"` (no customisation — zero-regression path) vs `"custom"`
+   * (use `bottomNavOrder`). Flipping back to `"default"` is the "reset"
+   * action exposed in the settings UI.
+   */
+  bottomNavLayout: "default" | "custom";
 }
 
 export const MAX_PINNED_TABS = 5;
 
+/** Maximum number of items the mobile bottom-nav can fit. */
+export const BOTTOM_NAV_LIMIT = 5;
+
 const KEY_PREFIX = "manicbot_dashboard_prefs";
 
+/** Storage key is tenant-scoped to prevent cross-tenant bleed */
 function storageKey(tenantId?: string | null): string {
   return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
 }
 
 const DEFAULTS: DashboardPrefs = {
   hiddenTabs: [],
-  hiddenStatCards: [],
   showTodayApts: true,
-  defaultTab: "overview",
+  defaultTab: "",
   tabOrder: [],
   pinnedTabs: [],
+  bottomNavOrder: [],
+  bottomNavLayout: "default",
 };
 
 function load(tenantId?: string | null): DashboardPrefs {
@@ -47,6 +66,7 @@ function load(tenantId?: string | null): DashboardPrefs {
       // Defensive: server-fetched arrays could be missing.
       tabOrder: Array.isArray(parsed.tabOrder) ? parsed.tabOrder : [],
       pinnedTabs: Array.isArray(parsed.pinnedTabs) ? parsed.pinnedTabs : [],
+      bottomNavOrder: Array.isArray(parsed.bottomNavOrder) ? parsed.bottomNavOrder : [],
     };
   } catch {
     return DEFAULTS;
@@ -141,23 +161,12 @@ export function useDashboardPrefs() {
       const hidden = prev.hiddenTabs.includes(tab)
         ? prev.hiddenTabs.filter((t) => t !== tab)
         : [...prev.hiddenTabs, tab];
-      // If hiding the default tab, reset default to overview
-      const defaultTab = hidden.includes(prev.defaultTab) ? "overview" : prev.defaultTab;
+      // If hiding the default tab, reset default to "not selected"
+      const defaultTab = hidden.includes(prev.defaultTab) ? "" : prev.defaultTab;
       // Hidden tabs cannot be pinned — drop them from the pin list as a side
       // effect so the UI never shows "pinned but hidden".
       const pinnedTabs = prev.pinnedTabs.filter((t) => !hidden.includes(t));
       const next = { ...prev, hiddenTabs: hidden, defaultTab, pinnedTabs };
-      persist(next);
-      return next;
-    });
-  }, [persist]);
-
-  const toggleStatCard = useCallback((card: string) => {
-    setPrefsState((prev) => {
-      const hidden = prev.hiddenStatCards.includes(card)
-        ? prev.hiddenStatCards.filter((c) => c !== card)
-        : [...prev.hiddenStatCards, card];
-      const next = { ...prev, hiddenStatCards: hidden };
       persist(next);
       return next;
     });
@@ -198,14 +207,39 @@ export function useDashboardPrefs() {
     update({ defaultTab: tab });
   }, [update]);
 
+  /**
+   * Replace the mobile bottom-nav order with the supplied list and switch
+   * to `bottomNavLayout='custom'`. The list is de-duped and clamped to
+   * `BOTTOM_NAV_LIMIT` items — entries past the cap are dropped silently
+   * so a 6-item drop from the settings UI feels predictable (FIFO).
+   */
+  const setBottomNav = useCallback((order: string[]) => {
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const href of order) {
+      if (typeof href !== "string" || !href) continue;
+      if (seen.has(href)) continue;
+      seen.add(href);
+      deduped.push(href);
+      if (deduped.length >= BOTTOM_NAV_LIMIT) break;
+    }
+    update({ bottomNavOrder: deduped, bottomNavLayout: "custom" });
+  }, [update]);
+
+  /** Reset bottom-nav customisation back to the role-default ordering. */
+  const resetBottomNav = useCallback(() => {
+    update({ bottomNavOrder: [], bottomNavLayout: "default" });
+  }, [update]);
+
   return {
     prefs,
     toggleTab,
-    toggleStatCard,
     togglePin,
     setTabOrder,
     setShowTodayApts,
     setDefaultTab,
+    setBottomNav,
+    resetBottomNav,
   };
 }
 

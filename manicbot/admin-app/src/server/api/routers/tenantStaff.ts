@@ -19,7 +19,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import {
@@ -81,23 +81,38 @@ async function managerSelfOrOwnerForTenant(ctx: any, tenantId: string, targetUse
 }
 
 export const tenantStaffRouter = createTRPCRouter({
-  /** List managers (and their permission rows) for a tenant. Owner-only. */
+  /**
+   * List every staff member of a tenant: both `tenant_manager` accounts and
+   * salon-invited `master` accounts (web_users.role IN ('tenant_manager',
+   * 'master')). Owner-only.
+   *
+   * Each row carries its role + permission set so the unified Staff UI can
+   * render manager/master badges side-by-side. Synthetic-Telegram-only
+   * masters (without a web_user row) are intentionally excluded — they
+   * don't use the web admin and have no permission rows to manage.
+   */
   listMembers: protectedProcedure
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await ownerOnlyForTenant(ctx, input.tenantId);
-      const managers = await ctx.db
+      const members = await ctx.db
         .select({
           id: webUsers.id,
           email: webUsers.email,
           name: webUsers.name,
+          role: webUsers.role,
           emailVerified: webUsers.emailVerified,
           createdAt: webUsers.createdAt,
         })
         .from(webUsers)
-        .where(and(eq(webUsers.tenantId, input.tenantId), eq(webUsers.role, "tenant_manager")));
+        .where(
+          and(
+            eq(webUsers.tenantId, input.tenantId),
+            inArray(webUsers.role, ["tenant_manager", "master"]),
+          ),
+        );
 
-      if (managers.length === 0) return [];
+      if (members.length === 0) return [];
 
       const perms = await ctx.db
         .select({ webUserId: tenantMemberPermissions.webUserId, permission: tenantMemberPermissions.permission })
@@ -106,13 +121,13 @@ export const tenantStaffRouter = createTRPCRouter({
 
       const byUser = new Map<string, PermissionKey[]>();
       for (const p of perms) {
-        if (!TENANT_PERMISSION_KEYS.includes(p.permission as PermissionKey)) continue;
+        if (!(TENANT_PERMISSION_KEYS as readonly string[]).includes(p.permission)) continue;
         const arr = byUser.get(p.webUserId) ?? [];
         arr.push(p.permission as PermissionKey);
         byUser.set(p.webUserId, arr);
       }
 
-      return managers.map((m) => ({
+      return members.map((m) => ({
         ...m,
         permissions: byUser.get(m.id) ?? [],
       }));

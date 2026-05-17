@@ -28,6 +28,7 @@
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors, Zap } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
+import { Switch } from "~/components/ui/Switch";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
  *  same master gets the same color in the rail and the grid. */
@@ -482,24 +483,16 @@ export function CalendarLeftRail({
                   <span className="text-[11px] font-medium text-slate-700 dark:text-slate-200 truncate">
                     {channelLabel}
                   </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={enabled}
+                  <Switch
+                    size="xs"
+                    checked={enabled}
+                    onChange={(next) => setAutoConfirm(ch, next)}
                     disabled={!!autoConfirmLoading}
-                    onClick={() => setAutoConfirm(ch, !enabled)}
+                    aria-label={`${t("salon.autoConfirm.title", lang)}: ${channelLabel}`}
                     data-testid="rail-auto-confirm-toggle"
                     data-channel={ch}
-                    className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
-                      enabled ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
-                    } ${autoConfirmLoading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
-                  >
-                    <span
-                      className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${
-                        enabled ? "translate-x-3.5" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
+                    className={autoConfirmLoading ? "cursor-wait" : ""}
+                  />
                 </li>
               );
             })}

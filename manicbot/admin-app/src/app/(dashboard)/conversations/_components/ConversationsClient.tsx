@@ -100,7 +100,7 @@ export function ConversationsPage() {
           <select
             value={godTenantFilter}
             onChange={(e) => setGodTenantFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500/40"
+            className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-slate-200 focus:outline-none focus:border-brand-500/40"
           >
             <option value="">{t("conv.filter.allSalons", lang)}</option>
             {(tenants.data ?? []).map((t: { id: string; name: string | null }) => (

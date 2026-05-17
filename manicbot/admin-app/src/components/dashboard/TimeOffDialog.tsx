@@ -123,12 +123,12 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
       onClick={onClose}
       data-testid="time-off-dialog"
     >
       <div
-        className="glass-card w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900/95"
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5"
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "90vh" }}
       >
@@ -159,7 +159,7 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
         {/* Sub-tabs — break / day off / vacation. Visually pill bar; the
             previously selected option stays highlighted via aria-pressed. */}
         <div
-          className="px-5 pt-4 grid grid-cols-3 gap-1 bg-white dark:bg-slate-900/95"
+          className="px-5 pt-4 grid grid-cols-3 gap-1 bg-white dark:bg-slate-900"
           role="tablist"
           data-testid="time-off-kind-tabs"
         >
@@ -322,7 +322,7 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
             </p>
           )}
 
-          <div className="flex gap-3 pt-1 sticky bottom-0 bg-white dark:bg-slate-900/95 -mx-5 px-5 pb-1">
+          <div className="flex gap-3 pt-1 sticky bottom-0 bg-white dark:bg-slate-900 -mx-5 px-5 pb-1">
             <button
               type="button"
               onClick={onClose}

@@ -57,8 +57,12 @@ interface Props {
   apts: AgendaApt[];
   isLoading: boolean;
   lang: Lang;
-  onAction: (id: number | string, status: "confirmed" | "cancelled" | "rejected") => void;
-  onNoShow: (id: number | string, noShowBy: "client" | "master") => void;
+  /** Confirm / reject / cancel callback. Optional — master role has no
+   *  `appointments.updateStatus` equivalent, so the master-side ScheduleTab
+   *  passes `undefined` and the row hides the affordance. */
+  onAction?: (id: number | string, status: "confirmed" | "cancelled" | "rejected") => void;
+  /** Mark-no-show callback. Optional — same rationale as `onAction`. */
+  onNoShow?: (id: number | string, noShowBy: "client" | "master") => void;
   /** Optional master list — used to color rows + show master name. */
   masters?: MasterMeta[];
   /** Optional service list — used to look up display names. svcId → name. */
@@ -137,8 +141,10 @@ interface RowProps {
   masterColor: string;
   masterName: string | null;
   serviceName: string;
-  onAction: Props["onAction"];
-  onNoShow: Props["onNoShow"];
+  /** Optional — see SalonAgendaView Props comments. */
+  onAction?: Props["onAction"];
+  /** Optional — see SalonAgendaView Props comments. */
+  onNoShow?: Props["onNoShow"];
 }
 
 function AgendaRow({ a, lang, masterColor, masterName, serviceName, onAction, onNoShow }: RowProps) {
@@ -217,8 +223,10 @@ function AgendaRow({ a, lang, masterColor, masterName, serviceName, onAction, on
         {statusLabel}
       </span>
 
-      {/* Inline actions */}
-      {isPending && (
+      {/* Inline actions — only when the caller wired a confirm/reject mutation.
+          Master role has no `appointments.updateStatus` analogue and passes
+          `onAction === undefined`, so the buttons stay hidden. */}
+      {isPending && onAction && (
         <div className="flex gap-1 shrink-0">
           <button
             type="button"
@@ -243,8 +251,9 @@ function AgendaRow({ a, lang, masterColor, masterName, serviceName, onAction, on
         </div>
       )}
 
-      {/* "..." menu for confirmed rows — opens Cancel / no-show actions */}
-      {isConfirmed && (
+      {/* "..." menu for confirmed rows — opens Cancel / no-show actions.
+          Hidden entirely when the row has neither callback wired (read-only). */}
+      {isConfirmed && (onAction || onNoShow) && (
         <div className="relative shrink-0" ref={menuRef}>
           <button
             type="button"
@@ -263,36 +272,42 @@ function AgendaRow({ a, lang, masterColor, masterName, serviceName, onAction, on
               className="absolute right-0 top-full mt-1 z-20 w-52 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-lg p-1 text-left"
               role="menu"
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onAction(a.id, "cancelled");
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                <XCircle className="h-3.5 w-3.5" /> {t("salon.agenda.cancel", lang)}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onNoShow(a.id, "client");
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 transition-colors"
-              >
-                <UserX className="h-3.5 w-3.5" /> {t("salon.agenda.clientNoShow", lang)}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onNoShow(a.id, "master");
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 transition-colors"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" /> {t("salon.agenda.masterNoShow", lang)}
-              </button>
+              {onAction && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onAction(a.id, "cancelled");
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  <XCircle className="h-3.5 w-3.5" /> {t("salon.agenda.cancel", lang)}
+                </button>
+              )}
+              {onNoShow && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onNoShow(a.id, "client");
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 transition-colors"
+                >
+                  <UserX className="h-3.5 w-3.5" /> {t("salon.agenda.clientNoShow", lang)}
+                </button>
+              )}
+              {onNoShow && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onNoShow(a.id, "master");
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-500/10 transition-colors"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" /> {t("salon.agenda.masterNoShow", lang)}
+                </button>
+              )}
             </div>
           )}
         </div>

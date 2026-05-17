@@ -143,11 +143,36 @@ export function AppointmentDetailPanel({
     },
   });
 
-  const updateStatus = api.appointments.updateStatus.useMutation({
-    onSuccess: () => onChanged(),
+  // Tenant-scoped status mutations. Previously the panel called
+  // `api.appointments.updateStatus` + `markNoShow` which are God Mode
+  // (`adminProcedure`) only — every click from a salon owner silently
+  // 403'd. The `salon.*` procedures are guarded by `assertTenantOwner`
+  // and additionally fire the Worker `/admin/appointment-action` so the
+  // client gets the right Telegram message + Google Calendar update.
+  const mapStatusError = (e: { message: string }) => {
+    if (e.message === "cannot_mark_done_before_start") {
+      setErr(t("salon.day.panel.doneNotYet", lang));
+    } else if (e.message === "invalid_status_transition") {
+      setErr(t("salon.day.panel.invalidStatusTransition", lang));
+    } else {
+      setErr(e.message);
+    }
+  };
+  const confirmApt = api.salon.confirmAppointment.useMutation({
+    onSuccess: () => { setErr(null); onChanged(); },
+    onError: mapStatusError,
   });
-  const markNoShow = api.appointments.markNoShow.useMutation({
-    onSuccess: () => onChanged(),
+  const markDoneMut = api.salon.markDone.useMutation({
+    onSuccess: () => { setErr(null); onChanged(); },
+    onError: mapStatusError,
+  });
+  const markNoShow = api.salon.markNoShow.useMutation({
+    onSuccess: () => { setErr(null); onChanged(); },
+    onError: mapStatusError,
+  });
+  const cancelApt = api.salon.cancelAppointment.useMutation({
+    onSuccess: () => { setErr(null); setConfirmDelete(false); onChanged(); },
+    onError: mapStatusError,
   });
 
   const isPending = selected.status === "pending" && !selected.cancelled;
@@ -155,6 +180,23 @@ export function AppointmentDetailPanel({
   const isCancelled = !!selected.cancelled || selected.status === "cancelled" || selected.status === "rejected";
   const isNoShow = !!selected.noShow;
   const isDone = selected.status === "done";
+
+  // "Mark Done" disabled until the appointment time has passed. Mirror
+  // of the server-side check in `salon.markDone` so the user gets
+  // immediate feedback instead of waiting for a round-trip rejection.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const aptStartSec = (() => {
+    const [hh, mm] = (selected.time ?? "00:00").split(":");
+    const iso = `${selected.date}T${(hh ?? "00").padStart(2, "0")}:${(mm ?? "00").padStart(2, "0")}:00`;
+    const parsed = Date.parse(iso);
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : nowSec;
+  })();
+  const canMarkDone = aptStartSec <= nowSec;
+  const statusBusy =
+    confirmApt.isPending
+    || markDoneMut.isPending
+    || markNoShow.isPending
+    || cancelApt.isPending;
 
   const currentMaster = useMemo(
     () => masters.find((m) => m.chatId === selected.masterId) ?? null,
@@ -209,10 +251,10 @@ export function AppointmentDetailPanel({
   }
 
   function doDelete() {
-    setConfirmDelete(false);
-    updateStatus.mutate({
+    cancelApt.mutate({
+      tenantId: tenantId,
       id: String(selected.id),
-      status: "cancelled",
+      cancelledBy: "admin",
       comment: "Removed via day-view panel",
     });
   }
@@ -388,52 +430,68 @@ export function AppointmentDetailPanel({
         </p>
       )}
 
-      {/* Action row — varies by mode */}
+      {/* Action row — varies by mode. Buttons stack into a 2-col grid on
+          phones so each row remains a 44px+ tap target (sm:auto-flow lets
+          them wrap normally above sm). */}
       {mode === "read" && !isCancelled && !isNoShow && !isDone && (
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-wrap">
           {isPending && (
             <button
               type="button"
+              disabled={statusBusy}
               onClick={() =>
-                updateStatus.mutate({ id: String(selected.id), status: "confirmed" })
+                confirmApt.mutate({ tenantId, id: String(selected.id) })
               }
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-colors"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="panel-confirm"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              {t("salon.day.panel.confirmApt", lang)}
+              {confirmApt.isPending
+                ? t("salon.day.panel.confirmingApt", lang)
+                : t("salon.day.panel.confirmApt", lang)}
             </button>
           )}
           {isConfirmed && (
             <button
               type="button"
+              disabled={statusBusy || !canMarkDone}
+              title={!canMarkDone ? t("salon.day.panel.doneNotYet", lang) : undefined}
               onClick={() =>
-                updateStatus.mutate({ id: String(selected.id), status: "done" })
+                markDoneMut.mutate({ tenantId, id: String(selected.id) })
               }
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/25 transition-colors"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="panel-done"
+              data-can-mark-done={canMarkDone ? "1" : "0"}
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              {t("salon.day.panel.markDone", lang)}
+              {markDoneMut.isPending
+                ? t("salon.day.panel.markingDone", lang)
+                : t("salon.day.panel.markDone", lang)}
             </button>
           )}
           <button
             type="button"
-            onClick={() => markNoShow.mutate({ id: String(selected.id), noShowBy: "client" })}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors"
+            disabled={statusBusy}
+            onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "client" })}
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="panel-client-no-show"
           >
             <UserX className="h-3.5 w-3.5" />
-            {t("salon.day.panel.clientNoShow", lang)}
+            {markNoShow.isPending && markNoShow.variables?.noShowBy === "client"
+              ? t("salon.day.panel.markingNoShow", lang)
+              : t("salon.day.panel.clientNoShow", lang)}
           </button>
           <button
             type="button"
-            onClick={() => markNoShow.mutate({ id: String(selected.id), noShowBy: "master" })}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors"
+            disabled={statusBusy}
+            onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "master" })}
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="panel-master-no-show"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
-            {t("salon.day.panel.masterNoShow", lang)}
+            {markNoShow.isPending && markNoShow.variables?.noShowBy === "master"
+              ? t("salon.day.panel.markingNoShow", lang)
+              : t("salon.day.panel.masterNoShow", lang)}
           </button>
         </div>
       )}
@@ -479,7 +537,7 @@ export function AppointmentDetailPanel({
         confirmLabel={t("common.delete", lang)}
         cancelLabel={t("common.cancel", lang)}
         tone="danger"
-        busy={updateStatus.isPending}
+        busy={cancelApt.isPending}
         onConfirm={doDelete}
         onCancel={() => setConfirmDelete(false)}
       />

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "./NotificationBell";
 import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { t, LANGS } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
 import { api } from "~/trpc/react";
@@ -234,8 +236,8 @@ export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "too
           inSettings ? "w-full justify-between px-3 py-3" : "px-2.5 py-1.5"
         } ${
           activePreview
-            ? "bg-amber-500/20 border border-amber-500/30 text-amber-300"
-            : "bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10"
+            ? "bg-amber-100 border border-amber-300 text-amber-800 dark:bg-amber-500/20 dark:border-amber-500/30 dark:text-amber-300"
+            : "bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
         }`}
       >
         <span className="flex items-center gap-1.5 min-w-0">
@@ -403,8 +405,8 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
             onClick={() => setLang(code)}
             className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-medium transition-all ${
               lang === code
-                ? "bg-brand-500/20 border-brand-500/40 text-brand-300"
-                : "bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10"
+                ? "bg-brand-100 border-brand-300 text-brand-800 dark:bg-brand-500/20 dark:border-brand-500/40 dark:text-brand-300"
+                : "bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
             }`}
           >
             <span className="text-2xl leading-none">{flag}</span>
@@ -437,8 +439,8 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
                   onClick={() => { setLang(code); setOpen(false); }}
                   className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all ${
                     lang === code
-                      ? "bg-brand-500/20 border border-brand-500/40 text-brand-300"
-                      : "bg-white/5 border border-transparent text-slate-400 hover:text-white hover:bg-white/10"
+                      ? "bg-brand-100 border border-brand-300 text-brand-800 dark:bg-brand-500/20 dark:border-brand-500/40 dark:text-brand-300"
+                      : "bg-slate-100 border border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-400 dark:hover:text-white dark:hover:bg-white/10"
                   }`}
                 >
                   <span className="text-base">{flag}</span>
@@ -524,6 +526,8 @@ function DashboardTopBar({ title, subtitle }: { title: string; subtitle?: string
         {subtitle && <p className="text-[11px] text-slate-500 truncate">{subtitle}</p>}
       </div>
 
+      <NotificationBell />
+
       <button
         type="button"
         onClick={toggleTheme}
@@ -567,6 +571,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
   const { role, previewRole } = useRole();
   const { lang } = useLang();
+  const { prefs: dashboardPrefs } = useDashboardPrefs();
   const activeNavItems = navItems ?? buildGodModeNavItems(lang);
   const displayTitle = title ?? "ManicBot";
   /** Creator in plain God Mode: language + preview mode live on /settings, not in the chrome (avoids clash with Settings tab). */
@@ -576,14 +581,39 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
   useEffect(() => { setAdmin(getAdminInfo()); }, []);
 
-  // Mobile: keep Settings visible because creator preview/language live there.
-  const mobileNavItems = activeNavItems.length <= 5
-    ? activeNavItems
-    : (() => {
-        const settingsItem = activeNavItems.find((item) => item.href === "/settings");
-        const leading = activeNavItems.filter((item) => item.href !== "/settings").slice(0, 4);
-        return settingsItem ? [...leading, settingsItem] : activeNavItems.slice(0, 5);
-      })();
+  // Mobile: keep Settings visible because creator preview/language live
+  // there. Honour the user's saved bottom-nav order from Settings →
+  // Appearance — falls back to the legacy "first 4 + Settings" slice
+  // when no customisation is set, which preserves the previous
+  // behavior byte-for-byte for the zero-prefs case.
+  const mobileNavItems = (() => {
+    const settingsItem =
+      activeNavItems.find((item) => item.href === "/settings") ?? activeNavItems[activeNavItems.length - 1];
+    if (
+      dashboardPrefs.bottomNavLayout === "custom"
+      && dashboardPrefs.bottomNavOrder.length > 0
+    ) {
+      const byHref = new Map(activeNavItems.map((n) => [n.href, n]));
+      const chosen: typeof activeNavItems = [];
+      const seen = new Set<string>();
+      for (const href of dashboardPrefs.bottomNavOrder) {
+        if (seen.has(href)) continue;
+        const item = byHref.get(href);
+        if (!item) continue;
+        seen.add(href);
+        chosen.push(item);
+        if (chosen.length >= 5) break;
+      }
+      if (settingsItem && !seen.has(settingsItem.href)) {
+        if (chosen.length >= 5) chosen.pop();
+        chosen.push(settingsItem);
+      }
+      if (chosen.length > 0) return chosen;
+    }
+    if (activeNavItems.length <= 5) return activeNavItems;
+    const leading = activeNavItems.filter((item) => item.href !== "/settings").slice(0, 4);
+    return settingsItem ? [...leading, settingsItem] : activeNavItems.slice(0, 5);
+  })();
 
   return (
     <div className="flex h-screen w-full flex-col md:flex-row bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
@@ -618,7 +648,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
                 <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-brand-400" : ""}`} />
                 <span>{item.label}</span>
                 {isSettingsHub && (
-                  <span className="ml-auto rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                  <span className="ml-auto rounded-full border border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
                     Mode
                   </span>
                 )}

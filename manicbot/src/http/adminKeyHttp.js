@@ -1018,6 +1018,30 @@ export async function tryAdminKeyRoutes(request, env, url) {
             log.error('http.adminKey', e instanceof Error ? e : new Error(String(e.message)), { action: 'appointment_calendar_sync_reschedule' });
           }
         }
+      } else if (action === 'done' || action === 'no_show_client' || action === 'no_show_master') {
+        // New unified path — routes through the marketing-automation
+        // dispatcher. The dispatcher always runs deterministic D1
+        // side-effects (lifetime_visits bump on done, reminder cleanup,
+        // analytics row) and decides whether to send a default client
+        // message. Marketing rows in `marketing_automations` will
+        // override the default once the marketing engine is wired (PR 3).
+        const { dispatchAppointmentAutomation } = await import('../services/appointmentAutomations.js');
+        const eventType =
+          action === 'done' ? 'appointment.done'
+          : action === 'no_show_client' ? 'appointment.no_show_client'
+          : 'appointment.no_show_master';
+        const result = await dispatchAppointmentAutomation(ctx, apt, eventType);
+        notified = !!result.notified;
+        return Response.json({
+          ok: true,
+          action,
+          appointmentId,
+          notified,
+          calendarSynced: false,
+          automationsFired: result.automationsFired ?? 0,
+        });
+      } else {
+        return Response.json({ error: 'unknown action', code: 'UNKNOWN_APPOINTMENT_ACTION' }, { status: 400 });
       }
 
       return Response.json({ ok: true, action, appointmentId, notified, calendarSynced });

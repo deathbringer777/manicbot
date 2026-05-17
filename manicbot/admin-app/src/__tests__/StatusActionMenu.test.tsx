@@ -200,4 +200,61 @@ describe("StatusActionMenu", () => {
       expect(screen.queryByTestId("status-pill-trigger")).toBeNull();
     });
   });
+
+  describe("portal + sizing", () => {
+    // The dropdown used to render INSIDE AptCard, which had
+    // overflow-hidden + a glass-card stacking context — so the open
+    // menu was either clipped or painted behind the next row. These
+    // tests pin the portal escape hatch and the enlarged pill so
+    // neither regresses.
+
+    it("renders the open menu in document.body (not inside the trigger wrapper)", () => {
+      const { container } = render(
+        <StatusActionMenu
+          statusKey="confirmed"
+          label="Подтверждено"
+          lang="ru"
+          onAction={mkAction()}
+          onNoShow={mkNoShow()}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("status-pill-trigger"));
+      expect(container.querySelector('[data-testid="status-pill-menu"]')).toBeNull();
+      expect(document.body.querySelector('[data-testid="status-pill-menu"]')).toBeTruthy();
+    });
+
+    it("pill trigger uses the enlarged tap-target classes (regression guard)", () => {
+      render(
+        <StatusActionMenu
+          statusKey="confirmed"
+          label="Подтверждено"
+          lang="ru"
+          onAction={mkAction()}
+          onNoShow={mkNoShow()}
+        />,
+      );
+      const trigger = screen.getByTestId("status-pill-trigger");
+      expect(trigger.className).toMatch(/\btext-xs\b/);
+      expect(trigger.className).toMatch(/\bpx-2\.5\b/);
+      expect(trigger.className).toMatch(/\bpy-1\b/);
+    });
+
+    it("scroll closes the open menu (prevents stale fixed-position floater)", () => {
+      render(
+        <StatusActionMenu
+          statusKey="confirmed"
+          label="Подтверждено"
+          lang="ru"
+          onAction={mkAction()}
+          onNoShow={mkNoShow()}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("status-pill-trigger"));
+      expect(screen.getByTestId("status-pill-trigger").getAttribute("aria-expanded")).toBe("true");
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      expect(screen.getByTestId("status-pill-trigger").getAttribute("aria-expanded")).toBe("false");
+    });
+  });
 });

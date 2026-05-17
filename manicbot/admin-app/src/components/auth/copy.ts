@@ -121,6 +121,10 @@ export const authCopy: Record<
       referralFriends: string;
       referralOther: string;
       referralNotePlaceholder: string;
+      referralCodeLabel: string;
+      referralCodePlaceholder: string;
+      referralCodeValid: string;
+      referralCodeInvalid: string;
       passwordsMismatch: string;
       passwordTooShort: string;
       googleStartError: string;
@@ -280,6 +284,10 @@ export const authCopy: Record<
       referralFriends: "Друзья / знакомые",
       referralOther: "Другое",
       referralNotePlaceholder: "Напишите откуда",
+      referralCodeLabel: "Промокод друга (если есть)",
+      referralCodePlaceholder: "Например, ANNA-K2X7M",
+      referralCodeValid: "Промо от {name} — 20% off первого месяца или 10% off годовой подписки",
+      referralCodeInvalid: "Этот код не действителен. Можно продолжить без него.",
       passwordsMismatch: "Пароли не совпадают",
       passwordTooShort: "Пароль должен содержать минимум 12 символов",
       googleStartError: "Не удалось начать вход через Google",
@@ -438,6 +446,10 @@ export const authCopy: Record<
       referralFriends: "Друзі / знайомі",
       referralOther: "Інше",
       referralNotePlaceholder: "Напишіть звідки",
+      referralCodeLabel: "Промокод друга (якщо є)",
+      referralCodePlaceholder: "Наприклад, ANNA-K2X7M",
+      referralCodeValid: "Промо від {name} — 20% off першого місяця або 10% off річної підписки",
+      referralCodeInvalid: "Цей код недійсний. Можна продовжити без нього.",
       passwordsMismatch: "Паролі не збігаються",
       passwordTooShort: "Пароль має містити щонайменше 12 символів",
       googleStartError: "Не вдалося почати вхід через Google",
@@ -596,6 +608,10 @@ export const authCopy: Record<
       referralFriends: "Friends / colleagues",
       referralOther: "Other",
       referralNotePlaceholder: "Specify the source",
+      referralCodeLabel: "Friend's promo code (optional)",
+      referralCodePlaceholder: "e.g. ANNA-K2X7M",
+      referralCodeValid: "Promo from {name} — 20% off your first month or 10% off yearly",
+      referralCodeInvalid: "This code is no longer valid. You can continue without one.",
       passwordsMismatch: "Passwords do not match",
       passwordTooShort: "Password must be at least 12 characters long",
       googleStartError: "Could not start Google sign-in",
@@ -754,6 +770,10 @@ export const authCopy: Record<
       referralFriends: "Znajomi / polecenie",
       referralOther: "Inne",
       referralNotePlaceholder: "Podaj źródło",
+      referralCodeLabel: "Kod promo znajomego (opcjonalnie)",
+      referralCodePlaceholder: "np. ANNA-K2X7M",
+      referralCodeValid: "Promo od {name} — 20% zniżki w pierwszym miesiącu lub 10% zniżki rocznie",
+      referralCodeInvalid: "Ten kod nie jest już aktywny. Możesz kontynuować bez niego.",
       passwordsMismatch: "Hasła nie są takie same",
       passwordTooShort: "Hasło musi mieć co najmniej 12 znaków",
       googleStartError: "Nie udało się rozpocząć logowania przez Google",

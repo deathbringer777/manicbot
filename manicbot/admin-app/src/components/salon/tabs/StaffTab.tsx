@@ -4,6 +4,8 @@ import { useState } from "react";
 import { UserPlus, Trash2, ShieldCheck, KeyRound, Loader2, X, CheckCircle, AlertCircle, Clock } from "lucide-react";
 import { api } from "~/trpc/react";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { Button } from "~/components/ui/Button";
+import { Pill } from "~/components/ui/Pill";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import {
@@ -18,6 +20,7 @@ interface Props {
 }
 
 const PERMISSION_LABELS: Record<PermissionKey, string> = {
+  // tenant_manager defaults
   "appointments.view": "Просмотр записей",
   "appointments.manage": "Управление записями",
   "chat.inbox": "Чат с клиентами",
@@ -25,12 +28,29 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   "services.view": "Просмотр услуг",
   "masters.view": "Просмотр мастеров",
   "reviews.view": "Просмотр отзывов",
+  // master defaults (own-scope)
+  "appointments.view_own": "Свои записи",
+  "appointments.manage_own": "Свои записи: редактировать",
+  "clients.view_own": "Свои клиенты",
+  "earnings.view_own": "Свой доход",
+  // cross-master
+  "appointments.view_peers": "Записи коллег",
+  "appointments.create_for_peer": "Запись на коллегу",
+  "clients.view_peers": "Клиенты коллег",
+  // manager extensions
+  "analytics.view": "Аналитика",
+  "reviews.manage": "Управление отзывами",
+  "plugins.view": "Маркетплейс плагинов",
+  // sensitive
   "services.manage": "Редактирование услуг",
   "masters.manage": "Управление мастерами",
   "branding.manage": "Бренд и профиль",
   "billing.manage": "Оплата и подписка",
   "settings.manage": "Настройки салона",
   "staff.manage": "Управление персоналом",
+  "earnings.view_peers": "Доход коллег",
+  "plugins.manage": "Установка плагинов",
+  "referrals.view_tenant": "Реферальная программа",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -56,10 +76,10 @@ export function StaffTab({ tenantId }: Props) {
     <div className="space-y-5">
       {/* Pending action requests */}
       {(requests.data?.length ?? 0) > 0 && (
-        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <section className="rounded-2xl border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-4">
           <header className="mb-3 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-bold text-amber-200">
+            <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">
               Запросы от персонала ({requests.data!.length})
             </h3>
           </header>
@@ -72,24 +92,27 @@ export function StaffTab({ tenantId }: Props) {
       )}
 
       {/* Staff list */}
-      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+      <section className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.02] p-4">
         <header className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-200">Администраторы салона</h3>
-          <button
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-200">Персонал салона</h3>
+          <Button
+            tone="brand"
+            variant="soft"
+            size="sm"
             onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-brand-500/20 border border-brand-500/30 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/30"
+            leadingIcon={<UserPlus className="h-3.5 w-3.5" />}
           >
-            <UserPlus className="h-3.5 w-3.5" />
-            Пригласить
-          </button>
+            Пригласить админа
+          </Button>
         </header>
 
         {members.isLoading ? (
           <div className="h-20 animate-pulse rounded-xl bg-slate-800/50" />
         ) : !members.data?.length ? (
           <p className="py-6 text-center text-xs text-slate-500">
-            Администраторов пока нет. Пригласите сотрудника — по умолчанию у него ограниченный доступ
-            (записи + чат). Сильные права выдаются с подтверждением по email.
+            Здесь видны администраторы и мастера с веб-доступом. Пригласите админа выше —
+            по умолчанию ограниченные права (записи + чат). Мастеров пригласите во вкладке «Мастера».
+            Сильные права (биллинг, бренд, плагины) выдаются с подтверждением по email.
           </p>
         ) : (
           <div className="space-y-3">
@@ -144,11 +167,13 @@ function MemberRow({
     id: string;
     email: string;
     name: string | null;
+    role: string;
     emailVerified: number | null;
     permissions: PermissionKey[];
   };
   onElevationRequired: (info: { elevationId: string; targetEmail: string; permissions: PermissionKey[] }) => void;
 }) {
+  const isMaster = member.role === "master";
   const { lang } = useLang();
   const utils = api.useUtils();
   const [selected, setSelected] = useState<Set<PermissionKey>>(new Set(member.permissions));
@@ -193,25 +218,38 @@ function MemberRow({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-white">{member.name ?? member.email}</p>
+            <Pill
+              tone={isMaster ? "violet" : "sky"}
+              variant="soft"
+              size="xs"
+              title={isMaster ? "Мастер" : "Администратор"}
+            >
+              {isMaster ? "Мастер" : "Админ"}
+            </Pill>
             {member.emailVerified ? (
-              <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-300">
-                <CheckCircle className="h-3 w-3" /> verified
-              </span>
+              <Pill tone="emerald" variant="soft" size="xs" leadingIcon={<CheckCircle className="h-3 w-3" />}>
+                verified
+              </Pill>
             ) : (
-              <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">
-                <AlertCircle className="h-3 w-3" /> pending
-              </span>
+              <Pill tone="amber" variant="soft" size="xs" leadingIcon={<AlertCircle className="h-3 w-3" />}>
+                pending
+              </Pill>
             )}
           </div>
           <p className="truncate text-[11px] text-slate-500">{member.email}</p>
         </div>
-        <button
-          onClick={() => setConfirmRevoke(true)}
-          className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
-          title="Отозвать"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {/* Revoke only safe for managers — masters need cleanup of `masters`
+            table too, which the legacy revokeMember does not do. Owner uses
+            the Masters tab to remove a master. */}
+        {!isMaster && (
+          <button
+            onClick={() => setConfirmRevoke(true)}
+            className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+            title="Отозвать"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <ConfirmDialog
         open={confirmRevoke}
@@ -235,9 +273,9 @@ function MemberRow({
               className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs cursor-pointer ${
                 checked
                   ? isSensitive
-                    ? "bg-amber-500/10 text-amber-200"
-                    : "bg-brand-500/10 text-brand-200"
-                  : "text-slate-400 hover:bg-white/5"
+                    ? "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200"
+                    : "bg-brand-50 text-brand-800 dark:bg-brand-500/10 dark:text-brand-200"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5"
               }`}
             >
               <input
@@ -256,20 +294,22 @@ function MemberRow({
         })}
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-700 dark:text-red-400">{error}</p>}
 
       <div className="mt-3 flex justify-end">
-        <button
+        <Button
+          tone="brand"
+          variant="soft"
+          size="sm"
           disabled={unchanged || update.isPending}
           onClick={() => {
             setError(null);
             update.mutate({ tenantId, webUserId: member.id, permissions: Array.from(selected) });
           }}
-          className="flex items-center gap-1.5 rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/30 disabled:opacity-40"
+          leadingIcon={update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
         >
-          {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
           Сохранить
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -446,25 +486,24 @@ function ElevationDialog({
           placeholder="• • • • • •"
           autoFocus
         />
-        {error && <p className="mt-3 text-xs text-red-500 dark:text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-red-700 dark:text-red-400">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-          >
+          <Button tone="slate" variant="soft" size="sm" onClick={onClose}>
             Отмена
-          </button>
-          <button
+          </Button>
+          <Button
+            tone="amber"
+            variant="soft"
+            size="sm"
             disabled={code.length !== 6 || confirm.isPending}
             onClick={() => {
               setError(null);
               confirm.mutate({ elevationId, code });
             }}
-            className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/30 disabled:opacity-40"
+            leadingIcon={confirm.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
           >
-            {confirm.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
             Подтвердить
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -493,32 +532,38 @@ function ActionRequestRow({
   try { payload = req.payload ? JSON.parse(req.payload) : null; } catch { /* ignore */ }
 
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-slate-900/40 p-3">
+    <div className="flex items-center gap-3 rounded-xl bg-slate-100 dark:bg-slate-900/40 p-3">
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-white">{ACTION_LABELS[req.action] ?? req.action}</p>
+        <p className="text-xs font-medium text-slate-900 dark:text-white">{ACTION_LABELS[req.action] ?? req.action}</p>
         {payload && (
           <p className="truncate text-[10px] text-slate-500">
             {JSON.stringify(payload)}
           </p>
         )}
-        <p className="text-[10px] text-slate-600">
+        <p className="text-[10px] text-slate-500 dark:text-slate-600">
           {new Date(req.createdAt * 1000).toLocaleString("ru-RU")}
         </p>
       </div>
-      <button
+      <Button
+        tone="emerald"
+        variant="soft"
+        size="sm"
         disabled={review.isPending}
         onClick={() => review.mutate({ requestId: req.id, decision: "approved" })}
-        className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-40"
+        className="shrink-0"
       >
         Одобрить
-      </button>
-      <button
+      </Button>
+      <Button
+        tone="red"
+        variant="soft"
+        size="sm"
         disabled={review.isPending}
         onClick={() => review.mutate({ requestId: req.id, decision: "denied" })}
-        className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-[11px] font-medium text-red-300 hover:bg-red-500/30 disabled:opacity-40"
+        className="shrink-0"
       >
         Отклонить
-      </button>
+      </Button>
     </div>
   );
 }

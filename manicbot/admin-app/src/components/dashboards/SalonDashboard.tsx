@@ -17,7 +17,9 @@ import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
-import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
+import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
+import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
+import { Bell, Repeat } from "lucide-react";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
@@ -25,13 +27,17 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
+import {
+  applyPendingStatusChanges as mergeStatusPatches,
+  buildCancelPatch,
+  buildStatusChangePatch,
+  buildNoShowPatch,
+  type PendingStatusPatches,
+} from "~/lib/optimisticStatusMerge";
 import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
-import { SalonSettingsEditor } from "~/components/salon/SalonSettingsEditor";
-import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
-import { PublicProfileEditor } from "~/components/salon/PublicProfileEditor";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
 import { ClientFormModal } from "~/components/salon/tabs/clients/ClientFormModal";
@@ -42,10 +48,11 @@ import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDialog";
 import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
+import { ReferralOverviewTeaser } from "~/components/dashboard/ReferralOverviewTeaser";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
-import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { EmptyState } from "~/components/ui/EmptyState";
+import { Switch } from "~/components/ui/Switch";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 import { NAIL_EMOJIS } from "~/lib/appointments";
@@ -62,7 +69,7 @@ import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
@@ -407,6 +414,937 @@ function AddMasterModal({ onClose, tenantId }: { onClose: () => void; tenantId: 
   );
 }
 
+// ─── Salon Settings Editor ───────────────────────────────────────
+function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; profile: any }) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const [editing, setEditing] = useState(false);
+  const [salonName, setSalonName] = useState(profile?.name ?? "");
+  const [displayName, setDisplayName] = useState(profile?.displayName ?? "");
+  const [address, setAddress] = useState(profile?.salon?.address ?? "");
+  const [phone, setPhone] = useState(profile?.salon?.phone ?? "");
+  const [hoursFrom, setHoursFrom] = useState(String(profile?.salon?.workHours?.from ?? "9"));
+  const [hoursTo, setHoursTo] = useState(String(profile?.salon?.workHours?.to ?? "20"));
+  const [logo, setLogo] = useState(profile?.logo ?? "");
+  const [logoR2Key, setLogoR2Key] = useState(profile?.logoR2Key ?? "");
+  const [coverPhoto, setCoverPhoto] = useState(profile?.coverPhoto ?? "");
+  const [coverR2Key, setCoverR2Key] = useState(profile?.coverR2Key ?? "");
+  const [brandPrimary, setBrandPrimary] = useState<string>(
+    (profile?.brandPalette && typeof profile.brandPalette === "object" && profile.brandPalette.primary) || "#EC4899",
+  );
+
+  const update = api.salon.updateSalonProfile.useMutation({
+    onSuccess: () => { utils.salon.getSalonProfile.invalidate(); setEditing(false); },
+  });
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        <SectionHeader title={t("salon.salonProfile", lang)} action={
+          <Btn onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />{t("action.edit", lang)}</Btn>
+        } />
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <Settings className="h-4 w-4 text-slate-500 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-500">{t("salon.name", lang)}</p>
+              <p className="text-sm text-slate-900 dark:text-white font-medium">{profile?.name || "—"}</p>
+            </div>
+          </div>
+          {profile?.displayName && (
+            <div className="flex items-center gap-3">
+              <Settings className="h-4 w-4 text-slate-500 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">{t("salon.branding.displayName", lang)}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.displayName}</p>
+              </div>
+            </div>
+          )}
+          {profile?.salon?.address && (
+            <div className="flex items-center gap-3">
+              <Settings className="h-4 w-4 text-slate-500 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">{t("salon.address", lang)}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.salon.address}</p>
+              </div>
+            </div>
+          )}
+          {profile?.salon?.phone && (
+            <div className="flex items-center gap-3">
+              <Settings className="h-4 w-4 text-slate-500 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">{t("salon.phone", lang)}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.salon.phone}</p>
+              </div>
+            </div>
+          )}
+          {profile?.salon?.workHours && (
+            <div className="flex items-center gap-3">
+              <Settings className="h-4 w-4 text-slate-500 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">{t("salon.hours", lang)}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{profile.salon.workHours.from}:00 — {profile.salon.workHours.to}:00</p>
+              </div>
+            </div>
+          )}
+          {(profile?.logo || profile?.coverPhoto || profile?.brandPalette?.primary) && (
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 flex gap-3 items-start">
+              {profile.logo && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.branding.logo", lang)}</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={profile.logo} alt="logo" className="h-14 w-14 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
+              {profile.coverPhoto && (
+                <div className="flex-1">
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.branding.cover", lang)}</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={profile.coverPhoto} alt="cover" className="h-14 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
+              {profile.brandPalette?.primary && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">{t("salon.branding.brandColor", lang)}</p>
+                  <div
+                    className="h-14 w-14 rounded-lg border border-slate-200 dark:border-slate-700"
+                    style={{ background: profile.brandPalette.primary }}
+                    title={profile.brandPalette.primary}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader title={t("salon.editProfile", lang)} action={
+        <Btn variant="ghost" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" />{t("action.cancel", lang)}</Btn>
+      } />
+      <div className="glass-card rounded-2xl p-4 space-y-3">
+        <Input label={t("salon.name", lang)} value={salonName} onChange={setSalonName} />
+        <Input
+          label={t("salon.branding.displayNameOptional", lang)}
+          value={displayName}
+          onChange={setDisplayName}
+          placeholder={t("salon.branding.displayNameHint", lang)}
+        />
+        <Input label={t("salon.address", lang)} value={address} onChange={setAddress} />
+        <Input label={t("salon.phone", lang)} value={phone} onChange={setPhone} />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label={t("salon.workHoursFrom", lang)} value={hoursFrom} onChange={setHoursFrom} type="number" />
+          <Input label={t("salon.workHoursTo", lang)} value={hoursTo} onChange={setHoursTo} type="number" />
+        </div>
+        <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+          <AssetUploadField
+            label={t("salon.branding.logo", lang)}
+            tenantId={tenantId}
+            kind="logo"
+            value={logo}
+            onChange={({ url, key }) => {
+              setLogo(url);
+              setLogoR2Key(key);
+            }}
+            preview="square"
+            hint={t("salon.branding.logoHint", lang)}
+          />
+          <AssetUploadField
+            label={t("salon.branding.cover", lang)}
+            tenantId={tenantId}
+            kind="cover"
+            value={coverPhoto}
+            onChange={({ url, key }) => {
+              setCoverPhoto(url);
+              setCoverR2Key(key);
+            }}
+            preview="cover"
+            hint={t("salon.branding.coverHint", lang)}
+          />
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.branding.brandColor", lang)}</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={brandPrimary}
+                onChange={(e) => setBrandPrimary(e.target.value)}
+                className="h-10 w-16 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent cursor-pointer"
+                aria-label="Brand primary color"
+              />
+              <input
+                value={brandPrimary}
+                onChange={(e) => setBrandPrimary(e.target.value)}
+                placeholder="#EC4899"
+                className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 font-mono uppercase"
+              />
+            </div>
+          </div>
+        </div>
+        <Btn onClick={() => {
+          const isValidHex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(brandPrimary);
+          update.mutate({
+            tenantId,
+            name: salonName,
+            displayName: displayName || "",
+            address,
+            phone,
+            workHoursFrom: parseInt(hoursFrom, 10) || 9,
+            workHoursTo: parseInt(hoursTo, 10) || 20,
+            logo: logo || "",
+            coverPhoto: coverPhoto || "",
+            logoR2Key: logoR2Key || "",
+            coverR2Key: coverR2Key || "",
+            brandPalette: isValidHex ? { primary: brandPrimary } : null,
+          });
+        }} disabled={update.isPending} className="w-full justify-center py-2.5">
+          {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {t("common.save", lang)}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── Auto-confirm Settings ──────────────────────────────────────
+//
+// Per-channel toggle for "skip the master review step and confirm
+// instantly when a client books." Web defaults to ON (TikTok / IG bio
+// leads need an immediate response, masters aren't watching the widget
+// in real time); Telegram / WhatsApp / Instagram default to OFF because
+// the master IS in those threads. The defaults must mirror
+// `manicbot/src/services/services.js:AUTO_CONFIRM_DEFAULTS`.
+function AutoConfirmSettings({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const { data, isLoading } = api.salon.getAutoConfirmSettings.useQuery({ tenantId });
+  const set = api.salon.setAutoConfirm.useMutation({
+    onSuccess: () => { utils.salon.getAutoConfirmSettings.invalidate(); },
+  });
+
+  const channels: Array<{ key: "web" | "telegram" | "whatsapp" | "instagram"; label: string; hint: string }> = [
+    { key: "web",       label: t("salon.channels.web.label", lang),       hint: t("salon.channels.web.hint", lang) },
+    { key: "telegram",  label: "Telegram",                                  hint: t("salon.channels.telegram.hint", lang) },
+    { key: "whatsapp",  label: "WhatsApp",                                  hint: t("salon.channels.whatsapp.hint", lang) },
+    { key: "instagram", label: t("salon.channels.instagram.label", lang),  hint: t("salon.channels.instagram.hint", lang) },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader title={t("salon.autoConfirm.title", lang)} />
+      <div className="glass-card rounded-2xl p-4 space-y-3">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t("salon.autoConfirm.body", lang)}
+        </p>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
+          </div>
+        ) : (
+          channels.map((ch) => {
+            const enabled = data?.[ch.key] ?? (ch.key === "web");
+            return (
+              <div key={ch.key} className="flex items-start justify-between gap-3 py-2 border-t border-slate-200 dark:border-white/5 first:border-t-0 first:pt-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{ch.label}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ch.hint}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  disabled={set.isPending}
+                  onClick={() => set.mutate({ tenantId, channel: ch.key, enabled: !enabled })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors mt-0.5 ${
+                    enabled ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600"
+                  } ${set.isPending ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      enabled ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Public Profile Editor ───────────────────────────────────────
+function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
+  const validate = (lat: number, lng: number) =>
+    isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+      ? { lat, lng } : null;
+  // @lat,lng pattern (e.g. /place/.../@55.7558,37.6173,17z/)
+  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if (atMatch) return validate(parseFloat(atMatch[1]!), parseFloat(atMatch[2]!));
+  // ?q=lat,lng or ?ll=lat,lng
+  try {
+    const url = new URL(input);
+    for (const key of ["q", "ll", "query"]) {
+      const v = url.searchParams.get(key);
+      const m = v?.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+      if (m) return validate(parseFloat(m[1]!), parseFloat(m[2]!));
+    }
+  } catch { /* not a URL */ }
+  // Bare coordinate pair: "55.7558, 37.6173"
+  const bare = input.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
+  if (bare) return validate(parseFloat(bare[1]!), parseFloat(bare[2]!));
+  return null;
+}
+
+const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+function PublicProfileEditor({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId });
+  const servicesList = api.salon.getServices.useQuery({ tenantId });
+  const [publishError, setPublishError] = useState<string[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [city, setCity] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [parsedCoords, setParsedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isPublic, setIsPublic] = useState(false);
+  const [slugError, setSlugError] = useState("");
+  const [slugChecked, setSlugChecked] = useState<boolean | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [newPhotoUrl, setNewPhotoUrl] = useState("");
+  // Branding section
+  const [logo, setLogo] = useState("");
+  const [coverPhoto, setCoverPhoto] = useState("");
+  const [brandPrimary, setBrandPrimary] = useState("");
+  const [brandBg, setBrandBg] = useState("");
+  const [brandText, setBrandText] = useState("");
+  // Contacts section
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [instagramUrl, setInstagramUrl] = useState("");
+  // Schedule section
+  const [workHours, setWorkHours] = useState<WorkHoursState>(DEFAULT_WORK_HOURS);
+  // Field-level validation errors (key → message)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const data = profile.data as any;
+
+  useEffect(() => {
+    if (data && !editing) {
+      setSlug(data.slug ?? "");
+      setDescription(data.description ?? "");
+      setCity(data.city ?? "");
+      if (data.mapsUrl) {
+        setMapsUrl(data.mapsUrl);
+        setParsedCoords(parseGoogleMapsUrl(data.mapsUrl));
+      } else if (data.lat != null && data.lng != null) {
+        setMapsUrl(`${data.lat}, ${data.lng}`);
+        setParsedCoords({ lat: data.lat, lng: data.lng });
+      } else {
+        setMapsUrl("");
+        setParsedCoords(null);
+      }
+      setIsPublic(!!data.publicActive);
+      setPhotos(Array.isArray(data.photos) ? data.photos : []);
+      // Branding
+      setLogo(data.logo ?? "");
+      setCoverPhoto(data.coverPhoto ?? "");
+      setBrandPrimary(data.brandPalette?.primary ?? "");
+      setBrandBg(data.brandPalette?.bg ?? "");
+      setBrandText(data.brandPalette?.text ?? "");
+      // Contacts
+      setAddress(data.salon?.address ?? "");
+      setPhone(data.salon?.phone ?? "");
+      setInstagramUrl(data.instagramUrl ?? "");
+      // Schedule
+      setWorkHours(hydrateWorkHours(data.salon?.workHours));
+      setFieldErrors({});
+    }
+  }, [data, editing]);
+
+  const update = api.salon.updateSalonProfile.useMutation({
+    onSuccess: () => {
+      utils.salon.getSalonProfile.invalidate();
+      setEditing(false);
+      setPublishError(null);
+    },
+    onError: (err) => {
+      const msg = err.message ?? "";
+      if (msg.startsWith("NOT_READY_TO_PUBLISH:")) {
+        setPublishError(msg.replace("NOT_READY_TO_PUBLISH:", "").split(","));
+        setIsPublic(false);
+      }
+    },
+  });
+
+  const readinessMissing: string[] = [];
+  if (!data?.slug) readinessMissing.push("slug");
+  if (!data?.name || !String(data.name).trim()) readinessMissing.push("name");
+  if (servicesList.data && servicesList.data.length === 0) readinessMissing.push("services");
+  const isReadyToPublish = readinessMissing.length === 0;
+
+  const MISSING_LABELS: Record<string, string> = {
+    slug: t("salon.publicProfile.slugReq", lang),
+    name: t("salon.publicProfile.nameReq", lang),
+    services: t("salon.publicProfile.servicesReq", lang),
+  };
+
+  const slugCheck = api.salon.checkSlugAvailable.useQuery(
+    { slug, tenantId },
+    { enabled: editing && slug.length > 0 && !slugError, staleTime: 5000 },
+  );
+
+  function validateSlug(v: string) {
+    if (v && !/^[a-z0-9-]+$/.test(v)) {
+      setSlugError(t("salon.publicProfile.slugError", lang));
+      setSlugChecked(null);
+      return false;
+    }
+    setSlugError("");
+    return true;
+  }
+
+  function validateExtras(): Record<string, string> {
+    const errs: Record<string, string> = {};
+    // Mirror the server regexes in `salon.updateSalonProfile` — keep client +
+    // server in lockstep so the form blocks before round-trip and bad payloads
+    // can't slip past a customised client either.
+    if (logo && !/^https:\/\//i.test(logo)) errs.logo = t("salon.publicProfile.urlHttpsError", lang);
+    if (coverPhoto && !/^https:\/\//i.test(coverPhoto)) errs.coverPhoto = t("salon.publicProfile.urlHttpsError", lang);
+    if (brandPrimary && !HEX_RE.test(brandPrimary)) errs.brandPrimary = t("salon.publicProfile.hexError", lang);
+    if (brandBg && !HEX_RE.test(brandBg)) errs.brandBg = t("salon.publicProfile.hexError", lang);
+    if (brandText && !HEX_RE.test(brandText)) errs.brandText = t("salon.publicProfile.hexError", lang);
+    if (instagramUrl && !/^https:\/\/(www\.)?instagram\.com\//i.test(instagramUrl)) {
+      errs.instagramUrl = t("salon.publicProfile.instagramError", lang);
+    }
+    return errs;
+  }
+
+  function handleSave() {
+    if (!validateSlug(slug)) return;
+    const extras = validateExtras();
+    if (Object.keys(extras).length) {
+      setFieldErrors(extras);
+      return;
+    }
+    setFieldErrors({});
+    // Client-side pre-check: if trying to enable publishing without a ready
+    // profile, surface the red banner without round-tripping to the server.
+    if (isPublic) {
+      const missing: string[] = [];
+      if (!slug) missing.push("slug");
+      if (!data?.name || !String(data.name).trim()) missing.push("name");
+      if (servicesList.data && servicesList.data.length === 0) missing.push("services");
+      if (missing.length) {
+        setPublishError(missing);
+        setIsPublic(false);
+        return;
+      }
+    }
+    setPublishError(null);
+
+    // Brand palette: required `primary` per server schema, so only send a
+    // palette object when primary is present. Otherwise emit `null` to clear.
+    let brandPalette: { primary: string; bg?: string; text?: string } | null | undefined;
+    if (brandPrimary) {
+      brandPalette = { primary: brandPrimary };
+      if (brandBg) brandPalette.bg = brandBg;
+      if (brandText) brandPalette.text = brandText;
+    } else if (brandBg || brandText) {
+      // Partial palette without primary — drop silently rather than error.
+      brandPalette = undefined;
+    } else {
+      brandPalette = null;
+    }
+
+    update.mutate({
+      tenantId,
+      slug: slug || undefined,
+      description: description || undefined,
+      city: city || undefined,
+      lat: parsedCoords?.lat,
+      lng: parsedCoords?.lng,
+      mapsUrl: mapsUrl.startsWith("http") ? mapsUrl : undefined,
+      publicActive: isPublic ? 1 : 0,
+      photos,
+      // Branding
+      logo: logo || "",
+      coverPhoto: coverPhoto || "",
+      brandPalette,
+      // Contacts (stored under tenants.salon JSON + tenant_config)
+      address: address || "",
+      phone: phone || "",
+      instagramUrl: instagramUrl || "",
+      // Schedule (per-day JSON string under tenants.salon.workHours +
+      // tenant_config.work_hours).
+      workHours: serializeWorkHours(workHours),
+    });
+  }
+
+  function addPhoto() {
+    const url = newPhotoUrl.trim();
+    if (!url) return;
+    setPhotos((prev) => [...prev, url]);
+    setNewPhotoUrl("");
+  }
+
+  const publicUrl = slug ? `/salon/${slug}` : null;
+
+  if (profile.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
+  if (profile.isError) return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>;
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title={t("salon.publicProfile.title", lang)}
+        action={editing
+          ? <Btn variant="ghost" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" />{t("common.cancel", lang)}</Btn>
+          : <Btn onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />{t("common.edit", lang)}</Btn>
+        }
+      />
+
+      {/* Status banner */}
+      <div className={`rounded-xl p-4 flex items-center gap-3 ${isPublic ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"}`}>
+        {isPublic
+          ? <ToggleRight className="h-6 w-6 text-emerald-400 shrink-0" />
+          : <ToggleLeft className="h-6 w-6 text-slate-500 shrink-0" />}
+        <div className="flex-1">
+          <p className={`text-sm font-semibold ${isPublic ? "text-emerald-300" : "text-slate-500 dark:text-slate-400"}`}>
+            {isPublic ? t("salon.publicProfile.visibleInCatalog", lang) : t("salon.publicProfile.hiddenFromCatalog", lang)}
+          </p>
+          {publicUrl && (
+            <a href={publicUrl} target="_blank" rel="noopener noreferrer"
+              className="mt-0.5 flex items-center gap-1 text-xs text-brand-400 hover:underline">
+              <Globe className="h-3 w-3" />
+              manicbot.com{publicUrl}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+        {!editing && (
+          <button onClick={() => {
+            const newVal = isPublic ? 0 : 1;
+            if (newVal === 1 && !isReadyToPublish) {
+              setPublishError(readinessMissing);
+              return;
+            }
+            setPublishError(null);
+            setIsPublic(!!newVal);
+            update.mutate({ tenantId, publicActive: newVal });
+          }}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${isPublic ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"}`}>
+            {isPublic ? t("salon.publicProfile.hide", lang) : t("salon.publicProfile.publish", lang)}
+          </button>
+        )}
+      </div>
+
+      {publishError && publishError.length > 0 && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 text-red-500 dark:text-red-400" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+                {t("salon.publicProfile.cantPublish", lang)}
+              </p>
+              <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-red-700/90 dark:text-red-300/90">
+                {publishError.map((k) => (
+                  <li key={k}>{MISSING_LABELS[k] ?? k}</li>
+                ))}
+              </ul>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => setEditing(true)}
+                  className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
+                >
+                  {t("salon.publicProfile.editProfile", lang)}
+                </button>
+                <button
+                  onClick={() => setPublishError(null)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-700/70 transition hover:text-red-700 dark:text-red-300/70 dark:hover:text-red-300"
+                >
+                  {t("common.close", lang)}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!editing ? (
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          {[
+            { label: "URL (slug)", value: data?.slug, icon: Globe },
+            { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
+            { label: t("common.description", lang), value: data?.description, icon: null },
+            { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
+            { label: t("salon.publicProfile.address", lang), value: data?.salon?.address, icon: MapPin },
+            { label: t("salon.publicProfile.phone", lang), value: data?.salon?.phone, icon: Phone },
+          ].map(({ label, value, icon: Icon }) => value ? (
+            <div key={label} className="flex items-start gap-3">
+              {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
+              <div>
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="text-sm text-slate-900 dark:text-white">{value}</p>
+              </div>
+            </div>
+          ) : null)}
+          {data?.instagramUrl && (
+            <div className="flex items-start gap-3">
+              <InstagramIcon className="h-4 w-4 text-pink-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs text-slate-500">{t("salon.publicProfile.instagramUrl", lang)}</p>
+                <a href={data.instagramUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-brand-400 hover:underline break-all">
+                  {data.instagramUrl}
+                </a>
+              </div>
+            </div>
+          )}
+          {(data?.logo || data?.coverPhoto) && (
+            <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
+              {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+              {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+            </div>
+          )}
+          {/* Brand palette swatches */}
+          {(data?.brandPalette?.primary || data?.brandPalette?.bg || data?.brandPalette?.text) && (
+            <div className="flex items-center gap-2 border-t border-slate-200 dark:border-white/5 pt-3">
+              <Palette className="h-4 w-4 text-slate-500 shrink-0" />
+              <p className="text-xs text-slate-500 mr-1">{t("salon.publicProfile.brandingSection", lang)}:</p>
+              {(["primary", "bg", "text"] as const).map((k) => {
+                const c = data.brandPalette?.[k];
+                if (!c) return null;
+                return (
+                  <span key={k} className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                    <span className="h-4 w-4 rounded border border-slate-200 dark:border-slate-700 shadow-sm shrink-0" style={{ backgroundColor: c }} aria-label={`${k} ${c}`} />
+                    {c}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {/* Work hours summary — only rendered when the value is parsable
+              (per-day JSON, legacy short string, or legacy {from,to}). */}
+          {data?.salon?.workHours && (() => {
+            const wh = data.salon.workHours as unknown;
+            const perDay = typeof wh === "string" ? decodePerDayWorkHours(wh) : null;
+            const dayLabels = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+            let legacyLine: string | null = null;
+            if (!perDay) {
+              if (typeof wh === "string" && wh.trim()) legacyLine = wh;
+              else if (wh && typeof wh === "object") {
+                const obj = wh as { from?: number | string; to?: number | string };
+                if (obj.from !== undefined && obj.to !== undefined) {
+                  const fmt = (v: number | string) => typeof v === "string" ? v : `${v}:00`;
+                  legacyLine = `${fmt(obj.from)} – ${fmt(obj.to)}`;
+                }
+              }
+            }
+            if (!perDay && !legacyLine) return null;
+            return (
+              <div className="border-t border-slate-200 dark:border-white/5 pt-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="h-4 w-4 text-slate-500" />
+                  <p className="text-xs text-slate-500">{t("salon.publicProfile.scheduleSection", lang)}</p>
+                </div>
+                {perDay ? (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs pl-6">
+                    {dayLabels.map((d, i) => {
+                      const slot = perDay[i];
+                      return (
+                        <div key={d} className="flex justify-between">
+                          <span className="text-slate-500">{t(`salon.publicProfile.day.${d}`, lang)}</span>
+                          <span className={slot ? "text-slate-900 dark:text-white font-medium" : "text-slate-400"}>
+                            {slot ? `${slot.open}–${slot.close}` : t("salon.publicProfile.dayOff", lang)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-900 dark:text-white pl-6">{legacyLine}</p>
+                )}
+              </div>
+            );
+          })()}
+          {photos.length > 0 && (
+            <div>
+              <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>
+              <div className="flex flex-wrap gap-2">
+                {photos.map((url, i) => (
+                  <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                ))}
+              </div>
+            </div>
+          )}
+          {!data?.slug && (
+            <p className="text-xs text-amber-400/80 flex items-center gap-1">
+              <AlertCircle className="h-3.5 w-3.5" />
+              {t("salon.publicProfile.setSlugFirst", lang)}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          {/* Toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">{t("salon.publicProfile.showInCatalog", lang)}</p>
+              <p className="text-xs text-slate-500">{t("salon.publicProfile.findInSearch", lang)}</p>
+            </div>
+            <Switch
+              checked={isPublic}
+              onChange={setIsPublic}
+              aria-label={t("salon.publicProfile.showInCatalog", lang)}
+              data-testid="public-profile-visibility-toggle"
+            />
+          </div>
+
+          <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">URL slug</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600 dark:text-slate-500 shrink-0">manicbot.com/salon/</span>
+                <input value={slug} onChange={(e) => { setSlug(e.target.value.toLowerCase()); validateSlug(e.target.value.toLowerCase()); }}
+                  placeholder="moj-salon-warszawa"
+                  className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {slug && !slugError && (
+                  <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
+                    {slugCheck.isLoading ? "..." : slugCheck.data?.available === false ? `❌ ${t("salon.publicProfile.taken", lang)}` : slugCheck.data?.available ? "✅" : ""}
+                  </span>
+                )}
+              </div>
+              {slugError && <p className="text-xs text-red-400 mt-1">{slugError}</p>}
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.city", lang)}</label>
+              <input value={city} onChange={(e) => setCity(e.target.value)}
+                placeholder="Warszawa"
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("common.description", lang)}</label>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                rows={3} placeholder={t("salon.publicProfile.descriptionPlaceholder", lang)}
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.mapsLabel", lang)}</label>
+              <input value={mapsUrl} onChange={(e) => { setMapsUrl(e.target.value); setParsedCoords(parseGoogleMapsUrl(e.target.value)); }}
+                placeholder={t("salon.publicProfile.mapsPlaceholder", lang)}
+                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              {mapsUrl && parsedCoords && (
+                <p className="text-xs text-emerald-500 mt-1">{t("salon.publicProfile.coords", lang)}: {parsedCoords.lat}, {parsedCoords.lng}</p>
+              )}
+              {mapsUrl && !parsedCoords && (
+                <p className="text-xs text-amber-400 mt-1">{t("salon.publicProfile.coordsBad", lang)}</p>
+              )}
+            </div>
+
+            {/* Branding section: logo / cover / brand palette */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Palette className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.brandingSection", lang)}</h4>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.logoUrl", lang)}</label>
+                <input value={logo} onChange={(e) => setLogo(e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {fieldErrors.logo && <p className="text-xs text-red-400 mt-1">{fieldErrors.logo}</p>}
+                {logo && /^https:\/\//.test(logo) && (
+                  <img src={logo} alt="logo preview" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 mt-2" />
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.coverUrl", lang)}</label>
+                <input value={coverPhoto} onChange={(e) => setCoverPhoto(e.target.value)}
+                  placeholder="https://example.com/cover.jpg"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {fieldErrors.coverPhoto && <p className="text-xs text-red-400 mt-1">{fieldErrors.coverPhoto}</p>}
+                {coverPhoto && /^https:\/\//.test(coverPhoto) && (
+                  <img src={coverPhoto} alt="cover preview" className="h-16 w-full rounded-lg object-cover border border-slate-200 dark:border-slate-700 mt-2" />
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: "brandPrimary", label: t("salon.publicProfile.brandPrimary", lang), value: brandPrimary, setter: setBrandPrimary },
+                  { key: "brandBg", label: t("salon.publicProfile.brandBg", lang), value: brandBg, setter: setBrandBg },
+                  { key: "brandText", label: t("salon.publicProfile.brandText", lang), value: brandText, setter: setBrandText },
+                ].map(({ key, label, value, setter }) => (
+                  <div key={key}>
+                    <label className="text-[10px] text-slate-500 dark:text-slate-400 mb-1 block">{label}</label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="color"
+                        value={HEX_RE.test(value) ? value : "#000000"}
+                        onChange={(e) => setter(e.target.value)}
+                        aria-label={label}
+                        className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent cursor-pointer"
+                      />
+                      <input
+                        value={value}
+                        onChange={(e) => setter(e.target.value)}
+                        placeholder="#000000"
+                        className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-2 text-xs font-mono text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                      />
+                    </div>
+                    {fieldErrors[key] && <p className="text-[10px] text-red-400 mt-1">{fieldErrors[key]}</p>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500">{t("salon.publicProfile.hexHint", lang)}</p>
+            </div>
+
+            {/* Contacts section: address / phone / instagram */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.contactsSection", lang)}</h4>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.address", lang)}</label>
+                <input value={address} onChange={(e) => setAddress(e.target.value)}
+                  placeholder="ul. Marszałkowska 1, Warszawa"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.phone", lang)}</label>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+48 600 000 000"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <InstagramIcon className="h-3.5 w-3.5 text-pink-400" />
+                  {t("salon.publicProfile.instagramUrl", lang)}
+                </label>
+                <input value={instagramUrl} onChange={(e) => setInstagramUrl(e.target.value)}
+                  placeholder="https://instagram.com/your_salon"
+                  className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
+                {fieldErrors.instagramUrl && <p className="text-xs text-red-400 mt-1">{fieldErrors.instagramUrl}</p>}
+                <p className="text-[10px] text-slate-500 mt-1">{t("salon.publicProfile.instagramHint", lang)}</p>
+              </div>
+            </div>
+
+            {/* Schedule section: per-day work hours */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.scheduleSection", lang)}</h4>
+              </div>
+              <p className="text-[11px] text-slate-500">{t("salon.publicProfile.scheduleHint", lang)}</p>
+              <div className="space-y-2">
+                {WEEKDAY_KEYS.map((day) => {
+                  const value = workHours[day];
+                  const isOff = value === null;
+                  return (
+                    <div key={day} data-testid={`workhours-row-${day}`} className="flex items-center gap-2">
+                      <span className="w-24 shrink-0 text-xs text-slate-700 dark:text-slate-300">{t(`salon.publicProfile.day.${day}`, lang)}</span>
+                      <Switch
+                        size="sm"
+                        checked={!isOff}
+                        onChange={(next) => setWorkHours((prev) => ({
+                          ...prev,
+                          [day]: next ? { open: "09:00", close: "18:00" } : null,
+                        }))}
+                        aria-label={t("salon.publicProfile.workingDay", lang)}
+                        data-testid={`workhours-toggle-${day}`}
+                      />
+                      {isOff ? (
+                        <span className="flex-1 text-xs text-slate-500 italic">{t("salon.publicProfile.dayOff", lang)}</span>
+                      ) : (
+                        <>
+                          <input
+                            type="time"
+                            aria-label={`${t(`salon.publicProfile.day.${day}`, lang)} ${t("salon.publicProfile.opens", lang)}`}
+                            value={value.open}
+                            onChange={(e) => setWorkHours((prev) => ({ ...prev, [day]: { ...value, open: e.target.value } }))}
+                            className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                          />
+                          <span className="text-xs text-slate-500">—</span>
+                          <input
+                            type="time"
+                            aria-label={`${t(`salon.publicProfile.day.${day}`, lang)} ${t("salon.publicProfile.closes", lang)}`}
+                            value={value.close}
+                            onChange={(e) => setWorkHours((prev) => ({ ...prev, [day]: { ...value, close: e.target.value } }))}
+                            className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Photos */}
+            <div className="border-t border-slate-200 dark:border-white/5 pt-3">
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">{t("salon.publicProfile.gallery", lang)} ({photos.length})</label>
+              {photos.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {photos.map((url, i) => (
+                    <div key={i} className="flex items-center gap-2 group">
+                      <img src={url} alt="" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
+                      <span className="flex-1 text-xs text-slate-500 truncate">{url}</span>
+                      <div className="flex gap-1 shrink-0">
+                        <button type="button" disabled={i === 0}
+                          onClick={() => setPhotos((prev) => { const a = [...prev]; const t = a[i-1]!; a[i-1] = a[i]!; a[i] = t; return a; })}
+                          className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-300 dark:hover:bg-slate-600">
+                          ↑
+                        </button>
+                        <button type="button" disabled={i === photos.length - 1}
+                          onClick={() => setPhotos((prev) => { const a = [...prev]; const t = a[i+1]!; a[i+1] = a[i]!; a[i] = t; return a; })}
+                          className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-300 dark:hover:bg-slate-600">
+                          ↓
+                        </button>
+                        <button type="button"
+                          onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
+                          className="h-6 w-6 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/20">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  value={newPhotoUrl}
+                  onChange={(e) => setNewPhotoUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addPhoto())}
+                  placeholder="https://example.com/photo.jpg"
+                  className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
+                />
+                <button type="button" onClick={addPhoto}
+                  className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("common.add", lang)}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <Btn onClick={handleSave} disabled={update.isPending || !!slugError || slugCheck.data?.available === false} className="w-full justify-center py-2.5">
+            {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {t("salon.publicProfile.savePublic", lang)}
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ──────────────────────────────────────────────
 // ─── Review Card (salon dashboard) ──────────────────────────────────────────
 
@@ -615,7 +1553,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -793,17 +1731,67 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // agenda/list rows.
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
-  const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
+  const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
   const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
   const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
 
+  // Optimistic status state — mirrors `pendingMoves` below, but for status
+  // mutations (confirm / cancel / reject / no-show). Without this the click
+  // → mutate → invalidate → refetch round-trip takes 300–800 ms, during
+  // which the AptCard is visually unchanged and the user reads it as
+  // "nothing happened". Patch shape + merge live in `optimisticStatusMerge`
+  // so AptCard's read contract stays pinned by a unit test.
+  const [pendingStatusChanges, setPendingStatusChanges] = useState<PendingStatusPatches>({});
+
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
-    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+    onMutate: ({ appointmentId, status }) => {
+      setPendingStatusChanges((prev) => ({
+        ...prev,
+        [appointmentId]: status === "cancelled"
+          ? buildCancelPatch()
+          : buildStatusChangePatch(status),
+      }));
+    },
+    onError: (err) => {
+      toast.error(t("salon.apt.statusUpdateFailed", lang), err?.message || undefined);
+    },
+    onSuccess: () => {
+      toast.success(t("salon.apt.statusUpdated", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingStatusChanges((prev) => {
+        const next = { ...prev };
+        delete next[vars.appointmentId];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
   });
   const markNoShow = api.salon.markNoShow.useMutation({
-    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+    onMutate: ({ id, noShowBy }) => {
+      setPendingStatusChanges((prev) => ({
+        ...prev,
+        [id]: buildNoShowPatch(noShowBy),
+      }));
+    },
+    onError: (err) => {
+      toast.error(t("salon.apt.noShowFailed", lang), err?.message || undefined);
+    },
+    onSuccess: () => {
+      toast.success(t("salon.apt.statusUpdated", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingStatusChanges((prev) => {
+        const next = { ...prev };
+        delete next[vars.id];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
   });
 
   // Drag-to-reschedule optimistic state.
@@ -873,6 +1861,15 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     });
   };
 
+  // Layer in-flight status mutations onto the appointment arrays — twin of
+  // applyPendingMoves, but for confirm/cancel/no-show. The merged row gets
+  // the new status + cancelled/noShow flags so AptCard.statusKey flips
+  // instantly to the terminal state and the card dims. Merge logic lives in
+  // `~/lib/optimisticStatusMerge` (unit-tested) — this closure just plugs
+  // the current `pendingStatusChanges` state into it.
+  const applyPendingStatusChanges = (rows: any[] | undefined): any[] =>
+    mergeStatusPatches(rows, pendingStatusChanges);
+
   const handleMoveAppointment = (move: MoveCommit) => {
     if (move.toMasterId == null) {
       // Week view drops carry masterId=null (the column is per-day). The
@@ -921,7 +1918,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { key: "clients", label: t("salon.clients", lang), perm: "clients.view" },
     { key: "analytics", label: `📊 ${t("salon.tabs.analytics", lang)}`, perm: null, ownerOnly: true },
     { key: "promo_codes", label: `🎟 ${t("salon.tabs.promoCodes", lang)}`, perm: null, ownerOnly: true },
-    { key: "billing", label: t("salon.billing", lang), perm: "billing.manage" },
     { key: "channels", label: t("salon.tabs.channels", lang), perm: "settings.manage" },
     { key: "reviews", label: t("salon.tabs.reviews", lang), perm: "reviews.view" },
     { key: "public_profile", label: `🌐 ${t("salon.tabs.publicProfile", lang)}`, perm: "branding.manage" },
@@ -946,6 +1942,35 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
   // TimeReservationDialog). Cleared on dialog close.
   const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number } | null>(null);
+  // Reminders plugin — FAB-launched modal state.
+  const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
+  // Which plugins are installed for this tenant. Drives the FAB extraItems list.
+  // Skipped (enabled:false) until tenantId is known so we don't fetch on the
+  // public landing pre-auth render.
+  const installedPlugins = api.plugins.getInstalled.useQuery(undefined, {
+    enabled: !!tenantId,
+  });
+  const remindersInstalled = !!installedPlugins.data?.find(
+    (p) => p.pluginSlug === "reminders" && p.enabled === 1,
+  );
+  const fabExtraItems: FabExtraItem[] = remindersInstalled
+    ? [
+        {
+          id: "reminder",
+          icon: Bell,
+          label: "Напоминание",
+          description: "Однократное напоминание для себя или мастера",
+          onClick: () => setReminderModal("reminder"),
+        },
+        {
+          id: "routine",
+          icon: Repeat,
+          label: "Рутина",
+          description: "Циклическое напоминание (например, по будням)",
+          onClick: () => setReminderModal("routine"),
+        },
+      ]
+    : [];
 
   const isTest = useRole().isTest;
 
@@ -1034,6 +2059,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           onTimeReservation={() => setTimeReservationOpen(true)}
           onTimeOff={() => setTimeOffOpen(true)}
           onAddClient={() => setClientFormOpen(true)}
+          extraItems={fabExtraItems}
         />
       )}
 
@@ -1063,6 +2089,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         />
       )}
 
+      {reminderModal && (
+        <ReminderModal
+          tenantId={tenantId}
+          defaultKind={reminderModal}
+          onClose={() => setReminderModal(null)}
+        />
+      )}
+
       {/* ── OVERVIEW ──
           The Overview tab is now a focused two-card surface:
           (1) the merged setup checklist (auto-hides when 10/10 done) and
@@ -1072,6 +2106,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
+          <ReferralOverviewTeaser />
           {dashPrefs.showTodayApts && (
             <>
               {todayApts.isLoading && (
@@ -1087,7 +2122,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                       {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
                     </button>
                   </div>
-                  {[...todayApts.data]
+                  {[...applyPendingStatusChanges(todayApts.data)]
                     .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
                     .map((a: any) => (
                       <AptCard key={a.id} a={a} lang={lang}
@@ -1152,14 +2187,17 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           hiddenServiceIds.size > 0 ||
           masterVis.hiddenMasterIds.size > 0;
 
-        const aptsFiltered = (apts.data ?? []).filter(filterApt);
+        const aptsFiltered = applyPendingStatusChanges((apts.data ?? []).filter(filterApt));
         // applyPendingMoves layers in-flight drag-reschedules on top of the
         // server snapshot so the dragged block visually settles into its
         // new slot immediately (the cache invalidate in onSettled will
         // overwrite with canonical data once the mutation resolves).
-        const dayAptsFiltered = applyPendingMoves((dayApts.data ?? []).filter(filterApt));
-        const weekAptsFiltered = applyPendingMoves((weekApts.data ?? []).filter(filterApt));
-        const calAptsFiltered = (calApts.data ?? []).filter(filterApt);
+        // applyPendingStatusChanges does the same for confirm/cancel/no-show
+        // mutations — without it the user reads the 300–800 ms refetch gap
+        // as "nothing happened" after clicking the status dropdown.
+        const dayAptsFiltered = applyPendingMoves(applyPendingStatusChanges((dayApts.data ?? []).filter(filterApt)));
+        const weekAptsFiltered = applyPendingMoves(applyPendingStatusChanges((weekApts.data ?? []).filter(filterApt)));
+        const calAptsFiltered = applyPendingStatusChanges((calApts.data ?? []).filter(filterApt));
 
         return (
         <div className="flex flex-col lg:flex-row gap-4">
@@ -1447,11 +2485,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── CLIENTS ── */}
       {tab === "clients" && <ClientsTab tenantId={tenantId} />}
-
-      {/* ── BILLING ── */}
-      {tab === "billing" && (
-        <BillingTabContent tenantId={tenantId} billing={billing} lang={lang} />
-      )}
 
       {/* ── REVIEWS ── */}
       {tab === "reviews" && (

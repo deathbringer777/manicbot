@@ -3,48 +3,11 @@ import { TRPCError } from "@trpc/server";
 import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
 import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
-import { env } from "~/env";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { slotsBusy } from "~/server/api/slotsBusy";
 import { log } from "~/server/utils/logger";
+import { notifyWorker, type AppointmentAction } from "~/server/utils/notifyWorker";
 import { syncMarketingContact } from "~/server/clients/marketingSync";
-
-/**
- * Fire-and-forget call to Worker endpoint to trigger notifications + calendar sync.
- * Non-blocking: errors are logged but don't affect the mutation response.
- *
- * `extra` carries action-specific payload — e.g. the previous date/time for
- * a reschedule action so the Worker can render "Was X → Now Y" in the client
- * message via `sendAptRescheduledToClient`.
- */
-async function notifyWorker(
-  action: string,
-  appointmentId: string,
-  tenantId: string,
-  confirmedBy?: string | number | null,
-  extra?: Record<string, unknown>,
-) {
-  const workerUrl = env.WORKER_PUBLIC_URL;
-  const adminKey = env.ADMIN_KEY;
-  if (!workerUrl || !adminKey) {
-    log.warn("appointments.notifyWorker", { message: "WORKER_PUBLIC_URL or ADMIN_KEY not set — skipping" });
-    return;
-  }
-  try {
-    // #S9: ADMIN_KEY moved from query string to Authorization: Bearer header.
-    const resp = await fetch(`${workerUrl}/admin/appointment-action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
-      body: JSON.stringify({ action, appointmentId, tenantId, confirmedBy, ...(extra ?? {}) }),
-    });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      log.error("appointments.notifyWorker", new Error(`Worker notification failed ${resp.status}`), { body: text });
-    }
-  } catch (e) {
-    log.error("appointments.notifyWorker", e instanceof Error ? e : new Error(String(e)));
-  }
-}
 
 export const appointmentsRouter = createTRPCRouter({
   getAll: adminProcedure
@@ -184,9 +147,14 @@ export const appointmentsRouter = createTRPCRouter({
 
       // Fire-and-forget: notify Worker to send Telegram message + sync calendar
       // Worker expects bare verb ("confirm" / "reject" / "cancel"), not past tense
-      const workerActionMap: Record<string, string> = { confirmed: "confirm", rejected: "reject", cancelled: "cancel" };
-      if (tenantId && workerActionMap[input.status]) {
-        notifyWorker(workerActionMap[input.status]!, input.id, tenantId, updates.confirmedBy ?? null).catch(() => {});
+      const workerActionMap: Record<string, AppointmentAction | undefined> = {
+        confirmed: "confirm",
+        rejected: "reject",
+        cancelled: "cancel",
+      };
+      const mappedAction = workerActionMap[input.status];
+      if (tenantId && mappedAction) {
+        notifyWorker(mappedAction, input.id, tenantId, updates.confirmedBy ?? null).catch(() => {});
       }
 
       return { success: true, updatedAt: Date.now() };

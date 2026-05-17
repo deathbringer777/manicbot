@@ -7,6 +7,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { SalonSettingsEditor } from "~/components/salon/SalonSettingsEditor";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
+import { AutoSuggestFavoriteSettings } from "~/components/salon/AutoSuggestFavoriteSettings";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 export function MySalonSection() {
@@ -44,6 +45,7 @@ export function MySalonSection() {
     <div className="space-y-6">
       <SalonSettingsEditor tenantId={effectiveTenantId} profile={profile.data} />
       <AutoConfirmSettings tenantId={effectiveTenantId} />
+      <AutoSuggestFavoriteSettings tenantId={effectiveTenantId} />
       <SalonCalendarSection tenantId={effectiveTenantId} />
     </div>
   );

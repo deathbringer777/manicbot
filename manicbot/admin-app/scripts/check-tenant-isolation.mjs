@@ -119,8 +119,9 @@ const ALLOWLIST = new Set([
   // unification + PR-B referral helpers) → 1159 (after the new tenant-
   // scoped status mutations confirmAppointment / rejectAppointment /
   // markDone landed above this line) → 1292 (after salon.updateMaster +
-  // expanded getMasterDetail landed above this line).
-  "src/server/api/routers/salon.ts:1292",
+  // expanded getMasterDetail landed above this line) → 1348 (after the
+  // 0074 favorite-master auto-suggest tRPC pair landed above this line).
+  "src/server/api/routers/salon.ts:1348",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

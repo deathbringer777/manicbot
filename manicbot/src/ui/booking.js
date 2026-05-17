@@ -4,8 +4,9 @@ import { fmtDT, fmtDate, resolveDateHint, resolveTimeHint, findClosestSlot } fro
 import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
 import { setState } from '../services/state.js';
-import { getUser, isRegComplete, listMasters } from '../services/users.js';
+import { getUser, isRegComplete, listMasters, getFavoriteMasterId } from '../services/users.js';
 import { getApts, getSlots } from '../services/appointments.js';
+import { getFavoriteSuggest } from '../services/services.js';
 import { svcKb, calKb, timeKb } from './keyboards.js';
 import { showMyApts } from './screens.js';
 
@@ -122,7 +123,7 @@ const IG_MASTER_PAGE_SIZE = 10; // max masters per page on Instagram
  */
 export async function showMasterPick(ctx, cid, svcId, date, st, page = 0) {
   const lg = await getLang(ctx, cid) || 'ru';
-  const masters = (await listMasters(ctx)).filter(m => !m.onVacation && m.active !== false);
+  let masters = (await listMasters(ctx)).filter(m => !m.onVacation && m.active !== false);
   if (!masters.length) {
     // No masters — skip master pick, go straight to time
     const slots = await getSlots(ctx, date, svcId, null);
@@ -131,6 +132,41 @@ export async function showMasterPick(ctx, cid, svcId, date, st, page = 0) {
     return send(ctx, cid, `📅 <b>${fmtDate(lg, date)}</b>\n${svcName(ctx, lg, svcId)}\n\n${t(lg, 'choose_time')}`, timeKb(slots, lg));
   }
   await setState(ctx, cid, { ...st, step: STEP.MASTER_PICK });
+
+  // 0074 — favorite-master nudge. When the toggle is ON for this
+  // channel and the client has a favorite (manual pin OR derived from
+  // history), mark that master with ⭐ and float them to the top so
+  // they're the first button the client sees. The data flow degrades
+  // gracefully: if either query throws or returns null, we render the
+  // legacy alphabetical list with no annotation.
+  let favoriteId = null;
+  try {
+    const channel = ctx.channel?.type || 'telegram';
+    if (await getFavoriteSuggest(ctx, channel)) {
+      favoriteId = await getFavoriteMasterId(ctx, cid);
+    }
+  } catch (e) {
+    favoriteId = null;
+  }
+  if (favoriteId != null) {
+    const idx = masters.findIndex(m => Number(m.chatId) === Number(favoriteId));
+    if (idx > 0) {
+      // Reorder in-place: pull the favorite to the front so it's the
+      // first row in either the IG-paginated or the full-keyboard branch.
+      const [fav] = masters.splice(idx, 1);
+      masters = [fav, ...masters];
+    } else if (idx < 0) {
+      // Favorite is on vacation / inactive — drop the annotation so we
+      // don't render a star next to nothing.
+      favoriteId = null;
+    }
+  }
+  const labelFor = (m) => {
+    const base = fill(t(lg, 'book_master_label'), { name: escHtml(m.name) });
+    return Number(m.chatId) === Number(favoriteId)
+      ? `⭐ ${base}`
+      : base;
+  };
 
   const isIG = ctx.channel?.type === 'instagram';
   const btns = [];
@@ -143,7 +179,7 @@ export async function showMasterPick(ctx, cid, svcId, date, st, page = 0) {
     // "Any master" only on first page
     if (p === 0) btns.push([{ text: t(lg, 'book_any_master'), callback_data: CB.MASTER_ANY }]);
     for (const m of slice) {
-      btns.push([{ text: fill(t(lg, 'book_master_label'), { name: escHtml(m.name) }), callback_data: CB.MASTER_SEL + m.chatId }]);
+      btns.push([{ text: labelFor(m), callback_data: CB.MASTER_SEL + m.chatId }]);
     }
     const nav = [];
     if (p > 0) nav.push({ text: '◀', callback_data: CB.MASTER_PAGE + (p - 1) });
@@ -153,7 +189,7 @@ export async function showMasterPick(ctx, cid, svcId, date, st, page = 0) {
   } else {
     btns.push([{ text: t(lg, 'book_any_master'), callback_data: CB.MASTER_ANY }]);
     for (const m of masters) {
-      btns.push([{ text: fill(t(lg, 'book_master_label'), { name: escHtml(m.name) }), callback_data: CB.MASTER_SEL + m.chatId }]);
+      btns.push([{ text: labelFor(m), callback_data: CB.MASTER_SEL + m.chatId }]);
     }
     btns.push([{ text: t(lg, 'back'), callback_data: CB.CAL_BACK }]);
   }

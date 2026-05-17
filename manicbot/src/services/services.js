@@ -144,6 +144,34 @@ export async function setAutoConfirm(ctx, channel, enabled) {
   await setConfig(ctx, key, enabled === true);
 }
 
+/**
+ * 0074 — "Auto-suggest favorite master" per channel. Mirrors the
+ * AUTO_CONFIRM_DEFAULTS / getAutoConfirm pair. Both channels default
+ * ON because the suggestion is purely additive (client can still pick
+ * a different master from the keyboard / Select). Source-of-truth for
+ * defaults lives here AND in admin-app `salon.getAutoSuggestFavoriteSettings`
+ * — keep them in lockstep.
+ */
+const FAVORITE_SUGGEST_DEFAULTS = {
+  web: true,
+  telegram: true,
+};
+
+export async function getFavoriteSuggest(ctx, channel) {
+  const key = `fav_suggest_${channel || 'telegram'}`;
+  const stored = await getConfig(ctx, key);
+  if (stored == null) return FAVORITE_SUGGEST_DEFAULTS[channel] === true;
+  if (typeof stored === 'boolean') return stored;
+  if (typeof stored === 'string') return stored === 'true' || stored === '1';
+  if (typeof stored === 'number') return stored !== 0;
+  return FAVORITE_SUGGEST_DEFAULTS[channel] === true;
+}
+
+export async function setFavoriteSuggest(ctx, channel, enabled) {
+  const key = `fav_suggest_${channel || 'telegram'}`;
+  await setConfig(ctx, key, enabled === true);
+}
+
 export async function loadAboutPhotos(ctx) {
   let stored = await getConfig(ctx, 'about_photos');
   if (stored && Array.isArray(stored) && stored.length > 0) {

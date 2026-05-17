@@ -13,7 +13,7 @@
  */
 
 import { useState } from "react";
-import { X, Edit2, Trash2, Ban, ShieldCheck, Phone, Mail, Send, Instagram, Cake } from "lucide-react";
+import { X, Edit2, Trash2, Ban, ShieldCheck, Phone, Mail, Send, Instagram, Cake, Star } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -45,6 +45,14 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
   const [blockReason, setBlockReason] = useState("");
 
   const detail = api.clients.get.useQuery({ tenantId, chatId });
+  // 0074 — pull manual + derived favorite for the profile-tab summary
+  // row. Cheap (one read for the manual pin, one GROUP BY for derived);
+  // skipped while the parent detail row is still loading because the
+  // chatId we pass to it should match a real `users` row.
+  const favoriteSuggestion = api.clients.getFavoriteMasterSuggestion.useQuery(
+    { tenantId, chatId },
+    { enabled: !detail.isLoading && !!detail.data },
+  );
   const utils = api.useUtils();
 
   const del = api.clients.delete.useMutation({
@@ -174,6 +182,23 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
               <ContactRow icon={<Send className="h-4 w-4 text-sky-500" />} value={c.tgUsername ? `@${c.tgUsername}` : null} />
               <ContactRow icon={<Instagram className="h-4 w-4 text-pink-500" />} value={c.igUsername ? `@${c.igUsername}` : null} />
               <ContactRow icon={<Cake className="h-4 w-4 text-amber-500" />} value={c.dob ?? null} />
+              {/* 0074 — Favorite master row. Shows the manual pin when
+                  set, otherwise the derived "most-frequent master from
+                  history". `(auto)` qualifier disambiguates the two so
+                  the salon owner knows whether they pinned it or the
+                  system inferred it. */}
+              {(favoriteSuggestion.data?.manual || favoriteSuggestion.data?.derived) && (
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                  <span className="text-amber-500">
+                    <Star className="h-4 w-4" />
+                  </span>
+                  <span className="truncate">
+                    {favoriteSuggestion.data.manual
+                      ? (favoriteSuggestion.data.manual.name ?? `#${favoriteSuggestion.data.manual.masterId}`)
+                      : `${favoriteSuggestion.data.derived!.name ?? `#${favoriteSuggestion.data.derived!.masterId}`} ${t("clients.detail.favoriteAuto", lang)}`}
+                  </span>
+                </div>
+              )}
               {c.tags && (
                 <div className="flex flex-wrap gap-1">
                   {c.tags.split(",").map((tag) => (
@@ -354,6 +379,7 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
             tags: c.tags,
             notes: c.notes,
             dob: c.dob,
+            favoriteMasterId: (c as { favoriteMasterId?: number | null }).favoriteMasterId ?? null,
           } satisfies InitialClient}
           onClose={() => setEditOpen(false)}
           onSaved={() => setEditOpen(false)}

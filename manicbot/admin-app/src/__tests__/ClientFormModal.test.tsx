@@ -28,6 +28,8 @@ vi.mock("~/trpc/react", () => ({
         list: { invalidate: vi.fn() },
         get: { invalidate: vi.fn() },
         getListMemberships: { invalidate: vi.fn() },
+        // 0074 — favorite-master suggestion cache invalidation.
+        getFavoriteMasterSuggestion: { invalidate: vi.fn() },
       },
       marketingTenant: {
         segmentsList: { invalidate: vi.fn() },
@@ -59,6 +61,15 @@ vi.mock("~/trpc/react", () => ({
       },
       setListMemberships: {
         useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({ added: 0, removed: 0 }), isPending: false }),
+      },
+    },
+    // 0074: favorite-master picker reads the active-master roster.
+    // Empty list keeps the picker hidden in this test (which exercises
+    // the contact-channel surface, not the picker itself — those go in
+    // clients-favorite-master.test.ts on the router side).
+    salon: {
+      getMasters: {
+        useQuery: () => ({ data: [], isLoading: false }),
       },
     },
     marketingTenant: {

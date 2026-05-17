@@ -84,6 +84,8 @@ export const users = sqliteTable("users", {
   avatarEmoji: text("avatar_emoji"),
   avatarUrl: text("avatar_url"),
   avatarR2Key: text("avatar_r2_key"),
+  // 0074: manual pin for "favorite master". NULL → derived from history.
+  favoriteMasterId: integer("favorite_master_id"),
 }, (t) => [
   index("idx_user_username").on(t.tenantId, t.tgUsername),
   index("idx_users_tenant_dob").on(t.tenantId, t.dob),
@@ -94,6 +96,7 @@ export const users = sqliteTable("users", {
   index("idx_users_tenant_blocked").on(t.tenantId, t.isBlockedGlobal),
   index("idx_users_tenant_deleted").on(t.tenantId, t.deletedAt),
   index("idx_users_tenant_last_visit").on(t.tenantId, t.lastVisitAt),
+  index("idx_users_tenant_favorite_master").on(t.tenantId, t.favoriteMasterId),
 ]);
 
 // 0062: per-master client blacklist. A master can hide specific clients

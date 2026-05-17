@@ -83,6 +83,13 @@ const avatarUrlSchema = z
   .nullable()
   .optional();
 
+// 0074: nullable pointer to a master's chat_id. We DO NOT pin the FK to
+// `masters.chatId` at the SQL level — masters get archived (origin
+// 'salon_created' → archived_at) without us forcing a NULL cascade on
+// every client that picked them. Stale pointers are filtered at read
+// time in `getFavoriteMasterSuggestion`.
+const favoriteMasterIdSchema = z.number().int().nullable().optional();
+
 const filterSchema = z.object({
   hasPhone: z.boolean().optional(),
   hasEmail: z.boolean().optional(),
@@ -145,6 +152,7 @@ interface ClientRow {
   avatarEmoji: string | null;
   avatarUrl: string | null;
   avatarR2Key: string | null;
+  favoriteMasterId: number | null;
 }
 
 // ─── Router ──────────────────────────────────────────────────────────────────
@@ -305,6 +313,7 @@ export const clientsRouter = createTRPCRouter({
       dob: dobSchema,
       avatarEmoji: avatarEmojiSchema,
       avatarUrl: avatarUrlSchema,
+      favoriteMasterId: favoriteMasterIdSchema,
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -323,6 +332,14 @@ export const clientsRouter = createTRPCRouter({
       const safeNotes = input.notes ? sanitizeText(input.notes, 2000) : null;
       const safeTags = input.tags ? sanitizeText(input.tags, 500) : null;
 
+      // Validate favoriteMasterId belongs to this tenant (skip on null /
+      // missing). The check costs one indexed lookup and gives us a clean
+      // 400 instead of letting a typo'd id silently land in the DB and
+      // surface as a dead suggestion later.
+      const favoriteMasterId = await resolveFavoriteMasterId(
+        ctx.db, input.tenantId, input.favoriteMasterId ?? null,
+      );
+
       await ctx.db.insert(users).values({
         tenantId: input.tenantId,
         chatId,
@@ -336,6 +353,7 @@ export const clientsRouter = createTRPCRouter({
         dob: input.dob ?? null,
         avatarEmoji: input.avatarEmoji ?? null,
         avatarUrl: input.avatarUrl ?? null,
+        favoriteMasterId,
         registeredAt: now,
         updatedAt: now,
         firstSource: "salon_dashboard_manual",
@@ -386,6 +404,7 @@ export const clientsRouter = createTRPCRouter({
         dob: dobSchema,
         avatarEmoji: avatarEmojiSchema,
         avatarUrl: avatarUrlSchema,
+        favoriteMasterId: favoriteMasterIdSchema,
       }),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -426,6 +445,13 @@ export const clientsRouter = createTRPCRouter({
       if (p.avatarUrl !== undefined) {
         updates.avatarUrl = p.avatarUrl;
         if (p.avatarUrl) updates.avatarEmoji = null;
+      }
+      // 0074: validate before assigning so a stale id can't silently
+      // overwrite a valid pin with NULL on the live PATCH.
+      if (p.favoriteMasterId !== undefined) {
+        updates.favoriteMasterId = await resolveFavoriteMasterId(
+          ctx.db, input.tenantId, p.favoriteMasterId,
+        );
       }
 
       await ctx.db
@@ -859,6 +885,34 @@ export const clientsRouter = createTRPCRouter({
     }),
 
   /**
+   * Return the favorite-master suggestion for a client.
+   *
+   * Two layers:
+   *   - `manual`   — `users.favorite_master_id` set explicitly by the
+   *                  salon owner via the Client modal (highest priority).
+   *   - `derived`  — most-frequent master across the client's COMPLETED
+   *                  appointments (status='done' OR status='confirmed'
+   *                  AND ts < now). Cancelled / no-show rows excluded so
+   *                  a client who abandons one master 5 times doesn't
+   *                  end up pinned to that master.
+   *
+   * Stale-row tolerance: a manual id that no longer matches an active
+   * master row returns `manual:null` so the UI gracefully falls back to
+   * the derived value.
+   *
+   * Cross-channel by construction: identity collapses to one (tenant,
+   * chat_id) row regardless of the original contact channel (phone-in,
+   * Telegram, IG, email match), so this single read works whether the
+   * caller arrived via the dashboard, the mini-app, or the bot.
+   */
+  getFavoriteMasterSuggestion: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), chatId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      return computeFavoriteMasterSuggestion(ctx.db, input.tenantId, input.chatId);
+    }),
+
+  /**
    * Top-20 tag suggestions for the filter chip & form autocomplete.
    * Cheap: pulls `users.tags` for the tenant and splits client-side.
    */
@@ -920,6 +974,102 @@ async function findClientByPriority(
     if (r) return r as ClientRow;
   }
   return null;
+}
+
+/**
+ * 0074 — resolve & validate a favoriteMasterId before write.
+ * Returns the id when the row exists and is non-archived in this tenant;
+ * returns null when the caller cleared the pin OR the supplied id is stale.
+ * Throws BAD_REQUEST when the id is a number but points outside this tenant
+ * (defense against cross-tenant id-stuffing).
+ */
+async function resolveFavoriteMasterId(
+  db: any,
+  tenantId: string,
+  raw: number | null | undefined,
+): Promise<number | null> {
+  if (raw == null) return null;
+  const [row] = await db
+    .select({ chatId: masters.chatId, archivedAt: masters.archivedAt })
+    .from(masters)
+    .where(and(eq(masters.tenantId, tenantId), eq(masters.chatId, raw)))
+    .limit(1);
+  if (!row) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "favorite_master_not_in_tenant",
+    });
+  }
+  if (row.archivedAt != null) return null; // gracefully clear stale pins
+  return raw;
+}
+
+/**
+ * 0074 — derive the manual + history-derived favorite. Returns
+ * `{ manual, derived }` where each entry is either a `{ masterId, name }`
+ * object or `null`. Cancelled / no-show rows are excluded so abandoned
+ * masters don't dominate the histogram. Top-1 by visit count.
+ */
+export async function computeFavoriteMasterSuggestion(
+  db: any,
+  tenantId: string,
+  chatId: number,
+) {
+  const [client] = await db
+    .select({ favoriteMasterId: users.favoriteMasterId })
+    .from(users)
+    .where(and(eq(users.tenantId, tenantId), eq(users.chatId, chatId)))
+    .limit(1);
+
+  let manual: { masterId: number; name: string | null } | null = null;
+  if (client?.favoriteMasterId != null) {
+    const [m] = await db
+      .select({ chatId: masters.chatId, name: masters.name, archivedAt: masters.archivedAt })
+      .from(masters)
+      .where(and(
+        eq(masters.tenantId, tenantId),
+        eq(masters.chatId, client.favoriteMasterId),
+      ))
+      .limit(1);
+    if (m && m.archivedAt == null) {
+      manual = { masterId: m.chatId, name: m.name };
+    }
+  }
+
+  // Histogram across past, non-cancelled, non-no-show appointments.
+  // Includes 'confirmed' AND 'done' so a returning client who hasn't yet
+  // had their second visit marked done still gets a derived favorite.
+  const rows = await db
+    .select({
+      masterId: appointments.masterId,
+      count: sql<number>`count(*)`,
+    })
+    .from(appointments)
+    .where(and(
+      eq(appointments.tenantId, tenantId),
+      eq(appointments.chatId, chatId),
+      eq(appointments.cancelled, 0),
+      isNotNull(appointments.masterId),
+    ))
+    .groupBy(appointments.masterId)
+    .orderBy(desc(sql`count(*)`))
+    .limit(5);
+
+  let derived: { masterId: number; count: number; name: string | null } | null = null;
+  for (const r of rows) {
+    if (r.masterId == null) continue;
+    // Reject stale (archived) masters; walk the next ranked entry.
+    const [m] = await db
+      .select({ name: masters.name, archivedAt: masters.archivedAt })
+      .from(masters)
+      .where(and(eq(masters.tenantId, tenantId), eq(masters.chatId, r.masterId)))
+      .limit(1);
+    if (!m || m.archivedAt != null) continue;
+    derived = { masterId: r.masterId, count: Number(r.count), name: m.name };
+    break;
+  }
+
+  return { manual, derived };
 }
 
 function mergeRowIntoUser(

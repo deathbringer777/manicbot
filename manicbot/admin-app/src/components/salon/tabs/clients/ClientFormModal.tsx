@@ -10,10 +10,11 @@
  */
 
 import { useState, useEffect, useMemo, type FormEvent } from "react";
-import { X, ListChecks, Plus, Check } from "lucide-react";
+import { X, ListChecks, Plus, Check, Star } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
 
 const FIELD_BASE =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
@@ -31,6 +32,8 @@ export interface InitialClient {
   tags?: string | null;
   notes?: string | null;
   dob?: string | null;
+  /** 0074: manual favorite-master pin. NULL → derived from history. */
+  favoriteMasterId?: number | null;
 }
 
 interface Props {
@@ -52,7 +55,23 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
   const [tags, setTags] = useState(initial?.tags ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [dob, setDob] = useState(initial?.dob ?? "");
+  // 0074 — empty string = no pin (cleared). Numeric string = master chatId.
+  const [favoriteMaster, setFavoriteMaster] = useState<string>(
+    initial?.favoriteMasterId != null ? String(initial.favoriteMasterId) : "",
+  );
   const [err, setErr] = useState<string | null>(null);
+
+  // Master roster for the favorite-master Select. Filters out archived
+  // rows (no point letting the user pin a master who no longer exists).
+  const mastersQ = api.salon.getMasters.useQuery({ tenantId });
+  const masterOptions = useMemo(() => {
+    const list = (mastersQ.data ?? []) as Array<{
+      chatId: number; name: string | null; archivedAt?: number | null;
+    }>;
+    return list
+      .filter((m) => !m.archivedAt)
+      .map((m) => ({ value: String(m.chatId), label: m.name || `#${m.chatId}` }));
+  }, [mastersQ.data]);
 
   // ── Marketing lists (Brevo-style manual segments) ────────────────────────
   // The form lets the user toggle which lists this client belongs to. On
@@ -136,6 +155,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
   const create = api.clients.create.useMutation({
     onSuccess: async (r) => {
       void utils.clients.list.invalidate({ tenantId });
+      void utils.clients.getFavoriteMasterSuggestion.invalidate({ tenantId, chatId: r.chatId });
       await commitMemberships(r.chatId);
       onSaved(r.chatId);
       onClose();
@@ -147,6 +167,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
     onSuccess: async () => {
       void utils.clients.list.invalidate({ tenantId });
       void utils.clients.get.invalidate({ tenantId, chatId: initial!.chatId });
+      void utils.clients.getFavoriteMasterSuggestion.invalidate({ tenantId, chatId: initial!.chatId });
       await commitMemberships(initial!.chatId);
       onSaved(initial!.chatId);
       onClose();
@@ -185,6 +206,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
       setErr(t("clients.form.contactRequired", lang));
       return;
     }
+    const favoriteMasterId = favoriteMaster ? Number(favoriteMaster) : null;
     if (isEdit) {
       update.mutate({
         tenantId,
@@ -198,6 +220,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
           tags: tags.trim() || null,
           notes: notes.trim() || null,
           dob: dob.trim() || null,
+          favoriteMasterId,
         },
       });
     } else {
@@ -213,6 +236,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
         tags: tags.trim() || null,
         notes: notes.trim() || null,
         dob: dob.trim() || null,
+        favoriteMasterId,
       });
     }
   }
@@ -334,6 +358,34 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
               />
             </div>
           </div>
+
+          {/* 0074 — Favorite master pin. The select is hidden when the
+              salon has no masters yet (no one to pick) and rendered as a
+              single full-width row otherwise. The auto-suggested value
+              from booking history is shown beneath when no manual pin is
+              set, so the owner can see "what the bot would have picked"
+              before deciding to lock it. */}
+          {masterOptions.length > 0 && (
+            <div>
+              <label className={`${LABEL} flex items-center gap-1.5`}>
+                <Star className="h-3.5 w-3.5 text-amber-500" />
+                {t("clients.form.favoriteMaster", lang)}
+              </label>
+              <Select
+                testIdPrefix="cf-favorite-master"
+                value={favoriteMaster}
+                onChange={setFavoriteMaster}
+                placeholder={t("clients.form.favoriteMaster.none", lang)}
+                options={[
+                  { value: "", label: t("clients.form.favoriteMaster.none", lang) },
+                  ...masterOptions,
+                ]}
+              />
+              <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                {t("clients.form.favoriteMaster.hint", lang)}
+              </p>
+            </div>
+          )}
 
           {/* Marketing lists — Brevo-style manual segments.
               Hidden until tenant has at least one list OR user clicks

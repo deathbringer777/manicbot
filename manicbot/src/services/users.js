@@ -374,6 +374,74 @@ export async function getUser(ctx, cid) {
   return { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at, tosAcceptedAt: row.tos_accepted_at };
 }
 
+/**
+ * 0074 — return the favorite-master chat id for this user in the current
+ * tenant, or null if neither a manual pin nor a derived favorite exists.
+ *
+ * Lookup order (mirrors admin-app `clients.getFavoriteMasterSuggestion`):
+ *   1. `users.favorite_master_id` — explicit pin set by the salon owner
+ *      in the Client modal. Skipped if the pinned master is archived.
+ *   2. Most-frequent `master_id` across this user's non-cancelled
+ *      appointments. Top-1 by visit count, skipping archived masters.
+ *
+ * Returns null when:
+ *   - The Worker has no D1 binding (legacy KV-only context).
+ *   - The user has no rows for either lookup.
+ *   - All candidates resolve to archived / missing masters.
+ *
+ * Cross-channel: identity collapses to one (tenant_id, chat_id) row.
+ * The same Telegram chat id resolves through phone/email match if the
+ * salon staff manually linked them in the dashboard.
+ */
+export async function getFavoriteMasterId(ctx, cid) {
+  if (!ctx?.db || !ctx?.tenantId) return null;
+  // 1. Manual pin.
+  const pinRow = await dbGet(
+    ctx,
+    'SELECT favorite_master_id FROM users WHERE tenant_id = ? AND chat_id = ?',
+    ctx.tenantId, cid,
+  );
+  const pinned = pinRow?.favorite_master_id ?? null;
+  if (pinned != null) {
+    const m = await dbGet(
+      ctx,
+      'SELECT chat_id, archived_at FROM masters WHERE tenant_id = ? AND chat_id = ?',
+      ctx.tenantId, pinned,
+    );
+    if (m && m.archived_at == null) return Number(m.chat_id);
+  }
+  // 2. Derived from history. We pull every non-cancelled (tenant, chat,
+  // master) row and aggregate in JS instead of using GROUP BY — the
+  // per-client appointment count is small (tens, maybe hundreds of rows
+  // over a lifetime), and the in-JS aggregation keeps us portable to the
+  // mock D1 used in tests (which doesn't parse GROUP BY). One row per
+  // appointment scans the existing idx_apt_tenant_chat index.
+  const rows = await dbAll(
+    ctx,
+    `SELECT master_id FROM appointments
+      WHERE tenant_id = ? AND chat_id = ? AND cancelled = 0 AND master_id IS NOT NULL`,
+    ctx.tenantId, cid,
+  );
+  const counts = new Map();
+  for (const r of rows) {
+    const mid = Number(r.master_id);
+    if (!Number.isFinite(mid)) continue;
+    counts.set(mid, (counts.get(mid) ?? 0) + 1);
+  }
+  const ranked = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  for (const [mid] of ranked) {
+    const m = await dbGet(
+      ctx,
+      'SELECT chat_id, archived_at FROM masters WHERE tenant_id = ? AND chat_id = ?',
+      ctx.tenantId, mid,
+    );
+    if (m && m.archived_at == null) return Number(m.chat_id);
+  }
+  return null;
+}
+
 export async function saveUser(ctx, cid, d) {
   if (!ctx?.db || !ctx?.tenantId) {
     await kvPut(ctx, `u:${cid}`, d);

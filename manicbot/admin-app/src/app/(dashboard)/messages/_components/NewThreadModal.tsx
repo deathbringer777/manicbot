@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X, User as DmIcon, Users as GroupIcon, Check } from "lucide-react";
+import Link from "next/link";
+import { X, User as DmIcon, Users as GroupIcon, Check, UserPlus } from "lucide-react";
 import { api } from "~/trpc/react";
 
 type Mode = "pick" | "dm" | "group";
@@ -12,12 +13,55 @@ interface Props {
   onCreated: (threadId: string) => void;
 }
 
+/**
+ * Contextual empty-state copy for the staff picker. Falls back to the
+ * "invite via Команда tab" hint whenever there are no DM-able candidates.
+ * Reads `pendingInviteCount` from listStaff so the message can call out
+ * still-pending email invitations instead of looking like a dead end.
+ */
+function EmptyStaffHint({
+  pendingInviteCount,
+  onClose,
+}: {
+  pendingInviteCount: number;
+  onClose: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-center dark:border-slate-700">
+      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+        {pendingInviteCount > 0
+          ? `${pendingInviteCount} ${
+              pendingInviteCount === 1
+                ? "приглашение ещё не принято"
+                : "приглашений ещё не приняты"
+            }`
+          : "Нет других сотрудников"}
+      </p>
+      <p className="mt-1 text-[11px] text-slate-500">
+        {pendingInviteCount > 0
+          ? "Мастера появятся здесь, как только подключатся к панели."
+          : "Пригласите мастеров — после подключения они станут доступны для прямых сообщений."}
+      </p>
+      <Link
+        href="/settings?section=team"
+        onClick={onClose}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-brand-600"
+      >
+        <UserPlus className="h-3 w-3" />
+        Перейти в «Команда»
+      </Link>
+    </div>
+  );
+}
+
 export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<Mode>("pick");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [groupTitle, setGroupTitle] = useState("");
 
   const staffQ = api.messenger.listStaff.useQuery({ tenantId }, { enabled: !!tenantId });
+  const candidates = staffQ.data?.candidates ?? [];
+  const pendingInviteCount = staffQ.data?.pendingInviteCount ?? 0;
   const utils = api.useUtils();
 
   const dmMutation = api.messenger.createStaffDm.useMutation({
@@ -112,10 +156,13 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                     <div key={i} className="h-10 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
                   ))}
                 </div>
-              ) : !staffQ.data?.length ? (
-                <p className="text-center text-xs text-slate-500">Нет других сотрудников</p>
+              ) : !candidates.length ? (
+                <EmptyStaffHint
+                  pendingInviteCount={pendingInviteCount}
+                  onClose={onClose}
+                />
               ) : (
-                staffQ.data.map((u) => (
+                candidates.map((u) => (
                   <button
                     key={u.id}
                     type="button"
@@ -164,8 +211,8 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
 
             <p className="mb-2 mt-3 text-xs text-slate-500">Участники</p>
             <div className="max-h-60 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
-              {staffQ.data?.length ? (
-                staffQ.data.map((u) => {
+              {candidates.length ? (
+                candidates.map((u) => {
                   const selected = selectedIds.includes(u.id);
                   return (
                     <button
@@ -192,7 +239,10 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                   );
                 })
               ) : (
-                <p className="text-center text-[11px] text-slate-500">Нет других сотрудников</p>
+                <EmptyStaffHint
+                  pendingInviteCount={pendingInviteCount}
+                  onClose={onClose}
+                />
               )}
             </div>
 

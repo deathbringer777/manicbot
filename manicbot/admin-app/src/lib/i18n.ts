@@ -1019,6 +1019,17 @@ const translations = {
   "master.webBadge":              { ru: "Web",                    ua: "Web",                    en: "Web",                   pl: "Web" },
   "master.done":                  { ru: "Готово",                 ua: "Готово",                 en: "Done",                  pl: "Gotowe" },
 
+  // ── Master-side "show my password" card (Profile tab) ───────────────────────
+  "master.peekPassword.title":     { ru: "Мой пароль для входа",  ua: "Мій пароль для входу",  en: "My login password",     pl: "Moje hasło logowania" },
+  "master.peekPassword.subtitle":  { ru: "Этот пароль выдал салон при создании аккаунта. Сохрани его в менеджер паролей и можешь сменить через смену пароля.", ua: "Цей пароль видав салон під час створення акаунту. Збережи його у менеджер паролів і можеш змінити через зміну пароля.", en: "This is the password the salon issued when your account was created. Save it to a password manager — you can rotate it via the standard change-password flow.", pl: "To hasło wydane przez salon przy tworzeniu konta. Zapisz je w menedżerze haseł — możesz je zmienić przez standardowy proces zmiany hasła." },
+  "master.peekPassword.show":      { ru: "Показать пароль",        ua: "Показати пароль",        en: "Show password",         pl: "Pokaż hasło" },
+  "master.peekPassword.hide":      { ru: "Скрыть",                 ua: "Сховати",                en: "Hide",                  pl: "Ukryj" },
+  "master.peekPassword.copied":    { ru: "Скопировано",            ua: "Скопійовано",            en: "Copied",                pl: "Skopiowano" },
+  "master.peekPassword.errNotVerified": { ru: "Сначала подтверди email — кнопка появится после верификации.", ua: "Спочатку підтверди email — кнопка з'явиться після верифікації.", en: "Verify your email first — the button activates after verification.", pl: "Najpierw potwierdź email — przycisk pojawi się po weryfikacji." },
+  "master.peekPassword.errNotVaulted":  { ru: "Пароль недоступен для просмотра. Попроси салон сбросить пароль или восстанови его через «забыл пароль».", ua: "Пароль недоступний для перегляду. Попроси салон скинути пароль або відновіть його через «забув пароль».", en: "This password isn't recoverable. Ask the salon to reset it, or use forgot-password to set a new one.", pl: "Tego hasła nie można odzyskać. Poproś salon o reset albo użyj opcji „nie pamiętam hasła”." },
+  "master.peekPassword.errNotOwned":    { ru: "Эта функция работает только для аккаунтов, созданных салоном.", ua: "Ця функція працює лише для акаунтів, створених салоном.", en: "This feature works only for accounts the salon created.", pl: "Ta funkcja działa tylko dla kont utworzonych przez salon." },
+  "master.peekPassword.errGeneric":     { ru: "Не удалось получить пароль. Попробуй ещё раз.", ua: "Не вдалося отримати пароль. Спробуй ще раз.", en: "Could not retrieve the password. Please try again.", pl: "Nie udało się pobrać hasła. Spróbuj ponownie." },
+
   // ── Master detail modal (owner-side edit, parity with Clients tab) ─────────
   "masterDetail.field.name":          { ru: "Имя",            ua: "Ім'я",         en: "Name",          pl: "Imię" },
   "masterDetail.field.tgUsername":    { ru: "Telegram",       ua: "Telegram",     en: "Telegram",      pl: "Telegram" },

@@ -1277,8 +1277,23 @@ export const salonRouter = createTRPCRouter({
       const syntheticChatId = 10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
 
       const sanitizedName = sanitizeText(input.name, 200);
-      // Insert web_users
-      await ctx.db.insert(webUsers).values({
+
+      // Decide permission set up-front so the batch is one shot.
+      let permsToGrant: PermissionKey[] = [];
+      if (input.permissionTemplate === "default") permsToGrant = MASTER_DEFAULT;
+      else if (input.permissionTemplate === "stylist_plus") permsToGrant = PERMISSION_TEMPLATES.stylist_plus;
+      else if (input.permissionTemplate === "read_only") permsToGrant = PERMISSION_TEMPLATES.read_only;
+
+      // Build every INSERT as a single D1 batch so the four touched tables
+      // (web_users, masters, tenant_roles, tenant_member_permissions) commit
+      // all-or-nothing. Pre-fix: web_users row was written first, and if any
+      // subsequent INSERT threw (e.g. a missing migration column) we'd leave
+      // an orphan web_users row that blocked retries with "email already
+      // exists". Found in prod when migration 0074 was missing on D1 and the
+      // master Drizzle schema referenced telegram_chat_id even though the
+      // INSERT didn't list it — the partial-state bug was the real damage,
+      // the migration was just the trigger.
+      const insertWebUser = ctx.db.insert(webUsers).values({
         id,
         email: login,
         passwordHash,
@@ -1286,18 +1301,17 @@ export const salonRouter = createTRPCRouter({
         role: "master",
         tenantId: input.tenantId,
         name: sanitizedName,
-        emailVerified: input.email ? 0 : 1, // generated emails don't need verification
+        // Synthetic *.salon.manicbot.local mailboxes are auto-verified
+        // (no real inbox to confirm); real addresses follow the standard
+        // verification flow before login.
+        emailVerified: input.email ? 0 : 1,
         createdAt: now,
         updatedAt: now,
       });
-
-      // Insert masters — bind to the just-created webUser so that S-01/S-03
-      // authorization works for invited multi-master tenants out of the box.
-      // isSynthetic=1 because chatId is synthetic — 0052 migration adds
-      // an explicit flag so cron post-visit + Telegram-dependent jobs
-      // skip these rows.
-      // 0062: origin='salon_created' — salon owns this account fully.
-      await ctx.db.insert(masters).values({
+      // isSynthetic=1 because chatId is synthetic (0052). origin='salon_created'
+      // — salon owns credentials and may peek/reset via OTP (0062 + 0066).
+      // webUserId binds master row to the auth identity for S-01/S-03 checks.
+      const insertMaster = ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: syntheticChatId,
         name: sanitizedName,
@@ -1307,21 +1321,11 @@ export const salonRouter = createTRPCRouter({
         isSynthetic: 1,
         origin: "salon_created",
       });
-
-      // Assign tenant_roles
-      await ctx.db.insert(tenantRoles)
+      const insertTenantRole = ctx.db.insert(tenantRoles)
         .values({ tenantId: input.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
         .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
-
-      // Grant default permission set so the salon-invited master can access
-      // the unified admin permission system (0063). 'custom' = no rows; owner
-      // configures via Staff tab. Other templates pull from PERMISSION_TEMPLATES.
-      let permsToGrant: PermissionKey[] = [];
-      if (input.permissionTemplate === "default") permsToGrant = MASTER_DEFAULT;
-      else if (input.permissionTemplate === "stylist_plus") permsToGrant = PERMISSION_TEMPLATES.stylist_plus;
-      else if (input.permissionTemplate === "read_only") permsToGrant = PERMISSION_TEMPLATES.read_only;
-      for (const p of permsToGrant) {
-        await ctx.db.insert(tenantMemberPermissions).values({
+      const permInserts = permsToGrant.map((p) =>
+        ctx.db.insert(tenantMemberPermissions).values({
           tenantId: input.tenantId,
           webUserId: id,
           permission: p,
@@ -1330,6 +1334,47 @@ export const salonRouter = createTRPCRouter({
         }).onConflictDoUpdate({
           target: [tenantMemberPermissions.tenantId, tenantMemberPermissions.webUserId, tenantMemberPermissions.permission],
           set: { grantedAt: now, grantedBy: ctx.webUser!.id },
+        }),
+      );
+
+      try {
+        // D1 batch is atomic — first failure rolls back every prior statement
+        // in the same batch. Fall back to sequential awaits when running
+        // outside D1 (tests against the mock db, or libsql integration).
+        const batchCapable = typeof (ctx.db as unknown as { batch?: unknown }).batch === "function";
+        if (batchCapable) {
+          const batch = [insertWebUser, insertMaster, insertTenantRole, ...permInserts] as unknown as [unknown, ...unknown[]];
+          await (ctx.db as unknown as { batch: (b: typeof batch) => Promise<unknown> }).batch(batch);
+        } else {
+          await insertWebUser;
+          await insertMaster;
+          await insertTenantRole;
+          for (const p of permInserts) await p;
+        }
+      } catch (e) {
+        // Surface the real failure to the operator (logs + God Mode /errors)
+        // while keeping a clean user-facing message. Best-effort cleanup of
+        // any partial state when the runtime didn't give us atomicity.
+        log.error(
+          "salon.createMasterAccount.insert",
+          e instanceof Error ? e : new Error(String(e)),
+          { tenantId: input.tenantId, login },
+        );
+        try { await ctx.db.delete(webUsers).where(eq(webUsers.id, id)); } catch { /* noop */ }
+        try {
+          await ctx.db.delete(masters).where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, syntheticChatId)));
+        } catch { /* noop */ }
+        try {
+          await ctx.db.delete(tenantRoles).where(and(eq(tenantRoles.tenantId, input.tenantId), eq(tenantRoles.chatId, syntheticChatId)));
+        } catch { /* noop */ }
+        const msg = e instanceof Error ? e.message : String(e);
+        // BAD_REQUEST keeps the message visible (errorFormatter doesn't
+        // sanitize non-INTERNAL_SERVER_ERROR codes). The message includes
+        // the original DB error so the operator can act on it without
+        // scraping logs.
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Не удалось создать аккаунт мастера: ${msg.slice(0, 200)}`,
         });
       }
 

@@ -24,7 +24,7 @@ describe('isAdminAppPath — /plugins', () => {
   });
 
   it('forwards /plugin/:slug (singular runtime-open route) to admin-app', () => {
-    expect(isAdminAppPath('/plugin/google-calendar')).toBe(true);
+    expect(isAdminAppPath('/plugin/task-board')).toBe(true);
     expect(isAdminAppPath('/plugin/no-show-shield')).toBe(true);
   });
 

@@ -45,11 +45,11 @@ function RoleBadge({ role }: { role: string }) {
     system_admin: t("gmRoleReq.roleAdmin", lang),
   };
   const colors: Record<string, string> = {
-    tenant_owner: "bg-cyan-500/20 text-cyan-400",
-    master: "bg-violet-500/20 text-violet-400",
-    support: "bg-purple-500/20 text-purple-400",
-    technical_support: "bg-amber-500/20 text-amber-300",
-    system_admin: "bg-amber-500/20 text-amber-400",
+    tenant_owner: "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-400",
+    master: "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
+    support: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400",
+    technical_support: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
+    system_admin: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400",
   };
   return (
     <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${colors[role] ?? "bg-slate-500/20 text-slate-400"}`}>

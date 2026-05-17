@@ -139,7 +139,7 @@ describe("usePinnedPlugins — cross-tenant isolation", () => {
   });
 
   it("server sync mirrors to tenant-scoped localStorage key, not global key", async () => {
-    _serverPins["t_salon_a"] = ["quick-notes"];
+    _serverPins["t_salon_a"] = ["task-board"];
     mockTenantId = "t_salon_a";
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {

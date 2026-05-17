@@ -30,15 +30,15 @@ import { renderWithLang, setDarkMode } from "./helpers/renderWithLang";
 import type { CatalogCard } from "@plugins/types";
 
 const card: CatalogCard = {
-  slug: "quick-notes",
+  slug: "task-board",
   category: "productivity",
   status: "live",
-  iconName: "StickyNote",
-  iconTint: "#f59e0b",
-  name: "Quick Notes",
-  tagline: "Capture ideas fast",
-  description: "Simple notepad in the panel",
-  keywords: ["notes"],
+  iconName: "LayoutGrid",
+  iconTint: "#3b82f6",
+  name: "Task Board",
+  tagline: "Kanban board for internal to-dos",
+  description: "Three columns: To do / In progress / Done.",
+  keywords: ["tasks", "kanban"],
   billingLabel: "Free",
   billingModel: "free",
   lock: { kind: "none" },

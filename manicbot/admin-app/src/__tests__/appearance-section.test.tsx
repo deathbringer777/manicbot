@@ -3,6 +3,19 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from "vite
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import React from "react";
 
+// `useNavItems` (called by AppearanceSection's new BottomNav section after the
+// PR #99 sidebar-mirroring landed on main) does `api.plugins.getInstalled.useQuery`.
+// happy-dom tests don't have a tRPC provider — stub the only call this surface uses.
+vi.mock("~/trpc/react", () => ({
+  api: {
+    plugins: {
+      getInstalled: {
+        useQuery: () => ({ data: [], isLoading: false }),
+      },
+    },
+  },
+}));
+
 import { AppearanceSection } from "~/components/settings/sections/AppearanceSection";
 import { RoleContext } from "~/components/RoleContext";
 import type { RoleContextValue } from "~/components/RoleContext";
@@ -176,10 +189,11 @@ describe("AppearanceSection — default-tab dropdown", () => {
     fireEvent.click(screen.getByRole("button", { name: /Боковая панель/ }));
 
     // The sidebar list renders one row per togglable tab; locate the billing row
-    // by its label text and click its toggle (the rightmost button in the row).
+    // by its label text and click its Switch (Switch primitive uses role="switch"
+    // after the PR #114 unification — was a plain <button> in #122's original).
     const billingRow = screen.getByText("Биллинг").closest("div");
     expect(billingRow).toBeTruthy();
-    const toggle = within(billingRow as HTMLElement).getByRole("button");
+    const toggle = within(billingRow as HTMLElement).getByRole("switch");
     fireEvent.click(toggle);
 
     // defaultTab in storage should reset to "" (the new "not selected" default).

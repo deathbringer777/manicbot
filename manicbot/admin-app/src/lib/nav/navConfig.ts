@@ -50,6 +50,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.users",         href: "/users",              icon: Users,           labelKey: "Users",            roles: ["system_admin"], group: "management" },
   { id: "god.appointments",  href: "/appointments",       icon: CalendarDays,    labelKey: "Appointments",     roles: ["system_admin"], group: "management" },
   { id: "god.conversations", href: "/conversations",      icon: MessageSquare,   labelKey: "Inbox",            roles: ["system_admin"], group: "management" },
+  { id: "god.messages",      href: "/messages",            icon: MessageSquare,   labelKey: "Messages",         roles: ["system_admin"], group: "management" },
   { id: "god.roleRequests",  href: "/dashboard?tab=role-requests", icon: ArrowLeftRight, labelKey: "Role Requests", roles: ["system_admin"], group: "management" },
   { id: "god.leads",         href: "/dashboard?tab=leads", icon: Inbox,             labelKey: "Leads",            roles: ["system_admin"], group: "management" },
   { id: "god.agents",        href: "/agents",             icon: UserCog,         labelKey: "Agents",           roles: ["system_admin"], group: "management" },
@@ -67,11 +68,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "salon.services",      href: "/dashboard?tab=services",       icon: Scissors,      labelKey: "Services",      roles: ["tenant_owner"], hideable: true },
   { id: "salon.masters",       href: "/dashboard?tab=masters",        icon: UserRound,     labelKey: "Masters",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.clients",       href: "/dashboard?tab=clients",        icon: Users,         labelKey: "Clients",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.billing",       href: "/dashboard?tab=billing",        icon: Wallet,        labelKey: "Billing",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.channels",      href: "/dashboard?tab=channels",       icon: MessageSquare, labelKey: "Channels",      roles: ["tenant_owner"], hideable: true },
   { id: "salon.analytics",     href: "/dashboard?tab=analytics",      icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
   { id: "salon.reviews",       href: "/dashboard?tab=reviews",        icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.publicProfile", href: "/dashboard?tab=public_profile", icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
+  { id: "salon.messages",      href: "/messages",                     icon: MessageSquare, labelKey: "Messages",      roles: ["tenant_owner"], hideable: true },
   { id: "salon.marketing",     href: "/marketing",                    icon: Megaphone,     labelKey: "Marketing",     roles: ["tenant_owner"], hideable: true },
   { id: "salon.plugins",       href: "/plugins",                      icon: Puzzle,        labelKey: "Plugins",       roles: ["tenant_owner"], hideable: true },
 
@@ -83,6 +84,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "master.reviews",  href: "/dashboard?tab=reviews",      icon: Star,          labelKey: "Reviews",  roles: ["master"] },
   { id: "master.services", href: "/dashboard?tab=services",     icon: Scissors,      labelKey: "Services", roles: ["master"], requiresPersonalTenant: true },
   { id: "master.profile",  href: "/dashboard?tab=profile",      icon: UserRound,     labelKey: "Profile",  roles: ["master"] },
+  { id: "master.messages", href: "/messages",                   icon: MessageSquare, labelKey: "Messages", roles: ["master"] },
   { id: "master.plugins",  href: "/plugins",                    icon: Puzzle,        labelKey: "Plugins",  roles: ["master"] },
 
   // ── Support ──

@@ -96,6 +96,27 @@ The new helper `encryptBotTokenForWorker` mirrors the Worker's HKDF-SHA256 + AES
 ### H4 — Support router uses `publicProcedure` ✅ FIXED
 **Verified:** `manicbot/admin-app/src/server/api/routers/support.ts:34,42,71` and onwards — every procedure now uses `protectedProcedure`. `assertSupport(ctx)` in-body check retained for role granularity.
 
+### H7 — Salon Day-view appointment status mutations gated by `adminProcedure` (silent 403 in production) ✅ FIXED (2026-05-16)
+**Where:** `manicbot/admin-app/src/components/dashboard-ui/AppointmentDetailPanel.tsx:146-149` and the `salon.markDone` / `salon.confirmAppointment` / `salon.rejectAppointment` procedures that now live in `manicbot/admin-app/src/server/api/routers/salon.ts:234-377`.
+
+**What:** The rich appointment-detail panel on `SalonDayView` rendered three pill-buttons ("Выполнено", "Клиент не пришёл", "Мастер не пришёл") plus the existing Confirm / Mark-done variants. Every button called `api.appointments.updateStatus` or `api.appointments.markNoShow` — both `adminProcedure`-gated (system_admin / support / technical_support only). Salon owners (`tenant_owner`) — the actual users of `/dashboard` — were silently rejected by tRPC with FORBIDDEN. The mutation never reached D1, no client notification fired, and the UI showed no error because the panel's `onError` was a silent passthrough. Net effect: the buttons looked functional but the appointment status never changed and no message reached the client.
+
+This is a confidentiality / availability defect. No data leaked, but every "mark done" / "no-show" decision the salon owner believed they made was lost, including the analytics + lifetime_visits side-effects that downstream features (review prompts, repeat-customer reporting) depend on.
+
+**Fix:** The panel now calls `api.salon.confirmAppointment / markDone / markNoShow / cancelAppointment` — all `tenantOwnerProcedure`-gated, all scoping every `UPDATE appointments` WHERE clause with `(id = ? AND tenant_id = ?)`. The legacy `appointments.updateStatus / markNoShow` (adminProcedure) are retained for the God Mode `/appointments` page only. New mutations validate:
+- status transition is legal (`pending → confirmed`, `confirmed → done`, etc. — others throw `invalid_status_transition`)
+- `markDone` refuses when `apt.ts > now` (`cannot_mark_done_before_start`) to prevent accidental "mark done at 9am for a 5pm appointment" mistakes from the dashboard
+- master-scoped variants (`master.confirmAppointment` / `markDone`) re-use the existing `assertCallerIsMaster` IDOR guard so a salon-employed master can only mutate their own appointments
+
+Side-effect dispatch is unified in `manicbot/src/services/appointmentAutomations.js` (`dispatchAppointmentAutomation`). Every status change funnels through it: `lifetime_visits++`, reminder cleanup, `analytics_events` row, marketing-automations lookup, and the default client notification. Default copy lives in one place; the marketing module overrides via `marketing_automations` rows in a follow-up.
+
+**Verification:**
+- `manicbot/admin-app/src/__tests__/salon-status-mutations.test.ts` — 16 tests; cross-tenant isolation, status-transition guards, `notifyWorker` invocation per action.
+- `manicbot/admin-app/src/__tests__/master-status-mutations.test.ts` — 7 tests; per-master IDOR enforcement.
+- `manicbot/test/admin-appointment-action-status.test.js` — Worker handler tests for `done` / `no_show_client` / `no_show_master`; unknown actions now return `400 UNKNOWN_APPOINTMENT_ACTION`.
+- `manicbot/test/appointment-automations-dispatcher.test.js` — dispatcher fires lifetime_visits update, reminder cleanup, analytics, and the correct default message per event type.
+- Full suites: admin-app 3918/3918 green, Worker 2082/2082 green, `npx tsc --noEmit` clean, `check-schema` OK (68 tables), `check-tenant-isolation` clean (allowlist entry for `salon.ts` cross-tenant bot collision check moved 964 → 1074 to reflect line drift).
+
 ### H5 — `INSTAGRAM_ACCESS_TOKEN` env-var fallback ✅ FIXED
 **Verified:** `manicbot/src/http/metaWebhooksHttp.js:146-150` — if `channelConfig.token` is unset, code logs warning + error and `continue`s, no platform-wide fallback. The fallback to `env.INSTAGRAM_ACCESS_TOKEN` is removed; comment confirms "INSTAGRAM_ACCESS_TOKEN platform fallback removed; set token via POST /admin/ig-token".
 

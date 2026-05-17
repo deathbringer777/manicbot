@@ -42,7 +42,7 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
 
   return (
     <div
-      className={`glass-card rounded-xl border-l-2 ${border} overflow-hidden transition ${
+      className={`glass-card rounded-xl border-l-2 ${border} transition ${
         isTerminal ? "opacity-50" : ""
       }`}
       data-testid="apt-card"

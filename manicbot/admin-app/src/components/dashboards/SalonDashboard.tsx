@@ -17,7 +17,9 @@ import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
-import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
+import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
+import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
+import { Bell, Repeat } from "lucide-react";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
@@ -25,6 +27,13 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
+import {
+  applyPendingStatusChanges as mergeStatusPatches,
+  buildCancelPatch,
+  buildStatusChangePatch,
+  buildNoShowPatch,
+  type PendingStatusPatches,
+} from "~/lib/optimisticStatusMerge";
 import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
@@ -39,10 +48,11 @@ import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDialog";
 import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
+import { ReferralOverviewTeaser } from "~/components/dashboard/ReferralOverviewTeaser";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
-import { BillingTabContent } from "~/components/dashboard/BillingTabContent";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { EmptyState } from "~/components/ui/EmptyState";
+import { Switch } from "~/components/ui/Switch";
 import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 import { NAIL_EMOJIS } from "~/lib/appointments";
@@ -59,7 +69,7 @@ import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "billing" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
@@ -1088,10 +1098,12 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               <p className="text-sm font-medium text-slate-900 dark:text-white">{t("salon.publicProfile.showInCatalog", lang)}</p>
               <p className="text-xs text-slate-500">{t("salon.publicProfile.findInSearch", lang)}</p>
             </div>
-            <button onClick={() => setIsPublic((v) => !v)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-700"}`}>
-              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch
+              checked={isPublic}
+              onChange={setIsPublic}
+              aria-label={t("salon.publicProfile.showInCatalog", lang)}
+              data-testid="public-profile-visibility-toggle"
+            />
           </div>
 
           <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
@@ -1239,17 +1251,16 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   return (
                     <div key={day} data-testid={`workhours-row-${day}`} className="flex items-center gap-2">
                       <span className="w-24 shrink-0 text-xs text-slate-700 dark:text-slate-300">{t(`salon.publicProfile.day.${day}`, lang)}</span>
-                      <button
-                        type="button"
-                        aria-label={t("salon.publicProfile.dayOff", lang)}
-                        onClick={() => setWorkHours((prev) => ({
+                      <Switch
+                        size="sm"
+                        checked={!isOff}
+                        onChange={(next) => setWorkHours((prev) => ({
                           ...prev,
-                          [day]: isOff ? { open: "09:00", close: "18:00" } : null,
+                          [day]: next ? { open: "09:00", close: "18:00" } : null,
                         }))}
-                        className={`shrink-0 relative h-5 w-9 rounded-full transition-colors ${isOff ? "bg-slate-300 dark:bg-slate-700" : "bg-brand-500"}`}
-                      >
-                        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isOff ? "translate-x-0.5" : "translate-x-[18px]"}`} />
-                      </button>
+                        aria-label={t("salon.publicProfile.workingDay", lang)}
+                        data-testid={`workhours-toggle-${day}`}
+                      />
                       {isOff ? (
                         <span className="flex-1 text-xs text-slate-500 italic">{t("salon.publicProfile.dayOff", lang)}</span>
                       ) : (
@@ -1542,7 +1553,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "billing", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -1720,17 +1731,67 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // agenda/list rows.
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
-  const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "billing" || tab === "overview" });
+  const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
   const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
   const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
 
+  // Optimistic status state — mirrors `pendingMoves` below, but for status
+  // mutations (confirm / cancel / reject / no-show). Without this the click
+  // → mutate → invalidate → refetch round-trip takes 300–800 ms, during
+  // which the AptCard is visually unchanged and the user reads it as
+  // "nothing happened". Patch shape + merge live in `optimisticStatusMerge`
+  // so AptCard's read contract stays pinned by a unit test.
+  const [pendingStatusChanges, setPendingStatusChanges] = useState<PendingStatusPatches>({});
+
   const updateAptStatus = api.salon.updateAppointmentStatus.useMutation({
-    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+    onMutate: ({ appointmentId, status }) => {
+      setPendingStatusChanges((prev) => ({
+        ...prev,
+        [appointmentId]: status === "cancelled"
+          ? buildCancelPatch()
+          : buildStatusChangePatch(status),
+      }));
+    },
+    onError: (err) => {
+      toast.error(t("salon.apt.statusUpdateFailed", lang), err?.message || undefined);
+    },
+    onSuccess: () => {
+      toast.success(t("salon.apt.statusUpdated", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingStatusChanges((prev) => {
+        const next = { ...prev };
+        delete next[vars.appointmentId];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
   });
   const markNoShow = api.salon.markNoShow.useMutation({
-    onSuccess: () => { utils.salon.getAppointments.invalidate(); todayApts.refetch(); },
+    onMutate: ({ id, noShowBy }) => {
+      setPendingStatusChanges((prev) => ({
+        ...prev,
+        [id]: buildNoShowPatch(noShowBy),
+      }));
+    },
+    onError: (err) => {
+      toast.error(t("salon.apt.noShowFailed", lang), err?.message || undefined);
+    },
+    onSuccess: () => {
+      toast.success(t("salon.apt.statusUpdated", lang));
+    },
+    onSettled: (_data, _err, vars) => {
+      setPendingStatusChanges((prev) => {
+        const next = { ...prev };
+        delete next[vars.id];
+        return next;
+      });
+      utils.salon.getAppointments.invalidate();
+      todayApts.refetch();
+    },
   });
 
   // Drag-to-reschedule optimistic state.
@@ -1800,6 +1861,15 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     });
   };
 
+  // Layer in-flight status mutations onto the appointment arrays — twin of
+  // applyPendingMoves, but for confirm/cancel/no-show. The merged row gets
+  // the new status + cancelled/noShow flags so AptCard.statusKey flips
+  // instantly to the terminal state and the card dims. Merge logic lives in
+  // `~/lib/optimisticStatusMerge` (unit-tested) — this closure just plugs
+  // the current `pendingStatusChanges` state into it.
+  const applyPendingStatusChanges = (rows: any[] | undefined): any[] =>
+    mergeStatusPatches(rows, pendingStatusChanges);
+
   const handleMoveAppointment = (move: MoveCommit) => {
     if (move.toMasterId == null) {
       // Week view drops carry masterId=null (the column is per-day). The
@@ -1848,7 +1918,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { key: "clients", label: t("salon.clients", lang), perm: "clients.view" },
     { key: "analytics", label: `📊 ${t("salon.tabs.analytics", lang)}`, perm: null, ownerOnly: true },
     { key: "promo_codes", label: `🎟 ${t("salon.tabs.promoCodes", lang)}`, perm: null, ownerOnly: true },
-    { key: "billing", label: t("salon.billing", lang), perm: "billing.manage" },
     { key: "channels", label: t("salon.tabs.channels", lang), perm: "settings.manage" },
     { key: "reviews", label: t("salon.tabs.reviews", lang), perm: "reviews.view" },
     { key: "public_profile", label: `🌐 ${t("salon.tabs.publicProfile", lang)}`, perm: "branding.manage" },
@@ -1873,6 +1942,35 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
   // TimeReservationDialog). Cleared on dialog close.
   const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number } | null>(null);
+  // Reminders plugin — FAB-launched modal state.
+  const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
+  // Which plugins are installed for this tenant. Drives the FAB extraItems list.
+  // Skipped (enabled:false) until tenantId is known so we don't fetch on the
+  // public landing pre-auth render.
+  const installedPlugins = api.plugins.getInstalled.useQuery(undefined, {
+    enabled: !!tenantId,
+  });
+  const remindersInstalled = !!installedPlugins.data?.find(
+    (p) => p.pluginSlug === "reminders" && p.enabled === 1,
+  );
+  const fabExtraItems: FabExtraItem[] = remindersInstalled
+    ? [
+        {
+          id: "reminder",
+          icon: Bell,
+          label: "Напоминание",
+          description: "Однократное напоминание для себя или мастера",
+          onClick: () => setReminderModal("reminder"),
+        },
+        {
+          id: "routine",
+          icon: Repeat,
+          label: "Рутина",
+          description: "Циклическое напоминание (например, по будням)",
+          onClick: () => setReminderModal("routine"),
+        },
+      ]
+    : [];
 
   const isTest = useRole().isTest;
 
@@ -1961,6 +2059,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           onTimeReservation={() => setTimeReservationOpen(true)}
           onTimeOff={() => setTimeOffOpen(true)}
           onAddClient={() => setClientFormOpen(true)}
+          extraItems={fabExtraItems}
         />
       )}
 
@@ -1990,6 +2089,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         />
       )}
 
+      {reminderModal && (
+        <ReminderModal
+          tenantId={tenantId}
+          defaultKind={reminderModal}
+          onClose={() => setReminderModal(null)}
+        />
+      )}
+
       {/* ── OVERVIEW ──
           The Overview tab is now a focused two-card surface:
           (1) the merged setup checklist (auto-hides when 10/10 done) and
@@ -1999,6 +2106,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
+          <ReferralOverviewTeaser />
           {dashPrefs.showTodayApts && (
             <>
               {todayApts.isLoading && (
@@ -2014,7 +2122,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                       {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
                     </button>
                   </div>
-                  {[...todayApts.data]
+                  {[...applyPendingStatusChanges(todayApts.data)]
                     .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
                     .map((a: any) => (
                       <AptCard key={a.id} a={a} lang={lang}
@@ -2079,14 +2187,17 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           hiddenServiceIds.size > 0 ||
           masterVis.hiddenMasterIds.size > 0;
 
-        const aptsFiltered = (apts.data ?? []).filter(filterApt);
+        const aptsFiltered = applyPendingStatusChanges((apts.data ?? []).filter(filterApt));
         // applyPendingMoves layers in-flight drag-reschedules on top of the
         // server snapshot so the dragged block visually settles into its
         // new slot immediately (the cache invalidate in onSettled will
         // overwrite with canonical data once the mutation resolves).
-        const dayAptsFiltered = applyPendingMoves((dayApts.data ?? []).filter(filterApt));
-        const weekAptsFiltered = applyPendingMoves((weekApts.data ?? []).filter(filterApt));
-        const calAptsFiltered = (calApts.data ?? []).filter(filterApt);
+        // applyPendingStatusChanges does the same for confirm/cancel/no-show
+        // mutations — without it the user reads the 300–800 ms refetch gap
+        // as "nothing happened" after clicking the status dropdown.
+        const dayAptsFiltered = applyPendingMoves(applyPendingStatusChanges((dayApts.data ?? []).filter(filterApt)));
+        const weekAptsFiltered = applyPendingMoves(applyPendingStatusChanges((weekApts.data ?? []).filter(filterApt)));
+        const calAptsFiltered = applyPendingStatusChanges((calApts.data ?? []).filter(filterApt));
 
         return (
         <div className="flex flex-col lg:flex-row gap-4">
@@ -2374,11 +2485,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── CLIENTS ── */}
       {tab === "clients" && <ClientsTab tenantId={tenantId} />}
-
-      {/* ── BILLING ── */}
-      {tab === "billing" && (
-        <BillingTabContent tenantId={tenantId} billing={billing} lang={lang} />
-      )}
 
       {/* ── REVIEWS ── */}
       {tab === "reviews" && (

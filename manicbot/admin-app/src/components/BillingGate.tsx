@@ -62,7 +62,7 @@ export function BillingGate() {
         </div>
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => router.push("/billing")}
+            onClick={() => router.push("/settings?section=billing")}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-500 transition-colors"
           >
             <CreditCard className="h-4 w-4" />

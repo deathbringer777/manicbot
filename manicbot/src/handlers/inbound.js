@@ -14,6 +14,8 @@ import { dbRunSafe, dbAll } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { randomId } from '../utils/security.js';
 import { getLang, setLang } from '../services/chat.js';
+import { upsertClientConvThreadForInbound } from '../services/messengerThreads.js';
+import { publishToMessengerHub } from '../http/messengerWsHttp.js';
 import { log } from '../utils/logger.js';
 
 const VALID_INBOUND_LANGS = new Set(['ru', 'en', 'ua', 'pl']);
@@ -58,6 +60,39 @@ export async function handleInbound(ctx, inbound) {
 
     // Await side-effects — fast KV/D1 writes, ensures message_window is persisted before send
     await Promise.all(sideEffects).catch(e => log.error('handlers.inbound', e instanceof Error ? e : new Error(String(e.message)), { action: 'side_effect_batch' }));
+
+    // Messenger client_conv thread — runs serially AFTER upsertConversation
+    // resolves so we can link to the canonical conversations.id. Skip callback
+    // events (button presses) — only real user messages should appear in the
+    // unified messenger inbox. Errors are non-fatal: a messenger hiccup must
+    // not 500 the webhook.
+    if (!inbound.callbackData) {
+      try {
+        const result = await upsertClientConvThreadForInbound(ctx, {
+          tenantId: inbound.tenantId,
+          channelType: inbound.channel,
+          channelUserId: String(inbound.channelUserId ?? ''),
+          displayName: inbound.userName ?? null,
+          body: inbound.text ?? '',
+          externalMsgId: inbound.messageId ?? null,
+        });
+        // Phase 3 — push to MessengerHub DO for live fan-out to open
+        // /messages tabs. Best-effort, polling fallback (5s) covers
+        // misses.
+        if (result?.threadId) {
+          await publishToMessengerHub(ctx, inbound.tenantId, {
+            type: 'message.new',
+            threadId: result.threadId,
+            messageId: result.messageId,
+            kind: 'client_conv',
+          }).catch(() => undefined);
+        }
+      } catch (e) {
+        log.error('handlers.inbound',
+          e instanceof Error ? e : new Error(String(e?.message)),
+          { action: 'messenger_thread_upsert' });
+      }
+    }
   }
 
   // Persist the user's preferred language as soon as we know it. The web

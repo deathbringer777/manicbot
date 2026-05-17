@@ -77,6 +77,29 @@ function toStripeLocale(lang?: string): string {
   return map[lang ?? ""] ?? "auto";
 }
 
+/**
+ * Create a one-shot percent-off Stripe Coupon. Used by the referral program
+ * to mint a fresh, single-use coupon per checkout (cleaner than reusing
+ * a long-lived promo code — Stripe charges for redemption history).
+ */
+export async function createOneTimePercentOffCoupon(
+  secretKey: string,
+  opts: { percentOff: number; name: string; metadata?: Record<string, string> },
+): Promise<string> {
+  const data: Record<string, string> = {
+    percent_off: String(opts.percentOff),
+    duration: "once",
+    name: opts.name,
+  };
+  if (opts.metadata) {
+    for (const [k, v] of Object.entries(opts.metadata)) {
+      data[`metadata[${k}]`] = v;
+    }
+  }
+  const coupon = await stripePost<{ id: string }>(secretKey, "/coupons", data);
+  return coupon.id;
+}
+
 export async function createCheckoutSession(
   secretKey: string,
   opts: {
@@ -88,10 +111,12 @@ export async function createCheckoutSession(
     plan: string;
     locale?: string;
     billingCycle?: "monthly" | "annual";
+    couponId?: string;          // referral discount, applied once on this checkout
+    referralId?: string;        // stamped into subscription metadata for webhook routing
   },
 ): Promise<string> {
   const cycle = opts.billingCycle ?? "monthly";
-  const session = await stripePost<{ url: string }>(secretKey, "/checkout/sessions", {
+  const data: Record<string, string> = {
     customer: opts.customerId,
     "line_items[0][price]": opts.priceId,
     "line_items[0][quantity]": "1",
@@ -102,12 +127,20 @@ export async function createCheckoutSession(
     "metadata[tenantId]": opts.tenantId,
     "metadata[plan]": opts.plan,
     "metadata[billingCycle]": cycle,
-    // Subscription metadata — available in subscription.updated
+    // Subscription metadata — available in subscription.updated / invoice.paid
     "subscription_data[metadata][tenantId]": opts.tenantId,
     "subscription_data[metadata][plan]": opts.plan,
     "subscription_data[metadata][billingCycle]": cycle,
     locale: toStripeLocale(opts.locale),
-  });
+  };
+  if (opts.couponId) {
+    data["discounts[0][coupon]"] = opts.couponId;
+  }
+  if (opts.referralId) {
+    data["metadata[referralId]"] = opts.referralId;
+    data["subscription_data[metadata][referralId]"] = opts.referralId;
+  }
+  const session = await stripePost<{ url: string }>(secretKey, "/checkout/sessions", data);
   return session.url;
 }
 
@@ -121,26 +154,34 @@ export async function createEmbeddedCheckoutSession(
     plan: string;
     locale?: string;
     billingCycle?: "monthly" | "annual";
+    couponId?: string;
+    referralId?: string;
   },
 ): Promise<string> {
   const cycle = opts.billingCycle ?? "monthly";
-  const session = await stripePost<{ client_secret: string }>(secretKey, "/checkout/sessions", {
+  const data: Record<string, string> = {
     customer: opts.customerId,
     "line_items[0][price]": opts.priceId,
     "line_items[0][quantity]": "1",
     mode: "subscription",
     ui_mode: "embedded",
     return_url: opts.returnUrl,
-    // Session metadata — available in checkout.session.completed
     "metadata[tenantId]": opts.tenantId,
     "metadata[plan]": opts.plan,
     "metadata[billingCycle]": cycle,
-    // Subscription metadata — available in subscription.updated
     "subscription_data[metadata][tenantId]": opts.tenantId,
     "subscription_data[metadata][plan]": opts.plan,
     "subscription_data[metadata][billingCycle]": cycle,
     locale: toStripeLocale(opts.locale),
-  });
+  };
+  if (opts.couponId) {
+    data["discounts[0][coupon]"] = opts.couponId;
+  }
+  if (opts.referralId) {
+    data["metadata[referralId]"] = opts.referralId;
+    data["subscription_data[metadata][referralId]"] = opts.referralId;
+  }
+  const session = await stripePost<{ client_secret: string }>(secretKey, "/checkout/sessions", data);
   return session.client_secret;
 }
 

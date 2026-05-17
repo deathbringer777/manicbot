@@ -10,6 +10,7 @@ import { AppearanceSection } from "~/components/settings/sections/AppearanceSect
 import { HelpSection } from "~/components/settings/sections/HelpSection";
 import { PlatformSection } from "~/components/settings/sections/PlatformSection";
 import { BillingSection } from "~/components/settings/sections/BillingSection";
+import { ReferralsSection } from "~/components/settings/sections/ReferralsSection";
 import { PluginSettingsSection } from "~/components/settings/PluginSettingsSection";
 
 export default function SettingsPageClient() {
@@ -42,6 +43,8 @@ export default function SettingsPageClient() {
         return <AccountSection />;
       case "billing":
         return effectiveTenantId ? <BillingSection tenantId={effectiveTenantId} /> : null;
+      case "referrals":
+        return <ReferralsSection />;
       case "appearance":
         return <AppearanceSection />;
       case "help":

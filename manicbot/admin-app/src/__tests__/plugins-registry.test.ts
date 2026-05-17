@@ -13,13 +13,13 @@ describe("plugin registry", () => {
     expect(Object.isFrozen(PLUGINS)).toBe(true);
   });
 
-  it("includes the google-calendar plugin", () => {
-    expect(PLUGINS["google-calendar"]).toBeDefined();
-    expect(PLUGINS["google-calendar"]!.manifest.slug).toBe("google-calendar");
+  it("includes the task-board plugin", () => {
+    expect(PLUGINS["task-board"]).toBeDefined();
+    expect(PLUGINS["task-board"]!.manifest.slug).toBe("task-board");
   });
 
   it("getPlugin returns a known plugin by slug", () => {
-    const p = getPlugin("google-calendar");
+    const p = getPlugin("task-board");
     expect(p).not.toBeNull();
     expect(p?.manifest.vendor).toBe("manicbot");
   });

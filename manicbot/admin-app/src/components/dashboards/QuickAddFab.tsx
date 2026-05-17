@@ -8,12 +8,19 @@
  *   │ + Новая запись              │  → onNewBooking
  *   │ ⏸  Резерв времени           │  → onTimeReservation
  *   │ ☕ Перерыв / выходной        │  → onTimeOff
+ *   ├─────────────────────────────┤  ← separator when extraItems present
+ *   │ … plugin-injected items …   │  → each .onClick
  *   └─────────────────────────────┘
  *
  * Mode `client` (0062 — Clients tab): single-action FAB. The menu sheet
  * is bypassed entirely — clicking the FAB fires `onAddClient` directly.
  * This addresses the UX bug where the salon owner could not create a
  * client without first creating an appointment.
+ *
+ * `extraItems` lets installed plugins inject menu rows declaratively (the
+ * Reminders plugin adds "+ Reminder" / "+ Routine"). The FAB itself does
+ * not know about plugins — the caller (SalonDashboard) queries
+ * `plugins.getInstalled` and supplies the list.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -21,10 +28,26 @@ import { Plus, X, Coffee, PauseCircle, UserPlus, type LucideIcon } from "lucide-
 import { t, type Lang } from "~/lib/i18n";
 
 interface Action {
-  id: "newBooking" | "timeReservation" | "timeOff";
+  id: string;
   icon: LucideIcon;
   label: string;
   description: string;
+  disabled?: boolean;
+  comingSoonCopy?: string;
+  onClick?: () => void;
+}
+
+/**
+ * Extra menu items injected by installed plugins. Rendered below the
+ * built-in actions with a 1px separator. Each item is fully owned by the
+ * caller — it brings its own icon, label, description and handler.
+ */
+export interface FabExtraItem {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  description: string;
+  onClick: () => void;
 }
 
 export type QuickAddMode = "booking" | "client";
@@ -36,6 +59,7 @@ interface Props {
   onTimeReservation?: () => void;
   onTimeOff?: () => void;
   onAddClient?: () => void;
+  extraItems?: FabExtraItem[];
 }
 
 export function QuickAddFab({
@@ -45,6 +69,7 @@ export function QuickAddFab({
   onTimeReservation,
   onTimeOff,
   onAddClient,
+  extraItems,
 }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -93,11 +118,21 @@ export function QuickAddFab({
   ];
 
   const handleClick = (a: Action) => {
+    if (a.disabled) return;
     setOpen(false);
     if (a.id === "newBooking") onNewBooking?.();
     else if (a.id === "timeReservation") onTimeReservation?.();
     else if (a.id === "timeOff") onTimeOff?.();
+    else if (a.onClick) a.onClick();
   };
+
+  const extraActions: Action[] = (extraItems ?? []).map((e) => ({
+    id: e.id,
+    icon: e.icon,
+    label: e.label,
+    description: e.description,
+    onClick: e.onClick,
+  }));
 
   // Clients-mode: short-circuit to single action — no menu, no toggle.
   if (mode === "client") {
@@ -141,31 +176,13 @@ export function QuickAddFab({
             </button>
           </div>
           <ul className="py-1">
-            {actions.map((a) => {
-              const Icon = a.icon;
-              return (
-                <li key={a.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleClick(a)}
-                    data-testid={`quick-add-${a.id}`}
-                    className="w-full text-left flex items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.04]"
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/10 text-brand-500 dark:text-brand-400 shrink-0">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white block">
-                        {a.label}
-                      </span>
-                      <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                        {a.description}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {actions.map((a) => renderActionRow(a, handleClick))}
+            {extraActions.length > 0 && (
+              <>
+                <li className="my-1 border-t border-slate-100 dark:border-white/5" aria-hidden="true" />
+                {extraActions.map((a) => renderActionRow(a, handleClick))}
+              </>
+            )}
           </ul>
         </div>
       )}
@@ -186,5 +203,45 @@ export function QuickAddFab({
         <span className="hidden sm:inline">+ {t("appointments.newBooking", lang)}</span>
       </button>
     </div>
+  );
+}
+
+function renderActionRow(a: Action, handleClick: (a: Action) => void) {
+  const Icon = a.icon;
+  const isDisabled = !!a.disabled;
+  return (
+    <li key={a.id}>
+      <button
+        type="button"
+        disabled={isDisabled}
+        onClick={() => handleClick(a)}
+        data-testid={`quick-add-${a.id}`}
+        data-disabled={isDisabled ? "1" : "0"}
+        className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors ${
+          isDisabled
+            ? "opacity-60 cursor-not-allowed"
+            : "hover:bg-slate-50 dark:hover:bg-white/[0.04]"
+        }`}
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500/10 text-brand-500 dark:text-brand-400 shrink-0">
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">
+              {a.label}
+            </span>
+            {isDisabled && a.comingSoonCopy && (
+              <span className="text-[9px] uppercase tracking-wide font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5">
+                {a.comingSoonCopy}
+              </span>
+            )}
+          </span>
+          <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+            {a.description}
+          </span>
+        </span>
+      </button>
+    </li>
   );
 }

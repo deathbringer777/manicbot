@@ -26,25 +26,25 @@ describe("Plugin lifecycle end-to-end", () => {
     //
     // Each mutation returns {ok:true} and increments insertCalls/updateCalls/deleteCalls.
 
+    // message-templates has minPlan="any", so no plan-gate select fires.
     const { db, insertCalls, updateCalls, deleteCalls } = createDbMock([
-      [{ plan: "pro" }], // install — plan lookup
       [],                // install — dup check
       [{
-        id: "pi_1", tenantId: "t_pro", pluginSlug: "google-calendar",
+        id: "pi_1", tenantId: "t_pro", pluginSlug: "message-templates",
         enabled: 1, version: "1.0.0", installedBy: "w_owner",
         installedAt: 1000, updatedAt: 1000, settingsJson: null,
         billingState: "not_applicable",
         stripeSubscriptionItemId: null, stripePaymentIntentId: null,
       }], // disable — load install
       [{
-        id: "pi_1", tenantId: "t_pro", pluginSlug: "google-calendar",
+        id: "pi_1", tenantId: "t_pro", pluginSlug: "message-templates",
         enabled: 0, version: "1.0.0", installedBy: "w_owner",
         installedAt: 1000, updatedAt: 1000, settingsJson: null,
         billingState: "not_applicable",
         stripeSubscriptionItemId: null, stripePaymentIntentId: null,
       }], // enable — load install
       [{
-        id: "pi_1", tenantId: "t_pro", pluginSlug: "google-calendar",
+        id: "pi_1", tenantId: "t_pro", pluginSlug: "message-templates",
         enabled: 1, version: "1.0.0", installedBy: "w_owner",
         installedAt: 1000, updatedAt: 1000, settingsJson: null,
         billingState: "not_applicable",
@@ -53,7 +53,7 @@ describe("Plugin lifecycle end-to-end", () => {
     ]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);
 
-    const installRes = await caller.install({ slug: "google-calendar", tenantId: "t_pro" });
+    const installRes = await caller.install({ slug: "message-templates", tenantId: "t_pro" });
     expect(installRes.id).toMatch(/.+/);
 
     // After install: 2 inserts (install row + installed event)

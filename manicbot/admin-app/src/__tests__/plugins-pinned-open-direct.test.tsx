@@ -15,7 +15,7 @@ vi.mock("~/trpc/react", () => ({
       plugins: {
         listPinned: {
           cancel: () => Promise.resolve(),
-          getData: () => ["quick-notes"],
+          getData: () => ["task-board"],
           setData: () => {},
           invalidate: () => Promise.resolve(),
         },
@@ -23,7 +23,7 @@ vi.mock("~/trpc/react", () => ({
     }),
     plugins: {
       listPinned: {
-        useQuery: () => ({ data: ["quick-notes"], isLoading: false }),
+        useQuery: () => ({ data: ["task-board"], isLoading: false }),
       },
       togglePin: {
         useMutation: () => ({ mutate: () => {}, error: null }),
@@ -47,7 +47,7 @@ describe("PinnedNavSection — href uses singular /plugin/<slug>", () => {
     const links = screen.getAllByTestId("pinned-nav-item");
     expect(links.length).toBeGreaterThan(0);
     const href = links[0]!.getAttribute("href");
-    expect(href).toBe("/plugin/quick-notes");
+    expect(href).toBe("/plugin/task-board");
     expect(href).not.toContain("/plugins/");
   });
 

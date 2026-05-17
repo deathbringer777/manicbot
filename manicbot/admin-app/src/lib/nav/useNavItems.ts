@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Puzzle, type LucideIcon } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
-import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
+import { useDashboardPrefs, BOTTOM_NAV_LIMIT } from "~/lib/useDashboardPrefs";
 import { api } from "~/trpc/react";
 import { getPlugin } from "@plugins/index";
 import type { PluginLang, PluginRole } from "@plugins/types";
@@ -35,8 +35,18 @@ function resolveItem(def: NavItemDef, lang: string): NavItem {
  * - isPersonalTenant (for master services tab)
  * - hiddenTabs (from useDashboardPrefs)
  * - previewMasterId (owner delegating → show master nav)
+ *
+ * `mobileNav` is the ordered list rendered in the mobile bottom-bar /
+ * iPad-portrait bottom-bar. When `bottomNavLayout === "default"` it
+ * mirrors the legacy "first 5 + Settings" slice (zero-regression
+ * baseline). When `"custom"`, it honours the user's saved
+ * `bottomNavOrder` — entries are filtered against the role's allowed
+ * items so a hidden tab can never resurrect via a stale customisation,
+ * Settings is always appended last (chrome safety — the user can't
+ * lock themselves out of the only entry point to this setting), and
+ * the result is hard-capped at `BOTTOM_NAV_LIMIT`.
  */
-export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: NavItem } {
+export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: NavItem; mobileNav: NavItem[] } {
   const { role, isPersonalTenant, previewRole, previewMasterId } = useRole();
   const { lang } = useLang();
   const { prefs: dashPrefs } = useDashboardPrefs();
@@ -128,8 +138,53 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
     const flat = groups.flatMap(g => g.items);
     const settings = resolveItem(SETTINGS_ITEM, lang);
 
-    return { groups, flat, settings };
-  }, [role, previewRole, previewMasterId, isPersonalTenant, lang, dashPrefs.hiddenTabs, installedQ.data]);
+    // ── mobileNav derivation ───────────────────────────────────────
+    // Default path: legacy "first 5 + Settings" slice. Custom path:
+    // honour user-supplied order, drop items the role no longer
+    // exposes, append Settings if the user removed it.
+    const mobileNav: NavItem[] = (() => {
+      if (dashPrefs.bottomNavLayout !== "custom" || dashPrefs.bottomNavOrder.length === 0) {
+        // Zero-regression slice — same logic Shell.tsx used inline.
+        if (flat.length + 1 <= BOTTOM_NAV_LIMIT) {
+          // All items fit including settings — show everything.
+          return [...flat, settings];
+        }
+        const leading = flat.slice(0, Math.max(0, BOTTOM_NAV_LIMIT - 1));
+        return [...leading, settings];
+      }
+      const flatByHref = new Map<string, NavItem>(flat.map((n) => [n.href, n]));
+      const chosen: NavItem[] = [];
+      const seen = new Set<string>();
+      for (const href of dashPrefs.bottomNavOrder) {
+        if (seen.has(href)) continue;
+        const item = flatByHref.get(href);
+        if (!item) continue; // role/plugin no longer exposes this tab
+        seen.add(href);
+        chosen.push(item);
+        if (chosen.length >= BOTTOM_NAV_LIMIT) break;
+      }
+      // Settings is the safety belt — always present, always last,
+      // never countable against BOTTOM_NAV_LIMIT for items the user
+      // explicitly picked.
+      if (!seen.has(settings.href)) {
+        if (chosen.length >= BOTTOM_NAV_LIMIT) chosen.pop();
+        chosen.push(settings);
+      }
+      return chosen;
+    })();
+
+    return { groups, flat, settings, mobileNav };
+  }, [
+    role,
+    previewRole,
+    previewMasterId,
+    isPersonalTenant,
+    lang,
+    dashPrefs.hiddenTabs,
+    dashPrefs.bottomNavOrder,
+    dashPrefs.bottomNavLayout,
+    installedQ.data,
+  ]);
 }
 
 export { getRoleInfo } from "./navConfig";

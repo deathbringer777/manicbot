@@ -31,22 +31,22 @@ function resolveOpenUrl(
 }
 
 describe("resolveOpenUrl", () => {
-  const plainManifest = getPlugin("ai-abuse-monitor")!.manifest;
+  const plainManifest = getPlugin("shift-planner")!.manifest;
 
   it("returns null when not installed", () => {
-    expect(resolveOpenUrl("ai-abuse-monitor", plainManifest, false, false, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("shift-planner", plainManifest, false, false, "system_admin")).toBeNull();
   });
 
   it("returns null when installed but not enabled", () => {
-    expect(resolveOpenUrl("ai-abuse-monitor", plainManifest, true, false, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("shift-planner", plainManifest, true, false, "system_admin")).toBeNull();
   });
 
   it("returns null for a plugin with no runtime, no settingsPanel + no nav", () => {
-    expect(resolveOpenUrl("ai-abuse-monitor", plainManifest, true, true, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("shift-planner", plainManifest, true, true, "system_admin")).toBeNull();
   });
 
   it("returns /plugin/<slug> when plugin has a runtime", () => {
-    const runtimeSlug = "quick-notes";
+    const runtimeSlug = "task-board";
     const m = getPlugin(runtimeSlug)!.manifest;
     expect(resolveOpenUrl(runtimeSlug, m, true, true, "system_admin")).toBe(`/plugin/${runtimeSlug}`);
   });
@@ -54,11 +54,11 @@ describe("resolveOpenUrl", () => {
   it("returns settings URL when plugin has settingsPanel but no runtime", () => {
     const m: PluginManifest = {
       ...plainManifest,
-      slug: "ai-abuse-monitor", // ensure no runtime override
+      slug: "shift-planner", // ensure no runtime override
       capabilities: { settingsPanel: { sectionKey: "plugin:x", componentId: "x.Panel" } },
     };
-    // ai-abuse-monitor has no runtime, so settingsPanel takes precedence
-    expect(resolveOpenUrl("ai-abuse-monitor", m, true, true, "system_admin")).toBe("/settings?section=plugin:x");
+    // shift-planner has no runtime, so settingsPanel takes precedence
+    expect(resolveOpenUrl("shift-planner", m, true, true, "system_admin")).toBe("/settings?section=plugin:x");
   });
 
   it("returns nav[0].href when only nav contributions exist and role matches", () => {
@@ -70,7 +70,7 @@ describe("resolveOpenUrl", () => {
         ],
       },
     };
-    expect(resolveOpenUrl("ai-abuse-monitor", m, true, true, "tenant_owner")).toBe("/plugins/x/settings");
+    expect(resolveOpenUrl("shift-planner", m, true, true, "tenant_owner")).toBe("/plugins/x/settings");
   });
 
   it("nav match respects role filter", () => {
@@ -82,7 +82,7 @@ describe("resolveOpenUrl", () => {
         ],
       },
     };
-    expect(resolveOpenUrl("ai-abuse-monitor", m, true, true, "tenant_owner")).toBeNull();
+    expect(resolveOpenUrl("shift-planner", m, true, true, "tenant_owner")).toBeNull();
   });
 });
 

@@ -56,7 +56,13 @@ describe("dashboardPrefsKey", () => {
 
 describe("loadDashboardPrefs / saveDashboardPrefs", () => {
   it("roundtrip with tenantId", () => {
-    const prefs = { hiddenTabs: ["billing"], hiddenStatCards: [], showTodayApts: false, defaultTab: "overview" };
+    const prefs = {
+      hiddenTabs: ["billing"],
+      showTodayApts: false,
+      defaultTab: "overview",
+      bottomNavOrder: [],
+      bottomNavLayout: "default" as const,
+    };
     saveDashboardPrefs(prefs, "t_a");
     const loaded = loadDashboardPrefs("t_a");
     expect(loaded.hiddenTabs).toEqual(["billing"]);
@@ -64,7 +70,13 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
   });
 
   it("tenant A prefs don't bleed into tenant B", () => {
-    const prefs = { hiddenTabs: ["services"], hiddenStatCards: [], showTodayApts: true, defaultTab: "overview" };
+    const prefs = {
+      hiddenTabs: ["services"],
+      showTodayApts: true,
+      defaultTab: "overview",
+      bottomNavOrder: [],
+      bottomNavLayout: "default" as const,
+    };
     saveDashboardPrefs(prefs, "t_a");
     const b = loadDashboardPrefs("t_b");
     expect(b.hiddenTabs).toEqual([]);
@@ -80,16 +92,6 @@ describe("useDashboardPrefs — tenant isolation", () => {
 
     const { result: b } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_b") });
     expect(b.current.prefs.hiddenTabs).not.toContain("billing");
-  });
-
-  it("hidden stat card for tenant A doesn't affect tenant B", async () => {
-    const { result: a } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_a") });
-
-    act(() => a.current.toggleStatCard("billingPlan"));
-    await waitFor(() => expect(a.current.prefs.hiddenStatCards).toContain("billingPlan"));
-
-    const { result: b } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_b") });
-    expect(b.current.prefs.hiddenStatCards).not.toContain("billingPlan");
   });
 
   it("each tenant writes to its own localStorage key", async () => {

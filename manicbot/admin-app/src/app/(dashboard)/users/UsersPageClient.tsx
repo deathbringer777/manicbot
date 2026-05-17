@@ -42,19 +42,19 @@ function RoleBadge({ role }: { role: string }) {
   const { lang } = useLang();
   if (role === "system_admin")
     return (
-      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 uppercase">
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400 uppercase">
         {t("gmUsers.roleAdminBadge", lang)}
       </span>
     );
   if (role === "technical_support")
     return (
-      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 uppercase">
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 uppercase">
         {t("gmUsers.roleTechSupportBadge", lang)}
       </span>
     );
   if (role === "support")
     return (
-      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-400 uppercase">
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400 uppercase">
         support
       </span>
     );

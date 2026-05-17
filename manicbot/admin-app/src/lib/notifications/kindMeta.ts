@@ -12,6 +12,7 @@
  *   - support.ticket.reply   (support replyToMyTicket fan-out)
  *   - birthday.client        (birthday cron — tenant_owner)
  *   - appointment.created    (notifyAptStaff — master in-app)
+ *   - master.invite          (salon.sendMasterInvitation + auth.getMyRole backfill)
  *   - billing.alert          (future — billing status flip)
  *   - marketing.campaign.sent (future — campaign delivery report)
  */
@@ -24,6 +25,7 @@ import {
   LifeBuoy,
   MessageCircle,
   Star,
+  UserPlus,
 } from "lucide-react";
 
 export type NotifKind = string;
@@ -41,6 +43,7 @@ export interface KindMeta {
     | "marketing"
     | "messenger"
     | "reminder"
+    | "master"
     | "generic";
 }
 
@@ -53,6 +56,7 @@ const META_BY_PREFIX: Array<[string, KindMeta]> = [
   ["messenger.", { icon: MessageCircle, accent: "text-indigo-500 bg-indigo-500/10", category: "messenger" }],
   ["thread.", { icon: MessageCircle, accent: "text-indigo-500 bg-indigo-500/10", category: "messenger" }],
   ["reminder.", { icon: Bell, accent: "text-cyan-500 bg-cyan-500/10", category: "reminder" }],
+  ["master.", { icon: UserPlus, accent: "text-emerald-500 bg-emerald-500/10", category: "master" }],
 ];
 
 const GENERIC: KindMeta = { icon: Bell, accent: "text-slate-500 bg-slate-500/10", category: "generic" };

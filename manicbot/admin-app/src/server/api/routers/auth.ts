@@ -3,6 +3,7 @@ import { webUsers, masters, tenants } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { listPermissions, type PermissionKey } from "~/server/api/permissions";
 import { evaluateTrialState } from "~/lib/billing/trialState";
+import { backfillPendingInviteNotifications } from "~/server/auth/backfillPendingInvites";
 
 export type AppRole =
   | "system_admin"
@@ -180,6 +181,16 @@ export const authRouter = createTRPCRouter({
       try {
         permissions = await listPermissions(ctx, tenantId, ctx.webUser.id);
       } catch { /* non-critical */ }
+    }
+
+    // Fire-and-forget backfill: surface any pending master invitations
+    // for this user's email in the bell. Idempotent on the partial
+    // UNIQUE `(web_user_id, source_slug, source_id, kind)` so re-runs are
+    // no-ops. Recovers the pre-PR-#151 invites that never got their
+    // send-time `notifyWebUser` row, and acts as a safety net for any
+    // future race where the send-time write is lost.
+    if (email) {
+      void backfillPendingInviteNotifications(ctx.db, ctx.webUser.id, email);
     }
 
     return {

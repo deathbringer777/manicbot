@@ -56,15 +56,17 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           name: "Имя (необязательно)",
           namePh: "Анна",
           submit: "Отправить приглашение",
-          successExisting: "Отправлено — у пользователя уже есть аккаунт",
-          successNew: "Отправлено — мы попросили зарегистрироваться",
+          successExisting: "Отправлено — у пользователя уже есть аккаунт. Уведомление появится в его колокольчике и письмом на email.",
+          successNew: "Отправлено — мы попросили зарегистрироваться по ссылке из письма.",
           errorRate: "Слишком много приглашений за час. Подождите.",
           errorDup: "Приглашение уже отправлено. Отмените его и попробуйте снова.",
           errorPersonal: "Нельзя приглашать в персональный салон.",
-          errorOther: "Не удалось отправить. Проверьте формат email.",
+          errorSelf: "Нельзя пригласить самого себя — вы уже владелец салона.",
+          errorBadEmail: "Похоже, в email есть опечатка. Проверьте адрес.",
+          errorOther: "Не удалось отправить. Попробуйте позже.",
           cancel: "Закрыть",
           done: "Готово",
-          hint: "Если у получателя есть аккаунт ManicBot — приглашение придёт в раздел сообщений. Если нет — ему придёт ссылка на регистрацию с предзаполненным email.",
+          hint: "Если у получателя есть аккаунт ManicBot — приглашение появится в его колокольчике (и письмом). Если нет — придёт ссылка на регистрацию с предзаполненным email.",
         };
       case "ua":
         return {
@@ -73,15 +75,17 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           name: "Імʼя (необовʼязково)",
           namePh: "Анна",
           submit: "Надіслати запрошення",
-          successExisting: "Надіслано — у користувача вже є акаунт",
-          successNew: "Надіслано — ми попросили зареєструватися",
+          successExisting: "Надіслано — у користувача вже є акаунт. Сповіщення з'явиться у його дзвіночку та листом на email.",
+          successNew: "Надіслано — ми попросили зареєструватися за посиланням з листа.",
           errorRate: "Забагато запрошень за годину. Зачекайте.",
           errorDup: "Запрошення вже надіслано. Скасуйте його і спробуйте знову.",
           errorPersonal: "Не можна запрошувати в персональний салон.",
-          errorOther: "Не вдалося надіслати. Перевірте формат email.",
+          errorSelf: "Не можна запросити самого себе — ви вже власник салону.",
+          errorBadEmail: "Здається, в email є помилка. Перевірте адресу.",
+          errorOther: "Не вдалося надіслати. Спробуйте пізніше.",
           cancel: "Закрити",
           done: "Готово",
-          hint: "Якщо в одержувача є акаунт ManicBot — запрошення прийде в розділ повідомлень. Якщо ні — йому прийде посилання на реєстрацію з заповненим email.",
+          hint: "Якщо в одержувача є акаунт ManicBot — запрошення з'явиться у його дзвіночку (і листом). Якщо ні — прийде посилання на реєстрацію з заповненим email.",
         };
       case "pl":
         return {
@@ -90,15 +94,17 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           name: "Imię (opcjonalne)",
           namePh: "Anna",
           submit: "Wyślij zaproszenie",
-          successExisting: "Wysłano — użytkownik ma już konto",
-          successNew: "Wysłano — poprosiliśmy o rejestrację",
+          successExisting: "Wysłano — użytkownik ma już konto. Powiadomienie pojawi się w jego dzwonku oraz mailem.",
+          successNew: "Wysłano — poprosiliśmy o rejestrację linkiem z e-maila.",
           errorRate: "Za dużo zaproszeń w godzinę. Poczekaj.",
           errorDup: "Zaproszenie już wysłane. Anuluj je i spróbuj ponownie.",
           errorPersonal: "Nie można zapraszać do osobistego salonu.",
-          errorOther: "Nie udało się wysłać. Sprawdź format email.",
+          errorSelf: "Nie można zaprosić samego siebie — jesteś już właścicielem salonu.",
+          errorBadEmail: "Wygląda na literówkę w adresie. Sprawdź email.",
+          errorOther: "Nie udało się wysłać. Spróbuj później.",
           cancel: "Zamknij",
           done: "Gotowe",
-          hint: "Jeśli odbiorca ma konto ManicBot — zaproszenie trafi do wiadomości. Jeśli nie — otrzyma link rejestracyjny z wypełnionym emailem.",
+          hint: "Jeśli odbiorca ma konto ManicBot — zaproszenie pojawi się w jego dzwonku (i mailem). Jeśli nie — otrzyma link rejestracyjny z wypełnionym e-mailem.",
         };
       default:
         return {
@@ -107,15 +113,17 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           name: "Display name (optional)",
           namePh: "Anna",
           submit: "Send invitation",
-          successExisting: "Sent — recipient already has an account",
-          successNew: "Sent — they've been asked to register",
+          successExisting: "Sent — recipient already has an account. They'll see it in their bell and inbox.",
+          successNew: "Sent — they've been asked to register via the email link.",
           errorRate: "Too many invitations this hour. Try again later.",
           errorDup: "Invitation already pending. Revoke it and try again.",
           errorPersonal: "Cannot invite into a personal-master tenant.",
-          errorOther: "Could not send. Check the email format.",
+          errorSelf: "You can't invite yourself — you're already the salon owner.",
+          errorBadEmail: "Looks like a typo in the email. Double-check.",
+          errorOther: "Could not send. Try again later.",
           cancel: "Close",
           done: "Done",
-          hint: "If the recipient already has a ManicBot account — the invitation lands in their messages. If not — they get a registration link with the email pre-filled.",
+          hint: "If the recipient already has a ManicBot account — the invitation lands in their bell (and inbox). If not — they get a registration link with the email pre-filled.",
         };
     }
   })();
@@ -135,7 +143,17 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
             if (m === "rate_limited") return labels.errorRate;
             if (m === "invitation_already_pending") return labels.errorDup;
             if (m === "personal_tenant_cannot_invite") return labels.errorPersonal;
-            return labels.errorOther;
+            if (m === "cannot_invite_self") return labels.errorSelf;
+            // Zod email validation failure surfaces as a long messages-array
+            // JSON string starting with `[` — show the friendlier copy.
+            if (m.startsWith("[") || /email/i.test(m) && /invalid|format/i.test(m)) {
+              return labels.errorBadEmail;
+            }
+            // Last-resort: show the raw server message in dev / staging so a
+            // future "Не удалось отправить" doesn't hide the real root cause.
+            // Prod still gets the localized fallback, but the message is at
+            // least visible in DevTools and Sentry.
+            return labels.errorOther + (m ? ` (${m.slice(0, 120)})` : "");
           })();
     return (
       <div

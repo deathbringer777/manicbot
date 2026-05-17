@@ -9,8 +9,8 @@
  * marketing-directory sync transparently.
  */
 
-import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { useState, useEffect, useMemo, type FormEvent } from "react";
+import { X, ListChecks, Plus, Check } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -54,11 +54,89 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
   const [dob, setDob] = useState(initial?.dob ?? "");
   const [err, setErr] = useState<string | null>(null);
 
+  // ── Marketing lists (Brevo-style manual segments) ────────────────────────
+  // The form lets the user toggle which lists this client belongs to. On
+  // Save we diff (initial ↔ picked) and call `clients.setListMemberships`
+  // after the main upsert finishes. `creatingList` opens an inline mini-form
+  // so the user can spin up a new list without leaving the modal.
+  const [pickedLists, setPickedLists] = useState<Set<string>>(new Set());
+  const [creatingList, setCreatingList] = useState(false);
+  const [newListName, setNewListName] = useState("");
+
+  const allListsQ = api.marketingTenant.segmentsList.useQuery(
+    { tenantId },
+    { enabled: !!tenantId },
+  );
+  const manualLists = useMemo(
+    () => ((allListsQ.data ?? []) as any[]).filter((s) => s.kind === "manual"),
+    [allListsQ.data],
+  );
+  const currentMembersQ = api.clients.getListMemberships.useQuery(
+    { tenantId, chatId: initial?.chatId ?? 0 },
+    { enabled: isEdit && !!initial?.chatId },
+  );
+  // Seed `pickedLists` once we know the existing memberships (edit mode).
+  // Skip if the user already touched the chips — don't clobber their work
+  // if the query re-fetches.
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (!isEdit) return;
+    if (seeded) return;
+    if (currentMembersQ.data?.segmentIds) {
+      setPickedLists(new Set(currentMembersQ.data.segmentIds));
+      setSeeded(true);
+    }
+  }, [isEdit, seeded, currentMembersQ.data?.segmentIds]);
+
   const utils = api.useUtils();
 
-  const create = api.clients.create.useMutation({
+  function invalidateLists() {
+    void utils.marketingTenant.segmentsList.invalidate({ tenantId });
+    if (isEdit && initial?.chatId) {
+      void utils.clients.getListMemberships.invalidate({ tenantId, chatId: initial.chatId });
+    }
+  }
+
+  const setMembershipsM = api.clients.setListMemberships.useMutation();
+  const createListM = api.marketingTenant.segmentCreate.useMutation({
     onSuccess: (r) => {
+      void utils.marketingTenant.segmentsList.invalidate({ tenantId });
+      setPickedLists((prev) => {
+        const next = new Set(prev);
+        next.add(r.id);
+        return next;
+      });
+      setCreatingList(false);
+      setNewListName("");
+    },
+    onError: (e) => setErr(e.message),
+  });
+
+  async function commitMemberships(chatId: number) {
+    const initialIds = isEdit ? new Set(currentMembersQ.data?.segmentIds ?? []) : new Set<string>();
+    const same =
+      initialIds.size === pickedLists.size &&
+      Array.from(pickedLists).every((id) => initialIds.has(id));
+    if (same) return;
+    try {
+      await setMembershipsM.mutateAsync({
+        tenantId,
+        chatId,
+        segmentIds: Array.from(pickedLists),
+      });
+    } catch (e: any) {
+      // Surface the error but don't block the modal close — the client
+      // itself was already saved. We bubble up to the toast layer if any.
+      // eslint-disable-next-line no-console
+      console.warn("[ClientFormModal] setListMemberships failed", e);
+    }
+    invalidateLists();
+  }
+
+  const create = api.clients.create.useMutation({
+    onSuccess: async (r) => {
       void utils.clients.list.invalidate({ tenantId });
+      await commitMemberships(r.chatId);
       onSaved(r.chatId);
       onClose();
     },
@@ -66,14 +144,35 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
   });
 
   const update = api.clients.update.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       void utils.clients.list.invalidate({ tenantId });
       void utils.clients.get.invalidate({ tenantId, chatId: initial!.chatId });
+      await commitMemberships(initial!.chatId);
       onSaved(initial!.chatId);
       onClose();
     },
     onError: (e) => setErr(e.message || t("appointments.manual.somethingWrong", lang)),
   });
+
+  function toggleList(id: string) {
+    setPickedLists((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function submitNewList(e: FormEvent) {
+    e.preventDefault();
+    if (!newListName.trim()) return;
+    createListM.mutate({
+      tenantId,
+      name: newListName.trim(),
+      kind: "manual",
+      filterJson: "{}",
+    });
+  }
 
   const hasContact = !!(phone.trim() || email.trim() || tg.trim() || ig.trim());
   const valid = name.trim().length > 0 && hasContact;
@@ -235,6 +334,108 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
               />
             </div>
           </div>
+
+          {/* Marketing lists — Brevo-style manual segments.
+              Hidden until tenant has at least one list OR user clicks
+              "Create list" — keeps the form short for tenants who haven't
+              touched the marketing module yet. */}
+          {(manualLists.length > 0 || creatingList) && (
+            <div>
+              <label className={`${LABEL} flex items-center gap-1.5`}>
+                <ListChecks className="h-3.5 w-3.5 text-violet-500" />
+                {t("clients.form.lists", lang)}
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {manualLists.map((l: any) => {
+                  const picked = pickedLists.has(l.id);
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => toggleList(l.id)}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                        picked
+                          ? "border-violet-500 bg-violet-500/15 text-violet-700 dark:text-violet-200"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      {picked && <Check className="h-3 w-3" />}
+                      {l.name}
+                    </button>
+                  );
+                })}
+                {!creatingList ? (
+                  <button
+                    type="button"
+                    onClick={() => setCreatingList(true)}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-violet-300 hover:text-violet-600 dark:border-white/10 dark:hover:border-violet-400/40 dark:hover:text-violet-300"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {t("clients.form.lists.new", lang)}
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder={t("clients.form.lists.newPlaceholder", lang)}
+                      maxLength={120}
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitNewList(e as any);
+                        if (e.key === "Escape") {
+                          setCreatingList(false);
+                          setNewListName("");
+                        }
+                      }}
+                      className="rounded-full border border-violet-300 bg-white px-2.5 py-1 text-[11px] text-slate-900 outline-none focus:border-violet-500 dark:border-violet-400/40 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={submitNewList as any}
+                      disabled={!newListName.trim() || createListM.isPending}
+                      className="rounded-full bg-violet-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+                    >
+                      {createListM.isPending ? "…" : t("common.add", lang)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setCreatingList(false); setNewListName(""); }}
+                      className="rounded-full p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/[0.06]"
+                      aria-label="Cancel"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+              </div>
+              {manualLists.length === 0 && !creatingList && (
+                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                  {t("clients.form.lists.empty", lang)}
+                </p>
+              )}
+            </div>
+          )}
+          {/* If the tenant truly has no lists yet AND the user hasn't started
+              the inline create flow, show a single CTA so they discover the
+              feature without the section taking up form space. */}
+          {manualLists.length === 0 && !creatingList && (
+            <div>
+              <label className={`${LABEL} flex items-center gap-1.5`}>
+                <ListChecks className="h-3.5 w-3.5 text-violet-500" />
+                {t("clients.form.lists", lang)}
+              </label>
+              <button
+                type="button"
+                onClick={() => setCreatingList(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-violet-300 hover:text-violet-600 dark:border-white/10 dark:hover:border-violet-400/40 dark:hover:text-violet-300"
+              >
+                <Plus className="h-3 w-3" />
+                {t("clients.form.lists.new", lang)}
+              </button>
+            </div>
+          )}
 
           <div>
             <label className={LABEL}>{t("clients.form.notes", lang)}</label>

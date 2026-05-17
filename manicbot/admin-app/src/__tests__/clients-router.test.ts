@@ -368,4 +368,82 @@ describe("clientsRouter", () => {
       expect(r.filename).toContain("template");
     });
   });
+
+  // ─── getListMemberships / setListMemberships (0072 manual lists) ───────────
+  describe("getListMemberships", () => {
+    it("404s when the client doesn't exist for this tenant", async () => {
+      const { db } = buildDb([
+        [],                       // users.select → empty (client not found)
+      ]);
+      const caller = createCaller(makeCtx(db) as never);
+      await expect(
+        caller.getListMemberships({ tenantId: TENANT, chatId: 999 }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("returns empty memberships when the client has no marketing_contact_id", async () => {
+      const { db } = buildDb([
+        [{ marketingContactId: null }], // users row exists, no MC link yet
+      ]);
+      const caller = createCaller(makeCtx(db) as never);
+      const r = await caller.getListMemberships({ tenantId: TENANT, chatId: 1 });
+      expect(r).toEqual({ marketingContactId: null, segmentIds: [] });
+    });
+
+    it("returns the segment ids the marketing contact belongs to", async () => {
+      const { db } = buildDb([
+        [{ marketingContactId: 42 }],
+        // Membership JOIN result — list of segmentIds
+        [{ segmentId: "seg_vip" }, { segmentId: "seg_returning" }],
+      ]);
+      const caller = createCaller(makeCtx(db) as never);
+      const r = await caller.getListMemberships({ tenantId: TENANT, chatId: 1 });
+      expect(r.marketingContactId).toBe(42);
+      expect(r.segmentIds.sort()).toEqual(["seg_returning", "seg_vip"]);
+    });
+  });
+
+  describe("setListMemberships", () => {
+    it("404s when the client doesn't exist", async () => {
+      const { db } = buildDb([
+        [],
+      ]);
+      const caller = createCaller(makeCtx(db) as never);
+      await expect(
+        caller.setListMemberships({ tenantId: TENANT, chatId: 999, segmentIds: [] }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("PRECONDITION_FAILED when the client has no marketing_contact_id", async () => {
+      const { db } = buildDb([
+        [{ marketingContactId: null }],
+      ]);
+      const caller = createCaller(makeCtx(db) as never);
+      await expect(
+        caller.setListMemberships({ tenantId: TENANT, chatId: 1, segmentIds: ["seg_a"] }),
+      ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    });
+
+    it("silently drops segment ids that don't exist or aren't manual lists", async () => {
+      const { db, inserts } = buildDb([
+        [{ marketingContactId: 42 }],
+        // tenant segments — only one manual; filter-based one MUST be dropped.
+        [{ id: "seg_real", kind: "manual" }, { id: "seg_filter", kind: "filter" }],
+        // current memberships — empty
+        [],
+        // count after add
+        [{ count: 1 }],
+      ]);
+      const caller = createCaller(makeCtx(db) as never);
+      const r = await caller.setListMemberships({
+        tenantId: TENANT,
+        chatId: 1,
+        segmentIds: ["seg_real", "seg_filter", "seg_doesnt_exist"],
+      });
+      expect(r.added).toBe(1);
+      // Only the manual segment should be inserted into members.
+      expect(inserts.filter((i) => i.values.segmentId === "seg_real")).toHaveLength(1);
+      expect(inserts.find((i) => i.values.segmentId === "seg_filter")).toBeUndefined();
+    });
+  });
 });

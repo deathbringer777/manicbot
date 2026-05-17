@@ -27,6 +27,10 @@ vi.mock("~/trpc/react", () => ({
       clients: {
         list: { invalidate: vi.fn() },
         get: { invalidate: vi.fn() },
+        getListMemberships: { invalidate: vi.fn() },
+      },
+      marketingTenant: {
+        segmentsList: { invalidate: vi.fn() },
       },
     }),
     clients: {
@@ -47,6 +51,22 @@ vi.mock("~/trpc/react", () => ({
           },
           isPending: false,
         }),
+      },
+      // 0072: client lists membership — stubbed as a noop so the form
+      // renders without DB. The router-level tests cover real behavior.
+      getListMemberships: {
+        useQuery: () => ({ data: { marketingContactId: null, segmentIds: [] }, isLoading: false }),
+      },
+      setListMemberships: {
+        useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({ added: 0, removed: 0 }), isPending: false }),
+      },
+    },
+    marketingTenant: {
+      segmentsList: {
+        useQuery: () => ({ data: [], isLoading: false }),
+      },
+      segmentCreate: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
     },
   },

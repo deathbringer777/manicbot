@@ -39,6 +39,8 @@ import {
   masters,
   masterClientBlocks,
   marketingContacts,
+  marketingSegments,
+  marketingSegmentMembers,
 } from "~/server/db/schema";
 import {
   syncMarketingContact,
@@ -716,6 +718,144 @@ export const clientsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       return { data: CLIENT_CSV_TEMPLATE, filename: "clients_template.csv" };
+    }),
+
+  /**
+   * Return the manual-list memberships for a single client.
+   *
+   * Returns `{ marketingContactId, segmentIds }`:
+   *   * `marketingContactId` — needed by the modal so it can call
+   *     `marketingTenant.segmentAddContacts/segmentRemoveContacts` with
+   *     the canonical contact id (not the chat id).
+   *   * `segmentIds` — the manual segments the client is currently in.
+   *
+   * The query is scoped via the parent client row's tenantId; sysadmin /
+   * tenant_owner gates are enforced by `assertTenantOwner`.
+   */
+  getListMemberships: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), chatId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const [clientRow] = await ctx.db
+        .select({ marketingContactId: users.marketingContactId })
+        .from(users)
+        .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, input.chatId)))
+        .limit(1);
+      if (!clientRow) throw new TRPCError({ code: "NOT_FOUND" });
+
+      if (!clientRow.marketingContactId) {
+        return { marketingContactId: null, segmentIds: [] as string[] };
+      }
+
+      // INNER JOIN segments so the WHERE can pin tenant_id at the segment
+      // level — member rows have no tenant column themselves.
+      const rows = await ctx.db
+        .select({ segmentId: marketingSegmentMembers.segmentId })
+        .from(marketingSegmentMembers)
+        .innerJoin(marketingSegments, eq(marketingSegments.id, marketingSegmentMembers.segmentId))
+        .where(and(
+          eq(marketingSegmentMembers.contactId, clientRow.marketingContactId),
+          eq(marketingSegments.tenantId, input.tenantId),
+        ));
+
+      return {
+        marketingContactId: clientRow.marketingContactId,
+        segmentIds: rows.map((r) => r.segmentId),
+      };
+    }),
+
+  /**
+   * Replace the client's manual-list memberships with `segmentIds`.
+   *
+   * Computes the diff against current membership and issues per-segment
+   * INSERT OR IGNORE / DELETE calls. Used by the Edit-client modal where
+   * the user toggles list chips and presses Save once; the modal calls
+   * this AFTER `clients.update` finishes so the marketingContactId is
+   * guaranteed to exist.
+   */
+  setListMemberships: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatId: z.number().int(),
+      segmentIds: z.array(z.string()).max(50),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const [clientRow] = await ctx.db
+        .select({ marketingContactId: users.marketingContactId })
+        .from(users)
+        .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, input.chatId)))
+        .limit(1);
+      if (!clientRow) throw new TRPCError({ code: "NOT_FOUND" });
+      const mcid = clientRow.marketingContactId;
+      if (!mcid) {
+        // Client has no marketing-directory row yet — the marketingSync
+        // helper only seeds one when the client has an actual contact
+        // channel. Refuse loudly so the UI can surface the reason.
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "client_has_no_marketing_contact",
+        });
+      }
+
+      // Validate every supplied segment belongs to this tenant + is a
+      // manual list. We silently drop anything else (filter-based segments
+      // are NOT user-managed memberships).
+      const allowed = await ctx.db
+        .select({ id: marketingSegments.id, kind: marketingSegments.kind })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.tenantId, input.tenantId));
+      const manualIds = new Set(allowed.filter((s) => s.kind === "manual").map((s) => s.id));
+      const target = new Set(input.segmentIds.filter((id) => manualIds.has(id)));
+
+      const current = await ctx.db
+        .select({ segmentId: marketingSegmentMembers.segmentId })
+        .from(marketingSegmentMembers)
+        .innerJoin(marketingSegments, eq(marketingSegments.id, marketingSegmentMembers.segmentId))
+        .where(and(
+          eq(marketingSegmentMembers.contactId, mcid),
+          eq(marketingSegments.tenantId, input.tenantId),
+          eq(marketingSegments.kind, "manual"),
+        ));
+      const currentIds = new Set(current.map((r) => r.segmentId));
+
+      const toAdd = Array.from(target).filter((id) => !currentIds.has(id));
+      const toRemove = Array.from(currentIds).filter((id) => !target.has(id));
+
+      const nowSecs = nowSec();
+      for (const segId of toAdd) {
+        await ctx.db.insert(marketingSegmentMembers).values({
+          segmentId: segId,
+          contactId: mcid,
+          addedAt: nowSecs,
+        });
+        // Recompute denormalized count.
+        const cnt = await ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(marketingSegmentMembers)
+          .where(eq(marketingSegmentMembers.segmentId, segId));
+        await ctx.db.update(marketingSegments)
+          .set({ contactCount: Number(cnt[0]?.count ?? 0), updatedAt: nowSecs })
+          .where(and(eq(marketingSegments.id, segId), eq(marketingSegments.tenantId, input.tenantId)));
+      }
+      for (const segId of toRemove) {
+        await ctx.db.delete(marketingSegmentMembers)
+          .where(and(
+            eq(marketingSegmentMembers.segmentId, segId),
+            eq(marketingSegmentMembers.contactId, mcid),
+          ));
+        const cnt = await ctx.db
+          .select({ count: sql<number>`count(*)` })
+          .from(marketingSegmentMembers)
+          .where(eq(marketingSegmentMembers.segmentId, segId));
+        await ctx.db.update(marketingSegments)
+          .set({ contactCount: Number(cnt[0]?.count ?? 0), updatedAt: nowSecs })
+          .where(and(eq(marketingSegments.id, segId), eq(marketingSegments.tenantId, input.tenantId)));
+      }
+
+      return { added: toAdd.length, removed: toRemove.length };
     }),
 
   /**

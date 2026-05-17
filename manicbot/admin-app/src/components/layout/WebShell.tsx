@@ -21,6 +21,7 @@ import type { NavItem, NavGroup } from "~/lib/nav/useNavItems";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { useNavItems, tNav, getRoleInfo } from "~/lib/nav/useNavItems";
 import { MasterSwitcherInline } from "~/components/layout/Shell";
+import { NotificationBell } from "~/components/layout/NotificationBell";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
@@ -409,6 +410,12 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                   <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-violet-400 animate-pulse" />
                 </button>
               )}
+
+              {/* Notification bell — same component as Telegram Mini App
+                  Shell. Renders unread badge + dropdown of recent
+                  user_notifications. Mounted next to theme toggle per
+                  the design ask. */}
+              <NotificationBell />
 
               {/* Theme toggle */}
               <button

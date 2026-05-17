@@ -122,6 +122,10 @@ export default function DashboardLayout({
   // /messages is the new internal messenger (migration 0067). Same whitelist
   // treatment as /marketing so the role dashboard swap doesn't intercept it.
   const isMessagesPage = pathname === "/messages" || pathname.startsWith("/messages/");
+  // /notifications is the full-history view of the platform bell feed
+  // (PR1 of the notification-center upgrade). Whitelist so every role can
+  // open the page directly from the bell footer link.
+  const isNotificationsPage = pathname === "/notifications" || pathname.startsWith("/notifications/");
 
   // Gate: block dashboard content if email is not verified (except /settings)
   function wrapWithEmailGate(content: React.ReactNode) {
@@ -159,7 +163,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage
+            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
@@ -180,7 +184,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage
+            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
@@ -198,7 +202,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage
+            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="master" />
@@ -216,7 +220,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage
+            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
               ? children
               : <SupportDashboard />,
           )}

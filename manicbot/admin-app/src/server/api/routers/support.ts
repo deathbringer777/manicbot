@@ -1,11 +1,27 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { platformTickets, platformTicketMessages, webUsers } from "~/server/db/schema";
-import { eq, desc, or, like, and } from "drizzle-orm";
+import { eq, desc, or, like, and, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sendSupportReplyEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
 import type { Lang } from "~/lib/i18n";
+import { notifyWebUser, notifyManyWebUsers } from "~/server/services/notifyWebUser";
+
+const SUPPORT_STAFF_ROLES = ["system_admin", "support", "technical_support"] as const;
+const TICKET_SUBJECT_PREVIEW_RE = /^\[([^\]]{1,80})\]/;
+
+function extractTicketSubject(rawText: string | null | undefined, fallback = "Ticket"): string {
+  if (!rawText) return fallback;
+  const m = TICKET_SUBJECT_PREVIEW_RE.exec(rawText);
+  if (m && m[1]) return m[1].trim();
+  return rawText.slice(0, 80).trim() || fallback;
+}
+
+function truncateBody(text: string, max = 200): string {
+  const clean = text.replace(/^\[[^\]]+\]\s*/, "").replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
 
 async function assertSupport(ctx: any) {
   if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -104,33 +120,62 @@ export const supportRouter = createTRPCRouter({
         .set({ updatedAt: Math.floor(Date.now() / 1000) })
         .where(eq(platformTickets.id, input.ticketId));
 
-      // #P1-5 (relax.md §5) — best-effort support_reply notification. We
-      // resolve the ticket owner via platform_tickets.client_name (which
-      // holds the user's email at ticket-creation time — see createTicket
-      // below). Email failure must never break the support reply flow, so
-      // every step is guarded and the actual fetch is fire-and-forget.
+      // #P1-5 (relax.md §5) + notification-center PR1 — best-effort
+      // support_reply fan-out. We resolve the ticket owner via
+      // platform_tickets.client_name (which holds the email at create-time —
+      // see createTicket below), then fire BOTH an email AND an in-app
+      // user_notifications row so the salon-owner's header bell lights up.
+      // Email + in-app are independent: a failure in either path must
+      // never break the support reply flow.
       try {
         const ticketRows = await ctx.db
-          .select({ clientName: platformTickets.clientName })
+          .select({
+            clientName: platformTickets.clientName,
+            tenantId: platformTickets.tenantId,
+          })
           .from(platformTickets)
           .where(eq(platformTickets.id, input.ticketId))
           .limit(1);
         const recipientEmail = ticketRows[0]?.clientName?.trim();
+        const tenantId = ticketRows[0]?.tenantId ?? null;
         if (recipientEmail && /@/.test(recipientEmail)) {
-          // Pull preferred language from the web_users row if we have one;
-          // otherwise default to English so the email is at least legible.
           let lang: Lang = "en";
+          let recipientWebUserId: string | null = null;
           try {
             const userRows = await ctx.db
-              .select({ lang: webUsers.lang })
+              .select({ id: webUsers.id, lang: webUsers.lang })
               .from(webUsers)
               .where(eq(webUsers.email, recipientEmail))
               .limit(1);
             if (userRows[0]?.lang) lang = userRows[0].lang as Lang;
+            if (userRows[0]?.id) recipientWebUserId = userRows[0].id;
           } catch { /* best-effort */ }
+
           void sendSupportReplyEmail(recipientEmail, input.ticketId, input.text, lang).catch((e) =>
             log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e))),
           );
+
+          if (recipientWebUserId) {
+            // Idempotency: sourceId includes the message timestamp so each
+            // reply produces a fresh bell row (multiple replies to the
+            // same ticket don't collapse into one).
+            const sourceId = `${input.ticketId}:${Math.floor(Date.now() / 1000)}`;
+            void notifyWebUser(ctx.db, {
+              webUserId: recipientWebUserId,
+              tenantId,
+              kind: "support.reply",
+              title: lang === "ru" ? "Новый ответ поддержки"
+                : lang === "ua" ? "Нова відповідь підтримки"
+                : lang === "pl" ? "Nowa odpowiedź wsparcia"
+                : "New support reply",
+              body: truncateBody(input.text),
+              link: `/settings?section=help&ticket=${input.ticketId}`,
+              sourceSlug: "support",
+              sourceId,
+            }).catch((e) =>
+              log.error("support.replyToTicket.notify", e instanceof Error ? e : new Error(String(e))),
+            );
+          }
         }
       } catch (e) {
         log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e)));
@@ -232,6 +277,22 @@ export const supportRouter = createTRPCRouter({
         .update(platformTickets)
         .set(updates)
         .where(eq(platformTickets.id, input.ticketId));
+
+      // Fan-out to support staff so they see the follow-up in their bell.
+      // Skip the original ticket creator (no self-notify), and use a
+      // per-reply sourceId so multiple follow-ups don't collapse.
+      void notifyPlatformSupportStaff(ctx.db, {
+        excludeWebUserId: ctx.webUser?.id ?? null,
+        ticketId: input.ticketId,
+        kindSlug: "support.ticket.reply",
+        title: "Клиент ответил в тикете",
+        body: truncateBody(input.text),
+        link: `/?ticket=${input.ticketId}`,
+        sourceId: `${input.ticketId}:reply:${now}`,
+      }).catch((e) =>
+        log.error("support.replyToMyTicket.notifyStaff", e instanceof Error ? e : new Error(String(e))),
+      );
+
       return { ok: true };
     }),
 
@@ -269,6 +330,63 @@ export const supportRouter = createTRPCRouter({
         createdAt: now,
       });
 
+      // Fan-out: notify every support staff member that a new ticket is
+      // waiting. Fire-and-forget so a notification-write failure cannot
+      // block the user's ticket from being created.
+      void notifyPlatformSupportStaff(ctx.db, {
+        excludeWebUserId: ctx.webUser.id,
+        ticketId,
+        kindSlug: "support.ticket.new",
+        title: `Новый тикет: ${extractTicketSubject(`[${input.subject}]`, "Тикет")}`,
+        body: truncateBody(input.message),
+        link: `/?ticket=${ticketId}`,
+        sourceId: ticketId,
+      }).catch((e) =>
+        log.error("support.createTicket.notifyStaff", e instanceof Error ? e : new Error(String(e))),
+      );
+
       return { ticketId };
     }),
 });
+
+/**
+ * Fan-out helper — notify every web_user with a platform support role
+ * (system_admin / support / technical_support). Skips the supplied
+ * excludeWebUserId so a support agent doesn't ping themselves when they
+ * happen to be the ticket creator.
+ *
+ * Idempotent: relies on the user_notifications partial UNIQUE
+ * (web_user_id, source_slug, source_id, kind) — so caller-controlled
+ * sourceId determines collapse semantics.
+ */
+async function notifyPlatformSupportStaff(
+  db: any,
+  opts: {
+    excludeWebUserId: string | null;
+    ticketId: string;
+    kindSlug: string;
+    title: string;
+    body: string;
+    link: string;
+    sourceId: string;
+  },
+): Promise<void> {
+  const staff = await db
+    .select({ id: webUsers.id })
+    .from(webUsers)
+    .where(inArray(webUsers.role, SUPPORT_STAFF_ROLES as unknown as string[]))
+    .limit(200);
+  const targets: string[] = staff
+    .map((s: { id: string }) => s.id)
+    .filter((id: string) => id && id !== opts.excludeWebUserId);
+  if (targets.length === 0) return;
+  await notifyManyWebUsers(db, targets, {
+    kind: opts.kindSlug,
+    title: opts.title,
+    body: opts.body,
+    link: opts.link,
+    sourceSlug: "support",
+    sourceId: opts.sourceId,
+    tenantId: null,
+  });
+}

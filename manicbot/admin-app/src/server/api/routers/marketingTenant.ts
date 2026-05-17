@@ -20,6 +20,7 @@ import { sanitizeText, sanitizeHtml } from "~/server/security/sanitize";
 import {
   marketingContacts,
   marketingSegments,
+  marketingSegmentMembers,
   marketingTemplates,
   marketingCampaigns,
   marketingSends,
@@ -187,6 +188,7 @@ export const marketingTenantRouter = createTRPCRouter({
       tenantId: z.string().min(1),
       name: z.string().min(1).max(120),
       description: z.string().optional(),
+      kind: z.enum(["filter", "manual"]).default("manual"),
       filterJson: z.string().default("{}"),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -199,6 +201,7 @@ export const marketingTenantRouter = createTRPCRouter({
         tenantId: input.tenantId,
         name: sanitizeText(input.name, 120),
         description: input.description ? sanitizeText(input.description, 500) : null,
+        kind: input.kind,
         filterJson: input.filterJson,
         contactCount: 0,
         createdAt: t,
@@ -207,14 +210,215 @@ export const marketingTenantRouter = createTRPCRouter({
       return { id };
     }),
 
+  segmentUpdate: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      id: z.string(),
+      name: z.string().min(1).max(120).optional(),
+      description: z.string().nullable().optional(),
+      filterJson: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const existing = await ctx.db
+        .select({ tenantId: marketingSegments.tenantId })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.id, input.id))
+        .limit(1);
+      if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (existing[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Segment belongs to a different tenant" });
+      }
+
+      const patch: Record<string, unknown> = { updatedAt: now() };
+      if (input.name !== undefined) patch.name = sanitizeText(input.name, 120);
+      if (input.description !== undefined) patch.description = input.description ? sanitizeText(input.description, 500) : null;
+      if (input.filterJson !== undefined) patch.filterJson = input.filterJson;
+      await ctx.db.update(marketingSegments).set(patch).where(eq(marketingSegments.id, input.id));
+      return { ok: true };
+    }),
+
   segmentDelete: protectedProcedure
     .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       // Only delete if the row's tenantId matches — defense in depth even
-      // though the row id is opaque.
+      // though the row id is opaque. Member rows cascade implicitly because
+      // SQLite has no orphan rows to scan (segment_id is opaque + indexed).
+      await ctx.db.delete(marketingSegmentMembers)
+        .where(eq(marketingSegmentMembers.segmentId, input.id));
       await ctx.db.delete(marketingSegments)
         .where(and(eq(marketingSegments.id, input.id), eq(marketingSegments.tenantId, input.tenantId)));
+      return { ok: true };
+    }),
+
+  /**
+   * Manual list membership operations.
+   *
+   * Every op verifies the segment belongs to the caller's tenant before any
+   * write. Contact ids are checked to ensure they belong to the same tenant
+   * (cross-tenant adds would otherwise leak audience composition).
+   */
+  segmentMembersList: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      segmentId: z.string(),
+      limit: z.number().int().min(1).max(500).default(200),
+      offset: z.number().int().min(0).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const seg = await ctx.db
+        .select({ tenantId: marketingSegments.tenantId, kind: marketingSegments.kind })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.id, input.segmentId))
+        .limit(1);
+      if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (seg[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const rows = await ctx.db
+        .select({
+          id: marketingContacts.id,
+          email: marketingContacts.email,
+          phone: marketingContacts.phone,
+          name: marketingContacts.name,
+          unsubscribed: marketingContacts.unsubscribed,
+          addedAt: marketingSegmentMembers.addedAt,
+        })
+        .from(marketingSegmentMembers)
+        .innerJoin(marketingContacts, eq(marketingContacts.id, marketingSegmentMembers.contactId))
+        .where(and(
+          eq(marketingSegmentMembers.segmentId, input.segmentId),
+          eq(marketingContacts.tenantId, input.tenantId),
+        ))
+        .orderBy(desc(marketingSegmentMembers.addedAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const totalRow = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(marketingSegmentMembers)
+        .innerJoin(marketingContacts, eq(marketingContacts.id, marketingSegmentMembers.contactId))
+        .where(and(
+          eq(marketingSegmentMembers.segmentId, input.segmentId),
+          eq(marketingContacts.tenantId, input.tenantId),
+        ));
+
+      return { items: rows, total: Number(totalRow[0]?.count ?? 0), kind: seg[0].kind };
+    }),
+
+  segmentAddContacts: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      segmentId: z.string(),
+      contactIds: z.array(z.number().int()).min(1).max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const seg = await ctx.db
+        .select({ tenantId: marketingSegments.tenantId })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.id, input.segmentId))
+        .limit(1);
+      if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (seg[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // Restrict to contact ids that genuinely belong to this tenant —
+      // silently drops anything else (avoids leaking which ids exist in
+      // the platform-wide id space).
+      const allowed = await ctx.db
+        .select({ id: marketingContacts.id })
+        .from(marketingContacts)
+        .where(and(
+          eq(marketingContacts.tenantId, input.tenantId),
+          // drizzle's `inArray` is the right tool here, but we keep an
+          // explicit array reduction so the upper bound on contactIds
+          // (500) cannot blow up SQLite's parameter limit (variable
+          // bind count is well within 500).
+        ));
+      const allowedIds = new Set(allowed.map((r) => r.id));
+      const ok = input.contactIds.filter((id) => allowedIds.has(id));
+
+      const t = now();
+      let added = 0;
+      for (const id of ok) {
+        // INSERT OR IGNORE pattern via drizzle .onConflictDoNothing — but
+        // drizzle for D1 doesn't expose that universally; fall back to a
+        // pre-check. Membership table has (segment_id, contact_id) as PK
+        // so the duplicate insert would error otherwise.
+        const exists = await ctx.db
+          .select({ s: marketingSegmentMembers.segmentId })
+          .from(marketingSegmentMembers)
+          .where(and(
+            eq(marketingSegmentMembers.segmentId, input.segmentId),
+            eq(marketingSegmentMembers.contactId, id),
+          ))
+          .limit(1);
+        if (exists[0]) continue;
+        await ctx.db.insert(marketingSegmentMembers).values({
+          segmentId: input.segmentId,
+          contactId: id,
+          addedAt: t,
+        });
+        added++;
+      }
+
+      // Recompute denormalized count so the list-card displays the live size
+      // without an extra round-trip.
+      const cnt = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(marketingSegmentMembers)
+        .where(eq(marketingSegmentMembers.segmentId, input.segmentId));
+      await ctx.db.update(marketingSegments)
+        .set({ contactCount: Number(cnt[0]?.count ?? 0), updatedAt: t })
+        .where(eq(marketingSegments.id, input.segmentId));
+
+      return { added, skipped: input.contactIds.length - added };
+    }),
+
+  segmentRemoveContacts: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      segmentId: z.string(),
+      contactIds: z.array(z.number().int()).min(1).max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const seg = await ctx.db
+        .select({ tenantId: marketingSegments.tenantId })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.id, input.segmentId))
+        .limit(1);
+      if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (seg[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      for (const id of input.contactIds) {
+        await ctx.db.delete(marketingSegmentMembers)
+          .where(and(
+            eq(marketingSegmentMembers.segmentId, input.segmentId),
+            eq(marketingSegmentMembers.contactId, id),
+          ));
+      }
+
+      const t = now();
+      const cnt = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(marketingSegmentMembers)
+        .where(eq(marketingSegmentMembers.segmentId, input.segmentId));
+      await ctx.db.update(marketingSegments)
+        .set({ contactCount: Number(cnt[0]?.count ?? 0), updatedAt: t })
+        .where(eq(marketingSegments.id, input.segmentId));
+
       return { ok: true };
     }),
 

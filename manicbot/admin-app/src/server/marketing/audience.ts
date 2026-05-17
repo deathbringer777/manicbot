@@ -20,7 +20,7 @@
  */
 
 import { and, eq, sql, type SQL } from "drizzle-orm";
-import { marketingContacts, marketingSegments } from "~/server/db/schema";
+import { marketingContacts, marketingSegments, marketingSegmentMembers } from "~/server/db/schema";
 
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
 
@@ -73,11 +73,19 @@ export async function resolveAudience(args: ResolveAudienceArgs): Promise<{
   const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_LIMIT, DEFAULT_LIMIT));
   const nowSec = args.nowSec ?? Math.floor(Date.now() / 1000);
 
-  // Resolve the per-segment override filter, if any.
+  // Resolve the per-segment override filter, if any. Manual lists (0072)
+  // short-circuit the WHERE-builder and JOIN through the explicit member
+  // table — `filter_json` is intentionally ignored for kind='manual' so
+  // user expectations match the UI (the list shows what gets sent).
   let filter: AudienceFilter = {};
+  let manualSegment = false;
   if (segmentId) {
     const seg = await db
-      .select({ filterJson: marketingSegments.filterJson, tenantId: marketingSegments.tenantId })
+      .select({
+        filterJson: marketingSegments.filterJson,
+        tenantId: marketingSegments.tenantId,
+        kind: marketingSegments.kind,
+      })
       .from(marketingSegments)
       .where(eq(marketingSegments.id, segmentId))
       .limit(1);
@@ -90,7 +98,8 @@ export async function resolveAudience(args: ResolveAudienceArgs): Promise<{
       // Defense in depth — segment belongs to another tenant.
       return { contacts: [], totalCount: 0 };
     }
-    filter = parseFilterJson(seg[0].filterJson);
+    manualSegment = seg[0].kind === "manual";
+    if (!manualSegment) filter = parseFilterJson(seg[0].filterJson);
   }
 
   const conds: SQL[] = [eq(marketingContacts.tenantId, tenantId)];
@@ -142,6 +151,33 @@ export async function resolveAudience(args: ResolveAudienceArgs): Promise<{
   }
 
   const where = conds.length === 1 ? conds[0] : and(...conds);
+
+  if (manualSegment && segmentId) {
+    // Manual list: JOIN through marketing_segment_members. The same WHERE
+    // (channel consent + unsubscribe gate) still applies so bouncing /
+    // unsubscribed contacts never get a send even if the operator added
+    // them to a list by hand.
+    const [rows, totalRow] = await Promise.all([
+      db
+        .select({
+          id: marketingContacts.id,
+          email: marketingContacts.email,
+          phone: marketingContacts.phone,
+          name: marketingContacts.name,
+          unsubscribeToken: marketingContacts.unsubscribeToken,
+        })
+        .from(marketingSegmentMembers)
+        .innerJoin(marketingContacts, eq(marketingContacts.id, marketingSegmentMembers.contactId))
+        .where(and(eq(marketingSegmentMembers.segmentId, segmentId), where as SQL))
+        .limit(limit),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(marketingSegmentMembers)
+        .innerJoin(marketingContacts, eq(marketingContacts.id, marketingSegmentMembers.contactId))
+        .where(and(eq(marketingSegmentMembers.segmentId, segmentId), where as SQL)),
+    ]);
+    return { contacts: rows, totalCount: Number(totalRow[0]?.count ?? rows.length) };
+  }
 
   const [rows, totalRow] = await Promise.all([
     db

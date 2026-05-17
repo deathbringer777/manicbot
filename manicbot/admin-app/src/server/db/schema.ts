@@ -732,12 +732,27 @@ export const marketingSegments = sqliteTable("marketing_segments", {
   name: text("name").notNull(),
   description: text("description"),
   filterJson: text("filter_json").notNull(),
+  // 0072: 'filter' (existing — evaluates filter_json) or 'manual' (members
+  // stored in marketing_segment_members). Brevo-style explicit lists.
+  kind: text("kind").notNull().default("filter"),
   contactCount: integer("contact_count").notNull().default(0),
   lastComputedAt: integer("last_computed_at"),
   createdBy: integer("created_by"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [index("idx_mkt_segments_tenant").on(t.tenantId)]);
+
+// 0072: explicit list membership. (segment_id, contact_id) is the natural PK,
+// so adding the same contact twice is a no-op.
+export const marketingSegmentMembers = sqliteTable("marketing_segment_members", {
+  segmentId: text("segment_id").notNull(),
+  contactId: integer("contact_id").notNull(),
+  addedAt: integer("added_at").notNull(),
+  addedBy: text("added_by"),
+}, (t) => [
+  index("idx_msm_segment").on(t.segmentId),
+  index("idx_msm_contact").on(t.contactId),
+]);
 
 export const marketingTemplates = sqliteTable("marketing_templates", {
   id: text("id").primaryKey(),

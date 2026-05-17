@@ -1707,6 +1707,8 @@ const translations = {
   "marketing.automation.form.trigger":    { ru: "Триггер",                ua: "Тригер",                 en: "Trigger",                pl: "Wyzwalacz" },
   "marketing.automation.form.triggerNotice": { ru: "Триггер сохранится для будущего cron-движка. Сейчас работает только «Запустить» вручную.", ua: "Тригер збережеться для майбутнього cron-двигуна. Зараз працює тільки «Запустити» вручну.", en: "Trigger is saved for the upcoming cron engine. Only manual «Run now» works today.", pl: "Wyzwalacz zostanie zapisany dla nadchodzącego silnika cron. Obecnie działa tylko ręczne «Uruchom»." },
   "marketing.automation.form.template":   { ru: "Шаблон письма",          ua: "Шаблон листа",           en: "Email template",         pl: "Szablon e-mail" },
+  "marketing.automation.form.newTemplate":{ ru: "Создать шаблон",         ua: "Створити шаблон",        en: "Create template",        pl: "Utwórz szablon" },
+  "marketing.automation.form.pickStarter":{ ru: "Из готового набора",     ua: "З готового набору",      en: "From starter pack",      pl: "Z gotowego zestawu" },
   "marketing.automation.form.segment":    { ru: "Сегмент",                ua: "Сегмент",                en: "Segment",                pl: "Segment" },
   "marketing.automation.form.create":     { ru: "Сохранить",              ua: "Зберегти",               en: "Save",                   pl: "Zapisz" },
   "marketing.automation.form.missingFields": { ru: "Укажите название и шаблон.", ua: "Вкажіть назву і шаблон.", en: "Please fill name and pick a template.", pl: "Uzupełnij nazwę i wybierz szablon." },

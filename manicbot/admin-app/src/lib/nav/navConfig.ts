@@ -3,7 +3,7 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
-  Puzzle, Megaphone, AlertOctagon,
+  Puzzle, Megaphone, AlertOctagon, Plug,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -60,6 +60,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },
   { id: "god.errors",        href: "/errors",             icon: AlertOctagon,    labelKey: "Errors",           roles: ["system_admin"], group: "platform" },
   { id: "god.system",        href: "/system",             icon: Activity,        labelKey: "System",           roles: ["system_admin"], group: "platform" },
+  { id: "god.providers",     href: "/system/providers",   icon: Plug,            labelKey: "Providers",        roles: ["system_admin"], group: "platform" },
   { id: "god.plugins",       href: "/plugins",            icon: Puzzle,          labelKey: "Plugins",          roles: ["system_admin"], group: "platform" },
 
   // ── Salon (tenant_owner) — ?tab= hrefs handled by SalonDashboard monolith ──

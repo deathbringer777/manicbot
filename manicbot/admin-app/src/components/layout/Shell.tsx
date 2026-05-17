@@ -697,7 +697,18 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
             <div className="absolute -top-32 -right-32 h-64 w-64 rounded-full bg-brand-500/8 blur-[100px]" />
             <div className="absolute -bottom-32 -left-32 h-64 w-64 rounded-full bg-purple-500/8 blur-[100px]" />
           </div>
-          <div className="relative z-10 mx-auto max-w-7xl w-full">{children}</div>
+          {/*
+            No `z-N` on this wrapper. `relative z-10` would create a
+            stacking context for `{children}`, trapping modals
+            (`fixed inset-0 z-[100]` per the 0062 contract) at the
+            wrapper's z-layer. The sticky header at z-30 then paints
+            over them — visible as the light strip across the top of
+            any open modal. The orb wrapper above is positioned
+            `absolute` and this content wrapper appears later in DOM
+            order, so the content paints on top naturally without an
+            explicit z-index.
+          */}
+          <div className="relative mx-auto max-w-7xl w-full">{children}</div>
         </main>
 
         {/* ── Mobile Bottom Nav (fixed, equal-width tabs) ── */}

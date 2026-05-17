@@ -334,9 +334,28 @@ Telegram Mini App opens
 
 - `/settings` (account / appearance / bot / billing / help — common to all roles)
 - `/plugins`, `/plugins/*`, `/plugin/*` (Plugin Marketplace catalog, detail, runtime)
-- `/marketing`, `/marketing/*` (Marketing module — `MarketingShell` with 7-tab sub-nav)
+- `/marketing`, `/marketing/*` (Marketing module — `MarketingShell` with **6**-tab sub-nav: Overview / Contacts / Campaigns / SMS / Automations / Templates).
+
+`/marketing/providers` no longer exists as a tenant-reachable page — it is a server-side `redirect()` to `/system/providers` (system-admin-only, see below). Email/SMS vendor plumbing (Brevo, Resend, Twilio) is platform infrastructure and is intentionally NOT exposed under the salon-owner Marketing surface.
 
 When adding a new top-level module that should not be intercepted by the role dashboard, extend the whitelist in `(dashboard)/layout.tsx` (currently four mirror blocks: `tenant_owner` / `tenant_manager` / `master` / `support`+`technical_support`). The whitelist logic is exercised by `src/__tests__/marketing-routing.test.ts`.
+
+### System (God Mode) routes
+
+`system_admin`-only pages live under `/system/*`:
+
+- `/system` — environment / D1 table-stats / health dashboard (`SystemPageClient`).
+- `/system/providers` — email/SMS transport (Brevo / Resend / Twilio) with health-check + enable/disable. Moved out of `/marketing/providers` so the salon-owner Marketing surface no longer leaks vendor identity. Server router is `marketing.providersList / providerHealthCheck / providerToggle` (all `adminProcedure`). The page itself adds a top-level role gate (`useRole().role === "system_admin" && !previewRole`) so a sysadmin previewing a tenant role gets the same placeholder a tenant would. Nav entry: `god.providers` in `lib/nav/navConfig.ts` (group `platform`). Pinned by `src/__tests__/marketing-providers-ia.test.ts`.
+
+### Modal stacking contract (0062 + Shell wrapper pin)
+
+Every full-screen modal in the dashboard uses `fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-md` and a solid `bg-white` / `dark:bg-slate-900` card with `ring-1 ring-black/5`. This contract is locked by `src/__tests__/modal-styling-regression.test.ts`.
+
+A subtle adjacent bug: the content wrapper inside `WebShell` and `Shell` previously carried `relative z-10`, which establishes a stacking context for `{children}`. A modal at `fixed inset-0 z-[100]` rendered inside that wrapper is **trapped** at the wrapper's z-layer; the sticky page header (z-30) sits in the parent stacking context and paints over the modal — visible as a light strip across the top of any open modal. Fix: drop `z-N` from both content wrappers, rely on DOM order (the orb decoration is positioned `absolute` earlier in the tree, so the content paints on top naturally). Pinned by `src/__tests__/shell-no-content-stacking-trap.test.ts`.
+
+### Marketing modals — custom `Select`
+
+All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignFormModal`, `TemplateFormModal`, `ReminderModal`) use the brand-styled `~/components/ui/Select.tsx` rather than the native `<select>`. Native dropdowns render at the OS layer, ignore page theming, and break inside the dark-overlay modal stack. Pinned by `src/__tests__/marketing-modals-no-native-select.test.ts`.
 
 
 ### tRPC procedures

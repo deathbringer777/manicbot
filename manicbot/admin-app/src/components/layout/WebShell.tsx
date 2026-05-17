@@ -454,7 +454,18 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             <div className="min-h-full flex flex-col">
               <div
                 data-tour="web-content"
-                className={`relative z-10 p-4 lg:p-6 pb-24 lg:pb-6 mx-auto w-full flex-1 ${
+                /*
+                 * No `z-N` on this wrapper. `relative z-10` would create
+                 * a stacking context for `{children}`, trapping modals
+                 * (`fixed inset-0 z-[100]` per the 0062 contract) at
+                 * the wrapper's z-layer. The sticky topbar at z-30
+                 * then paints over them — visible as the light strip
+                 * across the top of any open modal. The orb wrapper
+                 * above is positioned `absolute` and the content
+                 * wrapper appears later in DOM order, so the content
+                 * paints on top naturally without an explicit z-index.
+                 */
+                className={`relative p-4 lg:p-6 pb-24 lg:pb-6 mx-auto w-full flex-1 ${
                   // Full-width pages: settings + the appointments calendar.
                   // The calendar needs every horizontal pixel for the
                   // master-column grid + left rail (matches Booksy / GCal

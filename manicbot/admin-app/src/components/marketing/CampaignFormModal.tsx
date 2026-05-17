@@ -19,6 +19,7 @@ import { X, Users as UsersIcon } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
 
 const FIELD_BASE =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
@@ -153,35 +154,31 @@ export function CampaignFormModal({ scope, forcedChannel, onClose, onSaved }: Pr
           {!forcedChannel && (
             <div>
               <label className={LABEL}>{t("marketing.campaign.form.channel", lang)}</label>
-              <select
+              <Select
                 value={channel}
-                onChange={(e) => {
-                  setChannel(e.target.value as Channel);
+                onChange={(v) => {
+                  setChannel(v as Channel);
                   setTemplateId("");
                 }}
-                className={FIELD_BASE}
-                data-testid="cmp-channel"
-              >
-                <option value="email">Email</option>
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
+                options={[
+                  { value: "email", label: "Email" },
+                  { value: "sms", label: "SMS" },
+                  { value: "whatsapp", label: "WhatsApp" },
+                ]}
+                testIdPrefix="cmp-channel"
+              />
             </div>
           )}
 
           <div>
             <label className={LABEL}>{t("marketing.campaign.form.template", lang)} *</label>
-            <select
+            <Select
               value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="cmp-template"
-            >
-              <option value="">{t("marketing.campaign.form.templatePlaceholder", lang)}</option>
-              {templates.map((tpl: any) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
-              ))}
-            </select>
+              onChange={setTemplateId}
+              placeholder={t("marketing.campaign.form.templatePlaceholder", lang)}
+              options={templates.map((tpl: any) => ({ value: tpl.id, label: tpl.name }))}
+              testIdPrefix="cmp-template"
+            />
             {templates.length === 0 && (
               <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                 {t("marketing.campaign.form.noTemplates", lang)}
@@ -191,17 +188,16 @@ export function CampaignFormModal({ scope, forcedChannel, onClose, onSaved }: Pr
 
           <div>
             <label className={LABEL}>{t("marketing.campaign.form.segment", lang)}</label>
-            <select
+            <Select
               value={segmentId}
-              onChange={(e) => setSegmentId(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="cmp-segment"
-            >
-              <option value="">{t("marketing.campaign.form.segmentAll", lang)}</option>
-              {segments.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+              onChange={setSegmentId}
+              placeholder={t("marketing.campaign.form.segmentAll", lang)}
+              options={[
+                { value: "", label: t("marketing.campaign.form.segmentAll", lang) },
+                ...segments.map((s: any) => ({ value: s.id, label: s.name })),
+              ]}
+              testIdPrefix="cmp-segment"
+            />
             {scope.mode === "tenant" && (
               <div className="mt-1.5 flex items-center gap-1.5 rounded-md bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900/40 px-2 py-1 text-[11px] text-violet-700 dark:text-violet-300">
                 <UsersIcon className="h-3 w-3" />

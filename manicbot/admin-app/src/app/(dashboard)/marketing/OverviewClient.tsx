@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * Marketing Overview — salon-owner facing summary of CRM activity.
+ *
+ * Provider plumbing (Brevo / Resend / Twilio) lives on `/system/providers`
+ * (sysadmin-only). It used to render as a card here on the admin path,
+ * but it's platform infrastructure, not a marketing surface — moved out
+ * along with the navigation entry.
+ */
+
 import { MarketingShell } from "./MarketingShell";
 import { api } from "~/trpc/react";
 import {
@@ -50,10 +59,6 @@ export default function OverviewClient() {
     { tenantId: tenantId ?? "", days: 7 },
     { enabled: mode === "tenant" && !!tenantId },
   );
-  // Providers card is admin-only — tenants don't operate the email/SMS
-  // vendor plumbing and the names are platform-internal. See the comment on
-  // `marketingTenant.providersList` for the data-leak rationale.
-  const adminProvidersQ = api.marketing.providersList.useQuery(undefined, { enabled: mode === "admin" });
 
   const statsQ = mode === "admin" ? adminStatsQ : tenantStatsQ;
   const activityQ = mode === "admin" ? adminActivityQ : tenantActivityQ;
@@ -110,46 +115,6 @@ export default function OverviewClient() {
           />
         </div>
       </div>
-
-      {/* Providers — admin-only. Tenants do not see provider plumbing. */}
-      {mode === "admin" && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
-            {t("marketing.overview.providersTitle", lang)}
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            {t("marketing.overview.providersDescription", lang)}
-          </p>
-          {adminProvidersQ.isLoading && <div className="text-xs text-slate-500">{t("common.loading", lang)}…</div>}
-          {adminProvidersQ.data && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {adminProvidersQ.data.map((p: any) => (
-                <div
-                  key={p.name}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 px-3 py-2"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 capitalize">{p.name}</div>
-                    <div className="text-[10px] text-slate-500">
-                      channels: {p.channels.join(", ")} • {p.configured.email ? "✓ email" : "✗ email"}
-                      {p.channels.includes("sms") ? (p.configured.sms ? " • ✓ sms" : " • ✗ sms") : ""}
-                    </div>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                    p.db?.enabled
-                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
-                      : "bg-slate-200 dark:bg-slate-700/40 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
-                  }`}>
-                    {p.db?.enabled
-                      ? t("marketing.provider.enabled", lang)
-                      : t("marketing.provider.dormant", lang)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </MarketingShell>
   );
 }

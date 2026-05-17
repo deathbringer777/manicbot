@@ -364,7 +364,12 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           {/* Topbar */}
           <header
             data-tour="web-header"
-            className="h-[60px] flex items-center gap-3 px-4 lg:px-6 border-b border-[#e5e7eb] dark:border-white/[0.06] bg-white dark:bg-slate-900/80 shrink-0 z-30"
+            // Header background matches the workspace + sidebar palette
+            // (#fafaf7 in light, slate-900 in dark). A pure `bg-white`
+            // here read as a brighter strip between the cream sidebar
+            // and cream workspace — visible jump in tone. Pinned by
+            // shell-header-palette.test.ts.
+            className="h-[60px] flex items-center gap-3 px-4 lg:px-6 border-b border-[#e5e7eb] dark:border-white/[0.06] bg-[#fafaf7] dark:bg-slate-900 shrink-0 z-30"
           >
             <button
               onClick={() => setSidebarOpen(true)}

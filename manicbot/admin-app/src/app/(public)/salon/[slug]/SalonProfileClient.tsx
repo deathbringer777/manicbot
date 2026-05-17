@@ -1,12 +1,51 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   MapPin, Phone, Clock, Instagram, Send, Star, ChevronDown, ChevronUp,
   ExternalLink, Scissors, User, CalendarDays, Image as ImageIcon, Camera, MessageCircle,
 } from "lucide-react";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { decodePerDayWorkHours } from "~/lib/workHours";
+import { encodeStartPayload, type TrackingPayload } from "~/lib/trackingPayload";
+
+const ANON_ID_KEY = "manicbot.anon";
+
+function readOrMintAnonId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const existing = window.sessionStorage.getItem(ANON_ID_KEY);
+    if (existing && /^[0-9a-fA-F-]{8,64}$/.test(existing)) return existing;
+    const fresh =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : Math.random().toString(16).slice(2).padEnd(32, "0");
+    window.sessionStorage.setItem(ANON_ID_KEY, fresh);
+    return fresh;
+  } catch {
+    return Math.random().toString(16).slice(2).padEnd(32, "0");
+  }
+}
+
+function buildBookUrl(
+  botUsername: string | null | undefined,
+  attribution?: TrackingPayload | null,
+): string | null {
+  if (!botUsername) return null;
+  const base = `https://t.me/${botUsername}`;
+  if (!attribution?.source) return base;
+  try {
+    const token = encodeStartPayload({
+      source: attribution.source,
+      medium: attribution.medium,
+      campaign: attribution.campaign,
+      content: attribution.content,
+    });
+    return `${base}?start=${token}`;
+  } catch {
+    return base;
+  }
+}
 
 type WorkHours = { from?: number; to?: number } | string | null;
 
@@ -150,10 +189,9 @@ function ServicePhotoCarousel({ photos, onValidCountChange }: { photos: string[]
   );
 }
 
-function ServiceCard({ svc, botUsername }: { svc: ServiceItem; botUsername: string | null }) {
+function ServiceCard({ svc, bookUrl }: { svc: ServiceItem; bookUrl: string | null }) {
   const [expanded, setExpanded] = useState(false);
   const [validPhotoCount, setValidPhotoCount] = useState(svc.photos.length);
-  const bookUrl = botUsername ? `https://t.me/${botUsername}` : null;
   const hasDetails = svc.description || svc.photos.length > 0;
 
   return (
@@ -264,10 +302,46 @@ function MasterCard({ master, services }: { master: MasterItem; services: Servic
   );
 }
 
-export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
+export function SalonProfileClient({
+  profile,
+  attribution,
+}: {
+  profile: SalonProfile;
+  attribution?: TrackingPayload | null;
+}) {
   const [photoIdx, setPhotoIdx] = useState(0);
-  const bookUrl = profile.botUsername ? `https://t.me/${profile.botUsername}` : null;
+  const bookUrl = useMemo(
+    () => buildBookUrl(profile.botUsername, attribution),
+    [profile.botUsername, attribution?.source, attribution?.medium, attribution?.campaign, attribution?.content],
+  );
   const chatUrl = profile.slug ? `/salon/${profile.slug}/chat` : null;
+
+  useEffect(() => {
+    if (!attribution?.source) return;
+    const anonymousId = readOrMintAnonId();
+    if (!anonymousId) return;
+    try {
+      void fetch("/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anonymousId,
+          event: "salon_view",
+          properties: {
+            slug: profile.slug ?? null,
+            source: attribution.source,
+            campaign: attribution.campaign ?? null,
+            medium: attribution.medium ?? null,
+            content: attribution.content ?? null,
+          },
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      /* swallow — analytics is best-effort */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const coverPhoto = profile.photos[photoIdx] ?? null;
 
@@ -411,7 +485,7 @@ export function SalonProfileClient({ profile }: { profile: SalonProfile }) {
                 </h2>
                 <div className="space-y-2">
                   {profile.services.map((svc) => (
-                    <ServiceCard key={svc.svcId} svc={svc} botUsername={profile.botUsername} />
+                    <ServiceCard key={svc.svcId} svc={svc} bookUrl={bookUrl} />
                   ))}
                 </div>
               </section>

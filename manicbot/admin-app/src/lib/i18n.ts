@@ -1004,6 +1004,23 @@ const translations = {
   "master.webBadge":              { ru: "Web",                    ua: "Web",                    en: "Web",                   pl: "Web" },
   "master.done":                  { ru: "Готово",                 ua: "Готово",                 en: "Done",                  pl: "Gotowe" },
 
+  // ── Master detail modal (owner-side edit, parity with Clients tab) ─────────
+  "masterDetail.field.name":          { ru: "Имя",            ua: "Ім'я",         en: "Name",          pl: "Imię" },
+  "masterDetail.field.tgUsername":    { ru: "Telegram",       ua: "Telegram",     en: "Telegram",      pl: "Telegram" },
+  "masterDetail.field.email":         { ru: "Email",          ua: "Email",        en: "Email",         pl: "Email" },
+  "masterDetail.field.bio":           { ru: "О себе",         ua: "Про себе",     en: "Bio",           pl: "O sobie" },
+  "masterDetail.field.photo":         { ru: "Фото (URL)",     ua: "Фото (URL)",   en: "Photo (URL)",   pl: "Zdjęcie (URL)" },
+  "masterDetail.field.vacation":      { ru: "Отпуск",         ua: "Відпустка",    en: "Vacation",      pl: "Urlop" },
+  "masterDetail.field.vacationFrom":  { ru: "С",              ua: "З",            en: "From",          pl: "Od" },
+  "masterDetail.field.vacationUntil": { ru: "По",             ua: "По",           en: "Until",         pl: "Do" },
+  "masterDetail.action.edit":         { ru: "Редактировать",  ua: "Редагувати",   en: "Edit",          pl: "Edytuj" },
+  "masterDetail.action.delete":       { ru: "Удалить",        ua: "Видалити",     en: "Delete",        pl: "Usuń" },
+  "masterDetail.delete.confirm":      { ru: "Удалить мастера из салона? Действие не отменить.", ua: "Видалити майстра з салону? Дію не скасувати.", en: "Remove this master from the salon? This cannot be undone.", pl: "Usunąć mistrza z salonu? Tego nie można cofnąć." },
+  "masterDetail.lock.selfRegistered": { ru: "Этот мастер зарегистрировался сам и управляет своим профилем — изменения недоступны со стороны салона.", ua: "Цей майстер зареєструвався самостійно і керує своїм профілем — зміни з боку салону недоступні.", en: "This master signed up independently and manages their own profile — salon-side edits are unavailable.", pl: "Ten mistrz zarejestrował się samodzielnie i zarządza swoim profilem — edycje po stronie salonu nie są dostępne." },
+  "masterDetail.lock.delegationOff":  { ru: "Мастер не делегировал управление профилем салону. Попроси его включить делегирование в личном кабинете.", ua: "Майстер не делегував керування профілем салону. Попроси його увімкнути делегування в особистому кабінеті.", en: "The master hasn't delegated profile management to the salon. Ask them to enable delegation in their own cabinet.", pl: "Mistrz nie przekazał zarządzania profilem salonowi. Poproś go o włączenie delegacji w panelu mistrza." },
+  "masterDetail.error.vacationPair":  { ru: "Заполни обе даты отпуска или очисти обе.", ua: "Заповни обидві дати відпустки або очисти обидві.", en: "Fill in both vacation dates, or clear both.", pl: "Wypełnij obie daty urlopu albo wyczyść obie." },
+  "masterDetail.error.vacationInverted": { ru: "Дата окончания отпуска не может быть раньше даты начала.", ua: "Дата завершення відпустки не може бути раніше дати початку.", en: "Vacation end cannot be before the start date.", pl: "Data końca urlopu nie może być wcześniejsza niż początek." },
+
   // ── Plugin Marketplace ───────────────────────────────────────────────────
   "plugins.nav.label":        { ru: "Плагины",                ua: "Плагіни",                en: "Plugins",              pl: "Wtyczki" },
   "plugins.title":            { ru: "Магазин плагинов",       ua: "Магазин плагінів",       en: "Plugin Marketplace",   pl: "Sklep wtyczek" },

@@ -70,9 +70,14 @@ export function middleware(request: NextRequest) {
   const embeddable = isSameOriginEmbeddableRoute(pathname);
 
   // ── Content-Security-Policy ──────────────────────────────────────────────
+  // SHA-256 of the hardcoded inline theme-init script in app/layout.tsx —
+  // authorised by hash so the root layout can stay sync (no `await headers()`),
+  // which in turn lets next-on-pages emit the implicit `/_not-found` route
+  // on edge runtime instead of nodejs (cloudflare/next-on-pages#979).
+  const themeInitHash = "'sha256-+/MXq7zLbcfrg/SVptAAXolh3tEkMCjQ6BQDMqP/Jb8='";
   const scriptSrc = usesNonce
-    ? `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com https://js.stripe.com`
-    : `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://js.stripe.com`;
+    ? `script-src 'self' 'nonce-${nonce}' ${themeInitHash} https://challenges.cloudflare.com https://js.stripe.com`
+    : `script-src 'self' 'unsafe-inline' ${themeInitHash} https://challenges.cloudflare.com https://js.stripe.com`;
 
   const frameAncestors = embeddable ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
 

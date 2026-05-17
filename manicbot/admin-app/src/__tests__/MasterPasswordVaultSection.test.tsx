@@ -43,7 +43,7 @@ vi.mock("~/trpc/react", () => ({
         useMutation: () => ({
           mutateAsync: (vars: any) => {
             peekMutate(vars);
-            return Promise.resolve({ password: "S3cretPass-XYZ" });
+            return Promise.resolve({ password: "test-fixture-pw-only-12345" });
           },
           isPending: false,
         }),
@@ -144,7 +144,7 @@ describe("MasterPasswordVaultSection — peek flow", () => {
       otpCode: "123456",
     });
     await waitFor(() => {
-      expect(screen.getByTestId("master-password-reveal").textContent).toBe("S3cretPass-XYZ");
+      expect(screen.getByTestId("master-password-reveal").textContent).toBe("test-fixture-pw-only-12345");
     });
   });
 

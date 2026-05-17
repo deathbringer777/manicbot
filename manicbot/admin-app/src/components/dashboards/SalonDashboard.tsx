@@ -1625,7 +1625,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       setSvcImportModal(false);
       setSvcImportCsv("");
       setSvcImportError("");
-      toast(`Импортировано: ${res.created} новых, ${res.updated} обновлено${res.skippedErrors > 0 ? `, ${res.skippedErrors} ошибок` : ""}`);
+      toast.success(`Импортировано: ${res.created} новых, ${res.updated} обновлено${res.skippedErrors > 0 ? `, ${res.skippedErrors} ошибок` : ""}`);
     },
     onError: (e) => setSvcImportError(e.message),
   });

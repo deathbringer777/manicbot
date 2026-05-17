@@ -83,7 +83,7 @@ export function ReminderModal({ tenantId, defaultKind = "reminder", defaultTarge
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl"
+        className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl ring-1 ring-black/5 dark:ring-white/5"
         data-testid="reminder-modal"
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-white/5">

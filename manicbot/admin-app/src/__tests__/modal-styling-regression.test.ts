@@ -31,6 +31,12 @@ const MODAL_FILES = [
   "src/components/dashboard/TimeOffDialog.tsx",
   "src/components/dashboard/TimeReservationDialog.tsx",
   "src/components/EmailVerificationPopup.tsx",
+  // Marketing module (PR #116) — full-screen modals
+  "src/components/marketing/TemplateFormModal.tsx",
+  "src/components/marketing/CampaignFormModal.tsx",
+  "src/components/marketing/AutomationFormModal.tsx",
+  // Reminders plugin (PR #125)
+  "src/components/plugins/reminders/ReminderModal.tsx",
 ];
 
 function read(rel: string): string {

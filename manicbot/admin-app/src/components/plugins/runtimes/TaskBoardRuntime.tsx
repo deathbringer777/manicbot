@@ -3,6 +3,12 @@
 /**
  * Task Board plugin runtime — 3-column Kanban backed by localStorage.
  * No server round-trip — good enough for a MVP "it actually works" demo.
+ *
+ * Drag-and-drop: native HTML5 DnD with explicit insertion-point drop zones
+ * between every card (and one at the top + one at the bottom of each
+ * column). Drop on a zone splices the dragged card to that exact position;
+ * drop on a column's dead space appends to the end as a fallback. Same-
+ * column reorder uses the same path. Touch devices fall back to ◀/▶.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -12,8 +18,8 @@ import { t } from "~/lib/i18n";
 import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
-type Column = "todo" | "doing" | "done";
-interface Task {
+export type Column = "todo" | "doing" | "done";
+export interface Task {
   id: string;
   title: string;
   column: Column;
@@ -41,6 +47,46 @@ function writeTasks(installationId: string, tasks: Task[]) {
   } catch { /* noop */ }
 }
 
+/**
+ * Pure move/reorder helper. Returns the new tasks array, or `null` when the
+ * operation is a no-op (drop on self, drop on the slot the card already
+ * occupies, missing source/target). Exported for unit tests — the component
+ * itself just calls this and writes to localStorage.
+ *
+ * `beforeId === null` means "append at the end of the target column" (which
+ * is the only valid drop position in an empty column).
+ */
+export function computeMovedTasks(
+  tasks: Task[],
+  id: string,
+  col: Column,
+  beforeId: string | null,
+): Task[] | null {
+  if (beforeId === id) return null;
+  const dragged = tasks.find((task) => task.id === id);
+  if (!dragged) return null;
+  const rest = tasks.filter((task) => task.id !== id);
+  const next: Task = { ...dragged, column: col };
+  let insertAt: number;
+  if (beforeId !== null) {
+    const idx = rest.findIndex((task) => task.id === beforeId);
+    insertAt = idx === -1 ? rest.length : idx;
+  } else {
+    let lastIdx = -1;
+    for (let i = rest.length - 1; i >= 0; i--) {
+      if (rest[i]!.column === col) { lastIdx = i; break; }
+    }
+    insertAt = lastIdx + 1;
+  }
+  const updated = [...rest];
+  updated.splice(insertAt, 0, next);
+  const sameOrder =
+    updated.length === tasks.length &&
+    updated.every((task, i) => task.id === tasks[i]!.id && task.column === tasks[i]!.column);
+  if (sameOrder) return null;
+  return updated;
+}
+
 const COLUMNS: { key: Column; icon: React.ComponentType<{ size?: number; className?: string }>; tint: string }[] = [
   { key: "todo", icon: Circle, tint: "text-slate-400" },
   { key: "doing", icon: Clock, tint: "text-amber-500" },
@@ -60,6 +106,15 @@ const PLACEHOLDERS: Record<string, string> = {
   pl: "Nowe zadanie…",
 };
 
+interface DropTarget {
+  col: Column;
+  beforeId: string | null;
+}
+
+function sameTarget(a: DropTarget | null, col: Column, beforeId: string | null): boolean {
+  return a !== null && a.col === col && a.beforeId === beforeId;
+}
+
 export default function TaskBoardRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -70,6 +125,7 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
   });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<Column | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
   useEffect(() => {
     setTasks(readTasks(installationId));
@@ -90,14 +146,15 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
     setDrafts((d) => ({ ...d, [col]: "" }));
   }, [drafts, installationId, tasks]);
 
-  const move = useCallback((id: string, col: Column) => {
-    const updated = tasks.map((t) => (t.id === id ? { ...t, column: col } : t));
+  const commitMove = useCallback((id: string, col: Column, beforeId: string | null) => {
+    const updated = computeMovedTasks(tasks, id, col, beforeId);
+    if (!updated) return;
     setTasks(updated);
     writeTasks(installationId, updated);
   }, [installationId, tasks]);
 
   const remove = useCallback((id: string) => {
-    const updated = tasks.filter((t) => t.id !== id);
+    const updated = tasks.filter((task) => task.id !== id);
     setTasks(updated);
     writeTasks(installationId, updated);
   }, [installationId, tasks]);
@@ -111,6 +168,7 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
   const handleDragEnd = useCallback(() => {
     setDraggingId(null);
     setDragOverCol(null);
+    setDropTarget(null);
   }, []);
 
   const handleColDragOver = useCallback((e: React.DragEvent<HTMLElement>, col: Column) => {
@@ -129,17 +187,38 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
     const id = e.dataTransfer.getData("text/plain") || draggingId;
     setDraggingId(null);
     setDragOverCol(null);
+    setDropTarget(null);
     if (!id) return;
-    const task = tasks.find((t) => t.id === id);
-    if (!task || task.column === col) return;
-    move(id, col);
-  }, [draggingId, move, tasks]);
+    // Column-level drop is the fallback when the cursor isn't on any zone:
+    // append to the end of the column.
+    commitMove(id, col, null);
+  }, [commitMove, draggingId]);
+
+  const handleZoneDragOver = useCallback((e: React.DragEvent<HTMLElement>, col: Column, beforeId: string | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (!sameTarget(dropTarget, col, beforeId)) {
+      setDropTarget({ col, beforeId });
+    }
+  }, [dropTarget]);
+
+  const handleZoneDrop = useCallback((e: React.DragEvent<HTMLElement>, col: Column, beforeId: string | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = e.dataTransfer.getData("text/plain") || draggingId;
+    setDraggingId(null);
+    setDragOverCol(null);
+    setDropTarget(null);
+    if (!id) return;
+    commitMove(id, col, beforeId);
+  }, [commitMove, draggingId]);
 
   return (
     <PluginRuntimeShell slug={slug} bare>
     <div data-testid="task-board-runtime" className="grid grid-cols-1 md:grid-cols-3 gap-3">
       {COLUMNS.map(({ key, icon: Icon, tint }) => {
-        const col = tasks.filter((t) => t.column === key);
+        const col = tasks.filter((task) => task.column === key);
         return (
           <section
             key={key}
@@ -160,54 +239,69 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
               </h3>
               <span className="text-[10px] text-slate-400">{col.length}</span>
             </header>
-            <div className="flex-1 space-y-2 mb-2 overflow-y-auto">
-              {col.map((task) => (
-                <article
-                  key={task.id}
-                  data-testid="task-board-card"
-                  data-task-id={task.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.id)}
-                  onDragEnd={handleDragEnd}
-                  className={`group rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-2.5 text-[13px] text-slate-700 dark:text-slate-200 flex items-start justify-between gap-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
-                    draggingId === task.id ? "opacity-40" : ""
-                  }`}
-                >
-                  <span className="flex-1 break-words">{task.title}</span>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {key !== "todo" && (
+            <div className="flex-1 mb-2 overflow-y-auto">
+              <DropZone
+                col={key}
+                beforeId={col[0]?.id ?? null}
+                active={draggingId !== null && sameTarget(dropTarget, key, col[0]?.id ?? null)}
+                onDragOver={handleZoneDragOver}
+                onDrop={handleZoneDrop}
+              />
+              {col.map((task, i) => (
+                <div key={task.id}>
+                  <article
+                    data-testid="task-board-card"
+                    data-task-id={task.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, task.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`group rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-2.5 text-[13px] text-slate-700 dark:text-slate-200 flex items-start justify-between gap-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
+                      draggingId === task.id ? "opacity-40" : ""
+                    }`}
+                  >
+                    <span className="flex-1 break-words">{task.title}</span>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {key !== "todo" && (
+                        <button
+                          type="button"
+                          aria-label="move left"
+                          data-testid="task-board-move-left"
+                          onClick={() => commitMove(task.id, key === "done" ? "doing" : "todo", null)}
+                          className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px] px-1"
+                        >
+                          ◀
+                        </button>
+                      )}
+                      {key !== "done" && (
+                        <button
+                          type="button"
+                          aria-label="move right"
+                          data-testid="task-board-move-right"
+                          onClick={() => commitMove(task.id, key === "todo" ? "doing" : "done", null)}
+                          className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px] px-1"
+                        >
+                          ▶
+                        </button>
+                      )}
                       <button
                         type="button"
-                        aria-label="move left"
-                        data-testid="task-board-move-left"
-                        onClick={() => move(task.id, key === "done" ? "doing" : "todo")}
-                        className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px] px-1"
+                        aria-label="delete task"
+                        data-testid="task-board-delete"
+                        onClick={() => remove(task.id)}
+                        className="text-slate-400 hover:text-red-500 transition-colors"
                       >
-                        ◀
+                        <X size={12} />
                       </button>
-                    )}
-                    {key !== "done" && (
-                      <button
-                        type="button"
-                        aria-label="move right"
-                        data-testid="task-board-move-right"
-                        onClick={() => move(task.id, key === "todo" ? "doing" : "done")}
-                        className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px] px-1"
-                      >
-                        ▶
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="delete task"
-                      data-testid="task-board-delete"
-                      onClick={() => remove(task.id)}
-                      className="text-slate-400 hover:text-red-500 transition-colors"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                </article>
+                    </div>
+                  </article>
+                  <DropZone
+                    col={key}
+                    beforeId={col[i + 1]?.id ?? null}
+                    active={draggingId !== null && sameTarget(dropTarget, key, col[i + 1]?.id ?? null)}
+                    onDragOver={handleZoneDragOver}
+                    onDrop={handleZoneDrop}
+                  />
+                </div>
               ))}
             </div>
             <form
@@ -240,5 +334,30 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
       })}
     </div>
     </PluginRuntimeShell>
+  );
+}
+
+interface DropZoneProps {
+  col: Column;
+  beforeId: string | null;
+  active: boolean;
+  onDragOver: (e: React.DragEvent<HTMLElement>, col: Column, beforeId: string | null) => void;
+  onDrop: (e: React.DragEvent<HTMLElement>, col: Column, beforeId: string | null) => void;
+}
+
+function DropZone({ col, beforeId, active, onDragOver, onDrop }: DropZoneProps) {
+  return (
+    <div
+      data-testid={`task-board-drop-zone-${col}-${beforeId ?? "end"}`}
+      data-col={col}
+      data-before-id={beforeId ?? ""}
+      onDragOver={(e) => onDragOver(e, col, beforeId)}
+      onDrop={(e) => onDrop(e, col, beforeId)}
+      className={`rounded-full transition-all ${
+        active
+          ? "h-2 my-1.5 bg-brand-500/70 ring-2 ring-brand-500/30"
+          : "h-2 my-0.5 bg-transparent"
+      }`}
+    />
   );
 }

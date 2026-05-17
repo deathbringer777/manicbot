@@ -35,6 +35,17 @@ export default {
   mst_client_msg: '💬 Od {client}:\n<i>{msg}</i>',
   mst_already_done: 'ℹ️ Już obsłużone.',
 
+  // 0072 — master Telegram pairing (deep-link /start mst_<token>)
+  master_pairing_success_prefix: 'Połączono cię z mistrzem {name}. Otwieram panel.',
+  master_pairing_err_not_found: 'Kod parowania nie znaleziony. Poproś salon o nowy.',
+  master_pairing_err_invalid: 'Nieprawidłowy format kodu parowania.',
+  master_pairing_err_wrong_tenant: 'Ten kod parowania nie pasuje do tego salonu.',
+  master_pairing_err_consumed: 'Ten kod został już użyty.',
+  master_pairing_err_expired: 'Kod parowania wygasł. Poproś o nowy.',
+  master_pairing_err_archived: 'Konto mistrza jest w archiwum — skontaktuj się z salonem.',
+  master_pairing_err_gone: 'Mistrz został usunięty — skontaktuj się z salonem.',
+  master_pairing_err_chat_in_use: 'Ten Telegram jest już połączony z innym mistrzem w salonie.',
+
   mst_calendar: '📅 Google Kalendarz',
   mst_calendar_status_on: '✅ Połączono',
   mst_calendar_status_off: '❌ Nie połączono',

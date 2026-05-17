@@ -170,6 +170,9 @@ CREATE TABLE IF NOT EXISTS masters (
   -- 0062: account-origin model + soft-delete via archived_at.
   origin TEXT NOT NULL DEFAULT 'salon_created',
   archived_at INTEGER,
+  -- 0074: real Telegram chat_id for masters whose primary `chat_id` is a
+  -- synthetic 10B+ identity. Bot's isMaster()/getMaster() match either column.
+  telegram_chat_id INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_master_web_user_id ON masters(web_user_id);
@@ -178,6 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_masters_vacation_until ON masters(vacation_until)
 CREATE INDEX IF NOT EXISTS idx_masters_calendar_visibility ON masters(tenant_id, calendar_visibility);
 CREATE INDEX IF NOT EXISTS idx_masters_active ON masters(tenant_id) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_masters_tenant_origin ON masters(tenant_id, origin);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_masters_tenant_tg_chat
+  ON masters(tenant_id, telegram_chat_id) WHERE telegram_chat_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS tenant_roles (
   tenant_id TEXT NOT NULL,
@@ -1422,3 +1427,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_push_sub_user_endpoint
   ON push_subscriptions(web_user_id, endpoint);
 CREATE INDEX IF NOT EXISTS idx_push_sub_user
   ON push_subscriptions(web_user_id);
+
+-- ─── Master Telegram pairing codes (migration 0074) ──────────────────────
+-- Single-use, 7-day-TTL deep-link tokens that bind a salon-employed
+-- master's `masters.telegram_chat_id` to their real Telegram account.
+-- Redeemed via `/start mst_<raw_token>` on the salon's TG bot. Tokens are
+-- stored as SHA-256 hex of the raw value — raw token leaves the server
+-- exactly once in the deep-link URL response.
+CREATE TABLE IF NOT EXISTS master_pairing_codes (
+  token_hash             TEXT PRIMARY KEY,
+  tenant_id              TEXT NOT NULL,
+  master_chat_id         INTEGER NOT NULL,
+  created_by_web_user_id TEXT,
+  created_at             INTEGER NOT NULL,
+  expires_at             INTEGER NOT NULL,
+  consumed_at            INTEGER,
+  consumed_chat_id       INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_mpc_tenant_master
+  ON master_pairing_codes(tenant_id, master_chat_id);
+CREATE INDEX IF NOT EXISTS idx_mpc_unconsumed_exp
+  ON master_pairing_codes(expires_at) WHERE consumed_at IS NULL;

@@ -35,6 +35,17 @@ export default {
   mst_client_msg: '💬 Від {client}:\n<i>{msg}</i>',
   mst_already_done: 'ℹ️ Вже оброблено.',
 
+  // 0072 — master Telegram pairing (deep-link /start mst_<token>)
+  master_pairing_success_prefix: 'Прив\'язав тебе до майстра {name}. Відкриваю панель.',
+  master_pairing_err_not_found: 'Код прив\'язки не знайдено. Попроси салон згенерувати новий.',
+  master_pairing_err_invalid: 'Невірний формат коду прив\'язки.',
+  master_pairing_err_wrong_tenant: 'Код прив\'язки не підходить до цього салону.',
+  master_pairing_err_consumed: 'Цей код вже було використано.',
+  master_pairing_err_expired: 'Термін коду прив\'язки минув. Попроси новий.',
+  master_pairing_err_archived: 'Аккаунт майстра в архіві — звернись до салону.',
+  master_pairing_err_gone: 'Майстра видалено — звернись до салону.',
+  master_pairing_err_chat_in_use: 'Цей Telegram вже прив\'язаний до іншого майстра в салоні.',
+
   mst_calendar: '📅 Google Календар',
   mst_calendar_status_on: '✅ Підключено',
   mst_calendar_status_off: '❌ Не підключено',

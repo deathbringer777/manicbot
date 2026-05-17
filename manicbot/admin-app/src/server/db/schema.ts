@@ -173,6 +173,16 @@ export const masters = sqliteTable("masters", {
   origin: text("origin").notNull().default("salon_created"),
   /** 0062: nullable soft-delete tombstone. NULL = active. */
   archivedAt: integer("archived_at"),
+  /**
+   * 0074: real Telegram chat_id for masters whose primary `chatId` is a
+   *  synthetic 10B+ identity (web-created via `salon_created` / `invited_email`
+   *  / `self_registered`). Set by `/start mst_<token>` consumption (Worker)
+   *  or by salon-owner manual override (tRPC). Bot's `isMaster()` and
+   *  `getMaster()` match against EITHER `chat_id` OR `telegram_chat_id`,
+   *  so masters whose `chat_id` is already real (origin='invited_telegram'
+   *  or pre-0023) keep working unchanged.
+   */
+  telegramChatId: integer("telegram_chat_id"),
 }, (t) => [
   index("idx_master_tenant").on(t.tenantId),
   index("idx_master_web_user_id").on(t.webUserId),
@@ -181,6 +191,36 @@ export const masters = sqliteTable("masters", {
   index("idx_masters_vacation_until").on(t.vacationUntil),
   index("idx_masters_active").on(t.tenantId),
   index("idx_masters_tenant_origin").on(t.tenantId, t.origin),
+  uniqueIndex("idx_masters_tenant_tg_chat").on(t.tenantId, t.telegramChatId),
+]);
+
+/**
+ * 0072: One-shot deep-link tokens that bind a salon-employed master's
+ * `masters.telegram_chat_id` to their real Telegram account. Minted by the
+ * salon owner (`salon.createMasterPairingCode`) or by the master themselves
+ * (`master.requestPairingCode`), redeemed via `/start mst_<raw_token>` on
+ * the salon's TG bot.
+ *
+ * Token storage is hash-only — the raw token leaves the server exactly once
+ * (in the deep-link URL response) and is then irrecoverable. Lookup is by
+ * `SHA-256(raw_token)` so a DB compromise doesn't expose pending tokens.
+ *
+ * 7-day TTL is generous (matches `master_invitations`) — gives the master
+ * a full week to open the link on a phone or copy-paste it.
+ */
+export const masterPairingCodes = sqliteTable("master_pairing_codes", {
+  /** SHA-256 hex of the raw token (64 chars). Primary key for direct lookup. */
+  tokenHash: text("token_hash").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  masterChatId: integer("master_chat_id").notNull(),
+  createdByWebUserId: text("created_by_web_user_id"),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  consumedChatId: integer("consumed_chat_id"),
+}, (t) => [
+  index("idx_mpc_tenant_master").on(t.tenantId, t.masterChatId),
+  index("idx_mpc_unconsumed_exp").on(t.expiresAt),
 ]);
 
 export const tenantRoles = sqliteTable("tenant_roles", {

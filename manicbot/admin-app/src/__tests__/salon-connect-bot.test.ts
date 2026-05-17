@@ -114,6 +114,6 @@ describe("salon.connectBot — H3 encrypted token persistence", () => {
     const caller = factory(ctx as never);
     await expect(
       caller.connectBot({ tenantId: "t_alice", token: validToken }),
-    ).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 });

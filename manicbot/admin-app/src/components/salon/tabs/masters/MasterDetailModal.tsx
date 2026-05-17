@@ -36,6 +36,7 @@ import {
 import { api, type RouterOutputs } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
+import { MasterTelegramInlineSection } from "./MasterTelegramInlineSection";
 
 type MasterDetail = RouterOutputs["salon"]["getMasterDetail"];
 
@@ -243,6 +244,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
         {!editing ? (
           <ViewMode
             master={m}
+            tenantId={tenantId}
             lang={lang}
             isEditable={isEditable}
             editLockReason={editLockReason}
@@ -305,6 +307,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
 
 function ViewMode({
   master,
+  tenantId,
   lang,
   isEditable,
   editLockReason,
@@ -315,6 +318,7 @@ function ViewMode({
   hiddenPending,
 }: {
   master: NonNullable<MasterDetail>;
+  tenantId: string;
   lang: Lang;
   isEditable: boolean;
   editLockReason: string | null;
@@ -357,6 +361,13 @@ function ViewMode({
           {editLockReason}
         </div>
       )}
+
+      <MasterTelegramInlineSection
+        tenantId={tenantId}
+        masterChatId={master.chatId}
+        origin={master.origin}
+        lang={lang}
+      />
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-white/5">
         {isEditable && (

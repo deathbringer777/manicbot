@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
-  masterInvitations,
+  masterInvitations, masterPairingCodes,
 } from "~/server/db/schema";
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
@@ -11,7 +11,12 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt } from "drizzle-orm";
+import {
+  generatePairingToken,
+  buildDeepLink,
+  PAIRING_TOKEN_TTL_SEC,
+} from "~/server/api/masterPairing/tokenLogic";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
@@ -21,6 +26,7 @@ import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/
 import { log } from "~/server/utils/logger";
 import { notifyWorker } from "~/server/utils/notifyWorker";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import { notifyWebUser } from "~/server/services/notifyWebUser";
 import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
@@ -1176,15 +1182,16 @@ export const salonRouter = createTRPCRouter({
 
       const passwordHash = await hashPassword(password);
       // 0065: salon-owned accounts also keep a reversibly-encrypted copy of
-      // the plaintext so the owner can peek/reset via OTP. Fail closed if
-      // BOT_ENCRYPTION_KEY is unset — refusing to create rather than storing
-      // half the data the salon needs to manage the account.
+      // the plaintext so the owner can peek/reset via OTP.
+      // Degrade gracefully if BOT_ENCRYPTION_KEY is unset — account is created
+      // without the encrypted copy; peek/reset-password features will be
+      // unavailable until the key is configured on Pages.
       const passwordEncrypted = await encryptMasterPassword(password, env.BOT_ENCRYPTION_KEY ?? null);
       if (!passwordEncrypted) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "BOT_ENCRYPTION_KEY is not configured; salon-owned master accounts require it.",
-        });
+        log.error(
+          "salon.createMasterAccount",
+          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — password_encrypted will be NULL. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app`"),
+        );
       }
       const id = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
@@ -1308,9 +1315,11 @@ export const salonRouter = createTRPCRouter({
       // Better to refuse onboarding than to leave a bricked bot row in D1.
       if (!env.BOT_ENCRYPTION_KEY || env.BOT_ENCRYPTION_KEY.length < 32) {
         log.error("salon.connectBot", new Error("BOT_ENCRYPTION_KEY not configured (≥32 chars required) — refusing to register bot without encryption"));
+        // PRECONDITION_FAILED so the operator sees the actionable message
+        // instead of the generic "Internal server error" sanitization.
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Bot registration is temporarily unavailable. Please contact support.",
+          code: "PRECONDITION_FAILED",
+          message: "Server config error: BOT_ENCRYPTION_KEY is not set on Pages. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app` (must match the Worker value).",
         });
       }
 
@@ -1952,6 +1961,16 @@ export const salonRouter = createTRPCRouter({
       const inviter = ctx.webUser;
       if (!inviter?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
 
+      const email = input.email.trim().toLowerCase();
+
+      // Self-invite guard. Compared case-insensitively; the inviter is already
+      // tenant_owner of this tenant, sending an invite to themselves does
+      // nothing useful and historically created a confusing pending row that
+      // could not be accepted (email_mismatch on the accept page).
+      if (inviter.email && inviter.email.trim().toLowerCase() === email) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_invite_self" });
+      }
+
       // Personal-tenant guard.
       const tenantRow = await ctx.db
         .select({ name: tenants.name, isPersonal: tenants.isPersonal })
@@ -1975,7 +1994,6 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "rate_limited" });
       }
 
-      const email = input.email.trim().toLowerCase();
       const now = Math.floor(Date.now() / 1000);
 
       // Resolve scenario.
@@ -2026,6 +2044,41 @@ export const salonRouter = createTRPCRouter({
         void sendMasterInviteExistingUserEmail(email, invitationId, salonName, lang).catch((e) =>
           log.error("salon.invite.existing", e instanceof Error ? e : new Error(String(e))),
         );
+
+        // In-app Bell entry for the invitee. Email is unreliable (spam, DNS,
+        // delayed delivery) — the Bell drop is what guarantees the recipient
+        // sees the invite next time they open the dashboard. Idempotent on
+        // (web_user_id, source_slug, source_id, kind) so a duplicate-send
+        // retry collapses to the same row.
+        const inviteeId = existingUser[0]!.id;
+        const inviteeLabel = ((): string => {
+          switch (lang) {
+            case "ru": return `Приглашение от салона «${salonName}»`;
+            case "ua": return `Запрошення від салону «${salonName}»`;
+            case "pl": return `Zaproszenie od salonu „${salonName}"`;
+            default:   return `Invitation from ${salonName}`;
+          }
+        })();
+        const inviteeBody = ((): string => {
+          switch (lang) {
+            case "ru": return "Вас приглашают присоединиться как мастера. Нажмите, чтобы принять.";
+            case "ua": return "Вас запрошують приєднатися як майстра. Натисніть, щоб прийняти.";
+            case "pl": return "Zapraszamy Cię do dołączenia jako mistrz. Kliknij, aby zaakceptować.";
+            default:   return "You're invited to join as a master. Click to accept.";
+          }
+        })();
+        void notifyWebUser(ctx.db, {
+          webUserId: inviteeId,
+          kind: "master.invite",
+          title: inviteeLabel,
+          body: inviteeBody,
+          link: `/invitations/${invitationId}`,
+          tenantId: input.tenantId,
+          sourceSlug: "master_invitations",
+          sourceId: invitationId,
+        }).catch((e) =>
+          log.error("salon.invite.notify", e instanceof Error ? e : new Error(String(e))),
+        );
       } else {
         void sendMasterInviteNewUserEmail(email, rawToken, salonName, lang).catch((e) =>
           log.error("salon.invite.new", e instanceof Error ? e : new Error(String(e))),
@@ -2041,6 +2094,92 @@ export const salonRouter = createTRPCRouter({
       });
 
       return { invitationId, scenario };
+    }),
+
+  /**
+   * Read-only context for the accept-invitation page.
+   *
+   * Returns everything the accept-page needs in a single round-trip so the UI
+   * can render a precise, copy-driven warning instead of a generic
+   * "Salon invited you". Public-ish: requires a logged-in webUser (the
+   * route group middleware enforces this), but does NOT require the caller
+   * to be the invitation's recipient — the page itself reveals whether the
+   * email matches and routes to /login if not.
+   *
+   * Fields returned:
+   *   - salonName             — the inviting salon (for the headline)
+   *   - inviterEmail          — who sent it (helps recipient identify spam)
+   *   - status / expiresAt    — drives the "already used / expired" copy
+   *   - emailMatch            — true when the caller's email == invitation email
+   *   - callerOwnsOtherTenant — true when caller is tenant_owner of a different
+   *                              non-personal salon (drives the dual-role warning)
+   *   - callerTenantName      — name of caller's own salon (for the warning copy)
+   */
+  getInvitationContext: protectedProcedure
+    .input(z.object({ invitationId: z.string().min(1).max(64) }))
+    .query(async ({ ctx, input }) => {
+      const caller = ctx.webUser;
+      if (!caller?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const rows = await ctx.db
+        .select({
+          id: masterInvitations.id,
+          tenantId: masterInvitations.tenantId,
+          email: masterInvitations.email,
+          status: masterInvitations.status,
+          scenario: masterInvitations.scenario,
+          tokenExpiresAt: masterInvitations.tokenExpiresAt,
+          inviterUserId: masterInvitations.inviterUserId,
+          tenantName: tenants.name,
+        })
+        .from(masterInvitations)
+        .leftJoin(tenants, eq(tenants.id, masterInvitations.tenantId))
+        .where(eq(masterInvitations.id, input.invitationId))
+        .limit(1);
+      const inv = rows[0];
+      if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "invitation_not_found" });
+
+      const inviterRows = await ctx.db
+        .select({ email: webUsers.email })
+        .from(webUsers)
+        .where(eq(webUsers.id, inv.inviterUserId))
+        .limit(1);
+
+      // Surface the dual-role warning whenever the caller is a tenant_owner
+      // of a different non-personal salon. Lookup is via web_users.tenantId
+      // (web_users.role='tenant_owner' rows are linked to their salon there).
+      let callerOwnsOtherTenant = false;
+      let callerTenantName: string | null = null;
+      if (caller.webRole === "tenant_owner" && caller.tenantId && caller.tenantId !== inv.tenantId) {
+        const ownedRow = await ctx.db
+          .select({ name: tenants.name, isPersonal: tenants.isPersonal })
+          .from(tenants)
+          .where(eq(tenants.id, caller.tenantId))
+          .limit(1);
+        if (ownedRow[0] && ownedRow[0].isPersonal !== 1) {
+          callerOwnsOtherTenant = true;
+          callerTenantName = ownedRow[0].name ?? null;
+        }
+      }
+
+      const nowSec = Math.floor(Date.now() / 1000);
+      return {
+        invitationId: inv.id,
+        tenantId: inv.tenantId,
+        salonName: inv.tenantName ?? "ManicBot",
+        inviterEmail: inviterRows[0]?.email ?? null,
+        /** The email the invitation was sent to — surfaced on the accept
+         *  page so the recipient can see which account they need to sign
+         *  in as when emailMatch is false. */
+        email: inv.email,
+        status: inv.status,
+        scenario: inv.scenario,
+        expiresAt: inv.tokenExpiresAt,
+        expired: inv.tokenExpiresAt < nowSec,
+        emailMatch: (caller.email ?? "").trim().toLowerCase() === inv.email.toLowerCase(),
+        callerOwnsOtherTenant,
+        callerTenantName,
+      };
     }),
 
   /** Returns pending invitations for the masters-tab strip. */
@@ -2226,10 +2365,10 @@ export const salonRouter = createTRPCRouter({
       const passwordHash = await hashPassword(newPassword);
       const passwordEncrypted = await encryptMasterPassword(newPassword, env.BOT_ENCRYPTION_KEY ?? null);
       if (!passwordEncrypted) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "encryption_key_missing",
-        });
+        log.error(
+          "salon.resetMasterPassword",
+          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — password_encrypted will be NULL. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app`"),
+        );
       }
       const now = Math.floor(Date.now() / 1000);
       await ctx.db
@@ -2406,5 +2545,261 @@ export const salonRouter = createTRPCRouter({
       }
 
       return { ...m, webUser: webUserInfo };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  0072 — TELEGRAM PAIRING (salon-owner-initiated)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * List all masters in the tenant with their Telegram pairing state.
+   *
+   * Used by the Salon → Channels → Telegram tab to show a per-master
+   * table: name, primary `chatId` (synthetic vs real), `telegramChatId`
+   * (paired or NULL), and whether a pending pairing code exists.
+   *
+   * Authorization: tenant owner. Returns archived masters too — UI can
+   * filter / show them dimmed.
+   */
+  listMasterPairingStates: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = Math.floor(Date.now() / 1000);
+
+      const masterRows = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          name: masters.name,
+          isSynthetic: masters.isSynthetic,
+          origin: masters.origin,
+          archivedAt: masters.archivedAt,
+          telegramChatId: masters.telegramChatId,
+        })
+        .from(masters)
+        .where(eq(masters.tenantId, input.tenantId))
+        .orderBy(masters.name);
+
+      // Active codes grouped by master_chat_id — one query, then merge in JS.
+      const activeCodes = await ctx.db
+        .select({
+          masterChatId: masterPairingCodes.masterChatId,
+          expiresAt: masterPairingCodes.expiresAt,
+        })
+        .from(masterPairingCodes)
+        .where(and(
+          eq(masterPairingCodes.tenantId, input.tenantId),
+          isNull(masterPairingCodes.consumedAt),
+          gt(masterPairingCodes.expiresAt, now),
+        ));
+      const activeMap = new Map<number, number>();
+      for (const c of activeCodes) {
+        const prev = activeMap.get(c.masterChatId) ?? 0;
+        if (c.expiresAt > prev) activeMap.set(c.masterChatId, c.expiresAt);
+      }
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+
+      return {
+        botUsername: bot?.botUsername ?? null,
+        masters: masterRows.map((m) => ({
+          chatId: m.chatId,
+          name: m.name,
+          isSynthetic: m.isSynthetic === 1,
+          origin: m.origin,
+          archived: m.archivedAt !== null,
+          telegramChatId: m.telegramChatId ?? null,
+          hasActiveCode: activeMap.has(m.chatId),
+          activeCodeExpiresAt: activeMap.get(m.chatId) ?? null,
+        })),
+      };
+    }),
+
+  /**
+   * Single-master pairing state. Same shape as one row from
+   * `listMasterPairingStates`, plus the salon's `botUsername`.
+   *
+   * Used by `MasterTelegramInlineSection` inside `MasterDetailModal` so
+   * the owner can mint / unpair / manually enter chat_id directly from
+   * the per-master detail view, without bouncing to Channels → Telegram.
+   *
+   * Authorization: tenant owner. Returns 404 if the master doesn't exist
+   * in this tenant. Archived rows ARE returned (UI dims them out).
+   */
+  getMasterPairingState: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), masterChatId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = Math.floor(Date.now() / 1000);
+
+      const [m] = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          isSynthetic: masters.isSynthetic,
+          origin: masters.origin,
+          archivedAt: masters.archivedAt,
+          telegramChatId: masters.telegramChatId,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+
+      const [activeCode] = await ctx.db
+        .select({ expiresAt: masterPairingCodes.expiresAt })
+        .from(masterPairingCodes)
+        .where(and(
+          eq(masterPairingCodes.tenantId, input.tenantId),
+          eq(masterPairingCodes.masterChatId, input.masterChatId),
+          isNull(masterPairingCodes.consumedAt),
+          gt(masterPairingCodes.expiresAt, now),
+        ))
+        .orderBy(desc(masterPairingCodes.expiresAt))
+        .limit(1);
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+
+      return {
+        chatId: m.chatId,
+        isSynthetic: m.isSynthetic === 1,
+        origin: m.origin,
+        archived: m.archivedAt !== null,
+        telegramChatId: m.telegramChatId ?? null,
+        hasActiveCode: !!activeCode,
+        activeCodeExpiresAt: activeCode?.expiresAt ?? null,
+        botUsername: bot?.botUsername ?? null,
+      };
+    }),
+
+  /**
+   * Salon-owner-initiated pairing mint. Same shape as
+   * `master.requestPairingCode` but authorized via `assertTenantOwner`
+   * — the owner doesn't need IDOR scoping. Stores
+   * `createdByWebUserId = ctx.webUser.id` for attribution.
+   */
+  createMasterPairingCode: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), masterChatId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const [m] = await ctx.db
+        .select({ archivedAt: masters.archivedAt })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "Master not found" });
+      if (m.archivedAt !== null) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Master is archived" });
+      }
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+      if (!bot?.botUsername) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Connect a Telegram bot first (Channels → Telegram)",
+        });
+      }
+
+      const { raw, hash } = await generatePairingToken();
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = now + PAIRING_TOKEN_TTL_SEC;
+
+      await ctx.db.insert(masterPairingCodes).values({
+        tokenHash: hash,
+        tenantId: input.tenantId,
+        masterChatId: input.masterChatId,
+        createdByWebUserId: ctx.webUser.id,
+        createdAt: now,
+        expiresAt,
+      });
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.pairing_code_created",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId}`,
+        ip: ctxIp(ctx),
+      });
+
+      return {
+        deepLink: buildDeepLink(bot.botUsername, raw),
+        expiresAt,
+      };
+    }),
+
+  /**
+   * Manual override: salon owner directly sets a master's
+   * `telegram_chat_id` (e.g. they have the master's TG ID on hand and
+   * want to skip the deep-link round-trip). Setting it to NULL unpairs.
+   *
+   * The partial UNIQUE `idx_masters_tenant_tg_chat` is enforced — a 409
+   * on collision rolls back without partial state.
+   */
+  setMasterTelegramChatId: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterChatId: z.number().int(),
+      telegramChatId: z.number().int().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const [m] = await ctx.db
+        .select({ archivedAt: masters.archivedAt })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Pre-check the partial UNIQUE so we can return a friendly error
+      // instead of a SQLite constraint violation.
+      if (input.telegramChatId !== null) {
+        const [collision] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(
+            eq(masters.tenantId, input.tenantId),
+            eq(masters.telegramChatId, input.telegramChatId),
+            ne(masters.chatId, input.masterChatId),
+          ))
+          .limit(1);
+        if (collision) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Этот Telegram уже привязан к другому мастеру в салоне",
+          });
+        }
+      }
+
+      await ctx.db
+        .update(masters)
+        .set({ telegramChatId: input.telegramChatId })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: input.telegramChatId === null
+          ? "tenant.master.telegram_unpaired"
+          : "tenant.master.telegram_set",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId} telegramChatId=${input.telegramChatId ?? "null"}`,
+        ip: ctxIp(ctx),
+      });
+
+      return { success: true };
     }),
 });

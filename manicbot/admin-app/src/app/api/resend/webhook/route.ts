@@ -1,33 +1,32 @@
 /**
- * Resend webhook handler — bounce / complaint / delivered events.
+ * Resend webhook handler — bounce / complaint / delivered / opened / clicked
+ * events. Closes the loop on `marketing_sends` so the dashboard sees real
+ * delivery status, not just "we handed it to Resend".
  *
- * When Resend reports a hard bounce or spam complaint, add the email to the
- * suppression list so we stop sending to it. Prevents the Resend domain
- * reputation from tanking.
+ * The pure-function event matrix lives in
+ * `~/server/marketing/webhooks/processResendEvent.ts` so the mapping is
+ * unit-testable without a DB. This handler is the I/O wrapper:
+ *   1. Verify Svix signature (Resend uses Svix-compatible signing).
+ *   2. Parse + dispatch to `processResendEvent`.
+ *   3. Apply `sendUpdate` to `marketing_sends` (last-write-wins on status,
+ *      timestamps idempotent via COALESCE so retries can't clobber).
+ *   4. Apply `suppress` to `email_suppressions` (existing reputation guard).
  *
- * Signature verification uses Resend's Svix-compatible webhook signing.
- * Expects RESEND_WEBHOOK_SECRET env var in the admin-app Pages project.
+ * `RESEND_WEBHOOK_SECRET` env var (Pages secret) is required. Without it
+ * the endpoint returns 503 — never accept unsigned events.
  */
 
 import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
 import { getDb } from "~/server/db";
 import { emailSuppressions } from "~/server/db/schema";
-import { sql } from "drizzle-orm";
 import { log } from "~/server/utils/logger";
+import {
+  processResendEvent,
+  type ResendEvent,
+} from "~/server/marketing/webhooks/processResendEvent";
 
 export const runtime = "edge";
-
-interface ResendEvent {
-  type: string;
-  created_at: string;
-  data: {
-    email_id?: string;
-    to?: string | string[];
-    from?: string;
-    bounce?: { type?: string; message?: string };
-    complaint?: { type?: string };
-  };
-}
 
 async function verifySvixSignature(
   rawBody: string,
@@ -84,28 +83,58 @@ export async function POST(req: Request) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const type = event.type;
-  const recipients = Array.isArray(event.data?.to) ? event.data.to : [event.data?.to];
   const now = Math.floor(Date.now() / 1000);
+  const result = processResendEvent(event, now);
+  const db = getDb();
 
-  // Hard bounce or complaint → suppress
-  const shouldSuppress =
-    type === "email.bounced" ||
-    type === "email.complained" ||
-    type === "email.delivery_delayed"; // optional: delayed repeatedly → suppress
+  // 1) marketing_sends update — closes the delivery-status loop.
+  if (result.sendUpdate) {
+    const u = result.sendUpdate;
+    try {
+      // Use COALESCE on timestamp columns so duplicate/retry webhooks
+      // don't clobber the original timestamp. Status promotion rule:
+      // terminal states (bounced / complained / failed) always win;
+      // otherwise the new status overwrites. Webhooks usually arrive
+      // in chronological order so this is monotonic enough in practice.
+      await db.run(sql`
+        UPDATE marketing_sends
+        SET
+          status = CASE
+            WHEN ${u.set.status ?? null} IN ('bounced', 'complained', 'failed')
+              THEN ${u.set.status ?? null}
+            WHEN status IN ('bounced', 'complained', 'failed')
+              THEN status
+            ELSE COALESCE(${u.set.status ?? null}, status)
+          END,
+          delivered_at  = COALESCE(delivered_at,  ${u.set.deliveredAt ?? null}),
+          opened_at     = COALESCE(opened_at,     ${u.set.openedAt ?? null}),
+          clicked_at    = COALESCE(clicked_at,    ${u.set.clickedAt ?? null}),
+          bounced_at    = COALESCE(bounced_at,    ${u.set.bouncedAt ?? null}),
+          complained_at = COALESCE(complained_at, ${u.set.complainedAt ?? null})
+        WHERE provider_message_id = ${u.providerMessageId}
+      `);
+    } catch (e) {
+      log.error(
+        "resend-webhook.marketingSends",
+        e instanceof Error ? e : new Error(String((e as Error).message)),
+        { providerMessageId: u.providerMessageId, outcome: result.outcome },
+      );
+    }
+  }
 
-  if (shouldSuppress) {
-    const db = getDb();
-    for (const addr of recipients.filter(Boolean) as string[]) {
+  // 2) email_suppressions insert — hard bounce / complaint / delayed.
+  if (result.suppress) {
+    const s = result.suppress;
+    for (const addr of s.emails) {
       try {
         await db
           .insert(emailSuppressions)
           .values({
-            email: addr.toLowerCase(),
-            reason: type,
+            email: addr,
+            reason: s.reason,
             source: "resend",
             suppressedAt: now,
-            detail: JSON.stringify(event.data).slice(0, 500),
+            detail: s.detail,
           })
           .onConflictDoUpdate({
             target: emailSuppressions.email,
@@ -116,10 +145,14 @@ export async function POST(req: Request) {
             },
           });
       } catch (e) {
-        log.error("resend-webhook.suppress", e instanceof Error ? e : new Error(String((e as Error).message)), { email: addr });
+        log.error(
+          "resend-webhook.suppress",
+          e instanceof Error ? e : new Error(String((e as Error).message)),
+          { email: addr, outcome: result.outcome },
+        );
       }
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, outcome: result.outcome });
 }

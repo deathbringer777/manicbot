@@ -35,6 +35,11 @@ function makeCtx(rows = []) {
             allCalls.push({ sql, args });
             return { results: rows };
           },
+          // Phase 2C: the marketing-automations dispatcher uses `dbGet`
+          // which calls `.first()`. Returns null so the marketing_contact
+          // lookup misses — the dispatcher then counts the automation
+          // rows but `automationsFired` stays 0 (no contact → no send).
+          first: async () => null,
         }),
       }),
     },
@@ -103,13 +108,19 @@ describe('dispatchAppointmentAutomation', () => {
     expect(sentMessages).toHaveLength(0);
   });
 
-  it('reports automationsFired = number of enabled marketing_automations rows', async () => {
+  it('automationsFired = 0 when matching rows exist but the client has no marketing_contact', async () => {
+    // Phase 2C changed the semantics: `automationsFired` is now the count
+    // of automations that actually generated at least one send, not the
+    // count of matching rows. With `[]` steps_json + no marketing_contact
+    // for the apt's chatId, nothing fires — both because the steps are
+    // empty and because the contact lookup misses. Detailed dispatch
+    // semantics are pinned in `marketing-automations-dispatcher.test.js`.
     const { ctx } = makeCtx([{ id: 'auto_1', steps_json: '[]' }, { id: 'auto_2', steps_json: '[]' }]);
     const apt = { id: 'apt_1', chatId: 555, date: '2026-05-15', time: '12:00', svcId: 'svc_a', masterId: 42 };
 
     const result = await dispatchAppointmentAutomation(ctx, apt, 'appointment.done');
 
-    expect(result.automationsFired).toBe(2);
+    expect(result.automationsFired).toBe(0);
   });
 
   it('returns zeros and no throw on a missing apt or tenantId', async () => {

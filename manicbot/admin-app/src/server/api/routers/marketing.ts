@@ -365,6 +365,61 @@ export const marketingRouter = createTRPCRouter({
         .offset(input.offset);
     }),
 
+  /**
+   * Cross-campaign recent sends — God Mode deliverability dashboard.
+   * Powers `/system/marketing/sends`. Optional filters: status (single),
+   * recipient substring. Joins to `marketing_campaigns` so the row can
+   * surface campaign name + tenant_id without an extra round-trip.
+   */
+  sendsRecent: adminProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(500).default(100),
+      offset: z.number().int().min(0).default(0),
+      status: z.string().optional(),
+      recipient: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const conds: any[] = [];
+      if (input.status) conds.push(eq(marketingSends.status, input.status));
+      if (input.recipient && input.recipient.trim()) {
+        const s = `%${input.recipient.trim().toLowerCase()}%`;
+        conds.push(sql`lower(${marketingSends.recipient}) like ${s}`);
+      }
+      const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
+
+      const [items, totalRow] = await Promise.all([
+        ctx.db
+          .select({
+            id: marketingSends.id,
+            campaignId: marketingSends.campaignId,
+            campaignName: marketingCampaigns.name,
+            campaignChannel: marketingCampaigns.channel,
+            tenantId: marketingCampaigns.tenantId,
+            contactId: marketingSends.contactId,
+            recipient: marketingSends.recipient,
+            provider: marketingSends.provider,
+            providerMessageId: marketingSends.providerMessageId,
+            status: marketingSends.status,
+            error: marketingSends.error,
+            queuedAt: marketingSends.queuedAt,
+            sentAt: marketingSends.sentAt,
+            deliveredAt: marketingSends.deliveredAt,
+            openedAt: marketingSends.openedAt,
+            clickedAt: marketingSends.clickedAt,
+            bouncedAt: marketingSends.bouncedAt,
+            complainedAt: marketingSends.complainedAt,
+          })
+          .from(marketingSends)
+          .leftJoin(marketingCampaigns, eq(marketingSends.campaignId, marketingCampaigns.id))
+          .where(where as any)
+          .orderBy(desc(marketingSends.queuedAt))
+          .limit(input.limit)
+          .offset(input.offset),
+        ctx.db.select({ count: sql<number>`count(*)` }).from(marketingSends).where(where as any),
+      ]);
+      return { items, total: Number(totalRow[0]?.count ?? 0) };
+    }),
+
   /** Audience preview — God Mode requires a tenantId since segments are tenant-scoped. */
   campaignAudiencePreview: adminProcedure
     .input(z.object({

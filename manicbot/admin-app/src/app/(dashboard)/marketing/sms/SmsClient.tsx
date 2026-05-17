@@ -3,15 +3,23 @@
 /**
  * SMS Campaigns tab — same UX as Email Campaigns but channel locked to `sms`.
  *
- * Gating: if Brevo SMS is not configured (`BREVO_API_KEY` + `BREVO_SMS_SENDER`
- * env vars), the Create CTA is disabled and we show env-var snippets. The
- * existing-row list still renders so an operator can review past sends.
+ * Gating (tenant view, mode === "tenant"):
+ *   If SMS is not configured at the platform level, the entire surface is
+ *   replaced with a greyed-out "coming soon" facade. Vendor names and ENV
+ *   variable strings (Brevo etc.) NEVER appear on the tenant surface —
+ *   that's platform infrastructure, salon owners don't operate it.
+ *
+ * Gating (admin view, mode === "admin"):
+ *   The original Brevo ENV-snippets gate still renders so the sysadmin can
+ *   see what's missing. Real configuration lives in /system/providers.
+ *
+ * When SMS IS configured both modes render the same working UI.
  */
 
 import { useState } from "react";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
-import { MessageSquare, Plus, Send, Trash2, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { MessageSquare, Plus, Send, Trash2, Clock, CheckCircle2, XCircle, AlertTriangle, Lock } from "lucide-react";
 import { useMarketingScope } from "../useMarketingScope";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -142,10 +150,75 @@ export default function SmsClient() {
 
   const sendPending = adminSend.isPending || tenantSend.isPending;
 
+  // Tenant surface MUST NOT see Brevo / vendor ENV details when SMS is
+  // not configured at the platform level — that's a "coming soon" state
+  // from their POV. Sysadmins (mode === "admin") still see the technical
+  // ENV strings because they're the ones who set them up.
+  const showTenantComingSoon = mode === "tenant" && !smsConfigured;
+  const showAdminBrevoGate = mode === "admin" && !smsConfigured;
+
+  if (showTenantComingSoon) {
+    return (
+      <MarketingShell title="Marketing • SMS" subtitle={t("marketing.sms.subtitle", lang)}>
+        <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 p-4">
+          <div className="flex items-start gap-2.5">
+            <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                {t("marketing.sms.comingSoon.title", lang)}
+              </div>
+              <p className="mt-1 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                {t("marketing.sms.comingSoon.description", lang)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5 opacity-60 pointer-events-none select-none cursor-not-allowed"
+          aria-disabled="true"
+          data-testid="sms-coming-soon"
+          title={t("marketing.sms.comingSoon.cta", lang)}
+        >
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("marketing.sms.cardTitle", lang)}
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                {t("marketing.sms.cardDescription", lang)}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white opacity-40 cursor-not-allowed"
+              aria-disabled="true"
+              tabIndex={-1}
+              title={t("marketing.sms.comingSoon.cta", lang)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("marketing.sms.create", lang)}
+            </button>
+          </div>
+          <div className="text-center py-8 text-slate-500">
+            <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            <div className="text-sm text-slate-700 dark:text-slate-400 font-medium mb-1">
+              {t("marketing.sms.empty.title", lang)}
+            </div>
+            <div className="text-xs text-slate-500">
+              {t("marketing.sms.comingSoon.cta", lang)}
+            </div>
+          </div>
+        </div>
+      </MarketingShell>
+    );
+  }
+
   return (
     <MarketingShell title="Marketing • SMS" subtitle={t("marketing.sms.subtitle", lang)}>
-      {/* Brevo SMS status gate */}
-      {!smsConfigured && (
+      {/* Admin-only Brevo status gate (sysadmin operates the plumbing). */}
+      {showAdminBrevoGate && (
         <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 p-4">
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />

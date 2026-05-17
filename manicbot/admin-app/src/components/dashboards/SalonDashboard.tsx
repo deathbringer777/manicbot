@@ -2657,7 +2657,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     {!isWebAccount && <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>}
                   </div>
                   <span className="text-[10px] text-slate-400 opacity-0 transition group-hover:opacity-100">
-                    {t("masterDetail.action.edit", lang)}
+                    {t("masterDetail.action.settings", lang)}
                   </span>
                 </button>
               );

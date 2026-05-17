@@ -1,19 +1,9 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import NotFoundBackButton from "./_components/NotFoundBackButton";
+
+export const runtime = "edge";
 
 export default function NotFound() {
-  const router = useRouter();
-
-  function handleBack() {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      window.history.back();
-    } else {
-      router.push("/");
-    }
-  }
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
       <div className="text-center px-4">
@@ -22,12 +12,7 @@ export default function NotFound() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           The page you are looking for does not exist.
         </p>
-        <button
-          onClick={handleBack}
-          className="mt-6 inline-block rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
-        >
-          Back
-        </button>
+        <NotFoundBackButton />
         <div className="mt-3">
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
             Go home

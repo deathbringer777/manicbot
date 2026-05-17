@@ -1449,3 +1449,58 @@ CREATE INDEX IF NOT EXISTS idx_mpc_tenant_master
   ON master_pairing_codes(tenant_id, master_chat_id);
 CREATE INDEX IF NOT EXISTS idx_mpc_unconsumed_exp
   ON master_pairing_codes(expires_at) WHERE consumed_at IS NULL;
+
+-- ─── Platform messenger (migration 0076) ────────────────────────────────
+-- Cross-tenant DM channel: ManicBot (any system_admin) ↔ one web_user
+-- (typically tenant_owner). Intentionally NOT a row in `threads` — that
+-- family is tenant-scoped (tenant_id NOT NULL) and reusing it would
+-- weaken tenant-isolation. `platform_broadcasts` records each broadcast
+-- once; emitted messages carry `broadcast_id` for aggregation.
+CREATE TABLE IF NOT EXISTS platform_threads (
+  id                       TEXT PRIMARY KEY,
+  recipient_web_user_id    TEXT NOT NULL,
+  recipient_tenant_id      TEXT,
+  last_message_at          INTEGER,
+  last_message_preview     TEXT,
+  last_sender_kind         TEXT,
+  recipient_last_read_at   INTEGER,
+  platform_last_read_at    INTEGER,
+  archived                 INTEGER NOT NULL DEFAULT 0,
+  created_at               INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_threads_recipient
+  ON platform_threads(recipient_web_user_id);
+CREATE INDEX IF NOT EXISTS idx_platform_threads_last
+  ON platform_threads(last_message_at);
+CREATE INDEX IF NOT EXISTS idx_platform_threads_archived
+  ON platform_threads(archived, last_message_at);
+
+CREATE TABLE IF NOT EXISTS platform_thread_messages (
+  id                       TEXT PRIMARY KEY,
+  thread_id                TEXT NOT NULL,
+  sender_kind              TEXT NOT NULL,
+  sender_web_user_id       TEXT NOT NULL,
+  body                     TEXT NOT NULL,
+  attachments_json         TEXT,
+  broadcast_id             TEXT,
+  created_at               INTEGER NOT NULL,
+  FOREIGN KEY (thread_id) REFERENCES platform_threads(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ptm_thread_id
+  ON platform_thread_messages(thread_id, id);
+CREATE INDEX IF NOT EXISTS idx_ptm_thread_created
+  ON platform_thread_messages(thread_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ptm_broadcast
+  ON platform_thread_messages(broadcast_id) WHERE broadcast_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS platform_broadcasts (
+  id                       TEXT PRIMARY KEY,
+  sender_web_user_id       TEXT NOT NULL,
+  title                    TEXT,
+  body                     TEXT NOT NULL,
+  audience_filter_json     TEXT NOT NULL,
+  recipients_count         INTEGER NOT NULL,
+  created_at               INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_platform_broadcasts_created
+  ON platform_broadcasts(created_at);

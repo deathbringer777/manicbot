@@ -41,6 +41,8 @@ describe('isAdminAppPath', () => {
     ['/marketing/providers'],
     ['/leads'],
     ['/inbox'],
+    ['/messages'],
+    ['/messages/abc123'],
     ['/role-requests'],
   ])('proxies %s', (path) => {
     expect(isAdminAppPath(path)).toBe(true);

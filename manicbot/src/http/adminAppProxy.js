@@ -38,6 +38,7 @@ export function isAdminAppPath(pathname) {
     '/marketing',
     '/leads',
     '/inbox',
+    '/messages',
     '/role-requests',
   ];
   for (const p of dash) {

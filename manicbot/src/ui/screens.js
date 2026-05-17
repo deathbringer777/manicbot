@@ -1,5 +1,5 @@
 import { send, sendPhoto, trySendPhoto, editPhoto, api } from '../telegram.js';
-import { escHtml, fill, t, svcName, isCorrectionSvc } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isCorrectionSvc, fmtEmoji } from '../utils/helpers.js';
 import { fmtDT, fmtDate } from '../utils/date.js';
 import { CB, SALON, ADDRESS, PHONE, HOURS_STR, MAPS_URL } from '../config.js';
 import { getLang } from '../services/chat.js';
@@ -58,7 +58,7 @@ export async function showPrices(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   let txt = t(lg, 'prices_t');
   for (const s of ctx.svc.filter(sv => sv.active !== false && sv.hidden !== true))
-    txt += `${s.e} <b>${t(lg, 'svc_' + s.id)}</b>\n   💵 ${s.price} ${t(lg, 'cur')} · ⏱ ${s.dur} ${t(lg, 'min')}\n\n`;
+    txt += `${fmtEmoji(s.e)}<b>${t(lg, 'svc_' + s.id)}</b>\n   💵 ${s.price} ${t(lg, 'cur')} · ⏱ ${s.dur} ${t(lg, 'min')}\n\n`;
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: [
     [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
     [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],

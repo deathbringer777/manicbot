@@ -82,6 +82,13 @@ function masterRowToDoc(row) {
   if (!row) return null;
   return {
     chatId: row.chat_id,
+    /**
+     * 0072 — real Telegram chat_id when the master was paired via
+     * `/start mst_<token>` (web-created synthetic masters). NULL for
+     * masters whose primary `chat_id` is already a real TG chat
+     * (origin='invited_telegram' or pre-0023 legacy rows).
+     */
+    telegramChatId: row.telegram_chat_id ?? null,
     name: row.name,
     tgUsername: row.tg_username,
     services: row.services ? JSON.parse(row.services) : null,
@@ -95,9 +102,44 @@ function masterRowToDoc(row) {
   };
 }
 
+/**
+ * Returns the Telegram chat_id to send messages / notifications to for
+ * a given master. Prefer `telegram_chat_id` (real TG account paired by
+ * the master via /start mst_<token>) over the primary `chat_id` which
+ * may be a synthetic >=10B identity for web-created salon masters.
+ *
+ * Returns null when the master has neither (cannot be messaged via TG).
+ *
+ * @param {object|null} master  master doc from `masterRowToDoc` or KV
+ * @returns {number|null}
+ */
+export function masterTelegramRecipient(master) {
+  if (!master) return null;
+  const tg = master.telegramChatId ?? master.telegram_chat_id ?? null;
+  if (tg) return Number(tg);
+  // Synthetic chat_ids live in the 10B+ range — see migration 0023. If we
+  // have no `telegram_chat_id`, a synthetic primary chat_id is NOT a
+  // valid TG recipient (Telegram API will 400).
+  const cid = Number(master.chatId);
+  if (Number.isFinite(cid) && cid > 0 && cid < 10_000_000_000) return cid;
+  return null;
+}
+
 export async function getMaster(ctx, cid) {
   if (!ctx?.db || !ctx?.tenantId) return kvGet(ctx, `master:${cid}`);
-  const row = await dbGet(ctx, 'SELECT * FROM masters WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
+  // 0072 — match EITHER the master's primary `chat_id` (legacy + real-TG
+  // masters) OR `telegram_chat_id` (web-created synthetic masters paired
+  // via /start mst_<token>). The partial UNIQUE index
+  // `idx_masters_tenant_tg_chat` guarantees at most one master row per
+  // (tenant_id, telegram_chat_id), so the OR can match at most one row.
+  // Archived masters are intentionally NOT filtered here — callers that
+  // need active-only (e.g. tenant_owner master list, public profile) add
+  // their own `archived_at IS NULL` check.
+  const row = await dbGet(
+    ctx,
+    'SELECT * FROM masters WHERE tenant_id = ? AND (chat_id = ? OR telegram_chat_id = ?)',
+    ctx.tenantId, cid, cid,
+  );
   return masterRowToDoc(row);
 }
 

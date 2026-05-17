@@ -3,7 +3,7 @@ import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
-  masterInvitations,
+  masterInvitations, masterPairingCodes,
 } from "~/server/db/schema";
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
@@ -11,7 +11,12 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt } from "drizzle-orm";
+import {
+  generatePairingToken,
+  buildDeepLink,
+  PAIRING_TOKEN_TTL_SEC,
+} from "~/server/api/masterPairing/tokenLogic";
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
@@ -2363,5 +2368,201 @@ export const salonRouter = createTRPCRouter({
       }
 
       return { ...m, webUser: webUserInfo };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  0072 — TELEGRAM PAIRING (salon-owner-initiated)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * List all masters in the tenant with their Telegram pairing state.
+   *
+   * Used by the Salon → Channels → Telegram tab to show a per-master
+   * table: name, primary `chatId` (synthetic vs real), `telegramChatId`
+   * (paired or NULL), and whether a pending pairing code exists.
+   *
+   * Authorization: tenant owner. Returns archived masters too — UI can
+   * filter / show them dimmed.
+   */
+  listMasterPairingStates: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = Math.floor(Date.now() / 1000);
+
+      const masterRows = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          name: masters.name,
+          isSynthetic: masters.isSynthetic,
+          origin: masters.origin,
+          archivedAt: masters.archivedAt,
+          telegramChatId: masters.telegramChatId,
+        })
+        .from(masters)
+        .where(eq(masters.tenantId, input.tenantId))
+        .orderBy(masters.name);
+
+      // Active codes grouped by master_chat_id — one query, then merge in JS.
+      const activeCodes = await ctx.db
+        .select({
+          masterChatId: masterPairingCodes.masterChatId,
+          expiresAt: masterPairingCodes.expiresAt,
+        })
+        .from(masterPairingCodes)
+        .where(and(
+          eq(masterPairingCodes.tenantId, input.tenantId),
+          isNull(masterPairingCodes.consumedAt),
+          gt(masterPairingCodes.expiresAt, now),
+        ));
+      const activeMap = new Map<number, number>();
+      for (const c of activeCodes) {
+        const prev = activeMap.get(c.masterChatId) ?? 0;
+        if (c.expiresAt > prev) activeMap.set(c.masterChatId, c.expiresAt);
+      }
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+
+      return {
+        botUsername: bot?.botUsername ?? null,
+        masters: masterRows.map((m) => ({
+          chatId: m.chatId,
+          name: m.name,
+          isSynthetic: m.isSynthetic === 1,
+          origin: m.origin,
+          archived: m.archivedAt !== null,
+          telegramChatId: m.telegramChatId ?? null,
+          hasActiveCode: activeMap.has(m.chatId),
+          activeCodeExpiresAt: activeMap.get(m.chatId) ?? null,
+        })),
+      };
+    }),
+
+  /**
+   * Salon-owner-initiated pairing mint. Same shape as
+   * `master.requestPairingCode` but authorized via `assertTenantOwner`
+   * — the owner doesn't need IDOR scoping. Stores
+   * `createdByWebUserId = ctx.webUser.id` for attribution.
+   */
+  createMasterPairingCode: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), masterChatId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const [m] = await ctx.db
+        .select({ archivedAt: masters.archivedAt })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "Master not found" });
+      if (m.archivedAt !== null) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Master is archived" });
+      }
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+      if (!bot?.botUsername) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Connect a Telegram bot first (Channels → Telegram)",
+        });
+      }
+
+      const { raw, hash } = await generatePairingToken();
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = now + PAIRING_TOKEN_TTL_SEC;
+
+      await ctx.db.insert(masterPairingCodes).values({
+        tokenHash: hash,
+        tenantId: input.tenantId,
+        masterChatId: input.masterChatId,
+        createdByWebUserId: ctx.webUser.id,
+        createdAt: now,
+        expiresAt,
+      });
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.pairing_code_created",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId}`,
+        ip: ctxIp(ctx),
+      });
+
+      return {
+        deepLink: buildDeepLink(bot.botUsername, raw),
+        expiresAt,
+      };
+    }),
+
+  /**
+   * Manual override: salon owner directly sets a master's
+   * `telegram_chat_id` (e.g. they have the master's TG ID on hand and
+   * want to skip the deep-link round-trip). Setting it to NULL unpairs.
+   *
+   * The partial UNIQUE `idx_masters_tenant_tg_chat` is enforced — a 409
+   * on collision rolls back without partial state.
+   */
+  setMasterTelegramChatId: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      masterChatId: z.number().int(),
+      telegramChatId: z.number().int().nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const [m] = await ctx.db
+        .select({ archivedAt: masters.archivedAt })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Pre-check the partial UNIQUE so we can return a friendly error
+      // instead of a SQLite constraint violation.
+      if (input.telegramChatId !== null) {
+        const [collision] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(
+            eq(masters.tenantId, input.tenantId),
+            eq(masters.telegramChatId, input.telegramChatId),
+            ne(masters.chatId, input.masterChatId),
+          ))
+          .limit(1);
+        if (collision) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Этот Telegram уже привязан к другому мастеру в салоне",
+          });
+        }
+      }
+
+      await ctx.db
+        .update(masters)
+        .set({ telegramChatId: input.telegramChatId })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: input.telegramChatId === null
+          ? "tenant.master.telegram_unpaired"
+          : "tenant.master.telegram_set",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterChatId} telegramChatId=${input.telegramChatId ?? "null"}`,
+        ip: ctxIp(ctx),
+      });
+
+      return { success: true };
     }),
 });

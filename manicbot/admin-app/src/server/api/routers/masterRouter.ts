@@ -1,10 +1,24 @@
 import { z } from "zod";
 import { createTRPCRouter, masterProcedure } from "~/server/api/trpc";
-import { appointments, masters, users, services, tenants, masterClientBlocks } from "~/server/db/schema";
-import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
+import {
+  appointments,
+  masters,
+  users,
+  services,
+  tenants,
+  masterClientBlocks,
+  bots,
+  masterPairingCodes,
+} from "~/server/db/schema";
+import { eq, and, gte, lte, desc, inArray, isNull, gt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sanitizeText } from "~/server/security/sanitize";
 import { notifyWorker } from "~/server/utils/notifyWorker";
+import {
+  generatePairingToken,
+  buildDeepLink,
+  PAIRING_TOKEN_TTL_SEC,
+} from "~/server/api/masterPairing/tokenLogic";
 
 /** Assert caller is master on a personal (independent) tenant — allows service/config management */
 async function assertPersonalMaster(ctx: any, tenantId: string) {
@@ -665,5 +679,155 @@ export const masterRouter = createTRPCRouter({
         ))
         .orderBy(desc(masterClientBlocks.blockedAt));
       return rows;
+    }),
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  0072 — TELEGRAM PAIRING (master self-service)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Return the master's current pairing state — primary `chatId`, the
+   * paired `telegramChatId` (if any), the active pending code's expiry
+   * (if any), and the bot username for the deep-link.
+   *
+   * Master role + `assertCallerIsMaster` IDOR guard (the master may only
+   * read their OWN row). System-admin bypass for support escalation.
+   */
+  getMyPairingState: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      const [row] = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          telegramChatId: masters.telegramChatId,
+          isSynthetic: masters.isSynthetic,
+          archivedAt: masters.archivedAt,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)))
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const now = Math.floor(Date.now() / 1000);
+      const [active] = await ctx.db
+        .select({ expiresAt: masterPairingCodes.expiresAt })
+        .from(masterPairingCodes)
+        .where(and(
+          eq(masterPairingCodes.tenantId, input.tenantId),
+          eq(masterPairingCodes.masterChatId, input.masterId),
+          isNull(masterPairingCodes.consumedAt),
+          gt(masterPairingCodes.expiresAt, now),
+        ))
+        .orderBy(desc(masterPairingCodes.createdAt))
+        .limit(1);
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+
+      return {
+        chatId: row.chatId,
+        telegramChatId: row.telegramChatId ?? null,
+        isSynthetic: row.isSynthetic === 1,
+        archived: row.archivedAt !== null,
+        hasActiveCode: !!active,
+        activeCodeExpiresAt: active?.expiresAt ?? null,
+        botUsername: bot?.botUsername ?? null,
+      };
+    }),
+
+  /**
+   * Mint a fresh pairing token, persist its SHA-256 hash + 7-day TTL in
+   * `master_pairing_codes`, and return the raw token + deep-link URL.
+   *
+   * The raw token leaves the server exactly once in this response and is
+   * then irrecoverable (only `SHA-256(raw)` is stored). The Worker's
+   * `/start mst_<raw>` consumer recomputes the hash, looks up the row,
+   * binds `masters.telegram_chat_id`, and marks the code consumed.
+   *
+   * Authorization: master role on their OWN row only (IDOR-guarded). The
+   * salon-owner-initiated mint lives at `salon.createMasterPairingCode`
+   * with `assertTenantOwner`.
+   */
+  requestPairingCode: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (ctx.webUser.webRole !== "master" || ctx.webUser.tenantId !== input.tenantId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the master themselves can request a pairing code",
+        });
+      }
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+
+      const [row] = await ctx.db
+        .select({ archivedAt: masters.archivedAt })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)))
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      if (row.archivedAt !== null) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Master account is archived" });
+      }
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+      if (!bot?.botUsername) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Salon has no active Telegram bot — ask the salon to connect one",
+        });
+      }
+
+      const { raw, hash } = await generatePairingToken();
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = now + PAIRING_TOKEN_TTL_SEC;
+
+      await ctx.db.insert(masterPairingCodes).values({
+        tokenHash: hash,
+        tenantId: input.tenantId,
+        masterChatId: input.masterId,
+        createdByWebUserId: ctx.webUser.id,
+        createdAt: now,
+        expiresAt,
+      });
+
+      return {
+        deepLink: buildDeepLink(bot.botUsername, raw),
+        expiresAt,
+      };
+    }),
+
+  /**
+   * Unbind a previously-paired Telegram account. Sets
+   * `masters.telegram_chat_id = NULL`. Does NOT delete past pairing-code
+   * rows (audit trail) and does NOT cancel pending unconsumed codes —
+   * the master is free to re-mint and re-pair.
+   *
+   * Authorization: same as `requestPairingCode` — master, own row only.
+   */
+  unpairTelegram: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (ctx.webUser.webRole !== "master" || ctx.webUser.tenantId !== input.tenantId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only the master themselves can unpair their Telegram",
+        });
+      }
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      await ctx.db
+        .update(masters)
+        .set({ telegramChatId: null })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
+      return { success: true };
     }),
 });

@@ -11,6 +11,7 @@ import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { TodayTab } from "~/components/master/tabs/TodayTab";
 import { ScheduleTab } from "~/components/master/tabs/ScheduleTab";
+import { MasterTelegramPairingCard } from "~/components/master/MasterTelegramPairingCard";
 import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
 import { TestBadge } from "~/components/ui/TestBadge";
@@ -629,6 +630,10 @@ export function MasterDashboard({
       {/* PROFILE */}
       {tab === "profile" && (
         <div className="space-y-4">
+          {/* 0072 — master Telegram pairing card. Self-hides when the master's
+              primary chatId is already a real Telegram chat (no need to pair). */}
+          <MasterTelegramPairingCard tenantId={tenantId} masterId={masterId} />
+
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.profile", lang)}</h2>
             {profile.data && !bioEdit && canMutate && (

@@ -10,7 +10,8 @@ import { ticketFwdAckKey } from '../utils/kv-keys.js';
 import { send, api } from '../telegram.js';
 import { getState, setState, clearState, checkRateLimit } from '../services/state.js';
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';
-import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, setAdminId, getMaster, saveMaster, listMasters, resolveMasterInput, blockUser, unblockUser, upsertUserFromTelegram, isPlatformAdmin } from '../services/users.js';
+import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, setAdminId, getMaster, saveMaster, listMasters, resolveMasterInput, blockUser, unblockUser, upsertUserFromTelegram, isPlatformAdmin, masterTelegramRecipient } from '../services/users.js';
+import { tryConsumePairingCode } from '../services/masterPairing.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
@@ -363,7 +364,12 @@ export async function onMsg(ctx, msg) {
         } else {
           const masters = await listMasters(ctx);
           const adminId = await getAdminId(ctx);
-          for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+          // 0072 — route to paired masters' real TG chat where present.
+          for (const m of masters) {
+            if (m.onVacation) continue;
+            const tg = masterTelegramRecipient(m);
+            if (tg) recipients.add(tg);
+          }
           if (adminId) recipients.add(adminId);
         }
         for (const rcid of recipients) {
@@ -592,7 +598,12 @@ export async function onMsg(ctx, msg) {
         } else {
           const masters = await listMasters(ctx);
           const adminId = await getAdminId(ctx);
-          for (const m of masters) if (m.chatId && !m.onVacation) await send(ctx, m.chatId, toSend);
+          // 0072 — paired masters: route to their real TG chat.
+          for (const m of masters) {
+            if (m.onVacation) continue;
+            const tg = masterTelegramRecipient(m);
+            if (tg) await send(ctx, tg, toSend);
+          }
           if (adminId) await send(ctx, adminId, toSend);
           if (ctx.adminChatId) await send(ctx, ctx.adminChatId, toSend);
         }
@@ -681,6 +692,43 @@ export async function onMsg(ctx, msg) {
   if (startMatch) {
     const startPayload = startMatch[1] || null;
     await upsertUserFromTelegram(ctx, cid, msg.from);
+
+    // 0072 — master Telegram pairing.  When the deep-link carries
+    // `mst_<rawToken>` we consume the pairing code, bind
+    // `masters.telegram_chat_id`, and hand control to the master panel.
+    // Cross-tenant guards live inside `tryConsumePairingCode` (the bot's
+    // resolved `ctx.tenantId` must match the code's tenant). We branch
+    // here BEFORE `decodeStartPayload` so the analytics origin tracker
+    // doesn't try to interpret `mst_…` as a UTM token.
+    if (startPayload && ctx.tenantId && startPayload.startsWith('mst_')) {
+      const rawToken = startPayload.slice(4);
+      const result = await tryConsumePairingCode(ctx, rawToken, cid);
+      const lg = (await getLang(ctx, cid)) || 'ru';
+      if (result.ok) {
+        await clearChatHistory(ctx, cid);
+        const msterName = result.masterName ? ' (' + result.masterName + ')' : '';
+        await send(
+          ctx,
+          cid,
+          '✅ ' + t(lg, 'master_pairing_success_prefix').replace('{name}', msterName.trim()),
+        ).catch(() => null);
+        return showMasterPanel(ctx, cid, name);
+      }
+      // Friendly user-facing error text per reason.
+      const reasonText = {
+        not_found: 'master_pairing_err_not_found',
+        invalid_token: 'master_pairing_err_invalid',
+        wrong_tenant: 'master_pairing_err_wrong_tenant',
+        consumed: 'master_pairing_err_consumed',
+        expired: 'master_pairing_err_expired',
+        master_archived: 'master_pairing_err_archived',
+        master_gone: 'master_pairing_err_gone',
+        tg_chat_in_use: 'master_pairing_err_chat_in_use',
+      }[result.reason] || 'master_pairing_err_invalid';
+      await send(ctx, cid, '⚠️ ' + t(lg, reasonText)).catch(() => null);
+      // Fall through to the standard /start flow so the user still gets
+      // a usable bot rather than being stuck on the error toast.
+    }
 
     // Record acquisition origin if this is a deep-link /start. The channel is
     // derived from the inbound metadata if present (omnichannel path) and
@@ -1201,7 +1249,12 @@ export async function onMsg(ctx, msg) {
     const adminId = await getAdminId(ctx);
     if (adminId) recipients.add(adminId);
     const masters = await listMasters(ctx);
-    for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+    // 0072 — paired masters: route to their real TG chat.
+    for (const m of masters) {
+      if (m.onVacation) continue;
+      const tg = masterTelegramRecipient(m);
+      if (tg) recipients.add(tg);
+    }
     for (const rcid of recipients) {
       const rlg = await getLang(ctx, rcid) || 'ru';
       await send(ctx, rcid, fill(t(rlg, 'mst_client_msg'), { client: escHtml(apt.userName), msg: escHtml(txt) }), { reply_markup: { inline_keyboard: [

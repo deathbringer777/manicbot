@@ -71,6 +71,9 @@ import inventoryLiteManifest from "./inventory-lite/manifest";
 // ── productivity / cron-backed (first plugin wired to phasePluginCron) ──────
 import remindersManifest from "./reminders/manifest";
 
+// ── operations / core-backed (UI facade only, no router/lifecycle) ──────────
+import masterTelegramPairingManifest from "./master-telegram-pairing/manifest";
+
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
@@ -92,6 +95,8 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   inventoryLiteManifest,
   // productivity / cron-backed (first plugin wired to phasePluginCron)
   remindersManifest,
+  // operations / core-backed UI facade (0072 — master Telegram pairing)
+  masterTelegramPairingManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

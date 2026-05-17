@@ -68,6 +68,8 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
     doing: "",
     done: "",
   });
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<Column | null>(null);
 
   useEffect(() => {
     setTasks(readTasks(installationId));
@@ -100,6 +102,39 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
     writeTasks(installationId, updated);
   }, [installationId, tasks]);
 
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLElement>, id: string) => {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingId(null);
+    setDragOverCol(null);
+  }, []);
+
+  const handleColDragOver = useCallback((e: React.DragEvent<HTMLElement>, col: Column) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverCol !== col) setDragOverCol(col);
+  }, [dragOverCol]);
+
+  const handleColDragLeave = useCallback((e: React.DragEvent<HTMLElement>, col: Column) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    if (dragOverCol === col) setDragOverCol(null);
+  }, [dragOverCol]);
+
+  const handleColDrop = useCallback((e: React.DragEvent<HTMLElement>, col: Column) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || draggingId;
+    setDraggingId(null);
+    setDragOverCol(null);
+    if (!id) return;
+    const task = tasks.find((t) => t.id === id);
+    if (!task || task.column === col) return;
+    move(id, col);
+  }, [draggingId, move, tasks]);
+
   return (
     <PluginRuntimeShell slug={slug} bare>
     <div data-testid="task-board-runtime" className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -109,7 +144,14 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
           <section
             key={key}
             data-testid={`task-board-col-${key}`}
-            className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-slate-900/40 p-3 flex flex-col min-h-[280px]"
+            onDragOver={(e) => handleColDragOver(e, key)}
+            onDragLeave={(e) => handleColDragLeave(e, key)}
+            onDrop={(e) => handleColDrop(e, key)}
+            className={`rounded-xl border bg-slate-50/60 dark:bg-slate-900/40 p-3 flex flex-col min-h-[280px] transition-colors ${
+              dragOverCol === key
+                ? "border-brand-500 ring-2 ring-brand-500/30 bg-brand-50/40 dark:bg-brand-500/10"
+                : "border-slate-200 dark:border-white/10"
+            }`}
           >
             <header className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 inline-flex items-center gap-1.5">
@@ -124,7 +166,12 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
                   key={task.id}
                   data-testid="task-board-card"
                   data-task-id={task.id}
-                  className="group rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-2.5 text-[13px] text-slate-700 dark:text-slate-200 flex items-start justify-between gap-2"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, task.id)}
+                  onDragEnd={handleDragEnd}
+                  className={`group rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-2.5 text-[13px] text-slate-700 dark:text-slate-200 flex items-start justify-between gap-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
+                    draggingId === task.id ? "opacity-40" : ""
+                  }`}
                 >
                   <span className="flex-1 break-words">{task.title}</span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -3,7 +3,7 @@ import { log } from './utils/logger.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, p2 } from './utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from './utils/date.js';
 import { ADDRESS, MAPS_URL, CB } from './config.js';
-import { listMasters, getAdminId, getUser, canManageApt } from './services/users.js';
+import { listMasters, getAdminId, getUser, canManageApt, masterTelegramRecipient } from './services/users.js';
 import { getLang } from './services/chat.js';
 import { kvPut, kvGet } from './utils/kv.js';
 import { makeICS, makeCalendarUrl } from './utils/ics.js';
@@ -17,12 +17,22 @@ export async function notifyAptStaff(ctx, apt, user) {
   const adminId = await getAdminId(ctx);
   const recipients = new Set();
   if (apt.masterId) {
-    // Assigned to a specific master — notify only that master + admin
-    recipients.add(apt.masterId);
-  } else {
-    // Unassigned — notify all active masters
+    // Assigned to a specific master — notify only that master + admin.
+    // 0072: route through masterTelegramRecipient so paired web-created
+    // masters get the ping on their REAL Telegram, not the synthetic
+    // 10B+ identity that Telegram would reject.
     const masters = await listMasters(ctx);
-    for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+    const assigned = masters.find(mm => Number(mm.chatId) === Number(apt.masterId));
+    const tg = masterTelegramRecipient(assigned);
+    if (tg && !assigned?.onVacation) recipients.add(tg);
+  } else {
+    // Unassigned — notify all active masters via their real TG chat.
+    const masters = await listMasters(ctx);
+    for (const m of masters) {
+      if (m.onVacation) continue;
+      const tg = masterTelegramRecipient(m);
+      if (tg) recipients.add(tg);
+    }
   }
   if (adminId) recipients.add(adminId);
   if (recipients.size === 0) {
@@ -151,10 +161,18 @@ export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
   const adminId = await getAdminId(ctx);
   const recipients = new Set();
   if (apt.masterId) {
-    recipients.add(apt.masterId);
+    // 0072 — paired master notif routing.
+    const masters = await listMasters(ctx);
+    const assigned = masters.find(mm => Number(mm.chatId) === Number(apt.masterId));
+    const tg = masterTelegramRecipient(assigned);
+    if (tg && !assigned?.onVacation) recipients.add(tg);
   } else {
     const masters = await listMasters(ctx);
-    for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+    for (const m of masters) {
+      if (m.onVacation) continue;
+      const tg = masterTelegramRecipient(m);
+      if (tg) recipients.add(tg);
+    }
   }
   if (adminId) recipients.add(adminId);
   if (recipients.size === 0) {
@@ -276,7 +294,11 @@ export async function notifyStaffAptCancelled(ctx, apt, comment = null) {
   const masters = await listMasters(ctx);
   const adminId = await getAdminId(ctx);
   const recipients = new Set();
-  for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(m.chatId);
+  for (const m of masters) {
+    if (m.onVacation) continue;
+    const tg = masterTelegramRecipient(m);
+    if (tg) recipients.add(tg);
+  }
   if (adminId) recipients.add(adminId);
   const user = await getUser(ctx, apt.chatId);
   const usernameRaw = apt.userTg || user?.tgUsername || '';
@@ -307,7 +329,11 @@ export async function notifyStaffConsultantRequest(ctx, clientCid, replyMarkup =
   const masters = await listMasters(ctx);
   const adminId = await getAdminId(ctx);
   const recipients = new Set();
-  for (const m of masters) if (m.chatId && !m.onVacation) recipients.add(Number(m.chatId));
+  for (const m of masters) {
+    if (m.onVacation) continue;
+    const tg = masterTelegramRecipient(m);
+    if (tg) recipients.add(Number(tg));
+  }
   if (adminId) recipients.add(Number(adminId));
   if (ctx.adminChatId) recipients.add(Number(ctx.adminChatId));
   const user = await getUser(ctx, clientCid);

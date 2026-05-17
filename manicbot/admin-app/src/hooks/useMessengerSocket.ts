@@ -33,13 +33,18 @@ export function useMessengerSocket(tenantId: string | null): {
   const reconnectTimer = useRef<number | null>(null);
   const attempts = useRef(0);
   const statusRef = useRef<"idle" | "connecting" | "open" | "closed" | "error">("idle");
+  // Sticky flag: when the server returns PRECONDITION_FAILED (WS_TOKEN_SECRET
+  // is unset on the deploy), realtime is permanently unavailable for this
+  // session. Without this, exponential backoff would keep firing
+  // issueWsToken every 1→2→4→…→30s, spamming the console + tRPC inspector.
+  const realtimeDisabled = useRef(false);
 
   useEffect(() => {
     if (!tenantId || typeof window === "undefined") return;
     let cancelled = false;
 
     async function connect() {
-      if (cancelled) return;
+      if (cancelled || realtimeDisabled.current) return;
       statusRef.current = "connecting";
       try {
         const { token } = await issueToken.mutateAsync({ tenantId: tenantId! });
@@ -96,8 +101,24 @@ export function useMessengerSocket(tenantId: string | null): {
           }
         });
       } catch (e) {
-        // issueWsToken threw — likely WS_TOKEN_SECRET not configured. Stay
-        // silent and rely on the polling fallback.
+        // tRPC PRECONDITION_FAILED → WS_TOKEN_SECRET unset → realtime is
+        // disabled by config, NOT a transient failure. Stop reconnecting so
+        // we don't burn a token-mint round-trip every backoff tick.
+        const code =
+          (e as { data?: { code?: string } } | null)?.data?.code ??
+          (e as { shape?: { data?: { code?: string } } } | null)?.shape?.data?.code;
+        if (code === "PRECONDITION_FAILED") {
+          if (!realtimeDisabled.current) {
+            realtimeDisabled.current = true;
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[messenger ws] realtime disabled (WS_TOKEN_SECRET unset); polling fallback active",
+            );
+          }
+          statusRef.current = "closed";
+          return;
+        }
+        // Transient failure (network, server error, etc.) — back off and retry.
         statusRef.current = "error";
         // eslint-disable-next-line no-console
         console.warn("[messenger ws] token mint failed; polling fallback", e);

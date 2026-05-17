@@ -18,7 +18,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq, desc, lt, sql, inArray } from "drizzle-orm";
+import { and, eq, desc, lt, sql, inArray, gt, isNull } from "drizzle-orm";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import {
   threads,
@@ -26,6 +26,7 @@ import {
   threadMessages,
   webUsers,
   masters,
+  masterInvitations,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
 import { sanitizeText } from "~/server/security/sanitize";
@@ -626,6 +627,19 @@ export const messengerRouter = createTRPCRouter({
   // ═══════════════════════════════════════════════════════════════
   //  STAFF DIRECTORY — for "+ New chat" picker
   // ═══════════════════════════════════════════════════════════════
+  //  Returns:
+  //   - candidates:        web_users in this tenant that the caller can DM
+  //                        (self filtered out). These are the ONLY rows the
+  //                        messenger can reach today — recipients with their
+  //                        web_users.tenantId pointing at a different tenant
+  //                        can't open the salon's messenger surface, so we
+  //                        intentionally omit them to avoid sending DMs that
+  //                        would never be read. They show up via the
+  //                        notification bell once cross-tenant messenger view
+  //                        ships in a follow-up.
+  //   - pendingInviteCount Pending (not-yet-accepted, not-expired) email
+  //                        invitations for this tenant — drives the
+  //                        contextual empty-state hint in NewThreadModal.
   listStaff: protectedProcedure
     .input(z.object({ tenantId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
@@ -642,17 +656,32 @@ export const messengerRouter = createTRPCRouter({
         .from(webUsers)
         .where(eq(webUsers.tenantId, input.tenantId));
 
-      // Cross-reference masters to attach display avatar later (Phase 4).
+      // Display-name fallback from the masters table (active rows only).
       const masterRows = await ctx.db
         .select({ webUserId: masters.webUserId, name: masters.name })
         .from(masters)
-        .where(eq(masters.tenantId, input.tenantId));
+        .where(and(eq(masters.tenantId, input.tenantId), isNull(masters.archivedAt)));
       const masterByWebUserId = new Map<string, string>();
       for (const m of masterRows) {
-        if (m.webUserId) masterByWebUserId.set(m.webUserId, m.name ?? "");
+        if (m.webUserId && m.name) masterByWebUserId.set(m.webUserId, m.name);
       }
 
-      return rows
+      // Pending email invitations — drives the empty-state hint copy in the
+      // modal ("3 invited masters haven't joined yet").
+      const nowSecLocal = nowSec();
+      const pendingRows = await ctx.db
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(masterInvitations)
+        .where(
+          and(
+            eq(masterInvitations.tenantId, input.tenantId),
+            eq(masterInvitations.status, "pending"),
+            gt(masterInvitations.tokenExpiresAt, nowSecLocal),
+          ),
+        );
+      const pendingInviteCount = Number(pendingRows[0]?.count ?? 0);
+
+      const candidates = rows
         .filter((r) => r.id !== webUserId) // hide self from the picker
         .map((r) => ({
           id: r.id,
@@ -660,5 +689,7 @@ export const messengerRouter = createTRPCRouter({
           email: r.email,
           role: r.role,
         }));
+
+      return { candidates, pendingInviteCount };
     }),
 });

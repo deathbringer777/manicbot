@@ -2179,6 +2179,13 @@ export const salonRouter = createTRPCRouter({
           origin: masters.origin,
           isSynthetic: masters.isSynthetic,
           webUserId: masters.webUserId,
+          // Vacation + delegation surfaced for the owner-side detail modal
+          // (parity with the Clients tab). The modal disables edits for
+          // self_registered + invited_* without `allowDelegation`.
+          vacationFrom: masters.vacationFrom,
+          vacationUntil: masters.vacationUntil,
+          onVacation: masters.onVacation,
+          allowDelegation: masters.allowDelegation,
           // Joined web_users fields (LEFT JOIN below via subquery — kept simple)
         })
         .from(masters)

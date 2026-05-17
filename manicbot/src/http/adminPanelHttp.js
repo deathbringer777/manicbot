@@ -1,6 +1,6 @@
 import { timingSafeEqual, checkAdmin, requireAdmin } from '../utils/security.js';
 import { dbAll } from '../utils/db.js';
-import { escHtml } from '../utils/helpers.js';
+import { escHtml, fmtEmoji } from '../utils/helpers.js';
 import { getAdminAllApts } from '../services/appointments.js';
 import { api } from '../telegram.js';
 import { initServices } from '../services/services.js';
@@ -179,7 +179,7 @@ tr:hover td{background:#fdf2f8}
           id: a.id,
           client: a.userName,
           chatId: a.chatId,
-          service: svc ? `${svc.e} ${a.svcId}` : a.svcId,
+          service: svc ? `${fmtEmoji(svc.e)}${a.svcId}` : a.svcId,
           date: a.date,
           time: a.time,
           status: a.cx

@@ -20,10 +20,14 @@ export function escHtml(s) {
 
 export function isCorrectionSvc(svcId) { return svcId === 'correction'; }
 
+export function fmtEmoji(e) {
+  return e && typeof e === 'string' && e.trim() ? e + ' ' : '';
+}
+
 export function svcName(ctx, lang, id) {
   const s = ctx.svc?.find(x => x.id === id);
   if (!s) return escHtml(id);
-  return `${s.e} ${t(lang, 'svc_' + id)}`;
+  return `${fmtEmoji(s.e)}${t(lang, 'svc_' + id)}`;
 }
 
 export function fill(str, vars) {

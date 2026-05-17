@@ -89,6 +89,12 @@ export function TrackingLinksGenerator({
 
   return (
     <div className="space-y-4">
+      <p
+        data-testid="tracking-hint"
+        className="rounded-lg bg-brand-500/10 text-brand-700 dark:text-brand-300 text-xs px-3 py-2 leading-relaxed"
+      >
+        {t("tracking.hint", lang)}
+      </p>
       <div className="glass-card rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>

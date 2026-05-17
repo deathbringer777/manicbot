@@ -46,6 +46,8 @@ describe("useDashboardPrefs — bottom-nav additions", () => {
         hiddenTabs: [],
         showTodayApts: true,
         defaultTab: "overview",
+        tabOrder: [],
+        pinnedTabs: [],
         bottomNavOrder: order,
         bottomNavLayout: "custom",
       },
@@ -80,6 +82,19 @@ vi.mock("~/components/RoleContext", () => ({
     previewMasterId: null,
     previewMasterWebUserId: null,
   }),
+}));
+
+vi.mock("~/trpc/react", () => ({
+  api: {
+    webUsers: {
+      getMyUiPrefs: {
+        useQuery: () => ({ data: undefined, isLoading: false }),
+      },
+      setMyUiPrefs: {
+        useMutation: () => ({ mutate: () => undefined }),
+      },
+    },
+  },
 }));
 
 import { vi } from "vitest";

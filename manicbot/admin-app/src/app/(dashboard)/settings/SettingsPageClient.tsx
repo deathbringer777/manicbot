@@ -12,6 +12,11 @@ import { PlatformSection } from "~/components/settings/sections/PlatformSection"
 import { BillingSection } from "~/components/settings/sections/BillingSection";
 import { ReferralsSection } from "~/components/settings/sections/ReferralsSection";
 import { PluginSettingsSection } from "~/components/settings/PluginSettingsSection";
+import { MySalonSection } from "~/components/settings/sections/MySalonSection";
+import { PublicProfileSection } from "~/components/settings/sections/PublicProfileSection";
+import { TeamSection } from "~/components/settings/sections/TeamSection";
+import { ChannelsSection } from "~/components/settings/sections/ChannelsSection";
+import { MasterProfileSection } from "~/components/settings/sections/MasterProfileSection";
 
 export default function SettingsPageClient() {
   const { role, previewRole, tenantId, previewTenantId } = useRole();
@@ -41,6 +46,14 @@ export default function SettingsPageClient() {
     switch (activeSection) {
       case "account":
         return <AccountSection />;
+      case "salon":
+        return <MySalonSection />;
+      case "public":
+        return <PublicProfileSection />;
+      case "team":
+        return <TeamSection />;
+      case "channels":
+        return <ChannelsSection />;
       case "billing":
         return effectiveTenantId ? <BillingSection tenantId={effectiveTenantId} /> : null;
       case "referrals":
@@ -49,6 +62,8 @@ export default function SettingsPageClient() {
         return <AppearanceSection />;
       case "help":
         return <HelpSection />;
+      case "profile":
+        return effectiveRole === "master" ? <MasterProfileSection /> : <AccountSection />;
       case "platform":
         return role === "system_admin" ? <PlatformSection /> : null;
       default:

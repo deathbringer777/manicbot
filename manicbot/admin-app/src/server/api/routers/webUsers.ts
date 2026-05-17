@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { webUsers, auditLog, tenants, masters, tenantRoles, masterInvitations } from "~/server/db/schema";
-import { and } from "drizzle-orm";
+import { webUsers, auditLog, tenants, masters, tenantConfig, tenantRoles, masterInvitations } from "~/server/db/schema";
 import type { Lang } from "~/lib/i18n";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { assertTenantMember } from "~/server/api/tenantAccess";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { generateToken, hashToken, timingSafeEqualHex } from "~/server/auth/tokens";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
@@ -1043,6 +1043,72 @@ export const webUsersRouter = createTRPCRouter({
         ip: clientIp(ctx as { headers?: Headers | null }),
       });
       return { success: true };
+    }),
+
+  /**
+   * Read the caller's UI prefs (sidebar layout, pinned tabs, etc.) for a given
+   * tenant. Stored as JSON in `tenant_config[ui_prefs:user:{webUserId}]`. The
+   * read path is client-tolerant: if the row is missing or malformed, we
+   * return an empty object so the caller's defaults apply.
+   *
+   * Per-tenant scoping (rather than global on `web_users`) is deliberate:
+   * the same user can be a tenant_owner in one salon and a master in another,
+   * and they should be able to keep different layouts in each.
+   */
+  getMyUiPrefs: protectedProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      if (!ctx.webUser) return {};
+      // Tenant-membership guard: a user from tenant A must not be able to
+      // probe tenant B's config table. assertTenantMember throws on mismatch.
+      await assertTenantMember(ctx, input.tenantId);
+      const key = `ui_prefs:user:${ctx.webUser.id}`;
+      const [row] = await ctx.db
+        .select({ value: tenantConfig.value })
+        .from(tenantConfig)
+        .where(and(eq(tenantConfig.tenantId, input.tenantId), eq(tenantConfig.key, key)))
+        .limit(1);
+      if (!row?.value) return {};
+      try {
+        const parsed = JSON.parse(row.value);
+        return (parsed && typeof parsed === "object") ? parsed : {};
+      } catch {
+        return {};
+      }
+    }),
+
+  /**
+   * Write the caller's UI prefs for a given tenant. The full object is sent —
+   * we don't merge partials server-side because the client owns the schema
+   * (extending the shape doesn't require a backend deploy). Validate only the
+   * outer shape and a max byte budget so a bug client-side can't fill the row.
+   */
+  setMyUiPrefs: protectedProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      prefs: z.record(z.unknown()),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // Tenant-membership guard: writes must target a tenant the caller
+      // belongs to. Without this, any logged-in user could spam tenant_config
+      // rows in any tenant.
+      await assertTenantMember(ctx, input.tenantId);
+      const serialized = JSON.stringify(input.prefs);
+      if (serialized.length > 8 * 1024) {
+        // 8 KB hard cap; the sidebar prefs payload is < 1 KB in practice.
+        throw new TRPCError({ code: "BAD_REQUEST", message: "UI prefs payload too large" });
+      }
+      const key = `ui_prefs:user:${ctx.webUser.id}`;
+      // UPSERT — tenant_config has a unique constraint on (tenant_id, key).
+      await ctx.db
+        .insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key, value: serialized })
+        .onConflictDoUpdate({
+          target: [tenantConfig.tenantId, tenantConfig.key],
+          set: { value: serialized },
+        });
+      return { ok: true as const };
     }),
 
   // ─── Master invitations (migration 0063) ────────────────────────────────

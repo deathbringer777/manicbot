@@ -19,6 +19,10 @@ afterEach(() => cleanup());
 import { RoleContext } from "~/components/RoleContext";
 import type { RoleContextValue } from "~/components/RoleContext";
 import { useDashboardPrefs, loadDashboardPrefs, saveDashboardPrefs, dashboardPrefsKey } from "~/lib/useDashboardPrefs";
+import { api } from "~/trpc/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { httpBatchLink } from "@trpc/client";
+import SuperJSON from "superjson";
 
 function makeWrapper(tenantId: string | null, webUserId: string | null = "owner-uid") {
   const value: RoleContextValue = {
@@ -41,8 +45,25 @@ function makeWrapper(tenantId: string | null, webUserId: string | null = "owner-
     previewMasterWebUserId: null,
     setPreviewMaster: () => {},
   };
+  // useDashboardPrefs now calls api.webUsers.getMyUiPrefs.useQuery so we need
+  // a real tRPC + react-query provider. The link target is unreachable
+  // (`http://test.invalid`) — the test only cares about local-storage and
+  // helper logic, and `retry: false` in the hook means the failed fetch
+  // doesn't loop.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  const trpcClient = api.createClient({
+    links: [httpBatchLink({ url: "http://test.invalid/api/trpc", transformer: SuperJSON })],
+  });
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(RoleContext.Provider, { value }, children);
+    return (
+      <QueryClientProvider client={queryClient}>
+        <api.Provider client={trpcClient} queryClient={queryClient}>
+          <RoleContext.Provider value={value}>{children}</RoleContext.Provider>
+        </api.Provider>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -62,6 +83,8 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
       hiddenTabs: ["billing"],
       showTodayApts: false,
       defaultTab: "overview",
+      tabOrder: [],
+      pinnedTabs: [],
       bottomNavOrder: [],
       bottomNavLayout: "default" as const,
     };
@@ -76,6 +99,8 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
       hiddenTabs: ["services"],
       showTodayApts: true,
       defaultTab: "overview",
+      tabOrder: [],
+      pinnedTabs: [],
       bottomNavOrder: [],
       bottomNavLayout: "default" as const,
     };

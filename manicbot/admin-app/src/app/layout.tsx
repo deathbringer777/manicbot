@@ -2,7 +2,6 @@ import "~/styles/globals.css";
 
 import { type Metadata, type Viewport } from "next";
 import { Geist } from "next/font/google";
-import { headers } from "next/headers";
 
 import { Toaster } from "sonner";
 
@@ -80,21 +79,18 @@ const geist = Geist({
   variable: "--font-geist-sans",
 });
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // Strict CSP on dynamic routes uses a per-request nonce set by middleware
-  // (see src/middleware.ts). Static public routes have no nonce header set
-  // and rely on `'unsafe-inline'` in their CSP, so the attribute is optional.
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="pl" className={`${geist.variable}`} suppressHydrationWarning>
       {/* Blocking script: apply .dark before first paint based on stored preference (avoids flash).
           Default is dark. Removed on toggle via WebShell which syncs document.documentElement.
-          Carries the per-request nonce on dynamic routes so it passes strict CSP. */}
+          Authorised under strict CSP by SHA-256 hash (see scriptSrc in middleware.ts) so the
+          layout can stay sync — `await headers()` here would force the implicit /_not-found
+          route into nodejs runtime and break the next-on-pages build. */}
       <head>
         <script
-          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `try{if(localStorage.getItem("manicbot_web_theme")==="dark"){document.documentElement.classList.add("dark")}else{document.documentElement.classList.remove("dark")}}catch(e){document.documentElement.classList.remove("dark")}`,
           }}

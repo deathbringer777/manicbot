@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MessageSquare, RefreshCw, MessageCircle, Search } from "lucide-react";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { SkeletonCard } from "~/components/ui/Skeleton";
+import { Select } from "~/components/ui/Select";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
@@ -38,6 +39,17 @@ export function ConversationsPage() {
   const isGod = role === "system_admin";
 
   const tenants = api.tenants.getAll.useQuery(undefined, { enabled: isGod });
+
+  const tenantOptions = useMemo(() => {
+    const rows = tenants.data ?? [];
+    return [
+      { value: "", label: t("conv.filter.allSalons", lang) },
+      ...rows.map((row: { id: string; name: string | null }) => ({
+        value: row.id,
+        label: row.name ?? row.id,
+      })),
+    ];
+  }, [tenants.data, lang]);
 
   const convsSalon = api.conversations.list.useQuery(
     {
@@ -97,18 +109,14 @@ export function ConversationsPage() {
               className="flex-1 min-w-0 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-500/40"
             />
           </div>
-          <select
+          <Select
             value={godTenantFilter}
-            onChange={(e) => setGodTenantFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-slate-200 focus:outline-none focus:border-brand-500/40"
-          >
-            <option value="">{t("conv.filter.allSalons", lang)}</option>
-            {(tenants.data ?? []).map((t: { id: string; name: string | null }) => (
-              <option key={t.id} value={t.id}>
-                {t.name ?? t.id}
-              </option>
-            ))}
-          </select>
+            onChange={setGodTenantFilter}
+            options={tenantOptions}
+            placeholder={t("conv.filter.allSalons", lang)}
+            testIdPrefix="conv-god-tenant"
+            className="w-full sm:w-64"
+          />
         </div>
       )}
 

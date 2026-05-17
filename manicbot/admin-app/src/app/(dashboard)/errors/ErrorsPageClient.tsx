@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { Select } from "~/components/ui/Select";
 import {
   RefreshCw,
   AlertCircle,
@@ -452,41 +453,29 @@ export default function ErrorsPageClient() {
         {/* Filters */}
         <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-2">
           <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-          <select
+          <Select
             value={severity}
-            onChange={(e) => setSeverity(e.target.value as Severity | "")}
-            className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-          >
-            {SEVERITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
+            onChange={(v) => setSeverity(v as Severity | "")}
+            options={SEVERITY_OPTIONS as Array<{ value: string; label: string }>}
+            testIdPrefix="errors-severity"
+            className="w-40"
+          />
+          <Select
             value={source}
-            onChange={(e) => setSource(e.target.value as Source | "")}
-            className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-          >
-            {SOURCE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <select
+            onChange={(v) => setSource(v as Source | "")}
+            options={SOURCE_OPTIONS as Array<{ value: string; label: string }>}
+            testIdPrefix="errors-source"
+            className="w-36"
+          />
+          <Select
             value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as Status | "regressed" | "all")
+            onChange={(v) =>
+              setStatusFilter(v as Status | "regressed" | "all")
             }
-            className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+            options={STATUS_OPTIONS as Array<{ value: string; label: string }>}
+            testIdPrefix="errors-status"
+            className="w-36"
+          />
           <input
             type="text"
             value={tenantId}

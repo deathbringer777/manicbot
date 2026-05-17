@@ -337,14 +337,16 @@ export default function UsersPageClient() {
         )}
       </div>
 
-      {/* Role Modal — bottom sheet */}
+      {/* Role Modal — follows the 0062 modal stacking contract (z-[100] +
+          bg-slate-950/70 backdrop-blur-md + solid card with ring-1
+          ring-black/5). Pinned in modal-styling-regression.test.ts. */}
       {roleModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
           onClick={() => setRoleModal(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
+            className="bg-white dark:bg-slate-900 ring-1 ring-black/5 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-5">

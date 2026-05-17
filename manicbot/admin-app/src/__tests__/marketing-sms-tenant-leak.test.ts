@@ -125,4 +125,55 @@ describe("marketing SMS — tenant vendor-leak contract", () => {
       expect(row).toMatch(/\bpl:/);
     }
   });
+
+  it("no comingSoon i18n locale mentions a provider name (Brevo/Resend/Twilio)", () => {
+    // A future translator pasting "Brevo" into one of the 4 locales would
+    // re-leak the vendor name into the facade. Pin against that.
+    const src = read("lib/i18n.ts");
+    for (const key of [
+      '"marketing.sms.comingSoon.title"',
+      '"marketing.sms.comingSoon.description"',
+      '"marketing.sms.comingSoon.cta"',
+    ]) {
+      const idx = src.indexOf(key);
+      expect(idx, `missing i18n key ${key}`).toBeGreaterThan(0);
+      const row = src.slice(idx, idx + 800);
+      expect(row, `${key} leaks vendor name`).not.toMatch(/brevo/i);
+      expect(row, `${key} leaks vendor name`).not.toMatch(/resend/i);
+      expect(row, `${key} leaks vendor name`).not.toMatch(/twilio/i);
+      // Also block the ENV-variable names — they would be just as bad as
+      // the vendor name appearing in customer-facing copy.
+      expect(row, `${key} leaks ENV var name`).not.toMatch(/BREVO_/);
+      expect(row, `${key} leaks ENV var name`).not.toMatch(/RESEND_/);
+      expect(row, `${key} leaks ENV var name`).not.toMatch(/TWILIO_/);
+    }
+  });
+
+  it("marketing.sms.cardDescription is vendor-neutral (rendered on the tenant facade too)", () => {
+    // The card description is rendered inside the facade card AND in the
+    // configured-SMS UI for sysadmin. It must not name a provider — the
+    // sysadmin already gets vendor identity via the ENV gate.
+    const src = read("lib/i18n.ts");
+    const idx = src.indexOf('"marketing.sms.cardDescription"');
+    expect(idx).toBeGreaterThan(0);
+    const row = src.slice(idx, idx + 800);
+    expect(row).not.toMatch(/brevo/i);
+    expect(row).not.toMatch(/resend/i);
+    expect(row).not.toMatch(/twilio/i);
+  });
+
+  it("the tenant facade renders BEFORE any sysadmin-only block (early-return contract)", () => {
+    // If a refactor moved the early-return below the main render block,
+    // the tenant could see Brevo strings before bailing. Pin the order.
+    const src = readSmsClient();
+    const earlyReturn = src.indexOf("if (showTenantComingSoon)");
+    const adminBranch = src.indexOf("showAdminBrevoGate");
+    const mainReturn = src.indexOf("\n  return (", earlyReturn);
+    expect(earlyReturn, "early-return missing").toBeGreaterThan(0);
+    expect(mainReturn, "main return missing").toBeGreaterThan(earlyReturn);
+    // showAdminBrevoGate is declared BEFORE the if-statement, then USED
+    // inside the main return — so the variable's first occurrence sits
+    // before the early-return.
+    expect(adminBranch).toBeLessThan(earlyReturn);
+  });
 });

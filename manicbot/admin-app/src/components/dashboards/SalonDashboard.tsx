@@ -9,6 +9,7 @@ import {
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
   Palette, Phone, Instagram as InstagramIcon, Clock,
+  Download, Upload,
 } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
@@ -88,6 +89,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
   const [emoji, setEmoji] = useState(svc?.emoji ?? initialData?.emoji ?? "💅");
   const [active, setActive] = useState(svc?.active !== 0);
   const [description, setDescription] = useState(svc?.description ?? "");
+  const [category, setCategory] = useState(svc?.category ?? "");
   const [promo, setPromo] = useState(svc?.promo ?? "");
   const [photos, setPhotos] = useState<string[]>(() => {
     try { return JSON.parse(svc?.photos ?? "[]"); } catch { return []; }
@@ -134,10 +136,11 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
     const durationNum = parseInt(duration, 10) || 60;
     const photosJson = photos.length > 0 ? JSON.stringify(photos) : undefined;
     const promoVal = promo.trim() || undefined;
+    const categoryVal = category.trim() || null;
     if (isNew) {
-      createSvc.mutate({ tenantId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum, description: description || undefined, photos: photosJson, promo: promoVal });
+      createSvc.mutate({ tenantId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum, description: description || undefined, photos: photosJson, promo: promoVal, category: categoryVal });
     } else {
-      updateSvc.mutate({ tenantId, svcId: svc.svcId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum, description: description || undefined, photos: photosJson, promo: promoVal });
+      updateSvc.mutate({ tenantId, svcId: svc.svcId, names: namesJson, price: priceNum, duration: durationNum, emoji, active: activeNum, description: description || undefined, photos: photosJson, promo: promoVal, category: categoryVal });
     }
   }
 
@@ -199,6 +202,14 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
               rows={2} placeholder={t("master.svcDescriptionPlaceholder", lang)}
               className="w-full resize-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
           </div>
+
+          {/* Category */}
+          <Input
+            label="Категория"
+            value={category}
+            onChange={setCategory}
+            placeholder="Маникюр, Педикюр, Покрытие…"
+          />
 
           {/* Promo */}
           <div>
@@ -1600,6 +1611,46 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // parity). The previous inline trash button is gone; the standalone confirm
   // modal below is also removed.
 
+  const [svcCategoryFilter, setSvcCategoryFilter] = useState<string | null>(null);
+  const [svcImportModal, setSvcImportModal] = useState(false);
+  const [svcImportCsv, setSvcImportCsv] = useState("");
+  const [svcImportError, setSvcImportError] = useState("");
+
+  const svcCategories = api.salon.listServiceCategories.useQuery({ tenantId }, { enabled: tab === "services" });
+  const exportSvcQuery = api.salon.exportServices.useQuery({ tenantId }, { enabled: false });
+  const importSvcMut = api.salon.importServices.useMutation({
+    onSuccess: (res) => {
+      void utils.salon.getServices.invalidate();
+      setSvcImportModal(false);
+      setSvcImportCsv("");
+      setSvcImportError("");
+      toast(`Импортировано: ${res.created} новых, ${res.updated} обновлено${res.skippedErrors > 0 ? `, ${res.skippedErrors} ошибок` : ""}`);
+    },
+    onError: (e) => setSvcImportError(e.message),
+  });
+
+  function handleExportServices() {
+    void exportSvcQuery.refetch().then(r => {
+      if (!r.data?.csv) return;
+      const blob = new Blob([r.data.csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `services-${tenantId}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  function handleSvcImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setSvcImportCsv((ev.target?.result as string) ?? "");
+    reader.readAsText(file, "utf-8");
+    e.target.value = "";
+  }
+
   function handleAddNew() { setSvcModal({ open: true, svc: null }); }
   function handleAddTemplates() { setShowTemplates(true); }
   function handleTemplateSelect(tmpl: ServiceTemplate) {
@@ -2332,21 +2383,89 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {/* ── SERVICES ── */}
       {tab === "services" && (
         <div className="space-y-3">
-          <SectionHeader title={t("salon.services", lang)} action={
-            (svcList.data?.length ?? 0) > 0
-              ? <AddServiceDropdown lang={lang} onNew={handleAddNew} onTemplates={handleAddTemplates} />
-              : undefined
-          } />
+          {/* Header: title + add dropdown + export/import */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex-1">{t("salon.services", lang)}</h2>
+            {(svcList.data?.length ?? 0) > 0 && (
+              <>
+                <button
+                  onClick={handleExportServices}
+                  disabled={exportSvcQuery.isFetching}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 text-xs hover:bg-slate-200 dark:hover:bg-white/10 transition-colors disabled:opacity-50">
+                  {exportSvcQuery.isFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  CSV
+                </button>
+                <button
+                  onClick={() => setSvcImportModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 text-xs hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
+                  <Upload className="h-3 w-3" /> Импорт
+                </button>
+                <AddServiceDropdown lang={lang} onNew={handleAddNew} onTemplates={handleAddTemplates} />
+              </>
+            )}
+          </div>
+
+          {/* Category filter pills */}
+          {(svcCategories.data?.length ?? 0) > 0 && (
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setSvcCategoryFilter(null)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  svcCategoryFilter === null
+                    ? "bg-brand-500 text-white"
+                    : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10"
+                }`}>
+                Все
+              </button>
+              {svcCategories.data?.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSvcCategoryFilter(prev => prev === cat ? null : cat)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    svcCategoryFilter === cat
+                      ? "bg-brand-500 text-white"
+                      : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10"
+                  }`}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+
           {svcList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {svcList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
-          <div className="space-y-2">
-            {svcList.data?.map((s: any) => {
+
+          {/* Services list — grouped by category when categories exist */}
+          {(() => {
+            const allSvcs = svcList.data ?? [];
+            const filtered: any[] = svcCategoryFilter
+              ? allSvcs.filter((s: any) => s.category === svcCategoryFilter)
+              : allSvcs;
+
+            if (allSvcs.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center py-14 gap-5">
+                  <span className="text-4xl">💅</span>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm text-center">{t("salon.noServices", lang)}</p>
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    <AddServiceDropdown lang={lang} onNew={handleAddNew} onTemplates={handleAddTemplates} />
+                    <button
+                      onClick={() => setSvcImportModal(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-dashed border-slate-300 dark:border-white/15 text-slate-500 dark:text-slate-400 text-sm hover:border-brand-500 hover:text-brand-500 transition-colors">
+                      <Upload className="h-4 w-4" /> Импорт CSV
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            const SvcCard = ({ s }: { s: any }) => {
               let names: Record<string, string> = {};
               try { names = s.names ? JSON.parse(s.names) : {}; } catch { /* ignore */ }
               const name = names.ru ?? names.en ?? s.svcId;
               const svcPhotos: string[] = (() => { try { return JSON.parse(s.photos ?? "[]"); } catch { return []; } })();
               return (
-                <div key={s.svcId} className="glass-card rounded-xl p-3">
+                <div className="glass-card rounded-xl p-3">
                   <div className="flex items-center gap-3">
                     <div className="relative shrink-0">
                       {svcPhotos[0] ? (
@@ -2363,7 +2482,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900 dark:text-white text-sm">{name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {`${s.price} zł`}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {`${s.price} zł`}</p>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.active ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-200 dark:bg-slate-700 text-slate-500"}`}>
                       {s.active ? t("service.active", lang) : t("service.hidden", lang)}
@@ -2381,19 +2500,106 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                   </div>
                 </div>
               );
-            })}
-            {svcList.data?.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-14 gap-5">
-                <span className="text-4xl">💅</span>
-                <p className="text-slate-500 dark:text-slate-400 text-sm text-center">{t("salon.noServices", lang)}</p>
-                <AddServiceDropdown lang={lang} onNew={handleAddNew} onTemplates={handleAddTemplates} />
+            };
+
+            // Flat list when a filter is active or no categories defined
+            if (svcCategoryFilter || (svcCategories.data?.length ?? 0) === 0) {
+              return (
+                <div className="space-y-2">
+                  {filtered.map((s: any) => <SvcCard key={s.svcId} s={s} />)}
+                  {filtered.length === 0 && (
+                    <p className="text-slate-500 dark:text-slate-400 text-sm text-center py-6">Нет услуг в этой категории</p>
+                  )}
+                </div>
+              );
+            }
+
+            // Grouped by category
+            const groups = new Map<string, any[]>();
+            for (const s of filtered) {
+              const cat: string = (s.category as string | null) ?? "";
+              if (!groups.has(cat)) groups.set(cat, []);
+              groups.get(cat)!.push(s);
+            }
+            const sortedGroups = [...groups.entries()].sort(([a], [b]) => {
+              if (!a && b) return 1;
+              if (a && !b) return -1;
+              return a.localeCompare(b, "ru");
+            });
+
+            return (
+              <div className="space-y-4">
+                {sortedGroups.map(([cat, svcs]) => (
+                  <div key={cat || "__none__"}>
+                    {cat && (
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2 px-1">{cat}</p>
+                    )}
+                    <div className="space-y-2">
+                      {svcs.map((s: any) => <SvcCard key={s.svcId} s={s} />)}
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+            );
+          })()}
+
+          {/* Import modal */}
+          {svcImportModal && (
+            <div role="dialog" aria-modal="true"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
+              onClick={() => setSvcImportModal(false)}>
+              <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl"
+                onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 dark:border-white/5">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Импорт услуг</h3>
+                  <button onClick={() => setSvcImportModal(false)}
+                    className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="px-5 py-4 space-y-4">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Загрузите CSV-файл со столбцами: <code className="bg-slate-100 dark:bg-white/10 px-1 rounded text-[11px]">name, price, duration, emoji, category, description, active</code>
+                  </p>
+                  <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 dark:border-white/15 rounded-xl p-6 cursor-pointer hover:border-brand-500 transition-colors">
+                    <Upload className="h-6 w-6 text-slate-400" />
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {svcImportCsv ? "Файл загружен ✓" : "Выберите CSV-файл"}
+                    </span>
+                    <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleSvcImportFile} />
+                  </label>
+                  {svcImportCsv && (
+                    <p className="text-xs text-emerald-500">Готов к импорту — {Math.max(0, svcImportCsv.split("\n").length - 2)} строк</p>
+                  )}
+                  {svcImportError && (
+                    <div className="flex items-start gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      <p className="text-sm text-red-600 dark:text-red-400">{svcImportError}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="px-5 pb-5 flex gap-2 justify-end">
+                  <button onClick={() => { setSvcImportModal(false); setSvcImportCsv(""); setSvcImportError(""); }}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 text-sm hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
+                    Отмена
+                  </button>
+                  <Btn
+                    onClick={() => {
+                      if (!svcImportCsv.trim()) { setSvcImportError("Сначала выберите файл"); return; }
+                      importSvcMut.mutate({ tenantId, csv: svcImportCsv });
+                    }}
+                    disabled={importSvcMut.isPending || !svcImportCsv}>
+                    {importSvcMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Импортировать
+                  </Btn>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── MASTERS ── */}
+            {/* ── MASTERS ── */}
       {tab === "masters" && (
         <div className="space-y-3">
           {/* 2026-05-17: top-right "Add via Telegram / Create account" buttons

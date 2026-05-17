@@ -25,6 +25,7 @@ import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/masterPasswordVault";
 import { log } from "~/server/utils/logger";
 import { notifyWorker } from "~/server/utils/notifyWorker";
+import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import {
   sendMasterInviteEmail,
@@ -472,6 +473,7 @@ export const salonRouter = createTRPCRouter({
       description: z.string().optional(),
       photos: z.string().optional(),
       promo: z.string().optional(),
+      category: z.string().max(100).optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -506,6 +508,7 @@ export const salonRouter = createTRPCRouter({
       active: z.number().min(0).max(1).default(1),
       hidden: z.number().min(0).max(1).default(0),
       sortOrder: z.number().default(0),
+      category: z.string().max(100).optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -523,6 +526,7 @@ export const salonRouter = createTRPCRouter({
         active: input.active,
         hidden: input.hidden,
         sortOrder: input.sortOrder,
+        category: input.category ?? null,
       });
       return { svcId };
     }),
@@ -536,6 +540,105 @@ export const salonRouter = createTRPCRouter({
         and(eq(services.tenantId, input.tenantId), eq(services.svcId, input.svcId))
       );
       return { success: true };
+    }),
+
+  // ── Service categories ──────────────────────────────────────────────────
+
+  listServiceCategories: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select({ category: services.category })
+        .from(services)
+        .where(and(
+          eq(services.tenantId, input.tenantId),
+          sql`category IS NOT NULL AND category != ''`,
+        ))
+        .groupBy(services.category)
+        .orderBy(services.category);
+      return rows.map(r => r.category).filter((c): c is string => Boolean(c));
+    }),
+
+  // ── CSV export/import ───────────────────────────────────────────────────
+
+  exportServices: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select()
+        .from(services)
+        .where(eq(services.tenantId, input.tenantId))
+        .orderBy(services.sortOrder);
+      return { csv: servicesToCsv(rows as any[]) };
+    }),
+
+  importServices: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      csv: z.string().max(200_000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const { rows, errors } = parseServicesCsv(input.csv);
+
+      if (rows.length === 0 && errors.length > 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Все строки содержат ошибки — ни одна услуга не импортирована" });
+      }
+
+      // Load existing services for this tenant to match by svc_id
+      const existing = await ctx.db
+        .select({ svcId: services.svcId })
+        .from(services)
+        .where(eq(services.tenantId, input.tenantId));
+      const existingIds = new Set(existing.map(e => e.svcId));
+
+      let created = 0;
+      let updated = 0;
+
+      for (const row of rows) {
+        const names = JSON.stringify({ ru: row.name, en: row.name, ua: row.name, pl: row.name });
+        const price = row.price ?? 0;
+        const duration = row.duration ?? 60;
+        const active = row.active ? 1 : 0;
+
+        if (row.svcId && existingIds.has(row.svcId)) {
+          // Update existing
+          await ctx.db.update(services).set({
+            names: sanitizeText(names, 500),
+            price,
+            duration,
+            emoji: row.emoji ?? null,
+            category: row.category ?? null,
+            description: row.description ? sanitizeText(row.description, 2000) : null,
+            active,
+          }).where(and(
+            eq(services.tenantId, input.tenantId),
+            eq(services.svcId, row.svcId),
+          ));
+          updated++;
+        } else {
+          // Create new
+          const svcId = `svc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          await ctx.db.insert(services).values({
+            tenantId: input.tenantId,
+            svcId,
+            names: sanitizeText(names, 500),
+            price,
+            duration,
+            emoji: row.emoji ?? null,
+            category: row.category ?? null,
+            description: row.description ? sanitizeText(row.description, 2000) : null,
+            active,
+            hidden: 0,
+            sortOrder: 0,
+          });
+          created++;
+        }
+      }
+
+      return { created, updated, skippedErrors: errors.length, errors };
     }),
 
   updateSalonProfile: tenantOwnerProcedure

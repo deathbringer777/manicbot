@@ -86,6 +86,13 @@ vi.mock("~/trpc/react", () => ({
           isPending: false,
         }),
       },
+      // Avatar picker mutation (0075) — stubbed so the picker can mount.
+      updateMasterAvatar: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+      mintUploadToken: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
       // Pairing mutations used by the inline section. Stubbed no-ops here.
       createMasterPairingCode: {
         useMutation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -117,6 +124,8 @@ function setMaster(overrides: Record<string, unknown> = {}) {
     vacationUntil: null,
     onVacation: 0,
     allowDelegation: 0,
+    avatarEmoji: null,
+    avatarUrl: null,
     webUser: {
       email: "olga@manicbot.com",
       emailVerified: 1,

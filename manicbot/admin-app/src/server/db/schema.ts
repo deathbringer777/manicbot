@@ -180,6 +180,15 @@ export const masters = sqliteTable("masters", {
    *  or pre-0023) keep working unchanged.
    */
   telegramChatId: integer("telegram_chat_id"),
+  /**
+   * 0075: master avatar (emoji + uploaded photo). No origin gating — the
+   * avatar is the salon's visual label for the master on the public profile,
+   * not the master's personal data. Updated by `salon.updateMasterAvatar`.
+   * Photo wins over emoji when both are set (same rule as client avatars).
+   */
+  avatarEmoji: text("avatar_emoji"),
+  avatarUrl: text("avatar_url"),
+  avatarR2Key: text("avatar_r2_key"),
 }, (t) => [
   index("idx_master_tenant").on(t.tenantId),
   index("idx_master_web_user_id").on(t.webUserId),

@@ -6,7 +6,7 @@ import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { SectionHeader, Btn } from "~/components/salon/SalonShared";
+import { Btn } from "~/components/salon/SalonShared";
 
 const TEAM_LABELS = {
   ru: {
@@ -28,6 +28,7 @@ const TEAM_LABELS = {
     safety2: "Подтверждение придёт на ваш email",
     safety3: "До подтверждения изменений не произойдёт",
     notReady: "Активный план обязателен",
+    noCandidates: "Пока некому передать права. Передавать можно только мастерам, у которых есть веб-аккаунт (вход по email).",
   },
   ua: {
     title: "Команда салону",
@@ -48,6 +49,7 @@ const TEAM_LABELS = {
     safety2: "Підтвердження прийде на ваш email",
     safety3: "До підтвердження змін не буде",
     notReady: "Активний план обовʼязковий",
+    noCandidates: "Поки нікому передати права. Передавати можна лише майстрам, у яких є веб-акаунт (вхід через email).",
   },
   en: {
     title: "Salon team",
@@ -68,6 +70,7 @@ const TEAM_LABELS = {
     safety2: "Confirmation will be sent to your email",
     safety3: "Nothing changes until you confirm",
     notReady: "Active subscription required",
+    noCandidates: "No one to transfer to yet. Ownership can only go to masters who have a web account (email login).",
   },
   pl: {
     title: "Zespół salonu",
@@ -88,6 +91,7 @@ const TEAM_LABELS = {
     safety2: "Potwierdzenie zostanie wysłane na Twój email",
     safety3: "Nic się nie zmieni dopóki nie potwierdzisz",
     notReady: "Wymagana aktywna subskrypcja",
+    noCandidates: "Nie ma jeszcze nikogo, komu można przekazać własność. Przekazanie jest możliwe tylko mistrzom posiadającym konto webowe (logowanie email).",
   },
 } as const;
 
@@ -134,10 +138,10 @@ export function TeamSection() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Team list */}
       <section>
-        <SectionHeader title={labels.masters} />
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{labels.masters}</h3>
         <div className="glass-card rounded-2xl p-4">
           {masters.isLoading ? (
             <div className="flex items-center justify-center py-6">
@@ -170,7 +174,7 @@ export function TeamSection() {
       {/* Ownership transfer */}
       {isOwner && (
         <section>
-          <SectionHeader title={labels.transferTitle} />
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{labels.transferTitle}</h3>
           <div className="glass-card rounded-2xl p-4 space-y-3">
             <p className="text-xs text-slate-500 dark:text-slate-400">{labels.transferDesc}</p>
 
@@ -203,11 +207,15 @@ export function TeamSection() {
                 <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                 <p className="text-xs text-amber-700 dark:text-amber-300">{labels.notReady}</p>
               </div>
+            ) : transferCandidates.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-white/[0.02] p-3 flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-slate-600 dark:text-slate-400">{labels.noCandidates}</p>
+              </div>
             ) : (
               <>
                 <Btn
                   onClick={() => setConfirmOpen(true)}
-                  disabled={transferCandidates.length === 0}
                   className="w-full justify-center"
                 >
                   <ArrowRightLeft className="h-3.5 w-3.5" />

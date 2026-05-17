@@ -217,13 +217,21 @@ export const appointmentsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
-      // Role scoping: masters can only book on their own calendar.
-      // For web sessions, masterId must match the master row tied to the caller's tenantId.
+      // Role scoping: masters can only book on their own calendar. The
+      // lookup MUST be bound to `web_user_id = caller` — filtering only on
+      // (tenantId, active=1) returns the first row regardless of who's
+      // calling, so in a multi-master salon the wrong master row decided
+      // the IDOR check (mirrors the masterRouter.assertCallerIsMaster
+      // pattern, #P0-4).
       if (ctx.webUser?.webRole === "master") {
         const [masterRow] = await ctx.db
           .select({ chatId: masters.chatId })
           .from(masters)
-          .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)))
+          .where(and(
+            eq(masters.tenantId, input.tenantId),
+            eq(masters.active, 1),
+            eq(masters.webUserId, ctx.webUser.id),
+          ))
           .limit(1);
         if (!masterRow || masterRow.chatId !== input.masterId) {
           throw new TRPCError({
@@ -489,12 +497,17 @@ export const appointmentsRouter = createTRPCRouter({
       if (newMasterId == null) throw new TRPCError({ code: "BAD_REQUEST", message: "master_required" });
 
       // Role scoping: masters can only move bookings on their own calendar
-      // and can't reassign to another master. Mirrors `createManual`.
+      // and can't reassign to another master. The lookup is bound to
+      // `web_user_id = caller` — see createManual for the rationale.
       if (ctx.webUser?.webRole === "master") {
         const [masterRow] = await ctx.db
           .select({ chatId: masters.chatId })
           .from(masters)
-          .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)))
+          .where(and(
+            eq(masters.tenantId, input.tenantId),
+            eq(masters.active, 1),
+            eq(masters.webUserId, ctx.webUser.id),
+          ))
           .limit(1);
         if (!masterRow || masterRow.chatId !== apt.masterId || newMasterId !== apt.masterId) {
           throw new TRPCError({

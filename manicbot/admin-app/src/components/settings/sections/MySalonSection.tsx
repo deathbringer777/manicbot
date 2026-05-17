@@ -7,6 +7,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { SalonSettingsEditor } from "~/components/salon/SalonSettingsEditor";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
+import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 export function MySalonSection() {
   const { tenantId, previewTenantId, role, previewRole } = useRole();
@@ -43,6 +44,7 @@ export function MySalonSection() {
     <div className="space-y-6">
       <SalonSettingsEditor tenantId={effectiveTenantId} profile={profile.data} />
       <AutoConfirmSettings tenantId={effectiveTenantId} />
+      <SalonCalendarSection tenantId={effectiveTenantId} />
     </div>
   );
 }

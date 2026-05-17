@@ -15,10 +15,10 @@ const STEPS = [
   { id: "set_schedule" as const,     labelKey: "onboarding.checklist.set_schedule" as const,     href: "?tab=masters" },
   { id: "share_link" as const,       labelKey: "onboarding.checklist.share_link" as const,       href: "?tab=channels" },
   { id: "first_booking" as const,    labelKey: "onboarding.checklist.first_booking" as const,    href: "?tab=appointments" },
-  { id: "fill_description" as const, labelKey: "onboarding.checklist.fill_description" as const, href: "?tab=settings" },
-  { id: "add_logo" as const,         labelKey: "onboarding.checklist.add_logo" as const,         href: "?tab=settings" },
-  { id: "add_cover" as const,        labelKey: "onboarding.checklist.add_cover" as const,        href: "?tab=public_profile" },
-  { id: "activate_public" as const,  labelKey: "onboarding.checklist.activate_public" as const,  href: "?tab=public_profile" },
+  { id: "fill_description" as const, labelKey: "onboarding.checklist.fill_description" as const, href: "/settings?section=salon" },
+  { id: "add_logo" as const,         labelKey: "onboarding.checklist.add_logo" as const,         href: "/settings?section=salon" },
+  { id: "add_cover" as const,        labelKey: "onboarding.checklist.add_cover" as const,        href: "/settings?section=public" },
+  { id: "activate_public" as const,  labelKey: "onboarding.checklist.activate_public" as const,  href: "/settings?section=public" },
 ];
 
 export function OnboardingChecklist({ tenantId }: Props) {

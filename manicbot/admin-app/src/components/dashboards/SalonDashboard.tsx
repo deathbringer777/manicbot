@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   Settings, ChevronLeft, ChevronRight, AlertCircle,
@@ -35,7 +35,6 @@ import {
   type PendingStatusPatches,
 } from "~/lib/optimisticStatusMerge";
 import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
-import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 import { AssetUploadField } from "~/components/salon/AssetUploadField";
 import { AnalyticsTab } from "~/components/salon/AnalyticsTab";
@@ -1550,16 +1549,30 @@ function SalonBigCalendar({
 export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; forceTab?: Tab }) {
   const { lang } = useLang();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "reviews", "settings", "public_profile", "analytics", "promo_codes", "staff"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "reviews", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
     urlTab === "instagram" || urlTab === "whatsapp" ? "channels"
     : urlTab && VALID_SALON_TABS.includes(urlTab as Tab) ? (urlTab as Tab)
     : fallbackTab;
+
+  // Redirect legacy ?tab=settings / ?tab=public_profile inputs to the
+  // canonical /settings surface. These tabs used to render inline inside
+  // SalonDashboard, which left the "Домой" page header visible while the
+  // body showed settings content — a confusing duplicate. The Settings
+  // page is the single source of truth.
+  useEffect(() => {
+    if (urlTab === "settings") {
+      router.replace("/settings?section=salon");
+    } else if (urlTab === "public_profile") {
+      router.replace("/settings?section=public");
+    }
+  }, [urlTab, router]);
 
   const [tab, setTab] = useState<Tab>(forceTab ?? resolvedSalonTab);
 
@@ -1732,7 +1745,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "settings" || tab === "public_profile" || tab === "analytics" || tab === "channels" });
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
   const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
   const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
@@ -2554,23 +2567,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {/* ── CHANNELS ── */}
       {tab === "channels" && <SalonChannelsTab tenantId={tenantId} slug={profile.data?.slug ?? null} publicActive={!!profile.data?.publicActive} />}
 
-      {/* ── PUBLIC PROFILE ── */}
-      {tab === "public_profile" && (
-        <PublicProfileEditor tenantId={tenantId} />
-      )}
-
-      {/* ── SETTINGS ── */}
-      {tab === "settings" && (
-        <>
-          {profile.isLoading ? <Loader2 className="animate-spin text-brand-400 mx-auto" /> : profile.isError ? (
-            <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>
-          ) : (
-            <SalonSettingsEditor tenantId={tenantId} profile={profile.data} />
-          )}
-          <AutoConfirmSettings tenantId={tenantId} />
-          <SalonCalendarSection tenantId={tenantId} />
-        </>
-      )}
+      {/* `?tab=settings` and `?tab=public_profile` redirect to /settings
+          (see useEffect above) — no inline render here. */}
 
       {/* Modals */}
       {showTemplates && <ServiceTemplatesSheet lang={lang} onClose={() => setShowTemplates(false)} onSelect={handleTemplateSelect} />}

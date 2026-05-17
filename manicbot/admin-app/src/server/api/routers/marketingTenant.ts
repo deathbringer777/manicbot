@@ -558,7 +558,18 @@ export const marketingTenantRouter = createTRPCRouter({
     }),
 
   // ═══════════════════════════════════════════════════════════════
-  //  PROVIDERS — read-only (provider config stays God Mode)
+  //  PROVIDERS — aggregate-only capability flags.
+  //
+  //  By design the tenant surface MUST NOT leak which email/SMS vendor
+  //  is wired under the hood (Brevo, Resend, Twilio …). Salon owners
+  //  don't operate that plumbing and the names are platform-internal —
+  //  if we swap a vendor tomorrow the tenant should not see the churn.
+  //  Provider names, per-channel toggles and health detail stay on the
+  //  admin-only `marketing.providersList` / `providerToggle` /
+  //  `providerHealthCheck` procedures.
+  //
+  //  This procedure returns a sanitized capability object — enough for
+  //  the SMS tab "can we send?" gate, nothing more.
   // ═══════════════════════════════════════════════════════════════
   providersList: protectedProcedure
     .input(z.object({ tenantId: z.string().min(1) }))
@@ -568,24 +579,21 @@ export const marketingTenantRouter = createTRPCRouter({
       const rows = await ctx.db.select().from(marketingProviders);
       const fromCode = listProviders();
 
-      return fromCode.map((p) => {
-        const row = rows.find((r) => r.name === p.name);
-        return {
-          name: p.name,
-          channels: p.channels,
-          configured: {
-            email: p.channels.includes("email") && p.isConfigured("email"),
-            sms: p.channels.includes("sms") && p.isConfigured("sms"),
-          },
-          db: row ? {
-            enabled: row.enabled === 1,
-            isDefault: row.isDefault === 1,
-            healthStatus: row.healthStatus ?? "unknown",
-            healthDetail: row.healthDetail,
-            lastCheckAt: row.lastCheckAt,
-          } : null,
-        };
-      });
+      // A channel is "available" iff at least one enabled provider both
+      // declares the channel and reports its env config as present. We
+      // deliberately do NOT expose which provider satisfies it.
+      const enabledNames = new Set(
+        rows.filter((r) => r.enabled === 1).map((r) => r.name),
+      );
+      let canSendEmail = false;
+      let canSendSms = false;
+      for (const p of fromCode) {
+        const enabled = enabledNames.has(p.name);
+        if (!enabled) continue;
+        if (p.channels.includes("email") && p.isConfigured("email")) canSendEmail = true;
+        if (p.channels.includes("sms") && p.isConfigured("sms")) canSendSms = true;
+      }
+      return { canSendEmail, canSendSms };
     }),
 
   // ═══════════════════════════════════════════════════════════════

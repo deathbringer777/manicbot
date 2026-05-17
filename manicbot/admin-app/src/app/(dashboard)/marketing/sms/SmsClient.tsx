@@ -64,14 +64,16 @@ export default function SmsClient() {
   const { mode, tenantId } = useMarketingScope();
 
   // Provider config — drives the "not configured" gate.
+  // Tenant surface gets only a sanitized capability flag (no provider name)
+  // per the data-leak contract in `marketingTenant.providersList`.
   const adminProvidersQ = api.marketing.providersList.useQuery(undefined, { enabled: mode === "admin" });
   const tenantProvidersQ = api.marketingTenant.providersList.useQuery(
     { tenantId: tenantId ?? "" },
     { enabled: mode === "tenant" && !!tenantId },
   );
-  const providersQ = mode === "admin" ? adminProvidersQ : tenantProvidersQ;
-  const brevo = providersQ.data?.find((p: any) => p.name === "brevo");
-  const smsConfigured = !!brevo?.configured?.sms;
+  const smsConfigured = mode === "admin"
+    ? !!adminProvidersQ.data?.find((p: any) => p.channels.includes("sms"))?.configured?.sms
+    : !!tenantProvidersQ.data?.canSendSms;
 
   const adminListQ = api.marketing.campaignsList.useQuery(
     { channel: "sms" },

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
-import { Loader2, Activity, Zap, ZapOff } from "lucide-react";
+import { Loader2, Activity, Zap, ZapOff, ShieldAlert } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { useMarketingScope } from "../useMarketingScope";
@@ -25,19 +25,14 @@ function fmtDate(ts?: number | null) {
 export default function ProvidersClient() {
   const { lang } = useLang();
   const utils = api.useUtils();
-  const { mode, tenantId } = useMarketingScope();
+  const { mode } = useMarketingScope();
+  const isAdmin = mode === "admin";
 
-  // Tenant view is read-only — provider config + health-check + toggle stay
-  // God Mode. Tenants see provider status but cannot mutate platform state.
-  const adminListQ = api.marketing.providersList.useQuery(undefined, { enabled: mode === "admin" });
-  const tenantListQ = api.marketingTenant.providersList.useQuery(
-    { tenantId: tenantId ?? "" },
-    { enabled: mode === "tenant" && !!tenantId },
-  );
-  const listQ = mode === "admin" ? adminListQ : tenantListQ;
-
+  // All hooks must run unconditionally (Rules of Hooks). Provider data is
+  // admin-only — tenant `marketingTenant.providersList` is intentionally NOT
+  // queried here because its payload is sanitized aggregate-only.
+  const listQ = api.marketing.providersList.useQuery(undefined, { enabled: isAdmin });
   const [lastCheck, setLastCheck] = useState<Record<string, HealthResult>>({});
-
   const checkMut = api.marketing.providerHealthCheck.useMutation({
     onSuccess: (data: any, variables: any) => {
       setLastCheck((p) => ({ ...p, [variables.name]: data }));
@@ -48,7 +43,24 @@ export default function ProvidersClient() {
     onSuccess: () => utils.marketing.providersList.invalidate(),
   });
 
-  const canMutate = mode === "admin";
+  // Deep-link defense — the nav tab is hidden for tenants, but a typed URL
+  // must NOT spill provider names. See `marketingTenant.providersList` for
+  // the data-leak rationale.
+  if (!isAdmin) {
+    return (
+      <MarketingShell title="Marketing">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 max-w-xl mx-auto text-center">
+          <ShieldAlert className="h-7 w-7 text-slate-400 mx-auto mb-2" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">
+            {t("marketing.providers.adminOnly.title", lang)}
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {t("marketing.providers.adminOnly.body", lang)}
+          </p>
+        </div>
+      </MarketingShell>
+    );
+  }
 
   return (
     <MarketingShell title="Marketing • Providers" subtitle="Email/SMS транспорт: Brevo, Resend, Twilio">
@@ -105,44 +117,40 @@ export default function ProvidersClient() {
                     </div>
                   </div>
 
-                  {canMutate && (
-                    <div className="flex flex-col gap-1.5 shrink-0">
-                      <button
-                        onClick={() => checkMut.mutate({ name: p.name })}
-                        disabled={checkMut.isPending}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
-                      >
-                        <Activity className="h-3.5 w-3.5" />
-                        Проверить
-                      </button>
-                      <button
-                        onClick={() => toggleMut.mutate({ name: p.name, enabled: !p.db?.enabled })}
-                        disabled={toggleMut.isPending}
-                        className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md border transition-colors disabled:opacity-50 ${
-                          p.db?.enabled
-                            ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30"
-                            : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                        }`}
-                      >
-                        {p.db?.enabled ? <ZapOff className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
-                        {p.db?.enabled ? "Отключить" : "Включить"}
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <button
+                      onClick={() => checkMut.mutate({ name: p.name })}
+                      disabled={checkMut.isPending}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
+                    >
+                      <Activity className="h-3.5 w-3.5" />
+                      Проверить
+                    </button>
+                    <button
+                      onClick={() => toggleMut.mutate({ name: p.name, enabled: !p.db?.enabled })}
+                      disabled={toggleMut.isPending}
+                      className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md border transition-colors disabled:opacity-50 ${
+                        p.db?.enabled
+                          ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                          : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                      }`}
+                    >
+                      {p.db?.enabled ? <ZapOff className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
+                      {p.db?.enabled ? "Отключить" : "Включить"}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })}
 
-          {canMutate && (
-            <div className="text-[11px] text-slate-500 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-3">
-              <b>Env vars (Cloudflare Pages):</b><br/>
-              <code className="text-slate-700 dark:text-slate-300">BREVO_API_KEY</code> — Brevo API ключ (xkeysib-…)<br/>
-              <code className="text-slate-700 dark:text-slate-300">BREVO_FROM</code> — отправитель email (<code>ManicBot &lt;noreply@manicbot.com&gt;</code>)<br/>
-              <code className="text-slate-700 dark:text-slate-300">BREVO_SMS_SENDER</code> — SMS sender ID (до 11 символов)<br/>
-              <code className="text-slate-700 dark:text-slate-300">RESEND_API_KEY</code>, <code className="text-slate-700 dark:text-slate-300">RESEND_FROM</code> — активны для транзакционных писем
-            </div>
-          )}
+          <div className="text-[11px] text-slate-500 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 p-3">
+            <b>Env vars (Cloudflare Pages):</b><br/>
+            <code className="text-slate-700 dark:text-slate-300">BREVO_API_KEY</code> — Brevo API ключ (xkeysib-…)<br/>
+            <code className="text-slate-700 dark:text-slate-300">BREVO_FROM</code> — отправитель email (<code>ManicBot &lt;noreply@manicbot.com&gt;</code>)<br/>
+            <code className="text-slate-700 dark:text-slate-300">BREVO_SMS_SENDER</code> — SMS sender ID (до 11 символов)<br/>
+            <code className="text-slate-700 dark:text-slate-300">RESEND_API_KEY</code>, <code className="text-slate-700 dark:text-slate-300">RESEND_FROM</code> — активны для транзакционных писем
+          </div>
         </div>
       )}
     </MarketingShell>

@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { X, Bell, Repeat } from "lucide-react";
 import { api } from "~/trpc/react";
+import { Select } from "~/components/ui/Select";
 
 interface Props {
   tenantId: string;
@@ -171,15 +172,16 @@ export function ReminderModal({ tenantId, defaultKind = "reminder", defaultTarge
 
           <div>
             <label className="block text-[11px] uppercase tracking-wider text-slate-500 mb-1">Повтор</label>
-            <select
+            <Select
               value={preset}
-              onChange={(e) => setPreset(e.target.value as PresetRecurrence)}
-              className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
-            >
-              <option value="once">Один раз</option>
-              <option value="daily">Каждый день</option>
-              <option value="weekly-weekdays">По будням (Пн–Пт)</option>
-            </select>
+              onChange={(v) => setPreset(v as PresetRecurrence)}
+              options={[
+                { value: "once", label: "Один раз" },
+                { value: "daily", label: "Каждый день" },
+                { value: "weekly-weekdays", label: "По будням (Пн–Пт)" },
+              ]}
+              testIdPrefix="reminder-preset"
+            />
           </div>
 
           <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">

@@ -18,6 +18,7 @@ import { X } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
 
 const FIELD_BASE =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
@@ -193,19 +194,19 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
 
           <div>
             <label className={LABEL}>{t("marketing.automation.form.trigger", lang)}</label>
-            <select
+            <Select
               value={triggerType}
-              onChange={(e) => setTriggerType(e.target.value as TriggerType)}
-              className={FIELD_BASE}
-              data-testid="auto-trigger"
-            >
-              <option value="manual">{t("marketing.automation.trigger.manual", lang)}</option>
-              <option value="welcome_series">{t("marketing.automation.trigger.welcome_series", lang)}</option>
-              <option value="re_engagement">{t("marketing.automation.trigger.re_engagement", lang)}</option>
-              <option value="birthday">{t("marketing.automation.trigger.birthday", lang)}</option>
-              <option value="booking_reminder">{t("marketing.automation.trigger.booking_reminder", lang)}</option>
-              <option value="abandoned_booking">{t("marketing.automation.trigger.abandoned_booking", lang)}</option>
-            </select>
+              onChange={(v) => setTriggerType(v as TriggerType)}
+              options={[
+                { value: "manual", label: t("marketing.automation.trigger.manual", lang) },
+                { value: "welcome_series", label: t("marketing.automation.trigger.welcome_series", lang) },
+                { value: "re_engagement", label: t("marketing.automation.trigger.re_engagement", lang) },
+                { value: "birthday", label: t("marketing.automation.trigger.birthday", lang) },
+                { value: "booking_reminder", label: t("marketing.automation.trigger.booking_reminder", lang) },
+                { value: "abandoned_booking", label: t("marketing.automation.trigger.abandoned_booking", lang) },
+              ]}
+              testIdPrefix="auto-trigger"
+            />
             {triggerType !== "manual" && (
               <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                 {t("marketing.automation.form.triggerNotice", lang)}
@@ -215,17 +216,13 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
 
           <div>
             <label className={LABEL}>{t("marketing.automation.form.template", lang)} *</label>
-            <select
+            <Select
               value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="auto-template"
-            >
-              <option value="">{t("marketing.campaign.form.templatePlaceholder", lang)}</option>
-              {templates.map((tpl: any) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
-              ))}
-            </select>
+              onChange={setTemplateId}
+              placeholder={t("marketing.campaign.form.templatePlaceholder", lang)}
+              options={templates.map((tpl: any) => ({ value: tpl.id, label: tpl.name }))}
+              testIdPrefix="auto-template"
+            />
             {templates.length === 0 && (
               <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                 {t("marketing.campaign.form.noTemplates", lang)}
@@ -235,17 +232,16 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
 
           <div>
             <label className={LABEL}>{t("marketing.automation.form.segment", lang)}</label>
-            <select
+            <Select
               value={segmentId}
-              onChange={(e) => setSegmentId(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="auto-segment"
-            >
-              <option value="">{t("marketing.campaign.form.segmentAll", lang)}</option>
-              {segments.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+              onChange={setSegmentId}
+              placeholder={t("marketing.campaign.form.segmentAll", lang)}
+              options={[
+                { value: "", label: t("marketing.campaign.form.segmentAll", lang) },
+                ...segments.map((s: any) => ({ value: s.id, label: s.name })),
+              ]}
+              testIdPrefix="auto-segment"
+            />
           </div>
 
           {err && (

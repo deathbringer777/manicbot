@@ -14,6 +14,7 @@ import { X } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
 
 const FIELD_BASE =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
@@ -174,17 +175,17 @@ export function TemplateFormModal({ scope, initial, onClose, onSaved }: Props) {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className={LABEL}>{t("marketing.template.form.channel", lang)}</label>
-              <select
+              <Select
                 value={channel}
                 disabled={isEdit}
-                onChange={(e) => setChannel(e.target.value as "email" | "sms" | "whatsapp")}
-                className={FIELD_BASE}
-                data-testid="tpl-channel"
-              >
-                <option value="email">Email</option>
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
+                onChange={(v) => setChannel(v as "email" | "sms" | "whatsapp")}
+                options={[
+                  { value: "email", label: "Email" },
+                  { value: "sms", label: "SMS" },
+                  { value: "whatsapp", label: "WhatsApp" },
+                ]}
+                testIdPrefix="tpl-channel"
+              />
               {isEdit && (
                 <p className="mt-1 text-[10px] text-slate-500">
                   {t("marketing.template.form.channelLocked", lang)}
@@ -193,17 +194,17 @@ export function TemplateFormModal({ scope, initial, onClose, onSaved }: Props) {
             </div>
             <div>
               <label className={LABEL}>{t("marketing.template.form.locale", lang)}</label>
-              <select
+              <Select
                 value={locale}
-                onChange={(e) => setLocale(e.target.value)}
-                className={FIELD_BASE}
-                data-testid="tpl-locale"
-              >
-                <option value="ru">Русский</option>
-                <option value="ua">Українська</option>
-                <option value="en">English</option>
-                <option value="pl">Polski</option>
-              </select>
+                onChange={setLocale}
+                options={[
+                  { value: "ru", label: "Русский" },
+                  { value: "ua", label: "Українська" },
+                  { value: "en", label: "English" },
+                  { value: "pl", label: "Polski" },
+                ]}
+                testIdPrefix="tpl-locale"
+              />
             </div>
           </div>
 

@@ -1,12 +1,23 @@
 "use client";
 
+/**
+ * /system/providers — sysadmin-only email/SMS transport dashboard.
+ *
+ * Moved from `/marketing/providers` because vendor plumbing is platform
+ * infrastructure, not part of the salon-owner Marketing surface. The
+ * server-side guards on `marketing.providersList / providerHealthCheck /
+ * providerToggle` already require `system_admin` (adminProcedure). This
+ * page adds a top-level role gate (placeholder for non-admin) so the
+ * URL itself is self-explanatory if a tenant types it.
+ */
+
 import { useState } from "react";
-import { MarketingShell } from "../MarketingShell";
+import { Shell } from "~/components/layout/Shell";
 import { api } from "~/trpc/react";
 import { Loader2, Activity, Zap, ZapOff, ShieldAlert } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { useMarketingScope } from "../useMarketingScope";
+import { useRole } from "~/components/RoleContext";
 
 type HealthResult = {
   status: "ok" | "not_configured" | "degraded" | "down";
@@ -25,16 +36,20 @@ function fmtDate(ts?: number | null) {
 export default function ProvidersClient() {
   const { lang } = useLang();
   const utils = api.useUtils();
-  const { mode } = useMarketingScope();
-  const isAdmin = mode === "admin";
+  const { role, previewRole } = useRole();
+  // The page is sysadmin-only. A sysadmin previewing a tenant role
+  // (previewRole !== null) deliberately steps into the tenant POV — they
+  // should see the same placeholder a tenant would.
+  const isAdmin = role === "system_admin" && !previewRole;
 
-  // All hooks must run unconditionally (Rules of Hooks). Provider data is
-  // admin-only — tenant `marketingTenant.providersList` is intentionally NOT
-  // queried here because its payload is sanitized aggregate-only.
+  // All hooks must run unconditionally (Rules of Hooks).
   const listQ = api.marketing.providersList.useQuery(undefined, { enabled: isAdmin });
   const [lastCheck, setLastCheck] = useState<Record<string, HealthResult>>({});
   const checkMut = api.marketing.providerHealthCheck.useMutation({
     onSuccess: (data: any, variables: any) => {
+      // The tRPC return is a union of `{ status, detail, account, plan }`
+      // and an error variant; we store whatever shape came back and let
+      // the render-time fall-throughs handle missing fields.
       setLastCheck((p) => ({ ...p, [variables.name]: data }));
       utils.marketing.providersList.invalidate();
     },
@@ -43,12 +58,9 @@ export default function ProvidersClient() {
     onSuccess: () => utils.marketing.providersList.invalidate(),
   });
 
-  // Deep-link defense — the nav tab is hidden for tenants, but a typed URL
-  // must NOT spill provider names. See `marketingTenant.providersList` for
-  // the data-leak rationale.
   if (!isAdmin) {
     return (
-      <MarketingShell title="Marketing">
+      <Shell title="System">
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 max-w-xl mx-auto text-center">
           <ShieldAlert className="h-7 w-7 text-slate-400 mx-auto mb-2" />
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">
@@ -58,12 +70,12 @@ export default function ProvidersClient() {
             {t("marketing.providers.adminOnly.body", lang)}
           </p>
         </div>
-      </MarketingShell>
+      </Shell>
     );
   }
 
   return (
-    <MarketingShell title="Marketing • Providers" subtitle="Email/SMS транспорт: Brevo, Resend, Twilio">
+    <Shell title="System • Providers" subtitle="Email/SMS транспорт: Brevo, Resend, Twilio">
       {listQ.isLoading ? (
         <div className="flex items-center justify-center py-10 text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin" />
@@ -153,6 +165,6 @@ export default function ProvidersClient() {
           </div>
         </div>
       )}
-    </MarketingShell>
+    </Shell>
   );
 }

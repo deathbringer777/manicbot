@@ -1,21 +1,32 @@
 "use client";
 
+/**
+ * MarketingShell — sub-nav for the customer-facing Marketing module.
+ *
+ * The `Providers` tab used to live here as an admin-only entry. It was
+ * moved to `/system/providers` (system_admin only) because:
+ *
+ *   - email/SMS vendor plumbing (Brevo, Resend, Twilio) is platform
+ *     infrastructure, not a tenant feature;
+ *   - Marketing is the salon-owner surface — every tab here must be
+ *     useful to the salon owner;
+ *   - sysadmin operating the provider toggle / health-check belongs in
+ *     `/system/*` alongside other platform-level dashboards.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Shell } from "~/components/layout/Shell";
 import {
-  Megaphone, Users, Mail, MessageSquare, Workflow, FileText, Plug,
+  Megaphone, Users, Mail, MessageSquare, Workflow, FileText,
   type LucideIcon,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t, type TranslationKey } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
-import { useMarketingScope } from "./useMarketingScope";
 
-type SubNavItem = { href: string; icon: LucideIcon; labelKey: TranslationKey; adminOnly?: boolean };
+type SubNavItem = { href: string; icon: LucideIcon; labelKey: TranslationKey };
 
-// `providers` is admin-only by design — see `marketingTenant.providersList`
-// for the rationale (no provider-name leak on the tenant surface).
 const SUB_NAV: Array<SubNavItem> = [
   { href: "/marketing",              icon: Megaphone,     labelKey: "marketing.nav.overview" },
   { href: "/marketing/contacts",     icon: Users,         labelKey: "marketing.nav.contacts" },
@@ -23,7 +34,6 @@ const SUB_NAV: Array<SubNavItem> = [
   { href: "/marketing/sms",          icon: MessageSquare, labelKey: "marketing.nav.sms" },
   { href: "/marketing/automations",  icon: Workflow,      labelKey: "marketing.nav.automations" },
   { href: "/marketing/templates",    icon: FileText,      labelKey: "marketing.nav.templates" },
-  { href: "/marketing/providers",    icon: Plug,          labelKey: "marketing.nav.providers", adminOnly: true },
 ];
 
 export function MarketingShell({
@@ -37,16 +47,13 @@ export function MarketingShell({
 }) {
   const pathname = usePathname();
   const { lang } = useLang();
-  const { mode } = useMarketingScope();
   const resolvedTitle = title ?? tNav("Marketing", lang);
   const resolvedSubtitle = subtitle ?? `${t("marketing.nav.contacts", lang)} · ${t("marketing.nav.campaigns", lang)} · ${t("marketing.nav.automations", lang)}`;
-
-  const visibleNav = SUB_NAV.filter((item) => !item.adminOnly || mode === "admin");
 
   return (
     <Shell title={resolvedTitle} subtitle={resolvedSubtitle}>
       <div className="flex flex-wrap gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-3 mb-5 overflow-x-auto">
-        {visibleNav.map(({ href, icon: Icon, labelKey }) => {
+        {SUB_NAV.map(({ href, icon: Icon, labelKey }) => {
           const label = t(labelKey, lang);
           const active =
             href === "/marketing" ? pathname === "/marketing" : pathname?.startsWith(href);

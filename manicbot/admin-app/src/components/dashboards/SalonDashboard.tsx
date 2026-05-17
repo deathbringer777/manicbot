@@ -68,6 +68,7 @@ import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 import { PendingInvitationsStrip } from "~/components/salon/PendingInvitationsStrip";
+import { MasterDetailModal } from "~/components/salon/tabs/masters/MasterDetailModal";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -1594,8 +1595,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });
   const [showTemplates, setShowTemplates] = useState(false);
   const [masterModal, setMasterModal] = useState<"telegram" | "create" | "invite" | null>(null);
+  const [masterDetailChatId, setMasterDetailChatId] = useState<number | null>(null);
   const [deleteSvcConfirm, setDeleteSvcConfirm] = useState<{ active: boolean; svcId: string | null }>({ active: false, svcId: null });
-  const [removeMasterConfirm, setRemoveMasterConfirm] = useState<{ active: boolean; chatId: string | null }>({ active: false, chatId: null });
+  // 2026-05-17: master-row deletion moved into MasterDetailModal (Clients-tab
+  // parity). The previous inline trash button is gone; the standalone confirm
+  // modal below is also removed.
 
   function handleAddNew() { setSvcModal({ open: true, svc: null }); }
   function handleAddTemplates() { setShowTemplates(true); }
@@ -1909,9 +1913,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const removeMaster = api.salon.removeMaster.useMutation({
     onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
-  const setMasterPublicHidden = api.salon.setMasterPublicHidden.useMutation({
-    onSuccess: () => { utils.salon.getMasters.invalidate(); },
-  });
   const deleteSvc = api.salon.deleteService.useMutation({
     onSuccess: () => { utils.salon.getServices.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
@@ -2003,30 +2004,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           <button onClick={() => {
             if (deleteSvcConfirm.svcId) deleteSvc.mutate({ tenantId, svcId: deleteSvcConfirm.svcId });
             setDeleteSvcConfirm({ active: false, svcId: null });
-          }}
-            className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors">
-            {t("action.delete", lang)}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Remove master confirmation modal
-  const removeMasterConfirmModal = removeMasterConfirm.active && (
-    <div role="dialog" aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={() => setRemoveMasterConfirm({ active: false, chatId: null })}>
-      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("confirm.removeMaster", lang)}</h3>
-        <div className="flex gap-2">
-          <button onClick={() => setRemoveMasterConfirm({ active: false, chatId: null })}
-            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-            {t("action.cancel", lang)}
-          </button>
-          <button onClick={() => {
-            if (removeMasterConfirm.chatId) removeMaster.mutate({ tenantId, chatId: Number(removeMasterConfirm.chatId) });
-            setRemoveMasterConfirm({ active: false, chatId: null });
           }}
             className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 transition-colors">
             {t("action.delete", lang)}
@@ -2420,12 +2397,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {/* ── MASTERS ── */}
       {tab === "masters" && (
         <div className="space-y-3">
-          <SectionHeader title={t("salon.masters", lang)} action={
-            <div className="flex items-center gap-2">
-              <Btn onClick={() => setMasterModal("telegram")}><Plus className="h-3.5 w-3.5" />{t("master.addViaTelegram", lang)}</Btn>
-              <Btn onClick={() => setMasterModal("create")}><Plus className="h-3.5 w-3.5" />{t("master.createAccount", lang)}</Btn>
-            </div>
-          } />
+          {/* 2026-05-17: top-right "Add via Telegram / Create account" buttons
+              removed. The bottom-right `AddMasterFab` covers all 3 flows
+              (create_account / add_telegram / invite_email) — header was a
+              duplicate from the transition period. */}
+          <SectionHeader title={t("salon.masters", lang)} />
           <PendingInvitationsStrip tenantId={tenantId} />
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
@@ -2443,7 +2419,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 nowSec <= m.vacationUntil;
               const onVacation = m.onVacation === 1 || inRange;
               return (
-                <div key={m.chatId} className="glass-card rounded-xl p-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  key={m.chatId}
+                  onClick={() => setMasterDetailChatId(m.chatId)}
+                  data-testid={`master-row-${m.chatId}`}
+                  className="glass-card group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:border-brand-500/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500/40 active:scale-[0.99]"
+                >
                   <div className={`h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-brand-500 flex items-center justify-center text-sm font-bold text-white shrink-0 ${isHidden ? "opacity-50" : ""}`}>
                     {(m.name ?? "?").charAt(0).toUpperCase()}
                   </div>
@@ -2468,23 +2450,10 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     </div>
                     {!isWebAccount && <p className="text-[10px] text-slate-500">ID: {m.chatId}</p>}
                   </div>
-                  <button
-                    onClick={() => setMasterPublicHidden.mutate({ tenantId, chatId: m.chatId, hidden: isHidden ? 0 : 1 })}
-                    disabled={setMasterPublicHidden.isPending}
-                    title={isHidden ? t("master.showOnPublic", lang) : t("master.hideFromPublic", lang)}
-                    className={`h-8 w-8 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 ${
-                      isHidden
-                        ? "bg-slate-500/10 text-slate-500 hover:bg-slate-500/20"
-                        : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
-                    }`}
-                  >
-                    {isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  </button>
-                  <button onClick={() => setRemoveMasterConfirm({ active: true, chatId: m.chatId })}
-                    className="h-8 w-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/20 transition-colors">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                  <span className="text-[10px] text-slate-400 opacity-0 transition group-hover:opacity-100">
+                    {t("masterDetail.action.edit", lang)}
+                  </span>
+                </button>
               );
             })}
             {mastersList.data?.length === 0 && (
@@ -2615,7 +2584,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         />
       )}
       {deleteSvcConfirmModal}
-      {removeMasterConfirmModal}
+      {masterDetailChatId !== null && (
+        <MasterDetailModal
+          tenantId={tenantId}
+          chatId={masterDetailChatId}
+          onClose={() => setMasterDetailChatId(null)}
+        />
+      )}
     </Shell>
   );
 }

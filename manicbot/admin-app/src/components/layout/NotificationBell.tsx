@@ -20,7 +20,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, X, CheckCheck, Inbox } from "lucide-react";
+import { Bell, X, CheckCheck, Inbox, BellOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "~/trpc/react";
@@ -31,6 +31,7 @@ import {
   kindMeta,
   type BellGroup,
 } from "~/lib/notifications/kindMeta";
+import { usePushSubscription } from "~/lib/notifications/usePushSubscription";
 
 const DROPDOWN_LIMIT = 12;
 
@@ -265,19 +266,69 @@ export function NotificationBell() {
             })}
           </div>
 
-          {/* Footer — full history link */}
-          <div className="px-4 py-2 border-t border-slate-100 dark:border-white/5 text-center">
-            <Link
-              href="/notifications"
-              onClick={() => setOpen(false)}
-              data-testid="notification-bell-see-all"
-              className="text-[11px] font-medium text-indigo-500 hover:text-indigo-600"
-            >
-              Все уведомления →
-            </Link>
-          </div>
+          {/* Footer — push opt-in + full history link */}
+          <BellFooter onClose={() => setOpen(false)} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Footer extracted into a small component so the push hook only mounts
+ * when the dropdown is open — saves a few cycles and avoids registering
+ * the service worker on initial page paint.
+ */
+function BellFooter({ onClose }: { onClose: () => void }) {
+  const push = usePushSubscription();
+
+  // Hide the push toggle when the platform hasn't deployed VAPID keys
+  // yet (vapidEnabled === false) or when the browser doesn't support
+  // the Push API. Either way → no actionable toggle, just the link.
+  const showPushToggle = push.support && push.vapidEnabled;
+
+  return (
+    <div className="border-t border-slate-100 dark:border-white/5 divide-y divide-slate-100 dark:divide-white/5">
+      {showPushToggle && (
+        <div className="px-4 py-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {push.enabled ? "Браузерные пуши включены" : "Пуш в браузер"}
+          </span>
+          {push.enabled ? (
+            <button
+              type="button"
+              onClick={() => void push.unsubscribe()}
+              disabled={push.loading}
+              data-testid="notification-bell-push-off"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5"
+            >
+              <BellOff className="h-3 w-3" />
+              Выкл
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void push.subscribe()}
+              disabled={push.loading || push.permission === "denied"}
+              data-testid="notification-bell-push-on"
+              className="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 px-2 py-1 text-[11px] font-medium text-indigo-500 hover:bg-indigo-500/20 disabled:opacity-50"
+            >
+              <Bell className="h-3 w-3" />
+              {push.permission === "denied" ? "Заблокировано" : push.loading ? "Подключаем…" : "Включить"}
+            </button>
+          )}
+        </div>
+      )}
+      <div className="px-4 py-2 text-center">
+        <Link
+          href="/notifications"
+          onClick={onClose}
+          data-testid="notification-bell-see-all"
+          className="text-[11px] font-medium text-indigo-500 hover:text-indigo-600"
+        >
+          Все уведомления →
+        </Link>
+      </div>
     </div>
   );
 }

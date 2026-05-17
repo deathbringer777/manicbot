@@ -8,7 +8,7 @@ import {
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { SectionHeader, Btn } from "~/components/salon/SalonShared";
+import { Btn } from "~/components/salon/SalonShared";
 
 function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
   const validate = (lat: number, lng: number) =>
@@ -149,15 +149,7 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   if (profile.isError) return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>;
 
   return (
-    <div className="space-y-5">
-      <SectionHeader
-        title={t("salon.publicProfile.title", lang)}
-        action={editing
-          ? <Btn variant="ghost" onClick={() => setEditing(false)}><X className="h-3.5 w-3.5" />{t("common.cancel", lang)}</Btn>
-          : <Btn onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" />{t("common.edit", lang)}</Btn>
-        }
-      />
-
+    <div className="space-y-4">
       <div className={`rounded-xl p-4 flex items-center gap-3 ${isPublic ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"}`}>
         {isPublic
           ? <ToggleRight className="h-6 w-6 text-emerald-400 shrink-0" />
@@ -225,43 +217,56 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       )}
 
       {!editing ? (
-        <div className="glass-card rounded-2xl p-4 space-y-3">
-          {[
-            { label: "URL (slug)", value: data?.slug, icon: Globe },
-            { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
-            { label: t("common.description", lang), value: data?.description, icon: null },
-            { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
-          ].map(({ label, value, icon: Icon }) => value ? (
-            <div key={label} className="flex items-start gap-3">
-              {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
+        <div className="glass-card rounded-2xl p-4">
+          <div className="space-y-3">
+            {(() => {
+              const rows = [
+                { label: "URL (slug)", value: data?.slug, icon: Globe },
+                { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
+                { label: t("common.description", lang), value: data?.description, icon: null },
+                { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
+              ];
+              const filled = rows.filter((r) => r.value);
+              if (filled.length === 0) {
+                return (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 py-2">
+                    {t("salon.publicProfile.setSlugFirst", lang)}
+                  </p>
+                );
+              }
+              return filled.map(({ label, value, icon: Icon }) => (
+                <div key={label} className="flex items-start gap-3">
+                  {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="text-sm text-slate-900 dark:text-white break-words">{value}</p>
+                  </div>
+                </div>
+              ));
+            })()}
+            {(data?.logo || data?.coverPhoto) && (
+              <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
+                {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+                {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+              </div>
+            )}
+            {photos.length > 0 && (
               <div>
-                <p className="text-xs text-slate-500">{label}</p>
-                <p className="text-sm text-slate-900 dark:text-white">{value}</p>
+                <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>
+                <div className="flex flex-wrap gap-2">
+                  {photos.map((url, i) => (
+                    <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null)}
-          {(data?.logo || data?.coverPhoto) && (
-            <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
-              {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
-              {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
-            </div>
-          )}
-          {photos.length > 0 && (
-            <div>
-              <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>
-              <div className="flex flex-wrap gap-2">
-                {photos.map((url, i) => (
-                  <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
-                ))}
-              </div>
-            </div>
-          )}
-          {!data?.slug && (
-            <p className="text-xs text-amber-400/80 flex items-center gap-1">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {t("salon.publicProfile.setSlugFirst", lang)}
-            </p>
-          )}
+            )}
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/5 flex justify-end">
+            <Btn onClick={() => setEditing(true)}>
+              <Pencil className="h-3.5 w-3.5" />
+              {t("common.edit", lang)}
+            </Btn>
+          </div>
         </div>
       ) : (
         <div className="glass-card rounded-2xl p-4 space-y-3">
@@ -366,10 +371,16 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             </div>
           </div>
 
-          <Btn onClick={handleSave} disabled={update.isPending || !!slugError || slugCheck.data?.available === false} className="w-full justify-center py-2.5">
-            {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {t("salon.publicProfile.savePublic", lang)}
-          </Btn>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            <Btn variant="ghost" onClick={() => setEditing(false)} className="sm:flex-1 justify-center py-2.5">
+              <X className="h-3.5 w-3.5" />
+              {t("common.cancel", lang)}
+            </Btn>
+            <Btn onClick={handleSave} disabled={update.isPending || !!slugError || slugCheck.data?.available === false} className="sm:flex-[2] justify-center py-2.5">
+              {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {t("salon.publicProfile.savePublic", lang)}
+            </Btn>
+          </div>
         </div>
       )}
     </div>

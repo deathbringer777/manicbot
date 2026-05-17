@@ -250,6 +250,16 @@ Platform-wide in-app feed driving the header bell + a full-history view at `/not
 - `src/handlers/cron.js` `processBirthdayAndReturningPromos` now fires `birthday.client` to the tenant owner alongside the existing client-facing Telegram promo. `sourceId` = `bday:${chatId}:${year}` so the 15-min cron cadence collapses to one row per year per client.
 - Worker writer pin: `test/notification-writers-pr2.test.js`.
 
+**PR 3 (2026-05-17) — Web Push (browser push notifications):**
+- Migration `0073_push_subscriptions.sql` — one row per (web_user_id, endpoint) browser pair. Worker-side encryption uses the (p256dh, auth) ECDH keys per RFC 8291. `failure_count` is bumped on 404 / 410 from the push service; a future cleanup cron prunes dead rows.
+- tRPC `pushSubscriptionsRouter` — `getVapidPublicKey` (returns `{enabled: false}` when env unset → UI hides the toggle), `subscribe` (UPSERT on the unique (user, endpoint) pair), `unsubscribe`, `list`. Every read/mutation pinned to `ctx.webUser.id`. Pinned by `src/__tests__/push-subscriptions-router.test.ts`.
+- Service worker `manicbot/admin-app/public/sw.js` — handles `push` (renders native OS notification with kind-aware tag-based replace), `notificationclick` (focuses existing dashboard tab over spawning a new one), and `pushsubscriptionchange` (best-effort resync to `/api/push/resync`).
+- Client hook `lib/notifications/usePushSubscription.ts` — registers the SW, calls `PushManager.subscribe` with the VAPID key, POSTs subscription back. Hides itself when `Notification` / `PushManager` is unsupported or VAPID isn't deployed. NotificationBell footer renders the «Включить пуши / Выкл» button when the hook reports the platform is ready.
+- Worker `src/services/webpush.js` — full RFC 8291 sender using Web Crypto only (no `web-push` npm — incompatible with Workers runtime). Implements: P-256 ECDH → HKDF-SHA256 → AES-128-GCM with `aes128gcm` content-encoding; VAPID ES256 JWT signing. Single `sendWebPush(subscription, payload, vapid)` returns `{ok, status, body?}` so the caller can detect 404 / 410 and prune. Pinned by `test/webpush-encryption.test.js`.
+- Worker `notifyWebUser` extended with `push?: boolean` (default true). Fans out to every `push_subscriptions` row of the recipient, no-ops when VAPID isn't configured (so the bell still works in the early-launch state). On 404 / 410 the row's `failure_count` is bumped.
+- VAPID key generator: `node manicbot/scripts/generate-vapid-keys.mjs [--subject mailto:ops@example.com]`. Generates a P-256 keypair and prints the three env vars to set: `VAPID_PUBLIC_KEY` (Pages + Worker), `VAPID_PRIVATE_KEY` (Worker secret only), `VAPID_SUBJECT` (mailto). Until those are configured the push opt-in UI hides itself.
+- **Bonus fix:** `src/http/adminAppProxy.js` was missing `/notifications`, `/channels`, `/errors`, `/invitations`, `/marketing-autopilot` — those dashboard pages all 404'd via the landing proxy. Whitelist updated + extra cases in `test/admin-app-proxy.test.js`.
+
 ---
 
 ## Worker Architecture (`manicbot/src/`)
@@ -387,6 +397,40 @@ A subtle adjacent bug: the content wrapper inside `WebShell` and `Shell` previou
 
 All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignFormModal`, `TemplateFormModal`, `ReminderModal`) use the brand-styled `~/components/ui/Select.tsx` rather than the native `<select>`. Native dropdowns render at the OS layer, ignore page theming, and break inside the dark-overlay modal stack. Pinned by `src/__tests__/marketing-modals-no-native-select.test.ts`.
 
+### Chat composer — Enter-to-send contract
+
+Every chat-style composer in the admin-app honours one keyboard convention: **Enter sends, Shift+Enter inserts a newline**. Applies to:
+- `MessageComposer.tsx` (`/messages` thread view) — original implementation, pattern source.
+- `HelpSection.tsx` reply textarea (salon-owner ticket replies under `/settings?section=help`).
+- `SupportDashboard.tsx` reply textarea (platform-staff `/platform-support` ticket replies).
+- `Composer.tsx` (public salon AI chat at `/salon/{slug}/chat`).
+
+The handler guards three conditions before firing the mutation: trimmed body must be non-empty (or an attachment must be present), the mutation must not already be pending, and the ticket/thread must be open. Pinned by `src/__tests__/ticket-composer-enter-behavior.test.tsx` for the two ticket surfaces.
+
+### Chat composer — image attachments (drag / paste / click)
+
+The same three composers (HelpSection, SupportDashboard, MessageComposer) accept PNG / JPEG / WEBP image attachments up to 2 MB via three input methods:
+
+- **Click**: paperclip icon next to the Send button — opens the OS file picker.
+- **Paste**: pasting an image from the clipboard (`Cmd+V` on a screenshot) into the textarea uploads it.
+- **Drag-and-drop**: dropping a file anywhere on the composer container uploads it. The drop zone gets a brand-coloured ring while a file is hovering.
+
+Upload flow:
+1. Composer calls a tRPC mint procedure to get a short-lived signed URL:
+   - `support.mintTicketUploadToken({ ticketId })` — works for ticket owners AND platform support staff (system_admin / support / technical_support). Falls back to the `_platform` sentinel tid for tickets with no `tenantId`.
+   - `messenger.mintAttachmentUploadToken({ tenantId, threadId })` — gated by `assertThreadMember` (system_admin bypass still requires the thread to live in the tenant).
+2. Browser POSTs the file to the Worker's `/upload/asset?t=<token>&kind=chat_attachment` endpoint (same as the salon-branding upload pipeline; new `chat_attachment` kind added to `ALLOWED_KINDS` in both `manicbot/src/services/upload.js` and `manicbot/admin-app/src/server/lib/uploadToken.ts`).
+3. Worker writes the bytes to R2 under `t/{tid}/chat_attachment-{sha12}.{ext}` after magic-byte / MIME / size validation.
+4. Composer receives the CDN URL, shows a preview chip, and includes it in the next `replyToMyTicket` / `replyToTicket` / `sendMessage` mutation.
+
+Persistence shape:
+- Tickets: single `attachmentUrl` text column on `platform_ticket_messages`. `replyToMyTicket` now accepts `attachmentUrl` (was missing); `replyToTicket` already did.
+- Messenger: `attachments_json` on `thread_messages`, wrapped object `{ attachments: [{ url, kind }, …] }` so the schema can extend later. Capped at 4 attachments per message at the zod boundary.
+
+The shared client primitives live in `~/lib/chatAttachments.ts` (`uploadChatAttachment`, `validateChatAttachmentFile`, `describeChatAttachmentError`, `ChatAttachmentUploadError`) and `~/components/chat/ChatAttachButton.tsx`. Pinned by `src/__tests__/chat-attachment-uploads.test.ts` (18 cases — auth, tenant isolation, env edges, JSON shape).
+
+Inline image rendering: ticket and thread message lists render attachments as `<img>` when the URL ends with `.png|.jpg|.jpeg|.webp` (with or without query string); otherwise the URL is shown as a clickable text link (used for `telegram:` sentinel attachments and external URLs that staff paste manually into the SupportDashboard URL fallback field).
+
 
 ### tRPC procedures
 
@@ -402,7 +446,7 @@ All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignForm
 | `auth`           | `routers/auth.ts`           | public (validates initData in ctx)                                                                              |
 | `webUsers`       | `routers/webUsers.ts`       | mixed: public (register, verify, reset) / protected (changePassword, requestEmailChange) / admin (create, list) |
 | `publicSalon`    | `routers/publicSalon.ts`    | public (salon directory: getProfile, search, getCities, autocomplete)                                           |
-| `salon`          | `routers/salon.ts`          | `tenant_owner` for tenantId (`assertTenantOwner`)                                                               |
+| `salon`          | `routers/salon.ts`          | `tenant_owner` for tenantId (`assertTenantOwner`). Owner-side master CRUD includes `updateMaster` (2026-05-17) which lets owners edit `name / tgUsername / bio / photo / vacationFrom / vacationUntil / onVacation` on masters they manage. Origin gating: `salon_created` → always editable; `invited_email` / `invited_telegram` → only when `masters.allow_delegation = 1`; `self_registered` → FORBIDDEN (master owns their own profile via `master.updateProfile`). Vacation rules mirror `master.setVacation` (both-or-neither, 2-year cap, `on_vacation` derived from now-in-range). |
 | `master`         | `routers/masterRouter.ts`   | `master` or `tenant_owner` for tenantId                                                                         |
 | `support`        | `routers/support.ts`        | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`). PR1 (2026-05-17) added in-app notification fan-out: `replyToTicket` → `support.reply` to the ticket owner, `createTicket` + `replyToMyTicket` → `support.ticket.new` / `support.ticket.reply` to every support staff member except the creator. See Notification Center above. |
 | `channels`       | `routers/channels.ts`       | protected + `assertTenantOwner`                                                                                 |
@@ -484,6 +528,40 @@ The `dashPrefs.hiddenStatCards` preference field stays in
 toggles) but they no longer affect the dashboard. Cleaning that up is a
 follow-up; it's harmless because the stat grid is unconditionally gone
 from `SalonDashboard.tsx`.
+
+
+### Masters tab row → MasterDetailModal (2026-05-17)
+
+Owner UX parity with the Clients tab. Previously the master row in
+`/dashboard?tab=masters` carried only two inline icons — "hide from
+public profile" (eye) and "delete" (trash) — and there was no way to
+edit `name / tg handle / bio / photo / vacation` from the owner side.
+Independent + invited masters update their profiles through
+`master.updateProfile`, but accounts created via "Создать аккаунт через
+web" (`origin = 'salon_created'`) had no owner-side editor at all.
+
+The fix mirrors `ClientRow` → `ClientDetailModal`:
+
+- **Row is now a `<button>`** ([SalonDashboard.tsx](manicbot/admin-app/src/components/dashboards/SalonDashboard.tsx)) — click opens
+  [MasterDetailModal.tsx](manicbot/admin-app/src/components/salon/tabs/masters/MasterDetailModal.tsx). Inline eye + trash
+  icons removed; all actions live inside the modal.
+- **Top-right header buttons removed** ("Добавить через Telegram" /
+  "Создать аккаунт") — they were a transition-period duplicate of the
+  bottom-right `AddMasterFab` which already covers all three add-flows
+  (`create_account` / `add_telegram` / `invite_email`).
+- **Backend mutation** `salon.updateMaster` (see Router table above)
+  with origin gating — `salon_created` always editable, `invited_*`
+  only when `allowDelegation = 1`, `self_registered` rejected. Vacation
+  validation mirrors `master.setVacation`.
+- **`salon.getMasterDetail`** extended to return `vacationFrom`,
+  `vacationUntil`, `onVacation`, `allowDelegation` so the modal can
+  hydrate the edit form and decide whether to show the lock notice.
+- **Modal stacking contract (0062)** — pinned in
+  `src/__tests__/modal-styling-regression.test.ts` (the
+  `MasterDetailModal` path was added to `MODAL_FILES`).
+- **Tests** — `src/__tests__/salon-update-master.test.ts` (17 cases:
+  6 origin/delegation, 2 authorization, 7 vacation, 2 sanitization +
+  no-op).
 
 
 ### Appointment status transitions (Day-view detail panel — 2026-05-16)

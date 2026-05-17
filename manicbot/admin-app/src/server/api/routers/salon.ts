@@ -956,6 +956,139 @@ export const salonRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  /**
+   * Owner-side edit of a master's profile fields. Powers the per-row detail
+   * modal on /dashboard?tab=masters (parity with the Clients tab UX).
+   *
+   * Origin gating (migration 0063 — see `masters.origin`):
+   *   - salon_created    → always editable (the salon owns the account)
+   *   - invited_email    → editable only if `allowDelegation = 1`
+   *   - invited_telegram → editable only if `allowDelegation = 1`
+   *   - self_registered  → never editable by the owner; the master owns
+   *                        their own profile (use master.updateProfile)
+   *
+   * Vacation rules mirror master.setVacation: both-or-neither, range no
+   * longer than 2 years, `on_vacation` derived from now ∈ [from, until].
+   * A plain `onVacation` toggle without dates clears any pinned range
+   * when flipped to 0 — same contract as master.updateWorkHours.
+   */
+  updateMaster: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatId: z.number(),
+      name: z.string().min(1).max(200).optional(),
+      tgUsername: z.string().max(64).nullable().optional(),
+      bio: z.string().max(500).nullable().optional(),
+      photo: z.string().max(2000).nullable().optional(),
+      onVacation: z.number().min(0).max(1).optional(),
+      vacationFrom: z.number().int().nullable().optional(),
+      vacationUntil: z.number().int().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Origin / delegation gate — load the master row first so the owner
+      // cannot accidentally rewrite a self-registered master's profile.
+      const [master] = await ctx.db
+        .select({
+          origin: masters.origin,
+          allowDelegation: masters.allowDelegation,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.chatId)))
+        .limit(1);
+
+      if (!master) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+      }
+      if (master.origin === "self_registered") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "master_owns_profile" });
+      }
+      if (
+        (master.origin === "invited_email" || master.origin === "invited_telegram")
+        && !master.allowDelegation
+      ) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "delegation_required" });
+      }
+
+      const setObj: Record<string, unknown> = {};
+      if (input.name !== undefined) setObj.name = sanitizeText(input.name, 200);
+      if (input.tgUsername !== undefined) {
+        setObj.tgUsername = input.tgUsername ? sanitizeText(input.tgUsername, 64) : null;
+      }
+      if (input.bio !== undefined) {
+        setObj.bio = input.bio ? sanitizeText(input.bio, 500) : null;
+      }
+      if (input.photo !== undefined) {
+        setObj.photo = input.photo ? input.photo : null;
+      }
+
+      const hasVacFrom = input.vacationFrom !== undefined;
+      const hasVacUntil = input.vacationUntil !== undefined;
+      if (hasVacFrom || hasVacUntil) {
+        if (hasVacFrom !== hasVacUntil) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "vacationFrom and vacationUntil must both be set or both be null",
+          });
+        }
+        const from = input.vacationFrom ?? null;
+        const until = input.vacationUntil ?? null;
+        if ((from == null) !== (until == null)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "vacationFrom and vacationUntil must both be set or both be null",
+          });
+        }
+        if (from == null && until == null) {
+          setObj.vacationFrom = null;
+          setObj.vacationUntil = null;
+          setObj.onVacation = 0;
+        } else if (from != null && until != null) {
+          if (until < from) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "vacationUntil must be on or after vacationFrom",
+            });
+          }
+          const MAX_RANGE = 2 * 365 * 24 * 60 * 60;
+          if (until - from > MAX_RANGE) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Vacation range cannot exceed 2 years",
+            });
+          }
+          const now = Math.floor(Date.now() / 1000);
+          setObj.vacationFrom = from;
+          setObj.vacationUntil = until;
+          setObj.onVacation = from <= now && now <= until ? 1 : 0;
+        }
+      } else if (input.onVacation !== undefined) {
+        setObj.onVacation = input.onVacation;
+        if (input.onVacation === 0) {
+          setObj.vacationFrom = null;
+          setObj.vacationUntil = null;
+        }
+      }
+
+      if (Object.keys(setObj).length === 0) {
+        return { success: true };
+      }
+
+      await ctx.db.update(masters)
+        .set(setObj)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.chatId)));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "tenant.master.update",
+        tenantId: input.tenantId,
+        detail: `chatId=${input.chatId}; fields=${Object.keys(setObj).join(",")}`,
+        ip: ctxIp(ctx),
+      });
+      return { success: true };
+    }),
+
   createMasterAccount: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
@@ -2305,6 +2438,13 @@ export const salonRouter = createTRPCRouter({
           origin: masters.origin,
           isSynthetic: masters.isSynthetic,
           webUserId: masters.webUserId,
+          // Vacation + delegation surfaced for the owner-side detail modal
+          // (parity with the Clients tab). The modal disables edits for
+          // self_registered + invited_* without `allowDelegation`.
+          vacationFrom: masters.vacationFrom,
+          vacationUntil: masters.vacationUntil,
+          onVacation: masters.onVacation,
+          allowDelegation: masters.allowDelegation,
           // Joined web_users fields (LEFT JOIN below via subquery — kept simple)
         })
         .from(masters)

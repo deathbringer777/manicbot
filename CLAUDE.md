@@ -224,6 +224,28 @@ Both `CommandPalette` and `ActivityFeed` mount globally in `src/app/(dashboard)/
 
 ---
 
+## Notification Center
+
+Platform-wide in-app feed driving the header bell + a full-history view at `/notifications`. Every salon owner / master / support agent sees the same bell with their own row set; `user_notifications` rows are scoped by `web_user_id` and every read/mutation is pinned to the caller via `notificationsRouter` (no cross-user reads possible).
+
+**Surfaces:**
+- `components/layout/NotificationBell.tsx` — bell with unread badge + 10-row dropdown (refetch 30s closed, 5s open). Mounted in BOTH `Shell.tsx` (Telegram Mini App) and `WebShell.tsx` (web dashboard, between the tour-replay button and the theme toggle). PR1 (2026-05-17) added the WebShell mount — previously the web dashboard had no bell at all and salon owners using https://manicbot.com missed every in-app notification. Pinned by `src/__tests__/webshell-bell-mount.test.ts`.
+- `app/(dashboard)/notifications/NotificationsClient.tsx` — `/notifications` full-history page. Per-`kind` icon + accent, relative time, "Сегодня / На этой неделе / Ранее" buckets, "Все / Непрочитанные" tabs, per-row dismiss (hard-delete via `notifications.dismiss`).
+
+**Writers** (the bell stays empty until someone calls `notifyWebUser`):
+- `server/services/notifyWebUser.ts` — admin-app-side Drizzle helper. Mirror of the Worker `src/services/userNotify.js`. INSERT OR IGNORE on the `(web_user_id, source_slug, source_id, kind)` partial UNIQUE → caller-controlled `sourceId` decides collapse semantics. Exports `notifyWebUser` and a `notifyManyWebUsers` fan-out. Pinned by `src/__tests__/notify-web-user.test.ts`.
+- `plugins/reminders/cron.js` — fires `kind='reminder.fired'` per reminder occurrence (pre-existing).
+- `server/api/routers/support.ts` — three new writers added in PR1:
+  - `replyToTicket` → in-app `support.reply` to the ticket owner (resolved via `platform_tickets.client_name` email → `web_users`). Title localized to ru/ua/en/pl per `web_users.lang`. Link: `/settings?section=help&ticket={id}` — `HelpSection` auto-opens that ticket via `useSearchParams`.
+  - `createTicket` → fan-out `support.ticket.new` to every `web_users.role IN (system_admin, support, technical_support)`, minus the creator.
+  - `replyToMyTicket` → fan-out `support.ticket.reply` to support staff (client-side follow-up). `sourceId` includes the message timestamp so multiple replies don't collapse.
+
+  All three are fire-and-forget — a notification-write failure never blocks the underlying support mutation. Pinned by `src/__tests__/support-notifications.test.ts`.
+
+**Notification kind taxonomy:** `<domain>.<event>` slugs. Current set: `reminder.fired`, `support.reply`, `support.ticket.new`, `support.ticket.reply`. PR2 adds `birthday.*`, `appointment.*`, `billing.*`, `marketing.*` and the `/notifications` page already styles them via the `kindIcon` / `kindAccent` helpers.
+
+---
+
 ## Worker Architecture (`manicbot/src/`)
 
 ```
@@ -336,6 +358,7 @@ Telegram Mini App opens
 - `/settings` (account / appearance / bot / billing / help — common to all roles)
 - `/plugins`, `/plugins/*`, `/plugin/*` (Plugin Marketplace catalog, detail, runtime)
 - `/marketing`, `/marketing/*` (Marketing module — `MarketingShell` with **6**-tab sub-nav: Overview / Contacts / Campaigns / SMS / Automations / Templates).
+- `/notifications`, `/notifications/*` (Notification Center — full-history feed driven by `user_notifications`; bell footer links here). Pinned by `src/__tests__/notifications-route-whitelist.test.ts`.
 
 `/marketing/providers` no longer exists as a tenant-reachable page — it is a server-side `redirect()` to `/system/providers` (system-admin-only, see below). Email/SMS vendor plumbing (Brevo, Resend, Twilio) is platform infrastructure and is intentionally NOT exposed under the salon-owner Marketing surface.
 
@@ -375,7 +398,7 @@ All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignForm
 | `publicSalon`    | `routers/publicSalon.ts`    | public (salon directory: getProfile, search, getCities, autocomplete)                                           |
 | `salon`          | `routers/salon.ts`          | `tenant_owner` for tenantId (`assertTenantOwner`)                                                               |
 | `master`         | `routers/masterRouter.ts`   | `master` or `tenant_owner` for tenantId                                                                         |
-| `support`        | `routers/support.ts`        | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`)                         |
+| `support`        | `routers/support.ts`        | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`). PR1 (2026-05-17) added in-app notification fan-out: `replyToTicket` → `support.reply` to the ticket owner, `createTicket` + `replyToMyTicket` → `support.ticket.new` / `support.ticket.reply` to every support staff member except the creator. See Notification Center above. |
 | `channels`       | `routers/channels.ts`       | protected + `assertTenantOwner`                                                                                 |
 | `googleCalendar` | `routers/googleCalendar.ts` | protected + `assertTenantOwner`                                                                                 |
 | `conversations`  | `routers/conversations.ts`  | protected + `assertTenantOwner`                                                                                 |

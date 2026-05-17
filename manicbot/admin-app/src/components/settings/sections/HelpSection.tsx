@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   HelpCircle,
@@ -45,6 +46,19 @@ export function HelpSection() {
 
   const [view, setView] = useState<View>("list");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+
+  // Deep-link: notification-bell rows link to /settings?section=help&ticket=<id>
+  // so the user lands directly on the support thread. We honour the param
+  // once on mount AND whenever it changes (back/forward navigation).
+  const searchParams = useSearchParams();
+  const ticketQuery = searchParams?.get("ticket") ?? null;
+  useEffect(() => {
+    if (!showSupportForm) return;
+    if (!ticketQuery) return;
+    if (ticketQuery === selectedTicketId && view === "detail") return;
+    setSelectedTicketId(ticketQuery);
+    setView("detail");
+  }, [ticketQuery, showSupportForm, selectedTicketId, view]);
 
   // New ticket form
   const [subject, setSubject] = useState("");

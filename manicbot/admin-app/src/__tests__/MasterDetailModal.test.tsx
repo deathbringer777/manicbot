@@ -28,12 +28,33 @@ vi.mock("~/trpc/react", () => ({
       salon: {
         getMasters: { invalidate: vi.fn() },
         getMasterDetail: { invalidate: vi.fn() },
+        getMasterPairingState: { invalidate: vi.fn() },
       },
     }),
     salon: {
       getMasterDetail: {
         useQuery: () => ({
           data: masterFixture,
+          isLoading: false,
+          isError: false,
+        }),
+      },
+      // The inline Telegram-pairing section mounted inside ViewMode reads
+      // this. Stub it out — the dedicated MasterTelegramInlineSection.test
+      // covers state-driven rendering. Here we just need the modal to not
+      // crash when its child queries.
+      getMasterPairingState: {
+        useQuery: () => ({
+          data: {
+            chatId: 10_000_000_001,
+            isSynthetic: true,
+            origin: "salon_created",
+            archived: false,
+            telegramChatId: null,
+            hasActiveCode: false,
+            activeCodeExpiresAt: null,
+            botUsername: "demo_salon_bot",
+          },
           isLoading: false,
           isError: false,
         }),
@@ -64,6 +85,13 @@ vi.mock("~/trpc/react", () => ({
           },
           isPending: false,
         }),
+      },
+      // Pairing mutations used by the inline section. Stubbed no-ops here.
+      createMasterPairingCode: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+      setMasterTelegramChatId: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
     },
   },

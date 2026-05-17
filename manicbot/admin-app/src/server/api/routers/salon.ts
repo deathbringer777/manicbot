@@ -2574,6 +2574,66 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /**
+   * Single-master pairing state. Same shape as one row from
+   * `listMasterPairingStates`, plus the salon's `botUsername`.
+   *
+   * Used by `MasterTelegramInlineSection` inside `MasterDetailModal` so
+   * the owner can mint / unpair / manually enter chat_id directly from
+   * the per-master detail view, without bouncing to Channels → Telegram.
+   *
+   * Authorization: tenant owner. Returns 404 if the master doesn't exist
+   * in this tenant. Archived rows ARE returned (UI dims them out).
+   */
+  getMasterPairingState: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), masterChatId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = Math.floor(Date.now() / 1000);
+
+      const [m] = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          isSynthetic: masters.isSynthetic,
+          origin: masters.origin,
+          archivedAt: masters.archivedAt,
+          telegramChatId: masters.telegramChatId,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+
+      const [activeCode] = await ctx.db
+        .select({ expiresAt: masterPairingCodes.expiresAt })
+        .from(masterPairingCodes)
+        .where(and(
+          eq(masterPairingCodes.tenantId, input.tenantId),
+          eq(masterPairingCodes.masterChatId, input.masterChatId),
+          isNull(masterPairingCodes.consumedAt),
+          gt(masterPairingCodes.expiresAt, now),
+        ))
+        .orderBy(desc(masterPairingCodes.expiresAt))
+        .limit(1);
+
+      const [bot] = await ctx.db
+        .select({ botUsername: bots.botUsername })
+        .from(bots)
+        .where(and(eq(bots.tenantId, input.tenantId), eq(bots.active, 1)))
+        .limit(1);
+
+      return {
+        chatId: m.chatId,
+        isSynthetic: m.isSynthetic === 1,
+        origin: m.origin,
+        archived: m.archivedAt !== null,
+        telegramChatId: m.telegramChatId ?? null,
+        hasActiveCode: !!activeCode,
+        activeCodeExpiresAt: activeCode?.expiresAt ?? null,
+        botUsername: bot?.botUsername ?? null,
+      };
+    }),
+
+  /**
    * Salon-owner-initiated pairing mint. Same shape as
    * `master.requestPairingCode` but authorized via `assertTenantOwner`
    * — the owner doesn't need IDOR scoping. Stores

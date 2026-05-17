@@ -68,7 +68,7 @@ function renderBadge(card: CatalogCard, lang: Lang): React.ReactNode {
 
 export function PluginCard({ card }: { card: CatalogCard }) {
   const { lang } = useLang();
-  const { isPinned, toggle, error: pinError } = usePinnedPlugins();
+  const { isPinned, toggle, readOnly: pinReadOnly, error: pinError } = usePinnedPlugins();
   const lastErrorRef = useRef<string | null>(null);
   useEffect(() => {
     if (pinError && pinError !== lastErrorRef.current) {
@@ -102,20 +102,26 @@ export function PluginCard({ card }: { card: CatalogCard }) {
       data-lang={lang}
       className="group relative flex flex-col h-full min-h-[200px] rounded-2xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-4 sm:p-5 transition-all duration-200 ease-out hover:border-brand-500/50 dark:hover:border-brand-400/40 hover:shadow-[0_4px_24px_-8px] hover:shadow-brand-500/15 dark:hover:shadow-brand-400/10 hover:-translate-y-0.5"
     >
-      {/* Pin button — visible (not hover-only) when plugin is actionable. */}
+      {/* Pin button — visible (not hover-only) when plugin is actionable.
+       *  In preview-as-master mode the button is disabled (owner doesn't
+       *  silently rewrite a master's saved layout via preview).
+       */}
       {actionable && (
         <button
           type="button"
           data-testid="plugin-card-pin"
           data-pinned={pinned ? "1" : "0"}
+          data-readonly={pinReadOnly ? "1" : "0"}
+          disabled={pinReadOnly}
           aria-label={pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
-          title={pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
+          title={pinReadOnly ? t("plugins.pin.previewLocked", lang) : pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (pinReadOnly) return;
             toggle(card.slug);
           }}
-          className={`absolute top-3 right-3 z-10 h-7 w-7 inline-flex items-center justify-center rounded-lg transition-colors ${
+          className={`absolute top-3 right-3 z-10 h-7 w-7 inline-flex items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             pinned
               ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30"
               : "bg-slate-100 dark:bg-white/[0.04] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-white/[0.08]"

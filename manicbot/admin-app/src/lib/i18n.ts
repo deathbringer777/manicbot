@@ -1060,9 +1060,12 @@ const translations = {
   "plugins.pinned.header":    { ru: "Закреплённое",           ua: "Закріплене",             en: "Pinned",               pl: "Przypięte" },
   "plugins.pinned.emptyHint": { ru: "Часто используемые плагины появятся здесь.", ua: "Часто використовувані плагіни з'являться тут.", en: "Frequently-used plugins will appear here.", pl: "Najczęściej używane wtyczki pojawią się tutaj." },
   "plugins.pinned.emptyCta":  { ru: "Открыть магазин →",       ua: "Відкрити магазин →",     en: "Open marketplace →",   pl: "Otwórz sklep →" },
+  "plugins.pinned.previewEmptyHint":     { ru: "У этого мастера пока нет закреплённых плагинов.", ua: "У цього майстра поки немає закріплених плагінів.",   en: "This master has no pinned plugins yet.",       pl: "Ten mistrz nie ma jeszcze przypiętych wtyczek." },
+  "plugins.pinned.previewSyntheticHint": { ru: "Мастер ещё не входил в систему — кастомизация появится после первого логина.", ua: "Майстер ще не входив у систему — кастомізація з'явиться після першого входу.", en: "This master has not signed in yet — their customisation will appear after first login.", pl: "Mistrz nie zalogował się jeszcze — personalizacja pojawi się po pierwszym logowaniu." },
   "plugins.pin":              { ru: "Закрепить",              ua: "Закріпити",              en: "Pin",                  pl: "Przypnij" },
   "plugins.unpin":            { ru: "Открепить",              ua: "Відкріпити",             en: "Unpin",                pl: "Odepnij" },
   "plugins.pin.limit":        { ru: "Максимум 20 закрепов",    ua: "Максимум 20 закріплень", en: "20-pin limit reached", pl: "Limit 20 przypięć" },
+  "plugins.pin.previewLocked":{ ru: "В режиме превью нельзя править закрепления мастера", ua: "У режимі прев'ю не можна редагувати закріплення майстра", en: "Can't edit master's pins in preview mode", pl: "W trybie podglądu nie można edytować przypięć mistrza" },
   "plugins.admin.installAll": { ru: "Установить все плагины", ua: "Встановити всі плагіни", en: "Install all plugins", pl: "Zainstaluj wszystkie" },
   "plugins.admin.allInstalled":{ ru: "Все плагины установлены", ua: "Усі плагіни встановлені", en: "All plugins installed", pl: "Wszystkie wtyczki zainstalowane" },
 

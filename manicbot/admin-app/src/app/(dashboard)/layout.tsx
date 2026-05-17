@@ -44,6 +44,9 @@ export default function DashboardLayout({
   const [previewRole, setPreviewRoleState] = useState<AppRole>(null);
   const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
   const [previewMasterId, setPreviewMasterIdState] = useState<number | null>(null);
+  // Resolved at click time by MasterSwitcherInline (which already has the masters
+  // list loaded). Null for synthetic masters with no web_users row.
+  const [previewMasterWebUserId, setPreviewMasterWebUserIdState] = useState<string | null>(null);
 
   // Auth: query role from next-auth session (email/password)
   const roleQuery = api.auth.getMyRole.useQuery(undefined, { retry: false });
@@ -59,14 +62,16 @@ export default function DashboardLayout({
     setPreviewRoleState(r);
     setPreviewTenantId(tenantId ?? null);
     setPreviewMasterIdState(null);
+    setPreviewMasterWebUserIdState(null);
     // When God activates a preview, redirect to /dashboard so content matches nav
     if (r && r !== "system_admin") {
       router.replace("/dashboard");
     }
   }
 
-  function setPreviewMaster(masterId: number | null) {
+  function setPreviewMaster(masterId: number | null, webUserId?: string | null) {
     setPreviewMasterIdState(masterId);
+    setPreviewMasterWebUserIdState(masterId === null ? null : (webUserId ?? null));
   }
 
   // Loading
@@ -81,7 +86,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions, billingStatus, isTrialExpired } = roleQuery.data;
+  const { role, webUserId, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions, billingStatus, isTrialExpired } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -90,6 +95,7 @@ export default function DashboardLayout({
     tenantId,
     tenantName: tenantName ?? null,
     userId: null, // web users don't have Telegram userId
+    webUserId: webUserId ?? null,
     createdAt: createdAt ?? null,
     emailVerified: emailVerified ?? true,
     hasPassword: hasPassword ?? true,
@@ -101,6 +107,7 @@ export default function DashboardLayout({
     previewTenantId,
     setPreviewRole,
     previewMasterId,
+    previewMasterWebUserId,
     setPreviewMaster,
   };
 

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRole } from "~/components/RoleContext";
+import { useEffectiveProfile } from "~/lib/effectiveProfile";
 import { api } from "~/trpc/react";
 
 export interface DashboardPrefs {
@@ -39,9 +40,16 @@ export const BOTTOM_NAV_LIMIT = 5;
 
 const KEY_PREFIX = "manicbot_dashboard_prefs";
 
-/** Storage key is tenant-scoped to prevent cross-tenant bleed */
-function storageKey(tenantId?: string | null): string {
-  return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
+/**
+ * localStorage key. When `profileKey` is supplied the key is the new
+ * profile-scoped format; otherwise the legacy tenant-only form is
+ * returned so the migration shim can read the prior value before
+ * overwriting it.
+ */
+function storageKey(tenantId?: string | null, profileKey?: string): string {
+  if (!tenantId) return KEY_PREFIX;
+  if (profileKey) return `${KEY_PREFIX}_${tenantId}_${profileKey}`;
+  return `${KEY_PREFIX}_${tenantId}`;
 }
 
 const DEFAULTS: DashboardPrefs = {
@@ -54,10 +62,10 @@ const DEFAULTS: DashboardPrefs = {
   bottomNavLayout: "default",
 };
 
-function load(tenantId?: string | null): DashboardPrefs {
+function load(tenantId?: string | null, profileKey?: string): DashboardPrefs {
   if (typeof window === "undefined") return DEFAULTS;
   try {
-    const raw = localStorage.getItem(storageKey(tenantId));
+    const raw = localStorage.getItem(storageKey(tenantId, profileKey));
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<DashboardPrefs>;
     return {
@@ -73,9 +81,32 @@ function load(tenantId?: string | null): DashboardPrefs {
   }
 }
 
-function save(prefs: DashboardPrefs, tenantId?: string | null) {
+function save(prefs: DashboardPrefs, tenantId?: string | null, profileKey?: string) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(storageKey(tenantId), JSON.stringify(prefs));
+  localStorage.setItem(storageKey(tenantId, profileKey), JSON.stringify(prefs));
+}
+
+/**
+ * One-time copy of the legacy tenant-only key into the new
+ * profile-scoped key. Without this the user would silently lose their
+ * saved tab order / pinned tabs / bottom-nav on first load — server
+ * sync covers most fields now, but legacy installs still hold local-only
+ * customisations during the rollout window. Idempotent: re-running with
+ * the new key already populated is a no-op.
+ */
+function migrateLegacyTenantKey(tenantId: string, profileKey: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const newKey = storageKey(tenantId, profileKey);
+    const legacyKey = storageKey(tenantId);
+    if (window.localStorage.getItem(newKey)) return;
+    const legacyRaw = window.localStorage.getItem(legacyKey);
+    if (!legacyRaw) return;
+    window.localStorage.setItem(newKey, legacyRaw);
+    window.localStorage.removeItem(legacyKey);
+  } catch {
+    // noop
+  }
 }
 
 /**
@@ -114,39 +145,60 @@ export function applyTabPrefs(
 
 export function useDashboardPrefs() {
   const { tenantId } = useRole();
-  const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId));
+  const profile = useEffectiveProfile();
+  const profileKey = profile.effectiveProfileKey;
+  const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId, profileKey));
 
-  // Server-side pull on mount / tenant change. Server wins on conflict so that
-  // a fresh device immediately sees the user's saved layout.
+  // Server-side pull on mount / tenant change. Server wins on conflict
+  // so a fresh device immediately sees the user's saved layout. DISABLED
+  // in preview-as-master: the server prefs row belongs to the caller
+  // (the owner) and hydrating it into the preview state would re-leak
+  // the owner's layout. The owner sees only the master's localStorage
+  // cache (which is empty for synthetic masters — that's the intent).
   const serverQuery = api.webUsers.getMyUiPrefs.useQuery(
     { tenantId: tenantId ?? "" },
-    { enabled: !!tenantId, staleTime: 60_000, refetchOnWindowFocus: false, retry: false },
+    {
+      enabled: !!tenantId && profile.canWrite,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+      retry: false,
+    },
   );
 
   useEffect(() => {
     if (!serverQuery.data) return;
+    if (!profile.canWrite) return;
     const merged: DashboardPrefs = { ...DEFAULTS, ...(serverQuery.data as Partial<DashboardPrefs>) };
     setPrefsState(merged);
-    save(merged, tenantId);
-  }, [serverQuery.data, tenantId]);
+    save(merged, tenantId, profileKey);
+  }, [serverQuery.data, tenantId, profileKey, profile.canWrite]);
 
-  // Re-load when tenant switches
+  // Re-load when tenant OR profile switches (same browser, multiple
+  // accounts, OR owner toggling «view as master» preview).
   useEffect(() => {
-    setPrefsState(load(tenantId));
-  }, [tenantId]);
+    if (tenantId && !profile.isPreview && profile.effectiveWebUserId != null) {
+      migrateLegacyTenantKey(tenantId, profileKey);
+    }
+    setPrefsState(load(tenantId, profileKey));
+  }, [tenantId, profileKey, profile.isPreview, profile.effectiveWebUserId]);
 
   const setMut = api.webUsers.setMyUiPrefs.useMutation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persist = useCallback((next: DashboardPrefs) => {
-    save(next, tenantId);
+    save(next, tenantId, profileKey);
     if (!tenantId) return;
-    // Debounced server write: drag-and-drop fires many tiny updates; we batch.
+    // In preview-as-master mode the caller is the OWNER. Any server
+    // write would land on the OWNER's prefs row — re-introducing the
+    // exact leak this PR is fixing. Local state still updates so the
+    // preview reflects the change immediately, but it never leaves
+    // the device.
+    if (!profile.canWrite) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setMut.mutate({ tenantId, prefs: next as unknown as Record<string, unknown> });
     }, 400);
-  }, [tenantId, setMut]);
+  }, [tenantId, profileKey, profile.canWrite, setMut]);
 
   const update = useCallback((patch: Partial<DashboardPrefs>) => {
     setPrefsState((prev) => {

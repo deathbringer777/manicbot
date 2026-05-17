@@ -50,6 +50,7 @@ function renderWith(tenantId: string | null = "t_test", lang: "ru" | "en" = "ru"
     tenantId,
     tenantName: null,
     userId: null,
+    webUserId: "owner-uid",
     createdAt: null,
     hasPassword: true,
     emailVerified: true,
@@ -61,6 +62,7 @@ function renderWith(tenantId: string | null = "t_test", lang: "ru" | "en" = "ru"
     previewTenantId: null,
     setPreviewRole: () => {},
     previewMasterId: null,
+    previewMasterWebUserId: null,
     setPreviewMaster: () => {},
   };
   return render(
@@ -150,12 +152,15 @@ describe("AppearanceSection — default-tab dropdown", () => {
     // Pick a real tab option (the "appointments" tab by value).
     fireEvent.change(select, { target: { value: "appointments" } });
 
-    const stored = loadDashboardPrefs("t_test");
+    // Prefs are now profile-scoped — read with the matching profile key.
+    const stored = loadDashboardPrefs("t_test", "uowner-uid");
     expect(stored.defaultTab).toBe("appointments");
   });
 
   it("selecting 'Не выбрано' resets defaultTab to empty string", () => {
-    // Seed localStorage with a non-empty defaultTab so we can confirm the reset.
+    // Seed localStorage with a non-empty defaultTab so we can confirm the
+    // reset. Uses the legacy key — the migration shim copies it into the
+    // new profile-scoped key on first mount.
     _mockLocalStorage.setItem(
       dashboardPrefsKey("t_test"),
       JSON.stringify({ hiddenTabs: [], hiddenStatCards: [], showTodayApts: true, defaultTab: "billing" })
@@ -166,7 +171,7 @@ describe("AppearanceSection — default-tab dropdown", () => {
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     expect(select.value).toBe("billing");
     fireEvent.change(select, { target: { value: "" } });
-    expect(loadDashboardPrefs("t_test").defaultTab).toBe("");
+    expect(loadDashboardPrefs("t_test", "uowner-uid").defaultTab).toBe("");
   });
 
   it("default-tab dropdown lists only currently-visible (non-hidden) tabs", () => {

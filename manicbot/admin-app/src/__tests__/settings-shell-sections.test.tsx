@@ -31,6 +31,7 @@ function roleValue(role: AppRole): RoleContextValue {
     tenantId: "t_demo",
     tenantName: "Demo",
     userId: 1,
+    webUserId: "owner-uid",
     createdAt: 0,
     hasPassword: true,
     emailVerified: true,
@@ -42,6 +43,7 @@ function roleValue(role: AppRole): RoleContextValue {
     previewTenantId: null,
     setPreviewRole: () => {},
     previewMasterId: null,
+    previewMasterWebUserId: null,
     setPreviewMaster: () => {},
   };
 }

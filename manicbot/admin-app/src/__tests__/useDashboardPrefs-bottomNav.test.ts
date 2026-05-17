@@ -72,8 +72,16 @@ describe("useDashboardPrefs — bottom-nav additions", () => {
 import { renderHook, act } from "@testing-library/react";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 
+const TEST_PROFILE_UID = "owner-uid";
+const TEST_PROFILE_KEY = `u${TEST_PROFILE_UID}`;
+
 vi.mock("~/components/RoleContext", () => ({
-  useRole: () => ({ tenantId: TENANT }),
+  useRole: () => ({
+    tenantId: TENANT,
+    webUserId: TEST_PROFILE_UID,
+    previewMasterId: null,
+    previewMasterWebUserId: null,
+  }),
 }));
 
 vi.mock("~/trpc/react", () => ({
@@ -111,8 +119,8 @@ describe("useDashboardPrefs — bottom-nav setters", () => {
       "/dashboard?tab=appointments",
       "/dashboard?tab=clients",
     ]);
-    // Round-trip through localStorage
-    expect(loadDashboardPrefs(TENANT).bottomNavOrder).toHaveLength(2);
+    // Round-trip through localStorage (profile-scoped key now)
+    expect(loadDashboardPrefs(TENANT, TEST_PROFILE_KEY).bottomNavOrder).toHaveLength(2);
   });
 
   it("setBottomNav dedupes and clamps to BOTTOM_NAV_LIMIT", () => {

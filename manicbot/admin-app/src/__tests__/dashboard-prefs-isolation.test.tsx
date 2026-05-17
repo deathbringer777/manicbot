@@ -24,12 +24,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
 import SuperJSON from "superjson";
 
-function makeWrapper(tenantId: string | null) {
+function makeWrapper(tenantId: string | null, webUserId: string | null = "owner-uid") {
   const value: RoleContextValue = {
     role: "tenant_owner",
     tenantId,
     tenantName: null,
     userId: null,
+    webUserId,
     createdAt: null,
     hasPassword: true,
     emailVerified: true,
@@ -41,6 +42,7 @@ function makeWrapper(tenantId: string | null) {
     previewTenantId: null,
     setPreviewRole: () => {},
     previewMasterId: null,
+    previewMasterWebUserId: null,
     setPreviewMaster: () => {},
   };
   // useDashboardPrefs now calls api.webUsers.getMyUiPrefs.useQuery so we need
@@ -119,13 +121,14 @@ describe("useDashboardPrefs — tenant isolation", () => {
     expect(b.current.prefs.hiddenTabs).not.toContain("billing");
   });
 
-  it("each tenant writes to its own localStorage key", async () => {
+  it("each tenant writes to its own profile-scoped localStorage key", async () => {
     const { result: a } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_a") });
     act(() => a.current.toggleTab("services"));
     await waitFor(() => expect(a.current.prefs.hiddenTabs).toContain("services"));
 
-    expect(_lsStore["manicbot_dashboard_prefs_t_a"]).toBeDefined();
-    expect(_lsStore["manicbot_dashboard_prefs_t_b"]).toBeUndefined();
+    // Profile-scoped key format: <prefix>_<tenant>_u<webUserId>
+    expect(_lsStore["manicbot_dashboard_prefs_t_a_uowner-uid"]).toBeDefined();
+    expect(_lsStore["manicbot_dashboard_prefs_t_b_uowner-uid"]).toBeUndefined();
     expect(_lsStore["manicbot_dashboard_prefs"]).toBeUndefined();
   });
 
@@ -136,5 +139,39 @@ describe("useDashboardPrefs — tenant isolation", () => {
 
     expect(_lsStore["manicbot_dashboard_prefs"]).toBeDefined();
     expect(_lsStore["manicbot_dashboard_prefs_null"]).toBeUndefined();
+  });
+
+  it("two different web users on the same tenant get isolated prefs", async () => {
+    const { result: u1 } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_a", "user-1") });
+    act(() => u1.current.toggleTab("billing"));
+    await waitFor(() => expect(u1.current.prefs.hiddenTabs).toContain("billing"));
+
+    const { result: u2 } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_a", "user-2") });
+    expect(u2.current.prefs.hiddenTabs).not.toContain("billing");
+
+    expect(_lsStore["manicbot_dashboard_prefs_t_a_uuser-1"]).toBeDefined();
+    expect(_lsStore["manicbot_dashboard_prefs_t_a_uuser-2"]).toBeUndefined();
+  });
+
+  it("migrates legacy tenant-only key into profile-scoped key on first mount", async () => {
+    // Seed legacy key (pre-migration value).
+    const legacyPrefs = {
+      hiddenTabs: ["billing"],
+      showTodayApts: false,
+      defaultTab: "overview",
+      bottomNavOrder: ["/clients", "/services"],
+      bottomNavLayout: "custom" as const,
+    };
+    _lsStore["manicbot_dashboard_prefs_t_a"] = JSON.stringify(legacyPrefs);
+
+    const { result } = renderHook(() => useDashboardPrefs(), { wrapper: makeWrapper("t_a", "owner-uid") });
+    await waitFor(() => expect(result.current.prefs.hiddenTabs).toContain("billing"));
+
+    // New key now holds the migrated payload AND legacy key is gone so a
+    // second web-user can't accidentally inherit it.
+    expect(_lsStore["manicbot_dashboard_prefs_t_a_uowner-uid"]).toBeDefined();
+    expect(_lsStore["manicbot_dashboard_prefs_t_a"]).toBeUndefined();
+    expect(result.current.prefs.bottomNavOrder).toEqual(["/clients", "/services"]);
+    expect(result.current.prefs.bottomNavLayout).toBe("custom");
   });
 });

@@ -15,6 +15,12 @@ export type AppRole =
 
 type RoleResult = {
   role: AppRole;
+  /**
+   * Internal `web_users.id` of the authenticated user (TEXT primary key).
+   * Drives per-profile scoping (plugin pins, dashboard prefs) and the
+   * preview-as-master permission guard. `null` only when unauthenticated.
+   */
+  webUserId: string | null;
   tenantId: string | null;
   tenantName: string | null;
   masterId: number | null;
@@ -40,6 +46,7 @@ type RoleResult = {
 
 const EMPTY: RoleResult = {
   role: null,
+  webUserId: null,
   tenantId: null,
   tenantName: null,
   masterId: null,
@@ -177,6 +184,7 @@ export const authRouter = createTRPCRouter({
 
     return {
       role,
+      webUserId: ctx.webUser.id,
       tenantId,
       tenantName,
       masterId,

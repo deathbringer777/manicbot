@@ -71,13 +71,27 @@ export function middleware(request: NextRequest) {
 
   // ── Content-Security-Policy ──────────────────────────────────────────────
   // SHA-256 of the hardcoded inline theme-init script in app/layout.tsx —
-  // authorised by hash so the root layout can stay sync (no `await headers()`),
-  // which in turn lets next-on-pages emit the implicit `/_not-found` route
-  // on edge runtime instead of nodejs (cloudflare/next-on-pages#979).
+  // authorised by hash on DYNAMIC routes so the root layout can stay sync
+  // (no `await headers()`), which lets next-on-pages emit the implicit
+  // `/_not-found` route on edge runtime instead of nodejs
+  // (cloudflare/next-on-pages#979).
+  //
+  // CSP3 footgun: per spec, `'unsafe-inline'` is IGNORED when a hash or
+  // nonce is present in script-src. So on STATIC public routes — which
+  // need `'unsafe-inline'` for Next.js's streaming RSC scripts
+  // (`self.__next_f.push(...)`) that have no nonce attribute — we MUST
+  // NOT add the hash. Adding it would make the browser drop
+  // `'unsafe-inline'`, blocking every inline script and leaving the page
+  // blank. That regression shipped briefly via a15cad0 and broke the
+  // salon-dashboard chat preview iframe (loads `/salon/<slug>/chat`,
+  // which is SSG). The theme-init script still runs on static routes
+  // because `'unsafe-inline'` covers it without needing a hash there.
+  //
+  // Pinned by `csp-script-src-static-no-hash.test.ts`.
   const themeInitHash = "'sha256-+/MXq7zLbcfrg/SVptAAXolh3tEkMCjQ6BQDMqP/Jb8='";
   const scriptSrc = usesNonce
     ? `script-src 'self' 'nonce-${nonce}' ${themeInitHash} https://challenges.cloudflare.com https://js.stripe.com`
-    : `script-src 'self' 'unsafe-inline' ${themeInitHash} https://challenges.cloudflare.com https://js.stripe.com`;
+    : `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://js.stripe.com`;
 
   const frameAncestors = embeddable ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
 

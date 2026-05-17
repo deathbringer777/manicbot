@@ -105,15 +105,18 @@ function ensureValidRecurrence(rec: unknown) {
 
 /**
  * For master-role callers, refuse to target a master other than themselves
- * (or null, meaning self/owner).
+ * (or null, meaning self/owner). The lookup MUST be tenant-bound — a
+ * platform-wide `chat_id = ?` resolves the wrong row whenever the same
+ * chat_id exists in another tenant (synthetic personal-master ids in
+ * [10B, 11B) can collide), which would let a master pin a reminder
+ * against a chat_id that doesn't belong to their own tenant.
  */
 async function enforceMasterScopeOnCreate(
   ctx: { webUser: { id: string; webRole: string } | null | undefined; db: unknown },
-  input: { targetMasterId?: number | null },
+  input: { tenantId: string; targetMasterId?: number | null },
 ): Promise<void> {
   if (ctx.webUser?.webRole !== "master") return;
   if (input.targetMasterId == null) return; // self
-  // Look up the master's web_user_id via Drizzle. Cheap.
   const { masters } = await import("~/server/db/schema");
   const rows = await (ctx.db as {
     select: (fields: unknown) => {
@@ -126,7 +129,10 @@ async function enforceMasterScopeOnCreate(
   })
     .select({ webUserId: masters.webUserId })
     .from(masters)
-    .where(eq(masters.chatId, input.targetMasterId))
+    .where(and(
+      eq(masters.tenantId, input.tenantId),
+      eq(masters.chatId, input.targetMasterId),
+    ))
     .limit(1);
   const ownerWebUserId = rows[0]?.webUserId;
   if (ownerWebUserId && ownerWebUserId === ctx.webUser?.id) return;
@@ -329,7 +335,10 @@ export const pluginRemindersRouter = createTRPCRouter({
         patch.recurrenceJson = JSON.stringify(ensureValidRecurrence(input.patch.recurrence));
       }
       if (input.patch.targetMasterId !== undefined) {
-        await enforceMasterScopeOnCreate(ctx as never, { targetMasterId: input.patch.targetMasterId });
+        await enforceMasterScopeOnCreate(ctx as never, {
+          tenantId: input.tenantId,
+          targetMasterId: input.patch.targetMasterId,
+        });
         patch.targetMasterId = input.patch.targetMasterId;
       }
       if (input.patch.channels !== undefined) patch.channelsJson = JSON.stringify(input.patch.channels);

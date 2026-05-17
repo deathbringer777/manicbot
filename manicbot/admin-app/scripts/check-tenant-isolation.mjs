@@ -110,7 +110,7 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:1297 — bot_id collision check across tenants (intentional
+  // salon.ts:1306 — bot_id collision check across tenants (intentional
   // global lookup, cross-tenant by design). The procedure is
   // tenantOwnerProcedure-gated; this read confirms the bot isn't already
   // claimed by SOMEONE ELSE before we accept it. Line drift history: 883
@@ -122,8 +122,10 @@ const ALLOWLIST = new Set([
   // expanded getMasterDetail landed above this line) → 1297 (after the
   // 0074 master-pairing imports added `gt` to drizzle-orm and
   // `generatePairingToken` / `buildDeepLink` / `PAIRING_TOKEN_TTL_SEC`
-  // from `~/server/api/masterPairing/tokenLogic`).
-  "src/server/api/routers/salon.ts:1297",
+  // from `~/server/api/masterPairing/tokenLogic`) → 1306 (after #153
+  // surfaced the BOT_ENCRYPTION_KEY-missing guard inside connectBot,
+  // pushing the collision check below the new PRECONDITION_FAILED block).
+  "src/server/api/routers/salon.ts:1306",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

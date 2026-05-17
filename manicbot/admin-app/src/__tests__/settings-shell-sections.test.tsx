@@ -67,7 +67,7 @@ function sectionIds() {
 describe("SettingsShell — section contract by role", () => {
   afterEach(cleanup);
 
-  it("tenant_owner sees the 8 headline sections in order", () => {
+  it("tenant_owner sees the 9 headline sections in order", () => {
     mount("tenant_owner");
     expect(sectionIds()).toEqual([
       "account",
@@ -77,6 +77,7 @@ describe("SettingsShell — section contract by role", () => {
       "channels",
       "billing",
       "appearance",
+      "referrals",
       "help",
     ]);
   });
@@ -91,6 +92,7 @@ describe("SettingsShell — section contract by role", () => {
       "channels",
       "billing",
       "appearance",
+      "referrals",
       "help",
     ]);
   });

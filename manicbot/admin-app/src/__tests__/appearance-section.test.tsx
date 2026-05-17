@@ -13,6 +13,14 @@ vi.mock("~/trpc/react", () => ({
         useQuery: () => ({ data: [], isLoading: false }),
       },
     },
+    webUsers: {
+      getMyUiPrefs: {
+        useQuery: () => ({ data: undefined, isLoading: false }),
+      },
+      setMyUiPrefs: {
+        useMutation: () => ({ mutate: () => undefined }),
+      },
+    },
   },
 }));
 

@@ -70,6 +70,7 @@ import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFa
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 import { PendingInvitationsStrip } from "~/components/salon/PendingInvitationsStrip";
 import { MasterDetailModal } from "~/components/salon/tabs/masters/MasterDetailModal";
+import { resolveMasterAvatarEmoji } from "~/lib/masterAvatar";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -2632,8 +2633,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                   data-testid={`master-row-${m.chatId}`}
                   className="glass-card group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:border-brand-500/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500/40 active:scale-[0.99]"
                 >
-                  <div className={`h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-brand-500 flex items-center justify-center text-sm font-bold text-white shrink-0 ${isHidden ? "opacity-50" : ""}`}>
-                    {(m.name ?? "?").charAt(0).toUpperCase()}
+                  <div
+                    className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand-500/20 to-violet-500/20 flex items-center justify-center text-xl ${isHidden ? "opacity-50" : ""}`}
+                    data-testid={`master-row-avatar-${m.chatId}`}
+                  >
+                    {m.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    ) : (
+                      <span>{resolveMasterAvatarEmoji(m.avatarEmoji ?? null)}</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">

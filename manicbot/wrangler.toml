@@ -96,12 +96,13 @@ database_name = "manicbot-db"
 database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
 
 # ─── R2 object storage for salon branding assets ─────────────────────────────
-# Enable R2 in Cloudflare Dashboard first, then uncomment:
-#   wrangler r2 bucket create manicbot-assets
-# [[r2_buckets]]
-# binding = "ASSETS"
-# bucket_name = "manicbot-assets"
-# preview_bucket_name = "manicbot-assets-preview"
+# Powers /upload/asset (POST, signed token) + /cdn/<key> (GET, public read-through
+# via the Worker). Bucket created 2026-05-17. Keep this binding live — without it
+# every upload (logo / cover / photo / portfolio / service_photo / client_avatar)
+# 500s at the Worker side with "R2 not bound".
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "manicbot-assets"
 
 # ─── R2 archive for phaseRetention pre-delete export ─────────────────────────
 # Rows pruned by phaseRetention (audit_log, error_log, analytics_events,

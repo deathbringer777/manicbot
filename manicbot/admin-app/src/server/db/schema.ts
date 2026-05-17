@@ -1393,3 +1393,24 @@ export const userNotifications = sqliteTable("user_notifications", {
   index("idx_user_notifications_recent").on(t.webUserId, t.createdAt),
   uniqueIndex("uq_user_notifications_source").on(t.webUserId, t.sourceSlug, t.sourceId, t.kind),
 ]);
+
+// Web Push (browser push notifications) — migration 0073. One row per
+// (web_user_id, endpoint) pair; same browser issues a stable endpoint
+// so re-subscribing from the same browser overwrites instead of
+// duplicating. p256dh + auth are the ECDH keys the Worker uses to
+// encrypt the payload per RFC 8291.
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: text("id").primaryKey(),
+  webUserId: text("web_user_id").notNull().references(() => webUsers.id, { onDelete: "cascade" }),
+  tenantId: text("tenant_id"),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: integer("created_at").notNull(),
+  lastUsedAt: integer("last_used_at"),
+  failureCount: integer("failure_count").notNull().default(0),
+}, (t) => [
+  uniqueIndex("uq_push_sub_user_endpoint").on(t.webUserId, t.endpoint),
+  index("idx_push_sub_user").on(t.webUserId),
+]);

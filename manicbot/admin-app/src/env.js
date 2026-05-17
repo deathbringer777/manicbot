@@ -46,6 +46,13 @@ export const env = createEnv({
      * here on /ws/messenger upgrade.
      */
     WS_TOKEN_SECRET: z.string().optional(),
+    /**
+     * Web Push (browser push notifications) — VAPID public key. Returned
+     * to the browser by pushSubscriptions.getVapidPublicKey so the
+     * browser can call PushManager.subscribe({ applicationServerKey }).
+     * Non-secret by design. When unset, the push opt-in UI hides itself.
+     */
+    VAPID_PUBLIC_KEY: z.string().optional(),
   },
 
   client: {
@@ -78,6 +85,7 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     MARKETING_AUTOPILOT_ENABLED: process.env.MARKETING_AUTOPILOT_ENABLED,
     WS_TOKEN_SECRET: process.env.WS_TOKEN_SECRET,
+    VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,

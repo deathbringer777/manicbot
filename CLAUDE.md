@@ -250,6 +250,16 @@ Platform-wide in-app feed driving the header bell + a full-history view at `/not
 - `src/handlers/cron.js` `processBirthdayAndReturningPromos` now fires `birthday.client` to the tenant owner alongside the existing client-facing Telegram promo. `sourceId` = `bday:${chatId}:${year}` so the 15-min cron cadence collapses to one row per year per client.
 - Worker writer pin: `test/notification-writers-pr2.test.js`.
 
+**PR 3 (2026-05-17) — Web Push (browser push notifications):**
+- Migration `0073_push_subscriptions.sql` — one row per (web_user_id, endpoint) browser pair. Worker-side encryption uses the (p256dh, auth) ECDH keys per RFC 8291. `failure_count` is bumped on 404 / 410 from the push service; a future cleanup cron prunes dead rows.
+- tRPC `pushSubscriptionsRouter` — `getVapidPublicKey` (returns `{enabled: false}` when env unset → UI hides the toggle), `subscribe` (UPSERT on the unique (user, endpoint) pair), `unsubscribe`, `list`. Every read/mutation pinned to `ctx.webUser.id`. Pinned by `src/__tests__/push-subscriptions-router.test.ts`.
+- Service worker `manicbot/admin-app/public/sw.js` — handles `push` (renders native OS notification with kind-aware tag-based replace), `notificationclick` (focuses existing dashboard tab over spawning a new one), and `pushsubscriptionchange` (best-effort resync to `/api/push/resync`).
+- Client hook `lib/notifications/usePushSubscription.ts` — registers the SW, calls `PushManager.subscribe` with the VAPID key, POSTs subscription back. Hides itself when `Notification` / `PushManager` is unsupported or VAPID isn't deployed. NotificationBell footer renders the «Включить пуши / Выкл» button when the hook reports the platform is ready.
+- Worker `src/services/webpush.js` — full RFC 8291 sender using Web Crypto only (no `web-push` npm — incompatible with Workers runtime). Implements: P-256 ECDH → HKDF-SHA256 → AES-128-GCM with `aes128gcm` content-encoding; VAPID ES256 JWT signing. Single `sendWebPush(subscription, payload, vapid)` returns `{ok, status, body?}` so the caller can detect 404 / 410 and prune. Pinned by `test/webpush-encryption.test.js`.
+- Worker `notifyWebUser` extended with `push?: boolean` (default true). Fans out to every `push_subscriptions` row of the recipient, no-ops when VAPID isn't configured (so the bell still works in the early-launch state). On 404 / 410 the row's `failure_count` is bumped.
+- VAPID key generator: `node manicbot/scripts/generate-vapid-keys.mjs [--subject mailto:ops@example.com]`. Generates a P-256 keypair and prints the three env vars to set: `VAPID_PUBLIC_KEY` (Pages + Worker), `VAPID_PRIVATE_KEY` (Worker secret only), `VAPID_SUBJECT` (mailto). Until those are configured the push opt-in UI hides itself.
+- **Bonus fix:** `src/http/adminAppProxy.js` was missing `/notifications`, `/channels`, `/errors`, `/invitations`, `/marketing-autopilot` — those dashboard pages all 404'd via the landing proxy. Whitelist updated + extra cases in `test/admin-app-proxy.test.js`.
+
 ---
 
 ## Worker Architecture (`manicbot/src/`)

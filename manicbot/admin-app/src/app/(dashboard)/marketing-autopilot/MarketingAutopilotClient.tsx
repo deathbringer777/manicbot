@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
+import { Select } from "~/components/ui/Select";
 import {
   RefreshCw,
   PlayCircle,
@@ -57,6 +58,14 @@ function fmtTs(unix: number | null) {
   if (!unix) return "—";
   return new Date(unix * 1000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 }
+
+const STATUS_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "All statuses" },
+  ...Object.entries(STATUS_LABELS).map(([v, m]) => ({
+    value: v,
+    label: m.label,
+  })),
+];
 
 export default function MarketingAutopilotClient() {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
@@ -161,18 +170,13 @@ export default function MarketingAutopilotClient() {
         {/* Filter */}
         <div className="flex items-center gap-3">
           <label className="text-sm text-slate-400">Filter:</label>
-          <select
+          <Select
             value={statusFilter}
-            onChange={(e) => setStatusFilter((e.target.value as Status) || "")}
-            className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-200"
-          >
-            <option value="">All statuses</option>
-            {Object.entries(STATUS_LABELS).map(([v, m]) => (
-              <option key={v} value={v}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setStatusFilter((v as Status) || "")}
+            options={STATUS_FILTER_OPTIONS}
+            testIdPrefix="autopilot-status"
+            className="w-44"
+          />
         </div>
 
         {/* Table */}

@@ -400,6 +400,8 @@ A subtle adjacent bug: the content wrapper inside `WebShell` and `Shell` previou
 
 All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignFormModal`, `TemplateFormModal`, `ReminderModal`) use the brand-styled `~/components/ui/Select.tsx` rather than the native `<select>`. Native dropdowns render at the OS layer, ignore page theming, and break inside the dark-overlay modal stack. Pinned by `src/__tests__/marketing-modals-no-native-select.test.ts`.
 
+The same contract extends to God Mode (system_admin) page surfaces — `ErrorsPageClient` (severity / source / status filters), `ConversationsClient` (cross-tenant filter visible only when `role === "system_admin"`), and `MarketingAutopilotClient` (status filter) all use the custom `<Select>`. Pinned by `src/__tests__/god-mode-no-native-select.test.ts`. The `UsersPageClient` role-management modal also follows the 0062 modal stacking contract (`z-[100]` overlay, `bg-slate-950/70 backdrop-blur-md`, solid card with `ring-1 ring-black/5`) — pinned as a region anchor inside `modal-styling-regression.test.ts` (the page file itself uses `glass-card` for user-row cards, so the whole-file MODAL_FILES pin would not apply).
+
 ### Chat composer — Enter-to-send contract
 
 Every chat-style composer in the admin-app honours one keyboard convention: **Enter sends, Shift+Enter inserts a newline**. Applies to:

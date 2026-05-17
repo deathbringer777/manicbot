@@ -78,21 +78,21 @@ export async function dispatchAppointmentAutomation(ctx, apt, eventType, opts = 
     log.error('appointmentAutomations', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'side_effects', eventType });
   }
 
-  // ── 2. Marketing-automations lookup ─────────────────────────────
-  // The marketing engine consumes these rows in a follow-up PR; here we
-  // only count them so the dispatcher result is observable in tests +
-  // logs. Tenant-scoped rows take precedence over platform defaults
-  // (tenant_id IS NULL).
+  // ── 2. Marketing-automations dispatch ───────────────────────────
+  // Phase 2C: actually FIRE matching automations (Worker-local sender;
+  // see `src/services/marketing/automations.js`). Single-recipient mode
+  // — sends one email/SMS to the apt's client if they have a
+  // marketing_contacts row with consent for the target channel.
+  // Tenant-scoped rows AND platform defaults (tenant_id IS NULL) both
+  // fire; future PR can add precedence via a `priority` column.
   try {
     if (ctx.db?.prepare) {
-      const rows = await ctx.db.prepare(
-        'SELECT id, steps_json FROM marketing_automations ' +
-        'WHERE trigger_type = ? AND enabled = 1 AND (tenant_id = ? OR tenant_id IS NULL)'
-      ).bind(eventType, ctx.tenantId).all().catch(() => ({ results: [] }));
-      automationsFired = (rows?.results?.length) || 0;
+      const { fireAutomationForEvent } = await import('./marketing/automations.js');
+      const r = await fireAutomationForEvent(ctx, eventType, { chatId: apt.chatId });
+      automationsFired = r.fired;
     }
   } catch (e) {
-    log.error('appointmentAutomations', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'automations_lookup', eventType });
+    log.error('appointmentAutomations', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'automations_dispatch', eventType });
   }
 
   // ── 3. Default client notification ──────────────────────────────

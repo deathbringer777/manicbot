@@ -750,6 +750,7 @@ const translations = {
   "tracking.campaign.ph":                { ru: "Весна 2026", ua: "Весна 2026", en: "Spring 2026", pl: "Wiosna 2026" },
   "tracking.content.ph":                 { ru: "баннер, сторис", ua: "банер, сторіс", en: "banner, story", pl: "baner, story" },
   "tracking.tooLong":                    { ru: "Метка слишком длинная — сократите название кампании или контента.", ua: "Мітка задовга — скоротіть назву кампанії чи контенту.", en: "The tag is too long — shorten the campaign or content name.", pl: "Etykieta jest zbyt długa — skróć nazwę kampanii lub treści." },
+  "tracking.hint":                       { ru: "Кнопки «Создать» нет — заполните источник, ссылка обновится сама. Дальше — кнопка копирования справа.", ua: "Кнопки «Створити» немає — заповніть джерело, посилання оновиться само. Далі — кнопка копіювання праворуч.", en: "No «Create» button — fill in the source and the link updates itself. Then use the copy button on the right.", pl: "Brak przycisku «Utwórz» — wypełnij źródło, a link zaktualizuje się sam. Następnie skopiuj przyciskiem po prawej." },
 
   // ── Analytics tab ───────────────────────────────────────────────────────────
   "analytics.title":                     { ru: "Аналитика", ua: "Аналітика", en: "Analytics", pl: "Analityka" },

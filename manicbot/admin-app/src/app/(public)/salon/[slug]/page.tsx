@@ -15,6 +15,15 @@ import {
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}
+
+const ATTRIBUTION_TOKEN_RE = /^[A-Za-z0-9_.\-]{1,64}$/;
+
+function pickAttrToken(raw: string | string[] | undefined): string | undefined {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v || typeof v !== "string") return undefined;
+  return ATTRIBUTION_TOKEN_RE.test(v) ? v : undefined;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -54,12 +63,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return seo;
 }
 
-export default async function SalonProfilePage({ params }: Props) {
+export default async function SalonProfilePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const ctx = await createTRPCContext({ headers: new Headers() });
   const caller = createCaller(ctx);
   const profile = await caller.publicSalon.getProfile({ slug }).catch(() => null);
   if (!profile) notFound();
+
+  const sp = (await searchParams) ?? {};
+  const attribution = {
+    source: pickAttrToken(sp.s),
+    campaign: pickAttrToken(sp.c),
+    medium: pickAttrToken(sp.m),
+    content: pickAttrToken(sp.content),
+  };
   return (
     <>
       {profile.publicActive === 1 && (
@@ -95,7 +112,7 @@ export default async function SalonProfilePage({ params }: Props) {
           ]}
         />
       )}
-      <SalonProfileClient profile={profile} />
+      <SalonProfileClient profile={profile} attribution={attribution} />
     </>
   );
 }

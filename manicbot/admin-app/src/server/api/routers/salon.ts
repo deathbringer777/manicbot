@@ -1125,9 +1125,16 @@ export const salonRouter = createTRPCRouter({
       // half the data the salon needs to manage the account.
       const passwordEncrypted = await encryptMasterPassword(password, env.BOT_ENCRYPTION_KEY ?? null);
       if (!passwordEncrypted) {
+        log.error(
+          "salon.createMasterAccount",
+          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — cannot encrypt master password"),
+        );
+        // PRECONDITION_FAILED instead of INTERNAL_SERVER_ERROR so the message
+        // survives the error formatter (trpc.ts:55) and the operator sees the
+        // actual cause in the UI instead of a generic "Internal server error".
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "BOT_ENCRYPTION_KEY is not configured; salon-owned master accounts require it.",
+          code: "PRECONDITION_FAILED",
+          message: "Server config error: BOT_ENCRYPTION_KEY is not set on Pages. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app` (must match the Worker value).",
         });
       }
       const id = crypto.randomUUID();
@@ -1252,9 +1259,11 @@ export const salonRouter = createTRPCRouter({
       // Better to refuse onboarding than to leave a bricked bot row in D1.
       if (!env.BOT_ENCRYPTION_KEY || env.BOT_ENCRYPTION_KEY.length < 32) {
         log.error("salon.connectBot", new Error("BOT_ENCRYPTION_KEY not configured (≥32 chars required) — refusing to register bot without encryption"));
+        // PRECONDITION_FAILED so the operator sees the actionable message
+        // instead of the generic "Internal server error" sanitization.
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Bot registration is temporarily unavailable. Please contact support.",
+          code: "PRECONDITION_FAILED",
+          message: "Server config error: BOT_ENCRYPTION_KEY is not set on Pages. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app` (must match the Worker value).",
         });
       }
 
@@ -2170,9 +2179,13 @@ export const salonRouter = createTRPCRouter({
       const passwordHash = await hashPassword(newPassword);
       const passwordEncrypted = await encryptMasterPassword(newPassword, env.BOT_ENCRYPTION_KEY ?? null);
       if (!passwordEncrypted) {
+        log.error(
+          "salon.resetMasterPassword",
+          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — cannot encrypt new password"),
+        );
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "encryption_key_missing",
+          code: "PRECONDITION_FAILED",
+          message: "Server config error: BOT_ENCRYPTION_KEY is not set on Pages. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app` (must match the Worker value).",
         });
       }
       const now = Math.floor(Date.now() / 1000);

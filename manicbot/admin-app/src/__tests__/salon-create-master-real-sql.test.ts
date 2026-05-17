@@ -109,6 +109,9 @@ const BOOTSTRAP_SQL = [
      origin TEXT NOT NULL DEFAULT 'salon_created',
      archived_at INTEGER,
      telegram_chat_id INTEGER,
+     avatar_emoji TEXT,
+     avatar_url TEXT,
+     avatar_r2_key TEXT,
      PRIMARY KEY (tenant_id, chat_id)
    )`,
   `CREATE UNIQUE INDEX idx_masters_tenant_tg_chat

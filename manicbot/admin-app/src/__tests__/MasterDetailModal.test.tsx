@@ -1,16 +1,22 @@
 // @vitest-environment happy-dom
 /**
- * MasterDetailModal — owner-side detail + edit modal for the Masters tab.
+ * MasterDetailModal — owner-side detail + tabbed Settings modal for the
+ * Masters tab.
  *
- * Pins:
- *   * Renders the master name + the right badges (Web / hidden / vacation).
- *   * For an editable origin (salon_created), clicking Edit reveals the
- *     name / tg / bio / photo / vacation form, and Save calls
- *     `salon.updateMaster` with the form payload.
- *   * For a self_registered master, the Edit button is hidden and a lock
- *     notice is shown ("master owns profile").
+ * Pins the new contract:
+ *   * Bottom CTA is "Настройки" (was "Редактировать"). Clicking it switches
+ *     the modal to the editing view with a TabBar at the top.
+ *   * Default tab inside Settings is "Редактирование" (profile data).
+ *   * "Редактирование" pane saves name / tg / bio / photo (no vacation fields).
+ *   * "Настройки" pane carries vacation range + password vault. Vacation save
+ *     fires `updateMaster` with vacationFrom / vacationUntil ONLY (no profile
+ *     fields in the payload).
+ *   * Non-editable origins (self_registered / invited_* without delegation)
+ *     hide the Settings button and show the lock notice.
  *   * Visibility toggle calls `salon.setMasterPublicHidden`.
  *   * Delete inline confirm calls `salon.removeMaster`.
+ *   * Password vault section is visible for salon_created with a vaulted
+ *     password; absent for self_registered.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -61,9 +67,10 @@ vi.mock("~/trpc/react", () => ({
       },
       updateMaster: {
         useMutation: (opts: any) => ({
-          mutate: (vars: any) => {
+          mutate: (vars: any, perCallOpts?: any) => {
             updateMutate(vars);
             opts?.onSuccess?.({ success: true });
+            perCallOpts?.onSuccess?.({ success: true });
           },
           isPending: false,
         }),
@@ -99,6 +106,19 @@ vi.mock("~/trpc/react", () => ({
       },
       setMasterTelegramChatId: {
         useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+      // Password vault mutations — stubbed; dedicated MasterPasswordVault
+      // test covers the OTP flow end-to-end.
+      peekMasterPassword: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
+      resetMasterPassword: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
+    },
+    otp: {
+      request: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
       },
     },
   },
@@ -160,20 +180,33 @@ describe("MasterDetailModal — salon_created (editable)", () => {
     expect(screen.getByText("Web")).toBeTruthy();
   });
 
-  it("Edit button is visible and opens the edit form", () => {
+  it("Settings button is visible and opens the tabbed editor on Profile tab", () => {
     setMaster();
     renderModal();
-    const editBtn = screen.getByTestId("master-detail-edit");
-    fireEvent.click(editBtn);
-    // Name field must be present in edit mode
+    const settingsBtn = screen.getByTestId("master-detail-settings");
+    fireEvent.click(settingsBtn);
+    // TabBar present
+    expect(screen.getByTestId("master-detail-tabbar")).toBeTruthy();
+    // Profile tab is the default — name field must be present
     const nameInput = screen.getByTestId("master-detail-name") as HTMLInputElement;
     expect(nameInput.value).toBe("Ольга");
   });
 
-  it("Save calls updateMaster with the form payload", () => {
+  it("Switching to Настройки tab shows vacation fields + password vault", () => {
     setMaster();
     renderModal();
-    fireEvent.click(screen.getByTestId("master-detail-edit"));
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
+    expect(screen.getByTestId("master-detail-vacation-section")).toBeTruthy();
+    expect(screen.getByTestId("master-detail-vacation-from")).toBeTruthy();
+    expect(screen.getByTestId("master-detail-vacation-save")).toBeTruthy();
+    expect(screen.getByTestId("master-password-vault")).toBeTruthy();
+  });
+
+  it("Profile Save calls updateMaster with profile fields only (no vacation)", () => {
+    setMaster();
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
     const nameInput = screen.getByTestId("master-detail-name") as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: "Olga V" } });
     fireEvent.click(screen.getByTestId("master-detail-save"));
@@ -183,9 +216,33 @@ describe("MasterDetailModal — salon_created (editable)", () => {
     expect(call.chatId).toBe(10_000_000_001);
     expect(call.name).toBe("Olga V");
     expect(call.bio).toBe("Top-tier nail tech");
-    // Vacation cleared when both inputs are empty (handled as both-null clear)
-    expect(call.vacationFrom).toBeNull();
-    expect(call.vacationUntil).toBeNull();
+    // The new contract: Profile pane does NOT touch vacation.
+    expect(call).not.toHaveProperty("vacationFrom");
+    expect(call).not.toHaveProperty("vacationUntil");
+  });
+
+  it("Vacation Save calls updateMaster with vacation fields only (no profile)", () => {
+    setMaster();
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
+    fireEvent.change(screen.getByTestId("master-detail-vacation-from"), {
+      target: { value: "2026-06-01" },
+    });
+    fireEvent.change(screen.getByTestId("master-detail-vacation-until"), {
+      target: { value: "2026-06-10" },
+    });
+    fireEvent.click(screen.getByTestId("master-detail-vacation-save"));
+    expect(updateMutate).toHaveBeenCalledTimes(1);
+    const call = updateMutate.mock.calls[0]![0];
+    expect(call.tenantId).toBe("t_demo");
+    expect(call.chatId).toBe(10_000_000_001);
+    expect(typeof call.vacationFrom).toBe("number");
+    expect(typeof call.vacationUntil).toBe("number");
+    expect(call.vacationUntil).toBeGreaterThan(call.vacationFrom);
+    // The new contract: Vacation save does NOT touch profile fields.
+    expect(call).not.toHaveProperty("name");
+    expect(call).not.toHaveProperty("bio");
   });
 
   it("Visibility toggle calls setMasterPublicHidden with hidden=1", () => {
@@ -209,27 +266,75 @@ describe("MasterDetailModal — salon_created (editable)", () => {
       chatId: 10_000_000_001,
     });
   });
+
+  it("Back button returns from Settings to View mode", () => {
+    setMaster();
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    expect(screen.getByTestId("master-detail-tabbar")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("master-detail-settings-back"));
+    // Back to view → Settings CTA is visible again, TabBar gone
+    expect(screen.getByTestId("master-detail-settings")).toBeTruthy();
+    expect(screen.queryByTestId("master-detail-tabbar")).toBeNull();
+  });
 });
 
 describe("MasterDetailModal — non-editable origins", () => {
-  it("self_registered hides the Edit button and shows the lock notice", () => {
+  it("self_registered hides the Settings button and shows the lock notice", () => {
     setMaster({ origin: "self_registered", allowDelegation: 1 });
     renderModal();
-    expect(screen.queryByTestId("master-detail-edit")).toBeNull();
+    expect(screen.queryByTestId("master-detail-settings")).toBeNull();
     // Lock copy includes "сам и управляет" (matches the ru lock string)
     expect(screen.getByText(/самостоятельно|сам/i)).toBeTruthy();
   });
 
-  it("invited_email without allowDelegation hides Edit + shows delegation notice", () => {
+  it("invited_email without allowDelegation hides Settings + shows delegation notice", () => {
     setMaster({ origin: "invited_email", allowDelegation: 0 });
     renderModal();
-    expect(screen.queryByTestId("master-detail-edit")).toBeNull();
+    expect(screen.queryByTestId("master-detail-settings")).toBeNull();
     expect(screen.getByText(/делегиров/i)).toBeTruthy();
   });
 
-  it("invited_email WITH allowDelegation=1 shows the Edit button", () => {
+  it("invited_email WITH allowDelegation=1 shows the Settings button", () => {
     setMaster({ origin: "invited_email", allowDelegation: 1 });
     renderModal();
-    expect(screen.getByTestId("master-detail-edit")).toBeTruthy();
+    expect(screen.getByTestId("master-detail-settings")).toBeTruthy();
+  });
+});
+
+describe("MasterDetailModal — password vault visibility", () => {
+  it("salon_created with vaulted password renders the password vault inside Настройки", () => {
+    setMaster();
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
+    expect(screen.getByTestId("master-password-vault")).toBeTruthy();
+    // Both action buttons present in idle state
+    expect(screen.getByTestId("master-password-show")).toBeTruthy();
+    expect(screen.getByTestId("master-password-reset")).toBeTruthy();
+  });
+
+  it("self_registered does not show the editor at all (no vault accessible)", () => {
+    setMaster({ origin: "self_registered" });
+    renderModal();
+    // No way to open Settings for non-editable accounts
+    expect(screen.queryByTestId("master-detail-settings")).toBeNull();
+    expect(screen.queryByTestId("master-password-vault")).toBeNull();
+  });
+
+  it("salon_created WITHOUT vaulted password disables Show + still allows Reset", () => {
+    setMaster({ webUser: {
+      email: "olga@manicbot.com",
+      emailVerified: 1,
+      lastLoginAt: null,
+      hasVaultedPassword: false,
+    }});
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
+    const showBtn = screen.getByTestId("master-password-show") as HTMLButtonElement;
+    const resetBtn = screen.getByTestId("master-password-reset") as HTMLButtonElement;
+    expect(showBtn.disabled).toBe(true);
+    expect(resetBtn.disabled).toBe(false);
   });
 });

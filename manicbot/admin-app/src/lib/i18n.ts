@@ -929,9 +929,14 @@ const translations = {
   "master.avatar.tabPhoto":             { ru: "Фото", ua: "Фото", en: "Photo", pl: "Zdjęcie" },
   "master.avatar.uploadPhoto":          { ru: "Загрузить фото", ua: "Завантажити фото", en: "Upload photo", pl: "Prześlij zdjęcie" },
   "master.avatar.replacePhoto":         { ru: "Заменить фото", ua: "Замінити фото", en: "Replace photo", pl: "Zamień zdjęcie" },
-  "master.avatar.photoHint":            { ru: "PNG, JPEG или WebP до 2 МБ. Фото автоматически обрезается под круг.", ua: "PNG, JPEG або WebP до 2 МБ. Фото автоматично обрізається під коло.", en: "PNG, JPEG or WebP up to 2 MB. The photo is auto-cropped to a circle.", pl: "PNG, JPEG lub WebP do 2 MB. Zdjęcie jest automatycznie kadrowane do koła." },
+  "master.avatar.photoHint":            { ru: "PNG, JPEG или WebP до 2 МБ. После загрузки можно подвинуть и приблизить.", ua: "PNG, JPEG або WebP до 2 МБ. Після завантаження можна перетягнути та наблизити.", en: "PNG, JPEG or WebP up to 2 MB. You can pan and zoom after uploading.", pl: "PNG, JPEG lub WebP do 2 MB. Po przesłaniu można przesuwać i powiększać." },
   "master.avatar.resetDefault":         { ru: "Сбросить аватар", ua: "Скинути аватар", en: "Reset avatar", pl: "Resetuj awatar" },
   "master.avatar.tooltip":              { ru: "Нажмите, чтобы выбрать аватар", ua: "Натисніть, щоб обрати аватар", en: "Click to choose avatar", pl: "Kliknij, aby wybrać awatar" },
+
+  // ── Avatar cropper (shared by master + client pickers) ──────────────────────
+  "avatar.crop.hint":                   { ru: "Перетащите фото, чтобы выбрать кадр", ua: "Перетягніть фото, щоб обрати кадр", en: "Drag the photo to position it", pl: "Przeciągnij zdjęcie, aby je ustawić" },
+  "avatar.crop.zoom":                   { ru: "Масштаб", ua: "Масштаб", en: "Zoom", pl: "Powiększenie" },
+  "avatar.crop.reset":                  { ru: "Сбросить", ua: "Скинути", en: "Reset", pl: "Resetuj" },
 
   // ── Clients avatar picker (0072) ────────────────────────────────────────────
   "clients.avatar.title":               { ru: "Аватар клиента", ua: "Аватар клієнта", en: "Client avatar", pl: "Awatar klienta" },
@@ -939,7 +944,7 @@ const translations = {
   "clients.avatar.tabPhoto":            { ru: "Фото", ua: "Фото", en: "Photo", pl: "Zdjęcie" },
   "clients.avatar.uploadPhoto":         { ru: "Загрузить фото", ua: "Завантажити фото", en: "Upload photo", pl: "Prześlij zdjęcie" },
   "clients.avatar.replacePhoto":        { ru: "Заменить фото", ua: "Замінити фото", en: "Replace photo", pl: "Zamień zdjęcie" },
-  "clients.avatar.photoHint":           { ru: "PNG, JPEG или WebP до 2 МБ. Фото автоматически обрезается под круг.", ua: "PNG, JPEG або WebP до 2 МБ. Фото автоматично обрізається під коло.", en: "PNG, JPEG or WebP up to 2 MB. The photo is auto-cropped to a circle.", pl: "PNG, JPEG lub WebP do 2 MB. Zdjęcie jest automatycznie kadrowane do koła." },
+  "clients.avatar.photoHint":           { ru: "PNG, JPEG или WebP до 2 МБ. После загрузки можно подвинуть и приблизить.", ua: "PNG, JPEG або WebP до 2 МБ. Після завантаження можна перетягнути та наблизити.", en: "PNG, JPEG or WebP up to 2 MB. You can pan and zoom after uploading.", pl: "PNG, JPEG lub WebP do 2 MB. Po przesłaniu można przesuwać i powiększać." },
   "clients.avatar.resetDefault":        { ru: "Сбросить аватар", ua: "Скинути аватар", en: "Reset avatar", pl: "Resetuj awatar" },
   "clients.avatar.tooltip":             { ru: "Нажмите, чтобы выбрать аватар", ua: "Натисніть, щоб обрати аватар", en: "Click to choose avatar", pl: "Kliknij, aby wybrać awatar" },
 

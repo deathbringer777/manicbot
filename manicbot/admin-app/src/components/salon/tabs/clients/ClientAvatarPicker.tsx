@@ -36,6 +36,7 @@ import {
   validateUploadFile,
   UPLOAD_ACCEPT_MIME,
 } from "~/lib/uploadAsset";
+import { AvatarCropper } from "~/components/ui/AvatarCropper";
 
 interface Props {
   tenantId: string;
@@ -47,33 +48,6 @@ interface Props {
   onClose: () => void;
   /** Called after a successful save so the parent can refetch. */
   onSaved: () => void;
-}
-
-/**
- * Square-center-crop + resize the source file before upload. The avatar is
- * displayed as `rounded-full object-cover` — without a pre-crop a portrait
- * photo would render with awkward sides cut off in the circle. A 1:1
- * client-side crop sidesteps that by storing exactly what the user sees.
- */
-async function squareCropAndResize(file: File, size = 512): Promise<File> {
-  try {
-    if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") {
-      return file; // Browser too old — server still validates.
-    }
-    const bitmap = await createImageBitmap(file);
-    const min = Math.min(bitmap.width, bitmap.height);
-    const sx = Math.floor((bitmap.width - min) / 2);
-    const sy = Math.floor((bitmap.height - min) / 2);
-    const canvas = new OffscreenCanvas(size, size);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, sx, sy, min, min, 0, 0, size, size);
-    const blob = await canvas.convertToBlob({ type: "image/webp", quality: 0.9 });
-    const name = file.name.replace(/\.[^.]+$/, ".webp");
-    return new File([blob], name, { type: "image/webp" });
-  } catch {
-    return file;
-  }
 }
 
 export function ClientAvatarPicker({
@@ -88,6 +62,7 @@ export function ClientAvatarPicker({
   const [tab, setTab] = useState<"emoji" | "photo">("emoji");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const mintToken = api.salon.mintUploadToken.useMutation();
@@ -124,16 +99,20 @@ export function ClientAvatarPicker({
     });
   }
 
-  async function handleFile(file: File) {
+  function handleFile(file: File) {
     setError(null);
     const v = validateUploadFile(file);
     if (v) {
       setError(v);
       return;
     }
+    setPendingFile(file); // Cropper takes over from here.
+  }
+
+  async function handleCropped(cropped: File) {
+    setPendingFile(null);
     setBusy(true);
     try {
-      const cropped = await squareCropAndResize(file, 512);
       const { uploadUrl } = await mintToken.mutateAsync({ tenantId, kind: "client_avatar" });
       const uploaded = await uploadAssetFile(uploadUrl, cropped);
       // Picking a photo always clears the emoji — see same rule above.
@@ -309,6 +288,14 @@ export function ClientAvatarPicker({
           </p>
         )}
       </div>
+
+      {pendingFile && (
+        <AvatarCropper
+          file={pendingFile}
+          onCancel={() => setPendingFile(null)}
+          onCropped={handleCropped}
+        />
+      )}
     </div>
   );
 }

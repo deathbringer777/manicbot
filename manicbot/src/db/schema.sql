@@ -841,7 +841,9 @@ CREATE TABLE IF NOT EXISTS marketing_sends (
   delivered_at INTEGER,
   opened_at INTEGER,
   clicked_at INTEGER,
-  bounced_at INTEGER
+  bounced_at INTEGER,
+  -- 0075: spam complaint timestamp (Resend email.complained, Brevo spam).
+  complained_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_mkt_sends_campaign ON marketing_sends(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_mkt_sends_contact ON marketing_sends(contact_id);

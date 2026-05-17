@@ -17,7 +17,7 @@ import { usePathname } from "next/navigation";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
 import {
-  Megaphone, Mail, Users,
+  Megaphone, Mail, Users, Send,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +27,9 @@ const SUB_NAV: Array<SubNavItem> = [
   { href: "/system/marketing",            icon: Megaphone, label: "Обзор" },
   { href: "/system/marketing/campaigns",  icon: Mail,      label: "Кампании" },
   { href: "/system/marketing/leads",      icon: Users,     label: "Лиды" },
+  // PR 2B: deliverability log. Pulls from `marketing_sends` after the
+  // Resend webhook closes the loop on delivered / opened / bounced.
+  { href: "/system/marketing/sends",      icon: Send,      label: "Логи" },
 ];
 
 export function SystemMarketingShell({

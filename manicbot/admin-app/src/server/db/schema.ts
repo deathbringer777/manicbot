@@ -854,6 +854,10 @@ export const marketingSends = sqliteTable("marketing_sends", {
   openedAt: integer("opened_at"),
   clickedAt: integer("clicked_at"),
   bouncedAt: integer("bounced_at"),
+  // Migration 0075 — spam complaints. Distinct from bounces because the
+  // compliance / sender-reputation handling differs (reader-initiated vs
+  // provider-rejected).
+  complainedAt: integer("complained_at"),
 }, (t) => [
   index("idx_mkt_sends_campaign").on(t.campaignId),
   index("idx_mkt_sends_contact").on(t.contactId),

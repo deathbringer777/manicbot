@@ -65,14 +65,14 @@ describe("system/marketing IA pin", () => {
     expect(src).not.toMatch(/useMarketingScope/);
   });
 
-  it("/system/marketing sub-pages — campaigns + leads each have page.tsx + dedicated client", () => {
-    // Phase 1 ships Overview / Campaigns / Leads. A platform-wide Sends log
-    // lands in Phase 2 alongside provider webhooks (delivery / bounce / open)
-    // because without those callbacks the Sends view is just `queued/sent/failed`
-    // — not informative enough to justify a dedicated sub-page yet.
+  it("/system/marketing sub-pages — campaigns + leads + sends each have page.tsx + dedicated client", () => {
+    // Phase 1 shipped Overview / Campaigns / Leads. Phase 2B adds Sends
+    // alongside the Resend webhook that closes the delivery loop on
+    // `marketing_sends` (delivered / opened / clicked / bounced / complained).
     const sub = [
       { slug: "campaigns", client: "SystemMarketingCampaignsClient" },
       { slug: "leads", client: "SystemMarketingLeadsClient" },
+      { slug: "sends", client: "SystemMarketingSendsClient" },
     ];
     for (const { slug, client } of sub) {
       const page = path.join(ROOT, `app/(dashboard)/system/marketing/${slug}/page.tsx`);
@@ -97,6 +97,7 @@ describe("system/marketing IA pin", () => {
     expect(src).toMatch(/href:\s*"\/system\/marketing"/);
     expect(src).toMatch(/href:\s*"\/system\/marketing\/campaigns"/);
     expect(src).toMatch(/href:\s*"\/system\/marketing\/leads"/);
+    expect(src).toMatch(/href:\s*"\/system\/marketing\/sends"/);
   });
 
   it("MarketingShell — banner link points sysadmin-without-preview to /system/marketing", () => {

@@ -172,7 +172,7 @@ describe("salonRouter.sendMasterInvitation — bell notification for existing_us
 
     expect(notifyWebUserMock).toHaveBeenCalledTimes(1);
     const call = notifyWebUserMock.mock.calls[0]!;
-    const [, payload] = call as [unknown, Record<string, unknown>];
+    const [, payload] = call as unknown as [unknown, Record<string, unknown>];
     expect(payload).toMatchObject({
       webUserId: "w_invitee",
       kind: "master.invite",

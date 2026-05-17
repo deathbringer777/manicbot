@@ -30,7 +30,6 @@ const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row 
 const HOUR_START = 8;
 const HOUR_END = 22;
 const TOTAL_HOURS = HOUR_END - HOUR_START;
-const MOBILE_COLS = 3; // days visible at once on narrow screens
 
 const MASTER_PALETTE = [
   { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" },
@@ -143,11 +142,10 @@ export function SalonWeekView({
   const weekHasToday = days.some((d) => fmtIsoDate(d) === todayIso);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Mobile 3-day sliding window ──────────────────────────────────────────
-  // isMobile is false during SSR; set to true by the matchMedia effect so
-  // the initial paint is always full-week (avoids hydration mismatch).
+  // Mobile uses a narrower column width so 3-ish days fit at once; the user
+  // scrolls horizontally to reach the rest of the week. Tracked via matchMedia
+  // (false during SSR to avoid hydration mismatch).
   const [isMobile, setIsMobile] = useState(false);
-  const [mobileOffset, setMobileOffset] = useState(0); // 0–4 (days[offset..offset+3])
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -157,20 +155,10 @@ export function SalonWeekView({
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Auto-center today when the user navigates to a different week.
-  // On weeks that don't contain today, start from Monday (offset=0).
-  useEffect(() => {
-    const todayIdx = days.findIndex((d) => fmtIsoDate(d) === todayIso);
-    if (todayIdx >= 0) {
-      // Center today: offset = todayIdx - 1, clamped to valid range [0, 4].
-      setMobileOffset(Math.max(0, Math.min(7 - MOBILE_COLS, todayIdx - 1)));
-    } else {
-      setMobileOffset(0);
-    }
-  }, [days]); // intentionally omit todayIso — changes only at midnight, not worth the complexity
-
-  // Visible days: 3 on mobile, all 7 on desktop.
-  const visibleDays = isMobile ? days.slice(mobileOffset, mobileOffset + MOBILE_COLS) : days;
+  // All 7 days visible — the grid scrolls horizontally on mobile.
+  // The dedicated mobile 3-day window navigator was removed because users read
+  // it as a duplicate of the week-level prev/next chevrons above.
+  const visibleDays = days;
 
   // Today's column index within the *visible* slice — needed for now-line position.
   const visibleTodayColumnIndex = visibleDays.findIndex((d) => fmtIsoDate(d) === todayIso);
@@ -218,18 +206,27 @@ export function SalonWeekView({
     return m;
   }, [blocks, days]);
 
-  // Auto-scroll to current time when this week contains today.
+  // Auto-scroll to current time + today's column when this week contains today.
+  // Horizontal scroll keeps today centred on mobile (where the 7 columns
+  // overflow the viewport and the user otherwise lands on Monday).
   useEffect(() => {
     if (!weekHasToday || !scrollerRef.current) return;
     const now = new Date();
     const minutes = now.getHours() * 60 + now.getMinutes();
-    const offset = ((minutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
-    if (offset < 0) return;
+    const top = ((minutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
+    const todayIdx = days.findIndex((d) => fmtIsoDate(d) === todayIso);
     const tid = window.setTimeout(() => {
-      scrollerRef.current?.scrollTo({ top: Math.max(0, offset - HOUR_HEIGHT * 1.5), behavior: "smooth" });
+      const el = scrollerRef.current;
+      if (!el) return;
+      if (top >= 0) el.scrollTo({ top: Math.max(0, top - HOUR_HEIGHT * 1.5), behavior: "smooth" });
+      if (todayIdx >= 0) {
+        const colWidthNow = isMobile ? 100 : 140;
+        const left = todayIdx * colWidthNow;
+        el.scrollTo({ left: Math.max(0, left - colWidthNow * 0.5), behavior: "smooth" });
+      }
     }, 100);
     return () => window.clearTimeout(tid);
-  }, [weekHasToday]);
+  }, [weekHasToday, days, todayIso, isMobile]);
 
   // Current-time line.
   const [nowMinutes, setNowMinutes] = useState(() => {
@@ -318,64 +315,6 @@ export function SalonWeekView({
           </button>
         </div>
       </div>
-
-      {/* Mobile 3-day window navigator — dots + left/right arrows.
-          Hidden on sm+ screens where the full 7-day grid is shown. */}
-      {isMobile && (
-        <div className="flex items-center justify-between px-1">
-          <button
-            type="button"
-            onClick={() => setMobileOffset((o) => Math.max(0, o - 1))}
-            disabled={mobileOffset === 0}
-            data-testid="week-view-mobile-prev"
-            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-30"
-            aria-label={t("salon.week.prev", lang)}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </button>
-
-          {/* 7 dots — pill shape for the 3 visible, small circle for the rest.
-              Tapping a dot jumps to a window starting at that day. */}
-          <div className="flex items-center gap-1.5" role="tablist" aria-label="Day selector">
-            {days.map((day, i) => {
-              const isVisible = i >= mobileOffset && i < mobileOffset + MOBILE_COLS;
-              const isToday = fmtIsoDate(day) === todayIso;
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  role="tab"
-                  aria-selected={isVisible}
-                  onClick={() => setMobileOffset(Math.max(0, Math.min(7 - MOBILE_COLS, i)))}
-                  className={`rounded-full transition-all ${
-                    isVisible
-                      ? "h-1.5 w-4"
-                      : "h-1.5 w-1.5"
-                  } ${
-                    isToday
-                      ? "bg-brand-500"
-                      : isVisible
-                      ? "bg-slate-500 dark:bg-slate-400"
-                      : "bg-slate-300 dark:bg-slate-600"
-                  }`}
-                  title={day.toLocaleDateString(locale, { weekday: "short", day: "numeric" })}
-                />
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setMobileOffset((o) => Math.min(7 - MOBILE_COLS, o + 1))}
-            disabled={mobileOffset >= 7 - MOBILE_COLS}
-            data-testid="week-view-mobile-next"
-            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-30"
-            aria-label={t("salon.week.next", lang)}
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
 
       {/* Empty state when no apts in the entire week */}
       {aptsByDate.size === 0 && !isLoading && (

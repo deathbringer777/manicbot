@@ -63,6 +63,13 @@ export const metadata: Metadata = {
     // The DNS/HTML file verification via GSC is the primary method; this is belt-and-suspenders.
     google: process.env.NEXT_PUBLIC_GSC_VERIFICATION,
   },
+  icons: {
+    icon: [
+      { url: "/manicbot-mark-ui.png?v=2", type: "image/png" },
+    ],
+    shortcut: "/manicbot-mark-ui.png?v=2",
+    apple: "/manicbot-mark-ui.png?v=2",
+  },
 };
 
 export const viewport: Viewport = {

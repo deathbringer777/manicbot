@@ -13,6 +13,7 @@ import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { SectionHeader } from "./SalonShared";
 import { IGHealthCard } from "./IGHealthCard";
+import { SalonMasterPairingTable } from "./SalonMasterPairingTable";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
 import { MetaGuide } from "~/components/settings/MetaGuide";
 
@@ -152,6 +153,11 @@ function TelegramTab({ tenantId }: { tenantId: string }) {
             isPending={disconnectMut.isPending}
           />
         </section>
+        {/* 0072 — per-master Telegram pairing table.  Salon owner mints
+            single-use deep-links for each master, or types a chat_id
+            manually. Synthetic web-created masters need this to receive
+            bot notifications + open master-mode in TG. */}
+        <SalonMasterPairingTable tenantId={tenantId} />
       </div>
     );
   }

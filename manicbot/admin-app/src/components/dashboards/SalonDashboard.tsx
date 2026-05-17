@@ -67,6 +67,7 @@ import type { MoveCommit } from "~/lib/calendar/useDragToMove";
 import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
+import { PendingInvitationsStrip } from "~/components/salon/PendingInvitationsStrip";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -2425,6 +2426,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               <Btn onClick={() => setMasterModal("create")}><Plus className="h-3.5 w-3.5" />{t("master.createAccount", lang)}</Btn>
             </div>
           } />
+          <PendingInvitationsStrip tenantId={tenantId} />
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
           <div className="space-y-2">

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, tenantOwnerProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
@@ -21,6 +21,7 @@ import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/
 import { log } from "~/server/utils/logger";
 import { notifyWorker } from "~/server/utils/notifyWorker";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import { notifyWebUser } from "~/server/services/notifyWebUser";
 import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
@@ -1763,6 +1764,16 @@ export const salonRouter = createTRPCRouter({
       const inviter = ctx.webUser;
       if (!inviter?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
 
+      const email = input.email.trim().toLowerCase();
+
+      // Self-invite guard. Compared case-insensitively; the inviter is already
+      // tenant_owner of this tenant, sending an invite to themselves does
+      // nothing useful and historically created a confusing pending row that
+      // could not be accepted (email_mismatch on the accept page).
+      if (inviter.email && inviter.email.trim().toLowerCase() === email) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_invite_self" });
+      }
+
       // Personal-tenant guard.
       const tenantRow = await ctx.db
         .select({ name: tenants.name, isPersonal: tenants.isPersonal })
@@ -1786,7 +1797,6 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "rate_limited" });
       }
 
-      const email = input.email.trim().toLowerCase();
       const now = Math.floor(Date.now() / 1000);
 
       // Resolve scenario.
@@ -1837,6 +1847,41 @@ export const salonRouter = createTRPCRouter({
         void sendMasterInviteExistingUserEmail(email, invitationId, salonName, lang).catch((e) =>
           log.error("salon.invite.existing", e instanceof Error ? e : new Error(String(e))),
         );
+
+        // In-app Bell entry for the invitee. Email is unreliable (spam, DNS,
+        // delayed delivery) — the Bell drop is what guarantees the recipient
+        // sees the invite next time they open the dashboard. Idempotent on
+        // (web_user_id, source_slug, source_id, kind) so a duplicate-send
+        // retry collapses to the same row.
+        const inviteeId = existingUser[0]!.id;
+        const inviteeLabel = ((): string => {
+          switch (lang) {
+            case "ru": return `Приглашение от салона «${salonName}»`;
+            case "ua": return `Запрошення від салону «${salonName}»`;
+            case "pl": return `Zaproszenie od salonu „${salonName}"`;
+            default:   return `Invitation from ${salonName}`;
+          }
+        })();
+        const inviteeBody = ((): string => {
+          switch (lang) {
+            case "ru": return "Вас приглашают присоединиться как мастера. Нажмите, чтобы принять.";
+            case "ua": return "Вас запрошують приєднатися як майстра. Натисніть, щоб прийняти.";
+            case "pl": return "Zapraszamy Cię do dołączenia jako mistrz. Kliknij, aby zaakceptować.";
+            default:   return "You're invited to join as a master. Click to accept.";
+          }
+        })();
+        void notifyWebUser(ctx.db, {
+          webUserId: inviteeId,
+          kind: "master.invite",
+          title: inviteeLabel,
+          body: inviteeBody,
+          link: `/invitations/${invitationId}`,
+          tenantId: input.tenantId,
+          sourceSlug: "master_invitations",
+          sourceId: invitationId,
+        }).catch((e) =>
+          log.error("salon.invite.notify", e instanceof Error ? e : new Error(String(e))),
+        );
       } else {
         void sendMasterInviteNewUserEmail(email, rawToken, salonName, lang).catch((e) =>
           log.error("salon.invite.new", e instanceof Error ? e : new Error(String(e))),
@@ -1852,6 +1897,92 @@ export const salonRouter = createTRPCRouter({
       });
 
       return { invitationId, scenario };
+    }),
+
+  /**
+   * Read-only context for the accept-invitation page.
+   *
+   * Returns everything the accept-page needs in a single round-trip so the UI
+   * can render a precise, copy-driven warning instead of a generic
+   * "Salon invited you". Public-ish: requires a logged-in webUser (the
+   * route group middleware enforces this), but does NOT require the caller
+   * to be the invitation's recipient — the page itself reveals whether the
+   * email matches and routes to /login if not.
+   *
+   * Fields returned:
+   *   - salonName             — the inviting salon (for the headline)
+   *   - inviterEmail          — who sent it (helps recipient identify spam)
+   *   - status / expiresAt    — drives the "already used / expired" copy
+   *   - emailMatch            — true when the caller's email == invitation email
+   *   - callerOwnsOtherTenant — true when caller is tenant_owner of a different
+   *                              non-personal salon (drives the dual-role warning)
+   *   - callerTenantName      — name of caller's own salon (for the warning copy)
+   */
+  getInvitationContext: protectedProcedure
+    .input(z.object({ invitationId: z.string().min(1).max(64) }))
+    .query(async ({ ctx, input }) => {
+      const caller = ctx.webUser;
+      if (!caller?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const rows = await ctx.db
+        .select({
+          id: masterInvitations.id,
+          tenantId: masterInvitations.tenantId,
+          email: masterInvitations.email,
+          status: masterInvitations.status,
+          scenario: masterInvitations.scenario,
+          tokenExpiresAt: masterInvitations.tokenExpiresAt,
+          inviterUserId: masterInvitations.inviterUserId,
+          tenantName: tenants.name,
+        })
+        .from(masterInvitations)
+        .leftJoin(tenants, eq(tenants.id, masterInvitations.tenantId))
+        .where(eq(masterInvitations.id, input.invitationId))
+        .limit(1);
+      const inv = rows[0];
+      if (!inv) throw new TRPCError({ code: "NOT_FOUND", message: "invitation_not_found" });
+
+      const inviterRows = await ctx.db
+        .select({ email: webUsers.email })
+        .from(webUsers)
+        .where(eq(webUsers.id, inv.inviterUserId))
+        .limit(1);
+
+      // Surface the dual-role warning whenever the caller is a tenant_owner
+      // of a different non-personal salon. Lookup is via web_users.tenantId
+      // (web_users.role='tenant_owner' rows are linked to their salon there).
+      let callerOwnsOtherTenant = false;
+      let callerTenantName: string | null = null;
+      if (caller.webRole === "tenant_owner" && caller.tenantId && caller.tenantId !== inv.tenantId) {
+        const ownedRow = await ctx.db
+          .select({ name: tenants.name, isPersonal: tenants.isPersonal })
+          .from(tenants)
+          .where(eq(tenants.id, caller.tenantId))
+          .limit(1);
+        if (ownedRow[0] && ownedRow[0].isPersonal !== 1) {
+          callerOwnsOtherTenant = true;
+          callerTenantName = ownedRow[0].name ?? null;
+        }
+      }
+
+      const nowSec = Math.floor(Date.now() / 1000);
+      return {
+        invitationId: inv.id,
+        tenantId: inv.tenantId,
+        salonName: inv.tenantName ?? "ManicBot",
+        inviterEmail: inviterRows[0]?.email ?? null,
+        /** The email the invitation was sent to — surfaced on the accept
+         *  page so the recipient can see which account they need to sign
+         *  in as when emailMatch is false. */
+        email: inv.email,
+        status: inv.status,
+        scenario: inv.scenario,
+        expiresAt: inv.tokenExpiresAt,
+        expired: inv.tokenExpiresAt < nowSec,
+        emailMatch: (caller.email ?? "").trim().toLowerCase() === inv.email.toLowerCase(),
+        callerOwnsOtherTenant,
+        callerTenantName,
+      };
     }),
 
   /** Returns pending invitations for the masters-tab strip. */

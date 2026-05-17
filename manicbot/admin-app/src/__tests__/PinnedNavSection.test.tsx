@@ -21,6 +21,21 @@ vi.mock("next/navigation", () => ({
   usePathname: () => mockPathname,
 }));
 
+// Pin button visibility depends on `canWrite` derived from RoleContext.
+// Default-mocked owner profile lets the existing assertions about the
+// always-visible Pin button continue to pass.
+let mockPreviewMasterId: number | null = null;
+let mockPreviewMasterWebUserId: string | null = null;
+vi.mock("~/components/RoleContext", () => ({
+  useRole: () => ({
+    tenantId: "tenant_default",
+    role: "tenant_owner",
+    webUserId: "owner-uid",
+    previewMasterId: mockPreviewMasterId,
+    previewMasterWebUserId: mockPreviewMasterWebUserId,
+  }),
+}));
+
 vi.mock("~/trpc/react", () => ({
   api: {
     useUtils: () => ({
@@ -55,6 +70,8 @@ beforeEach(() => {
   mockPinned = [];
   mockPathname = "/dashboard";
   mockMutate.mockClear();
+  mockPreviewMasterId = null;
+  mockPreviewMasterWebUserId = null;
   try {
     window.localStorage.removeItem("manicbot_pinned_plugins");
   } catch {

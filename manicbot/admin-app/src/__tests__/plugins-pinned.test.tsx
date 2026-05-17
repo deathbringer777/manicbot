@@ -16,8 +16,16 @@ beforeAll(() => { vi.stubGlobal("localStorage", _mockLocalStorage); });
 
 // ── Mock useRole so tenantId is configurable per test ───────────────────────
 let mockTenantId: string | null = "tenant_default";
+let mockWebUserId: string | null = "owner-uid";
+let mockPreviewMasterId: number | null = null;
+let mockPreviewMasterWebUserId: string | null = null;
 vi.mock("~/components/RoleContext", () => ({
-  useRole: () => ({ tenantId: mockTenantId }),
+  useRole: () => ({
+    tenantId: mockTenantId,
+    webUserId: mockWebUserId,
+    previewMasterId: mockPreviewMasterId,
+    previewMasterWebUserId: mockPreviewMasterWebUserId,
+  }),
 }));
 
 // ── Shared mutable tRPC mock state ──────────────────────────────────────
@@ -71,6 +79,9 @@ beforeEach(() => {
   mockMutate = () => {};
   mockMutationError = null;
   mockTenantId = "tenant_default";
+  mockWebUserId = "owner-uid";
+  mockPreviewMasterId = null;
+  mockPreviewMasterWebUserId = null;
 });
 
 afterEach(() => cleanup());
@@ -118,16 +129,19 @@ describe("cross-tenant isolation — localStorage", () => {
     expect(readPinned("tenant_A")).not.toContain("export-hub");
   });
 
-  it("usePinnedPlugins mirrors server data to the correct tenant-scoped key", async () => {
+  it("usePinnedPlugins mirrors server data to the correct profile-scoped key", async () => {
     mockTenantId = "tenant_X";
+    mockWebUserId = "owner-uid";
     mockPinnedData = ["task-board"];
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
-      const key = "manicbot_pinned_plugins_tenant_X";
+      // Profile-scoped key: <prefix>_<tenant>_u<webUserId>
+      const key = "manicbot_pinned_plugins_tenant_X_uowner-uid";
       const stored = JSON.parse(window.localStorage.getItem(key) ?? "[]") as string[];
       expect(stored).toContain("task-board");
-      // The global (non-scoped) key must remain untouched
+      // The global (non-scoped) and legacy tenant-only keys must remain untouched
       expect(window.localStorage.getItem("manicbot_pinned_plugins")).toBeNull();
+      expect(window.localStorage.getItem("manicbot_pinned_plugins_tenant_X")).toBeNull();
     });
   });
 
@@ -149,18 +163,20 @@ describe("cross-tenant isolation — localStorage", () => {
 describe("usePinnedPlugins — server-backed (mocked tRPC)", () => {
   it("reads from tRPC query, not localStorage", () => {
     mockTenantId = "tenant_A";
-    window.localStorage.setItem("manicbot_pinned_plugins_tenant_A", JSON.stringify(["from-local"]));
+    mockWebUserId = "owner-uid";
+    window.localStorage.setItem("manicbot_pinned_plugins_tenant_A_uowner-uid", JSON.stringify(["from-local"]));
     mockPinnedData = ["from-server"];
     const { result } = renderHook(() => usePinnedPlugins());
     expect(result.current.pinned).toEqual(["from-server"]);
   });
 
-  it("mirrors server truth to localStorage for next-paint seeding", async () => {
+  it("mirrors server truth to profile-scoped localStorage for next-paint seeding", async () => {
     mockTenantId = "tenant_A";
+    mockWebUserId = "owner-uid";
     mockPinnedData = ["task-board"];
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
-      const key = "manicbot_pinned_plugins_tenant_A";
+      const key = "manicbot_pinned_plugins_tenant_A_uowner-uid";
       expect(JSON.parse(window.localStorage.getItem(key) ?? "[]")).toEqual(["task-board"]);
     });
   });

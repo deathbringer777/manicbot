@@ -30,6 +30,7 @@ function makeWrapper(tenantId: string | null) {
     tenantId,
     tenantName: null,
     userId: null,
+    webUserId: "owner-uid",
     createdAt: null,
     hasPassword: true,
     emailVerified: true,
@@ -41,6 +42,7 @@ function makeWrapper(tenantId: string | null) {
     previewTenantId: null,
     setPreviewRole: () => {},
     previewMasterId: null,
+    previewMasterWebUserId: null,
     setPreviewMaster: () => {},
   };
   return function Wrapper({ children }: { children: React.ReactNode }) {

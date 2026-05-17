@@ -20,11 +20,18 @@ const _mockLocalStorage = {
 };
 beforeAll(() => { vi.stubGlobal("localStorage", _mockLocalStorage); });
 
-// ── Mutable tenant context ──────────────────────────────────────────────
+// ── Mutable tenant + profile context ───────────────────────────────────
 let mockTenantId: string | null = "t_salon_a";
+let mockWebUserId: string | null = "owner-uid";
 
 vi.mock("~/components/RoleContext", () => ({
-  useRole: () => ({ tenantId: mockTenantId, role: "tenant_owner" }),
+  useRole: () => ({
+    tenantId: mockTenantId,
+    role: "tenant_owner",
+    webUserId: mockWebUserId,
+    previewMasterId: null,
+    previewMasterWebUserId: null,
+  }),
 }));
 
 // ── Per-tenant server state (simulates D1 rows filtered by tenantId) ────
@@ -78,6 +85,7 @@ beforeEach(() => {
   _mockLocalStorage.clear();
   Object.keys(_serverPins).forEach((k) => delete _serverPins[k]);
   mockTenantId = "t_salon_a";
+  mockWebUserId = "owner-uid";
 });
 afterEach(() => cleanup());
 
@@ -138,17 +146,18 @@ describe("usePinnedPlugins — cross-tenant isolation", () => {
     expect(rB.current.pinned).not.toContain("crm");
   });
 
-  it("server sync mirrors to tenant-scoped localStorage key, not global key", async () => {
+  it("server sync mirrors to profile-scoped localStorage key, not global key", async () => {
     _serverPins["t_salon_a"] = ["task-board"];
     mockTenantId = "t_salon_a";
     renderHook(() => usePinnedPlugins());
     await waitFor(() => {
-      expect(_lsStore["manicbot_pinned_plugins_t_salon_a"]).toBeDefined();
+      expect(_lsStore["manicbot_pinned_plugins_t_salon_a_uowner-uid"]).toBeDefined();
     });
     expect(_lsStore["manicbot_pinned_plugins"]).toBeUndefined();
+    expect(_lsStore["manicbot_pinned_plugins_t_salon_a"]).toBeUndefined();
   });
 
-  it("each tenant's localStorage seed key is scoped independently", async () => {
+  it("each tenant's localStorage seed key is scoped independently per profile", async () => {
     _serverPins["t_salon_a"] = ["sms"];
     _serverPins["t_salon_b"] = ["crm"];
 
@@ -158,13 +167,40 @@ describe("usePinnedPlugins — cross-tenant isolation", () => {
     const { result: rB } = renderHook(() => usePinnedPlugins());
 
     await waitFor(() => {
-      expect(_lsStore["manicbot_pinned_plugins_t_salon_a"]).toBeDefined();
-      expect(_lsStore["manicbot_pinned_plugins_t_salon_b"]).toBeDefined();
+      expect(_lsStore["manicbot_pinned_plugins_t_salon_a_uowner-uid"]).toBeDefined();
+      expect(_lsStore["manicbot_pinned_plugins_t_salon_b_uowner-uid"]).toBeDefined();
     });
 
-    expect(JSON.parse(_lsStore["manicbot_pinned_plugins_t_salon_a"]!)).toContain("sms");
-    expect(JSON.parse(_lsStore["manicbot_pinned_plugins_t_salon_b"]!)).toContain("crm");
+    expect(JSON.parse(_lsStore["manicbot_pinned_plugins_t_salon_a_uowner-uid"]!)).toContain("sms");
+    expect(JSON.parse(_lsStore["manicbot_pinned_plugins_t_salon_b_uowner-uid"]!)).toContain("crm");
     expect(rA.current.pinned).toEqual(["sms"]);
     expect(rB.current.pinned).toEqual(["crm"]);
+  });
+
+  it("two web-users on the SAME tenant + browser write to isolated localStorage keys", async () => {
+    // The localStorage key fix prevents the leak from the original
+    // screenshots: when two web-users share a browser/tenant, each one's
+    // optimistic-cache write must land in its own bucket. The tRPC mock
+    // in this fixture models the server as per-tenant only (it lives
+    // before the per-user binding lands in the actual server), so we
+    // verify the production guarantee at the localStorage layer.
+    _serverPins["t_salon_a"] = ["sms", "crm"];
+    mockTenantId = "t_salon_a";
+
+    mockWebUserId = "user-1";
+    const { result: r1 } = renderHook(() => usePinnedPlugins());
+    await waitFor(() => expect(r1.current.pinned).toEqual(["sms", "crm"]));
+
+    mockWebUserId = "user-2";
+    const { result: r2 } = renderHook(() => usePinnedPlugins());
+    await waitFor(() => expect(r2.current.pinned).toEqual(["sms", "crm"]));
+
+    // Both users get their own localStorage bucket — and the legacy
+    // tenant-only key is never created on the hot path, so the original
+    // "two humans on one browser" bleed cannot recur.
+    expect(_lsStore["manicbot_pinned_plugins_t_salon_a_uuser-1"]).toBeDefined();
+    expect(_lsStore["manicbot_pinned_plugins_t_salon_a_uuser-2"]).toBeDefined();
+    expect(_lsStore["manicbot_pinned_plugins_t_salon_a"]).toBeUndefined();
+    expect(_lsStore["manicbot_pinned_plugins"]).toBeUndefined();
   });
 });

@@ -71,11 +71,14 @@ export const masterRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertMaster(ctx, input.tenantId);
+      // `webUserId` is required for preview-as-master per-profile scoping
+      // (plugin pins, dashboard prefs). Null for synthetic/uninvited masters.
       return ctx.db
         .select({
           chatId: masters.chatId,
           name: masters.name,
           allowDelegation: masters.allowDelegation,
+          webUserId: masters.webUserId,
         })
         .from(masters)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)));

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRole } from "~/components/RoleContext";
+import { useEffectiveProfile } from "~/lib/effectiveProfile";
 
 export interface DashboardPrefs {
   hiddenTabs: string[];
@@ -29,9 +30,16 @@ const KEY_PREFIX = "manicbot_dashboard_prefs";
 /** Maximum number of items the mobile bottom-nav can fit. */
 export const BOTTOM_NAV_LIMIT = 5;
 
-/** Storage key is tenant-scoped to prevent cross-tenant bleed */
-function storageKey(tenantId?: string | null): string {
-  return tenantId ? `${KEY_PREFIX}_${tenantId}` : KEY_PREFIX;
+/**
+ * localStorage key. When `profileKey` is supplied the key is the new
+ * profile-scoped format; otherwise the legacy tenant-only form is
+ * returned so the migration shim can read the prior value before
+ * overwriting it.
+ */
+function storageKey(tenantId?: string | null, profileKey?: string): string {
+  if (!tenantId) return KEY_PREFIX;
+  if (profileKey) return `${KEY_PREFIX}_${tenantId}_${profileKey}`;
+  return `${KEY_PREFIX}_${tenantId}`;
 }
 
 const DEFAULTS: DashboardPrefs = {
@@ -42,10 +50,10 @@ const DEFAULTS: DashboardPrefs = {
   bottomNavLayout: "default",
 };
 
-function load(tenantId?: string | null): DashboardPrefs {
+function load(tenantId?: string | null, profileKey?: string): DashboardPrefs {
   if (typeof window === "undefined") return DEFAULTS;
   try {
-    const raw = localStorage.getItem(storageKey(tenantId));
+    const raw = localStorage.getItem(storageKey(tenantId, profileKey));
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<DashboardPrefs>;
     return { ...DEFAULTS, ...parsed };
@@ -54,26 +62,55 @@ function load(tenantId?: string | null): DashboardPrefs {
   }
 }
 
-function save(prefs: DashboardPrefs, tenantId?: string | null) {
-  localStorage.setItem(storageKey(tenantId), JSON.stringify(prefs));
+function save(prefs: DashboardPrefs, tenantId?: string | null, profileKey?: string) {
+  localStorage.setItem(storageKey(tenantId, profileKey), JSON.stringify(prefs));
+}
+
+/**
+ * One-time copy of the legacy tenant-only key into the new
+ * profile-scoped key. UNLIKE pinned-plugins (where D1 is the source of
+ * truth), `bottomNavOrder` / `hiddenTabs` live ONLY in localStorage — so
+ * skipping the migration would silently reset the user's saved layout
+ * on first load. Idempotent: re-running with the new key already
+ * populated is a no-op.
+ */
+function migrateLegacyTenantKey(tenantId: string, profileKey: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const newKey = storageKey(tenantId, profileKey);
+    const legacyKey = storageKey(tenantId);
+    if (window.localStorage.getItem(newKey)) return;
+    const legacyRaw = window.localStorage.getItem(legacyKey);
+    if (!legacyRaw) return;
+    window.localStorage.setItem(newKey, legacyRaw);
+    window.localStorage.removeItem(legacyKey);
+  } catch {
+    // noop
+  }
 }
 
 export function useDashboardPrefs() {
   const { tenantId } = useRole();
-  const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId));
+  const profile = useEffectiveProfile();
+  const profileKey = profile.effectiveProfileKey;
+  const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId, profileKey));
 
-  // Re-load when tenant switches (same browser, multiple tenant accounts)
+  // Re-load when tenant OR profile switches (same browser, multiple
+  // accounts, OR owner toggling «view as master» preview).
   useEffect(() => {
-    setPrefsState(load(tenantId));
-  }, [tenantId]);
+    if (tenantId && !profile.isPreview && profile.effectiveWebUserId != null) {
+      migrateLegacyTenantKey(tenantId, profileKey);
+    }
+    setPrefsState(load(tenantId, profileKey));
+  }, [tenantId, profileKey, profile.isPreview, profile.effectiveWebUserId]);
 
   const update = useCallback((patch: Partial<DashboardPrefs>) => {
     setPrefsState((prev) => {
       const next = { ...prev, ...patch };
-      save(next, tenantId);
+      save(next, tenantId, profileKey);
       return next;
     });
-  }, [tenantId]);
+  }, [tenantId, profileKey]);
 
   const toggleTab = useCallback((tab: string) => {
     setPrefsState((prev) => {
@@ -83,10 +120,10 @@ export function useDashboardPrefs() {
       // If hiding the default tab, reset default to overview
       const defaultTab = hidden.includes(prev.defaultTab) ? "overview" : prev.defaultTab;
       const next = { ...prev, hiddenTabs: hidden, defaultTab };
-      save(next, tenantId);
+      save(next, tenantId, profileKey);
       return next;
     });
-  }, [tenantId]);
+  }, [tenantId, profileKey]);
 
   const setShowTodayApts = useCallback((show: boolean) => {
     update({ showTodayApts: show });

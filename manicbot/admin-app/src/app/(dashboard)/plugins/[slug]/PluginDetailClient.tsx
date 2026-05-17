@@ -37,7 +37,7 @@ export default function PluginDetailClient() {
   const { role } = useRole();
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmUninstall, setConfirmUninstall] = useState(false);
-  const { isPinned, toggle: togglePin } = usePinnedPlugins();
+  const { isPinned, toggle: togglePin, readOnly: pinReadOnly } = usePinnedPlugins();
 
   const catalogQ = api.plugins.listCatalog.useQuery({ lang });
   const card = (catalogQ.data ?? []).find((c) => c.slug === slug);
@@ -162,8 +162,11 @@ export default function PluginDetailClient() {
                 type="button"
                 data-testid="plugin-detail-pin"
                 data-pinned={pinned ? "1" : "0"}
-                onClick={() => togglePin(slug)}
-                className={`px-3 py-1.5 text-xs rounded-xl border inline-flex items-center gap-1.5 transition-colors ${
+                data-readonly={pinReadOnly ? "1" : "0"}
+                disabled={pinReadOnly}
+                title={pinReadOnly ? t("plugins.pin.previewLocked", lang) : undefined}
+                onClick={() => { if (!pinReadOnly) togglePin(slug); }}
+                className={`px-3 py-1.5 text-xs rounded-xl border inline-flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   pinned
                     ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/25"
                     : "bg-white dark:bg-slate-900/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5"

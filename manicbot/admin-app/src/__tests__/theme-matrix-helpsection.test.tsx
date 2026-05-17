@@ -33,6 +33,13 @@ vi.mock("~/trpc/react", () => ({
       getMyTicket: { useQuery: () => ({ data: null, isLoading: false }) },
       createTicket: { useMutation: () => ({ mutate: () => {}, isPending: false, error: null }) },
       replyToMyTicket: { useMutation: () => ({ mutate: () => {}, isPending: false }) },
+      mintTicketUploadToken: {
+        useMutation: () => ({
+          mutate: () => {},
+          mutateAsync: async () => ({ token: "tok", uploadUrl: "https://w/x" }),
+          isPending: false,
+        }),
+      },
     },
   },
 }));

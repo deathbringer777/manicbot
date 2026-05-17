@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,6 +12,7 @@ import {
   Loader2,
   ChevronRight,
   Plus,
+  X,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
@@ -21,6 +22,13 @@ import { api } from "~/trpc/react";
 import { relativeTime } from "~/lib/appointments";
 import { Button } from "~/components/ui/Button";
 import { Pill, type PillTone } from "~/components/ui/Pill";
+import { ChatAttachButton } from "~/components/chat/ChatAttachButton";
+import {
+  uploadChatAttachment,
+  validateChatAttachmentFile,
+  describeChatAttachmentError,
+  ChatAttachmentUploadError,
+} from "~/lib/chatAttachments";
 
 const STATUS_TONES: Record<string, PillTone> = {
   open: "amber",
@@ -66,6 +74,10 @@ export function HelpSection() {
 
   // Reply
   const [replyText, setReplyText] = useState("");
+  const [replyAttachmentUrl, setReplyAttachmentUrl] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [pasteUploading, setPasteUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const utils = api.useUtils();
 
@@ -92,15 +104,91 @@ export function HelpSection() {
   const replyMut = api.support.replyToMyTicket.useMutation({
     onSuccess() {
       setReplyText("");
+      setReplyAttachmentUrl(null);
       utils.support.getMyTicket.invalidate();
       utils.support.getMyTickets.invalidate();
     },
   });
 
+  const mintTokenMut = api.support.mintTicketUploadToken.useMutation();
+
+  async function mintTokenForTicket() {
+    if (!selectedTicketId) throw new Error("no ticket selected");
+    return await mintTokenMut.mutateAsync({ ticketId: selectedTicketId });
+  }
+
+  // Shared upload path used by the click button (via ChatAttachButton),
+  // clipboard paste, and drag-drop. Single attachment per ticket reply —
+  // a newer upload replaces the previous one.
+  async function uploadOne(file: File) {
+    const validation = validateChatAttachmentFile(file);
+    if (validation) {
+      setAttachmentError(describeChatAttachmentError(validation));
+      return;
+    }
+    setAttachmentError(null);
+    setPasteUploading(true);
+    try {
+      const { uploadUrl } = await mintTokenForTicket();
+      const url = await uploadChatAttachment(file, uploadUrl);
+      setReplyAttachmentUrl(url);
+    } catch (e) {
+      const code =
+        e instanceof ChatAttachmentUploadError ? e.code : "upload_failed";
+      setAttachmentError(describeChatAttachmentError(code as never));
+    } finally {
+      setPasteUploading(false);
+    }
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]!;
+      if (it.kind === "file") {
+        const f = it.getAsFile();
+        if (f) {
+          e.preventDefault();
+          void uploadOne(f);
+          return;
+        }
+      }
+    }
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = e.dataTransfer?.files?.[0];
+    if (f) void uploadOne(f);
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      setIsDragging(true);
+    }
+  }
+
   function openTicket(id: string) {
     setSelectedTicketId(id);
     setReplyText("");
+    setReplyAttachmentUrl(null);
+    setAttachmentError(null);
     setView("detail");
+  }
+
+  function submitReply() {
+    const trimmed = replyText.trim();
+    if (!selectedTicketId || replyMut.isPending) return;
+    // Allow attachment-only submits (text+attachment OR attachment alone).
+    if (!trimmed && !replyAttachmentUrl) return;
+    replyMut.mutate({
+      ticketId: selectedTicketId,
+      text: trimmed || "(вложение)",
+      attachmentUrl: replyAttachmentUrl ?? undefined,
+    });
   }
 
   function backToList() {
@@ -317,7 +405,10 @@ export function HelpSection() {
                   <div className="space-y-2">
                     {ticketDetail.data.messages.map((msg: any) => {
                       const isSupport = typeof msg.sender === "string" && msg.sender.startsWith("support:");
-                      const att = msg.attachmentUrl as string | null | undefined;
+                      const att = (msg.attachmentUrl ?? "") as string;
+                      const attIsImage = att.startsWith("http") &&
+                        /\.(png|jpe?g|webp)(\?|$)/i.test(att);
+                      const attIsHttp = att.startsWith("http");
                       return (
                         <div key={msg.id} className={`flex ${isSupport ? "justify-start" : "justify-end"}`}>
                           <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 ${
@@ -329,7 +420,22 @@ export function HelpSection() {
                               {isSupport ? t("settings.supportTeam", lang) : t("settings.you", lang)}
                             </p>
                             <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
-                            {att?.startsWith("http") && (
+                            {attIsImage && (
+                              <a
+                                href={att}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 block overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={att}
+                                  alt="attachment"
+                                  className="max-h-64 w-auto object-contain"
+                                />
+                              </a>
+                            )}
+                            {attIsHttp && !attIsImage && (
                               <a href={att} target="_blank" rel="noopener noreferrer"
                                 className="text-xs text-sky-700 dark:text-sky-400 underline mt-1 block truncate">{att}</a>
                             )}
@@ -342,24 +448,84 @@ export function HelpSection() {
 
                   {/* Reply input */}
                   {ticketDetail.data.ticket.status !== "closed" ? (
-                    <div className="flex gap-2 pt-1">
-                      <textarea
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder={t("settings.replyPlaceholder", lang)}
-                        rows={2}
-                        className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
-                      />
-                      <Button
-                        type="button"
-                        tone="brand"
-                        variant="soft"
-                        size="md"
-                        onClick={() => replyMut.mutate({ ticketId: selectedTicketId, text: replyText.trim() })}
-                        disabled={replyMut.isPending || !replyText.trim()}
-                      >
-                        {replyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      </Button>
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={handleDrop}
+                      className={`space-y-2 pt-1 rounded-xl transition-colors ${
+                        isDragging
+                          ? "ring-2 ring-brand-500/60 ring-offset-2 ring-offset-white dark:ring-offset-slate-900"
+                          : ""
+                      }`}
+                    >
+                      {replyAttachmentUrl && (
+                        <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={replyAttachmentUrl}
+                            alt="preview"
+                            className="h-12 w-12 rounded object-cover"
+                          />
+                          <span className="flex-1 text-xs text-slate-500 dark:text-slate-400 truncate">
+                            Изображение прикреплено
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setReplyAttachmentUrl(null)}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700"
+                            aria-label="Убрать вложение"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      {attachmentError && (
+                        <p className="text-xs text-red-600 dark:text-red-400">{attachmentError}</p>
+                      )}
+                      {pasteUploading && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Загружаю изображение…
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <textarea
+                          data-testid="help-ticket-reply-input"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          onPaste={handlePaste}
+                          onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
+                            // Enter sends; Shift+Enter inserts a newline. Matches the
+                            // /messages composer and standard chat-app convention.
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              submitReply();
+                            }
+                          }}
+                          placeholder={t("settings.replyPlaceholder", lang)}
+                          rows={2}
+                          className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"
+                        />
+                        <ChatAttachButton
+                          mintToken={mintTokenForTicket}
+                          onUploaded={(url) => {
+                            setReplyAttachmentUrl(url);
+                            setAttachmentError(null);
+                          }}
+                          onError={(msg) => setAttachmentError(msg)}
+                          disabled={replyMut.isPending}
+                        />
+                        <Button
+                          type="button"
+                          tone="brand"
+                          variant="soft"
+                          size="md"
+                          onClick={submitReply}
+                          disabled={replyMut.isPending || (!replyText.trim() && !replyAttachmentUrl)}
+                        >
+                          {replyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <p className="text-xs text-slate-500 text-center py-2">{t("settings.ticketClosed", lang)}</p>

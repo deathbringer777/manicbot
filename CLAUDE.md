@@ -397,6 +397,40 @@ A subtle adjacent bug: the content wrapper inside `WebShell` and `Shell` previou
 
 All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignFormModal`, `TemplateFormModal`, `ReminderModal`) use the brand-styled `~/components/ui/Select.tsx` rather than the native `<select>`. Native dropdowns render at the OS layer, ignore page theming, and break inside the dark-overlay modal stack. Pinned by `src/__tests__/marketing-modals-no-native-select.test.ts`.
 
+### Chat composer — Enter-to-send contract
+
+Every chat-style composer in the admin-app honours one keyboard convention: **Enter sends, Shift+Enter inserts a newline**. Applies to:
+- `MessageComposer.tsx` (`/messages` thread view) — original implementation, pattern source.
+- `HelpSection.tsx` reply textarea (salon-owner ticket replies under `/settings?section=help`).
+- `SupportDashboard.tsx` reply textarea (platform-staff `/platform-support` ticket replies).
+- `Composer.tsx` (public salon AI chat at `/salon/{slug}/chat`).
+
+The handler guards three conditions before firing the mutation: trimmed body must be non-empty (or an attachment must be present), the mutation must not already be pending, and the ticket/thread must be open. Pinned by `src/__tests__/ticket-composer-enter-behavior.test.tsx` for the two ticket surfaces.
+
+### Chat composer — image attachments (drag / paste / click)
+
+The same three composers (HelpSection, SupportDashboard, MessageComposer) accept PNG / JPEG / WEBP image attachments up to 2 MB via three input methods:
+
+- **Click**: paperclip icon next to the Send button — opens the OS file picker.
+- **Paste**: pasting an image from the clipboard (`Cmd+V` on a screenshot) into the textarea uploads it.
+- **Drag-and-drop**: dropping a file anywhere on the composer container uploads it. The drop zone gets a brand-coloured ring while a file is hovering.
+
+Upload flow:
+1. Composer calls a tRPC mint procedure to get a short-lived signed URL:
+   - `support.mintTicketUploadToken({ ticketId })` — works for ticket owners AND platform support staff (system_admin / support / technical_support). Falls back to the `_platform` sentinel tid for tickets with no `tenantId`.
+   - `messenger.mintAttachmentUploadToken({ tenantId, threadId })` — gated by `assertThreadMember` (system_admin bypass still requires the thread to live in the tenant).
+2. Browser POSTs the file to the Worker's `/upload/asset?t=<token>&kind=chat_attachment` endpoint (same as the salon-branding upload pipeline; new `chat_attachment` kind added to `ALLOWED_KINDS` in both `manicbot/src/services/upload.js` and `manicbot/admin-app/src/server/lib/uploadToken.ts`).
+3. Worker writes the bytes to R2 under `t/{tid}/chat_attachment-{sha12}.{ext}` after magic-byte / MIME / size validation.
+4. Composer receives the CDN URL, shows a preview chip, and includes it in the next `replyToMyTicket` / `replyToTicket` / `sendMessage` mutation.
+
+Persistence shape:
+- Tickets: single `attachmentUrl` text column on `platform_ticket_messages`. `replyToMyTicket` now accepts `attachmentUrl` (was missing); `replyToTicket` already did.
+- Messenger: `attachments_json` on `thread_messages`, wrapped object `{ attachments: [{ url, kind }, …] }` so the schema can extend later. Capped at 4 attachments per message at the zod boundary.
+
+The shared client primitives live in `~/lib/chatAttachments.ts` (`uploadChatAttachment`, `validateChatAttachmentFile`, `describeChatAttachmentError`, `ChatAttachmentUploadError`) and `~/components/chat/ChatAttachButton.tsx`. Pinned by `src/__tests__/chat-attachment-uploads.test.ts` (18 cases — auth, tenant isolation, env edges, JSON shape).
+
+Inline image rendering: ticket and thread message lists render attachments as `<img>` when the URL ends with `.png|.jpg|.jpeg|.webp` (with or without query string); otherwise the URL is shown as a clickable text link (used for `telegram:` sentinel attachments and external URLs that staff paste manually into the SupportDashboard URL fallback field).
+
 
 ### tRPC procedures
 

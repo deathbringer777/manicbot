@@ -122,8 +122,9 @@ const ALLOWLIST = new Set([
   // expanded getMasterDetail) → 1297 (0074 master-pairing imports — `gt`
   // from drizzle-orm + `generatePairingToken` / `buildDeepLink` /
   // `PAIRING_TOKEN_TTL_SEC` from `~/server/api/masterPairing/tokenLogic`)
-  // → 1307 (self-invite guard imports from master-invitation
-  // close-the-loop PR stacked on top).
+  // → 1306 (#153 surfaced BOT_ENCRYPTION_KEY-missing guard above this
+  // line) → 1307 (self-invite guard imports from master-
+  // invitation close-the-loop PR stacked on top).
   "src/server/api/routers/salon.ts:1307",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate

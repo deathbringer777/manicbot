@@ -37,6 +37,22 @@ vi.mock('../src/services/users.js', () => ({
   getAdminId: vi.fn(async () => null),
   getUser: vi.fn(async () => null),
   canManageApt: vi.fn(async () => true),
+  // 0074 — notifyAptStaff (and its auto-confirmed sibling) now route
+  // through this helper to prefer a master's real Telegram chat over the
+  // synthetic >=10B identity. Each test seeds masters via the DB; the
+  // helper just reads `telegramChatId` / `chatId` off whichever object
+  // the SUT passes in, so the real implementation is safe here — but
+  // since we mock the whole module, the import sees `undefined` without
+  // an explicit export. Re-exporting the real helper keeps behaviour
+  // identical to production for the in-app bell fan-out tests.
+  masterTelegramRecipient: (master) => {
+    if (!master) return null;
+    const tg = master.telegramChatId ?? master.telegram_chat_id ?? null;
+    if (tg) return Number(tg);
+    const cid = Number(master.chatId);
+    if (Number.isFinite(cid) && cid > 0 && cid < 10_000_000_000) return cid;
+    return null;
+  },
 }));
 
 const { notifyAptStaff, notifyAptStaffAutoConfirmed } = await import('../src/notifications.js');

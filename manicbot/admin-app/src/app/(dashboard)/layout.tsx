@@ -86,7 +86,7 @@ export default function DashboardLayout({
     );
   }
 
-  const { role, webUserId, tenantId, tenantName, masterId, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions, billingStatus, isTrialExpired } = roleQuery.data;
+  const { role, webUserId, tenantId, tenantName, tenantLogo, masterId, masterAvatarUrl, masterAvatarEmoji, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions, billingStatus, isTrialExpired } = roleQuery.data;
   const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
   const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
 
@@ -94,6 +94,9 @@ export default function DashboardLayout({
     role,
     tenantId,
     tenantName: tenantName ?? null,
+    tenantLogo: tenantLogo ?? null,
+    masterAvatarUrl: masterAvatarUrl ?? null,
+    masterAvatarEmoji: masterAvatarEmoji ?? null,
     userId: null, // web users don't have Telegram userId
     webUserId: webUserId ?? null,
     createdAt: createdAt ?? null,

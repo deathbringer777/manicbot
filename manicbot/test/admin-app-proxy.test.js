@@ -44,6 +44,18 @@ describe('isAdminAppPath', () => {
     ['/messages'],
     ['/messages/abc123'],
     ['/role-requests'],
+    // Notification Center pages (PR1 of bell upgrade — were 404-ing on prod
+    // because the Worker proxied them to the landing site instead of Pages).
+    ['/notifications'],
+    ['/notifications/'],
+    // Dashboard pages that exist in app/(dashboard) but were never wired
+    // into this proxy table — same class of bug as /notifications.
+    ['/channels'],
+    ['/channels/whatsapp'],
+    ['/errors'],
+    ['/invitations'],
+    ['/invitations/abc'],
+    ['/marketing-autopilot'],
   ])('proxies %s', (path) => {
     expect(isAdminAppPath(path)).toBe(true);
   });

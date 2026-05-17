@@ -18,9 +18,10 @@
  * `kind` string and a per-kind handler in the UI.
  */
 
-import { dbGet, dbRun } from '../utils/db.js';
+import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { send as telegramSend } from '../telegram.js';
 import { log } from '../utils/logger.js';
+import { sendWebPush } from './webpush.js';
 
 const SYNTHETIC_CHAT_FLOOR = 10_000_000_000; // synthetic personal-master ids
 
@@ -36,12 +37,15 @@ const SYNTHETIC_CHAT_FLOOR = 10_000_000_000; // synthetic personal-master ids
  * @param {string|null} [opts.sourceId]
  * @param {boolean} [opts.inapp=true]
  * @param {boolean} [opts.telegram=false]
+ * @param {boolean} [opts.push=true]  — Web Push fan-out (PR3). No-op when
+ *                                       VAPID is unconfigured or the user
+ *                                       has no push_subscriptions rows.
  * @param {string|null} [opts.telegramText] — if omitted, derived from title+body
- * @returns {Promise<{ok: boolean, inappOk: boolean, telegramOk: boolean, error?: string}>}
+ * @returns {Promise<{ok: boolean, inappOk: boolean, telegramOk: boolean, pushOk: number, error?: string}>}
  */
 export async function notifyWebUser(ctx, webUserId, opts) {
   if (!ctx?.db || !webUserId) {
-    return { ok: false, inappOk: false, telegramOk: false, error: 'no_ctx_or_target' };
+    return { ok: false, inappOk: false, telegramOk: false, pushOk: 0, error: 'no_ctx_or_target' };
   }
   const {
     kind,
@@ -52,11 +56,12 @@ export async function notifyWebUser(ctx, webUserId, opts) {
     sourceId = null,
     inapp = true,
     telegram = false,
+    push = true,
     telegramText = null,
   } = opts || {};
 
   if (!kind || !title) {
-    return { ok: false, inappOk: false, telegramOk: false, error: 'missing_kind_or_title' };
+    return { ok: false, inappOk: false, telegramOk: false, pushOk: 0, error: 'missing_kind_or_title' };
   }
 
   let inappOk = false;
@@ -102,7 +107,91 @@ export async function notifyWebUser(ctx, webUserId, opts) {
     }
   }
 
-  return { ok: inappOk || telegramOk, inappOk, telegramOk };
+  let pushOk = 0;
+  if (push) {
+    pushOk = await fanOutWebPush(ctx, webUserId, {
+      title,
+      body,
+      link,
+      kind,
+      sourceId,
+    }).catch((e) => {
+      log.warn('services.userNotify', {
+        action: 'push_fanout_failed',
+        error: e?.message?.slice(0, 200),
+      });
+      return 0;
+    });
+  }
+
+  return { ok: inappOk || telegramOk || pushOk > 0, inappOk, telegramOk, pushOk };
+}
+
+/**
+ * Fan-out a notification to every push_subscriptions row of the recipient.
+ *
+ * - Reads VAPID config from the Worker env (passed via ctx).
+ * - Skips silently when VAPID isn't configured (early-launch state — the
+ *   bell still works without browser push).
+ * - On 404 / 410 from the push service the row is gone; bump
+ *   failure_count and let a future cleanup cron drop it.
+ *
+ * Returns the count of successful pushes.
+ */
+async function fanOutWebPush(ctx, webUserId, payload) {
+  const env = ctx?.env ?? ctx;
+  const publicKey = env?.VAPID_PUBLIC_KEY;
+  const privateKey = env?.VAPID_PRIVATE_KEY;
+  const subject = env?.VAPID_SUBJECT || 'mailto:noreply@manicbot.com';
+  if (!publicKey || !privateKey) return 0;
+
+  const subs = await dbAll(
+    ctx,
+    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE web_user_id = ? LIMIT 20',
+    webUserId,
+  ).catch(() => []);
+  if (!subs?.length) return 0;
+
+  const tag = payload.sourceId ?? `${payload.kind}:${Date.now()}`;
+  const wirePayload = {
+    title: payload.title,
+    body: payload.body ?? undefined,
+    link: payload.link ?? undefined,
+    tag,
+    kind: payload.kind,
+  };
+
+  let ok = 0;
+  for (const s of subs) {
+    try {
+      const res = await sendWebPush(
+        { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+        wirePayload,
+        { publicKey, privateKey, subject },
+        { urgency: 'normal', topic: payload.kind.slice(0, 32) },
+      );
+      if (res.ok) {
+        ok++;
+        await dbRun(
+          ctx,
+          'UPDATE push_subscriptions SET last_used_at = unixepoch(), failure_count = 0 WHERE id = ?',
+          s.id,
+        ).catch(() => {});
+      } else if (res.status === 404 || res.status === 410) {
+        await dbRun(
+          ctx,
+          'UPDATE push_subscriptions SET failure_count = failure_count + 1 WHERE id = ?',
+          s.id,
+        ).catch(() => {});
+      }
+    } catch (e) {
+      log.warn('services.userNotify', {
+        action: 'push_send_failed',
+        error: e?.message?.slice(0, 200),
+      });
+    }
+  }
+  return ok;
 }
 
 /**

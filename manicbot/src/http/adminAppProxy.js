@@ -36,10 +36,15 @@ export function isAdminAppPath(pathname) {
     '/plugins',
     '/plugin',
     '/marketing',
+    '/marketing-autopilot',
     '/leads',
     '/inbox',
     '/messages',
     '/role-requests',
+    '/notifications',
+    '/channels',
+    '/errors',
+    '/invitations',
   ];
   for (const p of dash) {
     if (pathname === p || pathname.startsWith(p + '/')) return true;

@@ -41,6 +41,7 @@ import { referralsRouter } from "~/server/api/routers/referrals";
 import { messengerRouter } from "~/server/api/routers/messenger";
 import { pluginRemindersRouter } from "~/server/api/routers/pluginReminders";
 import { notificationsRouter } from "~/server/api/routers/notifications";
+import { pushSubscriptionsRouter } from "~/server/api/routers/pushSubscriptions";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -85,6 +86,7 @@ export const appRouter = createTRPCRouter({
   messenger: messengerRouter,
   pluginReminders: pluginRemindersRouter,
   notifications: notificationsRouter,
+  pushSubscriptions: pushSubscriptionsRouter,
 });
 
 export type AppRouter = typeof appRouter;

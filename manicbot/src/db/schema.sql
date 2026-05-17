@@ -1398,3 +1398,23 @@ CREATE INDEX IF NOT EXISTS idx_user_notifications_recent
 CREATE UNIQUE INDEX IF NOT EXISTS uq_user_notifications_source
   ON user_notifications(web_user_id, source_slug, source_id, kind)
   WHERE source_slug IS NOT NULL AND source_id IS NOT NULL;
+
+-- Web Push (browser push notifications) — migration 0073. Companion to
+-- user_notifications; one row per (web_user_id, endpoint) browser pair.
+-- Worker fan-out reads p256dh + auth and encrypts the payload per RFC 8291.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id            TEXT PRIMARY KEY,
+  web_user_id   TEXT NOT NULL REFERENCES web_users(id) ON DELETE CASCADE,
+  tenant_id     TEXT,
+  endpoint      TEXT NOT NULL,
+  p256dh        TEXT NOT NULL,
+  auth          TEXT NOT NULL,
+  user_agent    TEXT,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+  last_used_at  INTEGER,
+  failure_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_push_sub_user_endpoint
+  ON push_subscriptions(web_user_id, endpoint);
+CREATE INDEX IF NOT EXISTS idx_push_sub_user
+  ON push_subscriptions(web_user_id);

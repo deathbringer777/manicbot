@@ -359,3 +359,97 @@ describe("salon.listMasterPairingStates", () => {
     expect(boris!.hasActiveCode).toBe(false);
   });
 });
+
+// ─── salon.getMasterPairingState (single-master, used by MasterDetailModal) ─
+
+describe("salon.getMasterPairingState", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("NOT_FOUND when the master doesn't exist in this tenant", async () => {
+    const dbMock = createDbMock([
+      [], // master lookup → empty
+    ]);
+    const caller = salonCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+    await expect(
+      caller.getMasterPairingState({ tenantId: TENANT, masterChatId: 999 }),
+    ).rejects.toThrow(/master_not_found/i);
+  });
+
+  it("happy path: returns single-master state + botUsername with hasActiveCode=false when no pending code", async () => {
+    const dbMock = createDbMock([
+      [{
+        chatId: MASTER_SYN,
+        isSynthetic: 1,
+        origin: "salon_created",
+        archivedAt: null,
+        telegramChatId: null,
+      }],
+      [], // no active codes
+      [{ botUsername: "manicbot" }],
+    ]);
+    const caller = salonCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+    const result = await caller.getMasterPairingState({ tenantId: TENANT, masterChatId: MASTER_SYN });
+
+    expect(result.chatId).toBe(MASTER_SYN);
+    expect(result.isSynthetic).toBe(true);
+    expect(result.origin).toBe("salon_created");
+    expect(result.archived).toBe(false);
+    expect(result.telegramChatId).toBeNull();
+    expect(result.hasActiveCode).toBe(false);
+    expect(result.activeCodeExpiresAt).toBeNull();
+    expect(result.botUsername).toBe("manicbot");
+  });
+
+  it("surfaces hasActiveCode=true + activeCodeExpiresAt when a pending code exists", async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 5 * 86400;
+    const dbMock = createDbMock([
+      [{
+        chatId: MASTER_SYN,
+        isSynthetic: 1,
+        origin: "salon_created",
+        archivedAt: null,
+        telegramChatId: null,
+      }],
+      [{ expiresAt }],
+      [{ botUsername: "manicbot" }],
+    ]);
+    const caller = salonCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+    const result = await caller.getMasterPairingState({ tenantId: TENANT, masterChatId: MASTER_SYN });
+    expect(result.hasActiveCode).toBe(true);
+    expect(result.activeCodeExpiresAt).toBe(expiresAt);
+  });
+
+  it("returns botUsername=null when the tenant has no active bot", async () => {
+    const dbMock = createDbMock([
+      [{
+        chatId: MASTER_SYN,
+        isSynthetic: 1,
+        origin: "salon_created",
+        archivedAt: null,
+        telegramChatId: null,
+      }],
+      [],
+      [], // no bot
+    ]);
+    const caller = salonCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+    const result = await caller.getMasterPairingState({ tenantId: TENANT, masterChatId: MASTER_SYN });
+    expect(result.botUsername).toBeNull();
+  });
+
+  it("surfaces archived=true when archivedAt is set (UI dims out actions)", async () => {
+    const dbMock = createDbMock([
+      [{
+        chatId: MASTER_SYN,
+        isSynthetic: 1,
+        origin: "salon_created",
+        archivedAt: 1234567890,
+        telegramChatId: null,
+      }],
+      [],
+      [{ botUsername: "manicbot" }],
+    ]);
+    const caller = salonCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+    const result = await caller.getMasterPairingState({ tenantId: TENANT, masterChatId: MASTER_SYN });
+    expect(result.archived).toBe(true);
+  });
+});

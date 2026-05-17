@@ -94,6 +94,12 @@ id = "62a7d16805e742918a82184e879537cc"
 binding = "DB"
 database_name = "manicbot-db"
 database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
+# Pin the migrations directory so CI (and local `wrangler d1 migrations apply`)
+# always resolves the same path regardless of the working directory. Wrangler
+# defaults to `migrations/` adjacent to wrangler.toml, but making it explicit
+# avoids the "0074 sat in repo but not in prod" failure mode we hit on
+# 2026-05-17 — see deploy.yml "Apply D1 migrations" step.
+migrations_dir = "migrations"
 
 # ─── R2 object storage for salon branding assets ─────────────────────────────
 # Powers /upload/asset (POST, signed token) + /cdn/<key> (GET, public read-through

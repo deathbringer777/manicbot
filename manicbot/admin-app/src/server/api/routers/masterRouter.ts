@@ -9,6 +9,7 @@ import {
   masterClientBlocks,
   bots,
   masterPairingCodes,
+  webUsers,
 } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray, isNull, gt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -19,6 +20,10 @@ import {
   buildDeepLink,
   PAIRING_TOKEN_TTL_SEC,
 } from "~/server/api/masterPairing/tokenLogic";
+import { decryptMasterPassword } from "~/server/security/masterPasswordVault";
+import { writeAudit, ctxIp } from "~/server/security/audit";
+import { env } from "~/env";
+import { log } from "~/server/utils/logger";
 
 /** Assert caller is master on a personal (independent) tenant — allows service/config management */
 async function assertPersonalMaster(ctx: any, tenantId: string) {
@@ -380,6 +385,94 @@ export const masterRouter = createTRPCRouter({
       let portfolio: string[] = [];
       try { portfolio = m.portfolio ? JSON.parse(m.portfolio) : []; } catch { /* ignore */ }
       return { ...m, portfolio };
+    }),
+
+  /**
+   * Master-side "show my original password" — surface the salon-issued
+   * plaintext password to the master themselves. Owner-side peek lives in
+   * `salon.peekMasterPassword` (OTP-gated). This procedure is the inverse:
+   * the master inspects their OWN credential after they've logged in and
+   * verified their email, so they can keep a record of it for password-
+   * manager onboarding before rotating it via the standard change-password
+   * flow.
+   *
+   * Requirements:
+   *   1. Caller's web session resolves to a master row in this tenant
+   *      (assertCallerIsMaster — closes IDOR).
+   *   2. Account is salon-owned (origin='salon_created') AND has a
+   *      reversibly-encrypted password (web_users.password_encrypted IS NOT
+   *      NULL). Self-registered + invited masters own their own credentials
+   *      and never have a recoverable copy.
+   *   3. Email is verified — for synthetic *.salon.manicbot.local mailboxes
+   *      email_verified=1 is set at creation time, so the master sees the
+   *      button immediately. Real-email overrides must verify first.
+   *   4. BOT_ENCRYPTION_KEY is configured on Pages — without it,
+   *      decryptMasterPassword returns null and we surface
+   *      `password_not_vaulted` instead of a 500.
+   *
+   * Audit: every successful peek lands in `audit_log` with action
+   * `tenant.master.password.peek_self` and the caller's email. No OTP
+   * (the master already authenticated to the web session).
+   */
+  peekMyOriginalPassword: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      if (!ctx.webUser?.id) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // Resolve the master row + linked web user in one query for the
+      // origin / email-verified / encrypted-blob checks.
+      const [row] = await ctx.db
+        .select({
+          origin: masters.origin,
+          webUserId: masters.webUserId,
+          email: webUsers.email,
+          emailVerified: webUsers.emailVerified,
+          passwordEncrypted: webUsers.passwordEncrypted,
+        })
+        .from(masters)
+        .leftJoin(webUsers, eq(webUsers.id, masters.webUserId))
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)))
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "master_not_found" });
+      if (row.origin !== "salon_created") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "not_owned_by_salon" });
+      }
+      if (!row.webUserId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "master_has_no_web_user" });
+      }
+      // Defense in depth: the master must be peeking their OWN row. Even
+      // though assertCallerIsMaster already pinned masterId→ctx.webUser.id,
+      // re-verify the web-user binding so a future refactor of the auth
+      // layer can't quietly widen the hole.
+      if (row.webUserId !== ctx.webUser.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot peek another master's password" });
+      }
+      if (!row.emailVerified) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "email_not_verified" });
+      }
+      const blob = row.passwordEncrypted;
+      if (!blob) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "password_not_vaulted" });
+      }
+      const plain = await decryptMasterPassword(blob, env.BOT_ENCRYPTION_KEY ?? null);
+      if (!plain) {
+        log.error(
+          "master.peekMyOriginalPassword",
+          new Error("decrypt_failed (BOT_ENCRYPTION_KEY mismatch or tampered blob)"),
+        );
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "password_not_vaulted" });
+      }
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser.email ?? null,
+        action: "tenant.master.password.peek_self",
+        tenantId: input.tenantId,
+        detail: `masterChatId=${input.masterId}`,
+        ip: ctxIp(ctx),
+      });
+
+      return { password: plain };
     }),
 
   updateProfile: masterProcedure

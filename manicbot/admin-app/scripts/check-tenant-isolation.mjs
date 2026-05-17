@@ -110,7 +110,7 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:1301 — bot_id collision check across tenants
+  // salon.ts:1449 — bot_id collision check across tenants
   // (intentional global lookup, cross-tenant by design). The procedure is
   // tenantOwnerProcedure-gated; this read confirms the bot isn't already
   // claimed by SOMEONE ELSE before we accept it. Line drift history: 883
@@ -128,8 +128,10 @@ const ALLOWLIST = new Set([
   // BOT_ENCRYPTION_KEY guard above this line from hard-throw to graceful
   // degradation, shrinking the block by 6 lines) → 1337 (#160 new
   // updateMasterAvatar mutations inserted above) → 1434 (#162 services
-  // export/import added ~97 lines above this query).
-  "src/server/api/routers/salon.ts:1434",
+  // export/import added ~97 lines above this query) → 1449
+  // (createMasterAccount atomic-batch refactor stacked ~150 lines of
+  // try/catch + cleanup above this line).
+  "src/server/api/routers/salon.ts:1449",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

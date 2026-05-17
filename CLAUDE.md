@@ -402,7 +402,7 @@ All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignForm
 | `auth`           | `routers/auth.ts`           | public (validates initData in ctx)                                                                              |
 | `webUsers`       | `routers/webUsers.ts`       | mixed: public (register, verify, reset) / protected (changePassword, requestEmailChange) / admin (create, list) |
 | `publicSalon`    | `routers/publicSalon.ts`    | public (salon directory: getProfile, search, getCities, autocomplete)                                           |
-| `salon`          | `routers/salon.ts`          | `tenant_owner` for tenantId (`assertTenantOwner`)                                                               |
+| `salon`          | `routers/salon.ts`          | `tenant_owner` for tenantId (`assertTenantOwner`). Owner-side master CRUD includes `updateMaster` (2026-05-17) which lets owners edit `name / tgUsername / bio / photo / vacationFrom / vacationUntil / onVacation` on masters they manage. Origin gating: `salon_created` → always editable; `invited_email` / `invited_telegram` → only when `masters.allow_delegation = 1`; `self_registered` → FORBIDDEN (master owns their own profile via `master.updateProfile`). Vacation rules mirror `master.setVacation` (both-or-neither, 2-year cap, `on_vacation` derived from now-in-range). |
 | `master`         | `routers/masterRouter.ts`   | `master` or `tenant_owner` for tenantId                                                                         |
 | `support`        | `routers/support.ts`        | platform staff: `support` / `technical_support` / `system_admin` (via `platform_roles`). PR1 (2026-05-17) added in-app notification fan-out: `replyToTicket` → `support.reply` to the ticket owner, `createTicket` + `replyToMyTicket` → `support.ticket.new` / `support.ticket.reply` to every support staff member except the creator. See Notification Center above. |
 | `channels`       | `routers/channels.ts`       | protected + `assertTenantOwner`                                                                                 |
@@ -484,6 +484,40 @@ The `dashPrefs.hiddenStatCards` preference field stays in
 toggles) but they no longer affect the dashboard. Cleaning that up is a
 follow-up; it's harmless because the stat grid is unconditionally gone
 from `SalonDashboard.tsx`.
+
+
+### Masters tab row → MasterDetailModal (2026-05-17)
+
+Owner UX parity with the Clients tab. Previously the master row in
+`/dashboard?tab=masters` carried only two inline icons — "hide from
+public profile" (eye) and "delete" (trash) — and there was no way to
+edit `name / tg handle / bio / photo / vacation` from the owner side.
+Independent + invited masters update their profiles through
+`master.updateProfile`, but accounts created via "Создать аккаунт через
+web" (`origin = 'salon_created'`) had no owner-side editor at all.
+
+The fix mirrors `ClientRow` → `ClientDetailModal`:
+
+- **Row is now a `<button>`** ([SalonDashboard.tsx](manicbot/admin-app/src/components/dashboards/SalonDashboard.tsx)) — click opens
+  [MasterDetailModal.tsx](manicbot/admin-app/src/components/salon/tabs/masters/MasterDetailModal.tsx). Inline eye + trash
+  icons removed; all actions live inside the modal.
+- **Top-right header buttons removed** ("Добавить через Telegram" /
+  "Создать аккаунт") — they were a transition-period duplicate of the
+  bottom-right `AddMasterFab` which already covers all three add-flows
+  (`create_account` / `add_telegram` / `invite_email`).
+- **Backend mutation** `salon.updateMaster` (see Router table above)
+  with origin gating — `salon_created` always editable, `invited_*`
+  only when `allowDelegation = 1`, `self_registered` rejected. Vacation
+  validation mirrors `master.setVacation`.
+- **`salon.getMasterDetail`** extended to return `vacationFrom`,
+  `vacationUntil`, `onVacation`, `allowDelegation` so the modal can
+  hydrate the edit form and decide whether to show the lock notice.
+- **Modal stacking contract (0062)** — pinned in
+  `src/__tests__/modal-styling-regression.test.ts` (the
+  `MasterDetailModal` path was added to `MODAL_FILES`).
+- **Tests** — `src/__tests__/salon-update-master.test.ts` (17 cases:
+  6 origin/delegation, 2 authorization, 7 vacation, 2 sanitization +
+  no-op).
 
 
 ### Appointment status transitions (Day-view detail panel — 2026-05-16)

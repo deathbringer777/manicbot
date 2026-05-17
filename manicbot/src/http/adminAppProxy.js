@@ -9,6 +9,11 @@ export function isAdminAppPath(pathname) {
   // NOTE: '/' is intentionally NOT proxied to admin-app — root serves the landing page.
   // Worker-handled Stripe routes must NOT be proxied to Pages.
   if (pathname === '/stripe/webhook' || pathname === '/stripe/success') return false;
+  // Admin-app static assets at root that would otherwise be claimed by
+  // isLandingPath's `*.png` regex. Without this the WebShell sidebar img +
+  // metadata.icons return the landing SPA fallback (HTML) instead of the PNG,
+  // and Chrome renders the broken-image placeholder with the alt text.
+  if (pathname === '/manicbot-mark-ui.png') return true;
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
   if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
   if (pathname === '/forgot-password' || pathname === '/reset-password') return true;

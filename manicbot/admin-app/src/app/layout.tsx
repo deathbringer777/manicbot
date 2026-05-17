@@ -15,7 +15,11 @@ import { SITE_URL, SITE_NAME } from "~/lib/seo";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — rezerwacje online dla salonów paznokci przez Telegram`,
+    // Neutral default — applies to every admin-app route that doesn't set its
+    // own title (/dashboard, /settings, /plugins, etc.). The marketing tagline
+    // ("rezerwacje online…") is set by the landing site (separate Vite repo)
+    // on `/`, so it doesn't need to live here as a fallback.
+    default: SITE_NAME,
     template: `%s — ${SITE_NAME}`,
   },
   description:

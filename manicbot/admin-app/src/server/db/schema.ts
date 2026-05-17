@@ -1463,3 +1463,55 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
   uniqueIndex("uq_push_sub_user_endpoint").on(t.webUserId, t.endpoint),
   index("idx_push_sub_user").on(t.webUserId),
 ]);
+
+// ─── Platform messenger (migration 0076) ────────────────────────────────
+// Cross-tenant DM channel between the platform (any system_admin) and a
+// single web_user (typically a tenant_owner). Intentionally separate from
+// the 0067 `threads` family — those are tenant-scoped (tenant_id NOT NULL)
+// and reusing them would weaken the tenant-isolation invariant the
+// codebase relies on. Read state is two per-thread pointers; broadcasts
+// are recorded once in `platform_broadcasts` and fan out via a
+// `broadcast_id` stamp on every emitted message.
+export const platformThreads = sqliteTable("platform_threads", {
+  id: text("id").primaryKey(),
+  recipientWebUserId: text("recipient_web_user_id").notNull(),
+  recipientTenantId: text("recipient_tenant_id"),
+  lastMessageAt: integer("last_message_at"),
+  lastMessagePreview: text("last_message_preview"),
+  lastSenderKind: text("last_sender_kind"),
+  recipientLastReadAt: integer("recipient_last_read_at"),
+  platformLastReadAt: integer("platform_last_read_at"),
+  archived: integer("archived").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_platform_threads_recipient").on(t.recipientWebUserId),
+  index("idx_platform_threads_last").on(t.lastMessageAt),
+  index("idx_platform_threads_archived").on(t.archived, t.lastMessageAt),
+]);
+
+export const platformThreadMessages = sqliteTable("platform_thread_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull().references(() => platformThreads.id, { onDelete: "cascade" }),
+  senderKind: text("sender_kind").notNull(),
+  senderWebUserId: text("sender_web_user_id").notNull(),
+  body: text("body").notNull(),
+  attachmentsJson: text("attachments_json"),
+  broadcastId: text("broadcast_id"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_ptm_thread_id").on(t.threadId, t.id),
+  index("idx_ptm_thread_created").on(t.threadId, t.createdAt),
+  index("idx_ptm_broadcast").on(t.broadcastId),
+]);
+
+export const platformBroadcasts = sqliteTable("platform_broadcasts", {
+  id: text("id").primaryKey(),
+  senderWebUserId: text("sender_web_user_id").notNull(),
+  title: text("title"),
+  body: text("body").notNull(),
+  audienceFilterJson: text("audience_filter_json").notNull(),
+  recipientsCount: integer("recipients_count").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_platform_broadcasts_created").on(t.createdAt),
+]);

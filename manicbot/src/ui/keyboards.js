@@ -1,5 +1,5 @@
 import { CB } from '../config.js';
-import { t, p2 } from '../utils/helpers.js';
+import { t, p2, fmtEmoji } from '../utils/helpers.js';
 import { todayStr, warsawNow } from '../utils/date.js';
 import { canUse } from '../billing/features.js';
 
@@ -69,7 +69,7 @@ export function svcKb(ctx, lg, page = 0) {
     const p = Math.max(0, Math.min(page, totalPages - 1));
     const slice = all.slice(p * IG_SVC_PAGE_SIZE, (p + 1) * IG_SVC_PAGE_SIZE);
     const rows = slice.map(s => [{
-      text: `${s.e} ${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
+      text: `${fmtEmoji(s.e)}${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
       callback_data: CB.SERVICE + s.id,
     }]);
     const nav = [];
@@ -81,7 +81,7 @@ export function svcKb(ctx, lg, page = 0) {
   }
 
   const rows = all.map(s => [{
-    text: `${s.e} ${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
+    text: `${fmtEmoji(s.e)}${t(lg, 'svc_' + s.id)} — ${s.price} ${t(lg, 'cur')}`,
     callback_data: CB.SERVICE + s.id,
   }]);
   rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
@@ -130,7 +130,7 @@ export function timeKb(slots, lg) {
 
 export function catListKb(ctx, lg) {
   const rows = ctx.svc.filter(s => s.active !== false && s.hidden !== true).map(s => [{
-    text: `${s.e} ${t(lg, 'svc_' + s.id)}`,
+    text: `${fmtEmoji(s.e)}${t(lg, 'svc_' + s.id)}`,
     callback_data: CB.CAT_PHOTO + s.id + ':0',
   }]);
   rows.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);

@@ -1,6 +1,6 @@
 import { send, sendPhoto, edit } from '../telegram.js';
 import { getTenantSupportAgents } from '../roles/roles.js';
-import { escHtml, fill, t, p2, svcName } from '../utils/helpers.js';
+import { escHtml, fill, t, p2, svcName, fmtEmoji } from '../utils/helpers.js';
 import { fmtDT, fmtDate } from '../utils/date.js';
 import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
@@ -60,8 +60,8 @@ export async function showServicesList(ctx, cid) {
   for (const s of ctx.svc.filter(x => x.hidden !== true)) {
     const status = s.active !== false ? '✅' : '❌';
     const name = s.names?.[lg] || s.names?.ru || s.id;
-    txt += `${status} ${s.e} <b>${escHtml(name)}</b> — ${s.price} ${t(lg, 'cur')} · ${s.dur} ${t(lg, 'min')}\n`;
-    btns.push([{ text: `✏️ ${s.e} ${name}`, callback_data: CB.SVC_EDIT + s.id }]);
+    txt += `${status} ${fmtEmoji(s.e)}<b>${escHtml(name)}</b> — ${s.price} ${t(lg, 'cur')} · ${s.dur} ${t(lg, 'min')}\n`;
+    btns.push([{ text: `✏️ ${fmtEmoji(s.e)}${name}`, callback_data: CB.SVC_EDIT + s.id }]);
   }
   btns.push([{ text: t(lg, 'svc_add'), callback_data: CB.SVC_ADD }]);
   btns.push([{ text: backToAdmLabel(ctx, lg), callback_data: CB.ADM_MAIN }]);
@@ -321,7 +321,7 @@ export async function showAdminAllApts(ctx, cid, filterMasterId = null) {
     if (!sv) continue;
     const st = aptStatusIcon(a.status);
     const masterName = a.masterId ? escHtml(masterMap.get(a.masterId)?.name || String(a.masterId)) : t(lg, 'adm_apt_unassigned');
-    txt += `${st} <b>${a.time}</b> — ${sv.e} ${svcName(ctx, lg, a.svcId)}\n`;
+    txt += `${st} <b>${a.time}</b> — ${svcName(ctx, lg, a.svcId)}\n`;
     txt += `👤 ${escHtml(a.userName)} · 👩‍🎨 ${masterName}\n`;
     const row = [{ text: `❌ ${a.time} ${escHtml(a.userName)}`, callback_data: CB.ADM_CANCEL_APT + a.id }];
     if (!a.masterId && masters.length) {

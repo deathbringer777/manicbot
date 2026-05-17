@@ -1126,22 +1126,16 @@ export const salonRouter = createTRPCRouter({
 
       const passwordHash = await hashPassword(password);
       // 0065: salon-owned accounts also keep a reversibly-encrypted copy of
-      // the plaintext so the owner can peek/reset via OTP. Fail closed if
-      // BOT_ENCRYPTION_KEY is unset — refusing to create rather than storing
-      // half the data the salon needs to manage the account.
+      // the plaintext so the owner can peek/reset via OTP.
+      // Degrade gracefully if BOT_ENCRYPTION_KEY is unset — account is created
+      // without the encrypted copy; peek/reset-password features will be
+      // unavailable until the key is configured on Pages.
       const passwordEncrypted = await encryptMasterPassword(password, env.BOT_ENCRYPTION_KEY ?? null);
       if (!passwordEncrypted) {
         log.error(
           "salon.createMasterAccount",
-          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — cannot encrypt master password"),
+          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — password_encrypted will be NULL. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app`"),
         );
-        // PRECONDITION_FAILED instead of INTERNAL_SERVER_ERROR so the message
-        // survives the error formatter (trpc.ts:55) and the operator sees the
-        // actual cause in the UI instead of a generic "Internal server error".
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Server config error: BOT_ENCRYPTION_KEY is not set on Pages. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app` (must match the Worker value).",
-        });
       }
       const id = crypto.randomUUID();
       const now = Math.floor(Date.now() / 1000);
@@ -2317,12 +2311,8 @@ export const salonRouter = createTRPCRouter({
       if (!passwordEncrypted) {
         log.error(
           "salon.resetMasterPassword",
-          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — cannot encrypt new password"),
+          new Error("BOT_ENCRYPTION_KEY missing or <32 chars on Pages env — password_encrypted will be NULL. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app`"),
         );
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Server config error: BOT_ENCRYPTION_KEY is not set on Pages. Set it via `wrangler pages secret put BOT_ENCRYPTION_KEY --project-name admin-app` (must match the Worker value).",
-        });
       }
       const now = Math.floor(Date.now() / 1000);
       await ctx.db

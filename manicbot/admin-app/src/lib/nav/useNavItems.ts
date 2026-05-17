@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Puzzle, type LucideIcon } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
-import { useDashboardPrefs, BOTTOM_NAV_LIMIT } from "~/lib/useDashboardPrefs";
+import { useDashboardPrefs, BOTTOM_NAV_LIMIT, applyTabPrefs } from "~/lib/useDashboardPrefs";
 import { api } from "~/trpc/react";
 import { getPlugin } from "@plugins/index";
 import type { PluginLang, PluginRole } from "@plugins/types";
@@ -132,7 +132,37 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
         items: combined.filter(r => (r as { _group?: string })._group === g.id).map(({ _group, ...item }) => item),
       })).filter(g => g.items.length > 0);
     } else {
-      groups = [{ id: "main", label: "", items: combined.map(({ _group, ...item }) => item) }];
+      // Apply user-defined pin / drag-reorder prefs. The sidebar `tab` id is
+      // either parsed from the `?tab=` href fragment or the plugin nav-contrib
+      // id. Plugins item is always pinned to the bottom — pinned plugins live
+      // in PinnedNavSection at the very end of the sidebar (under it), per
+      // user spec ("плагины всегда внизу + dropdown of pinned plugins below").
+      const idOf = (item: { href: string }) => {
+        const idx = item.href.indexOf("?tab=");
+        if (idx !== -1) return item.href.slice(idx + 5);
+        if (item.href === "/plugins") return "__plugins__";
+        if (item.href === "/dashboard") return "overview";
+        if (item.href === "/marketing") return "marketing";
+        return item.href.replace(/^\//, "");
+      };
+      const itemMap = new Map(combined.map((item) => [idOf(item), item]));
+      const orderedIds = applyTabPrefs(
+        Array.from(itemMap.keys()).filter((id) => id !== "__plugins__"),
+        {
+          tabOrder: dashPrefs.tabOrder,
+          pinnedTabs: dashPrefs.pinnedTabs,
+          // hiddenTabs already filtered upstream, but pass empty so we don't double-filter
+          hiddenTabs: [],
+        },
+        { applyHidden: false, alwaysVisible: ["overview"] },
+      );
+      // Plugins always at the bottom (per user spec)
+      const ordered = orderedIds
+        .map((id) => itemMap.get(id))
+        .filter((x): x is NonNullable<typeof x> => !!x);
+      const pluginsItem = itemMap.get("__plugins__");
+      if (pluginsItem) ordered.push(pluginsItem);
+      groups = [{ id: "main", label: "", items: ordered.map(({ _group, ...item }) => item) }];
     }
 
     const flat = groups.flatMap(g => g.items);
@@ -181,6 +211,8 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
     isPersonalTenant,
     lang,
     dashPrefs.hiddenTabs,
+    dashPrefs.tabOrder,
+    dashPrefs.pinnedTabs,
     dashPrefs.bottomNavOrder,
     dashPrefs.bottomNavLayout,
     installedQ.data,

@@ -26,6 +26,10 @@ import {
   masterInviteEmailText,
   supportReplyEmailHtml,
   supportReplyEmailText,
+  ownershipTransferRequestEmailHtml,
+  ownershipTransferCompletedOldOwnerEmailHtml,
+  ownershipTransferCompletedNewOwnerEmailHtml,
+  getOwnershipCopy,
   getEmailCopy,
   getPermissionElevationCopy,
 } from "./templates";
@@ -319,6 +323,53 @@ export async function sendSupportReplyEmail(
     subject: copy.supportReply.subject,
     html: supportReplyEmailHtml(options, lang),
     text: supportReplyEmailText(options, lang),
+  });
+}
+
+/* ── Ownership transfer ───────────────────────────────────────────────────── */
+
+export async function sendOwnershipTransferRequestEmail(opts: {
+  to: string;
+  fromName: string;
+  toName: string;
+  toEmail: string;
+  tenantName: string;
+  confirmUrl: string;
+  lang: Lang;
+}): Promise<SendEmailResult> {
+  const c = getOwnershipCopy(opts.lang).request;
+  return sendResendEmail({
+    to: opts.to,
+    subject: c.subject,
+    html: ownershipTransferRequestEmailHtml(opts),
+  });
+}
+
+export async function sendOwnershipTransferCompletedToOldOwnerEmail(opts: {
+  to: string;
+  newOwnerName: string;
+  tenantName: string;
+  lang: Lang;
+}): Promise<SendEmailResult> {
+  const c = getOwnershipCopy(opts.lang).oldOwner;
+  return sendResendEmail({
+    to: opts.to,
+    subject: c.subject,
+    html: ownershipTransferCompletedOldOwnerEmailHtml(opts),
+  });
+}
+
+export async function sendOwnershipTransferCompletedToNewOwnerEmail(opts: {
+  to: string;
+  oldOwnerName: string;
+  tenantName: string;
+  lang: Lang;
+}): Promise<SendEmailResult> {
+  const c = getOwnershipCopy(opts.lang).newOwner;
+  return sendResendEmail({
+    to: opts.to,
+    subject: c.subject,
+    html: ownershipTransferCompletedNewOwnerEmailHtml(opts),
   });
 }
 

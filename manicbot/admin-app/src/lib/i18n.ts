@@ -164,6 +164,7 @@ const translations = {
   "settings.overviewWidgetsDesc": { ru: "Что показывать на главном экране",  ua: "Що показувати на головному екрані",  en: "What to show on the main screen", pl: "Co pokazywać na ekranie głównym" },
   "settings.defaultTab":          { ru: "Какая вкладка открывается при входе", ua: "Яка вкладка відкривається при вході", en: "Which tab opens when you sign in", pl: "Która zakładka otwiera się po zalogowaniu" },
   "settings.defaultTabDesc":      { ru: "Когда зайдёшь в кабинет — сразу попадёшь сюда. Можно поменять в любой момент.", ua: "Коли зайдеш у кабінет — одразу потрапиш сюди. Можна змінити будь-коли.", en: "When you sign in, this is the page you land on. Change it any time.", pl: "Po zalogowaniu od razu wylądujesz na tej zakładce. Możesz to zmienić w każdej chwili." },
+  "settings.defaultTabNotSelected": { ru: "Не выбрано",                         ua: "Не вибрано",                         en: "Not selected",                  pl: "Nie wybrano" },
   "settings.todayAptsList":       { ru: "Записи на сегодня",                 ua: "Записи на сьогодні",                 en: "Today's appointments",          pl: "Wizyty na dziś" },
   "settings.alwaysVisible":       { ru: "Всегда видим",                      ua: "Завжди видимий",                     en: "Always visible",                pl: "Zawsze widoczny" },
   "settings.bottomNav":           { ru: "Нижняя навигация (мобильная)",      ua: "Нижня навігація (мобільна)",         en: "Bottom navigation (mobile)",   pl: "Dolna nawigacja (mobilna)" },

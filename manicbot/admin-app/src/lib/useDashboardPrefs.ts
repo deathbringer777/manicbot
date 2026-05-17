@@ -37,7 +37,7 @@ function storageKey(tenantId?: string | null): string {
 const DEFAULTS: DashboardPrefs = {
   hiddenTabs: [],
   showTodayApts: true,
-  defaultTab: "overview",
+  defaultTab: "",
   bottomNavOrder: [],
   bottomNavLayout: "default",
 };
@@ -80,8 +80,8 @@ export function useDashboardPrefs() {
       const hidden = prev.hiddenTabs.includes(tab)
         ? prev.hiddenTabs.filter((t) => t !== tab)
         : [...prev.hiddenTabs, tab];
-      // If hiding the default tab, reset default to overview
-      const defaultTab = hidden.includes(prev.defaultTab) ? "overview" : prev.defaultTab;
+      // If hiding the default tab, reset default to "not selected"
+      const defaultTab = hidden.includes(prev.defaultTab) ? "" : prev.defaultTab;
       const next = { ...prev, hiddenTabs: hidden, defaultTab };
       save(next, tenantId);
       return next;

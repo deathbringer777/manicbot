@@ -261,11 +261,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           {/* Logo — clickable */}
           <div className={`relative flex items-center gap-3 h-[60px] border-b border-[#e5e7eb] dark:border-white/[0.06] ${collapsed ? "px-4 justify-center" : "px-4"}`}>
             <Link href="/dashboard" className="flex items-center gap-2.5 flex-1 min-w-0">
-              <img
-                src="/manicbot-mark-ui.png"
-                alt="ManicBot"
-                className="h-8 w-8 rounded-lg shrink-0"
-              />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a2e] dark:bg-white shrink-0">
+                <span className="text-base leading-none select-none" role="img" aria-label="ManicBot">💅</span>
+              </div>
               {!collapsed && (
                 <div className="min-w-0 flex-1">
                   <h1 className="text-[13px] font-bold text-[#1a1a2e] dark:text-white tracking-tight truncate">{roleInfo.title}</h1>
@@ -320,11 +318,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               {/* Header — clickable logo */}
               <div className="flex items-center justify-between h-[60px] px-4 border-b border-[#e5e7eb] dark:border-white/[0.06]">
                 <Link href="/dashboard" onClick={() => setSidebarOpen(false)} className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <img
-                    src="/manicbot-mark-ui.png"
-                    alt="ManicBot"
-                    className="h-8 w-8 rounded-lg shrink-0"
-                  />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a2e] dark:bg-white shrink-0">
+                    <span className="text-base leading-none select-none" role="img" aria-label="ManicBot">💅</span>
+                  </div>
                   <div className="min-w-0">
                     <h1 className="text-[13px] font-bold text-[#1a1a2e] dark:text-white truncate">{roleInfo.title}</h1>
                     <p className="text-[10px] text-[#9ca3af] dark:text-slate-500 truncate">{roleInfo.subtitle}</p>
@@ -384,11 +380,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             </button>
             {/* Mobile logo + title */}
             <div className="lg:hidden flex items-center gap-2 min-w-0 flex-1">
-              <img
-                src="/manicbot-mark-ui.png"
-                alt="ManicBot"
-                className="h-7 w-7 rounded-lg shrink-0"
-              />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#1a1a2e] dark:bg-white shrink-0">
+                <span className="text-sm leading-none select-none" role="img" aria-label="ManicBot">💅</span>
+              </div>
               <span className="text-[13px] font-bold text-[#1a1a2e] dark:text-white truncate">{pageTitle}</span>
             </div>
             {/* Desktop: page title */}

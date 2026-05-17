@@ -242,7 +242,13 @@ Platform-wide in-app feed driving the header bell + a full-history view at `/not
 
   All three are fire-and-forget — a notification-write failure never blocks the underlying support mutation. Pinned by `src/__tests__/support-notifications.test.ts`.
 
-**Notification kind taxonomy:** `<domain>.<event>` slugs. Current set: `reminder.fired`, `support.reply`, `support.ticket.new`, `support.ticket.reply`. PR2 adds `birthday.*`, `appointment.*`, `billing.*`, `marketing.*` and the `/notifications` page already styles them via the `kindIcon` / `kindAccent` helpers.
+**Notification kind taxonomy:** `<domain>.<event>` slugs. Current set: `reminder.fired`, `support.reply`, `support.ticket.new`, `support.ticket.reply`, `appointment.created`, `appointment.confirmed`, `birthday.client`. Single source for icon + accent: `lib/notifications/kindMeta.ts` (exports `kindMeta`, `formatRelative`, `timeBucket`, `bellGroup` — the bell dropdown and `/notifications` both import from here so the two surfaces cannot drift). New writer = new kind slug; UI updates automatically.
+
+**PR 2 (2026-05-17) — VK/FB-style redesign + first cron writers:**
+- `NotificationBell` redesigned: per-kind icon + accent colour, relative time per row, «Новые / Ранее» group split (24h boundary), «Все / Непрочитанные» tabs driving the server-side `unreadOnly` filter, wider panel (22 rem mobile / 26 rem desktop). Pinned by `src/__tests__/notification-bell-redesign.test.ts`.
+- `src/notifications.js` (`notifyAptStaff` + `notifyAptStaffAutoConfirmed`) now also writes a `user_notifications` row for the assigned non-synthetic master AND the tenant owner — kind `appointment.created` / `appointment.confirmed`. Synthetic personal-master rows (`is_synthetic = 1`) are skipped by design. `sourceId` = `${apt.id}:${kind}` so different lifecycle events don't collapse, same-event retries do.
+- `src/handlers/cron.js` `processBirthdayAndReturningPromos` now fires `birthday.client` to the tenant owner alongside the existing client-facing Telegram promo. `sourceId` = `bday:${chatId}:${year}` so the 15-min cron cadence collapses to one row per year per client.
+- Worker writer pin: `test/notification-writers-pr2.test.js`.
 
 ---
 

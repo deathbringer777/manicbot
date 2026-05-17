@@ -13,66 +13,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
-  Cake,
-  Calendar,
   CheckCheck,
-  CreditCard,
   Inbox,
-  LifeBuoy,
   Loader2,
-  MessageCircle,
-  Star,
   Trash2,
 } from "lucide-react";
 import { api } from "~/trpc/react";
-
-type NotifKind = string;
-
-function kindIcon(kind: NotifKind) {
-  if (kind.startsWith("support.")) return LifeBuoy;
-  if (kind.startsWith("appointment.")) return Calendar;
-  if (kind.startsWith("birthday.")) return Cake;
-  if (kind.startsWith("billing.")) return CreditCard;
-  if (kind.startsWith("marketing.")) return Star;
-  if (kind.startsWith("messenger.") || kind.startsWith("thread.")) return MessageCircle;
-  return Bell;
-}
-
-function kindAccent(kind: NotifKind): string {
-  if (kind.startsWith("support.")) return "text-emerald-500 bg-emerald-500/10";
-  if (kind.startsWith("appointment.")) return "text-sky-500 bg-sky-500/10";
-  if (kind.startsWith("birthday.")) return "text-pink-500 bg-pink-500/10";
-  if (kind.startsWith("billing.")) return "text-amber-500 bg-amber-500/10";
-  if (kind.startsWith("marketing.")) return "text-violet-500 bg-violet-500/10";
-  if (kind.startsWith("messenger.") || kind.startsWith("thread.")) return "text-indigo-500 bg-indigo-500/10";
-  return "text-slate-500 bg-slate-500/10";
-}
-
-function formatRelative(unix: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = Math.max(0, now - unix);
-  if (diff < 60) return "только что";
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч`;
-  const days = Math.floor(diff / 86400);
-  if (days < 7) return `${days} д`;
-  if (days < 30) return `${Math.floor(days / 7)} нед`;
-  return new Date(unix * 1000).toLocaleDateString("ru-RU");
-}
-
-function bucketLabel(unix: number): "today" | "week" | "older" {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - unix;
-  if (diff < 86400) return "today";
-  if (diff < 7 * 86400) return "week";
-  return "older";
-}
-
-const BUCKET_TITLE: Record<"today" | "week" | "older", string> = {
-  today: "Сегодня",
-  week: "На этой неделе",
-  older: "Ранее",
-};
+import {
+  formatRelative,
+  kindMeta,
+  timeBucket,
+  TIME_BUCKET_TITLE,
+  type TimeBucket,
+} from "~/lib/notifications/kindMeta";
 
 export default function NotificationsClient() {
   const router = useRouter();
@@ -105,13 +58,13 @@ export default function NotificationsClient() {
 
   const grouped = useMemo(() => {
     const items = list.data ?? [];
-    const buckets: Record<"today" | "week" | "older", typeof items> = {
+    const buckets: Record<TimeBucket, typeof items> = {
       today: [],
       week: [],
       older: [],
     };
     for (const n of items) {
-      buckets[bucketLabel(n.createdAt)].push(n);
+      buckets[timeBucket(n.createdAt)].push(n);
     }
     return buckets;
   }, [list.data]);
@@ -203,12 +156,13 @@ export default function NotificationsClient() {
           return (
             <section key={bucket}>
               <h2 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2 px-1">
-                {BUCKET_TITLE[bucket]}
+                {TIME_BUCKET_TITLE[bucket]}
               </h2>
               <ul className="space-y-1.5">
                 {rows.map((n) => {
-                  const Icon = kindIcon(n.kind);
-                  const accent = kindAccent(n.kind);
+                  const meta = kindMeta(n.kind);
+                  const Icon = meta.icon;
+                  const accent = meta.accent;
                   const isUnread = n.readAt === null;
                   return (
                     <li

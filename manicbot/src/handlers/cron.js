@@ -36,6 +36,7 @@ import { isWithinMessageWindow } from './inbound.js';
 import { sendTemplateMessage, canSendTemplate, trackTemplateUsage, buildReminderComponents } from '../channels/whatsapp-templates.js';
 import { getChannelConfig } from '../channels/resolver.js';
 import { markReviewRequested } from '../services/reviews.js';
+import { notifyWebUser } from '../services/userNotify.js';
 import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manager.js';
 import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
@@ -1202,6 +1203,37 @@ async function processBirthdayAndReturningPromos(ctx, nowMs) {
           `🎉 С днём рождения${u.name ? `, ${u.name}` : ''}!\n\nДарим промокод на -20%: <b>${code}</b>\nДействует 30 дней.`,
           { parse_mode: 'HTML' },
         ).catch(() => {});
+      }
+
+      // PR2 of notification center upgrade: drop an in-app row for the
+      // tenant owner so they see "today is X's birthday" in their bell.
+      // Idempotency: sourceId = `bday:${chatId}:${year}` so re-runs of the
+      // cron in the same day collapse. Best-effort — bell-write failure
+      // never breaks the promo flow.
+      try {
+        const ownerRows = await dbAll(
+          ctx,
+          "SELECT id FROM web_users WHERE tenant_id = ? AND role = 'tenant_owner' LIMIT 1",
+          ctx.tenantId,
+        );
+        const ownerWebUserId = ownerRows?.[0]?.id;
+        if (ownerWebUserId) {
+          const displayName = u.name ? String(u.name).trim() : 'клиента';
+          await notifyWebUser(ctx, ownerWebUserId, {
+            kind: 'birthday.client',
+            title: `🎂 День рождения ${displayName}`,
+            body: `Сегодня. Выдан промокод -20% ${code}.`,
+            link: `/?tab=clients&q=${encodeURIComponent(displayName)}`,
+            sourceSlug: 'birthday',
+            sourceId: `bday:${u.chat_id}:${thisYear}`,
+            inapp: true,
+            telegram: false,
+          }).catch((e) =>
+            log.warn('handlers.cron', { action: 'birthday_notify_owner', error: e?.message?.slice(0, 200) }),
+          );
+        }
+      } catch (e) {
+        log.warn('handlers.cron', { action: 'birthday_notify_owner', error: e?.message?.slice(0, 200) });
       }
     }
   } catch (e) {

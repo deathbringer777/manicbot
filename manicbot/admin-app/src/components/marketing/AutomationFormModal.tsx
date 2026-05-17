@@ -14,11 +14,13 @@
  */
 
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { X, Plus, Sparkles } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { TemplateFormModal, type TemplateSeed } from "./TemplateFormModal";
+import { STARTER_TEMPLATES, getStarterForLocale } from "./templateStarterPack";
 
 const FIELD_BASE =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
@@ -79,6 +81,14 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
   const [templateId, setTemplateId] = useState<string>(initialStep.templateId ?? "");
   const [segmentId, setSegmentId] = useState<string>(initialStep.segmentId ?? "");
   const [err, setErr] = useState<string | null>(null);
+  /**
+   * Inline template-creation flow. When the user clicks "+ Создать шаблон"
+   * (or picks a starter card), we open TemplateFormModal layered on top —
+   * its onCreated callback auto-selects the new template here so the user
+   * doesn't have to come back through a dropdown.
+   */
+  const [tplModal, setTplModal] = useState<{ seed: TemplateSeed | null } | null>(null);
+  const [showStarterPack, setShowStarterPack] = useState(false);
 
   const adminTemplatesQ = api.marketing.templatesList.useQuery(
     { channel: "email" },
@@ -223,7 +233,60 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
               options={templates.map((tpl: any) => ({ value: tpl.id, label: tpl.name }))}
               testIdPrefix="auto-template"
             />
-            {templates.length === 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setTplModal({ seed: null })}
+                className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/20"
+                data-testid="auto-new-template"
+              >
+                <Plus className="h-3 w-3" />
+                {t("marketing.automation.form.newTemplate", lang)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowStarterPack((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
+                data-testid="auto-show-starter"
+              >
+                <Sparkles className="h-3 w-3" />
+                {t("marketing.automation.form.pickStarter", lang)}
+              </button>
+            </div>
+            {showStarterPack && (
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                {STARTER_TEMPLATES.filter((s) => s.channel === "email").map((card) => {
+                  const c = getStarterForLocale(card, lang);
+                  return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      onClick={() => {
+                        setTplModal({
+                          seed: {
+                            name: c.name,
+                            channel: "email",
+                            subject: c.subject,
+                            body: c.body,
+                            locale: lang,
+                          },
+                        });
+                        setShowStarterPack(false);
+                      }}
+                      className="flex flex-col items-start gap-0.5 rounded-md border border-slate-200 bg-white p-2 text-left transition hover:border-violet-300 hover:bg-violet-50/40 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-violet-400/40 dark:hover:bg-violet-500/5"
+                    >
+                      <span className="text-[11px] font-semibold text-slate-900 dark:text-slate-100">
+                        {c.title}
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {c.blurb}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {templates.length === 0 && !showStarterPack && (
               <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                 {t("marketing.campaign.form.noTemplates", lang)}
               </p>
@@ -269,6 +332,20 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
           </div>
         </form>
       </div>
+      {tplModal && (
+        <TemplateFormModal
+          scope={scope}
+          presetSeed={tplModal.seed}
+          onCreated={(id) => {
+            // Auto-select the freshly created template + refresh the
+            // dropdown options. The mutation already invalidated the
+            // templates query inside TemplateFormModal.
+            setTemplateId(id);
+          }}
+          onClose={() => setTplModal(null)}
+          onSaved={() => setTplModal(null)}
+        />
+      )}
     </div>
   );
 }

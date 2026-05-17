@@ -33,22 +33,44 @@ export interface TemplateInitial {
   locale?: string | null;
 }
 
+/**
+ * `presetSeed` pre-fills the create form (e.g. from the starter pack) but
+ * does NOT mark the modal as "edit". The user can tweak and Save creates a
+ * fresh row.
+ */
+export interface TemplateSeed {
+  name?: string;
+  channel?: "email" | "sms" | "whatsapp";
+  subject?: string;
+  body?: string;
+  locale?: string;
+}
+
 interface Props {
   scope: { mode: "admin" } | { mode: "tenant"; tenantId: string };
   initial?: TemplateInitial | null;
+  presetSeed?: TemplateSeed | null;
+  /**
+   * If provided, the created row's id is handed back through this callback
+   * before `onSaved` fires. The Automation modal uses this to auto-select
+   * a freshly created template.
+   */
+  onCreated?: (id: string) => void;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function TemplateFormModal({ scope, initial, onClose, onSaved }: Props) {
+export function TemplateFormModal({ scope, initial, presetSeed, onCreated, onClose, onSaved }: Props) {
   const { lang } = useLang();
   const isEdit = !!initial;
 
-  const [name, setName] = useState(initial?.name ?? "");
-  const [channel, setChannel] = useState<"email" | "sms" | "whatsapp">(initial?.channel ?? "email");
-  const [subject, setSubject] = useState(initial?.subject ?? "");
-  const [body, setBody] = useState(initial?.body ?? "");
-  const [locale, setLocale] = useState(initial?.locale ?? "ru");
+  const [name, setName] = useState(initial?.name ?? presetSeed?.name ?? "");
+  const [channel, setChannel] = useState<"email" | "sms" | "whatsapp">(
+    initial?.channel ?? presetSeed?.channel ?? "email",
+  );
+  const [subject, setSubject] = useState(initial?.subject ?? presetSeed?.subject ?? "");
+  const [body, setBody] = useState(initial?.body ?? presetSeed?.body ?? "");
+  const [locale, setLocale] = useState(initial?.locale ?? presetSeed?.locale ?? "ru");
   const [err, setErr] = useState<string | null>(null);
 
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
@@ -63,7 +85,7 @@ export function TemplateFormModal({ scope, initial, onClose, onSaved }: Props) {
   }
 
   const adminCreate = api.marketing.templateCreate.useMutation({
-    onSuccess: () => { invalidate(); onSaved(); onClose(); },
+    onSuccess: (r) => { invalidate(); onCreated?.(r.id); onSaved(); onClose(); },
     onError: (e) => setErr(e.message),
   });
   const adminUpdate = api.marketing.templateUpdate.useMutation({
@@ -71,7 +93,7 @@ export function TemplateFormModal({ scope, initial, onClose, onSaved }: Props) {
     onError: (e) => setErr(e.message),
   });
   const tenantCreate = api.marketingTenant.templateCreate.useMutation({
-    onSuccess: () => { invalidate(); onSaved(); onClose(); },
+    onSuccess: (r) => { invalidate(); onCreated?.(r.id); onSaved(); onClose(); },
     onError: (e) => setErr(e.message),
   });
   const tenantUpdate = api.marketingTenant.templateUpdate.useMutation({

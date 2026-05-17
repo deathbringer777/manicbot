@@ -757,6 +757,9 @@ CREATE TABLE IF NOT EXISTS marketing_segments (
   name TEXT NOT NULL,
   description TEXT,
   filter_json TEXT NOT NULL,
+  -- 0072: 'filter' (existing — evaluates filter_json) or 'manual' (members
+  -- live in marketing_segment_members). Brevo-style explicit lists.
+  kind TEXT NOT NULL DEFAULT 'filter',
   contact_count INTEGER NOT NULL DEFAULT 0,
   last_computed_at INTEGER,
   created_by INTEGER,
@@ -764,6 +767,17 @@ CREATE TABLE IF NOT EXISTS marketing_segments (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mkt_segments_tenant ON marketing_segments(tenant_id);
+
+-- 0072: explicit list membership for kind='manual' segments.
+CREATE TABLE IF NOT EXISTS marketing_segment_members (
+  segment_id TEXT NOT NULL,
+  contact_id INTEGER NOT NULL,
+  added_at INTEGER NOT NULL,
+  added_by TEXT,
+  PRIMARY KEY (segment_id, contact_id)
+);
+CREATE INDEX IF NOT EXISTS idx_msm_segment ON marketing_segment_members(segment_id);
+CREATE INDEX IF NOT EXISTS idx_msm_contact ON marketing_segment_members(contact_id);
 
 CREATE TABLE IF NOT EXISTS marketing_templates (
   id TEXT PRIMARY KEY,

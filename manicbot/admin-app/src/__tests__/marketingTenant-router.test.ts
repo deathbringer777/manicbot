@@ -192,6 +192,85 @@ describe("marketingTenantRouter.contactUpdate cross-tenant guard", () => {
   });
 });
 
+describe("marketingTenantRouter manual lists (0072)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("segmentCreate defaults `kind` to 'manual' (Brevo-style list)", async () => {
+    const { db, insertCalls } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await caller.segmentCreate({ tenantId: "t_a", name: "VIP", filterJson: "{}" });
+    expect(insertCalls.length).toBe(1);
+    expect(insertCalls[0]?.values.kind).toBe("manual");
+    expect(insertCalls[0]?.values.tenantId).toBe("t_a");
+  });
+
+  it("segmentCreate honours an explicit kind='filter'", async () => {
+    const { db, insertCalls } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await caller.segmentCreate({
+      tenantId: "t_a",
+      name: "Active 30d",
+      kind: "filter",
+      filterJson: JSON.stringify({ lastSeenWithinDays: 30 }),
+    });
+    expect(insertCalls[0]?.values.kind).toBe("filter");
+  });
+
+  it("segmentMembersList refuses a segment that belongs to another tenant", async () => {
+    const { db } = createDbMock([
+      [{ tenantId: "t_other", kind: "manual" }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.segmentMembersList({ tenantId: "t_a", segmentId: "seg_x" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("segmentAddContacts refuses a segment owned by another tenant", async () => {
+    const { db, insertCalls } = createDbMock([
+      [{ tenantId: "t_other" }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.segmentAddContacts({ tenantId: "t_a", segmentId: "seg_x", contactIds: [1, 2] }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    // The cross-tenant guard short-circuits BEFORE the membership INSERT,
+    // so no member rows leak across tenants.
+    expect(insertCalls.length).toBe(0);
+  });
+
+  it("segmentRemoveContacts refuses a segment owned by another tenant", async () => {
+    const { db, deleteCalls } = createDbMock([
+      [{ tenantId: "t_other" }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.segmentRemoveContacts({ tenantId: "t_a", segmentId: "seg_x", contactIds: [1] }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(deleteCalls.length).toBe(0);
+  });
+
+  it("segmentDelete cascades to member rows before dropping the segment", async () => {
+    const { db, deleteCalls } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await caller.segmentDelete({ tenantId: "t_a", id: "seg_x" });
+    // Two delete calls: one for marketing_segment_members, one for the
+    // segment row itself. Both must use .where(...).
+    expect(deleteCalls.length).toBe(2);
+    expect(deleteCalls.every((c) => c.whereCalled)).toBe(true);
+  });
+
+  it("segmentUpdate refuses to rename a segment from a different tenant", async () => {
+    const { db } = createDbMock([
+      [{ tenantId: "t_other" }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.segmentUpdate({ tenantId: "t_a", id: "seg_x", name: "renamed" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
 describe("marketingTenantRouter.templateUpdate / templateDelete cross-tenant guard", () => {
   beforeEach(() => vi.clearAllMocks());
 

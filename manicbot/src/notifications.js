@@ -10,6 +10,8 @@ import { makeICS, makeCalendarUrl } from './utils/ics.js';
 import { getAllPendingApts, updateApt } from './services/appointments.js';
 import { canUse } from './billing/features.js';
 import { syncAppointmentCalendar } from './services/google-calendar-oauth.js';
+import { notifyWebUser } from './services/userNotify.js';
+import { dbAll } from './utils/db.js';
 
 export async function notifyAptStaff(ctx, apt, user) {
   const adminId = await getAdminId(ctx);
@@ -58,6 +60,84 @@ export async function notifyAptStaff(ctx, apt, user) {
     })().catch(e => log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyAptStaff_send' })));
   }
   await Promise.allSettled(promises);
+
+  // PR2 of notification center upgrade: also drop an in-app row into
+  // user_notifications for every recipient that has a web_users row. The
+  // Telegram message above stays as the primary surface; the in-app row
+  // is the bell entry, useful for owners/masters who live in the web
+  // dashboard and don't have Telegram open. `telegram: false` because
+  // we already sent the rich Telegram above — no dup.
+  await dispatchAppointmentInApp(ctx, apt, user, 'appointment.created', 'Новая запись').catch((e) =>
+    log.error('notifications', e instanceof Error ? e : new Error(String(e?.message)), { action: 'notifyAptStaff_inapp' }),
+  );
+}
+
+/**
+ * Drop an in-app `user_notifications` row for every web-linked recipient
+ * of an appointment event (assigned master + tenant owner). Telegram
+ * fan-out is NOT done here — the regular `notifyAptStaff` /
+ * `notifyAptStaffAutoConfirmed` paths already cover Telegram.
+ *
+ * Resolves recipients via:
+ *   - `masters.web_user_id` (skips synthetic personal-master placeholders)
+ *   - `web_users WHERE tenant_id = ? AND role = 'tenant_owner'` (one row)
+ *
+ * Idempotency: sourceId = apt.id + ':' + kind so the same appointment can
+ * trigger multiple kinds (`appointment.created`, `appointment.confirmed`,
+ * future `appointment.reschedule`, `appointment.cancelled`) without
+ * collapsing.
+ */
+async function dispatchAppointmentInApp(ctx, apt, user, kind, titlePrefix) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  const targets = new Set();
+  try {
+    if (apt.masterId) {
+      // The assigned master — only when they have a non-synthetic web_users row.
+      const rows = await dbAll(
+        ctx,
+        'SELECT web_user_id FROM masters WHERE tenant_id = ? AND chat_id = ? AND is_synthetic = 0 LIMIT 1',
+        ctx.tenantId,
+        apt.masterId,
+      );
+      if (rows[0]?.web_user_id) targets.add(rows[0].web_user_id);
+    }
+    const ownerRows = await dbAll(
+      ctx,
+      "SELECT id FROM web_users WHERE tenant_id = ? AND role = 'tenant_owner' LIMIT 1",
+      ctx.tenantId,
+    );
+    if (ownerRows[0]?.id) targets.add(ownerRows[0].id);
+  } catch (e) {
+    log.warn('notifications', { action: 'dispatchAppointmentInApp.targets', error: e?.message?.slice(0, 200) });
+    return;
+  }
+  if (targets.size === 0) return;
+
+  const clientName = user?.name || apt.userName || 'Клиент';
+  const svc = svcName(ctx, 'ru', apt.svcId) || apt.svcId;
+  const when = fmtDT('ru', apt.date, apt.time);
+  const body = `${clientName} · ${svc} · ${when}`;
+  const link = `/?tab=appointments&apt=${encodeURIComponent(apt.id)}`;
+  const sourceId = `${apt.id}:${kind}`;
+
+  const calls = [];
+  for (const webUserId of targets) {
+    calls.push(
+      notifyWebUser(ctx, webUserId, {
+        kind,
+        title: titlePrefix,
+        body,
+        link,
+        sourceSlug: 'appointment',
+        sourceId,
+        inapp: true,
+        telegram: false,
+      }).catch((e) =>
+        log.warn('notifications', { action: 'dispatchAppointmentInApp.notify', error: e?.message?.slice(0, 200) }),
+      ),
+    );
+  }
+  await Promise.allSettled(calls);
 }
 
 /**
@@ -110,6 +190,11 @@ export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
     })().catch(e => log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyAptStaffAutoConfirmed_send' })));
   }
   await Promise.allSettled(promises);
+
+  // Mirror the Telegram fan-out into the bell for web-linked recipients.
+  await dispatchAppointmentInApp(ctx, apt, user, 'appointment.confirmed', 'Запись подтверждена').catch((e) =>
+    log.error('notifications', e instanceof Error ? e : new Error(String(e?.message)), { action: 'notifyAptStaffAutoConfirmed_inapp' }),
+  );
 }
 
 export async function sendAptConfirmedToClient(ctx, apt) {

@@ -18,12 +18,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Shell } from "~/components/layout/Shell";
 import {
-  Megaphone, Users, Mail, MessageSquare, Workflow, FileText,
+  Megaphone, Users, Mail, MessageSquare, Workflow, FileText, ArrowRight,
   type LucideIcon,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t, type TranslationKey } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
+import { useMarketingScope } from "./useMarketingScope";
 
 type SubNavItem = { href: string; icon: LucideIcon; labelKey: TranslationKey };
 
@@ -47,6 +48,13 @@ export function MarketingShell({
 }) {
   const pathname = usePathname();
   const { lang } = useLang();
+  // `mode: "admin"` means a sysadmin is on /marketing WITHOUT a tenant
+  // preview — i.e. they're seeing cross-tenant data on the salon-owner URL.
+  // PR 1 of the marketing roadmap added /system/marketing as the proper home
+  // for that view; we point them there with a banner instead of silently
+  // serving the data.
+  const scope = useMarketingScope();
+  const showSysadminBanner = scope.mode === "admin";
   const resolvedTitle = title ?? tNav("Marketing", lang);
   const resolvedSubtitle = subtitle ?? `${t("marketing.nav.contacts", lang)} · ${t("marketing.nav.campaigns", lang)} · ${t("marketing.nav.automations", lang)}`;
 
@@ -73,6 +81,24 @@ export function MarketingShell({
           );
         })}
       </div>
+      {showSysadminBanner && (
+        <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-bold text-amber-700 dark:text-amber-300">
+              Это салон-сторона маркетинга
+            </div>
+            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+              Платформенный CRM, кросс-тенантные кампании и воронка лидов — в Центре маркетинга.
+            </p>
+          </div>
+          <Link
+            href="/system/marketing"
+            className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-500/20 dark:text-amber-300 sm:self-auto"
+          >
+            Открыть Центр маркетинга <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
       {children}
     </Shell>
   );

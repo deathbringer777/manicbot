@@ -25,7 +25,7 @@ export interface ParsedServiceRow {
 }
 
 export interface ServiceRowError {
-  row: number;   // 0-indexed after header
+  row: number;   // line index from file start (header = 0, first data row = 1)
   reason: string;
 }
 
@@ -119,7 +119,7 @@ export function parseServicesCsv(csv: string): ServiceParseResult {
 
     // Validate name
     if (!raw.name) {
-      errors.push({ row: i - 1, reason: "Пустое название услуги" });
+      errors.push({ row: i, reason: "Пустое название услуги" });
       continue;
     }
 
@@ -127,7 +127,7 @@ export function parseServicesCsv(csv: string): ServiceParseResult {
     const priceStr = raw.price ?? "";
     const price = priceStr === "" ? null : parseFloat(priceStr);
     if (priceStr !== "" && (isNaN(price!) || price! < 0)) {
-      errors.push({ row: i - 1, reason: `Некорректная цена: "${priceStr}"` });
+      errors.push({ row: i, reason: `Некорректная цена: "${priceStr}"` });
       continue;
     }
 
@@ -135,7 +135,7 @@ export function parseServicesCsv(csv: string): ServiceParseResult {
     const durStr = raw.duration ?? "";
     const duration = durStr === "" ? null : parseInt(durStr, 10);
     if (durStr !== "" && (isNaN(duration!) || duration! <= 0)) {
-      errors.push({ row: i - 1, reason: `Некорректная длительность: "${durStr}"` });
+      errors.push({ row: i, reason: `Некорректная длительность: "${durStr}"` });
       continue;
     }
 

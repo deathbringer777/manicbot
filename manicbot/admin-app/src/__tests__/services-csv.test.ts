@@ -72,7 +72,7 @@ describe("parseServicesCsv", () => {
     const r = parseServicesCsv(csv);
     expect(r.rows).toHaveLength(2);
     expect(r.errors).toHaveLength(1);
-    expect(r.errors[0]!.row).toBe(2); // 0-indexed after header
+    expect(r.errors[0]!.row).toBe(2); // line index from file start (header=0, Good=1, Bad=2)
   });
 
   it("reports error on non-numeric duration but keeps other rows", () => {

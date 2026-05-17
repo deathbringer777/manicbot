@@ -169,6 +169,11 @@ CREATE TABLE IF NOT EXISTS masters (
   -- 0074: real Telegram chat_id for masters whose primary `chat_id` is a
   -- synthetic 10B+ identity. Bot's isMaster()/getMaster() match either column.
   telegram_chat_id INTEGER,
+  -- 0075: master avatar (emoji + photo). Mirrors the 0072 client avatar
+  -- pattern. Photo wins when avatar_url is set; else avatar_emoji; else '💅'.
+  avatar_emoji TEXT,
+  avatar_url TEXT,
+  avatar_r2_key TEXT,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_master_web_user_id ON masters(web_user_id);

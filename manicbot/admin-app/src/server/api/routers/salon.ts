@@ -853,7 +853,7 @@ export const salonRouter = createTRPCRouter({
   mintUploadToken: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
-      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar"]),
+      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar", "master_avatar"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -1061,6 +1061,36 @@ export const salonRouter = createTRPCRouter({
         detail: `chatId=${input.chatId}`,
         ip: ctxIp(ctx),
       });
+      return { success: true };
+    }),
+
+  /**
+   * Update the master avatar (emoji or uploaded photo URL).
+   *
+   * Intentionally NOT origin-gated: the avatar is the salon's visual label
+   * for the master on the public profile (same as `publicHidden`), not the
+   * master's personal profile data. Any tenant owner may update it.
+   *
+   * Rule: picking a photo clears avatarEmoji; picking an emoji clears
+   * avatarUrl. Passing both null resets to the default ('💅').
+   */
+  updateMasterAvatar: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatId: z.number(),
+      avatarEmoji: z.string().max(10).nullable(),
+      avatarUrl: z.string().max(2000).nullable(),
+      avatarR2Key: z.string().max(500).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db.update(masters)
+        .set({
+          avatarEmoji: input.avatarEmoji ?? null,
+          avatarUrl: input.avatarUrl ?? null,
+          avatarR2Key: input.avatarR2Key ?? null,
+        })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.chatId)));
       return { success: true };
     }),
 
@@ -2556,6 +2586,9 @@ export const salonRouter = createTRPCRouter({
           vacationUntil: masters.vacationUntil,
           onVacation: masters.onVacation,
           allowDelegation: masters.allowDelegation,
+          // 0075: avatar fields — read by MasterDetailModal header circle
+          avatarEmoji: masters.avatarEmoji,
+          avatarUrl: masters.avatarUrl,
           // Joined web_users fields (LEFT JOIN below via subquery — kept simple)
         })
         .from(masters)

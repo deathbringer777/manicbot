@@ -36,6 +36,8 @@ import {
 import { api, type RouterOutputs } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
+import { resolveMasterAvatarEmoji } from "~/lib/masterAvatar";
+import { MasterAvatarPicker } from "./MasterAvatarPicker";
 import { MasterTelegramInlineSection } from "./MasterTelegramInlineSection";
 
 type MasterDetail = RouterOutputs["salon"]["getMasterDetail"];
@@ -74,6 +76,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [avatarOpen, setAvatarOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -190,6 +193,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-4"
       onClick={onClose}
@@ -202,9 +206,24 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
       >
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-brand-500 text-base font-bold text-white ${isHidden ? "opacity-50" : ""}`}>
-              {(m.name ?? "?").charAt(0).toUpperCase()}
-            </div>
+            <button
+              type="button"
+              onClick={() => setAvatarOpen(true)}
+              aria-label={t("master.avatar.tooltip", lang)}
+              title={t("master.avatar.tooltip", lang)}
+              data-testid="master-detail-avatar-trigger"
+              className={`group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-purple-500/20 to-brand-500/20 text-2xl font-bold text-purple-400 ring-1 ring-purple-500/15 transition hover:ring-purple-500/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${isHidden ? "opacity-50" : ""}`}
+            >
+              {m.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span>{resolveMasterAvatarEmoji(m.avatarEmoji ?? null)}</span>
+              )}
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/55 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                {t("master.avatar.tabEmoji", lang)} / {t("master.avatar.tabPhoto", lang)}
+              </span>
+            </button>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 truncate">
@@ -302,6 +321,21 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
         )}
       </div>
     </div>
+
+    {avatarOpen && (
+      <MasterAvatarPicker
+        tenantId={tenantId}
+        chatId={chatId}
+        currentEmoji={m.avatarEmoji ?? null}
+        currentUrl={m.avatarUrl ?? null}
+        onClose={() => setAvatarOpen(false)}
+        onSaved={() => {
+          void utils.salon.getMasters.invalidate();
+          void utils.salon.getMasterDetail.invalidate({ tenantId, masterChatId: chatId });
+        }}
+      />
+    )}
+  </>
   );
 }
 

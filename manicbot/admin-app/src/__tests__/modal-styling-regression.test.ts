@@ -39,6 +39,8 @@ const MODAL_FILES = [
   "src/components/plugins/reminders/ReminderModal.tsx",
   // Master detail modal — owner-side edit (2026-05-17, parity with Clients tab)
   "src/components/salon/tabs/masters/MasterDetailModal.tsx",
+  // Master avatar picker — emoji + photo picker (0075)
+  "src/components/salon/tabs/masters/MasterAvatarPicker.tsx",
 ];
 
 function read(rel: string): string {

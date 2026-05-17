@@ -126,8 +126,10 @@ const ALLOWLIST = new Set([
   // line) → 1307 (self-invite guard imports from master-invitation
   // close-the-loop PR stacked on top) → 1301 (softened the
   // BOT_ENCRYPTION_KEY guard above this line from hard-throw to graceful
-  // degradation, shrinking the block by 6 lines).
-  "src/server/api/routers/salon.ts:1301",
+  // degradation, shrinking the block by 6 lines) → 1337 (#160 new
+  // updateMasterAvatar mutations inserted above) → 1434 (#162 services
+  // export/import added ~97 lines above this query).
+  "src/server/api/routers/salon.ts:1434",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

@@ -11,7 +11,7 @@
  * verifying the caller owns the tenant. Uses Web Crypto — edge-runtime safe.
  */
 
-export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo" | "client_avatar" | "chat_attachment";
+export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo" | "client_avatar" | "master_avatar" | "chat_attachment";
 
 const ALLOWED_KINDS: ReadonlySet<UploadKind> = new Set([
   "logo",
@@ -20,6 +20,7 @@ const ALLOWED_KINDS: ReadonlySet<UploadKind> = new Set([
   "portfolio",
   "service_photo",
   "client_avatar",
+  "master_avatar",
   "chat_attachment",
 ]);
 

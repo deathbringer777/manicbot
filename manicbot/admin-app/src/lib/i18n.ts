@@ -923,6 +923,16 @@ const translations = {
   "clients.block.confirm":              { ru: "Заблокировать клиента для всего салона?", ua: "Заблокувати клієнта для всього салону?", en: "Block this client across the whole salon?", pl: "Zablokować klienta w całym salonie?" },
   "clients.block.reasonPh":             { ru: "Причина (необяз.)", ua: "Причина (необов'язково)", en: "Reason (optional)", pl: "Powód (opcjonalnie)" },
 
+  // ── Master avatar picker (0075) ─────────────────────────────────────────────
+  "master.avatar.title":                { ru: "Аватар мастера", ua: "Аватар майстра", en: "Master avatar", pl: "Awatar mistrza" },
+  "master.avatar.tabEmoji":             { ru: "Эмодзи", ua: "Емодзі", en: "Emoji", pl: "Emoji" },
+  "master.avatar.tabPhoto":             { ru: "Фото", ua: "Фото", en: "Photo", pl: "Zdjęcie" },
+  "master.avatar.uploadPhoto":          { ru: "Загрузить фото", ua: "Завантажити фото", en: "Upload photo", pl: "Prześlij zdjęcie" },
+  "master.avatar.replacePhoto":         { ru: "Заменить фото", ua: "Замінити фото", en: "Replace photo", pl: "Zamień zdjęcie" },
+  "master.avatar.photoHint":            { ru: "PNG, JPEG или WebP до 2 МБ. Фото автоматически обрезается под круг.", ua: "PNG, JPEG або WebP до 2 МБ. Фото автоматично обрізається під коло.", en: "PNG, JPEG or WebP up to 2 MB. The photo is auto-cropped to a circle.", pl: "PNG, JPEG lub WebP do 2 MB. Zdjęcie jest automatycznie kadrowane do koła." },
+  "master.avatar.resetDefault":         { ru: "Сбросить аватар", ua: "Скинути аватар", en: "Reset avatar", pl: "Resetuj awatar" },
+  "master.avatar.tooltip":              { ru: "Нажмите, чтобы выбрать аватар", ua: "Натисніть, щоб обрати аватар", en: "Click to choose avatar", pl: "Kliknij, aby wybrać awatar" },
+
   // ── Clients avatar picker (0072) ────────────────────────────────────────────
   "clients.avatar.title":               { ru: "Аватар клиента", ua: "Аватар клієнта", en: "Client avatar", pl: "Awatar klienta" },
   "clients.avatar.tabEmoji":            { ru: "Эмодзи", ua: "Емодзі", en: "Emoji", pl: "Emoji" },

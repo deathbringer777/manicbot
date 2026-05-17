@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { MessageSquare, Loader2, ArrowLeft, Send, UserCheck, AlertTriangle, XCircle, ChevronRight, Search } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -176,8 +176,24 @@ export function SupportDashboard() {
                   />
                   <div className="flex gap-2">
                     <textarea
+                      data-testid="support-ticket-reply-input"
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
+                      onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
+                        // Enter sends; Shift+Enter inserts a newline. Matches the
+                        // /messages composer + tenant ticket reply behavior.
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          const trimmed = replyText.trim();
+                          if (trimmed && !reply.isPending) {
+                            reply.mutate({
+                              ticketId: selectedId,
+                              text: trimmed,
+                              attachmentUrl: replyAttachmentUrl.trim() || undefined,
+                            });
+                          }
+                        }
+                      }}
                       placeholder={t("support.replyPlaceholder", lang)}
                       rows={2}
                       className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"

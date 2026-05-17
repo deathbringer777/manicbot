@@ -387,6 +387,16 @@ A subtle adjacent bug: the content wrapper inside `WebShell` and `Shell` previou
 
 All four tenant-reachable marketing modals (`AutomationFormModal`, `CampaignFormModal`, `TemplateFormModal`, `ReminderModal`) use the brand-styled `~/components/ui/Select.tsx` rather than the native `<select>`. Native dropdowns render at the OS layer, ignore page theming, and break inside the dark-overlay modal stack. Pinned by `src/__tests__/marketing-modals-no-native-select.test.ts`.
 
+### Chat composer — Enter-to-send contract
+
+Every chat-style composer in the admin-app honours one keyboard convention: **Enter sends, Shift+Enter inserts a newline**. Applies to:
+- `MessageComposer.tsx` (`/messages` thread view) — original implementation, pattern source.
+- `HelpSection.tsx` reply textarea (salon-owner ticket replies under `/settings?section=help`).
+- `SupportDashboard.tsx` reply textarea (platform-staff `/platform-support` ticket replies).
+- `Composer.tsx` (public salon AI chat at `/salon/{slug}/chat`).
+
+The handler guards three conditions before firing the mutation: trimmed body must be non-empty, the mutation must not already be pending, and the ticket/thread must be open. Pinned by `src/__tests__/ticket-composer-enter-behavior.test.tsx` for the two ticket surfaces.
+
 
 ### tRPC procedures
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -344,8 +344,20 @@ export function HelpSection() {
                   {ticketDetail.data.ticket.status !== "closed" ? (
                     <div className="flex gap-2 pt-1">
                       <textarea
+                        data-testid="help-ticket-reply-input"
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
+                        onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
+                          // Enter sends; Shift+Enter inserts a newline. Matches the
+                          // /messages composer and standard chat-app convention.
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            const trimmed = replyText.trim();
+                            if (trimmed && !replyMut.isPending) {
+                              replyMut.mutate({ ticketId: selectedTicketId, text: trimmed });
+                            }
+                          }
+                        }}
                         placeholder={t("settings.replyPlaceholder", lang)}
                         rows={2}
                         className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-500/50"

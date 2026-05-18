@@ -25,15 +25,31 @@ interface Props {
  * "Advanced" details block at the bottom keeps the manual token paste as
  * an escape hatch for tenants who already have a token in hand.
  *
- * Wire flow:
+ * Wire flow (popup mode, default):
  *
- *   button click → tRPC.metaOAuth.start → window.location = authUrl
- *   Meta redirects → /dashboard?tab=channels&meta_state=…&meta_ok=1
- *   on mount: useSearchParams picks up meta_state → tRPC.metaOAuth.consume
+ *   click → window.open('about:blank', 'meta-oauth') synchronously (avoids
+ *           the popup-blocker) → tRPC.metaOAuth.start({popup:true}) →
+ *           popup.location = data.authUrl
+ *   Meta redirects popup → /meta/{provider}/callback → Worker renders HTML
+ *           that postMessages the opener and closes itself
+ *   message handler verifies event.origin === callbackOrigin AND
+ *           event.data.meta_state matches the pending state → consume
  *     - autoFinalized: true → success, onConnected()
  *     - autoFinalized: false (FB multi-page) → open Page picker modal →
  *       user picks → tRPC.metaOAuth.finalize → onConnected()
+ *
+ * Fallback (popup blocked):
+ *   click → window.open returns null/closed → tRPC.metaOAuth.start({popup:false}) →
+ *           window.location.href = data.authUrl (legacy top-level flow);
+ *           mount-time useSearchParams handler picks up the round-trip.
  */
+type PendingFlow = {
+  state: string;
+  callbackOrigin: string;
+  popupWindow: Window | null;
+  popupTimer: ReturnType<typeof setInterval> | null;
+};
+
 export function InstagramConnect({ tenantId, onConnected }: Props) {
   const { lang } = useLang();
   const router = useRouter();
@@ -47,6 +63,10 @@ export function InstagramConnect({ tenantId, onConnected }: Props) {
   const startMut = api.metaOAuth.start.useMutation();
   const consumeMut = api.metaOAuth.consume.useMutation();
   const finalizeMut = api.metaOAuth.finalize.useMutation();
+
+  // Holds the in-flight popup flow so the message handler can validate
+  // origin + state and the close-watcher can detect user-cancelled popups.
+  const pendingRef = useRef<PendingFlow | null>(null);
 
   // Compute returnTo from the current window (must match AUTH_URL origin
   // server-side). We strip oauth-related params so a refresh during
@@ -73,28 +93,12 @@ export function InstagramConnect({ tenantId, onConnected }: Props) {
     if (touched) router.replace(url.pathname + url.search, { scroll: false });
   }, [router]);
 
-  // ── Handle redirect-back from Meta on mount ─────────────────────────────
-
+  // Shared consume runner — same code path for both the popup postMessage
+  // intake AND the legacy mount-time URL-params intake. Centralizing it
+  // means the two surfaces can never drift on behaviour.
   const consumedStateRef = useRef<string | null>(null);
-  useEffect(() => {
-    const state = searchParams.get("meta_state");
-    const ok = searchParams.get("meta_ok");
-    const err = searchParams.get("meta_error");
-
-    if (!state) return;
-    // Guard against double-firing (StrictMode in dev or concurrent re-render).
+  const runConsume = useCallback((state: string) => {
     if (consumedStateRef.current === state) return;
-
-    if (ok !== "1") {
-      consumedStateRef.current = state;
-      setErrorMessage(err === "access_denied"
-        ? t("channels.ig.oauth.cancelledByUser", lang)
-        : (searchParams.get("meta_error_description") || err || t("channels.ig.oauth.expired", lang)));
-      setPhase("error");
-      clearMetaParams();
-      return;
-    }
-
     consumedStateRef.current = state;
     setPhase("completing");
     consumeMut.mutate(
@@ -111,7 +115,6 @@ export function InstagramConnect({ tenantId, onConnected }: Props) {
             setPhase("error");
             setErrorMessage("unexpected_consume_response");
           }
-          clearMetaParams();
         },
         onError: (e) => {
           if (e.data?.code === "NOT_FOUND") {
@@ -120,28 +123,167 @@ export function InstagramConnect({ tenantId, onConnected }: Props) {
             setErrorMessage(e.message);
           }
           setPhase("error");
-          clearMetaParams();
         },
       },
     );
+  }, [tenantId, consumeMut, onConnected, lang]);
+
+  const finishPendingFlow = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    if (pending.popupTimer) clearInterval(pending.popupTimer);
+    // Belt-and-suspenders close — the popup HTML calls window.close() itself
+    // but some browsers ignore that for non-script-opened or off-screen
+    // windows. Closing from the opener side guarantees no orphan popup.
+    if (pending.popupWindow && !pending.popupWindow.closed) {
+      try { pending.popupWindow.close(); } catch { /* ignore */ }
+    }
+    pendingRef.current = null;
+  }, []);
+
+  // ── postMessage bridge: popup -> opener ─────────────────────────────────
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      const pending = pendingRef.current;
+      if (!pending) return;
+      // Trust gates — both must pass:
+      //   (a) origin must match the Worker callback origin we minted with
+      //   (b) the state must be the one we're waiting for
+      // Either one alone is enough on paper, but doing both means a
+      // misbehaving extension or a same-origin XSS still can't ride this.
+      if (event.origin !== pending.callbackOrigin) return;
+      const data = (event.data ?? {}) as {
+        source?: string;
+        meta_ok?: string;
+        meta_state?: string;
+        meta_error?: string;
+        meta_error_description?: string;
+      };
+      if (data.source !== "manicbot-meta-oauth") return;
+      if (data.meta_state !== pending.state) return;
+
+      finishPendingFlow();
+
+      if (data.meta_ok !== "1") {
+        setErrorMessage(
+          data.meta_error === "access_denied"
+            ? t("channels.ig.oauth.cancelledByUser", lang)
+            : (data.meta_error_description || data.meta_error || t("channels.ig.oauth.expired", lang)),
+        );
+        setPhase("error");
+        return;
+      }
+      runConsume(pending.state);
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [runConsume, finishPendingFlow, lang]);
+
+  useEffect(() => () => finishPendingFlow(), [finishPendingFlow]);
+
+  // ── Mount-time URL params intake (popup-blocker fallback path) ──────────
+
+  useEffect(() => {
+    const state = searchParams.get("meta_state");
+    const ok = searchParams.get("meta_ok");
+    const err = searchParams.get("meta_error");
+
+    if (!state) return;
+    if (consumedStateRef.current === state) return;
+
+    if (ok !== "1") {
+      consumedStateRef.current = state;
+      setErrorMessage(err === "access_denied"
+        ? t("channels.ig.oauth.cancelledByUser", lang)
+        : (searchParams.get("meta_error_description") || err || t("channels.ig.oauth.expired", lang)));
+      setPhase("error");
+      clearMetaParams();
+      return;
+    }
+
+    runConsume(state);
+    clearMetaParams();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, tenantId]);
 
   // ── Start OAuth ─────────────────────────────────────────────────────────
 
+  /**
+   * Opens an OAuth popup synchronously (must happen inside the user-gesture
+   * callback or the browser blocks it), then asynchronously navigates the
+   * popup to the Meta authorize URL once the start mutation comes back.
+   * If the popup is blocked → graceful fallback to top-level navigation
+   * with `popup:false`, where the mount-time handler picks up the round-trip.
+   */
   const handleStart = useCallback((provider: "instagram" | "facebook") => {
     setPendingProvider(provider);
     setPhase("opening");
     setErrorMessage(null);
+
+    // 1. Open the placeholder popup synchronously so popup-blockers see a
+    //    user gesture. We navigate it to authUrl below once start resolves.
+    let popupWindow: Window | null = null;
+    try {
+      popupWindow = window.open(
+        "about:blank",
+        "meta-oauth",
+        "width=600,height=720,menubar=no,toolbar=no,location=no,status=no",
+      );
+    } catch {
+      popupWindow = null;
+    }
+    const popupOk = !!popupWindow && !popupWindow.closed;
+    const usePopup = popupOk;
+
     startMut.mutate(
-      { tenantId, provider, returnTo: buildReturnTo() },
+      { tenantId, provider, returnTo: buildReturnTo(), popup: usePopup },
       {
         onSuccess: (data) => {
-          // Top-level navigation — works inside Telegram Mini App + on the
-          // regular web admin without popup-blocker headaches.
-          window.location.href = data.authUrl;
+          if (usePopup && popupWindow) {
+            try {
+              popupWindow.location.href = data.authUrl;
+            } catch {
+              // Cross-origin write can fail in some environments; fall through
+              // to top-level navigation so the user can still finish.
+              try { popupWindow.close(); } catch { /* ignore */ }
+              window.location.href = data.authUrl;
+              return;
+            }
+            // Watch for the user closing the popup without authorizing.
+            const timer = setInterval(() => {
+              const pending = pendingRef.current;
+              if (!pending) {
+                clearInterval(timer);
+                return;
+              }
+              if (pending.popupWindow && pending.popupWindow.closed) {
+                clearInterval(timer);
+                // Only flip to error if we never received a message — the
+                // postMessage handler nulls pendingRef on success.
+                if (pendingRef.current && pendingRef.current.state === data.state) {
+                  pendingRef.current = null;
+                  setPhase((p) => (p === "completing" || p === "picking" || p === "success" ? p : "idle"));
+                  setPendingProvider(null);
+                }
+              }
+            }, 500);
+            pendingRef.current = {
+              state: data.state,
+              callbackOrigin: data.callbackOrigin,
+              popupWindow,
+              popupTimer: timer,
+            };
+          } else {
+            // No popup available (blocked / about:blank refused / inside a
+            // strict embed) — full-page navigation, mount-time handler picks
+            // up the round-trip.
+            window.location.href = data.authUrl;
+          }
         },
         onError: (e) => {
+          // Close any popup we opened pre-flight so it doesn't dangle.
+          if (popupWindow && !popupWindow.closed) { try { popupWindow.close(); } catch { /* ignore */ } }
           setErrorMessage(e.message);
           setPhase("error");
           setPendingProvider(null);

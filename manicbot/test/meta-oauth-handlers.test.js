@@ -155,6 +155,48 @@ describe('handleMetaOAuthStart', () => {
     expect(stored.webUserId).toBe('u_42');
     expect(stored.provider).toBe('instagram');
     expect(stored.pkceVerifier).toMatch(/^[A-Za-z0-9_-]{64}$/);
+    // popup defaults to false when the input omits it.
+    expect(stored.popup).toBe(false);
+  });
+
+  it('returns callbackOrigin so the popup message listener can validate event.origin', async () => {
+    const ctx = makeCtx();
+    const res = await handleMetaOAuthStart(ctx, makeReq('/meta/oauth/start', {
+      body: { provider: 'instagram', tenantId: 't_real', webUserId: 'u', returnTo: 'https://manicbot.com/x' },
+    }));
+    const json = await res.json();
+    // baseUrl is https://manicbot.com → /meta/instagram/callback → origin = https://manicbot.com
+    expect(json.callbackOrigin).toBe('https://manicbot.com');
+  });
+
+  it('persists popup=true into the state when the caller opts in', async () => {
+    const ctx = makeCtx();
+    const res = await handleMetaOAuthStart(ctx, makeReq('/meta/oauth/start', {
+      body: { provider: 'instagram', tenantId: 't_real', webUserId: 'u', returnTo: 'https://manicbot.com/x', popup: true },
+    }));
+    const json = await res.json();
+    const stored = JSON.parse(ctx.kv.store.get(`meta:oauth:state:${json.state}`));
+    expect(stored.popup).toBe(true);
+  });
+
+  it('redirect_uri is built from APP_BASE_URL (NOT request origin) — fixes "Invalid redirect_uri"', async () => {
+    // Simulate the production posture: APP_BASE_URL is the canonical
+    // domain Meta has whitelisted, but the Worker is reached via a
+    // non-canonical origin (workers.dev preview, misconfigured custom
+    // domain, proxy). The redirect_uri MUST still be the canonical one.
+    const ctx = makeCtx({
+      APP_BASE_URL: 'https://manicbot.com',
+      baseUrl: 'https://manicbot-staging.workers.dev',
+    });
+    const res = await handleMetaOAuthStart(ctx, makeReq('/meta/oauth/start', {
+      body: { provider: 'instagram', tenantId: 't_real', webUserId: 'u', returnTo: 'https://manicbot.com/x' },
+    }));
+    const json = await res.json();
+    const authUrl = new URL(json.authUrl);
+    expect(authUrl.searchParams.get('redirect_uri'))
+      .toBe('https://manicbot.com/meta/instagram/callback');
+    // callbackOrigin echoes the same canonical origin.
+    expect(json.callbackOrigin).toBe('https://manicbot.com');
   });
 });
 
@@ -229,6 +271,57 @@ describe('handleMetaOAuthCallback', () => {
     expect(draft.accessToken).toBe('IGAA_LONG_60d');
     expect(draft.igUserId).toBe('17841437');
     expect(draft.igUsername).toBe('manicbot_salon');
+  });
+
+  it('popup mode: renders HTML page that postMessages opener + closes (no 302)', async () => {
+    const ctx = makeCtx();
+    const state = generateOauthState();
+    ctx.kv.store.set(`meta:oauth:state:${state}`, JSON.stringify({
+      provider: 'instagram', tenantId: 't_real', webUserId: 'u',
+      pkceVerifier: 'verifier_x',
+      returnTo: 'https://admin.manicbot.com/dashboard?tab=channels',
+      popup: true, // ← the bit that triggers HTML mode
+      createdAt: 1,
+    }));
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(() => Promise.resolve(new Response(JSON.stringify({ access_token: 'IGAA_short', user_id: '17841437' }), { status: 200 })))
+      .mockImplementationOnce(() => Promise.resolve(new Response(JSON.stringify({ access_token: 'IGAA_LONG', expires_in: 5184000 }), { status: 200 })))
+      .mockImplementationOnce(() => Promise.resolve(new Response(JSON.stringify({ id: '17841437', username: 'salon' }), { status: 200 })));
+
+    const url = callbackUrl('instagram', { code: 'AQD-ig', state });
+    const res = await handleMetaOAuthCallback(ctx, new Request(url), url, 'instagram');
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/i);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const body = await res.text();
+    expect(body).toContain('manicbot-meta-oauth');
+    expect(body).toContain('"meta_ok":"1"');
+    expect(body).toContain(`"meta_state":"${state}"`);
+    // targetOrigin must be the admin-app origin (derived from returnTo).
+    expect(body).toContain('https://admin.manicbot.com');
+    expect(body).toContain('window.close()');
+  });
+
+  it('popup mode: HTML carries error params on the failure branch', async () => {
+    const ctx = makeCtx();
+    const state = generateOauthState();
+    ctx.kv.store.set(`meta:oauth:state:${state}`, JSON.stringify({
+      provider: 'instagram', tenantId: 't_real', webUserId: 'u',
+      pkceVerifier: 'verifier_x',
+      returnTo: 'https://admin.manicbot.com/dashboard?tab=channels',
+      popup: true,
+      createdAt: 1,
+    }));
+    const url = callbackUrl('instagram', { error: 'access_denied', error_description: 'User denied', state });
+    const res = await handleMetaOAuthCallback(ctx, new Request(url), url, 'instagram');
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/i);
+    const body = await res.text();
+    expect(body).toContain('"meta_ok":"0"');
+    expect(body).toContain('"meta_error":"access_denied"');
   });
 
   it('FB flow: short → long → /me → /me/accounts, draft carries Pages list', async () => {

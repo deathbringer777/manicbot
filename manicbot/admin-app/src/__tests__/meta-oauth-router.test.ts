@@ -103,6 +103,7 @@ describe("metaOAuthRouter", () => {
         ok: true,
         authUrl: "https://www.instagram.com/oauth/authorize?state=abc",
         state: "abc".padEnd(64, "0"),
+        callbackOrigin: "https://manicbot.com",
         expiresAt: 9999,
       });
 
@@ -114,6 +115,7 @@ describe("metaOAuthRouter", () => {
 
       expect(result.authUrl).toContain("instagram.com/oauth/authorize");
       expect(result.state).toMatch(/^[a-z0-9]{64}$/);
+      expect(result.callbackOrigin).toBe("https://manicbot.com");
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const [url, init] = fetchSpy.mock.calls[0]!;
@@ -124,12 +126,55 @@ describe("metaOAuthRouter", () => {
         "Content-Type": "application/json",
       });
       const sentBody = JSON.parse(String((init as RequestInit).body));
+      // popup defaults to false — explicit so the Worker can stamp it on the state.
       expect(sentBody).toEqual({
         provider: "instagram",
         tenantId: TENANT,
         webUserId: "w_owner",
         returnTo: VALID_RETURN_TO,
+        popup: false,
       });
+    });
+
+    it("passes popup=true through to the Worker when the caller opts in", async () => {
+      const { db } = createDbMock();
+      const caller = createCaller(makeTenantOwnerCtx(db, TENANT) as never);
+      const fetchSpy = mockFetchOk({
+        ok: true,
+        authUrl: "https://www.instagram.com/oauth/authorize?state=xyz",
+        state: "xyz".padEnd(64, "0"),
+        callbackOrigin: "https://manicbot.com",
+        expiresAt: 9999,
+      });
+
+      await caller.start({
+        tenantId: TENANT,
+        provider: "instagram",
+        returnTo: VALID_RETURN_TO,
+        popup: true,
+      });
+
+      const [, init] = fetchSpy.mock.calls[0]!;
+      const sentBody = JSON.parse(String((init as RequestInit).body));
+      expect(sentBody.popup).toBe(true);
+    });
+
+    it("returns callbackOrigin so the browser can validate event.origin on postMessage", async () => {
+      const { db } = createDbMock();
+      const caller = createCaller(makeTenantOwnerCtx(db, TENANT) as never);
+      mockFetchOk({
+        ok: true,
+        authUrl: "https://www.instagram.com/oauth/authorize?state=abc",
+        state: "abc".padEnd(64, "0"),
+        callbackOrigin: "https://manicbot.com",
+        expiresAt: 9999,
+      });
+      const result = await caller.start({
+        tenantId: TENANT,
+        provider: "instagram",
+        returnTo: VALID_RETURN_TO,
+      });
+      expect(result.callbackOrigin).toBe("https://manicbot.com");
     });
 
     it("maps Worker 503 (oauth_not_configured) to a tRPC error", async () => {

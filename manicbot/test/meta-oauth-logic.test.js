@@ -22,6 +22,8 @@ import {
   buildCallbackUri,
   parseMetaCallbackQuery,
   canAutoFinalizeDraft,
+  renderOAuthPopupClosePage,
+  deriveOpenerOriginFromReturnTo,
 } from '../src/services/meta-oauth-logic.js';
 
 // ─── detectMetaTokenType ─────────────────────────────────────────────────────
@@ -386,5 +388,142 @@ describe('canAutoFinalizeDraft', () => {
   it('refuses unknown provider / null input', () => {
     expect(canAutoFinalizeDraft(null)).toBe(false);
     expect(canAutoFinalizeDraft({ provider: 'whatsapp' })).toBe(false);
+  });
+});
+
+// ─── deriveOpenerOriginFromReturnTo ────────────────────────────────────────
+
+describe('deriveOpenerOriginFromReturnTo', () => {
+  it('extracts origin from a typical admin-app returnTo URL', () => {
+    expect(deriveOpenerOriginFromReturnTo('https://admin.manicbot.com/dashboard?tab=channels'))
+      .toBe('https://admin.manicbot.com');
+  });
+
+  it('handles port + protocol variations correctly', () => {
+    expect(deriveOpenerOriginFromReturnTo('http://localhost:3000/x'))
+      .toBe('http://localhost:3000');
+    expect(deriveOpenerOriginFromReturnTo('https://manicbot-staging.pages.dev/y'))
+      .toBe('https://manicbot-staging.pages.dev');
+  });
+
+  it('falls back to "*" on malformed inputs (postMessage will be loose, but state still gates)', () => {
+    expect(deriveOpenerOriginFromReturnTo('')).toBe('*');
+    expect(deriveOpenerOriginFromReturnTo(null)).toBe('*');
+    expect(deriveOpenerOriginFromReturnTo('not a url')).toBe('*');
+  });
+});
+
+// ─── renderOAuthPopupClosePage ─────────────────────────────────────────────
+
+describe('renderOAuthPopupClosePage', () => {
+  const validState = 'a'.repeat(64);
+
+  it('emits a postMessage payload with source, meta_ok, meta_state', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '1',
+      metaState: validState,
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dashboard?meta_state=' + validState + '&meta_ok=1',
+    });
+    expect(html).toContain('manicbot-meta-oauth');
+    expect(html).toContain('"meta_ok":"1"');
+    expect(html).toContain('"meta_state":"' + validState + '"');
+    expect(html).toContain('postMessage(payload');
+    expect(html).toContain('"https://admin.manicbot.com"');
+  });
+
+  it('uses targetOrigin as the second arg to postMessage (origin-scoped, never bare "*" by default)', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '1',
+      metaState: validState,
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    // postMessage(payload, openerOrigin) — payload first, origin second.
+    expect(html).toMatch(/postMessage\(\s*payload\s*,\s*openerOrigin\s*\)/);
+  });
+
+  it('includes window.close() so the popup self-closes', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '1',
+      metaState: validState,
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    expect(html).toContain('window.close()');
+  });
+
+  it('falls back to fallbackUrl when window.opener is null', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '1',
+      metaState: validState,
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dashboard?meta_state=' + validState + '&meta_ok=1',
+    });
+    expect(html).toContain('window.location.replace(fallbackUrl)');
+    expect(html).toContain('meta_state=' + validState);
+  });
+
+  it('forwards meta_error + description on the failure branch', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '0',
+      metaState: validState,
+      metaError: 'access_denied',
+      metaErrorDescription: 'User denied',
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    expect(html).toContain('"meta_ok":"0"');
+    expect(html).toContain('"meta_error":"access_denied"');
+    expect(html).toContain('"meta_error_description":"User denied"');
+  });
+
+  it('clamps a tampered metaOk to "0" (never trusts non-"1" inputs as success)', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: 'truthy',
+      metaState: validState,
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    expect(html).toContain('"meta_ok":"0"');
+  });
+
+  it('drops a malformed state (single source of truth for "valid state" — the receiver re-checks)', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '1',
+      metaState: 'short',
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    expect(html).toContain('"meta_state":""');
+  });
+
+  it('escapes </script> in attacker-controlled error description so the script block cannot be broken out of', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '0',
+      metaState: validState,
+      metaError: 'access_denied',
+      metaErrorDescription: '</script><script>alert(1)</script>',
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    // The literal closing tag should never appear inside the inline JS — the
+    // escaper turns it into `<\/script`.
+    const scriptStart = html.indexOf('<script>(function');
+    const scriptEnd = html.indexOf('</script>', scriptStart);
+    const scriptBody = html.slice(scriptStart, scriptEnd);
+    expect(scriptBody).not.toContain('</script>');
+    expect(scriptBody).toContain('<\\/script>');
+  });
+
+  it('emits Cyrillic-safe HTML (no character mojibake)', () => {
+    const html = renderOAuthPopupClosePage({
+      metaOk: '1',
+      metaState: validState,
+      openerOrigin: 'https://admin.manicbot.com',
+      fallbackUrl: 'https://admin.manicbot.com/dash',
+    });
+    expect(html).toContain('Завершаем подключение');
+    expect(html).toContain('charset="utf-8"');
   });
 });

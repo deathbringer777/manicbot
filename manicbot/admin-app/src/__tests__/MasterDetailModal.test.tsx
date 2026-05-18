@@ -322,7 +322,13 @@ describe("MasterDetailModal — password vault visibility", () => {
     expect(screen.queryByTestId("master-password-vault")).toBeNull();
   });
 
-  it("salon_created WITHOUT vaulted password disables Show + still allows Reset", () => {
+  it("salon_created WITHOUT vaulted password keeps Show enabled (bootstrap-on-peek flow takes over)", () => {
+    // Post bootstrap-on-empty-vault landing: legacy accounts whose
+    // password_encrypted blob is NULL no longer hit a dead-end. The Show
+    // button stays interactive — clicking it surfaces a rotate-and-reveal
+    // confirm before firing OTP. Reset stays enabled too (it's the
+    // alternative path that emails the new password to the master instead
+    // of revealing it to the salon owner).
     setMaster({ webUser: {
       email: "olga@manicbot.com",
       emailVerified: 1,
@@ -334,7 +340,7 @@ describe("MasterDetailModal — password vault visibility", () => {
     fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
     const showBtn = screen.getByTestId("master-password-show") as HTMLButtonElement;
     const resetBtn = screen.getByTestId("master-password-reset") as HTMLButtonElement;
-    expect(showBtn.disabled).toBe(true);
+    expect(showBtn.disabled).toBe(false);
     expect(resetBtn.disabled).toBe(false);
   });
 });

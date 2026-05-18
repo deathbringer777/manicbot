@@ -45,7 +45,7 @@ interface Props {
 type Phase =
   | { kind: "idle" }
   | { kind: "code"; action: "peek" | "reset"; sentTo: string }
-  | { kind: "revealed"; password: string; secondsLeft: number }
+  | { kind: "revealed"; password: string; secondsLeft: number; bootstrapped: boolean }
   | { kind: "resetDone"; emailSentTo: string };
 
 const REVEAL_SECONDS = 30;
@@ -75,6 +75,9 @@ export function MasterPasswordVaultSection({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  // Empty-vault bootstrap warning. Distinct from confirmReset so the two
+  // confirm cards don't collide if both buttons are clicked in sequence.
+  const [confirmBootstrap, setConfirmBootstrap] = useState(false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Stop the auto-hide ticker when the component unmounts mid-reveal.
@@ -108,9 +111,9 @@ export function MasterPasswordVaultSection({
     );
   }
 
-  const startReveal = (password: string) => {
+  const startReveal = (password: string, bootstrapped: boolean) => {
     let secondsLeft = REVEAL_SECONDS;
-    setPhase({ kind: "revealed", password, secondsLeft });
+    setPhase({ kind: "revealed", password, secondsLeft, bootstrapped });
     if (tickRef.current) clearInterval(tickRef.current);
     tickRef.current = setInterval(() => {
       secondsLeft -= 1;
@@ -120,7 +123,7 @@ export function MasterPasswordVaultSection({
         setPhase({ kind: "idle" });
         setCopied(false);
       } else {
-        setPhase({ kind: "revealed", password, secondsLeft });
+        setPhase({ kind: "revealed", password, secondsLeft, bootstrapped });
       }
     }, 1000);
   };
@@ -164,7 +167,7 @@ export function MasterPasswordVaultSection({
           masterChatId,
           otpCode: trimmed,
         });
-        startReveal(res.password);
+        startReveal(res.password, Boolean((res as { bootstrapped?: boolean }).bootstrapped));
       } else {
         const res = await reset.mutateAsync({
           tenantId,
@@ -197,6 +200,14 @@ export function MasterPasswordVaultSection({
     return (
       <SectionCard>
         <Header />
+        {phase.bootstrapped && (
+          <div
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300"
+            data-testid="master-password-bootstrap-hint"
+          >
+            {t("masterDetail.password.bootstrappedHint", lang)}
+          </div>
+        )}
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
           <div className="mb-2 flex items-center gap-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -288,22 +299,36 @@ export function MasterPasswordVaultSection({
   }
 
   // idle
+  const handleShowClick = () => {
+    if (webUser.hasVaultedPassword) {
+      void handleRequest("peek");
+    } else {
+      // Empty vault — the old password is unrecoverable, so we have to
+      // generate a new one and rotate. Surface the consequence (active
+      // master sessions get signed out) before firing the OTP.
+      setConfirmBootstrap(true);
+    }
+  };
+
   return (
     <SectionCard>
       <Header />
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
         {t("masterDetail.password.hint", lang)}
       </p>
-      {!webUser.hasVaultedPassword && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300">
+      {!webUser.hasVaultedPassword && !confirmBootstrap && (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300"
+          data-testid="master-password-not-vaulted-hint"
+        >
           {t("masterDetail.password.notVaulted", lang)}
         </div>
       )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => void handleRequest("peek")}
-          disabled={!webUser.hasVaultedPassword || requestOtp.isPending}
+          onClick={handleShowClick}
+          disabled={requestOtp.isPending}
           className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 sm:flex-initial"
           data-testid="master-password-show"
         >
@@ -325,6 +350,32 @@ export function MasterPasswordVaultSection({
           <span>{t("masterDetail.password.reset", lang)}</span>
         </button>
       </div>
+      {confirmBootstrap && (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300"
+          data-testid="master-password-bootstrap-confirm-card"
+        >
+          <p className="mb-2">{t("masterDetail.password.confirmBootstrap", lang)}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmBootstrap(false)}
+              className="flex-1 rounded bg-white px-2 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            >
+              {t("common.cancel", lang)}
+            </button>
+            <button
+              onClick={() => {
+                setConfirmBootstrap(false);
+                void handleRequest("peek");
+              }}
+              className="flex-1 rounded bg-amber-600 px-2 py-1 font-semibold text-white"
+              data-testid="master-password-bootstrap-confirm"
+            >
+              {t("masterDetail.password.confirmBootstrapCta", lang)}
+            </button>
+          </div>
+        </div>
+      )}
       {confirmReset && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
           <p className="mb-2">{t("masterDetail.password.confirmReset", lang)}</p>

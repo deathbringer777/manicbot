@@ -24,6 +24,12 @@ import { MasterPasswordVaultSection } from "~/components/salon/tabs/masters/Mast
 const otpRequest = vi.fn();
 const peekMutate = vi.fn();
 const resetMutate = vi.fn();
+// Mutable return value for the peekMasterPassword mock — lets a single test
+// flip the server response (e.g. add `bootstrapped: true`) without re-mocking
+// the whole trpc module.
+let peekReturn: { password: string; bootstrapped?: boolean } = {
+  password: "test-fixture-pw-only-12345",
+};
 
 vi.mock("~/trpc/react", () => ({
   api: {
@@ -43,7 +49,7 @@ vi.mock("~/trpc/react", () => ({
         useMutation: () => ({
           mutateAsync: (vars: any) => {
             peekMutate(vars);
-            return Promise.resolve({ password: "test-fixture-pw-only-12345" });
+            return Promise.resolve(peekReturn);
           },
           isPending: false,
         }),
@@ -83,6 +89,8 @@ afterEach(() => {
   otpRequest.mockClear();
   peekMutate.mockClear();
   resetMutate.mockClear();
+  // Reset peek payload to the default for the next test.
+  peekReturn = { password: "test-fixture-pw-only-12345" };
 });
 
 describe("MasterPasswordVaultSection — gating", () => {
@@ -98,14 +106,73 @@ describe("MasterPasswordVaultSection — gating", () => {
     expect(screen.queryByTestId("master-password-show")).toBeNull();
   });
 
-  it("disables Show when password is not vaulted, keeps Reset enabled", () => {
+  it("keeps Show enabled when vault is empty — clicking surfaces a bootstrap confirm instead of disabling", async () => {
     renderSection({
       webUser: { email: "x@y", emailVerified: 1, hasVaultedPassword: false },
     });
     const show = screen.getByTestId("master-password-show") as HTMLButtonElement;
     const reset = screen.getByTestId("master-password-reset") as HTMLButtonElement;
-    expect(show.disabled).toBe(true);
+    expect(show.disabled).toBe(false);
     expect(reset.disabled).toBe(false);
+    // Empty-vault notice is rendered above the buttons.
+    expect(screen.getByTestId("master-password-not-vaulted-hint")).toBeTruthy();
+
+    // Clicking Show with an empty vault does NOT fire the OTP request — first
+    // it surfaces a confirm card so the operator understands they're rotating.
+    fireEvent.click(show);
+    expect(otpRequest).not.toHaveBeenCalled();
+    expect(screen.getByTestId("master-password-bootstrap-confirm-card")).toBeTruthy();
+
+    // Confirming fires the OTP request for peek (same flow — the procedure
+    // bootstraps server-side when it sees an empty blob).
+    fireEvent.click(screen.getByTestId("master-password-bootstrap-confirm"));
+    await waitFor(() => expect(otpRequest).toHaveBeenCalledTimes(1));
+    expect(otpRequest.mock.calls[0]![0].action).toBe("peek_master_password");
+  });
+});
+
+describe("MasterPasswordVaultSection — empty-vault bootstrap reveal", () => {
+  it("when server returns bootstrapped=false (vault already populated), no bootstrap hint", async () => {
+    // peekReturn defaults to no bootstrap flag.
+    renderSection({
+      webUser: { email: "owner@manicbot.com", emailVerified: 1, hasVaultedPassword: false },
+    });
+    fireEvent.click(screen.getByTestId("master-password-show"));
+    fireEvent.click(screen.getByTestId("master-password-bootstrap-confirm"));
+    await waitFor(() => expect(screen.getByTestId("master-password-otp-input")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("master-password-otp-input"), {
+      target: { value: "111111" },
+    });
+    fireEvent.click(screen.getByTestId("master-password-otp-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("master-password-reveal").textContent).toBe(
+        "test-fixture-pw-only-12345",
+      );
+    });
+    expect(screen.queryByTestId("master-password-bootstrap-hint")).toBeNull();
+  });
+
+  it("when server signals bootstrapped=true, reveals the new password and shows the bootstrap hint", async () => {
+    peekReturn = { password: "FreshlyGeneratedPw_9X", bootstrapped: true };
+    renderSection({
+      webUser: { email: "owner@manicbot.com", emailVerified: 1, hasVaultedPassword: false },
+    });
+
+    fireEvent.click(screen.getByTestId("master-password-show"));
+    fireEvent.click(screen.getByTestId("master-password-bootstrap-confirm"));
+    await waitFor(() => expect(screen.getByTestId("master-password-otp-input")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("master-password-otp-input"), {
+      target: { value: "222222" },
+    });
+    fireEvent.click(screen.getByTestId("master-password-otp-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("master-password-reveal").textContent).toBe(
+        "FreshlyGeneratedPw_9X",
+      );
+    });
+    expect(screen.getByTestId("master-password-bootstrap-hint")).toBeTruthy();
   });
 });
 

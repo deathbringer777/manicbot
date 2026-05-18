@@ -2804,6 +2804,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           tenantId={tenantId}
           chatId={masterDetailChatId}
           onClose={() => setMasterDetailChatId(null)}
+          onNavigateToChannels={() => {
+            setMasterDetailChatId(null);
+            setTab("channels");
+            if (inWeb) router.push("/dashboard?tab=channels");
+          }}
         />
       )}
     </Shell>

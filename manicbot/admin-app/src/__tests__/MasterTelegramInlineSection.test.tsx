@@ -95,7 +95,7 @@ function setState(overrides: Partial<PairState> = {}) {
   };
 }
 
-function renderSection(originOverride?: string) {
+function renderSection(originOverride?: string, opts?: { onNavigateToChannels?: () => void }) {
   return render(
     <LangContext.Provider value={{ lang: "ru", setLang: () => {} }}>
       <MasterTelegramInlineSection
@@ -103,6 +103,7 @@ function renderSection(originOverride?: string) {
         masterChatId={MASTER_CHAT_ID}
         origin={originOverride ?? stateFixture?.origin ?? "salon_created"}
         lang="ru"
+        onNavigateToChannels={opts?.onNavigateToChannels}
       />
     </LangContext.Provider>,
   );
@@ -238,6 +239,37 @@ describe("MasterTelegramInlineSection — bot not connected", () => {
     expect(mintBtn.disabled).toBe(true);
     const manualBtn = screen.getByTestId("master-pair-manual-toggle") as HTMLButtonElement;
     expect(manualBtn.disabled).toBe(true);
+  });
+
+  it("renders the bot-missing warning as plain text when no navigate callback is supplied", () => {
+    setState({ botUsername: null });
+    renderSection();
+    expect(screen.queryByTestId("master-pair-bot-missing-cta")).toBeNull();
+  });
+
+  it("renders the bot-missing warning as a button when a navigate callback is supplied", () => {
+    setState({ botUsername: null });
+    const onNavigateToChannels = vi.fn();
+    renderSection(undefined, { onNavigateToChannels });
+    const cta = screen.getByTestId("master-pair-bot-missing-cta");
+    expect(cta.tagName).toBe("BUTTON");
+    // Copy is unchanged — same i18n key, just inside a clickable element.
+    expect(cta.textContent ?? "").toMatch(/не подключён/i);
+  });
+
+  it("clicking the bot-missing CTA fires onNavigateToChannels", () => {
+    setState({ botUsername: null });
+    const onNavigateToChannels = vi.fn();
+    renderSection(undefined, { onNavigateToChannels });
+    fireEvent.click(screen.getByTestId("master-pair-bot-missing-cta"));
+    expect(onNavigateToChannels).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT render the bot-missing CTA when the bot IS connected", () => {
+    setState({ botUsername: "demo_salon_bot" });
+    const onNavigateToChannels = vi.fn();
+    renderSection(undefined, { onNavigateToChannels });
+    expect(screen.queryByTestId("master-pair-bot-missing-cta")).toBeNull();
   });
 });
 

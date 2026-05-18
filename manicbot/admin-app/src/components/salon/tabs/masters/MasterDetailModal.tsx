@@ -57,6 +57,13 @@ interface Props {
   tenantId: string;
   chatId: number;
   onClose: () => void;
+  /**
+   * Optional handler triggered when the embedded Telegram-pairing section
+   * surfaces a "bot not connected" CTA and the owner clicks it. The parent
+   * is expected to dismiss this modal AND switch the dashboard to the
+   * Channels tab (Telegram sub-tab is the default landing).
+   */
+  onNavigateToChannels?: () => void;
 }
 
 function unixToDateInput(unix: number | null | undefined): string {
@@ -75,7 +82,7 @@ function dateInputToUnix(s: string): number | null {
   return Math.floor(new Date(y, m - 1, d).getTime() / 1000);
 }
 
-export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
+export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChannels }: Props) {
   const { lang } = useLang();
   const utils = api.useUtils();
 
@@ -325,6 +332,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose }: Props) {
             }
             onDeleteClick={() => setConfirmDelete(true)}
             hiddenPending={setHidden.isPending}
+            onNavigateToChannels={onNavigateToChannels}
           />
         ) : (
           <SettingsMode
@@ -406,6 +414,7 @@ function ViewMode({
   onToggleHidden,
   onDeleteClick,
   hiddenPending,
+  onNavigateToChannels,
 }: {
   master: NonNullable<MasterDetail>;
   tenantId: string;
@@ -417,6 +426,7 @@ function ViewMode({
   onToggleHidden: () => void;
   onDeleteClick: () => void;
   hiddenPending: boolean;
+  onNavigateToChannels?: () => void;
 }) {
   return (
     <div className="space-y-3 text-sm">
@@ -457,6 +467,7 @@ function ViewMode({
         masterChatId={master.chatId}
         origin={master.origin}
         lang={lang}
+        onNavigateToChannels={onNavigateToChannels}
       />
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-white/5">

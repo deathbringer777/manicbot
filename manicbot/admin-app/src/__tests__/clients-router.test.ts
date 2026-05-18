@@ -229,13 +229,14 @@ describe("clientsRouter", () => {
     it("persists avatarUrl on insert when provided", async () => {
       const { db, inserts } = buildDb([]);
       const caller = createCaller(makeCtx(db) as never);
+      const validUrl = `https://manicbot.com/cdn/t/${TENANT}/client_avatar-abcdef012345.webp`;
       await caller.create({
         tenantId: TENANT,
         name: "K",
         contacts: { phone: "+48000" },
-        avatarUrl: "https://r2.example.com/t/x.webp",
+        avatarUrl: validUrl,
       });
-      expect(inserts[0]!.values.avatarUrl).toBe("https://r2.example.com/t/x.webp");
+      expect(inserts[0]!.values.avatarUrl).toBe(validUrl);
       expect(inserts[0]!.values.avatarEmoji).toBeNull();
     });
 
@@ -248,6 +249,29 @@ describe("clientsRouter", () => {
           name: "K",
           contacts: { phone: "+48000" },
           avatarUrl: "javascript:alert(1)" as never,
+        }),
+      ).rejects.toBeTruthy();
+    });
+
+    it("rejects external/tracking avatarUrl that isn't our /cdn/t/.../client_avatar-... path", async () => {
+      const { db } = buildDb([]);
+      const caller = createCaller(makeCtx(db) as never);
+      // External CDN — wrong path shape (not our minted upload).
+      await expect(
+        caller.create({
+          tenantId: TENANT,
+          name: "K",
+          contacts: { phone: "+48000" },
+          avatarUrl: "https://tracker.example.com/pixel.gif" as never,
+        }),
+      ).rejects.toBeTruthy();
+      // Right host, wrong kind (logo instead of client_avatar).
+      await expect(
+        caller.create({
+          tenantId: TENANT,
+          name: "K",
+          contacts: { phone: "+48000" },
+          avatarUrl: `https://manicbot.com/cdn/t/${TENANT}/logo-abcdef012345.webp` as never,
         }),
       ).rejects.toBeTruthy();
     });

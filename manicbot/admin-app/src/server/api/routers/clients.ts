@@ -73,13 +73,21 @@ const contactsSchema = z.object({
 });
 
 // 0072 avatar fields. Emoji is short (we cap at 20 to leave room for ZWJ
-// sequences like 👩‍🎤); avatarUrl must be an https R2 URL minted via
-// salon.mintUploadToken — anything else is rejected at the boundary.
+// sequences like 👩‍🎤); avatarUrl must be an https URL pointing at our own
+// `/cdn/t/<tenantId>/client_avatar-<hash>.<ext>` path (minted via
+// salon.mintUploadToken + uploadHttp.buildAssetKey). The path shape is
+// deterministic across envs; the hostname is not, so we lock the path and
+// reject anything that smells like an external/tracking URL.
+const AVATAR_URL_PATH_RE =
+  /^https:\/\/[^/]+\/cdn\/t\/[A-Za-z0-9_-]+\/client_avatar-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
 const avatarEmojiSchema = z.string().min(1).max(20).nullable().optional();
 const avatarUrlSchema = z
   .string()
-  .regex(/^https:\/\//i, "URL must start with https://")
   .max(2048)
+  .refine((v) => AVATAR_URL_PATH_RE.test(v), {
+    message:
+      "avatarUrl must be an https URL minted by salon.mintUploadToken (path: /cdn/t/<tenantId>/client_avatar-<hash>.<ext>)",
+  })
   .nullable()
   .optional();
 

@@ -58,6 +58,13 @@ interface ServiceItem {
   duration: number;
   price: number;
   photos: string[];
+  category?: string | null;
+}
+
+interface CategoryItem {
+  id: string;
+  name: string;
+  sortOrder: number;
 }
 
 interface MasterItem {
@@ -86,6 +93,7 @@ interface SalonProfile {
   instagramUrl: string | null;
   botUsername: string | null;
   services: ServiceItem[];
+  serviceCategories?: CategoryItem[];
   masters: MasterItem[];
   isTest?: boolean;
 }
@@ -476,18 +484,58 @@ export function SalonProfileClient({
           {/* Left — services + masters */}
           <div className="lg:col-span-2 space-y-8">
 
-            {/* Services */}
+            {/* Services — grouped by category when defined, flat otherwise. */}
             {profile.services.length > 0 && (
               <section>
                 <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
                   <Scissors className="h-5 w-5 text-violet-600 dark:text-brand-400" />
                   Услуги
                 </h2>
-                <div className="space-y-2">
-                  {profile.services.map((svc) => (
-                    <ServiceCard key={svc.svcId} svc={svc} bookUrl={bookUrl} />
-                  ))}
-                </div>
+                {(() => {
+                  const cats = profile.serviceCategories ?? [];
+                  const hasAnyAssignment = cats.length > 0 && profile.services.some(s => s.category);
+                  if (!hasAnyAssignment) {
+                    return (
+                      <div className="space-y-2">
+                        {profile.services.map((svc) => (
+                          <ServiceCard key={svc.svcId} svc={svc} bookUrl={bookUrl} />
+                        ))}
+                      </div>
+                    );
+                  }
+                  const orderIndex = new Map<string, number>(cats.map((c, i) => [c.name, i]));
+                  const groups = new Map<string, ServiceItem[]>();
+                  for (const c of cats) groups.set(c.name, []);
+                  const orphans: ServiceItem[] = [];
+                  for (const s of profile.services) {
+                    if (s.category && orderIndex.has(s.category)) groups.get(s.category)!.push(s);
+                    else orphans.push(s);
+                  }
+                  const renderGroups: Array<{ name: string | null; items: ServiceItem[] }> = [];
+                  for (const c of cats) {
+                    const items = groups.get(c.name);
+                    if (items && items.length > 0) renderGroups.push({ name: c.name, items });
+                  }
+                  if (orphans.length > 0) renderGroups.push({ name: null, items: orphans });
+                  return (
+                    <div className="space-y-6">
+                      {renderGroups.map(g => (
+                        <div key={g.name ?? "__none__"}>
+                          {g.name && (
+                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 px-1">
+                              {g.name}
+                            </h3>
+                          )}
+                          <div className="space-y-2">
+                            {g.items.map((svc) => (
+                              <ServiceCard key={svc.svcId} svc={svc} bookUrl={bookUrl} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </section>
             )}
 

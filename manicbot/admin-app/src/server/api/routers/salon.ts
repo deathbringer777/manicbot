@@ -3,7 +3,7 @@ import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/se
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
-  masterInvitations, masterPairingCodes,
+  masterInvitations, masterPairingCodes, serviceCategories,
 } from "~/server/db/schema";
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
@@ -563,6 +563,208 @@ export const salonRouter = createTRPCRouter({
         .groupBy(services.category)
         .orderBy(services.category);
       return rows.map(r => r.category).filter((c): c is string => Boolean(c));
+    }),
+
+  // Structured list with metadata + per-category usage count. Powers the
+  // Service Categories management modal and the ServiceModal's category
+  // dropdown. `usageCount` is the number of services currently assigned to
+  // each category — drives the delete-confirm copy ("Эту категорию
+  // используют 3 услуги. Перенести в …").
+  serviceCategoriesList: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const cats = await ctx.db
+        .select()
+        .from(serviceCategories)
+        .where(eq(serviceCategories.tenantId, input.tenantId))
+        .orderBy(serviceCategories.sortOrder, serviceCategories.name);
+      const counts = await ctx.db
+        .select({ category: services.category, n: sql<number>`COUNT(*)` })
+        .from(services)
+        .where(and(
+          eq(services.tenantId, input.tenantId),
+          sql`category IS NOT NULL AND category != ''`,
+        ))
+        .groupBy(services.category);
+      const countByName = new Map(counts.map(c => [c.category as string, Number(c.n)]));
+      return cats.map(c => ({
+        id: c.id,
+        name: c.name,
+        sortOrder: c.sortOrder,
+        usageCount: countByName.get(c.name) ?? 0,
+      }));
+    }),
+
+  createServiceCategory: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      name: z.string().trim().min(1, "Имя не может быть пустым").max(60, "Максимум 60 символов"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const name = input.name.trim();
+
+      // Duplicate-name guard (also enforced by the UNIQUE index — this is
+      // the friendly 4xx).
+      const existing = await ctx.db
+        .select({ id: serviceCategories.id })
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.tenantId, input.tenantId), eq(serviceCategories.name, name)))
+        .limit(1);
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Категория с таким именем уже существует" });
+      }
+
+      // Append at end of sort order.
+      const maxRow = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+        .from(serviceCategories)
+        .where(eq(serviceCategories.tenantId, input.tenantId));
+      const nextOrder = (Number(maxRow[0]?.max ?? -1)) + 1;
+
+      const id = `sc_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+      await ctx.db.insert(serviceCategories).values({
+        tenantId: input.tenantId,
+        id,
+        name,
+        sortOrder: nextOrder,
+        createdAt: Math.floor(Date.now() / 1000),
+      });
+      return { id, name, sortOrder: nextOrder };
+    }),
+
+  renameServiceCategory: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      newName: z.string().trim().min(1).max(60),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const newName = input.newName.trim();
+
+      const row = await ctx.db
+        .select({ name: serviceCategories.name })
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.tenantId, input.tenantId), eq(serviceCategories.id, input.id)))
+        .limit(1);
+      if (row.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Категория не найдена" });
+      }
+      const oldName = row[0]!.name;
+      if (oldName === newName) return { ok: true, changed: false };
+
+      // Duplicate-name guard against the renamed-into name.
+      const collision = await ctx.db
+        .select({ id: serviceCategories.id })
+        .from(serviceCategories)
+        .where(and(
+          eq(serviceCategories.tenantId, input.tenantId),
+          eq(serviceCategories.name, newName),
+          ne(serviceCategories.id, input.id),
+        ))
+        .limit(1);
+      if (collision.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Категория с таким именем уже существует" });
+      }
+
+      // Rename in BOTH places. Order: services first → category last, so a
+      // mid-flight failure leaves services pointing at the new name and the
+      // catalog row still has the old name. The reverse order would leave
+      // services pointing at a name no longer in the catalog (orphan).
+      await ctx.db.update(services).set({ category: newName }).where(and(
+        eq(services.tenantId, input.tenantId),
+        eq(services.category, oldName),
+      ));
+      await ctx.db.update(serviceCategories).set({ name: newName }).where(and(
+        eq(serviceCategories.tenantId, input.tenantId),
+        eq(serviceCategories.id, input.id),
+      ));
+      return { ok: true, changed: true };
+    }),
+
+  deleteServiceCategory: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      reassignToId: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const row = await ctx.db
+        .select({ name: serviceCategories.name })
+        .from(serviceCategories)
+        .where(and(eq(serviceCategories.tenantId, input.tenantId), eq(serviceCategories.id, input.id)))
+        .limit(1);
+      if (row.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Категория не найдена" });
+      }
+      const oldName = row[0]!.name;
+
+      // Resolve reassign target (must belong to the same tenant; can't
+      // reassign to the category we're about to delete).
+      let newName: string | null = null;
+      if (input.reassignToId) {
+        if (input.reassignToId === input.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Нельзя перенести услуги в удаляемую категорию" });
+        }
+        const target = await ctx.db
+          .select({ name: serviceCategories.name })
+          .from(serviceCategories)
+          .where(and(eq(serviceCategories.tenantId, input.tenantId), eq(serviceCategories.id, input.reassignToId)))
+          .limit(1);
+        if (target.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Целевая категория не найдена" });
+        }
+        newName = target[0]!.name;
+      }
+
+      // Update services first (reassign or null), then delete the row.
+      await ctx.db.update(services).set({ category: newName }).where(and(
+        eq(services.tenantId, input.tenantId),
+        eq(services.category, oldName),
+      ));
+      await ctx.db.delete(serviceCategories).where(and(
+        eq(serviceCategories.tenantId, input.tenantId),
+        eq(serviceCategories.id, input.id),
+      ));
+      return { ok: true, reassignedTo: newName };
+    }),
+
+  reorderServiceCategories: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      ids: z.array(z.string()).min(1).max(200),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      // Verify every id belongs to the tenant before writing — defends
+      // against an attacker shuffling another tenant's order via a forged id.
+      const known = await ctx.db
+        .select({ id: serviceCategories.id })
+        .from(serviceCategories)
+        .where(and(
+          eq(serviceCategories.tenantId, input.tenantId),
+          inArray(serviceCategories.id, input.ids),
+        ));
+      const knownSet = new Set(known.map(k => k.id));
+      const unknown = input.ids.filter(id => !knownSet.has(id));
+      if (unknown.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Категории не найдены: ${unknown.join(", ")}`,
+        });
+      }
+      // Renumber. Sequential awaits — D1 hot path, ~200ms for 20 categories.
+      for (let i = 0; i < input.ids.length; i++) {
+        await ctx.db.update(serviceCategories).set({ sortOrder: i }).where(and(
+          eq(serviceCategories.tenantId, input.tenantId),
+          eq(serviceCategories.id, input.ids[i]!),
+        ));
+      }
+      return { ok: true, count: input.ids.length };
     }),
 
   // ── CSV export/import ───────────────────────────────────────────────────

@@ -215,6 +215,19 @@ CREATE TABLE IF NOT EXISTS services (
   PRIMARY KEY (tenant_id, svc_id)
 );
 
+CREATE TABLE IF NOT EXISTS service_categories (
+  tenant_id  TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_svc_cat_tenant_name
+  ON service_categories(tenant_id, name);
+CREATE INDEX IF NOT EXISTS idx_svc_cat_tenant_order
+  ON service_categories(tenant_id, sort_order);
+
 CREATE TABLE IF NOT EXISTS tenant_config (
   tenant_id TEXT NOT NULL,
   key TEXT NOT NULL,

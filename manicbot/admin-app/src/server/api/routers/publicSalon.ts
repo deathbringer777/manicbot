@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { tenants, services, masters, tenantConfig, bots, reviews } from "~/server/db/schema";
+import { tenants, services, masters, tenantConfig, bots, reviews, serviceCategories } from "~/server/db/schema";
 import { eq, and, like, or, isNotNull, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { checkRateLimit } from "~/server/auth/rateLimit";
@@ -96,7 +96,7 @@ export const publicSalonRouter = createTRPCRouter({
       const tenant = tenantRows[0];
       if (!tenant) return null;
 
-      const [serviceRows, masterRows, configRows, botRows] = await Promise.all([
+      const [serviceRows, masterRows, configRows, botRows, categoryRows] = await Promise.all([
         ctx.db
           .select()
           .from(services)
@@ -125,6 +125,11 @@ export const publicSalonRouter = createTRPCRouter({
           .from(bots)
           .where(and(eq(bots.tenantId, tenant.id), eq(bots.active, 1)))
           .limit(1),
+        ctx.db
+          .select({ id: serviceCategories.id, name: serviceCategories.name, sortOrder: serviceCategories.sortOrder })
+          .from(serviceCategories)
+          .where(eq(serviceCategories.tenantId, tenant.id))
+          .orderBy(serviceCategories.sortOrder, serviceCategories.name),
       ]);
 
       const cfg = Object.fromEntries(
@@ -217,8 +222,14 @@ export const publicSalonRouter = createTRPCRouter({
             duration: s.duration,
             price: s.price,
             photos: svcPhotos,
+            category: s.category ?? null,
           };
         }),
+        serviceCategories: categoryRows.map((c: any) => ({
+          id: c.id as string,
+          name: c.name as string,
+          sortOrder: c.sortOrder as number,
+        })),
         masters: masterRows.map((m: any) => {
           // Live vacation derivation: legacy boolean OR (now ∈ [from, until])
           const nowSec = Math.floor(Date.now() / 1000);

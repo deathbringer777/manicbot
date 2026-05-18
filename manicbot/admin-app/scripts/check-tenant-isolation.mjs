@@ -119,12 +119,13 @@ const ALLOWLIST = new Set([
   // → 1297 → 1306 → 1307 → 1301 → 1337 → 1434 → 1449 → 1479 → 1483
   // (#180/#182/#183 IG-OAuth audit series inserted reactivate / send-test /
   // error_type imports above this block) → 1539 (after the 0074 favorite-
-  // master auto-suggest tRPC pair landed above).
+  // master auto-suggest tRPC pair landed above) → 1741 (service-categories
+  // CRUD added ~200 lines around line 567 in the categories-PR).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1539",
+  "src/server/api/routers/salon.ts:1741",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

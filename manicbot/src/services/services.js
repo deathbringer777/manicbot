@@ -37,10 +37,11 @@ function svcRowToDoc(row) {
     names: safeParse(row.names, null),
     desc: safeParse(row.description, { ru: null, ua: null, en: null, pl: null }),
     photos: safeParse(row.photos, []),
+    category: row.category ?? null,
   };
 }
 
-async function loadServices(ctx) {
+export async function loadServices(ctx) {
   if (!ctx?.db || !ctx?.tenantId) return [...buildDefaultSvc(), CORRECTION_SVC];
 
   const rows = await dbAll(ctx, 'SELECT * FROM services WHERE tenant_id = ? ORDER BY sort_order', ctx.tenantId);
@@ -60,8 +61,8 @@ async function loadServices(ctx) {
 
 async function saveServiceRow(ctx, s) {
   await dbRun(ctx,
-    `INSERT OR REPLACE INTO services (tenant_id, svc_id, emoji, duration, price, active, hidden, sort_order, names, description, photos)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO services (tenant_id, svc_id, emoji, duration, price, active, hidden, sort_order, names, description, photos, category)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ctx.tenantId, s.id, s.e || null, s.dur, s.price,
     s.active === false ? 0 : 1,
     s.hidden ? 1 : 0,
@@ -69,6 +70,7 @@ async function saveServiceRow(ctx, s) {
     s.names ? JSON.stringify(s.names) : null,
     s.desc ? JSON.stringify(s.desc) : null,
     s.photos ? JSON.stringify(s.photos) : null,
+    s.category ?? null,
   );
 }
 
@@ -219,18 +221,37 @@ function syncSvcNames(ctx) {
   }
 }
 
+/**
+ * Read the service_categories list for this tenant. Returns rows ordered by
+ * sort_order (then by name as a stable tiebreaker). The Worker keyboard
+ * builder uses this ordering to group services in the Telegram catalog.
+ *
+ * Returns [] when there's no DB or no rows — the keyboard falls back to a
+ * flat list in that case (legacy behavior).
+ */
+export async function loadServiceCategories(ctx) {
+  if (!ctx?.db || !ctx?.tenantId) return [];
+  return dbAll(
+    ctx,
+    'SELECT id, name, sort_order FROM service_categories WHERE tenant_id = ? ORDER BY sort_order, name',
+    ctx.tenantId,
+  );
+}
+
 export async function initServices(ctx) {
   const tid = ctx.tenantId || '';
   const cached = _svcCacheByTenant.get(tid);
   if (cached && (Date.now() - cached.ts) < SVC_CACHE_TTL_MS) {
     ctx.svc = cached.data;
+    ctx.svcCategories = cached.categories || [];
   } else {
     ctx.svc = await loadServices(ctx);
+    ctx.svcCategories = await loadServiceCategories(ctx);
     if (_svcCacheByTenant.size >= SVC_CACHE_MAX_SIZE) {
       const oldest = [..._svcCacheByTenant.entries()].sort((a, b) => a[1].ts - b[1].ts);
       for (let i = 0; i < Math.floor(SVC_CACHE_MAX_SIZE / 4); i++) _svcCacheByTenant.delete(oldest[i][0]);
     }
-    _svcCacheByTenant.set(tid, { data: ctx.svc, ts: Date.now() });
+    _svcCacheByTenant.set(tid, { data: ctx.svc, categories: ctx.svcCategories, ts: Date.now() });
   }
   ctx.svcIds = new Set(ctx.svc.filter(s => s.active !== false).map(s => s.id));
   if (!ctx.svcIds.has('correction')) ctx.svcIds.add('correction');

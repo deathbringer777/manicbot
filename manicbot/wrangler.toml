@@ -25,6 +25,13 @@ REQUIRE_WEBHOOK_BOT_ID = "1"
 # secret for User→long-lived-User token exchange in the IG recovery and
 # auto-rotation paths. Set to the ManicBot Meta App.
 META_APP_ID = "1568224577592551"
+# Instagram Login product App ID (public — not a secret). Distinct from
+# META_APP_ID: post-Mar-2026 Meta split Instagram Messaging onto a
+# separate "Instagram Login" product with its own App ID + Secret +
+# endpoint (graph.instagram.com). Paired with META_INSTAGRAM_APP_SECRET.
+# Without this var, /meta/oauth/start with provider=instagram returns
+# 503 oauth_not_configured.
+META_INSTAGRAM_APP_ID = "3756985564432185"
 # Retention dry-run: when "1", phaseRetention logs counts but skips DELETE/archive.
 # Production default is "0" (live deletes with R2 archive). Flip to "1" in the
 # Cloudflare dashboard to preview a retention run without losing data.

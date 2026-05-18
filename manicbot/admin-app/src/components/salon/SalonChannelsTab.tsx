@@ -14,9 +14,11 @@ import { t, type Lang } from "~/lib/i18n";
 import { SectionHeader } from "./SalonShared";
 import { IGHealthCard } from "./IGHealthCard";
 import { InstagramConnect } from "./InstagramConnect";
+import { IGSendTestDialog } from "./IGSendTestDialog";
 import { SalonMasterPairingTable } from "./SalonMasterPairingTable";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
 import { MetaGuide } from "~/components/settings/MetaGuide";
+import { Send, Pause, Play, Trash2 } from "lucide-react";
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -198,10 +200,15 @@ function TelegramTab({ tenantId }: { tenantId: string }) {
 function InstagramTab({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const [error, setError] = useState<string | null>(null);
+  const [showTestDialog, setShowTestDialog] = useState(false);
   const channels = api.salon.getChannels.useQuery({ tenantId });
   const igChannel = channels.data?.find((c) => c.channelType === "instagram");
 
   const disconnectMut = api.salon.disconnectChannel.useMutation({
+    onSuccess: () => void channels.refetch(),
+    onError: (err) => setError(err.message),
+  });
+  const reactivateMut = api.salon.reactivateChannel.useMutation({
     onSuccess: () => void channels.refetch(),
     onError: (err) => setError(err.message),
   });
@@ -211,36 +218,145 @@ function InstagramTab({ tenantId }: { tenantId: string }) {
   if (igChannel) {
     let cfg: Record<string, string> = {};
     try { cfg = igChannel.config ? JSON.parse(igChannel.config) : {}; } catch { /* */ }
+    const isPaused = igChannel.active === 0;
+    const channelTitle = cfg.ig_username
+      ? `@${cfg.ig_username}`
+      : cfg.page_id
+      ? `Page ${cfg.page_id}`
+      : "Instagram";
+
     return (
       <div className="space-y-4">
         <section className="glass-card rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-pink-500/15 flex items-center justify-center">
-              <Instagram className="h-5 w-5 text-pink-400" />
+            <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${isPaused ? "bg-slate-500/15" : "bg-pink-500/15"}`}>
+              <Instagram className={`h-5 w-5 ${isPaused ? "text-slate-400" : "text-pink-400"}`} />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                {cfg.ig_username ? `@${cfg.ig_username}` : cfg.page_id ? `Page ${cfg.page_id}` : "Instagram"}
-              </h3>
-              <p className="text-[11px] text-slate-500">{t("channels.igConnected", lang)}</p>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{channelTitle}</h3>
+              <p className="text-[11px] text-slate-500">
+                {isPaused ? t("channels.ig.paused", lang) : t("channels.igConnected", lang)}
+              </p>
             </div>
+            {isPaused && (
+              <span className="shrink-0 text-[10px] font-medium rounded-full px-2 py-0.5 bg-slate-500/15 text-slate-400 uppercase">
+                {t("channels.ig.paused", lang)}
+              </span>
+            )}
           </div>
-          <ConnectedBadge
-            label={t("channels.igConnected", lang)}
-            onDisconnect={() => disconnectMut.mutate({ tenantId, channelType: "instagram" })}
-            confirmMsg={t("channels.igDisconnectConfirm", lang)}
-            disconnectLabel={t("channels.disconnectIg", lang)}
-            isPending={disconnectMut.isPending}
+
+          {/* Action grid — test send is only useful when the channel is live */}
+          {!isPaused && (
+            <button
+              type="button"
+              data-testid="ig-test-send-btn"
+              onClick={() => setShowTestDialog(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900/50 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-pink-500/40 hover:bg-pink-500/5 transition-colors"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {t("channels.ig.test.button", lang)}
+            </button>
+          )}
+
+          <PauseRemoveActions
+            tenantId={tenantId}
+            isPaused={isPaused}
+            isPending={disconnectMut.isPending || reactivateMut.isPending}
+            onPause={() => disconnectMut.mutate({ tenantId, channelType: "instagram", mode: "soft" })}
+            onResume={() => reactivateMut.mutate({ tenantId, channelType: "instagram" })}
+            onRemove={() => disconnectMut.mutate({ tenantId, channelType: "instagram", mode: "hard" })}
           />
+
           {error && <p className="text-xs text-red-400">{error}</p>}
         </section>
-        <IGHealthCard tenantId={tenantId} />
+        <IGHealthCard
+          tenantId={tenantId}
+          onRequestReauth={() => disconnectMut.mutate({ tenantId, channelType: "instagram", mode: "hard" })}
+        />
+        {showTestDialog && (
+          <IGSendTestDialog tenantId={tenantId} onClose={() => setShowTestDialog(false)} />
+        )}
       </div>
     );
   }
 
   // Not connected — OAuth-first surface with manual paste as escape hatch.
   return <InstagramConnect tenantId={tenantId} onConnected={() => { void channels.refetch(); }} />;
+}
+
+/**
+ * Two-action footer for the connected IG card: Pause (soft, keeps token)
+ * vs Remove (hard delete). Resume replaces Pause when channel is already
+ * paused.
+ */
+function PauseRemoveActions({
+  tenantId: _tenantId,
+  isPaused, isPending, onPause, onResume, onRemove,
+}: {
+  tenantId: string;
+  isPaused: boolean;
+  isPending: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  onRemove: () => void;
+}) {
+  const { lang } = useLang();
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  if (confirmRemove) {
+    return (
+      <div className="rounded-xl border border-red-500/20 p-3 space-y-2">
+        <p className="text-xs text-red-400">{t("channels.ig.removeConfirm", lang)}</p>
+        <div className="flex gap-2">
+          <button onClick={onRemove} disabled={isPending}
+            data-testid="ig-confirm-remove-btn"
+            className="flex-1 py-2 rounded-lg bg-red-500/15 text-red-400 text-xs font-medium hover:bg-red-500/25 transition-colors disabled:opacity-50">
+            {t("channels.ig.removeAction", lang)}
+          </button>
+          <button onClick={() => setConfirmRemove(false)}
+            className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors">
+            {t("common.cancel", lang)}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {isPaused ? (
+        <button
+          type="button"
+          data-testid="ig-resume-btn"
+          onClick={onResume}
+          disabled={isPending}
+          className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-medium hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+        >
+          <Play className="h-3 w-3" /> {t("channels.ig.resumeAction", lang)}
+        </button>
+      ) : (
+        <button
+          type="button"
+          data-testid="ig-pause-btn"
+          onClick={onPause}
+          disabled={isPending}
+          className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+          title={t("channels.ig.pauseConfirm", lang)}
+        >
+          <Pause className="h-3 w-3" /> {t("channels.ig.pauseAction", lang)}
+        </button>
+      )}
+      <button
+        type="button"
+        data-testid="ig-remove-btn"
+        onClick={() => setConfirmRemove(true)}
+        disabled={isPending}
+        className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-colors disabled:opacity-50"
+      >
+        <Trash2 className="h-3 w-3" /> {t("channels.ig.removeAction", lang)}
+      </button>
+    </div>
+  );
 }
 
 // ─── WhatsApp ────────────────────────────────────────────────────────────────

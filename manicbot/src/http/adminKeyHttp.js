@@ -941,6 +941,62 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
+  // POST /admin/ig-send-test — send a test Instagram DM from the tenant's bot to a PSID.
+  // Diagnostic for the salon owner: proves the channel is wired and the token is alive.
+  // Returns the raw Graph response (or {ok:false,error:'outside_message_window'}) so
+  // the operator sees Meta's verdict directly.
+  if (request.method === 'POST' && url.pathname === '/admin/ig-send-test') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    if (!env.BOT_ENCRYPTION_KEY || String(env.BOT_ENCRYPTION_KEY).length < 32) {
+      return Response.json({ error: 'BOT_ENCRYPTION_KEY not configured' }, { status: 503 });
+    }
+    try {
+      const { tenantId, psid, text } = await request.json();
+      if (!tenantId || !psid) {
+        return Response.json({ error: 'tenantId and psid required' }, { status: 400 });
+      }
+      const ec = envCtx(env);
+      const { dbAll } = await import('../utils/db.js');
+      const rows = await dbAll(ec,
+        "SELECT id, config, token_encrypted FROM channel_configs WHERE tenant_id = ? AND channel_type = 'instagram' AND active = 1 LIMIT 1",
+        tenantId,
+      );
+      if (!rows.length) {
+        return Response.json({ error: 'no_active_ig_channel' }, { status: 404 });
+      }
+      const row = rows[0];
+      const { getDecryptedToken } = await import('../channels/token-manager.js');
+      const token = await getDecryptedToken(ec, row.id, env.BOT_ENCRYPTION_KEY);
+      if (!token) {
+        return Response.json({ error: 'token_decrypt_failed' }, { status: 503 });
+      }
+      let cfg = {};
+      try { cfg = row.config ? JSON.parse(row.config) : {}; } catch {}
+
+      const { InstagramAdapter } = await import('../channels/instagram.js');
+      const adapter = new InstagramAdapter({
+        tenantId,
+        channelConfig: { config: cfg, token },
+        // No DB ref → adapter skips the 24h-window guard (test-diagnostic mode).
+        // The diagnostic value is "did Meta accept the call" — surface Meta's
+        // own answer instead of pre-rejecting based on our window cache.
+      });
+      const message = typeof text === 'string' && text.trim().length > 0
+        ? text.trim()
+        : 'Test message from your Instagram bot 👋';
+      const sendRes = await adapter.send(String(psid), { text: message });
+      return Response.json({
+        ok: !!sendRes?.ok,
+        sendRes,
+        api: cfg.api || 'facebook',
+      });
+    } catch (e) {
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_send_test' });
+      return Response.json({ error: 'Request failed', code: 'IG_SEND_TEST_ERROR' }, { status: 500 });
+    }
+  }
+
   // POST /admin/appointment-action?key=ADMIN_KEY — trigger notifications + calendar sync from admin-app
   if (request.method === 'POST' && url.pathname === '/admin/appointment-action') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();

@@ -1922,18 +1922,109 @@ export const salonRouter = createTRPCRouter({
       return { ok: true as const, channelConfigId: data.channelConfigId, graphMe: data.graphMe };
     }),
 
-  /** Disconnect a Meta channel (instagram or whatsapp) by deleting its config. */
+  /**
+   * Disconnect a Meta channel (instagram or whatsapp). Two modes:
+   *
+   *   - `'soft'` (default) — set `active = 0`, KEEP the encrypted token. The
+   *     channel stops receiving / sending but a future `setActive(true)`
+   *     restores it without a new OAuth round-trip. Picked when the operator
+   *     wants to pause the integration without losing credentials.
+   *
+   *   - `'hard'` — DELETE the row. Token is gone; reconnecting requires a
+   *     fresh OAuth flow. Picked when the operator is transferring the
+   *     channel to a different Meta account.
+   */
   disconnectChannel: tenantOwnerProcedure
-    .input(z.object({ tenantId: z.string(), channelType: z.enum(["instagram", "whatsapp"]) }))
+    .input(z.object({
+      tenantId: z.string(),
+      channelType: z.enum(["instagram", "whatsapp"]),
+      mode: z.enum(["soft", "hard"]).default("soft"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (input.mode === "hard") {
+        await ctx.db
+          .delete(channelConfigs)
+          .where(and(
+            eq(channelConfigs.tenantId, input.tenantId),
+            eq(channelConfigs.channelType, input.channelType),
+          ));
+      } else {
+        await ctx.db
+          .update(channelConfigs)
+          .set({ active: 0, updatedAt: Math.floor(Date.now() / 1000) })
+          .where(and(
+            eq(channelConfigs.tenantId, input.tenantId),
+            eq(channelConfigs.channelType, input.channelType),
+          ));
+      }
+      return { ok: true as const, mode: input.mode };
+    }),
+
+  /**
+   * Re-enable a soft-disconnected channel (`active = 1`). No-ops if there
+   * is no row to reactivate.
+   */
+  reactivateChannel: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      channelType: z.enum(["instagram", "whatsapp"]),
+    }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       await ctx.db
-        .delete(channelConfigs)
+        .update(channelConfigs)
+        .set({ active: 1, updatedAt: Math.floor(Date.now() / 1000) })
         .where(and(
           eq(channelConfigs.tenantId, input.tenantId),
           eq(channelConfigs.channelType, input.channelType),
         ));
       return { ok: true as const };
+    }),
+
+  /**
+   * Send a test Instagram DM from the tenant's bot to a PSID. Diagnostic
+   * tool for the salon owner — confirms the token is alive and the channel
+   * is correctly bound to a Meta IG account. Returns Meta's raw response
+   * (or an `outside_message_window` sentinel) so the operator sees the
+   * verdict directly.
+   */
+  sendInstagramTestMessage: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      psid: z.string().min(1).max(64),
+      text: z.string().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const workerUrl = env.WORKER_PUBLIC_URL;
+      const adminKey = env.ADMIN_KEY;
+      if (!workerUrl || !adminKey) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Server not configured for test send.",
+        });
+      }
+      const res = await fetch(`${workerUrl}/admin/ig-send-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
+        body: JSON.stringify({ tenantId: input.tenantId, psid: input.psid, text: input.text }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = await res.json() as {
+        ok?: boolean;
+        sendRes?: { ok: boolean; error?: string };
+        api?: string;
+        error?: string;
+      };
+      if (!res.ok || data.ok === false) {
+        const reason = data.sendRes?.error || data.error || "send_failed";
+        throw new TRPCError({
+          code: res.status === 404 ? "NOT_FOUND" : "BAD_REQUEST",
+          message: reason,
+        });
+      }
+      return { ok: true as const, api: data.api ?? null, sendRes: data.sendRes };
     }),
 
   /**

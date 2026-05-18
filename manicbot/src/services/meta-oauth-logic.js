@@ -320,3 +320,146 @@ export function canAutoFinalizeDraft(draft) {
   if (pages.length !== 1) return false;
   return Boolean(pages[0]?.igBusinessId);
 }
+
+// ─── Popup callback page ────────────────────────────────────────────────────
+
+/**
+ * Build the safe origin that the popup HTML will postMessage TO. We extract
+ * it from the admin-app's `returnTo` URL — that's the only origin we ever
+ * intended to talk to. Anything malformed falls back to `'*'` only as a
+ * dead-last belt-and-suspenders; the receiver still validates `event.origin`
+ * AND the state token so a misbehaving sender can't ride this channel.
+ *
+ * @param {string} returnTo
+ * @returns {string}
+ */
+export function deriveOpenerOriginFromReturnTo(returnTo) {
+  try {
+    return new URL(String(returnTo || '')).origin;
+  } catch {
+    return '*';
+  }
+}
+
+/**
+ * Naive but tight HTML escape for the few attribute / text values we splice
+ * into the popup HTML. We never accept caller-controlled values here — only
+ * server-derived strings (state, error code, origin) — but if any of those
+ * ever change, we want this layer to refuse to render dangerous content.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Render the HTML that the popup window lands on after Meta's callback when
+ * the flow was started with `popup: true`. It does three things:
+ *
+ *   1. `window.opener.postMessage({...}, openerOrigin)` — the opener (admin
+ *      app) is listening for this and resumes the consume flow.
+ *   2. `window.close()` — the popup goes away on its own.
+ *   3. Fallback: if `window.opener` is null (user opened the callback URL
+ *      directly, or the opener was lost) — top-level redirect to `returnTo`
+ *      with the same `meta_*` query params so the legacy mount-handler path
+ *      can still pick it up.
+ *
+ * The opener checks `event.origin === workerOrigin` AND
+ * `event.data.meta_state === pendingState`. Both checks live in the
+ * admin-app `InstagramConnect.tsx`. This HTML is the trusted sender.
+ *
+ * @param {Object} args
+ * @param {'1' | '0'} args.metaOk
+ * @param {string} args.metaState - 64-char hex state from the auth flow
+ * @param {string | null} [args.metaError]
+ * @param {string | null} [args.metaErrorDescription]
+ * @param {string} args.openerOrigin - validated admin-app origin
+ * @param {string} args.fallbackUrl - URL to top-level-redirect to if opener is gone
+ * @returns {string} HTML
+ */
+export function renderOAuthPopupClosePage({
+  metaOk,
+  metaState,
+  metaError = null,
+  metaErrorDescription = null,
+  openerOrigin,
+  fallbackUrl,
+}) {
+  const okFlag = metaOk === '1' ? '1' : '0';
+  const safeState = isValidOauthState(metaState) ? metaState : '';
+  // JSON-stringify is safe here for inline JS because we then escape `</` to
+  // `<\/` to keep an attacker-controlled error message (e.g. with a literal
+  // `</script>`) from breaking out of the script context.
+  const payload = JSON.stringify({
+    source: 'manicbot-meta-oauth',
+    meta_ok: okFlag,
+    meta_state: safeState,
+    meta_error: metaError || undefined,
+    meta_error_description: metaErrorDescription || undefined,
+  }).replace(/<\/script/gi, '<\\/script');
+
+  const openerOriginJs = JSON.stringify(openerOrigin || '*');
+  const fallbackUrlJs = JSON.stringify(String(fallbackUrl || '/'));
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Meta OAuth · ManicBot</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    color: #e2e8f0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+  }
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px; padding: 28px 32px; max-width: 360px;
+  }
+  h1 { font-size: 16px; margin: 0 0 6px; font-weight: 600; }
+  p { font-size: 13px; margin: 0; color: #94a3b8; line-height: 1.5; }
+  .spin {
+    width: 24px; height: 24px; margin: 0 auto 12px;
+    border: 2px solid rgba(255,255,255,0.18); border-top-color: #f472b6;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="spin" aria-hidden="true"></div>
+  <h1>Завершаем подключение…</h1>
+  <p>Можете закрыть это окно, если оно не закроется автоматически.</p>
+</div>
+<script>(function(){
+  var payload = ${payload};
+  var openerOrigin = ${openerOriginJs};
+  var fallbackUrl = ${fallbackUrlJs};
+  function bailToFallback() { try { window.location.replace(fallbackUrl); } catch (e) {} }
+  try {
+    if (window.opener && !window.opener.closed) {
+      try { window.opener.postMessage(payload, openerOrigin); } catch (e) {}
+      setTimeout(function(){ try { window.close(); } catch (e) {} bailToFallback(); }, 120);
+    } else {
+      bailToFallback();
+    }
+  } catch (e) { bailToFallback(); }
+})();</script>
+<noscript><a href="${escapeHtml(fallbackUrl)}">Continue</a></noscript>
+</body>
+</html>`;
+}

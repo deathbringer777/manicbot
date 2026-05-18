@@ -57,6 +57,8 @@ import {
   canAutoFinalizeDraft,
   detectMetaTokenType,
   configApiForTokenType,
+  renderOAuthPopupClosePage,
+  deriveOpenerOriginFromReturnTo,
 } from './meta-oauth-logic.js';
 
 // ─── KV namespaces + TTLs ────────────────────────────────────────────────────
@@ -86,8 +88,24 @@ function readProviderCredentials(ctx, provider) {
   };
 }
 
+/**
+ * Resolve the OAuth base URL.
+ *
+ * `APP_BASE_URL` MUST win over the request origin: Meta whitelists exactly
+ * one redirect URI per app, and that whitelist is keyed off the canonical
+ * production origin (https://manicbot.com). If we let `request.url.origin`
+ * drive the redirect_uri, then any non-canonical hit on the Worker
+ * (workers.dev preview, a misconfigured custom domain, a stripe-style
+ * proxy) silently produces a redirect_uri Meta refuses — exactly the
+ * "Invalid Request: Request parameters are invalid: Invalid redirect_uri"
+ * the user just reported.
+ *
+ * `baseUrl` (mirror of request origin) is kept as the LAST-resort fallback
+ * for environments where APP_BASE_URL isn't set (local dev, ad-hoc test
+ * harnesses).
+ */
 function getBaseUrl(ctx) {
-  return String(ctx?.baseUrl || ctx?.APP_BASE_URL || '').replace(/\/+$/, '');
+  return String(ctx?.APP_BASE_URL || ctx?.baseUrl || '').replace(/\/+$/, '');
 }
 
 // ─── Bearer auth (mirror of adminKeyHttp.js) ─────────────────────────────────
@@ -134,7 +152,7 @@ export async function handleMetaOAuthStart(ctx, request) {
   let body;
   try { body = await request.json(); } catch { body = {}; }
 
-  const { provider, tenantId, webUserId, returnTo } = body || {};
+  const { provider, tenantId, webUserId, returnTo, popup } = body || {};
   if (!isMetaOAuthProvider(provider)) {
     return Response.json({ ok: false, error: 'invalid_provider' }, { status: 400 });
   }
@@ -147,6 +165,10 @@ export async function handleMetaOAuthStart(ctx, request) {
   if (!returnTo || typeof returnTo !== 'string' || !/^https?:\/\//i.test(returnTo)) {
     return Response.json({ ok: false, error: 'invalid_return_to' }, { status: 400 });
   }
+  // popup is a UX hint — when truthy the callback returns an HTML page that
+  // postMessages the opener and self-closes (vs the default 302 to returnTo).
+  // We coerce-then-store so a tampered string can't sneak through.
+  const popupMode = popup === true || popup === 'true';
 
   const tenant = await getTenant(ctx, tenantId);
   if (!tenant) {
@@ -178,6 +200,7 @@ export async function handleMetaOAuthStart(ctx, request) {
     webUserId,
     pkceVerifier: verifier,
     returnTo,
+    popup: popupMode,
     createdAt: nowSec(),
   };
 
@@ -198,6 +221,11 @@ export async function handleMetaOAuthStart(ctx, request) {
     ok: true,
     authUrl,
     state,
+    // callbackOrigin lets the admin-app validate `event.origin` on incoming
+    // postMessage frames from the popup. Same value the popup HTML uses as
+    // its postMessage targetOrigin — both sides agree on which origin is
+    // allowed to broker the OAuth completion.
+    callbackOrigin: new URL(redirectUri).origin,
     expiresAt: nowSec() + STATE_TTL_SEC,
   });
 }
@@ -245,7 +273,7 @@ export async function handleMetaOAuthCallback(ctx, request, url, provider) {
 
   // User cancelled or Meta returned a permission error.
   if (!parsed.ok) {
-    return redirectToReturn(statePayload.returnTo, {
+    return finishCallback(statePayload, {
       meta_ok: '0',
       meta_state: parsed.state,
       meta_error: parsed.error,
@@ -266,7 +294,7 @@ export async function handleMetaOAuthCallback(ctx, request, url, provider) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log.error('services.metaOAuth', e instanceof Error ? e : new Error(msg), { action: 'exchange_code' });
-    return redirectToReturn(statePayload.returnTo, {
+    return finishCallback(statePayload, {
       meta_ok: '0',
       meta_state: parsed.state,
       meta_error: 'code_exchange_failed',
@@ -279,7 +307,7 @@ export async function handleMetaOAuthCallback(ctx, request, url, provider) {
     await kv.put(DRAFT_PREFIX + parsed.state, JSON.stringify(draft), { expirationTtl: DRAFT_TTL_SEC });
   } catch (e) {
     log.error('services.metaOAuth', e instanceof Error ? e : new Error(String(e?.message)), { action: 'put_draft' });
-    return redirectToReturn(statePayload.returnTo, {
+    return finishCallback(statePayload, {
       meta_ok: '0',
       meta_state: parsed.state,
       meta_error: 'draft_persist_failed',
@@ -292,19 +320,64 @@ export async function handleMetaOAuthCallback(ctx, request, url, provider) {
     data: { provider, pages: draft.pages?.length ?? 0, hasIgUser: !!draft.igUserId },
   });
 
-  return redirectToReturn(statePayload.returnTo, {
+  return finishCallback(statePayload, {
     meta_ok: '1',
     meta_state: parsed.state,
   });
 }
 
-function redirectToReturn(returnTo, params) {
+/**
+ * Two-way callback finisher.
+ *
+ *   - `statePayload.popup === true` → return an HTML page that postMessages
+ *     the opener and self-closes. The admin-app's `InstagramConnect` mounts
+ *     a window message listener and resumes the consume flow there.
+ *   - otherwise → legacy 302 to `returnTo` with the same params on the URL,
+ *     so the mount-time `useSearchParams` handler picks them up. This is
+ *     the popup-blocker fallback path.
+ *
+ * Both paths carry the SAME params (`meta_ok`, `meta_state`, optional
+ * error fields) so the admin-app receiver doesn't care which one fired.
+ */
+function finishCallback(statePayload, params) {
+  if (statePayload?.popup === true) {
+    const openerOrigin = deriveOpenerOriginFromReturnTo(statePayload.returnTo);
+    const fallbackUrl = buildReturnUrl(statePayload.returnTo, params);
+    const html = renderOAuthPopupClosePage({
+      metaOk: params.meta_ok,
+      metaState: params.meta_state || '',
+      metaError: params.meta_error || null,
+      metaErrorDescription: params.meta_error_description || null,
+      openerOrigin,
+      fallbackUrl,
+    });
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        // popup is private to this user's session — never cache.
+        'cache-control': 'no-store',
+        // Sandbox notes: the page contains an inline script we control, so
+        // a strict default-src 'self' would block it. We allow inline only
+        // for THIS response (route-scoped), keeping the worker's global CSP
+        // unaffected. `frame-ancestors 'none'` blocks the page from being
+        // iframed by a malicious origin.
+        'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
+        'referrer-policy': 'no-referrer',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  }
+  return Response.redirect(buildReturnUrl(statePayload.returnTo, params), 302);
+}
+
+function buildReturnUrl(returnTo, params) {
   const url = new URL(returnTo);
   for (const [k, v] of Object.entries(params)) {
     if (v == null || v === '') continue;
     url.searchParams.set(k, String(v));
   }
-  return Response.redirect(url.toString(), 302);
+  return url.toString();
 }
 
 // ─── Code exchange — provider-specific ─────────────────────────────────────

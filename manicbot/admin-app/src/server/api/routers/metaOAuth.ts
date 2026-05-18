@@ -86,6 +86,10 @@ export const metaOAuthRouter = createTRPCRouter({
         tenantId: z.string(),
         provider: ProviderEnum,
         returnTo: z.string().url(),
+        // popup=true is a UX hint to the Worker: render an HTML close+postMessage
+        // page on the callback instead of 302ing back to returnTo. Defaults to
+        // false so the existing top-level-navigation flow keeps working.
+        popup: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -112,17 +116,22 @@ export const metaOAuthRouter = createTRPCRouter({
         ok: true;
         authUrl: string;
         state: string;
+        callbackOrigin: string;
         expiresAt: number;
       }>(workerUrl, adminKey, "/meta/oauth/start", {
         provider: input.provider,
         tenantId: input.tenantId,
         webUserId: ctx.webUser.id,
         returnTo: input.returnTo,
+        popup: input.popup === true,
       });
 
       return {
         authUrl: result.authUrl,
         state: result.state,
+        // Echoed back to the browser so the InstagramConnect message listener
+        // can validate event.origin on incoming postMessage frames.
+        callbackOrigin: result.callbackOrigin,
         expiresAt: result.expiresAt,
       };
     }),

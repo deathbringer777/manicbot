@@ -57,13 +57,26 @@ afterEach(() => {
   searchParamsValue = new URLSearchParams();
 });
 
+// Helper: install a stub on window.open so we can detect the popup
+// attempt and choose whether to simulate a successful or blocked popup.
+function installPopupStub({ blocked = false }: { blocked?: boolean } = {}) {
+  const fakePopup = {
+    location: { href: "about:blank" } as { href: string },
+    closed: false,
+    close() { this.closed = true; },
+  };
+  const open = vi.fn().mockImplementation(() => (blocked ? null : fakePopup));
+  Object.defineProperty(window, "open", { value: open, writable: true, configurable: true });
+  return { open, fakePopup };
+}
+
 describe("InstagramConnect — initial render", () => {
   beforeEach(() => {
-    // Ensure window.location returns a sensible default for buildReturnTo().
     Object.defineProperty(window, "location", {
       value: new URL("https://admin.manicbot.com/dashboard?tab=channels"),
       writable: true,
     });
+    installPopupStub();
   });
 
   it("renders two OAuth buttons with the recommended badge on Instagram", () => {
@@ -73,20 +86,65 @@ describe("InstagramConnect — initial render", () => {
     expect(screen.getByText(/Рекомендуем/)).toBeTruthy();
   });
 
-  it("clicking Instagram button calls metaOAuth.start with provider='instagram'", () => {
+  it("clicking Instagram opens a popup synchronously THEN calls metaOAuth.start with popup=true", () => {
+    const { open } = installPopupStub();
     renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
     fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+    // popup-blocker workaround — open() must fire synchronously inside the
+    // click handler. Asserting *before* the mutation pin guarantees order.
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0]![0]).toBe("about:blank");
+    expect(open.mock.calls[0]![1]).toBe("meta-oauth");
+
     expect(startMutate).toHaveBeenCalledTimes(1);
     const [input] = startMutate.mock.calls[0]!;
-    expect(input).toMatchObject({ tenantId: "t_x", provider: "instagram" });
+    expect(input).toMatchObject({ tenantId: "t_x", provider: "instagram", popup: true });
     expect(input.returnTo).toContain("manicbot.com");
   });
 
-  it("clicking Facebook button calls metaOAuth.start with provider='facebook'", () => {
+  it("clicking Facebook button calls metaOAuth.start with provider='facebook' + popup=true", () => {
     renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
     fireEvent.click(screen.getByTestId("ig-oauth-facebook-btn"));
     expect(startMutate).toHaveBeenCalledTimes(1);
-    expect(startMutate.mock.calls[0]![0]).toMatchObject({ tenantId: "t_x", provider: "facebook" });
+    expect(startMutate.mock.calls[0]![0]).toMatchObject({
+      tenantId: "t_x",
+      provider: "facebook",
+      popup: true,
+    });
+  });
+
+  it("when popup is blocked → passes popup=false to start and falls back to top-level navigation", () => {
+    installPopupStub({ blocked: true });
+    const navTarget: { href: string } = { href: "" };
+    Object.defineProperty(window, "location", {
+      value: new Proxy(new URL("https://admin.manicbot.com/dashboard?tab=channels"), {
+        set(target, prop, value) {
+          if (prop === "href") { navTarget.href = String(value); return true; }
+          return Reflect.set(target, prop, value);
+        },
+        get(target, prop) {
+          if (prop === "href") return navTarget.href || target.href;
+          return Reflect.get(target, prop);
+        },
+      }),
+      writable: true,
+      configurable: true,
+    });
+
+    startMutate.mockImplementation((_input, opts) => {
+      opts.onSuccess({
+        authUrl: "https://www.instagram.com/oauth/authorize?state=abc",
+        state: "abc".padEnd(64, "0"),
+        callbackOrigin: "https://manicbot.com",
+        expiresAt: 9999,
+      });
+    });
+
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+
+    expect(startMutate.mock.calls[0]![0].popup).toBe(false);
+    expect(navTarget.href).toContain("instagram.com/oauth/authorize");
   });
 
   it("returnTo strips oauth-related params so refresh during consume doesn't loop", () => {
@@ -94,6 +152,7 @@ describe("InstagramConnect — initial render", () => {
       value: new URL("https://admin.manicbot.com/dashboard?tab=channels&meta_state=oldstate&meta_ok=1"),
       writable: true,
     });
+    installPopupStub();
     renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
     fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
     const input = startMutate.mock.calls[0]![0];
@@ -102,9 +161,135 @@ describe("InstagramConnect — initial render", () => {
     expect(returnUrl.searchParams.get("meta_ok")).toBeNull();
     expect(returnUrl.searchParams.get("tab")).toBe("channels");
   });
+
+  it("on start success: navigates the popup to the auth URL (instead of full-page navigation)", () => {
+    const { fakePopup } = installPopupStub();
+    startMutate.mockImplementation((_input, opts) => {
+      opts.onSuccess({
+        authUrl: "https://www.instagram.com/oauth/authorize?state=abc",
+        state: "abc".padEnd(64, "0"),
+        callbackOrigin: "https://manicbot.com",
+        expiresAt: 9999,
+      });
+    });
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+    expect(fakePopup.location.href).toBe("https://www.instagram.com/oauth/authorize?state=abc");
+  });
+});
+
+// ── postMessage path ────────────────────────────────────────────────────────
+
+describe("InstagramConnect — postMessage bridge", () => {
+  const STATE = "deadbeef".repeat(8); // 64 hex chars
+  const ORIGIN = "https://manicbot.com";
+
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      value: new URL("https://admin.manicbot.com/dashboard?tab=channels"),
+      writable: true,
+    });
+    installPopupStub();
+    startMutate.mockImplementation((_input, opts) => {
+      opts.onSuccess({
+        authUrl: "https://www.instagram.com/oauth/authorize?state=" + STATE,
+        state: STATE,
+        callbackOrigin: ORIGIN,
+        expiresAt: 9999,
+      });
+    });
+  });
+
+  function fireOAuthMessage(data: Record<string, unknown>, origin: string = ORIGIN) {
+    const event = new MessageEvent("message", { data, origin });
+    window.dispatchEvent(event);
+  }
+
+  it("on success message: validates origin + state, runs consume", async () => {
+    consumeMutate.mockImplementation((_input, opts) => {
+      opts.onSuccess({ autoFinalized: true, channelConfigId: "cc_1", subscribed: true });
+    });
+    const onConnected = vi.fn();
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={onConnected} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+
+    fireOAuthMessage({
+      source: "manicbot-meta-oauth",
+      meta_ok: "1",
+      meta_state: STATE,
+    });
+
+    await waitFor(() => expect(consumeMutate).toHaveBeenCalledTimes(1));
+    expect(consumeMutate.mock.calls[0]![0]).toMatchObject({ tenantId: "t_x", state: STATE });
+    expect(onConnected).toHaveBeenCalled();
+  });
+
+  it("ignores messages from a foreign origin (defense-in-depth)", async () => {
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+
+    fireOAuthMessage(
+      { source: "manicbot-meta-oauth", meta_ok: "1", meta_state: STATE },
+      "https://evil.example.com",
+    );
+
+    // Give the event loop a beat — consume must NOT have been called.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(consumeMutate).not.toHaveBeenCalled();
+  });
+
+  it("ignores messages with a state that doesn't match the pending flow", async () => {
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+
+    fireOAuthMessage({
+      source: "manicbot-meta-oauth",
+      meta_ok: "1",
+      meta_state: "f".repeat(64),
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(consumeMutate).not.toHaveBeenCalled();
+  });
+
+  it("ignores messages without the expected source field (random postMessage from extensions etc.)", async () => {
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+
+    fireOAuthMessage({ meta_ok: "1", meta_state: STATE });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(consumeMutate).not.toHaveBeenCalled();
+  });
+
+  it("on error message: renders friendly cancelled copy, skips consume", async () => {
+    renderWithLang(<InstagramConnect tenantId="t_x" onConnected={vi.fn()} />, "ru");
+    fireEvent.click(screen.getByTestId("ig-oauth-instagram-btn"));
+
+    fireOAuthMessage({
+      source: "manicbot-meta-oauth",
+      meta_ok: "0",
+      meta_state: STATE,
+      meta_error: "access_denied",
+    });
+
+    await waitFor(() => expect(screen.getByText(/Подключение отменено/)).toBeTruthy());
+    expect(consumeMutate).not.toHaveBeenCalled();
+  });
 });
 
 describe("InstagramConnect — Meta callback handler", () => {
+  // The mount-time URL-params intake path is the popup-blocker fallback.
+  // We force window.location to mirror the searchParams mock so the
+  // clearMetaParams() call (which reads window.location.href, not the mock)
+  // actually finds something to strip.
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      value: new URL("https://admin.manicbot.com/dashboard?tab=channels&meta_state=" + "a".repeat(64) + "&meta_ok=1"),
+      writable: true,
+      configurable: true,
+    });
+  });
+
   it("on meta_state + meta_ok=1 + auto-finalize → calls onConnected + clears URL params", async () => {
     const onConnected = vi.fn();
     searchParamsValue = new URLSearchParams({

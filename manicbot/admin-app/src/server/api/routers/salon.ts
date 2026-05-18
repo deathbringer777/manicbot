@@ -11,7 +11,7 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray } from "drizzle-orm";
 import {
   generatePairingToken,
   buildDeepLink,
@@ -28,6 +28,10 @@ import { notifyWorker } from "~/server/utils/notifyWorker";
 import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
+import {
+  IG_ALL_ERROR_TYPES,
+  IG_BROKEN_ERROR_TYPES,
+} from "~/server/api/channelErrorTypes";
 import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
@@ -1922,18 +1926,109 @@ export const salonRouter = createTRPCRouter({
       return { ok: true as const, channelConfigId: data.channelConfigId, graphMe: data.graphMe };
     }),
 
-  /** Disconnect a Meta channel (instagram or whatsapp) by deleting its config. */
+  /**
+   * Disconnect a Meta channel (instagram or whatsapp). Two modes:
+   *
+   *   - `'soft'` (default) — set `active = 0`, KEEP the encrypted token. The
+   *     channel stops receiving / sending but a future `setActive(true)`
+   *     restores it without a new OAuth round-trip. Picked when the operator
+   *     wants to pause the integration without losing credentials.
+   *
+   *   - `'hard'` — DELETE the row. Token is gone; reconnecting requires a
+   *     fresh OAuth flow. Picked when the operator is transferring the
+   *     channel to a different Meta account.
+   */
   disconnectChannel: tenantOwnerProcedure
-    .input(z.object({ tenantId: z.string(), channelType: z.enum(["instagram", "whatsapp"]) }))
+    .input(z.object({
+      tenantId: z.string(),
+      channelType: z.enum(["instagram", "whatsapp"]),
+      mode: z.enum(["soft", "hard"]).default("soft"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (input.mode === "hard") {
+        await ctx.db
+          .delete(channelConfigs)
+          .where(and(
+            eq(channelConfigs.tenantId, input.tenantId),
+            eq(channelConfigs.channelType, input.channelType),
+          ));
+      } else {
+        await ctx.db
+          .update(channelConfigs)
+          .set({ active: 0, updatedAt: Math.floor(Date.now() / 1000) })
+          .where(and(
+            eq(channelConfigs.tenantId, input.tenantId),
+            eq(channelConfigs.channelType, input.channelType),
+          ));
+      }
+      return { ok: true as const, mode: input.mode };
+    }),
+
+  /**
+   * Re-enable a soft-disconnected channel (`active = 1`). No-ops if there
+   * is no row to reactivate.
+   */
+  reactivateChannel: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      channelType: z.enum(["instagram", "whatsapp"]),
+    }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       await ctx.db
-        .delete(channelConfigs)
+        .update(channelConfigs)
+        .set({ active: 1, updatedAt: Math.floor(Date.now() / 1000) })
         .where(and(
           eq(channelConfigs.tenantId, input.tenantId),
           eq(channelConfigs.channelType, input.channelType),
         ));
       return { ok: true as const };
+    }),
+
+  /**
+   * Send a test Instagram DM from the tenant's bot to a PSID. Diagnostic
+   * tool for the salon owner — confirms the token is alive and the channel
+   * is correctly bound to a Meta IG account. Returns Meta's raw response
+   * (or an `outside_message_window` sentinel) so the operator sees the
+   * verdict directly.
+   */
+  sendInstagramTestMessage: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      psid: z.string().min(1).max(64),
+      text: z.string().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const workerUrl = env.WORKER_PUBLIC_URL;
+      const adminKey = env.ADMIN_KEY;
+      if (!workerUrl || !adminKey) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Server not configured for test send.",
+        });
+      }
+      const res = await fetch(`${workerUrl}/admin/ig-send-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
+        body: JSON.stringify({ tenantId: input.tenantId, psid: input.psid, text: input.text }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = await res.json() as {
+        ok?: boolean;
+        sendRes?: { ok: boolean; error?: string };
+        api?: string;
+        error?: string;
+      };
+      if (!res.ok || data.ok === false) {
+        const reason = data.sendRes?.error || data.error || "send_failed";
+        throw new TRPCError({
+          code: res.status === 404 ? "NOT_FOUND" : "BAD_REQUEST",
+          message: reason,
+        });
+      }
+      return { ok: true as const, api: data.api ?? null, sendRes: data.sendRes };
     }),
 
   /**
@@ -2008,9 +2103,17 @@ export const salonRouter = createTRPCRouter({
         ? Math.floor((nowSec - lastInboundAt) / 3600)
         : null;
 
+      // PR 3 (2026-05-18): match by structured `error_type` slug instead of
+      // substring search on `message`. Slugs come from
+      // ~/server/api/channelErrorTypes.ts (mirror of the Worker constants).
+      // The legacy `LIKE %message%` fallback is gone — once a row in
+      // error_events lacks a slug, the IGHealthCard intentionally won't
+      // surface it (those rows pre-date PR 3 and would have been pinged by
+      // the operator already).
       const errorRows = await ctx.db
         .select({
           message: errorEvents.message,
+          errorType: errorEvents.errorType,
           lastSeen: errorEvents.lastSeen,
           count: errorEvents.count,
         })
@@ -2019,18 +2122,17 @@ export const salonRouter = createTRPCRouter({
           eq(errorEvents.tenantId, input.tenantId),
           eq(errorEvents.status, "open"),
           gte(errorEvents.lastSeen, nowSec - 30 * 86400),
-          or(
-            like(errorEvents.message, "%instagram%"),
-            like(errorEvents.message, "%channels.instagram%"),
-            like(errorEvents.message, "%OAuthException%"),
-            like(errorEvents.message, "%needs_reauth%"),
-            like(errorEvents.message, "%decrypt_failed%"),
-          ),
+          inArray(errorEvents.errorType, IG_ALL_ERROR_TYPES as unknown as string[]),
         ))
         .orderBy(desc(errorEvents.lastSeen))
         .limit(1);
       const lastError = errorRows[0]
-        ? { message: errorRows[0].message, lastSeen: errorRows[0].lastSeen, count: errorRows[0].count }
+        ? {
+            message: errorRows[0].message,
+            errorType: errorRows[0].errorType,
+            lastSeen: errorRows[0].lastSeen,
+            count: errorRows[0].count,
+          }
         : null;
 
       const active = cfg.active === 1;
@@ -2039,9 +2141,18 @@ export const salonRouter = createTRPCRouter({
         ? Math.floor((nowSec - cfg.updatedAt) / 86400)
         : null;
 
+      // Broken = a "this channel cannot deliver" slug is open. Degraded
+      // slugs (subscription_lost, signature_mismatch) keep the state at
+      // `warning` instead of jumping straight to broken so the operator
+      // gets a different copy + the test-message dialog stays available.
+      const hasBrokenError = lastError
+        ? (IG_BROKEN_ERROR_TYPES as readonly string[]).includes(lastError.errorType ?? "")
+        : false;
+
       let state: "healthy" | "warning" | "needs_attention" | "broken";
       if (!active || !hasToken) state = "needs_attention";
-      else if (lastError) state = "broken";
+      else if (hasBrokenError) state = "broken";
+      else if (lastError) state = "warning";
       else if (lastInboundAt && nowSec - lastInboundAt < 7 * 86400) state = "healthy";
       else state = "warning";
 

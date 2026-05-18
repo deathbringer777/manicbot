@@ -147,10 +147,13 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
       // signing secret. Bodies stay private — only sig prefix + length.
       try {
         const { captureError } = await import('../utils/errorCapture.js');
+        const { CHANNEL_ERROR_TYPE } = await import('../channels/error-types.js');
         await captureError(env, new Error('IG webhook signature mismatch — Meta may be using a different App Secret (Instagram product has its own)'), {
           source: 'webhook.ig',
           severity: 'error',
           path: '/webhook/ig',
+          errorType: CHANNEL_ERROR_TYPE.META_WEBHOOK_SIGNATURE_MISMATCH,
+          channelType: 'instagram',
           sigPrefix: sig.slice(0, 24),
           bodyLen: rawBytes.byteLength,
           hasMetaAppSecret: env.META_APP_SECRET ? 'yes' : 'no',

@@ -21,6 +21,7 @@ import { tryMessengerWsRoute } from './http/messengerWsHttp.js';
 export { MessengerHub } from './durable/messengerHub.js';
 import { tryLeadRoutes } from './http/leadsHttp.js';
 import { tryGoogle } from './http/googleHttp.js';
+import { tryMetaOAuth } from './http/metaOAuthHttp.js';
 import { tryAdminPanel } from './http/adminPanelHttp.js';
 import { tryCalendar } from './http/calendarHttp.js';
 import { tryTelegramWebhook } from './http/telegramWebhookHttp.js';
@@ -200,6 +201,10 @@ function validateSecurityConfig(env) {
 
   if (env.ADMIN_KEY && String(env.ADMIN_KEY).length < 32) {
     throw new Error('[SECURITY] ADMIN_KEY must be at least 32 characters — refusing to start');
+  }
+
+  if (env.NOTIFY_TOKEN && String(env.NOTIFY_TOKEN).length < 32) {
+    throw new Error('[SECURITY] NOTIFY_TOKEN must be at least 32 characters — refusing to start');
   }
 
   if (env.BOT_ENCRYPTION_KEY && String(env.BOT_ENCRYPTION_KEY).length < 32) {
@@ -390,6 +395,13 @@ export default {
     if (res) return addSecurityHeaders(res);
 
     res = await tryGoogle(request, env, url);
+    if (res) return addSecurityHeaders(res);
+
+    // Meta OAuth (FB Login for Business + Instagram Login). Self-contained:
+    // admin-keyed start / consume / finalize endpoints + per-provider GET
+    // callback. Must run before tryMetaWebhooks because both live under
+    // `/meta/...` but the webhook routes are `/webhook/wa` and `/webhook/ig`.
+    res = await tryMetaOAuth(request, env, url);
     if (res) return addSecurityHeaders(res);
 
     // Meta WA/IG before getCtx: paths /webhook/wa and /webhook/ig are not Telegram bot ids.

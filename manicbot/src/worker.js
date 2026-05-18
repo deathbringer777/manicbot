@@ -203,6 +203,10 @@ function validateSecurityConfig(env) {
     throw new Error('[SECURITY] ADMIN_KEY must be at least 32 characters — refusing to start');
   }
 
+  if (env.NOTIFY_TOKEN && String(env.NOTIFY_TOKEN).length < 32) {
+    throw new Error('[SECURITY] NOTIFY_TOKEN must be at least 32 characters — refusing to start');
+  }
+
   if (env.BOT_ENCRYPTION_KEY && String(env.BOT_ENCRYPTION_KEY).length < 32) {
     throw new Error('[SECURITY] BOT_ENCRYPTION_KEY must be at least 32 characters — refusing to start');
   }

@@ -2706,6 +2706,16 @@ export const salonRouter = createTRPCRouter({
    * Audit-logged. ONLY for origin='salon_created' accounts. The returned
    * value is the actual password — the salon owner is expected to copy it
    * once and the UI must not persist it.
+   *
+   * Bootstrap-on-empty-vault: legacy salon_created accounts may have
+   * `password_encrypted IS NULL` (created before migration 0066, or when
+   * BOT_ENCRYPTION_KEY was missing on Pages env at create-time). For these,
+   * the hashed `password_hash` is mathematically irrecoverable, so we
+   * generate a fresh password, write the hash+vault blob+passwordChangedAt
+   * (invalidating the master's active JWT — same side effect as a manual
+   * reset), and return the new plaintext flagged as `bootstrapped: true`.
+   * Without BOT_ENCRYPTION_KEY we still refuse: there is no point bootstrapping
+   * a password we cannot persist into the vault for a future peek.
    */
   peekMasterPassword: tenantOwnerProcedure
     .input(z.object({
@@ -2745,12 +2755,44 @@ export const salonRouter = createTRPCRouter({
         .where(eq(webUsers.id, m.webUserId))
         .limit(1);
       const blob = userRow[0]?.passwordEncrypted;
+
       if (!blob) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "password_not_vaulted",
+        // Bootstrap path — vault empty, generate fresh credential and persist.
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+        const pwArr = crypto.getRandomValues(new Uint8Array(16));
+        const newPassword = Array.from(pwArr).map((b) => chars[b % chars.length]).join("");
+        const newBlob = await encryptMasterPassword(newPassword, env.BOT_ENCRYPTION_KEY ?? null);
+        if (!newBlob) {
+          // No encryption key on Pages env → refuse. We will not generate a
+          // throwaway password the operator can never re-peek.
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "password_not_vaulted",
+          });
+        }
+        const passwordHash = await hashPassword(newPassword);
+        const now = Math.floor(Date.now() / 1000);
+        await ctx.db
+          .update(webUsers)
+          .set({
+            passwordHash,
+            passwordEncrypted: newBlob,
+            passwordChangedAt: now, // invalidates any active JWT for the master
+            updatedAt: now,
+          })
+          .where(eq(webUsers.id, m.webUserId));
+
+        await writeAudit(ctx.db, {
+          actor: ctx.webUser.email ?? null,
+          action: "tenant.master.password.bootstrap_and_peek",
+          tenantId: input.tenantId,
+          detail: `masterChatId=${input.masterChatId} (vault was empty — generated fresh password and revealed to owner)`,
+          ip: ctxIp(ctx),
         });
+
+        return { password: newPassword, bootstrapped: true };
       }
+
       const plain = await decryptMasterPassword(blob, env.BOT_ENCRYPTION_KEY ?? null);
       if (!plain) {
         throw new TRPCError({

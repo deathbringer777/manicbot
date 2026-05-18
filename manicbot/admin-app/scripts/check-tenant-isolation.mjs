@@ -110,32 +110,20 @@ const SKIP_FILES = new Set([
  * the rationale so a future reader can re-validate.
  */
 const ALLOWLIST = new Set([
-  // salon.ts:1479 — bot_id collision check across tenants
-  // (intentional global lookup, cross-tenant by design). The procedure is
-  // tenantOwnerProcedure-gated; this read confirms the bot isn't already
-  // claimed by SOMEONE ELSE before we accept it. Line drift history: 883
-  // → 913 → 920 → 937 → 964 (master-invitation imports + URL-hardening
-  // regexes from clients/public-profile PR) → 1049 (after PR-A permission
-  // unification + PR-B referral helpers) → 1159 (after the new tenant-
-  // scoped status mutations confirmAppointment / rejectAppointment /
-  // markDone landed above this line) → 1292 (after salon.updateMaster +
-  // expanded getMasterDetail) → 1297 (0074 master-pairing imports — `gt`
-  // from drizzle-orm + `generatePairingToken` / `buildDeepLink` /
-  // `PAIRING_TOKEN_TTL_SEC` from `~/server/api/masterPairing/tokenLogic`)
-  // → 1306 (#153 surfaced BOT_ENCRYPTION_KEY-missing guard above this
-  // line) → 1307 (self-invite guard imports from master-invitation
-  // close-the-loop PR stacked on top) → 1301 (softened the
-  // BOT_ENCRYPTION_KEY guard above this line from hard-throw to graceful
-  // degradation, shrinking the block by 6 lines) → 1337 (#160 new
-  // updateMasterAvatar mutations inserted above) → 1434 (#162 services
-  // export/import added ~97 lines above this query) → 1449
-  // (createMasterAccount atomic-batch refactor stacked ~150 lines of
-  // try/catch + cleanup above this line) → 1479 (another sibling PR
-  // landed ~30 lines above without bumping the allowlist; this is the
-  // 4th time in <24h this scanner has caught its own line-number
-  // brittleness — see follow-up issue to switch to a content-anchored
-  // allowlist).
-  "src/server/api/routers/salon.ts:1479",
+  // salon.ts — bot_id collision check across tenants (intentional global
+  // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
+  // gated; this read confirms the bot isn't already claimed by SOMEONE
+  // ELSE before we accept it.
+  //
+  // Line-drift history: 883 → 913 → 920 → 937 → 964 → 1049 → 1159 → 1292
+  // → 1297 → 1306 → 1307 → 1301 → 1337 → 1434 → 1449 → 1479 → 1483
+  // (#180/#182/#183 IG-OAuth audit series inserted reactivate / send-test /
+  // error_type imports above this block).
+  //
+  // Brittleness is now well-documented; the long-term fix is to switch to
+  // a content-anchored allowlist (match the comment on the prior line
+  // instead of an absolute line number), tracked as a follow-up.
+  "src/server/api/routers/salon.ts:1483",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

@@ -4,9 +4,9 @@
  * /notifications — full history view of the user's bell feed.
  *
  * Backed by the same `notifications.list` tRPC query as the header bell,
- * but unbounded (up to 100 rows) and grouped into "Сегодня / На этой
- * неделе / Ранее" buckets. The header bell footer links here, and PR2
- * will likely link here from the VK-style "See all" CTA too.
+ * but unbounded (up to 100 rows) and grouped into «Сегодня / На этой
+ * неделе / Ранее» buckets (locale-aware via timeBucketTitle). The header
+ * bell footer links here, and the salon dashboards link here too.
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -23,12 +23,15 @@ import {
   formatRelative,
   kindMeta,
   timeBucket,
-  TIME_BUCKET_TITLE,
+  timeBucketTitle,
   type TimeBucket,
 } from "~/lib/notifications/kindMeta";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 export default function NotificationsClient() {
   const router = useRouter();
+  const { lang } = useLang();
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
   const list = api.notifications.list.useQuery(
@@ -85,9 +88,11 @@ export default function NotificationsClient() {
             <Bell className="h-4 w-4" />
           </div>
           <div>
-            <h1 className="text-base font-semibold text-slate-900 dark:text-white">Уведомления</h1>
+            <h1 className="text-base font-semibold text-slate-900 dark:text-white">{t("notifications.title", lang)}</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {totalCount} {totalCount === 1 ? "запись" : "записей"} · {unreadCount} непрочитано
+              {t("notifications.countSummary", lang)
+                .replace("{total}", String(totalCount))
+                .replace("{unread}", String(unreadCount))}
             </p>
           </div>
         </div>
@@ -103,7 +108,7 @@ export default function NotificationsClient() {
                   : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              Все
+              {t("notifications.tab.all", lang)}
             </button>
             <button
               type="button"
@@ -115,7 +120,7 @@ export default function NotificationsClient() {
                   : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              Непрочитанные
+              {t("notifications.tab.unread", lang)}
             </button>
           </div>
           {unreadCount > 0 && (
@@ -127,7 +132,7 @@ export default function NotificationsClient() {
               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-1 text-[11px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5"
             >
               <CheckCheck className="h-3.5 w-3.5" />
-              Прочитать всё
+              {t("notifications.markAll", lang)}
             </button>
           )}
         </div>
@@ -142,9 +147,9 @@ export default function NotificationsClient() {
       {list.data && list.data.length === 0 && (
         <div className="text-center py-16 text-slate-400">
           <Inbox className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">Уведомлений пока нет</p>
+          <p className="text-sm">{t("notifications.empty.all", lang)}</p>
           <p className="text-xs mt-1">
-            Здесь появятся ответы поддержки, напоминания, дни рождения клиентов и многое другое.
+            {t("notifications.empty.hint", lang)}
           </p>
         </div>
       )}
@@ -156,7 +161,7 @@ export default function NotificationsClient() {
           return (
             <section key={bucket}>
               <h2 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2 px-1">
-                {TIME_BUCKET_TITLE[bucket]}
+                {timeBucketTitle(bucket, lang)}
               </h2>
               <ul className="space-y-1.5">
                 {rows.map((n) => {
@@ -199,14 +204,14 @@ export default function NotificationsClient() {
                               </p>
                             )}
                             <p className="text-[10px] text-slate-400 mt-1">
-                              {formatRelative(n.createdAt)}
-                              {n.link && <span className="ml-2 text-indigo-500">Перейти →</span>}
+                              {formatRelative(n.createdAt, lang)}
+                              {n.link && <span className="ml-2 text-indigo-500">{t("notifications.openLink", lang)} →</span>}
                             </p>
                           </div>
                         </button>
                         <button
                           type="button"
-                          aria-label="Удалить"
+                          aria-label={t("notifications.delete", lang)}
                           onClick={() => dismiss.mutate({ id: n.id })}
                           disabled={dismiss.isPending}
                           className="p-1.5 rounded-md text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 transition-all"
@@ -225,10 +230,10 @@ export default function NotificationsClient() {
 
       <footer className="mt-8 pt-4 border-t border-slate-100 dark:border-white/5 text-center">
         <Link
-          href="/settings?section=appearance"
+          href="/settings?section=notifications"
           className="text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-white"
         >
-          Настроить уведомления в Настройках →
+          {t("notifications.configureLink", lang)} →
         </Link>
       </footer>
     </div>

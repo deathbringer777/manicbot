@@ -195,12 +195,45 @@ describe("notifyManyWebUsers — fanout", () => {
       kind: "x",
       title: "t",
     });
-    expect(r).toEqual({ ok: 1, deduped: 1, failed: 1 });
+    expect(r).toEqual({ ok: 1, deduped: 1, failed: 1, skippedByPrefs: 0 });
   });
 
   it("returns zeros for empty target list", async () => {
     const { db } = makeDbMock();
     const r = await notifyManyWebUsers(db, [], { kind: "x", title: "t" });
-    expect(r).toEqual({ ok: 0, deduped: 0, failed: 0 });
+    expect(r).toEqual({ ok: 0, deduped: 0, failed: 0, skippedByPrefs: 0 });
+  });
+
+  it("counts skippedByPrefs when the user opted out of the category", async () => {
+    // Mock returns a prefs row that disables marketing entirely.
+    const prefsBlob = JSON.stringify({ categories: { marketing: { inapp: false, push: false } } });
+    let callIdx = 0;
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => {
+              callIdx++;
+              return Promise.resolve([{ raw: prefsBlob }]);
+            },
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: () => ({
+          onConflictDoNothing: () => ({
+            returning: () => Promise.resolve([{ id: "n_x" }]),
+          }),
+        }),
+      }),
+    } as any;
+
+    const r = await notifyManyWebUsers(db, ["w_opted_out"], {
+      kind: "marketing.campaign.sent",
+      title: "Marketing",
+    });
+    expect(r.skippedByPrefs).toBe(1);
+    expect(r.ok).toBe(0);
+    expect(callIdx).toBeGreaterThanOrEqual(1);
   });
 });

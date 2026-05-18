@@ -1077,8 +1077,12 @@ export async function tryAdminKeyRoutes(request, env, url) {
         // Notify the client their appointment moved to a new slot. The
         // admin-app mutation sends the prior date/time so the message
         // shows "Was X → Now Y" instead of just the current values.
-        const { sendAptRescheduledToClient } = await import('../notifications.js');
+        const { sendAptRescheduledToClient, notifyStaffAptRescheduled } = await import('../notifications.js');
         await sendAptRescheduledToClient(ctx, apt, oldDate || null, oldTime || null);
+        // Bell row for the assigned master + tenant owner.
+        await notifyStaffAptRescheduled(ctx, apt, oldDate || null, oldTime || null).catch((e) =>
+          log.warn('http.adminKey', { action: 'reschedule_inapp', error: e?.message?.slice(0, 200) }),
+        );
         notified = true;
         const { canUse } = await import('../billing/features.js');
         if (canUse(ctx, 'calendar')) {

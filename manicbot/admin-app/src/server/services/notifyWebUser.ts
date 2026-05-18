@@ -13,9 +13,11 @@
  *   - Returns the inserted id, or null when dedup short-circuited.
  *   - Never throws — DB failures bubble up as `{ ok:false, error }`.
  */
-import { userNotifications } from "~/server/db/schema";
+import { eq } from "drizzle-orm";
+import { userNotifications, webUsers } from "~/server/db/schema";
 import { getDb } from "~/server/db";
 import { log } from "~/server/utils/logger";
+import { parsePrefs, shouldDeliver } from "~/lib/notifications/prefs";
 
 export type Db = ReturnType<typeof getDb>;
 
@@ -34,6 +36,8 @@ export interface NotifyWebUserResult {
   ok: boolean;
   id: string | null;
   deduped?: boolean;
+  /** True when the user opted out of this category (no row written). */
+  skippedByPrefs?: boolean;
   error?: string;
 }
 
@@ -59,6 +63,27 @@ export async function notifyWebUser(
   const link = input.link ? String(input.link).slice(0, LINK_MAX) : null;
   const sourceSlug = input.sourceSlug ?? null;
   const sourceId = input.sourceId ?? null;
+
+  // Respect the user's in-app opt-out. Read prefs first; on any error we
+  // fall through to writing — defaults are "deliver everything in-app".
+  // Self-test (`support.test`) is always written so the settings UI can
+  // confirm delivery even when the user has opted out of the support
+  // category for some reason.
+  if (input.kind !== "support.test") {
+    try {
+      const rows = await db
+        .select({ raw: webUsers.notificationPrefs })
+        .from(webUsers)
+        .where(eq(webUsers.id, input.webUserId))
+        .limit(1);
+      const prefs = parsePrefs(rows[0]?.raw ?? null);
+      if (!shouldDeliver(input.kind, prefs, "inapp")) {
+        return { ok: true, id: null, skippedByPrefs: true };
+      }
+    } catch {
+      // Swallow — prefs read MUST NOT block a notification write.
+    }
+  }
 
   const id = buildNotificationId();
   const createdAt = Math.floor(Date.now() / 1000);
@@ -103,15 +128,17 @@ export async function notifyManyWebUsers(
   db: Db,
   webUserIds: string[],
   payload: Omit<NotifyWebUserInput, "webUserId">,
-): Promise<{ ok: number; deduped: number; failed: number }> {
+): Promise<{ ok: number; deduped: number; failed: number; skippedByPrefs: number }> {
   let ok = 0;
   let deduped = 0;
   let failed = 0;
+  let skippedByPrefs = 0;
   for (const webUserId of webUserIds) {
     const r = await notifyWebUser(db, { ...payload, webUserId });
     if (!r.ok) failed++;
+    else if (r.skippedByPrefs) skippedByPrefs++;
     else if (r.deduped) deduped++;
     else ok++;
   }
-  return { ok, deduped, failed };
+  return { ok, deduped, failed, skippedByPrefs };
 }

@@ -1,0 +1,24 @@
+-- 0077_notification_prefs.sql
+-- Adds per-user notification preferences as a JSON blob on web_users.
+--
+-- Shape:
+--   {
+--     "categories": {
+--       "appointment": { "inapp": true,  "push": true },
+--       "support":     { "inapp": true,  "push": true },
+--       "birthday":    { "inapp": true,  "push": false },
+--       "platform":    { "inapp": true,  "push": true },
+--       "master":      { "inapp": true,  "push": true },
+--       "reminder":    { "inapp": true,  "push": true },
+--       "messenger":   { "inapp": true,  "push": true },
+--       "billing":     { "inapp": true,  "push": true },
+--       "marketing":   { "inapp": true,  "push": false }
+--     }
+--   }
+--
+-- NULL means "use defaults" (see lib/notifications/prefs.ts).
+-- A missing category in the JSON also resolves to default-on.
+-- Writers consult prefs at fan-out time and skip the channel when the
+-- category is opted-out; the partial UNIQUE on user_notifications still
+-- dedups in-app rows on retry as before.
+ALTER TABLE web_users ADD COLUMN notification_prefs TEXT;

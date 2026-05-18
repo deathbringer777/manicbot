@@ -72,7 +72,7 @@ function sectionIds() {
 describe("SettingsShell — section contract by role", () => {
   afterEach(cleanup);
 
-  it("tenant_owner sees the 9 headline sections in order", () => {
+  it("tenant_owner sees the 10 headline sections in order (notifications between billing and appearance)", () => {
     mount("tenant_owner");
     expect(sectionIds()).toEqual([
       "account",
@@ -81,6 +81,7 @@ describe("SettingsShell — section contract by role", () => {
       "team",
       "channels",
       "billing",
+      "notifications",
       "appearance",
       "referrals",
       "help",
@@ -96,30 +97,31 @@ describe("SettingsShell — section contract by role", () => {
       "team",
       "channels",
       "billing",
+      "notifications",
       "appearance",
       "referrals",
       "help",
     ]);
   });
 
-  it("master sees a 4-section subset including profile", () => {
+  it("master sees a 5-section subset including profile + notifications", () => {
     mount("master");
-    expect(sectionIds()).toEqual(["account", "profile", "appearance", "help"]);
+    expect(sectionIds()).toEqual(["account", "profile", "notifications", "appearance", "help"]);
   });
 
-  it("support sees a minimal 3-section set", () => {
+  it("support sees account / notifications / appearance / help", () => {
     mount("support");
-    expect(sectionIds()).toEqual(["account", "appearance", "help"]);
+    expect(sectionIds()).toEqual(["account", "notifications", "appearance", "help"]);
   });
 
-  it("technical_support sees a minimal 3-section set", () => {
+  it("technical_support sees account / notifications / appearance / help", () => {
     mount("technical_support");
-    expect(sectionIds()).toEqual(["account", "appearance", "help"]);
+    expect(sectionIds()).toEqual(["account", "notifications", "appearance", "help"]);
   });
 
-  it("system_admin sees account/appearance/help/platform (no billing in God Mode)", () => {
+  it("system_admin sees account/notifications/appearance/help/platform (no billing in God Mode)", () => {
     mount("system_admin");
-    expect(sectionIds()).toEqual(["account", "appearance", "help", "platform"]);
+    expect(sectionIds()).toEqual(["account", "notifications", "appearance", "help", "platform"]);
   });
 });
 

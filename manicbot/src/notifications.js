@@ -97,7 +97,7 @@ export async function notifyAptStaff(ctx, apt, user) {
  * future `appointment.reschedule`, `appointment.cancelled`) without
  * collapsing.
  */
-async function dispatchAppointmentInApp(ctx, apt, user, kind, titlePrefix) {
+export async function dispatchAppointmentInApp(ctx, apt, user, kind, titlePrefix) {
   if (!ctx?.db || !ctx?.tenantId) return;
   const targets = new Set();
   try {
@@ -323,6 +323,71 @@ export async function notifyStaffAptCancelled(ctx, apt, comment = null) {
     })().catch(e => log.error('notifications', e instanceof Error ? e : new Error(String(e.message)), { action: 'notifyStaffAptCancelled_send' })));
   }
   await Promise.allSettled(promises);
+
+  // Mirror into the bell so web-linked staff see the cancellation.
+  await dispatchAppointmentInApp(ctx, apt, user, 'appointment.cancelled', 'Запись отменена').catch((e) =>
+    log.error('notifications', e instanceof Error ? e : new Error(String(e?.message)), { action: 'notifyStaffAptCancelled_inapp' }),
+  );
+}
+
+/**
+ * Drop a bell row for the assigned master + tenant owner when an
+ * appointment is rescheduled. Used by the Worker `/admin/appointment-action
+ * reschedule` action AFTER the existing client-facing notification.
+ */
+export async function notifyStaffAptRescheduled(ctx, apt, oldDate, oldTime) {
+  if (!ctx?.db || !ctx?.tenantId || !apt) return;
+  const user = await getUser(ctx, apt.chatId).catch(() => null);
+  const oldDt = oldDate && oldTime ? fmtDT('ru', oldDate, oldTime) : null;
+  const newDt = fmtDT('ru', apt.date, apt.time);
+  const body = oldDt
+    ? `${user?.name || apt.userName || 'Клиент'} · ${oldDt} → ${newDt}`
+    : `${user?.name || apt.userName || 'Клиент'} · ${newDt}`;
+  // Reuse dispatchAppointmentInApp but with custom body — wrap manually
+  // since the default formats "name · svc · when" not "name · old → new".
+  const targets = new Set();
+  try {
+    if (apt.masterId) {
+      const rows = await dbAll(
+        ctx,
+        'SELECT web_user_id FROM masters WHERE tenant_id = ? AND chat_id = ? AND is_synthetic = 0 LIMIT 1',
+        ctx.tenantId,
+        apt.masterId,
+      );
+      if (rows[0]?.web_user_id) targets.add(rows[0].web_user_id);
+    }
+    const ownerRows = await dbAll(
+      ctx,
+      "SELECT id FROM web_users WHERE tenant_id = ? AND role = 'tenant_owner' LIMIT 1",
+      ctx.tenantId,
+    );
+    if (ownerRows[0]?.id) targets.add(ownerRows[0].id);
+  } catch (e) {
+    log.warn('notifications', { action: 'notifyStaffAptRescheduled.targets', error: e?.message?.slice(0, 200) });
+    return;
+  }
+  if (targets.size === 0) return;
+
+  const link = `/?tab=appointments&apt=${encodeURIComponent(apt.id)}`;
+  const sourceId = `${apt.id}:rescheduled:${apt.date}_${apt.time}`;
+  const calls = [];
+  for (const webUserId of targets) {
+    calls.push(
+      notifyWebUser(ctx, webUserId, {
+        kind: 'appointment.rescheduled',
+        title: 'Запись перенесена',
+        body,
+        link,
+        sourceSlug: 'appointment',
+        sourceId,
+        inapp: true,
+        telegram: false,
+      }).catch((e) =>
+        log.warn('notifications', { action: 'notifyStaffAptRescheduled.notify', error: e?.message?.slice(0, 200) }),
+      ),
+    );
+  }
+  await Promise.allSettled(calls);
 }
 
 export async function notifyStaffConsultantRequest(ctx, clientCid, replyMarkup = null, internalNote = null) {

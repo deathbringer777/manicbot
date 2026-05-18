@@ -17,6 +17,7 @@ import { PublicProfileSection } from "~/components/settings/sections/PublicProfi
 import { TeamSection } from "~/components/settings/sections/TeamSection";
 import { ChannelsSection } from "~/components/settings/sections/ChannelsSection";
 import { MasterProfileSection } from "~/components/settings/sections/MasterProfileSection";
+import { NotificationsSection } from "~/components/settings/sections/NotificationsSection";
 
 export default function SettingsPageClient() {
   const { role, previewRole, tenantId, previewTenantId } = useRole();
@@ -58,6 +59,8 @@ export default function SettingsPageClient() {
         return effectiveTenantId ? <BillingSection tenantId={effectiveTenantId} /> : null;
       case "referrals":
         return <ReferralsSection />;
+      case "notifications":
+        return <NotificationsSection />;
       case "appearance":
         return <AppearanceSection />;
       case "help":

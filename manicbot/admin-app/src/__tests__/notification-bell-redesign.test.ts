@@ -19,7 +19,20 @@ describe("NotificationBell — PR2 redesign contract", () => {
     expect(src).toMatch(/\bkindMeta\b/);
     expect(src).toMatch(/\bformatRelative\b/);
     expect(src).toMatch(/\bbellGroup\b/);
-    expect(src).toMatch(/\bBELL_GROUP_TITLE\b/);
+    expect(src).toMatch(/\bbellGroupTitle\b/);
+  });
+
+  it("uses i18n via useLang() — no hardcoded Russian copy", () => {
+    expect(src).toMatch(/from "~\/components\/LangContext"/);
+    expect(src).toMatch(/from "~\/lib\/i18n"/);
+    expect(src).toMatch(/t\("notifications\.title", lang\)/);
+    expect(src).toMatch(/t\("notifications\.tab\.all", lang\)/);
+    expect(src).toMatch(/t\("notifications\.tab\.unread", lang\)/);
+    // None of the user-visible Russian strings remain in the source.
+    expect(src).not.toMatch(/>Уведомления</);
+    expect(src).not.toMatch(/>Прочитать всё</);
+    expect(src).not.toMatch(/>Загрузка…</);
+    expect(src).not.toMatch(/>Включить</);
   });
 
   it("renders the All / Unread filter tabs", () => {

@@ -408,6 +408,12 @@ const translations = {
   "salon.channels.instagram.label":      { ru: "Instagram Direct", ua: "Instagram Direct", en: "Instagram Direct", pl: "Instagram Direct" },
   "salon.channels.instagram.hint":       { ru: "Записи через Instagram DM. По умолчанию ВЫКЛ.", ua: "Записи через Instagram DM. За замовчуванням ВИМК.", en: "Bookings via Instagram DM. Off by default.", pl: "Rezerwacje przez Instagram DM. Domyślnie WYŁ." },
 
+  // ── 0074 Auto-suggest favorite master ──────────────────────────────────────
+  "salon.favoriteSuggest.title":         { ru: "Любимый мастер", ua: "Улюблений майстер", en: "Favorite master", pl: "Ulubiony mistrz" },
+  "salon.favoriteSuggest.body":          { ru: "Если включено — при создании записи система автоматически предложит мастера, к которому клиент ходит чаще всего (или закреплённого вручную в карточке клиента). Работает по всем каналам, где клиент уже узнан.", ua: "Якщо увімкнено — при створенні запису система автоматично запропонує майстра, до якого клієнт ходить найчастіше (або закріпленого вручну в картці клієнта). Працює по всіх каналах, де клієнт уже впізнаний.", en: "When enabled, the system pre-picks the master a returning client visits most often (or the one you pinned manually on their card). Works across every channel where the client is already recognized.", pl: "Gdy włączone, system automatycznie wybiera mistrza, do którego klient chodzi najczęściej (lub przypiętego ręcznie w karcie klienta). Działa we wszystkich kanałach, gdzie klient jest już rozpoznany." },
+  "salon.favoriteSuggest.web.hint":      { ru: "Подсказка работает в форме «Новая запись» и в виджете на сайте.", ua: "Підказка працює у формі «Новий запис» і у віджеті на сайті.", en: "Suggestion works in the New Booking form and on the website widget.", pl: "Podpowiedź działa w formularzu «Nowa rezerwacja» i na widgetcie strony." },
+  "salon.favoriteSuggest.telegram.hint": { ru: "В Telegram-боте любимый мастер выделяется звёздочкой и поднимается в верх списка.", ua: "У Telegram-боті улюблений майстер виділяється зірочкою і піднімається у верх списку.", en: "In the Telegram bot, the favorite master is marked with a star and moved to the top of the list.", pl: "W bocie Telegram ulubiony mistrz jest oznaczony gwiazdką i przesuwany na górę listy." },
+
   "salon.publicProfile.title":           { ru: "Публичный профиль", ua: "Публічний профіль", en: "Public profile", pl: "Profil publiczny" },
   "salon.publicProfile.visibleInCatalog":{ ru: "Салон виден в каталоге", ua: "Салон видно в каталозі", en: "Salon is visible in catalog", pl: "Salon jest widoczny w katalogu" },
   "salon.publicProfile.hiddenFromCatalog": { ru: "Салон скрыт из каталога", ua: "Салон прихований з каталогу", en: "Salon is hidden from catalog", pl: "Salon ukryty z katalogu" },
@@ -886,6 +892,10 @@ const translations = {
   "appointments.manual.noName":          { ru: "(без имени)",      ua: "(без імені)",      en: "(no name)",  pl: "(bez imienia)" },
   "appointments.manual.clientNamePh":    { ru: "Имя клиента",      ua: "Ім'я клієнта",     en: "Client name", pl: "Imię klienta" },
   "appointments.manual.master":          { ru: "Мастер",           ua: "Майстер",          en: "Master",     pl: "Mistrz" },
+  // 0074 — random master + favorite label
+  "appointments.manual.masterRandom":    { ru: "🎲 Случайный мастер", ua: "🎲 Випадковий майстер", en: "🎲 Random master", pl: "🎲 Losowy mistrz" },
+  "appointments.manual.masterFavorite":  { ru: "⭐ любимый",        ua: "⭐ улюблений",     en: "⭐ favorite", pl: "⭐ ulubiony" },
+  "appointments.manual.noRandomCandidate": { ru: "Нет доступных мастеров для случайного выбора.", ua: "Немає доступних майстрів для випадкового вибору.", en: "No masters available for random pick.", pl: "Brak dostępnych mistrzów do losowego wyboru." },
   "appointments.manual.pickPlaceholder": { ru: "— выбрать —",      ua: "— вибрати —",      en: "— select —", pl: "— wybierz —" },
   "appointments.manual.service":         { ru: "Услуга",           ua: "Послуга",          en: "Service",    pl: "Usługa" },
   "appointments.manual.date":            { ru: "Дата",             ua: "Дата",             en: "Date",       pl: "Data" },
@@ -947,6 +957,11 @@ const translations = {
   "clients.form.lists.empty":           { ru: "Списки появятся после первого создания.", ua: "Списки з'являться після першого створення.", en: "Lists appear once you create the first one.", pl: "Listy pojawią się po utworzeniu pierwszej." },
   "clients.form.dob":                   { ru: "День рождения", ua: "День народження", en: "Date of birth", pl: "Data urodzin" },
   "clients.form.contactRequired":       { ru: "Заполните имя и хотя бы один контакт.", ua: "Заповніть ім'я і хоча б один контакт.", en: "Fill in name and at least one contact.", pl: "Wypełnij imię i co najmniej jeden kontakt." },
+  // 0074 — favorite-master pin on client form / detail
+  "clients.form.favoriteMaster":        { ru: "Любимый мастер", ua: "Улюблений майстер", en: "Favorite master", pl: "Ulubiony mistrz" },
+  "clients.form.favoriteMaster.none":   { ru: "— не выбран —", ua: "— не вибрано —", en: "— none —", pl: "— brak —" },
+  "clients.form.favoriteMaster.hint":   { ru: "Будет автоматически подставляться при создании записи.", ua: "Автоматично підставлятиметься при створенні запису.", en: "Will be auto-selected when creating a new booking.", pl: "Będzie automatycznie wybierany przy nowej rezerwacji." },
+  "clients.detail.favoriteAuto":        { ru: "(по истории)", ua: "(за історією)", en: "(from history)", pl: "(z historii)" },
   "clients.form.saving":                { ru: "Сохраняем…", ua: "Зберігаємо…", en: "Saving…", pl: "Zapisywanie…" },
   "clients.detail.history":             { ru: "История визитов", ua: "Історія візитів", en: "Visit history", pl: "Historia wizyt" },
   "clients.detail.blocks":              { ru: "Блокировки", ua: "Блокування", en: "Blocks", pl: "Blokady" },

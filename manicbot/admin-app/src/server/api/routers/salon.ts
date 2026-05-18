@@ -847,6 +847,62 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /**
+   * 0074 — read per-channel "auto-suggest favorite master" settings.
+   *
+   * Defaults to ON for both surfaces because the auto-suggest is a
+   * purely additive convenience (the user can always override the
+   * pre-pick in the master Select / Telegram keyboard). Source-of-
+   * truth defaults mirror Worker `services/services.js:getFavoriteSuggest`.
+   *
+   * Stored in `tenant_config` under `fav_suggest_{channel}`. We
+   * deliberately don't lump them into one JSON blob so the bot can
+   * read just `fav_suggest_telegram` without parsing.
+   */
+  getAutoSuggestFavoriteSettings: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db.select().from(tenantConfig)
+        .where(eq(tenantConfig.tenantId, input.tenantId));
+      const cfg = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+      const parse = (key: string, fallback: boolean): boolean => {
+        const v = cfg[key];
+        if (v == null) return fallback;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") {
+          const s = v.trim().toLowerCase();
+          return s === "true" || s === "1";
+        }
+        return fallback;
+      };
+      return {
+        web: parse("fav_suggest_web", true),
+        telegram: parse("fav_suggest_telegram", true),
+      };
+    }),
+
+  /**
+   * 0074 — toggle "auto-suggest favorite master" for one channel.
+   * Mirrors the setAutoConfirm shape so the settings UI can reuse the
+   * same switch component.
+   */
+  setAutoSuggestFavorite: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      channel: z.enum(["web", "telegram"]),
+      enabled: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const key = `fav_suggest_${input.channel}`;
+      const value = JSON.stringify(input.enabled);
+      await ctx.db.insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key, value })
+        .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      return { success: true };
+    }),
+
+  /**
    * Mint a short-lived HMAC-signed upload token for the Worker's /upload/asset
    * endpoint. The client uses this to upload a salon branding asset (logo,
    * cover photo, gallery photo, master portfolio) directly to R2 via the Worker.

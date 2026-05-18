@@ -84,6 +84,9 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_emoji TEXT,
   avatar_url TEXT,
   avatar_r2_key TEXT,
+  -- 0074: manual pin for "favorite master". NULL falls back to the
+  -- derived favorite computed from appointments history.
+  favorite_master_id INTEGER,
   PRIMARY KEY (tenant_id, chat_id)
 );
 CREATE INDEX IF NOT EXISTS idx_users_tenant_dob ON users(tenant_id, dob);
@@ -95,6 +98,7 @@ CREATE INDEX IF NOT EXISTS idx_users_marketing_id ON users(marketing_contact_id)
 CREATE INDEX IF NOT EXISTS idx_users_tenant_blocked ON users(tenant_id, is_blocked_global);
 CREATE INDEX IF NOT EXISTS idx_users_tenant_deleted ON users(tenant_id, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_tenant_last_visit ON users(tenant_id, last_visit_at);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_favorite_master ON users(tenant_id, favorite_master_id);
 
 -- FTS5 index over the user list. Kept in sync via the users_fts_ai/au/ad
 -- triggers installed by migration 0062. Search blob is lower(name + phone

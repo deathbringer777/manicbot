@@ -41,6 +41,16 @@ vi.mock("~/trpc/react", () => ({
       getMasters: { useQuery: () => ({ data: mastersRef.data, isLoading: mastersRef.isLoading }) },
       getServices: { useQuery: () => ({ data: servicesRef.data, isLoading: servicesRef.isLoading }) },
       getClients: { useQuery: () => ({ data: clientsRef.data }) },
+      // 0074 — favorite-master suggest toggle (defaults ON both channels).
+      getAutoSuggestFavoriteSettings: {
+        useQuery: () => ({ data: { web: true, telegram: true }, isLoading: false }),
+      },
+    },
+    clients: {
+      // 0074 — manual + derived favorite-master lookup for the picked client.
+      getFavoriteMasterSuggestion: {
+        useQuery: () => ({ data: { manual: null, derived: null }, isLoading: false }),
+      },
     },
     appointments: {
       createManual: {

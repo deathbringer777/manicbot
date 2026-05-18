@@ -13,6 +13,7 @@ import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { SectionHeader } from "./SalonShared";
 import { IGHealthCard } from "./IGHealthCard";
+import { InstagramConnect } from "./InstagramConnect";
 import { SalonMasterPairingTable } from "./SalonMasterPairingTable";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
 import { MetaGuide } from "~/components/settings/MetaGuide";
@@ -196,18 +197,10 @@ function TelegramTab({ tenantId }: { tenantId: string }) {
 
 function InstagramTab({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
-  const [token, setToken] = useState("");
-  const [pageId, setPageId] = useState("");
-  const [igAccountId, setIgAccountId] = useState("");
-  const [businessId, setBusinessId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const channels = api.salon.getChannels.useQuery({ tenantId });
   const igChannel = channels.data?.find((c) => c.channelType === "instagram");
 
-  const connectMut = api.salon.connectInstagram.useMutation({
-    onSuccess: () => { setToken(""); setPageId(""); setIgAccountId(""); setBusinessId(""); setError(null); void channels.refetch(); },
-    onError: (err) => setError(err.message),
-  });
   const disconnectMut = api.salon.disconnectChannel.useMutation({
     onSuccess: () => void channels.refetch(),
     onError: (err) => setError(err.message),
@@ -226,7 +219,9 @@ function InstagramTab({ tenantId }: { tenantId: string }) {
               <Instagram className="h-5 w-5 text-pink-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">{cfg.page_id ? `Page ${cfg.page_id}` : "Instagram"}</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                {cfg.ig_username ? `@${cfg.ig_username}` : cfg.page_id ? `Page ${cfg.page_id}` : "Instagram"}
+              </h3>
               <p className="text-[11px] text-slate-500">{t("channels.igConnected", lang)}</p>
             </div>
           </div>
@@ -244,45 +239,8 @@ function InstagramTab({ tenantId }: { tenantId: string }) {
     );
   }
 
-  const fields = [
-    { label: "Page Access Token", value: token, onChange: setToken, placeholder: "EAAxxxxxxxx...", required: true },
-    { label: "Facebook Page ID", value: pageId, onChange: setPageId, placeholder: "123456789012345", required: true },
-    { label: t("channels.igAccountId", lang), value: igAccountId, onChange: setIgAccountId, placeholder: "17841437...", required: false },
-    { label: t("channels.igBusinessId", lang), value: businessId, onChange: setBusinessId, placeholder: "25881183...", required: false },
-  ] as const;
-
-  // Connect form on top, "how to connect" guide collapsed at the bottom.
-  return (
-    <div className="space-y-4">
-      <section className="glass-card rounded-2xl p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-pink-500/10 flex items-center justify-center">
-            <Instagram className="h-5 w-5 text-pink-400" />
-          </div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.igNotConnected", lang)}</h3>
-        </div>
-        <form
-          onSubmit={(e) => { e.preventDefault(); setError(null); connectMut.mutate({ tenantId, token: token.trim(), pageId: pageId.trim(), igAccountId: igAccountId.trim() || undefined, instagramBusinessId: businessId.trim() || undefined }); }}
-          className="space-y-3"
-        >
-          {fields.map((f) => (
-            <div key={f.label}>
-              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">{f.label}</label>
-              <input type="text" value={f.value} onChange={(e) => f.onChange(e.target.value)}
-                placeholder={f.placeholder} required={f.required}
-                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-pink-500/60 text-slate-900 dark:text-white font-mono" />
-            </div>
-          ))}
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          <button type="submit" disabled={connectMut.isPending || !token.trim() || !pageId.trim()}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-pink-500/20 disabled:opacity-70">
-            {connectMut.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("channels.connecting", lang)}</> : <><Instagram className="h-4 w-4" /> {t("channels.connectIg", lang)}</>}
-          </button>
-        </form>
-      </section>
-      <MetaGuide channel="instagram" />
-    </div>
-  );
+  // Not connected — OAuth-first surface with manual paste as escape hatch.
+  return <InstagramConnect tenantId={tenantId} onConnected={() => { void channels.refetch(); }} />;
 }
 
 // ─── WhatsApp ────────────────────────────────────────────────────────────────

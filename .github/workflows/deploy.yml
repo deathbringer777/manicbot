@@ -138,6 +138,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: manicbot
+          wranglerVersion: "4.92.0"
           command: d1 migrations apply manicbot-db --remote
 
       - name: Deploy to Cloudflare Workers
@@ -146,6 +147,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: manicbot
+          wranglerVersion: "4.92.0"
           command: deploy --config wrangler.toml
 
   # ─── Landing: build + deploy to Cloudflare Pages ────────────
@@ -255,4 +257,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: manicbot/admin-app
+          wranglerVersion: "4.92.0"
           command: pages deploy .vercel/output/static --project-name=admin-app --commit-dirty=true --commit-message="${{ steps.cf_commit.outputs.msg }}"

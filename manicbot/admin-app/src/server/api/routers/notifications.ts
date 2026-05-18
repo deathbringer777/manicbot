@@ -15,9 +15,28 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { userNotifications } from "~/server/db/schema";
+import { userNotifications, webUsers } from "~/server/db/schema";
+import {
+  DEFAULT_PREFS,
+  NOTIFICATION_CATEGORIES,
+  parsePrefs,
+  serializePrefs,
+  type NotificationCategory,
+} from "~/lib/notifications/prefs";
+import { notifyWebUser } from "~/server/services/notifyWebUser";
 
 const ID_LIST = z.array(z.string().min(1)).min(1).max(100);
+
+const CATEGORY_ENUM = z.enum(NOTIFICATION_CATEGORIES as unknown as [NotificationCategory, ...NotificationCategory[]]);
+const PREF_INPUT = z.object({
+  categories: z.record(
+    CATEGORY_ENUM,
+    z.object({
+      inapp: z.boolean(),
+      push: z.boolean(),
+    }),
+  ).optional(),
+});
 
 export const notificationsRouter = createTRPCRouter({
   // ------------------------------------------------------------------
@@ -131,4 +150,93 @@ export const notificationsRouter = createTRPCRouter({
         .where(eq(userNotifications.id, input.id));
       return { ok: true };
     }),
+
+  // ------------------------------------------------------------------
+  // getMyPrefs — return the user's saved notification_prefs JSON, parsed
+  // into a complete shape (missing categories filled from DEFAULT_PREFS).
+  // Returning a full shape means the settings UI doesn't have to know
+  // about defaults.
+  // ------------------------------------------------------------------
+  getMyPrefs: protectedProcedure.query(async ({ ctx }) => {
+    const uid = ctx.webUser!.id;
+    const rows = await ctx.db
+      .select({ raw: webUsers.notificationPrefs })
+      .from(webUsers)
+      .where(eq(webUsers.id, uid))
+      .limit(1);
+    return parsePrefs(rows[0]?.raw ?? null);
+  }),
+
+  // ------------------------------------------------------------------
+  // setMyPrefs — merge supplied categories into the user's saved prefs.
+  // Partial updates supported: omit a category and its current setting
+  // survives. The serialized blob is always canonical (key order matches
+  // NOTIFICATION_CATEGORIES) so a round-trip is stable.
+  // ------------------------------------------------------------------
+  setMyPrefs: protectedProcedure
+    .input(PREF_INPUT)
+    .mutation(async ({ ctx, input }) => {
+      const uid = ctx.webUser!.id;
+      const rows = await ctx.db
+        .select({ raw: webUsers.notificationPrefs })
+        .from(webUsers)
+        .where(eq(webUsers.id, uid))
+        .limit(1);
+      const current = parsePrefs(rows[0]?.raw ?? null);
+      const next = {
+        categories: { ...current.categories },
+      };
+      if (input.categories) {
+        for (const [cat, value] of Object.entries(input.categories)) {
+          if (value) {
+            next.categories[cat as NotificationCategory] = value;
+          }
+        }
+      }
+      const serialized = serializePrefs(next);
+      await ctx.db
+        .update(webUsers)
+        .set({ notificationPrefs: serialized, updatedAt: Math.floor(Date.now() / 1000) })
+        .where(eq(webUsers.id, uid));
+      return next;
+    }),
+
+  // ------------------------------------------------------------------
+  // resetMyPrefs — wipe the JSON column. Subsequent loads resolve to
+  // DEFAULT_PREFS — same as a brand-new account.
+  // ------------------------------------------------------------------
+  resetMyPrefs: protectedProcedure.mutation(async ({ ctx }) => {
+    const uid = ctx.webUser!.id;
+    await ctx.db
+      .update(webUsers)
+      .set({ notificationPrefs: null, updatedAt: Math.floor(Date.now() / 1000) })
+      .where(eq(webUsers.id, uid));
+    return DEFAULT_PREFS;
+  }),
+
+  // ------------------------------------------------------------------
+  // sendTestNotification — drops a test row into the bell + (optionally)
+  // a push. Used by the settings panel to let the user verify the
+  // delivery pipeline works for their account. Server-side gate: 5/min
+  // by IP isn't possible from a tRPC ctx, but the partial UNIQUE on the
+  // table (sourceSlug='self_test', sourceId=fixed-day-bucket) dedups
+  // accidental double-clicks so the row count cannot blow up.
+  // ------------------------------------------------------------------
+  sendTestNotification: protectedProcedure.mutation(async ({ ctx }) => {
+    const uid = ctx.webUser!.id;
+    const now = Math.floor(Date.now() / 1000);
+    // Bucket sourceId to the minute so 60s of rapid clicks dedup but
+    // the user can still re-trigger after a minute.
+    const minuteBucket = Math.floor(now / 60);
+    const r = await notifyWebUser(ctx.db, {
+      webUserId: uid,
+      kind: "support.test",
+      title: "ManicBot · тест уведомлений",
+      body: "Если вы видите это в звонке — система доставки работает.",
+      link: "/notifications",
+      sourceSlug: "self_test",
+      sourceId: `t_${uid}_${minuteBucket}`,
+    });
+    return { ok: r.ok, deduped: r.deduped ?? false };
+  }),
 });

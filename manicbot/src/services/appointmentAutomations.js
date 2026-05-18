@@ -4,6 +4,39 @@ import { fmtDT } from '../utils/date.js';
 import { svcName } from '../utils/helpers.js';
 import { CB } from '../config.js';
 import { log } from '../utils/logger.js';
+import { dispatchAppointmentInApp } from '../notifications.js';
+import { getUser } from './users.js';
+
+/**
+ * Per-event bell row metadata. The dispatcher uses this to drop a
+ * user_notifications row for the assigned master + tenant owner after
+ * every status flip, so the bell reflects the apt lifecycle without
+ * each call site having to know about notifyWebUser.
+ *
+ * `silent: true` means the event still runs side-effects + analytics
+ * but no bell row is written (e.g. `appointment.no_show_client` —
+ * salon side already sees the consequence in lifetime_visits and the
+ * client is silently re-prompted).
+ */
+const EVENT_INAPP_TITLE = {
+  'appointment.done':            'Визит завершён',
+  'appointment.no_show_master':  'Мастер не пришёл',
+  'appointment.confirmed':       'Запись подтверждена',
+  'appointment.rejected':        'Запись отклонена',
+  'appointment.cancelled':       'Запись отменена',
+  'appointment.rescheduled':     'Запись перенесена',
+};
+
+async function dropAppointmentInAppForStaff(ctx, apt, eventType) {
+  const title = EVENT_INAPP_TITLE[eventType];
+  if (!title) return;
+  try {
+    const user = await getUser(ctx, apt.chatId).catch(() => null);
+    await dispatchAppointmentInApp(ctx, apt, user, eventType, title);
+  } catch (e) {
+    log.warn('appointmentAutomations', { phase: 'inapp_staff', eventType, error: e?.message?.slice(0, 200) });
+  }
+}
 
 /**
  * Single dispatch point for status-change side-effects on an appointment.
@@ -94,6 +127,13 @@ export async function dispatchAppointmentAutomation(ctx, apt, eventType, opts = 
   } catch (e) {
     log.error('appointmentAutomations', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'automations_dispatch', eventType });
   }
+
+  // ── 2.5. Bell row for the assigned master + tenant owner ─────────
+  // This is independent of the marketing dispatch — the salon dashboard
+  // should always reflect lifecycle events even if no marketing
+  // automation is configured. Idempotent via the partial UNIQUE on
+  // user_notifications (sourceSlug='appointment', sourceId='${id}:${kind}').
+  await dropAppointmentInAppForStaff(ctx, apt, eventType);
 
   // ── 3. Default client notification ──────────────────────────────
   // Unless an automation row explicitly suppressed it (sentinel for the

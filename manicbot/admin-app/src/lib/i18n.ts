@@ -1729,6 +1729,80 @@ const translations = {
   "time.minutesAgo":              { ru: "{n} мин назад",          ua: "{n} хв тому",            en: "{n}m ago",               pl: "{n} min temu" },
   "time.hoursAgo":                { ru: "{n} ч назад",            ua: "{n} год тому",           en: "{n}h ago",               pl: "{n} godz. temu" },
   "time.daysAgo":                 { ru: "{n} д назад",            ua: "{n} дн тому",            en: "{n}d ago",               pl: "{n} dni temu" },
+  "time.weeksAgo":                { ru: "{n} нед назад",          ua: "{n} тиж тому",           en: "{n}w ago",               pl: "{n} tyg. temu" },
+  // Compact bell variants (no "назад"/"ago" tail — used inside dense rows)
+  "time.minutesShort":            { ru: "{n} мин",                ua: "{n} хв",                 en: "{n}m",                   pl: "{n} min" },
+  "time.hoursShort":              { ru: "{n} ч",                  ua: "{n} год",                en: "{n}h",                   pl: "{n} godz." },
+  "time.daysShort":               { ru: "{n} д",                  ua: "{n} дн",                 en: "{n}d",                   pl: "{n} dni" },
+  "time.weeksShort":              { ru: "{n} нед",                ua: "{n} тиж",                en: "{n}w",                   pl: "{n} tyg." },
+
+  // ── Notification Center ────────────────────────────────────────────────────
+  "notifications.title":          { ru: "Уведомления",            ua: "Сповіщення",             en: "Notifications",          pl: "Powiadomienia" },
+  "notifications.tab.all":        { ru: "Все",                    ua: "Усі",                    en: "All",                    pl: "Wszystkie" },
+  "notifications.tab.unread":     { ru: "Непрочитанные",          ua: "Непрочитані",            en: "Unread",                 pl: "Nieprzeczytane" },
+  "notifications.empty.all":      { ru: "Нет уведомлений",        ua: "Немає сповіщень",        en: "No notifications",       pl: "Brak powiadomień" },
+  "notifications.empty.unread":   { ru: "Нет непрочитанных",      ua: "Немає непрочитаних",     en: "No unread",              pl: "Brak nieprzeczytanych" },
+  "notifications.empty.hint":     { ru: "Здесь появятся ответы поддержки, напоминания, дни рождения клиентов и многое другое.", ua: "Тут зʼявляться відповіді підтримки, нагадування, дні народження клієнтів і багато іншого.", en: "Replies from support, reminders, client birthdays and more will land here.", pl: "Tu pojawią się odpowiedzi wsparcia, przypomnienia, urodziny klientów i wiele więcej." },
+  "notifications.loading":        { ru: "Загрузка…",              ua: "Завантаження…",          en: "Loading…",               pl: "Ładowanie…" },
+  "notifications.markAll":        { ru: "Прочитать всё",          ua: "Прочитати все",          en: "Mark all read",          pl: "Oznacz wszystko" },
+  "notifications.seeAll":         { ru: "Все уведомления",        ua: "Усі сповіщення",         en: "See all",                pl: "Wszystkie powiadomienia" },
+  "notifications.group.new":      { ru: "Новые",                  ua: "Нові",                   en: "New",                    pl: "Nowe" },
+  "notifications.group.earlier":  { ru: "Ранее",                  ua: "Раніше",                 en: "Earlier",                pl: "Wcześniej" },
+  "notifications.bucket.today":   { ru: "Сегодня",                ua: "Сьогодні",               en: "Today",                  pl: "Dziś" },
+  "notifications.bucket.week":    { ru: "На этой неделе",         ua: "Цього тижня",            en: "This week",              pl: "W tym tygodniu" },
+  "notifications.bucket.older":   { ru: "Ранее",                  ua: "Раніше",                 en: "Earlier",                pl: "Wcześniej" },
+  "notifications.delete":         { ru: "Удалить",                ua: "Видалити",               en: "Delete",                 pl: "Usuń" },
+  "notifications.openLink":       { ru: "Перейти",                ua: "Перейти",                en: "Open",                   pl: "Otwórz" },
+  "notifications.countSummary":   { ru: "{total} · {unread} непрочитано", ua: "{total} · {unread} непрочитаних", en: "{total} total · {unread} unread", pl: "{total} · {unread} nieprzeczytanych" },
+  "notifications.configureLink":  { ru: "Настроить уведомления",  ua: "Налаштувати сповіщення", en: "Configure notifications", pl: "Skonfiguruj powiadomienia" },
+  // Bell footer push toggle
+  "notifications.push.enabled":   { ru: "Браузерные пуши включены", ua: "Браузерні пуші увімкнено", en: "Browser push enabled",  pl: "Push w przeglądarce włączony" },
+  "notifications.push.label":     { ru: "Пуш в браузер",          ua: "Пуш у браузер",          en: "Browser push",           pl: "Push w przeglądarce" },
+  "notifications.push.on":        { ru: "Включить",               ua: "Увімкнути",              en: "Enable",                 pl: "Włącz" },
+  "notifications.push.off":       { ru: "Выкл",                   ua: "Вимк",                   en: "Off",                    pl: "Wył" },
+  "notifications.push.connecting":{ ru: "Подключаем…",             ua: "Підключаємо…",           en: "Connecting…",            pl: "Łączenie…" },
+  "notifications.push.denied":    { ru: "Заблокировано",          ua: "Заблоковано",            en: "Blocked",                pl: "Zablokowane" },
+
+  // ── Notifications settings section ─────────────────────────────────────────
+  "notifications.settings.label":         { ru: "Уведомления",            ua: "Сповіщення",             en: "Notifications",          pl: "Powiadomienia" },
+  "notifications.settings.desc":          { ru: "Пуш, категории, тишина", ua: "Пуш, категорії, тиша",   en: "Push, categories, quiet", pl: "Push, kategorie, cisza" },
+  "notifications.settings.push.title":    { ru: "Браузерные push-уведомления", ua: "Push у браузері",   en: "Browser push notifications", pl: "Powiadomienia push w przeglądarce" },
+  "notifications.settings.push.desc":     { ru: "Получайте уведомления, даже когда вкладка закрыта.", ua: "Отримуйте сповіщення навіть коли вкладка закрита.", en: "Get alerts even when this tab is closed.", pl: "Otrzymuj powiadomienia, nawet gdy karta jest zamknięta." },
+  "notifications.settings.push.unsupported": { ru: "Этот браузер не поддерживает push-уведомления.", ua: "Цей браузер не підтримує push-сповіщення.", en: "This browser does not support push notifications.", pl: "Ta przeglądarka nie obsługuje powiadomień push." },
+  "notifications.settings.push.notConfigured": { ru: "Push временно недоступен — администратор ещё не настроил VAPID-ключи.", ua: "Push тимчасово недоступний — адміністратор ще не налаштував VAPID.", en: "Push is currently unavailable — VAPID keys are not deployed yet.", pl: "Push jest niedostępny — klucze VAPID nie są jeszcze wdrożone." },
+  "notifications.settings.push.deniedHint":{ ru: "Доступ к уведомлениям запрещён в настройках браузера. Разрешите его и обновите страницу.", ua: "Доступ до сповіщень заборонено в браузері. Дозвольте його та оновіть сторінку.", en: "Notification permission is denied in your browser settings. Allow it and reload.", pl: "Uprawnienia do powiadomień są zablokowane w przeglądarce. Włącz je i odśwież stronę." },
+  "notifications.settings.push.testBtn":  { ru: "Отправить тест",         ua: "Надіслати тест",         en: "Send test",              pl: "Wyślij test" },
+  "notifications.settings.push.testSent": { ru: "Тест отправлен — проверьте уведомления.", ua: "Тест надіслано — перевірте сповіщення.", en: "Test sent — check your notifications.", pl: "Test wysłany — sprawdź powiadomienia." },
+  "notifications.settings.categories.title":{ ru: "Категории",            ua: "Категорії",              en: "Categories",             pl: "Kategorie" },
+  "notifications.settings.categories.desc":{ ru: "Выберите, какие события и куда доставлять.", ua: "Оберіть, які події та куди доставляти.", en: "Choose which events to deliver and where.", pl: "Wybierz, jakie wydarzenia dostarczać i gdzie." },
+  "notifications.settings.col.inapp":     { ru: "В приложении",            ua: "У застосунку",           en: "In-app",                pl: "W aplikacji" },
+  "notifications.settings.col.push":      { ru: "Push",                   ua: "Push",                   en: "Push",                   pl: "Push" },
+  "notifications.settings.reset":         { ru: "Сбросить",               ua: "Скинути",                en: "Reset",                  pl: "Resetuj" },
+  "notifications.settings.saved":         { ru: "Сохранено",              ua: "Збережено",              en: "Saved",                  pl: "Zapisano" },
+  "notifications.settings.scenarios.title":{ ru: "Когда срабатывают уведомления", ua: "Коли спрацьовують сповіщення", en: "When notifications fire", pl: "Kiedy powiadomienia są wysyłane" },
+  "notifications.settings.scenarios.desc": { ru: "Список платформенных событий, которые попадают в этот канал.", ua: "Перелік платформних подій, що потрапляють у цей канал.", en: "Platform events that surface here.", pl: "Wydarzenia platformy trafiające do tego kanału." },
+
+  // Category labels (used in settings grid + future filters)
+  "notifications.cat.appointment":{ ru: "Записи",                 ua: "Записи",                 en: "Appointments",           pl: "Wizyty" },
+  "notifications.cat.support":    { ru: "Поддержка",              ua: "Підтримка",              en: "Support",                pl: "Wsparcie" },
+  "notifications.cat.birthday":   { ru: "Дни рождения",           ua: "Дні народження",         en: "Birthdays",              pl: "Urodziny" },
+  "notifications.cat.platform":   { ru: "Объявления платформы",   ua: "Оголошення платформи",   en: "Platform updates",       pl: "Aktualności platformy" },
+  "notifications.cat.master":     { ru: "Команда",                ua: "Команда",                en: "Team",                   pl: "Zespół" },
+  "notifications.cat.reminder":   { ru: "Напоминания",            ua: "Нагадування",            en: "Reminders",              pl: "Przypomnienia" },
+  "notifications.cat.messenger":  { ru: "Сообщения",              ua: "Повідомлення",           en: "Messages",               pl: "Wiadomości" },
+  "notifications.cat.billing":    { ru: "Биллинг",                ua: "Білінг",                 en: "Billing",                pl: "Płatności" },
+  "notifications.cat.marketing":  { ru: "Маркетинг",              ua: "Маркетинг",              en: "Marketing",              pl: "Marketing" },
+
+  // Per-category short descriptions of what events land there
+  "notifications.cat.appointment.desc":{ ru: "Новые записи, подтверждения, переносы, неявки.", ua: "Нові записи, підтвердження, перенесення, неявки.", en: "New bookings, confirmations, reschedules, no-shows.", pl: "Nowe wizyty, potwierdzenia, przesunięcia, nieobecności." },
+  "notifications.cat.support.desc":{ ru: "Ответы от поддержки и новые тикеты от клиентов.", ua: "Відповіді від підтримки та нові тікети від клієнтів.", en: "Replies from support and new client tickets.", pl: "Odpowiedzi wsparcia i nowe zgłoszenia klientów." },
+  "notifications.cat.birthday.desc":{ ru: "Когда у клиента день рождения и сработала промо-кампания.", ua: "Коли у клієнта день народження і спрацювала промо.", en: "When a client has a birthday and the promo fires.", pl: "Gdy klient ma urodziny i wystartuje promocja." },
+  "notifications.cat.platform.desc":{ ru: "Сообщения от ManicBot, объявления, рассылки.", ua: "Повідомлення від ManicBot, оголошення, розсилки.", en: "Messages from ManicBot, announcements, broadcasts.", pl: "Wiadomości od ManicBot, ogłoszenia, broadcasty." },
+  "notifications.cat.master.desc":{ ru: "Приглашения мастеров, изменения роли.", ua: "Запрошення майстрів, зміни ролей.", en: "Master invitations, role changes.", pl: "Zaproszenia mistrzów, zmiany roli." },
+  "notifications.cat.reminder.desc":{ ru: "Личные напоминания и рутины (плагин Reminders).", ua: "Особисті нагадування та рутини (плагін Reminders).", en: "Personal reminders and routines (Reminders plugin).", pl: "Osobiste przypomnienia i rutyny (wtyczka Reminders)." },
+  "notifications.cat.messenger.desc":{ ru: "Новые сообщения в чатах и тредах.", ua: "Нові повідомлення в чатах та тредах.", en: "New messages in chats and threads.", pl: "Nowe wiadomości w czatach i wątkach." },
+  "notifications.cat.billing.desc":{ ru: "Проблемы оплаты, продление, окончание триала.", ua: "Проблеми оплати, продовження, кінець триалу.", en: "Payment issues, renewals, trial expiry.", pl: "Problemy z płatnościami, odnowienia, koniec triala." },
+  "notifications.cat.marketing.desc":{ ru: "Статусы маркетинговых кампаний.", ua: "Статуси маркетингових кампаній.", en: "Marketing campaign status updates.", pl: "Statusy kampanii marketingowych." },
 
   // ── Activity-feed action labels (gender-neutral) ───────────────────────────
   "activity.tenantCreated":       { ru: "Новый салон в системе",  ua: "Новий салон у системі",  en: "joined the platform",    pl: "dołączył do platformy" },
@@ -1989,5 +2063,21 @@ export function formatRelativeTime(unixSeconds: number, lang: Lang, nowMs = Date
   if (diffSec < 3600) return t("time.minutesAgo", lang).replace("{n}", String(Math.floor(diffSec / 60)));
   if (diffSec < 86400) return t("time.hoursAgo", lang).replace("{n}", String(Math.floor(diffSec / 3600)));
   if (diffSec < 7 * 86400) return t("time.daysAgo", lang).replace("{n}", String(Math.floor(diffSec / 86400)));
+  if (diffSec < 30 * 86400) return t("time.weeksAgo", lang).replace("{n}", String(Math.floor(diffSec / (7 * 86400))));
+  return new Date(unixSeconds * 1000).toLocaleDateString(localeFor(lang));
+}
+
+/**
+ * Compact variant of formatRelativeTime — used in dense notification rows
+ * where the trailing "ago" / "назад" feels noisy. Same buckets, but uses
+ * the short i18n keys ("{n} мин", "{n}m") instead of the long ones.
+ */
+export function formatRelativeShort(unixSeconds: number, lang: Lang, nowMs = Date.now()): string {
+  const diffSec = Math.max(0, Math.floor(nowMs / 1000 - unixSeconds));
+  if (diffSec < 60) return t("time.justNow", lang);
+  if (diffSec < 3600) return t("time.minutesShort", lang).replace("{n}", String(Math.floor(diffSec / 60)));
+  if (diffSec < 86400) return t("time.hoursShort", lang).replace("{n}", String(Math.floor(diffSec / 3600)));
+  if (diffSec < 7 * 86400) return t("time.daysShort", lang).replace("{n}", String(Math.floor(diffSec / 86400)));
+  if (diffSec < 30 * 86400) return t("time.weeksShort", lang).replace("{n}", String(Math.floor(diffSec / (7 * 86400))));
   return new Date(unixSeconds * 1000).toLocaleDateString(localeFor(lang));
 }

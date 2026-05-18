@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   User, CreditCard, Palette, HelpCircle, ArrowLeft,
   Settings, Wrench, Store, Globe, Users, MessageSquare,
-  UserRound, ChevronLeft, ChevronRight, Gift,
+  UserRound, ChevronLeft, ChevronRight, Gift, Bell,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -86,6 +86,12 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     en: { label: "Refer a friend", desc: "Share, earn free months" },
     pl: { label: "Poleć znajomemu", desc: "Udostępnij, zarabiaj wolne miesiące" },
   },
+  notifications: {
+    ru: { label: "Уведомления",       desc: "Пуш, категории, тишина" },
+    ua: { label: "Сповіщення",        desc: "Пуш, категорії, тиша" },
+    en: { label: "Notifications",     desc: "Push, categories, quiet" },
+    pl: { label: "Powiadomienia",     desc: "Push, kategorie, cisza" },
+  },
 };
 
 const BACK_LABELS: Record<Lang, string> = {
@@ -103,17 +109,18 @@ const SETTINGS_TITLE: Record<Lang, string> = {
 };
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
-  account:    User,
-  salon:      Store,
-  public:     Globe,
-  team:       Users,
-  channels:   MessageSquare,
-  billing:    CreditCard,
-  appearance: Palette,
-  help:       HelpCircle,
-  profile:    UserRound,
-  platform:   Wrench,
-  referrals:  Gift,
+  account:       User,
+  salon:         Store,
+  public:        Globe,
+  team:          Users,
+  channels:      MessageSquare,
+  billing:       CreditCard,
+  appearance:    Palette,
+  help:          HelpCircle,
+  profile:       UserRound,
+  platform:      Wrench,
+  referrals:     Gift,
+  notifications: Bell,
 };
 
 function getSections(role: string | null, lang: Lang, isPersonalTenant: boolean): SettingsSection[] {
@@ -129,19 +136,19 @@ function getSections(role: string | null, lang: Lang, isPersonalTenant: boolean)
     (role === "master" && isPersonalTenant);
 
   if (role === "tenant_owner" || role === "tenant_manager") {
-    ids.push("account", "salon", "public", "team", "channels", "billing", "appearance");
+    ids.push("account", "salon", "public", "team", "channels", "billing", "notifications", "appearance");
     if (showReferrals) ids.push("referrals");
     ids.push("help");
   } else if (role === "master") {
-    ids.push("account", "profile", "appearance");
+    ids.push("account", "profile", "notifications", "appearance");
     if (showReferrals) ids.push("referrals");
     ids.push("help");
   } else if (role === "support" || role === "technical_support") {
-    ids.push("account", "appearance", "help");
+    ids.push("account", "notifications", "appearance", "help");
   } else if (role === "system_admin") {
-    ids.push("account", "appearance", "help", "platform");
+    ids.push("account", "notifications", "appearance", "help", "platform");
   } else {
-    ids.push("account", "appearance", "help");
+    ids.push("account", "notifications", "appearance", "help");
   }
 
   return ids.map((id) => ({

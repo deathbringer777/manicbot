@@ -7,7 +7,7 @@
  * Polls notifications.unreadCount every 30 s (5 s when dropdown open).
  * Click a row to navigate to its link and mark it read.
  *
- * Visual contract (PR 2 of the notification center upgrade):
+ * Visual contract:
  *  - Per-`kind` icon in a colored circle on the left (kindMeta helper)
  *  - Title + 1-line body preview
  *  - Relative time on the right
@@ -17,6 +17,9 @@
  *
  * Backend writers register kinds in lib/notifications/kindMeta.ts — the
  * dropdown does not need patching when a new writer is added.
+ *
+ * i18n: every user-facing string is sourced from lib/i18n.ts via the
+ * `useLang()` hook. New strings MUST be added there with all four locales.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -25,17 +28,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "~/trpc/react";
 import {
-  BELL_GROUP_TITLE,
   bellGroup,
+  bellGroupTitle,
   formatRelative,
   kindMeta,
   type BellGroup,
 } from "~/lib/notifications/kindMeta";
 import { usePushSubscription } from "~/lib/notifications/usePushSubscription";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 const DROPDOWN_LIMIT = 12;
 
 export function NotificationBell() {
+  const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -97,14 +103,16 @@ export function NotificationBell() {
     return buckets;
   }, [list.data]);
 
+  const titleText = t("notifications.title", lang);
+
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         data-testid="notification-bell"
-        title="Notifications"
-        aria-label="Notifications"
+        title={titleText}
+        aria-label={titleText}
         aria-expanded={open}
         className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 border border-slate-200 dark:border-white/10 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors"
       >
@@ -128,7 +136,7 @@ export function NotificationBell() {
           <div className="px-4 pt-3 pb-2 border-b border-slate-100 dark:border-white/5">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                Уведомления
+                {titleText}
               </p>
               <div className="flex items-center gap-0.5">
                 {count > 0 && (
@@ -136,7 +144,7 @@ export function NotificationBell() {
                     type="button"
                     onClick={() => markAll.mutate()}
                     disabled={markAll.isPending}
-                    title="Прочитать всё"
+                    title={t("notifications.markAll", lang)}
                     data-testid="notification-bell-mark-all"
                     className="p-1.5 rounded-md text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors"
                   >
@@ -146,7 +154,7 @@ export function NotificationBell() {
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  aria-label="Close"
+                  aria-label={t("common.close", lang)}
                   className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -166,7 +174,7 @@ export function NotificationBell() {
                     : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                 }`}
               >
-                Все
+                {t("notifications.tab.all", lang)}
               </button>
               <button
                 type="button"
@@ -178,7 +186,7 @@ export function NotificationBell() {
                     : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                 }`}
               >
-                Непрочитанные
+                {t("notifications.tab.unread", lang)}
                 {count > 0 && (
                   <span className="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 rounded">
                     {count > 99 ? "99+" : count}
@@ -191,13 +199,15 @@ export function NotificationBell() {
           {/* Body — grouped list */}
           <div className="max-h-96 overflow-y-auto">
             {list.isLoading && (
-              <p className="px-4 py-8 text-center text-xs text-slate-400">Загрузка…</p>
+              <p className="px-4 py-8 text-center text-xs text-slate-400">{t("notifications.loading", lang)}</p>
             )}
             {list.data && list.data.length === 0 && (
               <div className="px-4 py-10 text-center text-slate-400">
                 <Inbox className="h-6 w-6 mx-auto mb-2 opacity-50" />
                 <p className="text-xs">
-                  {filter === "unread" ? "Нет непрочитанных" : "Нет уведомлений"}
+                  {filter === "unread"
+                    ? t("notifications.empty.unread", lang)
+                    : t("notifications.empty.all", lang)}
                 </p>
               </div>
             )}
@@ -208,7 +218,7 @@ export function NotificationBell() {
               return (
                 <section key={group} data-testid={`notification-bell-group-${group}`}>
                   <h3 className="px-4 pt-2.5 pb-1 text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                    {BELL_GROUP_TITLE[group]}
+                    {bellGroupTitle(group, lang)}
                   </h3>
                   <ul>
                     {rows.map((n) => {
@@ -252,7 +262,7 @@ export function NotificationBell() {
                                   </p>
                                 )}
                                 <p className="text-[10px] text-slate-400 mt-0.5">
-                                  {formatRelative(n.createdAt)}
+                                  {formatRelative(n.createdAt, lang)}
                                 </p>
                               </div>
                             </div>
@@ -280,6 +290,7 @@ export function NotificationBell() {
  * the service worker on initial page paint.
  */
 function BellFooter({ onClose }: { onClose: () => void }) {
+  const { lang } = useLang();
   const push = usePushSubscription();
 
   // Hide the push toggle when the platform hasn't deployed VAPID keys
@@ -292,7 +303,9 @@ function BellFooter({ onClose }: { onClose: () => void }) {
       {showPushToggle && (
         <div className="px-4 py-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            {push.enabled ? "Браузерные пуши включены" : "Пуш в браузер"}
+            {push.enabled
+              ? t("notifications.push.enabled", lang)
+              : t("notifications.push.label", lang)}
           </span>
           {push.enabled ? (
             <button
@@ -303,7 +316,7 @@ function BellFooter({ onClose }: { onClose: () => void }) {
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5"
             >
               <BellOff className="h-3 w-3" />
-              Выкл
+              {t("notifications.push.off", lang)}
             </button>
           ) : (
             <button
@@ -314,7 +327,11 @@ function BellFooter({ onClose }: { onClose: () => void }) {
               className="inline-flex items-center gap-1 rounded-md bg-indigo-500/10 px-2 py-1 text-[11px] font-medium text-indigo-500 hover:bg-indigo-500/20 disabled:opacity-50"
             >
               <Bell className="h-3 w-3" />
-              {push.permission === "denied" ? "Заблокировано" : push.loading ? "Подключаем…" : "Включить"}
+              {push.permission === "denied"
+                ? t("notifications.push.denied", lang)
+                : push.loading
+                ? t("notifications.push.connecting", lang)
+                : t("notifications.push.on", lang)}
             </button>
           )}
         </div>
@@ -326,7 +343,7 @@ function BellFooter({ onClose }: { onClose: () => void }) {
           data-testid="notification-bell-see-all"
           className="text-[11px] font-medium text-indigo-500 hover:text-indigo-600"
         >
-          Все уведомления →
+          {t("notifications.seeAll", lang)} →
         </Link>
       </div>
     </div>

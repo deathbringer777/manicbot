@@ -76,6 +76,7 @@ const BOOTSTRAP_SQL = [
      verification_token_hash TEXT,
      email_change_token_hash TEXT,
      password_encrypted TEXT,
+     notification_prefs TEXT,
      created_at INTEGER NOT NULL,
      updated_at INTEGER NOT NULL
    )`,

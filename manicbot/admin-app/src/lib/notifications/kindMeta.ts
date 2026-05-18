@@ -12,11 +12,17 @@
  *   - support.ticket.reply   (support replyToMyTicket fan-out)
  *   - birthday.client        (birthday cron — tenant_owner)
  *   - appointment.created    (notifyAptStaff — master in-app)
- *   - master.invite          (salon.sendMasterInvitation + auth.getMyRole backfill)
+ *   - appointment.confirmed  (notifyAptStaffAutoConfirmed)
+ *   - appointment.cancelled  (notifyStaffAptCancelled)
+ *   - appointment.rescheduled(reschedule notify)
+ *   - appointment.no_show_client (post-visit dispatcher)
+ *   - appointment.no_show_master (post-visit dispatcher)
+ *   - appointment.done       (post-visit dispatcher)
+ *   - master.invite          (salon.sendMasterInvitation + auth backfill)
  *   - platform.message       (platformMessenger sendDirectMessage / broadcast)
  *   - platform.reply         (platformMessenger sendMyReply — fans to all sysadmins)
- *   - billing.alert          (future — billing status flip)
- *   - marketing.campaign.sent (future — campaign delivery report)
+ *   - billing.alert          (billing status flip — see Worker writer)
+ *   - marketing.campaign.sent(future — campaign delivery report)
  */
 import type { LucideIcon } from "lucide-react";
 import {
@@ -30,6 +36,7 @@ import {
   Star,
   UserPlus,
 } from "lucide-react";
+import { formatRelativeShort, t, type Lang } from "~/lib/i18n";
 
 export type NotifKind = string;
 
@@ -37,7 +44,7 @@ export interface KindMeta {
   icon: LucideIcon;
   /** Tailwind classes for the small circular icon container. */
   accent: string;
-  /** Stable visual category — only used in tests / debug. */
+  /** Stable visual category — also used by prefs / settings. */
   category:
     | "support"
     | "appointment"
@@ -74,21 +81,16 @@ export function kindMeta(kind: NotifKind): KindMeta {
 }
 
 /**
- * Render unix-seconds timestamp as a short relative label
- * ("только что", "5 мин", "2 ч", "3 д", "2 нед", "12.01.2026").
- *
- * Pure — accepts an explicit `now` so tests don't depend on the wall
- * clock.
+ * Render unix-seconds timestamp as a short, locale-aware relative label.
+ * Delegates to formatRelativeShort in lib/i18n so all callers pick up the
+ * same plural/format treatment.
  */
-export function formatRelative(unix: number, now: number = Math.floor(Date.now() / 1000)): string {
-  const diff = Math.max(0, now - unix);
-  if (diff < 60) return "только что";
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч`;
-  const days = Math.floor(diff / 86400);
-  if (days < 7) return `${days} д`;
-  if (days < 30) return `${Math.floor(days / 7)} нед`;
-  return new Date(unix * 1000).toLocaleDateString("ru-RU");
+export function formatRelative(
+  unix: number,
+  lang: Lang = "ru",
+  now: number = Math.floor(Date.now() / 1000),
+): string {
+  return formatRelativeShort(unix, lang, now * 1000);
 }
 
 export type TimeBucket = "today" | "week" | "older";
@@ -104,11 +106,12 @@ export function timeBucket(
   return "older";
 }
 
-export const TIME_BUCKET_TITLE: Record<TimeBucket, string> = {
-  today: "Сегодня",
-  week: "На этой неделе",
-  older: "Ранее",
-};
+/** Localized bucket headings — pass the active Lang. */
+export function timeBucketTitle(bucket: TimeBucket, lang: Lang): string {
+  if (bucket === "today") return t("notifications.bucket.today", lang);
+  if (bucket === "week") return t("notifications.bucket.week", lang);
+  return t("notifications.bucket.older", lang);
+}
 
 /**
  * Bell dropdown groups: rows from the last 24h land in «Новые», older in
@@ -125,6 +128,27 @@ export function bellGroup(
   return now - unix < 86400 ? "new" : "earlier";
 }
 
+export function bellGroupTitle(group: BellGroup, lang: Lang): string {
+  return group === "new"
+    ? t("notifications.group.new", lang)
+    : t("notifications.group.earlier", lang);
+}
+
+/**
+ * @deprecated Use `timeBucketTitle(bucket, lang)` instead. Kept for backward
+ *  compatibility with anything still importing this Record (tests, old
+ *  consumers). The default value matches the historical Russian copy.
+ */
+export const TIME_BUCKET_TITLE: Record<TimeBucket, string> = {
+  today: "Сегодня",
+  week: "На этой неделе",
+  older: "Ранее",
+};
+
+/**
+ * @deprecated Use `bellGroupTitle(group, lang)` instead. Kept for backward
+ *  compatibility.
+ */
 export const BELL_GROUP_TITLE: Record<BellGroup, string> = {
   new: "Новые",
   earlier: "Ранее",

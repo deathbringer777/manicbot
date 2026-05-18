@@ -516,6 +516,9 @@ CREATE TABLE IF NOT EXISTS web_users (
   -- ciphertext (BOT_ENCRYPTION_KEY + HKDF label 'master-password-v1').
   -- NULL for accounts the master owns themselves.
   password_encrypted TEXT,
+  -- 0077: per-user notification preferences (JSON blob). NULL = defaults.
+  -- See lib/notifications/prefs.ts for shape + writer integration.
+  notification_prefs TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

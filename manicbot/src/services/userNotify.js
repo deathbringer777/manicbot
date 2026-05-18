@@ -22,6 +22,7 @@ import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { send as telegramSend } from '../telegram.js';
 import { log } from '../utils/logger.js';
 import { sendWebPush } from './webpush.js';
+import { loadPrefsForWebUser, shouldDeliver } from './notificationPrefs.js';
 
 const SYNTHETIC_CHAT_FLOOR = 10_000_000_000; // synthetic personal-master ids
 
@@ -64,8 +65,17 @@ export async function notifyWebUser(ctx, webUserId, opts) {
     return { ok: false, inappOk: false, telegramOk: false, pushOk: 0, error: 'missing_kind_or_title' };
   }
 
+  // Honour the recipient's saved notification_prefs. Self-tests
+  // (`support.test`) always deliver so the settings UI can confirm the
+  // pipeline even when the support category is opted out.
+  let prefs = null;
+  if (kind !== 'support.test') {
+    prefs = await loadPrefsForWebUser(ctx.db, webUserId);
+  }
+
   let inappOk = false;
-  if (inapp) {
+  const inappAllowed = !prefs || shouldDeliver(kind, prefs, 'inapp');
+  if (inapp && inappAllowed) {
     try {
       const id = newNotificationId();
       const result = await dbRun(
@@ -108,7 +118,8 @@ export async function notifyWebUser(ctx, webUserId, opts) {
   }
 
   let pushOk = 0;
-  if (push) {
+  const pushAllowed = !prefs || shouldDeliver(kind, prefs, 'push');
+  if (push && pushAllowed) {
     pushOk = await fanOutWebPush(ctx, webUserId, {
       title,
       body,

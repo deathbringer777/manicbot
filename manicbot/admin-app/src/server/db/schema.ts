@@ -533,6 +533,12 @@ export const webUsers = sqliteTable("web_users", {
    * Salon owners read this via salon.peekMasterPassword under OTP gate.
    */
   passwordEncrypted: text("password_encrypted"),
+  /**
+   * 0077: per-user notification preferences (JSON blob). NULL = defaults.
+   * Shape lives in lib/notifications/prefs.ts; writers consult prefs at
+   * fan-out time and skip the channel when the category is opted-out.
+   */
+  notificationPrefs: text("notification_prefs"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [

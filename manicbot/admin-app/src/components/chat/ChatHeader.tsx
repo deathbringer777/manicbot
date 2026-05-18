@@ -1,13 +1,18 @@
 "use client";
 
+import { Moon, Sun } from "lucide-react";
 import type { ChatSalon } from "./chatTypes";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { usePublicTheme } from "~/components/public/ThemeProvider";
+import { LangDropdown } from "~/components/public/LangDropdown";
 
 export function ChatHeader({ salon }: { salon: ChatSalon }) {
   const palette = salon.brandPalette?.primary ?? "#EC4899";
-  const { lang } = useLang();
+  const { lang, setLang } = useLang();
+  const { theme, toggleTheme } = usePublicTheme();
   const onlineLabel = t("chat.online", lang);
+  const isDark = theme === "dark";
 
   return (
     <header
@@ -44,6 +49,21 @@ export function ChatHeader({ salon }: { salon: ChatSalon }) {
             {salon.city ? `${onlineLabel} · ${salon.city}` : onlineLabel}
           </span>
         </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <LangDropdown lang={lang} setLang={setLang} />
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200/90 bg-white/95 outline-none transition-transform hover:scale-[1.04] focus-visible:ring-2 focus-visible:ring-violet-500/50 dark:border-white/10 dark:bg-white/[0.06]"
+        >
+          {isDark ? (
+            <Sun className="h-4 w-4 text-amber-400" strokeWidth={2} />
+          ) : (
+            <Moon className="h-4 w-4 text-slate-600" strokeWidth={2} />
+          )}
+        </button>
       </div>
     </header>
   );

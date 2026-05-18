@@ -9,24 +9,19 @@ import { LangProvider } from "~/components/LangContext";
 export function PublicLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // The salon chat page doubles as a TikTok / Instagram bio embed target,
-  // so on mobile we drop the entire public chrome (header + pt-16 offset +
-  // footer) to give the chat the full viewport. Without this the chat
-  // overflows by 64px and the Composer is pushed below the visible area
-  // when the soft keyboard opens. Desktop visitors keep the full chrome.
+  // so we drop the entire site chrome (PublicHeader + PublicFooter + pt-16
+  // offset) on both mobile AND desktop. Language + theme controls live
+  // inside the chat's own ChatHeader instead, so visitors still have full
+  // i18n / theme control without the marketing-site nav stealing real
+  // estate from the conversation.
   const isChatRoute = /\/salon\/[^/]+\/chat$/.test(pathname);
 
   if (isChatRoute) {
     return (
       <PublicThemeProvider>
         <LangProvider>
-          <div className="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-50 md:min-h-screen md:transition-colors">
-            <div className="hidden md:block">
-              <PublicHeader />
-            </div>
-            <main className="md:pt-16">{children}</main>
-            <div className="hidden md:block">
-              <PublicFooter />
-            </div>
+          <div className="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-50">
+            <main>{children}</main>
           </div>
         </LangProvider>
       </PublicThemeProvider>

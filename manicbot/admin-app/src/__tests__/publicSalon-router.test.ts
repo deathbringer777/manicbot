@@ -154,7 +154,7 @@ describe("publicSalon router — FTS5 wiring", () => {
 
   describe("getProfile — no longer issues the dead reviews-by-slug query", () => {
     it("queries reviews exactly once, keyed on tenant.id (not slug)", async () => {
-      // Promise.all chunk: tenant + services + masters + tenantConfig + bots.
+      // Promise.all chunk (current): tenant + services + masters + tenantConfig + bots + serviceCategories.
       // Then a follow-up single reviews query (only if reviewsPublic).
       const tenantRows = [{ id: "t_real", slug: "demo", publicActive: 1, name: "Demo" }];
       const reviewsAvg = [{ avg: 4.5, count: 12 }];
@@ -164,6 +164,7 @@ describe("publicSalon router — FTS5 wiring", () => {
         [],         // masters
         [],         // tenantConfig — no reviews_public override
         [],         // bots
+        [],         // serviceCategories (PR — categories list, parallel with bots)
         reviewsAvg, // reviews (single query, keyed on tenant.id)
       ]);
       const caller = publicCaller(dbMock.db);
@@ -171,9 +172,11 @@ describe("publicSalon router — FTS5 wiring", () => {
       const result = await caller.getProfile({ slug: "demo" });
 
       expect(result?.rating).toEqual({ avg: 4.5, count: 12 });
-      // 5 selects for the Promise.all batch + exactly 1 for reviews =
-      // 6 total. Previously it was 7 (a dead query with eq(tenantId, slug)).
-      expect(dbMock.db.select).toHaveBeenCalledTimes(6);
+      // 6 selects for the Promise.all batch + exactly 1 for reviews = 7 total.
+      // Previously it was 6 (bumped because serviceCategories was added to
+      // the parallel batch). Still ONE reviews query, not two — the test's
+      // original guarantee (no dead reviews-by-slug round-trip) holds.
+      expect(dbMock.db.select).toHaveBeenCalledTimes(7);
     });
   });
 });

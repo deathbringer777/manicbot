@@ -307,6 +307,18 @@ export const services = sqliteTable("services", {
   industrySpecificProps: text("industry_specific_props"),
 });
 
+export const serviceCategories = sqliteTable("service_categories", {
+  tenantId: text("tenant_id").notNull(),
+  id: text("id").notNull(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.id] }),
+  uniqueIndex("idx_svc_cat_tenant_name").on(t.tenantId, t.name),
+  index("idx_svc_cat_tenant_order").on(t.tenantId, t.sortOrder),
+]);
+
 export const tenantConfig = sqliteTable("tenant_config", {
   tenantId: text("tenant_id").notNull(),
   key: text("key").notNull(),

@@ -70,6 +70,9 @@ import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFa
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
 import { PendingInvitationsStrip } from "~/components/salon/PendingInvitationsStrip";
 import { MasterDetailModal } from "~/components/salon/tabs/masters/MasterDetailModal";
+import { ServiceCategoriesModal } from "~/components/salon/tabs/services/ServiceCategoriesModal";
+import { Select } from "~/components/ui/Select";
+import { ListTree } from "lucide-react";
 import { resolveMasterAvatarEmoji } from "~/lib/masterAvatar";
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
@@ -77,9 +80,20 @@ type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "c
 // ─── Service Edit Modal ──────────────────────────────────────────
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
 
+const NEW_CATEGORY_SENTINEL = "__new__";
+
 function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null; onClose: () => void; tenantId: string; initialData?: ServiceTemplate }) {
   const { lang } = useLang();
   const utils = api.useUtils();
+  // Categories powering the Select dropdown. Loaded on modal mount.
+  const catsQ = api.salon.serviceCategoriesList.useQuery({ tenantId });
+  const createCategory = api.salon.createServiceCategory.useMutation({
+    onSuccess: (row) => {
+      void utils.salon.serviceCategoriesList.invalidate({ tenantId });
+      void utils.salon.listServiceCategories.invalidate({ tenantId });
+      setCategory(row.name);
+    },
+  });
   const [name, setName] = useState(() => {
     if (!svc) return (initialData ? (initialData.names[lang] ?? initialData.names.en) : "");
     let names: Record<string, string> = {};
@@ -205,13 +219,29 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
               className="w-full resize-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400 dark:placeholder:text-slate-600" />
           </div>
 
-          {/* Category */}
-          <Input
-            label="Категория"
-            value={category}
-            onChange={setCategory}
-            placeholder="Маникюр, Педикюр, Покрытие…"
-          />
+          {/* Category — Select with "+ New" inline. */}
+          <div>
+            <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1 block">
+              {t("salon.services.categories.fieldLabel", lang)}
+            </label>
+            <Select
+              value={category || ""}
+              onChange={(v) => {
+                if (v === NEW_CATEGORY_SENTINEL) {
+                  const name = window.prompt(t("salon.services.categories.createPromptTitle", lang));
+                  if (name && name.trim()) createCategory.mutate({ tenantId, name: name.trim() });
+                  return;
+                }
+                setCategory(v);
+              }}
+              options={[
+                { value: "", label: t("salon.services.categories.fieldNone", lang) },
+                ...(catsQ.data ?? []).map(c => ({ value: c.name, label: c.name })),
+                { value: NEW_CATEGORY_SENTINEL, label: t("salon.services.categories.fieldCreate", lang) },
+              ]}
+              testIdPrefix="service-category"
+            />
+          </div>
 
           {/* Promo */}
           <div>
@@ -1617,7 +1647,12 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [svcImportModal, setSvcImportModal] = useState(false);
   const [svcImportCsv, setSvcImportCsv] = useState("");
   const [svcImportError, setSvcImportError] = useState("");
+  const [svcCategoriesModalOpen, setSvcCategoriesModalOpen] = useState(false);
 
+  // Structured categories with sortOrder + usageCount — the source of truth
+  // for grouped rendering. The legacy `listServiceCategories` query (returns
+  // string[] from DISTINCT) is kept around for backward-compat callers.
+  const svcCategoriesV2 = api.salon.serviceCategoriesList.useQuery({ tenantId }, { enabled: tab === "services" });
   const svcCategories = api.salon.listServiceCategories.useQuery({ tenantId }, { enabled: tab === "services" });
   const exportSvcQuery = api.salon.exportServices.useQuery({ tenantId }, { enabled: false });
   const importSvcMut = api.salon.importServices.useMutation({
@@ -2385,9 +2420,16 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {/* ── SERVICES ── */}
       {tab === "services" && (
         <div className="space-y-3">
-          {/* Header: title + add dropdown + export/import */}
+          {/* Header: title + categories + add dropdown + export/import */}
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex-1">{t("salon.services", lang)}</h2>
+            <button
+              onClick={() => setSvcCategoriesModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 text-xs hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+              data-testid="services-manage-categories-btn">
+              <ListTree className="h-3 w-3" />
+              {t("salon.services.categories.manageBtn", lang)}
+            </button>
             {(svcList.data?.length ?? 0) > 0 && (
               <>
                 <button
@@ -2516,16 +2558,26 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               );
             }
 
-            // Grouped by category
+            // Grouped by category. Order = service_categories.sort_order
+            // (so the admin's drag-to-reorder in the categories modal is
+            // honoured). Unknown / null categories drop into a trailing
+            // "" bucket — matches the Worker's svcKb orphan group.
             const groups = new Map<string, any[]>();
             for (const s of filtered) {
               const cat: string = (s.category as string | null) ?? "";
               if (!groups.has(cat)) groups.set(cat, []);
               groups.get(cat)!.push(s);
             }
+            const orderedNames: string[] = (svcCategoriesV2.data ?? []).map(c => c.name);
+            const orderIndex = new Map<string, number>(orderedNames.map((n, i) => [n, i]));
             const sortedGroups = [...groups.entries()].sort(([a], [b]) => {
+              // Empty / unknown last.
               if (!a && b) return 1;
               if (a && !b) return -1;
+              const ai = orderIndex.has(a) ? orderIndex.get(a)! : Number.POSITIVE_INFINITY;
+              const bi = orderIndex.has(b) ? orderIndex.get(b)! : Number.POSITIVE_INFINITY;
+              if (ai !== bi) return ai - bi;
+              // Tiebreaker for orphans (unknown categories) — alphabetical.
               return a.localeCompare(b, "ru");
             });
 
@@ -2544,6 +2596,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               </div>
             );
           })()}
+
+          {/* Categories management modal */}
+          {svcCategoriesModalOpen && (
+            <ServiceCategoriesModal tenantId={tenantId} onClose={() => setSvcCategoriesModalOpen(false)} />
+          )}
 
           {/* Import modal */}
           {svcImportModal && (

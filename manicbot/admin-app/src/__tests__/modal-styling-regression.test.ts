@@ -41,6 +41,8 @@ const MODAL_FILES = [
   "src/components/salon/tabs/masters/MasterDetailModal.tsx",
   // Master avatar picker — emoji + photo picker (0075)
   "src/components/salon/tabs/masters/MasterAvatarPicker.tsx",
+  // Service categories manage modal (0077 — "lists of services")
+  "src/components/salon/tabs/services/ServiceCategoriesModal.tsx",
 ];
 
 function read(rel: string): string {

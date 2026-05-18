@@ -32,6 +32,22 @@ function isAdminKeyValid(url, env, request) {
   return false;
 }
 
+/**
+ * Returns true if EITHER env.NOTIFY_TOKEN OR env.ADMIN_KEY matches the Bearer
+ * header (timing-safe). Used by /admin/notify so remote/cloud callers can post
+ * Telegram messages with a low-privilege token that can ONLY trigger Telegram
+ * fan-out — never any other admin operation. Existing ADMIN_KEY callers keep
+ * working unchanged.
+ */
+function isNotifyAuthValid(env, request) {
+  const authHeader = request?.headers?.get?.('authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return false;
+  const presented = authHeader.slice(7);
+  if (env.NOTIFY_TOKEN && timingSafeEqual(presented, env.NOTIFY_TOKEN)) return true;
+  if (env.ADMIN_KEY && timingSafeEqual(presented, env.ADMIN_KEY)) return true;
+  return false;
+}
+
 /** Returns a 403 Forbidden response. */
 const forbidden = () => new Response('Forbidden', { status: 403 });
 
@@ -1278,14 +1294,17 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, indexed });
   }
 
-  // POST /admin/notify?key=ADMIN_KEY — send a Telegram message to the admin chat
+  // POST /admin/notify — send a Telegram message to the admin chat
+  // Auth: Bearer NOTIFY_TOKEN (low-priv, notify-only) OR Bearer ADMIN_KEY
+  // (legacy callers). NOTIFY_TOKEN lets remote/cloud routines post without
+  // carrying the master ADMIN_KEY which unlocks the entire admin surface.
   // Body: { text: string, parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2' }
   // Uses NOTIFY_BOT_TOKEN / NOTIFY_CHAT_ID with fallback to BOT_TOKEN / ADMIN_CHAT_ID.
   // Splits text into chunks on newline boundaries (surrogate-safe) so long
   // reports don't exceed Telegram's 4096-char limit and parse_mode entities
   // aren't cut mid-tag.
   if (request.method === 'POST' && url.pathname === '/admin/notify') {
-    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!isNotifyAuthValid(env, request)) return forbidden();
     const token = env.NOTIFY_BOT_TOKEN || env.BOT_TOKEN;
     const chatId = env.NOTIFY_CHAT_ID || env.ADMIN_CHAT_ID;
     if (!token || !chatId) return Response.json({ error: 'bot_token_or_chat_id_missing' }, { status: 503 });

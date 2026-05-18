@@ -56,6 +56,10 @@ describe('isAdminAppPath', () => {
     ['/invitations'],
     ['/invitations/abc'],
     ['/marketing-autopilot'],
+    // Admin-app static asset that would otherwise match isLandingPath's *.png
+    // catch-all and route to the landing site (which doesn't have this file).
+    // Used by WebShell + Shell sidebar logo + admin-app metadata.icons.
+    ['/manicbot-mark-ui.png'],
   ])('proxies %s', (path) => {
     expect(isAdminAppPath(path)).toBe(true);
   });

@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   Settings,
-  LogOut, Menu, X, Zap, ChevronLeft, ChevronRight, ChevronDown,
+  LogOut, Menu, X, ChevronLeft, ChevronRight, ChevronDown,
   Sun, Moon, Compass, Building2,
   Maximize2, Minimize2,
   type LucideIcon,
@@ -22,6 +22,7 @@ import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { useNavItems, tNav, getRoleInfo } from "~/lib/nav/useNavItems";
 import { MasterSwitcherInline } from "~/components/layout/Shell";
 import { NotificationBell } from "~/components/layout/NotificationBell";
+import { BrandTile } from "~/components/layout/BrandTile";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
 export const WebShellContext = createContext(false);
@@ -261,9 +262,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           {/* Logo — clickable */}
           <div className={`relative flex items-center gap-3 h-[60px] border-b border-[#e5e7eb] dark:border-white/[0.06] ${collapsed ? "px-4 justify-center" : "px-4"}`}>
             <Link href="/dashboard" className="flex items-center gap-2.5 flex-1 min-w-0">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a2e] dark:bg-white shrink-0">
-                <Zap className="h-4 w-4 text-white dark:text-[#1a1a2e]" />
-              </div>
+              <BrandTile className="h-8 w-8 rounded-lg" />
               {!collapsed && (
                 <div className="min-w-0 flex-1">
                   <h1 className="text-[13px] font-bold text-[#1a1a2e] dark:text-white tracking-tight truncate">{roleInfo.title}</h1>
@@ -318,9 +317,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
               {/* Header — clickable logo */}
               <div className="flex items-center justify-between h-[60px] px-4 border-b border-[#e5e7eb] dark:border-white/[0.06]">
                 <Link href="/dashboard" onClick={() => setSidebarOpen(false)} className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1a2e] dark:bg-white shrink-0">
-                    <Zap className="h-4 w-4 text-white dark:text-[#1a1a2e]" />
-                  </div>
+                  <BrandTile className="h-8 w-8 rounded-lg" />
                   <div className="min-w-0">
                     <h1 className="text-[13px] font-bold text-[#1a1a2e] dark:text-white truncate">{roleInfo.title}</h1>
                     <p className="text-[10px] text-[#9ca3af] dark:text-slate-500 truncate">{roleInfo.subtitle}</p>
@@ -380,9 +377,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             </button>
             {/* Mobile logo + title */}
             <div className="lg:hidden flex items-center gap-2 min-w-0 flex-1">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#1a1a2e] dark:bg-white shrink-0">
-                <Zap className="h-3.5 w-3.5 text-white dark:text-[#1a1a2e]" />
-              </div>
+              <BrandTile className="h-7 w-7 rounded-lg" glyphClassName="text-sm" />
               <span className="text-[13px] font-bold text-[#1a1a2e] dark:text-white truncate">{pageTitle}</span>
             </div>
             {/* Desktop: page title */}

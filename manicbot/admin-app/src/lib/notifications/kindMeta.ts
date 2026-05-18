@@ -12,6 +12,9 @@
  *   - support.ticket.reply   (support replyToMyTicket fan-out)
  *   - birthday.client        (birthday cron — tenant_owner)
  *   - appointment.created    (notifyAptStaff — master in-app)
+ *   - master.invite          (salon.sendMasterInvitation + auth.getMyRole backfill)
+ *   - platform.message       (platformMessenger sendDirectMessage / broadcast)
+ *   - platform.reply         (platformMessenger sendMyReply — fans to all sysadmins)
  *   - billing.alert          (future — billing status flip)
  *   - marketing.campaign.sent (future — campaign delivery report)
  */
@@ -22,8 +25,10 @@ import {
   Calendar,
   CreditCard,
   LifeBuoy,
+  Megaphone,
   MessageCircle,
   Star,
+  UserPlus,
 } from "lucide-react";
 
 export type NotifKind = string;
@@ -40,7 +45,9 @@ export interface KindMeta {
     | "billing"
     | "marketing"
     | "messenger"
+    | "platform"
     | "reminder"
+    | "master"
     | "generic";
 }
 
@@ -50,9 +57,11 @@ const META_BY_PREFIX: Array<[string, KindMeta]> = [
   ["birthday.", { icon: Cake, accent: "text-pink-500 bg-pink-500/10", category: "birthday" }],
   ["billing.", { icon: CreditCard, accent: "text-amber-500 bg-amber-500/10", category: "billing" }],
   ["marketing.", { icon: Star, accent: "text-violet-500 bg-violet-500/10", category: "marketing" }],
+  ["platform.", { icon: Megaphone, accent: "text-fuchsia-500 bg-fuchsia-500/10", category: "platform" }],
   ["messenger.", { icon: MessageCircle, accent: "text-indigo-500 bg-indigo-500/10", category: "messenger" }],
   ["thread.", { icon: MessageCircle, accent: "text-indigo-500 bg-indigo-500/10", category: "messenger" }],
   ["reminder.", { icon: Bell, accent: "text-cyan-500 bg-cyan-500/10", category: "reminder" }],
+  ["master.", { icon: UserPlus, accent: "text-emerald-500 bg-emerald-500/10", category: "master" }],
 ];
 
 const GENERIC: KindMeta = { icon: Bell, accent: "text-slate-500 bg-slate-500/10", category: "generic" };

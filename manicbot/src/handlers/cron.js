@@ -148,6 +148,22 @@ export async function maybeResubscribeIgWebhook(ctx, igConfig, nowMs) {
       return { ok: true };
     }
     log.error('handlers.cron', new Error(`IG resubscribe failed: ${data?.error?.message ?? `HTTP ${r.status}`}`), { tenantId: ctx.tenantId, pageId: igConfig.page_id });
+    try {
+      const { captureError } = await import('../utils/errorCapture.js');
+      const { CHANNEL_ERROR_TYPE } = await import('../channels/error-types.js');
+      await captureError(ctx,
+        new Error(`IG resubscribe failed: ${data?.error?.message ?? `HTTP ${r.status}`}`),
+        {
+          source: 'cron.ig_resubscribe',
+          tenantId: ctx.tenantId,
+          severity: 'error',
+          path: 'cron.phase.ig_resubscribe',
+          errorType: CHANNEL_ERROR_TYPE.IG_RESUBSCRIBE_FAILED,
+          channelType: 'instagram',
+          pageId: String(igConfig.page_id || ''),
+          status: String(r.status),
+        });
+    } catch { /* errorCapture must never break the request flow */ }
     return { ok: false, status: r.status, error: data?.error };
   } catch (e) {
     log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'ig_resubscribe', tenantId: ctx.tenantId });
@@ -183,12 +199,14 @@ export async function phaseChannelHealth(ctx, nowMs) {
   }
 
   const { captureError } = await import('../utils/errorCapture.js');
+  const { CHANNEL_ERROR_TYPE } = await import('../channels/error-types.js');
   if (!igConfig.token) {
     await captureError(ctx, new Error('IG token decrypt failed — bot is dead until recovery'), {
       source: 'cron.channel_health',
       tenantId: ctx.tenantId,
       severity: 'fatal',
       path: 'cron.phase.channel_health',
+      errorType: CHANNEL_ERROR_TYPE.IG_TOKEN_DECRYPT,
       channelType: 'instagram',
       pageId: String(igConfig.page_id || ''),
     });
@@ -207,6 +225,7 @@ export async function phaseChannelHealth(ctx, nowMs) {
         tenantId: ctx.tenantId,
         severity: 'fatal',
         path: 'cron.phase.channel_health',
+        errorType: CHANNEL_ERROR_TYPE.IG_TOKEN_REJECTED,
         channelType: 'instagram',
         pageId: String(igConfig.page_id || ''),
         graphCode: String(data?.error?.code ?? ''),
@@ -229,6 +248,7 @@ export async function phaseChannelHealth(ctx, nowMs) {
             tenantId: ctx.tenantId,
             severity: 'error',
             path: 'cron.phase.channel_health',
+            errorType: CHANNEL_ERROR_TYPE.IG_SUBSCRIPTION_LOST,
             channelType: 'instagram',
             pageId: String(igConfig.page_id || ''),
             missingFields: missing.join(','),

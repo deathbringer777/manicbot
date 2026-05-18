@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, Ban, ShieldCheck } from "lucide-react";
+import { CalendarDays, Users, TrendingUp, User, Loader2, Clock, Pencil, X, Save, Star, UserX, Eye, EyeOff, Lock, Unlock, Scissors, Plus, Trash2, Settings, Camera, Tag, ImageIcon, AlertCircle, Ban, ShieldCheck, Copy, KeyRound } from "lucide-react";
 import { resizeImageClientSide, validateUploadFile, uploadAssetFile } from "~/lib/uploadAsset";
 import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
@@ -734,6 +734,14 @@ export function MasterDashboard({
             </div>
           )}
 
+          {/* "Show my login password" — only meaningful for salon-created
+              masters (origin='salon_created') whose password was issued by
+              the salon. Self-registered and Telegram-paired masters chose
+              their own credential and never had a recoverable copy. */}
+          {profile.data && (profile.data as any).origin === "salon_created" && (
+            <MasterPeekPasswordCard tenantId={tenantId} masterId={masterId} lang={lang} />
+          )}
+
           {/* Vacation date range — independent masters only.
               Booksy-style: pick start/end and bookings are blocked, the
               public salon page shows "В отпуске до DD.MM". Leaving both
@@ -894,6 +902,114 @@ export function MasterDashboard({
         </div>
       )}
     </Shell>
+  );
+}
+
+// ─── Master-side "Show my login password" card ───────────────────────────────
+//
+// Renders inside MasterDashboard → Profile tab for salon-created masters
+// only. Calls `master.peekMyOriginalPassword` which decrypts the AES-GCM
+// blob stored in web_users.password_encrypted (migration 0066). The
+// procedure enforces:
+//   1. caller authentication + IDOR check (assertCallerIsMaster)
+//   2. master row binds to this web_user_id (defense-in-depth)
+//   3. account is salon-owned (origin='salon_created')
+//   4. email is verified
+//   5. password is vaulted (encrypted blob present)
+//
+// The card maps procedure error messages to localised hints so a master
+// who hasn't verified yet sees "verify first", not "Internal server error".
+function MasterPeekPasswordCard({
+  tenantId,
+  masterId,
+  lang,
+}: {
+  tenantId: string;
+  masterId: number;
+  lang: Lang;
+}) {
+  const [password, setPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [errKey, setErrKey] = useState<string | null>(null);
+
+  const peek = api.master.peekMyOriginalPassword.useMutation({
+    onSuccess: (data) => {
+      setPassword(data.password);
+      setErrKey(null);
+    },
+    onError: (e) => {
+      // Map server-side error codes to localised UI strings. The procedure
+      // intentionally returns short stable identifiers (email_not_verified,
+      // password_not_vaulted, not_owned_by_salon) so the UI can localise
+      // without parsing freeform text.
+      const m = e.message;
+      if (m.includes("email_not_verified")) setErrKey("master.peekPassword.errNotVerified");
+      else if (m.includes("password_not_vaulted")) setErrKey("master.peekPassword.errNotVaulted");
+      else if (m.includes("not_owned_by_salon")) setErrKey("master.peekPassword.errNotOwned");
+      else setErrKey("master.peekPassword.errGeneric");
+      setPassword(null);
+    },
+  });
+
+  function handleCopy() {
+    if (!password) return;
+    void navigator.clipboard.writeText(password);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="glass-card rounded-2xl p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-xl bg-brand-500/15 flex items-center justify-center shrink-0">
+          <KeyRound className="h-5 w-5 text-brand-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+            {t("master.peekPassword.title", lang)}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+            {t("master.peekPassword.subtitle", lang)}
+          </p>
+        </div>
+      </div>
+
+      {password && (
+        <div className="flex items-center gap-2">
+          <code className="flex-1 min-w-0 bg-slate-100 dark:bg-white/5 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-white break-all">
+            {password}
+          </code>
+          <button
+            onClick={handleCopy}
+            className="shrink-0 h-9 w-9 rounded-lg bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-brand-400 transition-colors"
+            aria-label={t("master.peekPassword.copied", lang)}>
+            {copied ? <span className="text-[10px] text-emerald-400 font-bold">✓</span> : <Copy className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={() => setPassword(null)}
+            className="shrink-0 h-9 w-9 rounded-lg bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-brand-400 transition-colors"
+            aria-label={t("master.peekPassword.hide", lang)}>
+            <EyeOff className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {!password && (
+        <button
+          onClick={() => peek.mutate({ tenantId, masterId })}
+          disabled={peek.isPending}
+          className="flex items-center justify-center gap-2 rounded-xl bg-brand-500/20 border border-brand-500/30 px-4 py-2 text-sm font-medium text-brand-400 hover:bg-brand-500/30 transition disabled:opacity-50 w-full sm:w-auto">
+          {peek.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+          {t("master.peekPassword.show", lang)}
+        </button>
+      )}
+
+      {errKey && (
+        <p className="text-xs rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-2">
+          {t(errKey as Parameters<typeof t>[0], lang)}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -342,6 +342,24 @@ export class InstagramAdapter {
             : 'Instagram-direct outbound 401 — investigating, channel left active',
           data: { code: result.errorCode, type: result.errorType, path, api: this._api },
         });
+        // PR 3 — also stamp a structured `error_events` row so the
+        // IGHealthCard surfaces the broken state to the operator
+        // immediately (logEvent above goes to a separate audit log).
+        try {
+          const { captureError } = await import('../utils/errorCapture.js');
+          const { CHANNEL_ERROR_TYPE } = await import('./error-types.js');
+          await captureError(this._ctx, new Error(`Instagram token dead (${result.errorCode || result.errorType || 'unknown'})`), {
+            source: 'channels.instagram.send',
+            tenantId: this._ctx.tenantId,
+            severity: shouldDeactivate ? 'fatal' : 'error',
+            path: 'channels.instagram.send',
+            errorType: CHANNEL_ERROR_TYPE.IG_INTEGRATION_NEEDS_REAUTH,
+            channelType: 'instagram',
+            api: this._api,
+            graphCode: String(result.errorCode || ''),
+            graphErrorType: String(result.errorType || ''),
+          });
+        } catch { /* monitoring must never break the send flow */ }
       } catch (e) {
         log.error('channels.instagram', e instanceof Error ? e : new Error(String(e?.message)));
       }

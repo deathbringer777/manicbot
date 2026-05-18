@@ -1,6 +1,7 @@
 "use client";
 
-import { Activity, AlertTriangle, CheckCircle2, Clock, Loader2, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { Activity, AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -50,8 +51,43 @@ function formatRelative(hoursSince: number | null, lang: "ru" | "ua" | "en" | "p
   return fill(t("channels.igHealth.daysAgo", lang), { n: Math.floor(hoursSince / 24) });
 }
 
-export function IGHealthCard({ tenantId }: { tenantId: string }) {
+/**
+ * Map a structured `error_type` slug to the localized human-readable message
+ * keyed in i18n. Falls back to the `unknown` slug for anything we haven't
+ * surfaced an explicit message for yet, so a future Worker slug doesn't
+ * crash the UI.
+ */
+function translateChannelErrorSlug(
+  slug: string | null | undefined,
+  lang: "ru" | "ua" | "en" | "pl",
+): string {
+  const key = (slug || "").startsWith("channel.ig.")
+    ? (`channels.ig.errorType.${slug!.slice("channel.ig.".length)}` as const)
+    : slug === "channel.meta.signature_mismatch"
+    ? ("channels.ig.errorType.signature_mismatch" as const)
+    : ("channels.ig.errorType.unknown" as const);
+  try {
+    return t(key as Parameters<typeof t>[0], lang);
+  } catch {
+    return t("channels.ig.errorType.unknown", lang);
+  }
+}
+
+export function IGHealthCard({
+  tenantId,
+  onRequestReauth,
+}: {
+  tenantId: string;
+  /**
+   * Invoked when the operator confirms the "Reconnect" CTA on a broken /
+   * needs_attention card. Caller is expected to hard-disconnect the existing
+   * channel and refetch — which unmounts this card and surfaces the OAuth
+   * picker via `InstagramConnect`.
+   */
+  onRequestReauth?: () => void;
+}) {
   const { lang } = useLang();
+  const [confirmReauth, setConfirmReauth] = useState(false);
   const q = api.salon.getInstagramHealth.useQuery({ tenantId }, { refetchOnWindowFocus: false });
 
   if (q.isLoading) {
@@ -114,17 +150,66 @@ export function IGHealthCard({ tenantId }: { tenantId: string }) {
         </div>
 
         {h.lastError && (
-          <div className="sm:col-span-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 space-y-0.5">
+          <div className="sm:col-span-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 space-y-1">
             <dt className="text-red-400 font-medium">{t("channels.igHealth.openError", lang)} (×{h.lastError.count})</dt>
-            <dd className="font-mono text-[10px] text-red-300 truncate">{h.lastError.message}</dd>
+            {/* PR 3: prefer the localized error_type slug over the raw English
+                message. The raw message stays available in the title attribute
+                so an operator can still grab it for support escalation. */}
+            <dd
+              className="text-[11px] text-red-300/90 leading-snug"
+              title={h.lastError.message}
+            >
+              {translateChannelErrorSlug(h.lastError.errorType, lang)}
+            </dd>
+            {h.lastError.errorType && (
+              <code className="block font-mono text-[10px] text-red-400/60 truncate">
+                {h.lastError.errorType}
+              </code>
+            )}
           </div>
         )}
       </dl>
 
       {(h.state === "needs_attention" || h.state === "broken") && (
-        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-          {t("channels.igHealth.relinkHint", lang)}
-        </p>
+        <div className="space-y-2">
+          <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+            {t("channels.igHealth.relinkHint", lang)}
+          </p>
+          {onRequestReauth && !confirmReauth && (
+            <button
+              type="button"
+              data-testid="ig-reauth-cta"
+              onClick={() => setConfirmReauth(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white px-4 py-2.5 text-xs font-semibold shadow-lg shadow-pink-500/20 transition-all"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              {t("channels.ig.reauth.button", lang)}
+            </button>
+          )}
+          {onRequestReauth && confirmReauth && (
+            <div className="rounded-xl border border-red-500/20 p-3 space-y-2 bg-red-500/5">
+              <p className="text-[11px] font-semibold text-red-400">{t("channels.ig.reauth.confirmTitle", lang)}</p>
+              <p className="text-[11px] text-red-300/90">{t("channels.ig.reauth.confirmBody", lang)}</p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  data-testid="ig-reauth-confirm-btn"
+                  onClick={() => { setConfirmReauth(false); onRequestReauth(); }}
+                  className="flex-1 py-2 rounded-lg bg-red-500/15 text-red-400 text-xs font-medium hover:bg-red-500/25 transition-colors"
+                >
+                  {t("channels.ig.reauth.button", lang)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReauth(false)}
+                  className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
+                >
+                  {t("common.cancel", lang)}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       {h.state === "warning" && (
         <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">

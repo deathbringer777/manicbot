@@ -67,7 +67,7 @@ describe("chat mobile layout — regression guards", () => {
     expect(src).not.toMatch(/className="h-dvh\s+min-h-screen/);
   });
 
-  it("PublicLayoutClient drops the public chrome on mobile chat route", () => {
+  it("PublicLayoutClient drops the public chrome on chat route (mobile + desktop)", () => {
     const src = readFileSync(
       resolve(
         process.cwd(),
@@ -75,20 +75,18 @@ describe("chat mobile layout — regression guards", () => {
       ),
       "utf8",
     );
-    // Mobile chat must render full-bleed: header + the pt-16 header offset
-    // both have to be hidden on mobile so the Composer is glued to the
-    // bottom of the viewport.
+    // The chat route renders full-bleed on every viewport: no PublicHeader,
+    // no PublicFooter, no pt-16 offset. Language + theme switchers live
+    // inside the chat's own ChatHeader instead. The non-chat branch keeps
+    // the marketing chrome.
     expect(src).toMatch(/isChatRoute/);
-    expect(src).toMatch(/hidden md:block/);
-    // The pt-16 offset must be gated behind md: (or absent) on the chat
-    // route, otherwise the chat overflows the viewport by 64px.
-    const usesUnconditionalPt16 = /<main className="pt-16">[\s\S]*<\/main>/.test(
-      src,
+    const chatBranchMatch = src.match(
+      /if \(isChatRoute\) \{[\s\S]+?return \(([\s\S]+?)\);\s*\}/,
     );
-    if (usesUnconditionalPt16) {
-      // OK only if it's not the chat branch — verify there's a chat-specific
-      // branch that uses md:pt-16 instead.
-      expect(src).toMatch(/md:pt-16/);
-    }
+    expect(chatBranchMatch).not.toBeNull();
+    const chatBranchBody = chatBranchMatch![1]!;
+    expect(chatBranchBody).not.toMatch(/PublicHeader/);
+    expect(chatBranchBody).not.toMatch(/PublicFooter/);
+    expect(chatBranchBody).not.toMatch(/pt-16/);
   });
 });

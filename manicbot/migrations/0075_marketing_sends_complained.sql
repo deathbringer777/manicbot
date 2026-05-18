@@ -1,0 +1,23 @@
+-- 0075_marketing_sends_complained.sql
+--
+-- Adds a `complained_at` column to `marketing_sends` so the
+-- provider-webhook ingest (Resend `email.complained`, Brevo `spam`)
+-- can record spam complaints. Distinct from `bounced_at` because the
+-- compliance / sender-reputation handling is different: a complaint is
+-- a reader-initiated "this is spam" signal, while a bounce is the
+-- provider rejecting the delivery.
+--
+-- This is the only missing column in `marketing_sends` for full
+-- delivery lifecycle tracking. Schema already has `delivered_at`,
+-- `opened_at`, `clicked_at`, `bounced_at` from the original
+-- 0032_marketing_schema.sql.
+--
+-- Companion changes (PR 2B of the marketing roadmap):
+--   - `~/server/marketing/webhooks/processResendEvent.ts` and the
+--     existing `app/api/resend/webhook/route.ts` use this column.
+--   - `app/(dashboard)/system/marketing/sends/*` reads this column
+--     into the cross-platform delivery dashboard.
+--   - `manicbot/admin-app/src/server/db/schema.ts` mirrors the column
+--     via the `complainedAt` field on `marketingSends`.
+
+ALTER TABLE marketing_sends ADD COLUMN complained_at INTEGER;

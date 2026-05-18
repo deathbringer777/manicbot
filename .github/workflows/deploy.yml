@@ -125,6 +125,21 @@ jobs:
         run: npm ci --legacy-peer-deps
         working-directory: manicbot
 
+      # Apply D1 migrations BEFORE deploying the Worker so the runtime never
+      # boots against a stale schema. Wrangler tracks applied migrations in
+      # a `d1_migrations` table — re-running this step is idempotent (already
+      # applied files are skipped). The procedure that motivated this guard
+      # (salon.createMasterAccount → masters.telegram_chat_id from migration
+      # 0074) silently 500'd in prod for days because the migration sat in
+      # `migrations/` without being applied.
+      - name: Apply D1 migrations (manicbot-db, remote)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: manicbot
+          command: d1 migrations apply manicbot-db --remote
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:

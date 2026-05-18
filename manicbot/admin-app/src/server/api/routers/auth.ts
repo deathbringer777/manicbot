@@ -3,6 +3,7 @@ import { webUsers, masters, tenants } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { listPermissions, type PermissionKey } from "~/server/api/permissions";
 import { evaluateTrialState } from "~/lib/billing/trialState";
+import { backfillPendingInviteNotifications } from "~/server/auth/backfillPendingInvites";
 
 export type AppRole =
   | "system_admin"
@@ -23,7 +24,17 @@ type RoleResult = {
   webUserId: string | null;
   tenantId: string | null;
   tenantName: string | null;
+  /** Salon-uploaded logo URL (`tenants.logo`). Drives the brand tile in the
+   *  sidebar/header when role is `tenant_owner` / `tenant_manager` (and as a
+   *  fallback for masters without their own avatar). */
+  tenantLogo: string | null;
   masterId: number | null;
+  /** Per-master avatar URL (`masters.avatar_url`, migration 0075). Wins over
+   *  emoji + tenant logo when role === "master". */
+  masterAvatarUrl: string | null;
+  /** Per-master single-glyph avatar (`masters.avatar_emoji`, migration 0075).
+   *  Renders as a centered emoji in the brand tile when no photo is set. */
+  masterAvatarEmoji: string | null;
   isPersonalTenant: boolean;
   isTest: boolean;
   createdAt: number | null;
@@ -49,7 +60,10 @@ const EMPTY: RoleResult = {
   webUserId: null,
   tenantId: null,
   tenantName: null,
+  tenantLogo: null,
   masterId: null,
+  masterAvatarUrl: null,
+  masterAvatarEmoji: null,
   isPersonalTenant: false,
   isTest: false,
   createdAt: null,
@@ -90,9 +104,12 @@ export const authRouter = createTRPCRouter({
     } catch { /* non-critical */ }
 
     let masterId: number | null = null;
+    let masterAvatarUrl: string | null = null;
+    let masterAvatarEmoji: string | null = null;
     let isPersonalTenant = false;
     let isTest = false;
     let tenantName: string | null = null;
+    let tenantLogo: string | null = null;
     let billingStatus: string | null = null;
     let trialEndsAt: number | null = null;
     let graceEndsAt: number | null = null;
@@ -103,6 +120,7 @@ export const authRouter = createTRPCRouter({
           .select({
             name: tenants.name,
             displayName: tenants.displayName,
+            logo: tenants.logo,
             isPersonal: tenants.isPersonal,
             isTest: tenants.isTest,
             billingStatus: tenants.billingStatus,
@@ -115,6 +133,7 @@ export const authRouter = createTRPCRouter({
           .limit(1);
         if (tenantRow) {
           tenantName = tenantRow.displayName || tenantRow.name || null;
+          tenantLogo = tenantRow.logo ?? null;
           if (tenantRow.isPersonal) isPersonalTenant = true;
           if (tenantRow.isTest) isTest = true;
 
@@ -147,8 +166,14 @@ export const authRouter = createTRPCRouter({
       if (role === "master") {
         try {
           // Authoritative: bind via web_user_id (added in migration 0043).
+          // Also pull avatar fields so the brand tile in the shell can render
+          // this master's photo/emoji instead of the platform 💅 fallback.
           const [boundRow] = await ctx.db
-            .select({ chatId: masters.chatId })
+            .select({
+              chatId: masters.chatId,
+              avatarUrl: masters.avatarUrl,
+              avatarEmoji: masters.avatarEmoji,
+            })
             .from(masters)
             .where(and(
               eq(masters.tenantId, tenantId),
@@ -158,16 +183,26 @@ export const authRouter = createTRPCRouter({
             .limit(1);
           if (boundRow) {
             masterId = boundRow.chatId;
+            masterAvatarUrl = boundRow.avatarUrl ?? null;
+            masterAvatarEmoji = boundRow.avatarEmoji ?? null;
           } else if (isPersonalTenant) {
             // Legacy personal-tenant fallback: a personal tenant has exactly
             // one master, so it's safe to resolve without a binding column.
             // If multiple rows somehow exist we abstain rather than guess.
             const personalRows = await ctx.db
-              .select({ chatId: masters.chatId })
+              .select({
+                chatId: masters.chatId,
+                avatarUrl: masters.avatarUrl,
+                avatarEmoji: masters.avatarEmoji,
+              })
               .from(masters)
               .where(and(eq(masters.tenantId, tenantId), eq(masters.active, 1)))
               .limit(2);
-            if (personalRows.length === 1) masterId = personalRows[0]!.chatId;
+            if (personalRows.length === 1) {
+              masterId = personalRows[0]!.chatId;
+              masterAvatarUrl = personalRows[0]!.avatarUrl ?? null;
+              masterAvatarEmoji = personalRows[0]!.avatarEmoji ?? null;
+            }
           }
           // Multi-master tenants without a binding row: leave masterId=null.
           // The UI then forces re-onboarding instead of leaking another master's data.
@@ -182,12 +217,25 @@ export const authRouter = createTRPCRouter({
       } catch { /* non-critical */ }
     }
 
+    // Fire-and-forget backfill: surface any pending master invitations
+    // for this user's email in the bell. Idempotent on the partial
+    // UNIQUE `(web_user_id, source_slug, source_id, kind)` so re-runs are
+    // no-ops. Recovers the pre-PR-#151 invites that never got their
+    // send-time `notifyWebUser` row, and acts as a safety net for any
+    // future race where the send-time write is lost.
+    if (email) {
+      void backfillPendingInviteNotifications(ctx.db, ctx.webUser.id, email);
+    }
+
     return {
       role,
       webUserId: ctx.webUser.id,
       tenantId,
       tenantName,
+      tenantLogo,
       masterId,
+      masterAvatarUrl,
+      masterAvatarEmoji,
       isPersonalTenant,
       isTest,
       createdAt,

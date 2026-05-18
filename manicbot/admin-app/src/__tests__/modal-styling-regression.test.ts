@@ -39,6 +39,8 @@ const MODAL_FILES = [
   "src/components/plugins/reminders/ReminderModal.tsx",
   // Master detail modal — owner-side edit (2026-05-17, parity with Clients tab)
   "src/components/salon/tabs/masters/MasterDetailModal.tsx",
+  // Master avatar picker — emoji + photo picker (0075)
+  "src/components/salon/tabs/masters/MasterAvatarPicker.tsx",
 ];
 
 function read(rel: string): string {
@@ -90,6 +92,22 @@ describe("modal styling regression (0062)", () => {
     const region = src.slice(idx, idx + 2000);
     expect(region).toMatch(/z-\[100\]/);
     expect(region).toMatch(/bg-slate-950\/70/);
+    expect(region).not.toMatch(/className=[^"]*"[^"]*\bglass-card\b/);
+  });
+
+  // God Mode / role-management modal — the page file itself uses
+  // `glass-card` on UserCard rows (it's not a modal), so we cannot pin
+  // the whole file. Anchor on the `roleModal && (` block instead, same
+  // pattern as MasterDashboard above.
+  it("UsersPageClient role modal follows the same contract", () => {
+    const src = read("src/app/(dashboard)/users/UsersPageClient.tsx");
+    const idx = src.indexOf("roleModal && (");
+    expect(idx).toBeGreaterThan(0);
+    const region = src.slice(idx, idx + 2500);
+    expect(region).toMatch(/z-\[100\]/);
+    expect(region).toMatch(/bg-slate-950\/70/);
+    expect(region).toMatch(/backdrop-blur-md/);
+    expect(region).toMatch(/ring-1\s+ring-black\/5/);
     expect(region).not.toMatch(/className=[^"]*"[^"]*\bglass-card\b/);
   });
 });

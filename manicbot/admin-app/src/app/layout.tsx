@@ -15,7 +15,11 @@ import { SITE_URL, SITE_NAME } from "~/lib/seo";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — rezerwacje online dla salonów paznokci przez Telegram`,
+    // Neutral default — applies to every admin-app route that doesn't set its
+    // own title (/dashboard, /settings, /plugins, etc.). The marketing tagline
+    // ("rezerwacje online…") is set by the landing site (separate Vite repo)
+    // on `/`, so it doesn't need to live here as a fallback.
+    default: SITE_NAME,
     template: `%s — ${SITE_NAME}`,
   },
   description:
@@ -62,6 +66,13 @@ export const metadata: Metadata = {
     // Optional — set NEXT_PUBLIC_GSC_VERIFICATION in Pages env to add a meta tag.
     // The DNS/HTML file verification via GSC is the primary method; this is belt-and-suspenders.
     google: process.env.NEXT_PUBLIC_GSC_VERIFICATION,
+  },
+  icons: {
+    icon: [
+      { url: "/manicbot-mark-ui.png?v=2", type: "image/png" },
+    ],
+    shortcut: "/manicbot-mark-ui.png?v=2",
+    apple: "/manicbot-mark-ui.png?v=2",
   },
 };
 

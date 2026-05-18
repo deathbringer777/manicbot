@@ -54,7 +54,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.roleRequests",  href: "/dashboard?tab=role-requests", icon: ArrowLeftRight, labelKey: "Role Requests", roles: ["system_admin"], group: "management" },
   { id: "god.leads",         href: "/dashboard?tab=leads", icon: Inbox,             labelKey: "Leads",            roles: ["system_admin"], group: "management" },
   { id: "god.agents",        href: "/agents",             icon: UserCog,         labelKey: "Agents",           roles: ["system_admin"], group: "management" },
-  { id: "god.marketing",     href: "/marketing",          icon: Megaphone,       labelKey: "Marketing",        roles: ["system_admin"], group: "management" },
+  // Sysadmin marketing center — distinct from the salon-owner `/marketing/*`
+  // surface. Lives under /system/* alongside other platform-level dashboards
+  // (providers, errors, events) per the IA split shipped in PR 1 of the
+  // marketing roadmap. Pinned by `system-marketing-ia.test.ts`.
+  { id: "god.marketing",     href: "/system/marketing",   icon: Megaphone,       labelKey: "Marketing Center", roles: ["system_admin"], group: "platform" },
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },

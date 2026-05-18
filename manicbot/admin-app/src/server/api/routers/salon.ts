@@ -11,7 +11,7 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray } from "drizzle-orm";
 import {
   generatePairingToken,
   buildDeepLink,
@@ -25,8 +25,13 @@ import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/masterPasswordVault";
 import { log } from "~/server/utils/logger";
 import { notifyWorker } from "~/server/utils/notifyWorker";
+import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
+import {
+  IG_ALL_ERROR_TYPES,
+  IG_BROKEN_ERROR_TYPES,
+} from "~/server/api/channelErrorTypes";
 import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
@@ -473,6 +478,7 @@ export const salonRouter = createTRPCRouter({
       description: z.string().optional(),
       photos: z.string().optional(),
       promo: z.string().optional(),
+      category: z.string().max(100).optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -507,6 +513,7 @@ export const salonRouter = createTRPCRouter({
       active: z.number().min(0).max(1).default(1),
       hidden: z.number().min(0).max(1).default(0),
       sortOrder: z.number().default(0),
+      category: z.string().max(100).optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -524,6 +531,7 @@ export const salonRouter = createTRPCRouter({
         active: input.active,
         hidden: input.hidden,
         sortOrder: input.sortOrder,
+        category: input.category ?? null,
       });
       return { svcId };
     }),
@@ -537,6 +545,105 @@ export const salonRouter = createTRPCRouter({
         and(eq(services.tenantId, input.tenantId), eq(services.svcId, input.svcId))
       );
       return { success: true };
+    }),
+
+  // ── Service categories ──────────────────────────────────────────────────
+
+  listServiceCategories: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select({ category: services.category })
+        .from(services)
+        .where(and(
+          eq(services.tenantId, input.tenantId),
+          sql`category IS NOT NULL AND category != ''`,
+        ))
+        .groupBy(services.category)
+        .orderBy(services.category);
+      return rows.map(r => r.category).filter((c): c is string => Boolean(c));
+    }),
+
+  // ── CSV export/import ───────────────────────────────────────────────────
+
+  exportServices: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select()
+        .from(services)
+        .where(eq(services.tenantId, input.tenantId))
+        .orderBy(services.sortOrder);
+      return { csv: servicesToCsv(rows as any[]) };
+    }),
+
+  importServices: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      csv: z.string().max(200_000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const { rows, errors } = parseServicesCsv(input.csv);
+
+      if (rows.length === 0 && errors.length > 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Все строки содержат ошибки — ни одна услуга не импортирована" });
+      }
+
+      // Load existing services for this tenant to match by svc_id
+      const existing = await ctx.db
+        .select({ svcId: services.svcId })
+        .from(services)
+        .where(eq(services.tenantId, input.tenantId));
+      const existingIds = new Set(existing.map(e => e.svcId));
+
+      let created = 0;
+      let updated = 0;
+
+      for (const row of rows) {
+        const names = JSON.stringify({ ru: row.name, en: row.name, ua: row.name, pl: row.name });
+        const price = row.price ?? 0;
+        const duration = row.duration ?? 60;
+        const active = row.active ? 1 : 0;
+
+        if (row.svcId && existingIds.has(row.svcId)) {
+          // Update existing
+          await ctx.db.update(services).set({
+            names: sanitizeText(names, 500),
+            price,
+            duration,
+            emoji: row.emoji ?? null,
+            category: row.category ?? null,
+            description: row.description ? sanitizeText(row.description, 2000) : null,
+            active,
+          }).where(and(
+            eq(services.tenantId, input.tenantId),
+            eq(services.svcId, row.svcId),
+          ));
+          updated++;
+        } else {
+          // Create new
+          const svcId = `svc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          await ctx.db.insert(services).values({
+            tenantId: input.tenantId,
+            svcId,
+            names: sanitizeText(names, 500),
+            price,
+            duration,
+            emoji: row.emoji ?? null,
+            category: row.category ?? null,
+            description: row.description ? sanitizeText(row.description, 2000) : null,
+            active,
+            hidden: 0,
+            sortOrder: 0,
+          });
+          created++;
+        }
+      }
+
+      return { created, updated, skippedErrors: errors.length, errors };
     }),
 
   updateSalonProfile: tenantOwnerProcedure
@@ -806,7 +913,7 @@ export const salonRouter = createTRPCRouter({
   mintUploadToken: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
-      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar"]),
+      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar", "master_avatar"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -1018,6 +1125,36 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /**
+   * Update the master avatar (emoji or uploaded photo URL).
+   *
+   * Intentionally NOT origin-gated: the avatar is the salon's visual label
+   * for the master on the public profile (same as `publicHidden`), not the
+   * master's personal profile data. Any tenant owner may update it.
+   *
+   * Rule: picking a photo clears avatarEmoji; picking an emoji clears
+   * avatarUrl. Passing both null resets to the default ('💅').
+   */
+  updateMasterAvatar: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatId: z.number(),
+      avatarEmoji: z.string().max(10).nullable(),
+      avatarUrl: z.string().max(2000).nullable(),
+      avatarR2Key: z.string().max(500).nullable().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      await ctx.db.update(masters)
+        .set({
+          avatarEmoji: input.avatarEmoji ?? null,
+          avatarUrl: input.avatarUrl ?? null,
+          avatarR2Key: input.avatarR2Key ?? null,
+        })
+        .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.chatId)));
+      return { success: true };
+    }),
+
+  /**
    * Owner-side edit of a master's profile fields. Powers the per-row detail
    * modal on /dashboard?tab=masters (parity with the Clients tab UX).
    *
@@ -1200,8 +1337,23 @@ export const salonRouter = createTRPCRouter({
       const syntheticChatId = 10_000_000_000 + (parseInt(id.replace(/-/g, "").slice(0, 8), 16) % 1_000_000_000);
 
       const sanitizedName = sanitizeText(input.name, 200);
-      // Insert web_users
-      await ctx.db.insert(webUsers).values({
+
+      // Decide permission set up-front so the batch is one shot.
+      let permsToGrant: PermissionKey[] = [];
+      if (input.permissionTemplate === "default") permsToGrant = MASTER_DEFAULT;
+      else if (input.permissionTemplate === "stylist_plus") permsToGrant = PERMISSION_TEMPLATES.stylist_plus;
+      else if (input.permissionTemplate === "read_only") permsToGrant = PERMISSION_TEMPLATES.read_only;
+
+      // Build every INSERT as a single D1 batch so the four touched tables
+      // (web_users, masters, tenant_roles, tenant_member_permissions) commit
+      // all-or-nothing. Pre-fix: web_users row was written first, and if any
+      // subsequent INSERT threw (e.g. a missing migration column) we'd leave
+      // an orphan web_users row that blocked retries with "email already
+      // exists". Found in prod when migration 0074 was missing on D1 and the
+      // master Drizzle schema referenced telegram_chat_id even though the
+      // INSERT didn't list it — the partial-state bug was the real damage,
+      // the migration was just the trigger.
+      const insertWebUser = ctx.db.insert(webUsers).values({
         id,
         email: login,
         passwordHash,
@@ -1209,18 +1361,17 @@ export const salonRouter = createTRPCRouter({
         role: "master",
         tenantId: input.tenantId,
         name: sanitizedName,
-        emailVerified: input.email ? 0 : 1, // generated emails don't need verification
+        // Synthetic *.salon.manicbot.local mailboxes are auto-verified
+        // (no real inbox to confirm); real addresses follow the standard
+        // verification flow before login.
+        emailVerified: input.email ? 0 : 1,
         createdAt: now,
         updatedAt: now,
       });
-
-      // Insert masters — bind to the just-created webUser so that S-01/S-03
-      // authorization works for invited multi-master tenants out of the box.
-      // isSynthetic=1 because chatId is synthetic — 0052 migration adds
-      // an explicit flag so cron post-visit + Telegram-dependent jobs
-      // skip these rows.
-      // 0062: origin='salon_created' — salon owns this account fully.
-      await ctx.db.insert(masters).values({
+      // isSynthetic=1 because chatId is synthetic (0052). origin='salon_created'
+      // — salon owns credentials and may peek/reset via OTP (0062 + 0066).
+      // webUserId binds master row to the auth identity for S-01/S-03 checks.
+      const insertMaster = ctx.db.insert(masters).values({
         tenantId: input.tenantId,
         chatId: syntheticChatId,
         name: sanitizedName,
@@ -1230,21 +1381,11 @@ export const salonRouter = createTRPCRouter({
         isSynthetic: 1,
         origin: "salon_created",
       });
-
-      // Assign tenant_roles
-      await ctx.db.insert(tenantRoles)
+      const insertTenantRole = ctx.db.insert(tenantRoles)
         .values({ tenantId: input.tenantId, chatId: syntheticChatId, role: "master", createdAt: now })
         .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
-
-      // Grant default permission set so the salon-invited master can access
-      // the unified admin permission system (0063). 'custom' = no rows; owner
-      // configures via Staff tab. Other templates pull from PERMISSION_TEMPLATES.
-      let permsToGrant: PermissionKey[] = [];
-      if (input.permissionTemplate === "default") permsToGrant = MASTER_DEFAULT;
-      else if (input.permissionTemplate === "stylist_plus") permsToGrant = PERMISSION_TEMPLATES.stylist_plus;
-      else if (input.permissionTemplate === "read_only") permsToGrant = PERMISSION_TEMPLATES.read_only;
-      for (const p of permsToGrant) {
-        await ctx.db.insert(tenantMemberPermissions).values({
+      const permInserts = permsToGrant.map((p) =>
+        ctx.db.insert(tenantMemberPermissions).values({
           tenantId: input.tenantId,
           webUserId: id,
           permission: p,
@@ -1253,6 +1394,47 @@ export const salonRouter = createTRPCRouter({
         }).onConflictDoUpdate({
           target: [tenantMemberPermissions.tenantId, tenantMemberPermissions.webUserId, tenantMemberPermissions.permission],
           set: { grantedAt: now, grantedBy: ctx.webUser!.id },
+        }),
+      );
+
+      try {
+        // D1 batch is atomic — first failure rolls back every prior statement
+        // in the same batch. Fall back to sequential awaits when running
+        // outside D1 (tests against the mock db, or libsql integration).
+        const batchCapable = typeof (ctx.db as unknown as { batch?: unknown }).batch === "function";
+        if (batchCapable) {
+          const batch = [insertWebUser, insertMaster, insertTenantRole, ...permInserts] as unknown as [unknown, ...unknown[]];
+          await (ctx.db as unknown as { batch: (b: typeof batch) => Promise<unknown> }).batch(batch);
+        } else {
+          await insertWebUser;
+          await insertMaster;
+          await insertTenantRole;
+          for (const p of permInserts) await p;
+        }
+      } catch (e) {
+        // Surface the real failure to the operator (logs + God Mode /errors)
+        // while keeping a clean user-facing message. Best-effort cleanup of
+        // any partial state when the runtime didn't give us atomicity.
+        log.error(
+          "salon.createMasterAccount.insert",
+          e instanceof Error ? e : new Error(String(e)),
+          { tenantId: input.tenantId, login },
+        );
+        try { await ctx.db.delete(webUsers).where(eq(webUsers.id, id)); } catch { /* noop */ }
+        try {
+          await ctx.db.delete(masters).where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, syntheticChatId)));
+        } catch { /* noop */ }
+        try {
+          await ctx.db.delete(tenantRoles).where(and(eq(tenantRoles.tenantId, input.tenantId), eq(tenantRoles.chatId, syntheticChatId)));
+        } catch { /* noop */ }
+        const msg = e instanceof Error ? e.message : String(e);
+        // BAD_REQUEST keeps the message visible (errorFormatter doesn't
+        // sanitize non-INTERNAL_SERVER_ERROR codes). The message includes
+        // the original DB error so the operator can act on it without
+        // scraping logs.
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Не удалось создать аккаунт мастера: ${msg.slice(0, 200)}`,
         });
       }
 
@@ -1800,18 +1982,109 @@ export const salonRouter = createTRPCRouter({
       return { ok: true as const, channelConfigId: data.channelConfigId, graphMe: data.graphMe };
     }),
 
-  /** Disconnect a Meta channel (instagram or whatsapp) by deleting its config. */
+  /**
+   * Disconnect a Meta channel (instagram or whatsapp). Two modes:
+   *
+   *   - `'soft'` (default) — set `active = 0`, KEEP the encrypted token. The
+   *     channel stops receiving / sending but a future `setActive(true)`
+   *     restores it without a new OAuth round-trip. Picked when the operator
+   *     wants to pause the integration without losing credentials.
+   *
+   *   - `'hard'` — DELETE the row. Token is gone; reconnecting requires a
+   *     fresh OAuth flow. Picked when the operator is transferring the
+   *     channel to a different Meta account.
+   */
   disconnectChannel: tenantOwnerProcedure
-    .input(z.object({ tenantId: z.string(), channelType: z.enum(["instagram", "whatsapp"]) }))
+    .input(z.object({
+      tenantId: z.string(),
+      channelType: z.enum(["instagram", "whatsapp"]),
+      mode: z.enum(["soft", "hard"]).default("soft"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      if (input.mode === "hard") {
+        await ctx.db
+          .delete(channelConfigs)
+          .where(and(
+            eq(channelConfigs.tenantId, input.tenantId),
+            eq(channelConfigs.channelType, input.channelType),
+          ));
+      } else {
+        await ctx.db
+          .update(channelConfigs)
+          .set({ active: 0, updatedAt: Math.floor(Date.now() / 1000) })
+          .where(and(
+            eq(channelConfigs.tenantId, input.tenantId),
+            eq(channelConfigs.channelType, input.channelType),
+          ));
+      }
+      return { ok: true as const, mode: input.mode };
+    }),
+
+  /**
+   * Re-enable a soft-disconnected channel (`active = 1`). No-ops if there
+   * is no row to reactivate.
+   */
+  reactivateChannel: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      channelType: z.enum(["instagram", "whatsapp"]),
+    }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
       await ctx.db
-        .delete(channelConfigs)
+        .update(channelConfigs)
+        .set({ active: 1, updatedAt: Math.floor(Date.now() / 1000) })
         .where(and(
           eq(channelConfigs.tenantId, input.tenantId),
           eq(channelConfigs.channelType, input.channelType),
         ));
       return { ok: true as const };
+    }),
+
+  /**
+   * Send a test Instagram DM from the tenant's bot to a PSID. Diagnostic
+   * tool for the salon owner — confirms the token is alive and the channel
+   * is correctly bound to a Meta IG account. Returns Meta's raw response
+   * (or an `outside_message_window` sentinel) so the operator sees the
+   * verdict directly.
+   */
+  sendInstagramTestMessage: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      psid: z.string().min(1).max(64),
+      text: z.string().max(1000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const workerUrl = env.WORKER_PUBLIC_URL;
+      const adminKey = env.ADMIN_KEY;
+      if (!workerUrl || !adminKey) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Server not configured for test send.",
+        });
+      }
+      const res = await fetch(`${workerUrl}/admin/ig-send-test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
+        body: JSON.stringify({ tenantId: input.tenantId, psid: input.psid, text: input.text }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = await res.json() as {
+        ok?: boolean;
+        sendRes?: { ok: boolean; error?: string };
+        api?: string;
+        error?: string;
+      };
+      if (!res.ok || data.ok === false) {
+        const reason = data.sendRes?.error || data.error || "send_failed";
+        throw new TRPCError({
+          code: res.status === 404 ? "NOT_FOUND" : "BAD_REQUEST",
+          message: reason,
+        });
+      }
+      return { ok: true as const, api: data.api ?? null, sendRes: data.sendRes };
     }),
 
   /**
@@ -1886,9 +2159,17 @@ export const salonRouter = createTRPCRouter({
         ? Math.floor((nowSec - lastInboundAt) / 3600)
         : null;
 
+      // PR 3 (2026-05-18): match by structured `error_type` slug instead of
+      // substring search on `message`. Slugs come from
+      // ~/server/api/channelErrorTypes.ts (mirror of the Worker constants).
+      // The legacy `LIKE %message%` fallback is gone — once a row in
+      // error_events lacks a slug, the IGHealthCard intentionally won't
+      // surface it (those rows pre-date PR 3 and would have been pinged by
+      // the operator already).
       const errorRows = await ctx.db
         .select({
           message: errorEvents.message,
+          errorType: errorEvents.errorType,
           lastSeen: errorEvents.lastSeen,
           count: errorEvents.count,
         })
@@ -1897,18 +2178,17 @@ export const salonRouter = createTRPCRouter({
           eq(errorEvents.tenantId, input.tenantId),
           eq(errorEvents.status, "open"),
           gte(errorEvents.lastSeen, nowSec - 30 * 86400),
-          or(
-            like(errorEvents.message, "%instagram%"),
-            like(errorEvents.message, "%channels.instagram%"),
-            like(errorEvents.message, "%OAuthException%"),
-            like(errorEvents.message, "%needs_reauth%"),
-            like(errorEvents.message, "%decrypt_failed%"),
-          ),
+          inArray(errorEvents.errorType, IG_ALL_ERROR_TYPES as unknown as string[]),
         ))
         .orderBy(desc(errorEvents.lastSeen))
         .limit(1);
       const lastError = errorRows[0]
-        ? { message: errorRows[0].message, lastSeen: errorRows[0].lastSeen, count: errorRows[0].count }
+        ? {
+            message: errorRows[0].message,
+            errorType: errorRows[0].errorType,
+            lastSeen: errorRows[0].lastSeen,
+            count: errorRows[0].count,
+          }
         : null;
 
       const active = cfg.active === 1;
@@ -1917,9 +2197,18 @@ export const salonRouter = createTRPCRouter({
         ? Math.floor((nowSec - cfg.updatedAt) / 86400)
         : null;
 
+      // Broken = a "this channel cannot deliver" slug is open. Degraded
+      // slugs (subscription_lost, signature_mismatch) keep the state at
+      // `warning` instead of jumping straight to broken so the operator
+      // gets a different copy + the test-message dialog stays available.
+      const hasBrokenError = lastError
+        ? (IG_BROKEN_ERROR_TYPES as readonly string[]).includes(lastError.errorType ?? "")
+        : false;
+
       let state: "healthy" | "warning" | "needs_attention" | "broken";
       if (!active || !hasToken) state = "needs_attention";
-      else if (lastError) state = "broken";
+      else if (hasBrokenError) state = "broken";
+      else if (lastError) state = "warning";
       else if (lastInboundAt && nowSec - lastInboundAt < 7 * 86400) state = "healthy";
       else state = "warning";
 
@@ -2509,6 +2798,9 @@ export const salonRouter = createTRPCRouter({
           vacationUntil: masters.vacationUntil,
           onVacation: masters.onVacation,
           allowDelegation: masters.allowDelegation,
+          // 0075: avatar fields — read by MasterDetailModal header circle
+          avatarEmoji: masters.avatarEmoji,
+          avatarUrl: masters.avatarUrl,
           // Joined web_users fields (LEFT JOIN below via subquery — kept simple)
         })
         .from(masters)

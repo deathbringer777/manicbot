@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { NotificationBell } from "./NotificationBell";
+import { BrandTile } from "./BrandTile";
 import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, Zap, UserCog, ChevronDown,
@@ -621,9 +622,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
       <aside className="hidden md:flex w-60 flex-col border-r border-slate-200 dark:border-white/5 bg-white/90 dark:bg-slate-900/50 p-4 shrink-0">
         {/* Logo + title */}
         <div className="mb-6 px-1 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 shadow-lg shadow-brand-500/25">
-            <Zap className="h-5 w-5 text-white" />
-          </div>
+          <BrandTile className="h-9 w-9 rounded-xl shadow-lg shadow-brand-500/25" glyphClassName="text-lg" />
           <div className="min-w-0 flex-1">
             <h1 className="text-sm font-bold text-slate-900 dark:text-white truncate">{displayTitle}</h1>
             <p className="text-[10px] text-slate-500">{subtitle ?? "Admin Panel"}</p>
@@ -681,9 +680,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
         {/* Mobile Header */}
         <header className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/5 bg-white/95 dark:bg-slate-950/80 backdrop-blur-lg sticky top-0 z-40">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 shrink-0">
-            <Zap className="h-4 w-4 text-white" />
-          </div>
+          <BrandTile className="h-7 w-7 rounded-lg" glyphClassName="text-sm" />
           <h1 className="text-sm font-bold text-slate-900 dark:text-white flex-1 truncate">{displayTitle}</h1>
           {showRoleSwitcherInChrome && <RoleSwitcherInline />}
           <MasterSwitcherInline />

@@ -25,6 +25,13 @@ REQUIRE_WEBHOOK_BOT_ID = "1"
 # secret for User→long-lived-User token exchange in the IG recovery and
 # auto-rotation paths. Set to the ManicBot Meta App.
 META_APP_ID = "1568224577592551"
+# Instagram Login product App ID (public — not a secret). Distinct from
+# META_APP_ID: post-Mar-2026 Meta split Instagram Messaging onto a
+# separate "Instagram Login" product with its own App ID + Secret +
+# endpoint (graph.instagram.com). Paired with META_INSTAGRAM_APP_SECRET.
+# Without this var, /meta/oauth/start with provider=instagram returns
+# 503 oauth_not_configured.
+META_INSTAGRAM_APP_ID = "3756985564432185"
 # Retention dry-run: when "1", phaseRetention logs counts but skips DELETE/archive.
 # Production default is "0" (live deletes with R2 archive). Flip to "1" in the
 # Cloudflare dashboard to preview a retention run without losing data.
@@ -94,6 +101,12 @@ id = "62a7d16805e742918a82184e879537cc"
 binding = "DB"
 database_name = "manicbot-db"
 database_id = "2c9bfdad-3dc0-4290-b26d-bcada6c02bfb"
+# Pin the migrations directory so CI (and local `wrangler d1 migrations apply`)
+# always resolves the same path regardless of the working directory. Wrangler
+# defaults to `migrations/` adjacent to wrangler.toml, but making it explicit
+# avoids the "0074 sat in repo but not in prod" failure mode we hit on
+# 2026-05-17 — see deploy.yml "Apply D1 migrations" step.
+migrations_dir = "migrations"
 
 # ─── R2 object storage for salon branding assets ─────────────────────────────
 # Powers /upload/asset (POST, signed token) + /cdn/<key> (GET, public read-through

@@ -252,10 +252,18 @@ async function resolveAudience(ctx, tenantId, segmentId, channel, limit) {
  * larger than INLINE_CAP stays in status='sending' so the next cron pass
  * processes the remaining queued contacts.
  *
+ * `opts.singleContactId` switches to single-recipient mode (used by
+ * event-triggered automations like appointment.done): bypasses
+ * `resolveAudience` and sends to exactly one marketing_contacts row.
+ * The row must exist (no auto-create) and must satisfy the standard
+ * consent gates for the campaign's channel — otherwise the send is
+ * silently skipped with `total=0, sent=0, failed=0`.
+ *
  * Returns { ok, total, sent, failed, deferred, error?, status }.
  */
 export async function runCampaignSend(ctx, tenantId, campaignId, opts = {}) {
   const inlineCap = Math.max(1, Math.min(opts.inlineCap ?? INLINE_CAP, INLINE_CAP));
+  const singleContactId = opts.singleContactId ?? null;
 
   const c = await dbGet(ctx,
     'SELECT * FROM marketing_campaigns WHERE id = ? LIMIT 1', campaignId);
@@ -299,7 +307,26 @@ export async function runCampaignSend(ctx, tenantId, campaignId, opts = {}) {
   const tenant = await dbGet(ctx, 'SELECT name FROM tenants WHERE id = ? LIMIT 1', tenantId);
   const salonName = tenant?.name ?? null;
 
-  const { contacts, totalCount } = await resolveAudience(ctx, tenantId, c.segment_id, channel, inlineCap);
+  let contacts;
+  let totalCount;
+  if (singleContactId != null) {
+    // Single-recipient mode (event-triggered automations).
+    // Apply the same consent + tenant scoping the segment-based path
+    // applies so an unsubscribed user or a wrong-tenant id is a no-op.
+    const consentCol = channel === 'email' ? 'consent_email = 1' : 'consent_sms = 1';
+    const valueCol = channel === 'email' ? "coalesce(email, '') <> ''" : "coalesce(phone, '') <> ''";
+    const row = await dbGet(ctx,
+      `SELECT id, email, phone, name, unsubscribe_token FROM marketing_contacts
+       WHERE id = ? AND tenant_id = ? AND unsubscribed = 0
+         AND ${consentCol} AND ${valueCol} LIMIT 1`,
+      singleContactId, tenantId);
+    contacts = row ? [row] : [];
+    totalCount = contacts.length;
+  } else {
+    const a = await resolveAudience(ctx, tenantId, c.segment_id, channel, inlineCap);
+    contacts = a.contacts;
+    totalCount = a.totalCount;
+  }
 
   let sent = 0;
   let failed = 0;

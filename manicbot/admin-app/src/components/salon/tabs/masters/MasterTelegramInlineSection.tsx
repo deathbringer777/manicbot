@@ -25,7 +25,7 @@
  */
 
 import { useState } from "react";
-import { Send, Loader2, Copy, Check, Unlink, AlertCircle, Pencil } from "lucide-react";
+import { Send, Loader2, Copy, Check, Unlink, AlertCircle, Pencil, ChevronRight } from "lucide-react";
 import { api } from "~/trpc/react";
 import { t, type Lang } from "~/lib/i18n";
 
@@ -35,6 +35,15 @@ interface Props {
   /** master.origin from getMasterDetail. Self-registered hides the whole section. */
   origin: string | null;
   lang: Lang;
+  /**
+   * Optional click handler for the "bot not connected" amber banner. Owners
+   * land on this section without realising the salon has no Telegram bot
+   * yet — wiring a callback here lets the parent close the modal and jump
+   * straight to the Channels → Telegram sub-tab (Telegram is the default
+   * `SalonChannelsTab` sub-tab, so `tab=channels` lands exactly there).
+   * If omitted, the banner renders as plain text.
+   */
+  onNavigateToChannels?: () => void;
 }
 
 function fmtExpiresIn(expiresAt: number, lang: Lang): string {
@@ -48,7 +57,7 @@ function fmtExpiresIn(expiresAt: number, lang: Lang): string {
   return t("masterDetail.pair.minutesShort", lang).replace("{n}", String(Math.max(1, Math.floor(diff / 60))));
 }
 
-export function MasterTelegramInlineSection({ tenantId, masterChatId, origin, lang }: Props) {
+export function MasterTelegramInlineSection({ tenantId, masterChatId, origin, lang, onNavigateToChannels }: Props) {
   const utils = api.useUtils();
   const stateQ = api.salon.getMasterPairingState.useQuery(
     { tenantId, masterChatId },
@@ -173,10 +182,23 @@ export function MasterTelegramInlineSection({ tenantId, masterChatId, origin, la
       ) : null}
 
       {!s.botUsername && (
-        <p className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
-          <AlertCircle className="h-3 w-3" />
-          {t("masterDetail.pair.botMissing", lang)}
-        </p>
+        onNavigateToChannels ? (
+          <button
+            type="button"
+            onClick={onNavigateToChannels}
+            data-testid="master-pair-bot-missing-cta"
+            className="flex w-full items-center gap-1 rounded-md text-left text-[10px] text-amber-600 underline-offset-2 transition hover:text-amber-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 dark:text-amber-400 dark:hover:text-amber-300"
+          >
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            <span className="flex-1">{t("masterDetail.pair.botMissing", lang)}</span>
+            <ChevronRight className="h-3 w-3 shrink-0" />
+          </button>
+        ) : (
+          <p className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+            <AlertCircle className="h-3 w-3" />
+            {t("masterDetail.pair.botMissing", lang)}
+          </p>
+        )
       )}
 
       {/* Just-minted deep link card */}

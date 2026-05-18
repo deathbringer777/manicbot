@@ -51,6 +51,28 @@ function formatRelative(hoursSince: number | null, lang: "ru" | "ua" | "en" | "p
   return fill(t("channels.igHealth.daysAgo", lang), { n: Math.floor(hoursSince / 24) });
 }
 
+/**
+ * Map a structured `error_type` slug to the localized human-readable message
+ * keyed in i18n. Falls back to the `unknown` slug for anything we haven't
+ * surfaced an explicit message for yet, so a future Worker slug doesn't
+ * crash the UI.
+ */
+function translateChannelErrorSlug(
+  slug: string | null | undefined,
+  lang: "ru" | "ua" | "en" | "pl",
+): string {
+  const key = (slug || "").startsWith("channel.ig.")
+    ? (`channels.ig.errorType.${slug!.slice("channel.ig.".length)}` as const)
+    : slug === "channel.meta.signature_mismatch"
+    ? ("channels.ig.errorType.signature_mismatch" as const)
+    : ("channels.ig.errorType.unknown" as const);
+  try {
+    return t(key as Parameters<typeof t>[0], lang);
+  } catch {
+    return t("channels.ig.errorType.unknown", lang);
+  }
+}
+
 export function IGHealthCard({
   tenantId,
   onRequestReauth,
@@ -128,9 +150,22 @@ export function IGHealthCard({
         </div>
 
         {h.lastError && (
-          <div className="sm:col-span-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 space-y-0.5">
+          <div className="sm:col-span-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 space-y-1">
             <dt className="text-red-400 font-medium">{t("channels.igHealth.openError", lang)} (×{h.lastError.count})</dt>
-            <dd className="font-mono text-[10px] text-red-300 truncate">{h.lastError.message}</dd>
+            {/* PR 3: prefer the localized error_type slug over the raw English
+                message. The raw message stays available in the title attribute
+                so an operator can still grab it for support escalation. */}
+            <dd
+              className="text-[11px] text-red-300/90 leading-snug"
+              title={h.lastError.message}
+            >
+              {translateChannelErrorSlug(h.lastError.errorType, lang)}
+            </dd>
+            {h.lastError.errorType && (
+              <code className="block font-mono text-[10px] text-red-400/60 truncate">
+                {h.lastError.errorType}
+              </code>
+            )}
           </div>
         )}
       </dl>

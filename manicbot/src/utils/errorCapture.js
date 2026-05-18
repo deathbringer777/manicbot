@@ -156,7 +156,15 @@ export async function captureError(env, error, context = {}) {
     const release = env?.RELEASE || env?.VERSION
       ? String(env.RELEASE || env.VERSION).slice(0, 64)
       : null;
-    const errorType = name;
+    // PR 3 (2026-05-18): callers may pass a SEMANTIC `errorType` (e.g.
+    // 'channel.ig.token_dead') so downstream consumers (IGHealthCard,
+    // monitoring dashboards) can match by stable slug instead of the raw
+    // Error class name. Fall back to the class name for callers that don't
+    // supply one. Slugs follow the convention `<domain>.<sub>.<kind>` and
+    // are kept short (<= 64 chars to fit the DB column).
+    const errorType = context.errorType
+      ? String(context.errorType).slice(0, 64)
+      : name;
     const title = bound(safeMessage, MAX_TITLE_LEN);
     const url = context.url ? bound(stripPII(String(context.url)), MAX_URL_LEN) : null;
     const method = context.method ? String(context.method).slice(0, 16) : null;

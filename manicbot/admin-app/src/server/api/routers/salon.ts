@@ -11,7 +11,7 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray } from "drizzle-orm";
 import {
   generatePairingToken,
   buildDeepLink,
@@ -28,6 +28,10 @@ import { notifyWorker } from "~/server/utils/notifyWorker";
 import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
+import {
+  IG_ALL_ERROR_TYPES,
+  IG_BROKEN_ERROR_TYPES,
+} from "~/server/api/channelErrorTypes";
 import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
@@ -2099,9 +2103,17 @@ export const salonRouter = createTRPCRouter({
         ? Math.floor((nowSec - lastInboundAt) / 3600)
         : null;
 
+      // PR 3 (2026-05-18): match by structured `error_type` slug instead of
+      // substring search on `message`. Slugs come from
+      // ~/server/api/channelErrorTypes.ts (mirror of the Worker constants).
+      // The legacy `LIKE %message%` fallback is gone — once a row in
+      // error_events lacks a slug, the IGHealthCard intentionally won't
+      // surface it (those rows pre-date PR 3 and would have been pinged by
+      // the operator already).
       const errorRows = await ctx.db
         .select({
           message: errorEvents.message,
+          errorType: errorEvents.errorType,
           lastSeen: errorEvents.lastSeen,
           count: errorEvents.count,
         })
@@ -2110,18 +2122,17 @@ export const salonRouter = createTRPCRouter({
           eq(errorEvents.tenantId, input.tenantId),
           eq(errorEvents.status, "open"),
           gte(errorEvents.lastSeen, nowSec - 30 * 86400),
-          or(
-            like(errorEvents.message, "%instagram%"),
-            like(errorEvents.message, "%channels.instagram%"),
-            like(errorEvents.message, "%OAuthException%"),
-            like(errorEvents.message, "%needs_reauth%"),
-            like(errorEvents.message, "%decrypt_failed%"),
-          ),
+          inArray(errorEvents.errorType, IG_ALL_ERROR_TYPES as unknown as string[]),
         ))
         .orderBy(desc(errorEvents.lastSeen))
         .limit(1);
       const lastError = errorRows[0]
-        ? { message: errorRows[0].message, lastSeen: errorRows[0].lastSeen, count: errorRows[0].count }
+        ? {
+            message: errorRows[0].message,
+            errorType: errorRows[0].errorType,
+            lastSeen: errorRows[0].lastSeen,
+            count: errorRows[0].count,
+          }
         : null;
 
       const active = cfg.active === 1;
@@ -2130,9 +2141,18 @@ export const salonRouter = createTRPCRouter({
         ? Math.floor((nowSec - cfg.updatedAt) / 86400)
         : null;
 
+      // Broken = a "this channel cannot deliver" slug is open. Degraded
+      // slugs (subscription_lost, signature_mismatch) keep the state at
+      // `warning` instead of jumping straight to broken so the operator
+      // gets a different copy + the test-message dialog stays available.
+      const hasBrokenError = lastError
+        ? (IG_BROKEN_ERROR_TYPES as readonly string[]).includes(lastError.errorType ?? "")
+        : false;
+
       let state: "healthy" | "warning" | "needs_attention" | "broken";
       if (!active || !hasToken) state = "needs_attention";
-      else if (lastError) state = "broken";
+      else if (hasBrokenError) state = "broken";
+      else if (lastError) state = "warning";
       else if (lastInboundAt && nowSec - lastInboundAt < 7 * 86400) state = "healthy";
       else state = "warning";
 

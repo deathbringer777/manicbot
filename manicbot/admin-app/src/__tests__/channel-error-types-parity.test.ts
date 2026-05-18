@@ -83,8 +83,7 @@ describe("channel error_type catalog — parity admin-app ↔ worker", () => {
   });
 
   it("every slug has a matching i18n key for ru/ua/en/pl", async () => {
-    const { default: messages } = await import("~/lib/i18n");
-    void messages; // just to ensure the import works
+    // i18n module only exposes named exports; we only need `t` here.
     const { t } = await import("~/lib/i18n");
     const langs = ["ru", "ua", "en", "pl"] as const;
     for (const slug of Object.values(CHANNEL_ERROR_TYPE)) {

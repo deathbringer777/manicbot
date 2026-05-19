@@ -181,7 +181,12 @@ export async function showAdminSettings(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   await clearState(ctx, cid);
   const salon = ctx.tenant?.salon || {};
-  const name = escHtml(salon.name || ctx.SALON_NAME || '—');
+  // Fallback chain: salon JSON → tenants.name column → legacy env default.
+  // Seed-tenants and any row whose `salon` JSON predates the name-mirror
+  // PR (admin-app `salon.updateSalonProfile`) only have the column
+  // populated; without this fallback the bot rendered "—" even though
+  // the dashboard showed the right name from `tenants.name`.
+  const name = escHtml(salon.name || ctx.tenant?.name || ctx.SALON_NAME || '—');
   const phone = escHtml(salon.phone || ctx.PHONE || '—');
   const addr = escHtml(salon.address || ctx.ADDRESS || '—');
   const wh = salon.workHours || ctx.WORK || {};

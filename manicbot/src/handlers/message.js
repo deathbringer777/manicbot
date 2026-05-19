@@ -12,6 +12,7 @@ import { getState, setState, clearState, checkRateLimit } from '../services/stat
 import { getLang, setLang, getChatHistory, appendChatTurn, clearChatHistory } from '../services/chat.js';
 import { getUser, saveUser, getRole, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, setAdminId, getMaster, saveMaster, listMasters, resolveMasterInput, blockUser, unblockUser, upsertUserFromTelegram, isPlatformAdmin, masterTelegramRecipient } from '../services/users.js';
 import { tryConsumePairingCode } from '../services/masterPairing.js';
+import { tryConsumePairingCode as tryConsumeOwnerPairingCode } from '../services/ownerPairing.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
@@ -728,6 +729,40 @@ export async function onMsg(ctx, msg) {
       await send(ctx, cid, '⚠️ ' + t(lg, reasonText)).catch(() => null);
       // Fall through to the standard /start flow so the user still gets
       // a usable bot rather than being stuck on the error toast.
+    }
+
+    // 0082 — owner Telegram pairing. Same shape as the `mst_` branch
+    // above but the consume call writes `web_users.telegram_chat_id`
+    // AND inserts a `tenant_roles` row so the existing role-resolution
+    // path picks the owner up without any change to `resolveRole`.
+    // Branches BEFORE `decodeStartPayload` for the same reason as
+    // `mst_` — the analytics tracker must never see `own_…`.
+    if (startPayload && ctx.tenantId && startPayload.startsWith('own_')) {
+      const rawToken = startPayload.slice(4);
+      const result = await tryConsumeOwnerPairingCode(ctx, rawToken, cid);
+      const lg = (await getLang(ctx, cid)) || 'ru';
+      if (result.ok) {
+        await clearChatHistory(ctx, cid);
+        const ownerName = result.ownerName ? ' (' + result.ownerName + ')' : '';
+        await send(
+          ctx,
+          cid,
+          '✅ ' + t(lg, 'owner_pairing_success_prefix').replace('{name}', ownerName.trim()),
+        ).catch(() => null);
+        return showAdminPanel(ctx, cid, name);
+      }
+      const reasonTextOwner = {
+        not_found: 'owner_pairing_err_not_found',
+        invalid_token: 'owner_pairing_err_invalid',
+        wrong_tenant: 'owner_pairing_err_wrong_tenant',
+        consumed: 'owner_pairing_err_consumed',
+        expired: 'owner_pairing_err_expired',
+        web_user_gone: 'owner_pairing_err_user_gone',
+        web_user_tenant_changed: 'owner_pairing_err_tenant_changed',
+        tg_chat_in_use: 'owner_pairing_err_chat_in_use',
+      }[result.reason] || 'owner_pairing_err_invalid';
+      await send(ctx, cid, '⚠️ ' + t(lg, reasonTextOwner)).catch(() => null);
+      // Fall through so the user still lands on a usable bot screen.
     }
 
     // Record acquisition origin if this is a deep-link /start. The channel is

@@ -16,6 +16,7 @@ import { IGHealthCard } from "./IGHealthCard";
 import { InstagramConnect } from "./InstagramConnect";
 import { IGSendTestDialog } from "./IGSendTestDialog";
 import { SalonMasterPairingTable } from "./SalonMasterPairingTable";
+import { SalonOwnerPairingCard } from "./SalonOwnerPairingCard";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
 import { MetaGuide } from "~/components/settings/MetaGuide";
 import { Send, Pause, Play, Trash2 } from "lucide-react";
@@ -156,6 +157,11 @@ function TelegramTab({ tenantId }: { tenantId: string }) {
             isPending={disconnectMut.isPending}
           />
         </section>
+        {/* 0082 — owner Telegram pairing.  Owner mints a deep-link
+            that, on /start own_<token>, binds web_users.telegram_chat_id
+            and inserts a tenant_roles row so the bot recognizes them
+            as tenant_owner. Symmetric to the master pairing below. */}
+        <SalonOwnerPairingCard tenantId={tenantId} />
         {/* 0072 — per-master Telegram pairing table.  Salon owner mints
             single-use deep-links for each master, or types a chat_id
             manually. Synthetic web-created masters need this to receive

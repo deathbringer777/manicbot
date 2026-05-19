@@ -46,6 +46,17 @@ export default {
   master_pairing_err_gone: 'Mistrz został usunięty — skontaktuj się z salonem.',
   master_pairing_err_chat_in_use: 'Ten Telegram jest już połączony z innym mistrzem w salonie.',
 
+  // 0082 — owner Telegram pairing (deep-link /start own_<token>)
+  owner_pairing_success_prefix: 'Połączono cię jako właściciela salonu {name}. Otwieram panel admina.',
+  owner_pairing_err_not_found: 'Kod parowania nie znaleziony. Wygeneruj nowy w panelu admina.',
+  owner_pairing_err_invalid: 'Nieprawidłowy format kodu parowania.',
+  owner_pairing_err_wrong_tenant: 'Ten kod parowania nie pasuje do tego salonu.',
+  owner_pairing_err_consumed: 'Ten kod został już użyty.',
+  owner_pairing_err_expired: 'Kod parowania wygasł. Wygeneruj nowy.',
+  owner_pairing_err_user_gone: 'Konto właściciela nie zostało znalezione — skontaktuj się ze wsparciem.',
+  owner_pairing_err_tenant_changed: 'Konto właściciela nie należy już do tego salonu.',
+  owner_pairing_err_chat_in_use: 'Ten Telegram jest już połączony z innym kontem.',
+
   mst_calendar: '📅 Google Kalendarz',
   mst_calendar_status_on: '✅ Połączono',
   mst_calendar_status_off: '❌ Nie połączono',

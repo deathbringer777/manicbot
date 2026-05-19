@@ -1,4 +1,4 @@
--- 0075_marketing_sends_complained.sql
+-- 0081_marketing_sends_complained.sql
 --
 -- Adds a `complained_at` column to `marketing_sends` so the
 -- provider-webhook ingest (Resend `email.complained`, Brevo `spam`)

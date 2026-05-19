@@ -1,4 +1,4 @@
--- 0074_favorite_master.sql
+-- 0080_favorite_master.sql
 -- Manual favorite-master pin per client. Lets the salon owner (or the
 -- client themselves, via future self-serve UI) lock a particular master
 -- as the default for this client across all booking surfaces — Manual

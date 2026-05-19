@@ -532,12 +532,19 @@ CREATE TABLE IF NOT EXISTS web_users (
   -- 0077: per-user notification preferences (JSON blob). NULL = defaults.
   -- See lib/notifications/prefs.ts for shape + writer integration.
   notification_prefs TEXT,
+  -- 0082: bridge from web identity to real Telegram chat_id. Populated
+  -- when the owner consumes a pairing code via `/start own_<token>`.
+  -- See `owner_pairing_codes` below + `src/services/ownerPairing.js`.
+  telegram_chat_id INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_web_user_email ON web_users(email);
 CREATE INDEX IF NOT EXISTS idx_web_user_tenant ON web_users(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_web_users_login_token ON web_users(login_token_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_users_tg_chat
+  ON web_users(telegram_chat_id)
+  WHERE telegram_chat_id IS NOT NULL;
 
 -- Reviews & ratings
 CREATE TABLE IF NOT EXISTS reviews (
@@ -1471,6 +1478,28 @@ CREATE INDEX IF NOT EXISTS idx_mpc_tenant_master
   ON master_pairing_codes(tenant_id, master_chat_id);
 CREATE INDEX IF NOT EXISTS idx_mpc_unconsumed_exp
   ON master_pairing_codes(expires_at) WHERE consumed_at IS NULL;
+
+-- ─── Owner Telegram pairing (migration 0082) ────────────────────────────
+-- Symmetric to master_pairing_codes (0074) but for the tenant_owner role.
+-- Single-use, 7-day-TTL deep-link tokens minted by the owner from the
+-- admin-app; redeemed via `/start own_<raw_token>` on the salon's TG
+-- bot. On consume the Worker sets `web_users.telegram_chat_id` AND
+-- inserts a `tenant_roles(tenant_id, chat_id, role='tenant_owner')`
+-- row so the existing `resolveRole` lookup resolves the owner without
+-- any change to the role-resolution path.
+CREATE TABLE IF NOT EXISTS owner_pairing_codes (
+  token_hash       TEXT PRIMARY KEY,
+  tenant_id        TEXT NOT NULL,
+  web_user_id      TEXT NOT NULL,
+  created_at       INTEGER NOT NULL,
+  expires_at       INTEGER NOT NULL,
+  consumed_at      INTEGER,
+  consumed_chat_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_opc_tenant_user
+  ON owner_pairing_codes(tenant_id, web_user_id);
+CREATE INDEX IF NOT EXISTS idx_opc_unconsumed_exp
+  ON owner_pairing_codes(expires_at) WHERE consumed_at IS NULL;
 
 -- ─── Platform messenger (migration 0076) ────────────────────────────────
 -- Cross-tenant DM channel: ManicBot (any system_admin) ↔ one web_user

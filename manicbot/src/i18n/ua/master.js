@@ -46,6 +46,17 @@ export default {
   master_pairing_err_gone: 'Майстра видалено — звернись до салону.',
   master_pairing_err_chat_in_use: 'Цей Telegram вже прив\'язаний до іншого майстра в салоні.',
 
+  // 0082 — owner Telegram pairing (deep-link /start own_<token>)
+  owner_pairing_success_prefix: 'Прив\'язав тебе як власника салону {name}. Відкриваю адмін-панель.',
+  owner_pairing_err_not_found: 'Код прив\'язки не знайдено. Згенеруй новий в адмінці.',
+  owner_pairing_err_invalid: 'Невірний формат коду прив\'язки.',
+  owner_pairing_err_wrong_tenant: 'Код прив\'язки не підходить до цього салону.',
+  owner_pairing_err_consumed: 'Цей код вже було використано.',
+  owner_pairing_err_expired: 'Термін коду прив\'язки минув. Згенеруй новий.',
+  owner_pairing_err_user_gone: 'Аккаунт власника не знайдено — звернись у підтримку.',
+  owner_pairing_err_tenant_changed: 'Аккаунт власника вже не належить цьому салону.',
+  owner_pairing_err_chat_in_use: 'Цей Telegram вже прив\'язаний до іншого аккаунту.',
+
   mst_calendar: '📅 Google Календар',
   mst_calendar_status_on: '✅ Підключено',
   mst_calendar_status_off: '❌ Не підключено',

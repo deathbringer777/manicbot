@@ -551,12 +551,41 @@ export const webUsers = sqliteTable("web_users", {
    * fan-out time and skip the channel when the category is opted-out.
    */
   notificationPrefs: text("notification_prefs"),
+  /**
+   * 0082: bridges the web identity to the real Telegram chat_id. Populated
+   * when the owner consumes a pairing code via `/start own_<token>` on
+   * the salon's TG bot. NULL for accounts that never paired. See
+   * `ownerPairingCodes` + `~/server/api/ownerPairing/tokenLogic.ts`.
+   */
+  telegramChatId: integer("telegram_chat_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (t) => [
   uniqueIndex("idx_web_user_email").on(t.email),
   index("idx_web_user_tenant").on(t.tenantId),
   index("idx_web_users_login_token").on(t.loginTokenHash),
+  uniqueIndex("idx_web_users_tg_chat").on(t.telegramChatId),
+]);
+
+/**
+ * Owner Telegram pairing codes — migration 0082. Symmetric to
+ * `masterPairingCodes` but keyed on `webUserId` (the owner identity).
+ *
+ * Single-use, 7-day TTL deep-link tokens. Hash-only storage (raw token
+ * leaves the server exactly once in the URL response).
+ */
+export const ownerPairingCodes = sqliteTable("owner_pairing_codes", {
+  /** SHA-256 hex of the raw token. */
+  tokenHash: text("token_hash").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  webUserId: text("web_user_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  consumedChatId: integer("consumed_chat_id"),
+}, (t) => [
+  index("idx_opc_tenant_user").on(t.tenantId, t.webUserId),
+  index("idx_opc_unconsumed_exp").on(t.expiresAt),
 ]);
 
 // ─── Reviews & Ratings ──────────────────────────────────────────────────────

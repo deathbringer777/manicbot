@@ -944,9 +944,17 @@ export const salonRouter = createTRPCRouter({
         if (input.workHoursTo !== undefined) wh.to = input.workHoursTo;
         existing.workHours = wh;
       }
+      // Mirror name into salon JSON so the Worker bot's `showAdminSettings`
+      // (`src/ui/admin.js` reads `ctx.tenant.salon.name`) renders the
+      // current name without falling back to the legacy env default.
+      // Without this mirror the bot showed "—" for any tenant whose
+      // `salon` JSON predated this PR (e.g. seed-script tenants where
+      // only `tenants.name` was populated).
+      const sanitizedName = input.name !== undefined ? sanitizeText(input.name, 200) : undefined;
+      if (sanitizedName !== undefined) existing.name = sanitizedName;
 
       const tenantUpdate: Record<string, unknown> = { salon: JSON.stringify(existing) };
-      if (input.name !== undefined) tenantUpdate.name = sanitizeText(input.name, 200);
+      if (sanitizedName !== undefined) tenantUpdate.name = sanitizedName;
       if (input.slug !== undefined) tenantUpdate.slug = input.slug || null;
       if (input.description !== undefined) tenantUpdate.description = input.description ? sanitizeText(input.description, 1000) : null;
       if (input.city !== undefined) tenantUpdate.city = input.city ? sanitizeText(input.city, 100) : null;

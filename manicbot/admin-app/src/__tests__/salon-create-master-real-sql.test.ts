@@ -77,6 +77,7 @@ const BOOTSTRAP_SQL = [
      email_change_token_hash TEXT,
      password_encrypted TEXT,
      notification_prefs TEXT,
+     telegram_chat_id INTEGER,
      created_at INTEGER NOT NULL,
      updated_at INTEGER NOT NULL
    )`,

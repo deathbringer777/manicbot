@@ -46,6 +46,17 @@ export default {
   master_pairing_err_gone: 'Master has been removed — contact the salon.',
   master_pairing_err_chat_in_use: 'This Telegram is already linked to another master in the salon.',
 
+  // 0082 — owner Telegram pairing (deep-link /start own_<token>)
+  owner_pairing_success_prefix: 'Linked you as the owner of {name}. Opening the admin panel.',
+  owner_pairing_err_not_found: 'Pairing code not found. Generate a new one from the dashboard.',
+  owner_pairing_err_invalid: 'Invalid pairing code format.',
+  owner_pairing_err_wrong_tenant: 'This pairing code is not for this salon.',
+  owner_pairing_err_consumed: 'This code has already been used.',
+  owner_pairing_err_expired: 'Pairing code has expired. Generate a new one.',
+  owner_pairing_err_user_gone: 'Owner account not found — please contact support.',
+  owner_pairing_err_tenant_changed: 'The owner account is no longer attached to this salon.',
+  owner_pairing_err_chat_in_use: 'This Telegram is already linked to another account.',
+
   mst_calendar: '📅 Google Calendar',
   mst_calendar_status_on: '✅ Connected',
   mst_calendar_status_off: '❌ Not connected',

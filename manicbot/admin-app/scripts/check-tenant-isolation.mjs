@@ -120,12 +120,14 @@ const ALLOWLIST = new Set([
   // (#180/#182/#183 IG-OAuth audit series inserted reactivate / send-test /
   // error_type imports above this block) → 1539 (after the 0074 favorite-
   // master auto-suggest tRPC pair landed above) → 1741 (service-categories
-  // CRUD added ~200 lines around line 567 in the categories-PR).
+  // CRUD added ~200 lines around line 567 in the categories-PR) → 1750
+  // (0082 owner-pairing PR added the salon-JSON name mirror, +8 lines in
+  // updateSalonProfile body).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1742",
+  "src/server/api/routers/salon.ts:1750",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

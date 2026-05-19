@@ -1,4 +1,4 @@
--- 0077_notification_prefs.sql
+-- 0078_notification_prefs.sql
 -- Adds per-user notification preferences as a JSON blob on web_users.
 --
 -- Shape:

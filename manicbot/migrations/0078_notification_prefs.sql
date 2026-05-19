@@ -21,4 +21,10 @@
 -- Writers consult prefs at fan-out time and skip the channel when the
 -- category is opted-out; the partial UNIQUE on user_notifications still
 -- dedups in-app rows on retry as before.
-ALTER TABLE web_users ADD COLUMN notification_prefs TEXT;
+--
+-- NOTE: This file was originally filed as 0077_notification_prefs.sql, which
+-- conflicted with 0077_service_categories.sql and was renamed in PR #198.
+-- Production D1 already has this column (applied under the old filename).
+-- Using ADD COLUMN IF NOT EXISTS (SQLite 3.37+ / D1) so this migration is
+-- idempotent whether or not the column was applied under the previous name.
+ALTER TABLE web_users ADD COLUMN IF NOT EXISTS notification_prefs TEXT;

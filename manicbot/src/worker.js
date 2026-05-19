@@ -182,6 +182,16 @@ export function addSecurityHeaders(resp) {
 }
 
 let _securityValidated = false;
+
+/**
+ * Reset the module-level "validation has run" cache. Test-only — exported
+ * so the Vitest suite can exercise the validation gate multiple times in
+ * one process (the production Worker only loads once per isolate).
+ */
+export function __resetSecurityValidationForTests() {
+  _securityValidated = false;
+}
+
 /**
  * Validate security configuration at startup. Throws on hard failures to
  * fail-fast rather than silently running with insecure defaults.
@@ -189,13 +199,18 @@ let _securityValidated = false;
  * Enforcement rules:
  *   - ADMIN_KEY: if set, must be ≥ 32 chars (throw). If unset, admin
  *     endpoints are disabled by isAdminKeyValid (no throw).
- *   - BOT_ENCRYPTION_KEY: if set, must be ≥ 32 chars (throw). If unset,
- *     warn only — downstream code (token encryption, calendar signing,
- *     Google OAuth) already fails closed individually.
+ *   - BOT_ENCRYPTION_KEY: REQUIRED. Must be set AND ≥ 32 chars (throw).
+ *     Previously this was warn-only when absent (H-A, audit 2026-05-20),
+ *     which let misconfigured deploys serve traffic with calendar links
+ *     silently broken, channel tokens decrypting to null, and the master
+ *     password vault panicking at consume time. Mirrors META_APP_SECRET
+ *     semantics. Dev-time bypass: set ALLOW_PLAINTEXT_TOKENS=1 (mirrors
+ *     ALLOW_LEGACY_BOT_CTX); produces a loud startup warning so the
+ *     deviation is visible in every log line.
  *   - META_APP_SECRET: if Meta channels are configured (META_VERIFY_TOKEN_*),
  *     must be set AND ≥ 32 chars (throw).
  */
-function validateSecurityConfig(env) {
+export function validateSecurityConfig(env) {
   if (_securityValidated) return;
   _securityValidated = true;
 
@@ -207,11 +222,18 @@ function validateSecurityConfig(env) {
     throw new Error('[SECURITY] NOTIFY_TOKEN must be at least 32 characters — refusing to start');
   }
 
-  if (env.BOT_ENCRYPTION_KEY && String(env.BOT_ENCRYPTION_KEY).length < 32) {
-    throw new Error('[SECURITY] BOT_ENCRYPTION_KEY must be at least 32 characters — refusing to start');
-  }
+  // H-A — fail-close on missing BOT_ENCRYPTION_KEY, with a dev-only escape
+  // hatch behind ALLOW_PLAINTEXT_TOKENS=1.
   if (!env.BOT_ENCRYPTION_KEY) {
-    log.warn('worker.security', { message: 'BOT_ENCRYPTION_KEY not set — bot/channel tokens will be stored in plaintext and calendar links disabled' });
+    if (env.ALLOW_PLAINTEXT_TOKENS === '1') {
+      log.warn('worker.security', {
+        message: '[SECURITY] ALLOW_PLAINTEXT_TOKENS=1 — BOT_ENCRYPTION_KEY unset; calendar links + channel decryption will fail closed downstream. Unset this var in production.',
+      });
+    } else {
+      throw new Error('[SECURITY] BOT_ENCRYPTION_KEY is required — refusing to start. Set ALLOW_PLAINTEXT_TOKENS=1 only for local development.');
+    }
+  } else if (String(env.BOT_ENCRYPTION_KEY).length < 32) {
+    throw new Error('[SECURITY] BOT_ENCRYPTION_KEY must be at least 32 characters — refusing to start');
   }
 
   const metaConfigured = !!(env.META_VERIFY_TOKEN_WA || env.META_VERIFY_TOKEN_IG);

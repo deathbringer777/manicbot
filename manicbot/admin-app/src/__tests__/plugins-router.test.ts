@@ -65,12 +65,12 @@ describe("pluginsRouter auth guards", () => {
     await expect(caller.listCatalog()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("install throws FORBIDDEN when unauthenticated (managerProcedure rejects null role)", async () => {
+  it("install throws UNAUTHORIZED when unauthenticated (L-F: managerProcedure flips null caller to UNAUTHORIZED)", async () => {
     const { db } = createDbMock();
     const caller = createCaller(makeUnauthCtx(db) as never);
     await expect(
       caller.install({ slug: TENANT_PLUGIN }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("auditTrail is admin-only", async () => {

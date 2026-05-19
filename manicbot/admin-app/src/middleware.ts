@@ -95,14 +95,21 @@ export function middleware(request: NextRequest) {
 
   const frameAncestors = embeddable ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
 
+  // M-B (audit 2026-05-20): replace the wildcard `https://*.manicbot.com`
+  // in connect-src with an explicit allowlist. Only the Worker apex, the
+  // marketing landing, and the Pages preview aliases need to be reachable
+  // from the dashboard; the wildcard was a typosquat-takeover hazard.
+  // M-D: drop `https://manicbot.com` from frame-src — the «Веб-чат»
+  // preview iframe is same-origin (the dashboard embeds
+  // `/salon/<slug>/chat` on its OWN Pages origin), so 'self' covers it.
   const csp = [
     "default-src 'self'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://api.stripe.com https://*.manicbot.com https://challenges.cloudflare.com https://core.telegram.org https://*.telegram.org",
-    "frame-src 'self' https://challenges.cloudflare.com https://js.stripe.com https://manicbot.com",
+    "connect-src 'self' https://api.stripe.com https://manicbot.com https://www.manicbot.com https://admin-app.pages.dev https://admin-app-3nc.pages.dev https://challenges.cloudflare.com https://core.telegram.org https://*.telegram.org",
+    "frame-src 'self' https://challenges.cloudflare.com https://js.stripe.com",
     frameAncestors,
     "object-src 'none'",
     "base-uri 'self'",

@@ -54,16 +54,19 @@ const enabledInstall = {
 };
 
 // Auth guard: managerProcedure rejects null webUser
+// L-F (audit 2026-05-20): unauthenticated callers must surface as
+// UNAUTHORIZED (401), not FORBIDDEN (403), so the client-side handler
+// can branch on "redirect to /login" vs "no access" page.
 describe("pluginRemindersRouter — auth", () => {
-  it("list throws FORBIDDEN for unauthenticated callers (managerProcedure)", async () => {
+  it("list throws UNAUTHORIZED for unauthenticated callers (managerProcedure)", async () => {
     const { db } = createDbMock();
     const caller = createCaller(makeUnauthCtx(db) as never);
     await expect(
       caller.list({ tenantId: "t_1" }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("create throws FORBIDDEN for unauthenticated callers", async () => {
+  it("create throws UNAUTHORIZED for unauthenticated callers", async () => {
     const { db } = createDbMock();
     const caller = createCaller(makeUnauthCtx(db) as never);
     await expect(
@@ -74,7 +77,7 @@ describe("pluginRemindersRouter — auth", () => {
         time: "09:00",
         recurrence: { type: "once" as const },
       }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });
 

@@ -75,11 +75,11 @@ describe("tokenLogic (admin-app mirror of Worker ownerPairing)", () => {
 describe("ownerPairing.requestPairingCode", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("rejects unauthenticated callers", async () => {
+  it("rejects unauthenticated callers (L-F: tenantOwnerProcedure throws UNAUTHORIZED, not FORBIDDEN)", async () => {
     const { db } = createDbMock();
     const caller = ownerCaller(makeUnauthCtx(db) as never);
     await expect(caller.requestPairingCode({ tenantId: TENANT } as never))
-      .rejects.toMatchObject({ code: "FORBIDDEN" });
+      .rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejects master role (tenant_owner-only)", async () => {

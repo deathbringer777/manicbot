@@ -149,11 +149,20 @@ export const protectedProcedure = t.procedure.use(timingMiddleware).use(async ({
 /**
  * Role-scoped procedure builders — use these instead of `publicProcedure + assertTenantOwner()`
  * so authorization is type-enforced at the procedure boundary.
+ *
+ * L-F (audit 2026-05-20): each builder MUST throw UNAUTHORIZED when the
+ * caller has no session, and FORBIDDEN when the session exists but the
+ * role is wrong. Aligns with `adminProcedure` so the client-side handler
+ * can branch on 401 (redirect to /login) vs 403 (show "no access" page).
+ * The previous implementation collapsed both cases to FORBIDDEN.
  */
 export const tenantOwnerProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
-    const role = ctx.webUser?.webRole;
+    if (!ctx.webUser) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+    const role = ctx.webUser.webRole;
     if (role !== "tenant_owner" && role !== "system_admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: "tenant_owner or system_admin required" });
     }
@@ -167,7 +176,10 @@ export const tenantOwnerProcedure = t.procedure
 export const managerProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
-    const role = ctx.webUser?.webRole;
+    if (!ctx.webUser) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+    const role = ctx.webUser.webRole;
     if (
       role !== "tenant_owner" &&
       role !== "tenant_manager" &&
@@ -182,7 +194,10 @@ export const managerProcedure = t.procedure
 export const masterProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
-    const role = ctx.webUser?.webRole;
+    if (!ctx.webUser) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+    const role = ctx.webUser.webRole;
     if (role !== "master" && role !== "tenant_owner" && role !== "system_admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: "master/tenant_owner/system_admin required" });
     }
@@ -192,7 +207,10 @@ export const masterProcedure = t.procedure
 export const systemAdminProcedure = t.procedure
   .use(timingMiddleware)
   .use(async ({ ctx, next }) => {
-    const role = ctx.webUser?.webRole;
+    if (!ctx.webUser) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required" });
+    }
+    const role = ctx.webUser.webRole;
     if (role !== "system_admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: "system_admin required" });
     }

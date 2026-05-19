@@ -85,6 +85,17 @@ jobs:
         run: npm audit --audit-level=high --production
         working-directory: manicbot
 
+      # H-B (audit 2026-05-20): dev-dep advisories surface as warn-only so
+      # the CI log captures supply-chain hygiene without blocking deploys.
+      # The build artifact does NOT ship these (worker/admin runtime is
+      # tree-shaken by wrangler / next-on-pages), so failing the gate would
+      # be over-strict. Production gate above (--production) still blocks
+      # on real runtime advisories.
+      - name: Security audit — dev deps (advisory, warn-only)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+        working-directory: manicbot
+
       - name: Admin app — install
         run: npm ci --legacy-peer-deps
         working-directory: manicbot/admin-app
@@ -103,6 +114,14 @@ jobs:
 
       - name: Admin app — security audit
         run: npm audit --audit-level=high --production
+        working-directory: manicbot/admin-app
+
+      # H-B (audit 2026-05-20): same warn-only gate for the admin-app
+      # dev deps. Surfaces the @cloudflare/next-on-pages → miniflare@3 →
+      # undici/ws chain that we cannot fix without forking next-on-pages.
+      - name: Admin app — dev-dep audit (advisory, warn-only)
+        run: npm audit --audit-level=high
+        continue-on-error: true
         working-directory: manicbot/admin-app
 
   # ─── Bot: deploy to Cloudflare Workers ──────────────────────

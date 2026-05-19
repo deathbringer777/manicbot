@@ -120,12 +120,9 @@ function mockMetaFetch(map) {
   });
 }
 
-let originalFetch;
-beforeEach(() => {
-  originalFetch = globalThis.fetch;
-});
+// Phase 2 cleanup: vi.stubGlobal + unstubAllGlobals — no manual save/restore.
 afterEach(() => {
-  globalThis.fetch = originalFetch;
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -185,9 +182,9 @@ describe('marketing/autopilot — phaseInstagramAutopilot (top-level)', () => {
     };
     const db = makeDb({ slots: [oldSlot] });
     const env = makeEnv({ db });
-    globalThis.fetch = mockMetaFetch({
+    vi.stubGlobal('fetch', mockMetaFetch({
       '/media': { ok: true, body: { id: 'CONTAINER_1' } },
-    });
+    }));
 
     const r = await phaseInstagramAutopilot(env);
     expect(r.processed).toBe(1);
@@ -227,13 +224,13 @@ describe('marketing/autopilot — phaseInstagramAutopilot (top-level)', () => {
 
     // First fetch fails, second succeeds
     let call = 0;
-    globalThis.fetch = vi.fn().mockImplementation(async (url) => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url) => {
       call++;
       if (url.includes('/media') && call === 1) {
         return { ok: false, status: 400, json: async () => ({ error: { message: 'bad' } }), text: async () => '' };
       }
       return { ok: true, status: 200, json: async () => ({ id: 'C' }), text: async () => '' };
-    });
+    }));
 
     const r = await phaseInstagramAutopilot(env);
     // One processed successfully, one errored (markSlotError ran)
@@ -265,7 +262,7 @@ describe('marketing/autopilot — processSlot (pending → ready)', () => {
     };
     const db = makeDb({ slots: [slot] });
     const env = makeEnv({ db });
-    globalThis.fetch = mockAnthropicFetch();
+    vi.stubGlobal('fetch', mockAnthropicFetch());
 
     await processSlot(env, slot, nowSec);
 
@@ -308,7 +305,7 @@ describe('marketing/autopilot — processSlot (pending → ready)', () => {
       error_count: 0,
     };
     const env = makeEnv({ db: makeDb({ slots: [slot] }) });
-    globalThis.fetch = mockAnthropicFetch();
+    vi.stubGlobal('fetch', mockAnthropicFetch());
 
     await processSlot(env, slot, nowSec);
 
@@ -333,7 +330,7 @@ describe('marketing/autopilot — processSlot (pending → ready)', () => {
       error_count: 0,
     };
     const env = makeEnv({ db: makeDb({ slots: [slot] }) });
-    globalThis.fetch = mockAnthropicFetch();
+    vi.stubGlobal('fetch', mockAnthropicFetch());
 
     await processSlot(env, slot, nowSec);
 
@@ -361,7 +358,7 @@ describe('marketing/autopilot — processSlot (ready → publishing)', () => {
     const metaFetch = mockMetaFetch({
       '/media': { ok: true, body: { id: 'CONTAINER_123' } },
     });
-    globalThis.fetch = metaFetch;
+    vi.stubGlobal('fetch', metaFetch);
 
     await processSlot(env, slot, nowSec);
 
@@ -392,7 +389,7 @@ describe('marketing/autopilot — processSlot (ready → publishing)', () => {
     };
     const env = makeEnv({ db: makeDb({ slots: [slot] }) });
     const f = vi.fn();
-    globalThis.fetch = f;
+    vi.stubGlobal('fetch', f);
 
     await processSlot(env, slot, nowSec);
     expect(f).not.toHaveBeenCalled();
@@ -411,7 +408,7 @@ describe('marketing/autopilot — processSlot (ready → publishing)', () => {
     };
     const env = makeEnv({ ig: false });
     const f = vi.fn();
-    globalThis.fetch = f;
+    vi.stubGlobal('fetch', f);
 
     await processSlot(env, slot, nowSec);
     expect(f).not.toHaveBeenCalled();
@@ -429,9 +426,9 @@ describe('marketing/autopilot — processSlot (ready → publishing)', () => {
       error_count: 0,
     };
     const env = makeEnv();
-    globalThis.fetch = mockMetaFetch({
+    vi.stubGlobal('fetch', mockMetaFetch({
       '/media': { ok: false, status: 400, body: { error: { code: 100, message: 'invalid image' } } },
-    });
+    }));
 
     await expect(processSlot(env, slot, nowSec)).rejects.toThrow(/createMediaContainer/);
   });
@@ -446,14 +443,15 @@ describe('marketing/autopilot — processSlot (publishing → posted)', () => {
       queue: [{ content_plan_id: 'slot_pub', meta_container_id: 'C1', attempts: 0 }],
     });
     const env = makeEnv({ db });
-    globalThis.fetch = mockMetaFetch({
+    const fetchMock = mockMetaFetch({
       '/C1': { ok: true, body: { status_code: 'IN_PROGRESS' } },
     });
+    vi.stubGlobal('fetch', fetchMock);
 
     await processSlot(env, slot, nowSec);
 
     // Did NOT publish (no /media_publish call)
-    const calls = globalThis.fetch.mock.calls.map((c) => c[0]);
+    const calls = fetchMock.mock.calls.map((c) => c[0]);
     expect(calls.some((u) => u.includes('media_publish'))).toBe(false);
     // Incremented attempts
     const incUpdate = db.state.updates.find((u) =>
@@ -470,7 +468,7 @@ describe('marketing/autopilot — processSlot (publishing → posted)', () => {
       queue: [{ content_plan_id: 'slot_pub2', meta_container_id: 'C2', attempts: 1 }],
     });
     const env = makeEnv({ db });
-    globalThis.fetch = vi.fn().mockImplementation(async (url) => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url) => {
       if (url.includes('/C2?fields=status_code')) {
         return { ok: true, status: 200, json: async () => ({ status_code: 'FINISHED' }), text: async () => '' };
       }
@@ -481,7 +479,7 @@ describe('marketing/autopilot — processSlot (publishing → posted)', () => {
         return { ok: true, status: 200, json: async () => ({ permalink: 'https://instagram.com/p/x' }), text: async () => '' };
       }
       return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
-    });
+    }));
 
     await processSlot(env, slot, nowSec);
 
@@ -501,9 +499,9 @@ describe('marketing/autopilot — processSlot (publishing → posted)', () => {
       queue: [{ content_plan_id: 'slot_err', meta_container_id: 'C3', attempts: 1 }],
     });
     const env = makeEnv({ db });
-    globalThis.fetch = mockMetaFetch({
+    vi.stubGlobal('fetch', mockMetaFetch({
       '/C3': { ok: true, body: { status_code: 'ERROR' } },
-    });
+    }));
 
     await expect(processSlot(env, slot, nowSec)).rejects.toThrow(/ERROR/);
   });

@@ -109,15 +109,15 @@ describe("describeChatAttachmentError", () => {
 // ─── uploadChatAttachment ─────────────────────────────────────────────────
 
 describe("uploadChatAttachment", () => {
-  const origFetch = globalThis.fetch;
+  // Phase 2 cleanup: vi.stubGlobal + unstubAllGlobals.
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => { globalThis.fetch = origFetch; });
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it("happy path: returns the Worker's CDN URL on 200 + { ok: true, url }", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ ok: true, url: "https://w/cdn/t/abc/x.png" }),
       { status: 200, headers: { "Content-Type": "application/json" } },
-    )) as never;
+    )));
     const file = makeFile({ type: "image/png", size: 200 });
     const url = await uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment");
     expect(url).toBe("https://w/cdn/t/abc/x.png");
@@ -125,7 +125,7 @@ describe("uploadChatAttachment", () => {
   });
 
   it("rejects oversize input BEFORE making any network call", async () => {
-    globalThis.fetch = vi.fn(async () => new Response("should-not-be-called", { status: 500 })) as never;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response("should-not-be-called", { status: 500 })));
     const file = makeFile({ type: "image/png", size: CHAT_ATTACHMENT_MAX_BYTES + 1 });
     await expect(uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment"))
       .rejects.toMatchObject({ code: "too_large" });
@@ -133,7 +133,7 @@ describe("uploadChatAttachment", () => {
   });
 
   it("rejects unsupported MIME BEFORE making any network call", async () => {
-    globalThis.fetch = vi.fn() as never;
+    vi.stubGlobal('fetch', vi.fn());
     const file = makeFile({ type: "image/gif", size: 200 });
     await expect(uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment"))
       .rejects.toMatchObject({ code: "unsupported_type" });
@@ -141,34 +141,34 @@ describe("uploadChatAttachment", () => {
   });
 
   it("surfaces 'network_error' when fetch throws", async () => {
-    globalThis.fetch = vi.fn(async () => { throw new TypeError("Failed to fetch"); }) as never;
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
     const file = makeFile({ type: "image/png", size: 200 });
     await expect(uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment"))
       .rejects.toMatchObject({ code: "network_error" });
   });
 
   it("surfaces 'upload_failed' on non-2xx response", async () => {
-    globalThis.fetch = vi.fn(async () => new Response("Bad", { status: 415 })) as never;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response("Bad", { status: 415 })));
     const file = makeFile({ type: "image/png", size: 200 });
     await expect(uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment"))
       .rejects.toMatchObject({ code: "upload_failed" });
   });
 
   it("surfaces 'upload_failed' when JSON is malformed", async () => {
-    globalThis.fetch = vi.fn(async () => new Response("not json", {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response("not json", {
       status: 200,
       headers: { "Content-Type": "application/json" },
-    })) as never;
+    })));
     const file = makeFile({ type: "image/png", size: 200 });
     await expect(uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment"))
       .rejects.toMatchObject({ code: "upload_failed" });
   });
 
   it("surfaces 'upload_failed' when the JSON body says { ok: false }", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ ok: false, error: "Token expired" }),
       { status: 200, headers: { "Content-Type": "application/json" } },
-    )) as never;
+    )));
     const file = makeFile({ type: "image/png", size: 200 });
     await expect(uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment"))
       .rejects.toMatchObject({ code: "upload_failed", message: expect.stringContaining("Token expired") });
@@ -176,13 +176,13 @@ describe("uploadChatAttachment", () => {
 
   it("posts FormData with a 'file' field to the upload URL", async () => {
     let captured: { url: string; init?: RequestInit } | null = null;
-    globalThis.fetch = vi.fn(async (input: RequestInfo, init?: RequestInit) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo, init?: RequestInit) => {
       captured = { url: typeof input === "string" ? input : input.toString(), init };
       return new Response(JSON.stringify({ ok: true, url: "https://w/cdn/y.png" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    }) as never;
+    }));
     const file = makeFile({ type: "image/png", size: 50, name: "snapshot.png" });
     await uploadChatAttachment(file, "https://w/upload/asset?t=TOK&kind=chat_attachment");
     expect(captured).toBeTruthy();

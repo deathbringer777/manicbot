@@ -20,19 +20,16 @@ function makeFetchResponse(status, body) {
   };
 }
 
-let originalFetch;
-beforeEach(() => {
-  originalFetch = globalThis.fetch;
-});
+// Phase 2 cleanup: vi.stubGlobal + unstubAllGlobals — no manual save/restore.
 afterEach(() => {
-  globalThis.fetch = originalFetch;
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('marketing/instagram-publish — createMediaContainer', () => {
   it('POSTs to /{pageId}/media with image_url + caption', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeFetchResponse(200, { id: 'C123' }));
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await createMediaContainer({
       pageId: PAGE_ID,
@@ -54,7 +51,7 @@ describe('marketing/instagram-publish — createMediaContainer', () => {
 
   it('rejects caption >2200 chars without calling Meta', async () => {
     const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const long = 'a'.repeat(2201);
     const res = await createMediaContainer({
@@ -71,7 +68,7 @@ describe('marketing/instagram-publish — createMediaContainer', () => {
 
   it('rejects missing pageId/imageUrl/token without calling Meta', async () => {
     const fetchMock = vi.fn();
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const r1 = await createMediaContainer({ pageId: '', imageUrl: IMAGE_URL, caption: '', token: TOKEN });
     const r2 = await createMediaContainer({ pageId: PAGE_ID, imageUrl: '', caption: '', token: TOKEN });
@@ -87,7 +84,7 @@ describe('marketing/instagram-publish — createMediaContainer', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       makeFetchResponse(401, { error: { code: 190, type: 'OAuthException', message: 'invalid token' } }),
     );
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await createMediaContainer({
       pageId: PAGE_ID,
@@ -103,7 +100,7 @@ describe('marketing/instagram-publish — createMediaContainer', () => {
 
   it('returns ok:false when Meta omits id', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeFetchResponse(200, { weird: 'shape' }));
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await createMediaContainer({
       pageId: PAGE_ID,
@@ -121,7 +118,7 @@ describe('marketing/instagram-publish — getContainerStatus', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(makeFetchResponse(200, { status_code: 'FINISHED', status: 'Finished' }));
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await getContainerStatus({ containerId: 'C123', token: TOKEN });
     expect(res.ok).toBe(true);
@@ -138,7 +135,7 @@ describe('marketing/instagram-publish — getContainerStatus', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(makeFetchResponse(200, { status_code: 'IN_PROGRESS' }));
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await getContainerStatus({ containerId: 'C', token: TOKEN });
     expect(res.ok).toBe(true);
@@ -156,7 +153,7 @@ describe('marketing/instagram-publish — getContainerStatus', () => {
 describe('marketing/instagram-publish — publishMediaContainer', () => {
   it('POSTs to /{pageId}/media_publish with creation_id', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeFetchResponse(200, { id: 'IG999' }));
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await publishMediaContainer({
       pageId: PAGE_ID,
@@ -175,7 +172,7 @@ describe('marketing/instagram-publish — publishMediaContainer', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       makeFetchResponse(400, { error: { code: 100, message: 'Invalid creation_id' } }),
     );
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await publishMediaContainer({
       pageId: PAGE_ID,
@@ -198,7 +195,7 @@ describe('marketing/instagram-publish — getMediaPermalink', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       makeFetchResponse(200, { permalink: 'https://instagram.com/p/abc' }),
     );
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await getMediaPermalink({ igPostId: 'IG999', token: TOKEN });
     expect(res).toEqual({ ok: true, permalink: 'https://instagram.com/p/abc' });
@@ -206,7 +203,7 @@ describe('marketing/instagram-publish — getMediaPermalink', () => {
 
   it('fails when permalink missing in response', async () => {
     const fetchMock = vi.fn().mockResolvedValue(makeFetchResponse(200, { id: 'IG999' }));
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await getMediaPermalink({ igPostId: 'IG999', token: TOKEN });
     expect(res.ok).toBe(false);
@@ -221,7 +218,7 @@ describe('marketing/instagram-publish — graphPost/Get retry behavior reuse', (
       if (calls === 1) return makeFetchResponse(429, { error: { message: 'rate limited' } });
       return makeFetchResponse(200, { id: 'OK' });
     });
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const res = await createMediaContainer({
       pageId: PAGE_ID,

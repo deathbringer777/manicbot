@@ -176,11 +176,10 @@ describe('POST /api/leads', () => {
     env.BOT_TOKEN = 'TOK';
     env.ADMIN_CHAT_ID = '1';
     const tgCalls = [];
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (url) => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('api.telegram.org')) tgCalls.push(String(url));
       return new Response('{"ok":true}', { status: 200 });
-    });
+    }));
     try {
       for (let i = 0; i < 10; i++) {
         const r = await tryLeadRoutes(
@@ -212,7 +211,7 @@ describe('POST /api/leads', () => {
       expect(await rOther.json()).toEqual({ ok: true });
       expect(rows.filter(r => r.table === 'leads')).toHaveLength(11);
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 
@@ -220,11 +219,10 @@ describe('POST /api/leads', () => {
     env.BOT_TOKEN = 'TOKEN';
     env.ADMIN_CHAT_ID = '42';
     const tgCalls = [];
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (url, init) => {
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       if (String(url).includes('api.telegram.org')) tgCalls.push(String(url));
       return new Response('{"ok":true}', { status: 200 });
-    });
+    }));
     try {
       for (let i = 0; i < 3; i++) {
         const req = reqJson('/api/leads', {
@@ -235,17 +233,16 @@ describe('POST /api/leads', () => {
       }
       expect(tgCalls.length).toBe(3);
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 
   it('notifies admin via Telegram when BOT_TOKEN and ADMIN_CHAT_ID are set', async () => {
     const calls = [];
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (url, init) => {
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       calls.push({ url: String(url), init });
       return new Response('{"ok":true}', { status: 200 });
-    });
+    }));
     try {
       env.BOT_TOKEN = 'TESTTOKEN';
       env.ADMIN_CHAT_ID = '777';
@@ -262,14 +259,13 @@ describe('POST /api/leads', () => {
       expect(body.chat_id).toBe('777');
       expect(body.text).toContain('Anna');
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 
   it('skips TG notification when BOT_TOKEN missing', async () => {
     const calls = [];
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (url) => { calls.push(String(url)); return new Response('{}', { status: 200 }); });
+    vi.stubGlobal('fetch', vi.fn(async (url) => { calls.push(String(url)); return new Response('{}', { status: 200 }); }));
     try {
       const req = reqJson('/api/leads', {
         name: 'Anna', email: 'a@b.com', phone: '+48501234567',
@@ -278,7 +274,7 @@ describe('POST /api/leads', () => {
       await new Promise((r) => setTimeout(r, 10));
       expect(calls.some(u => u.includes('api.telegram.org'))).toBe(false);
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 
@@ -319,11 +315,10 @@ describe('POST /api/email-subscribe', () => {
   it('does NOT send welcome email when RESEND_API_KEY is missing (warns instead)', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const calls = [];
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (url) => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
       calls.push(String(url));
       return new Response('{}', { status: 200 });
-    });
+    }));
     try {
       const r = await tryLeadRoutes(
         reqJson('/api/email-subscribe', { email: 'nokey@test.com', locale: 'en' }, '6.6.6.6'),
@@ -334,7 +329,7 @@ describe('POST /api/email-subscribe', () => {
       expect(calls.filter((u) => u.includes('api.resend.com'))).toHaveLength(0);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('RESEND_API_KEY or RESEND_FROM missing'));
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
       warnSpy.mockRestore();
     }
   });
@@ -358,8 +353,8 @@ describe('POST /api/email-subscribe', () => {
     };
     const tracked = [];
     const execCtx = { waitUntil: (p) => { tracked.push(p); } };
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async () => new Response('{"id":"1"}', { status: 200 }));
+    const fetchMock = vi.fn(async () => new Response('{"id":"1"}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
     try {
       const r = await tryLeadRoutes(
         reqJson('/api/email-subscribe', { email: 'wu@test.com', locale: 'en' }, '5.5.5.5'),
@@ -368,12 +363,12 @@ describe('POST /api/email-subscribe', () => {
       expect(r.status).toBe(200);
       expect(tracked).toHaveLength(1);
       await Promise.all(tracked);
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         'https://api.resend.com/emails',
         expect.objectContaining({ method: 'POST' }),
       );
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 
@@ -405,11 +400,10 @@ describe('POST /api/email-subscribe', () => {
       },
     };
     const calls = [];
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async (url, init) => {
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       calls.push({ url: String(url), init });
       return new Response('{"id":"e_1"}', { status: 200 });
-    });
+    }));
     try {
       // First time: new subscriber → email sent
       const r1 = await tryLeadRoutes(
@@ -436,7 +430,7 @@ describe('POST /api/email-subscribe', () => {
       await new Promise((r) => setTimeout(r, 10));
       expect(calls.filter((c) => c.url.includes('api.resend.com'))).toHaveLength(1);
     } finally {
-      global.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 

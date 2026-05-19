@@ -31,15 +31,14 @@ function makeReq({ method = 'POST', path = '/admin/notify', auth, body = { text:
 }
 
 describe('/admin/notify dual-auth', () => {
-  let originalFetch;
+  // Phase 2 cleanup: vi.stubGlobal + unstubAllGlobals isolates the fetch stub.
   beforeEach(() => {
-    originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(async () =>
+    vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 }),
-    );
+    ));
   });
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    vi.unstubAllGlobals();
   });
 
   it('accepts NOTIFY_TOKEN Bearer', async () => {

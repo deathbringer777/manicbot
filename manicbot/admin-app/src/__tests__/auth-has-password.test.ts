@@ -1,216 +1,183 @@
-import { describe, it, expect } from "vitest";
-import type { AppRole } from "~/server/api/routers/auth";
-
 /**
- * Tests for hasPassword field in getMyRole response.
- * Validates the logic that determines whether a web user has a
- * password set (relevant for Google-only registrations).
+ * hasPassword field — direct authRouter test.
  *
- * Pure logic tests — no D1 dependencies.
+ * Phase 2 cleanup: replaced the previous "MockWebUser + mirror" approach
+ * with a real `createCaller(authRouter)` exercise covering every shape of
+ * the `web_users.password_hash` column we care about (set / null / empty
+ * string / DB error path). The previous mirror file re-implemented the
+ * `!!rows[0]?.passwordHash` derivation and asserted on the copy, which
+ * could pass even if the real router stopped reading the column.
  */
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-interface MockWebUser {
-  id: string;
-  email: string;
-  webRole: string;
-  tenantId: string | null;
-}
+vi.mock("~/server/db", () => ({ getDb: () => null }));
+vi.mock("~/env", () => ({
+  env: {
+    ADMIN_CHAT_ID: "12345",
+    AUTH_SECRET: "test",
+    TELEGRAM_BOT_TOKEN: "0:TEST",
+    WORKER_PUBLIC_URL: "https://worker.test.local",
+    UPLOAD_TOKEN_SECRET: "0123456789abcdef0123456789abcdef",
+  },
+}));
 
-interface MockDbRow {
-  createdAt: number | null;
-  emailVerified: number;
-  passwordHash: string | null;
-}
+import { createCallerFactory } from "~/server/api/trpc";
+import { authRouter } from "~/server/api/routers/auth";
+import {
+  createDbMock,
+  makeAdminCtx,
+  makeTenantOwnerCtx,
+  makeMasterCtx,
+  makeSupportCtx,
+  makeUnauthCtx,
+} from "./helpers/db-mock";
 
-interface MockCtx {
-  user: { id: number } | null;
-  webUser: MockWebUser | null;
-  dbRow: MockDbRow | null;
-}
+const callerFactory = createCallerFactory(authRouter);
 
-type RoleResult = {
-  role: AppRole;
-  tenantId: string | null;
-  hasPassword: boolean;
-  emailVerified: boolean;
-  email: string | null;
-};
+describe("authRouter.getMyRole.hasPassword — real router contract", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-const EMPTY: RoleResult = {
-  role: null,
-  tenantId: null,
-  hasPassword: true,
-  emailVerified: true,
-  email: null,
-};
-
-/**
- * Mirrors the web session path in authRouter.getMyRole:
- *   hasPassword = !!(rows[0]?.passwordHash)
- * and the EMPTY default:
- *   hasPassword: true  (Telegram users and unauthenticated)
- */
-function getMyRoleLogic(ctx: MockCtx): RoleResult {
-  // Web session path
-  if (!ctx.user && ctx.webUser) {
-    const role = ctx.webUser.webRole as AppRole;
-    const tenantId = ctx.webUser.tenantId;
-    const email = ctx.webUser.email;
-    const hasPassword = !!(ctx.dbRow?.passwordHash);
-    const emailVerified = !!(ctx.dbRow?.emailVerified);
-    return { role, tenantId, hasPassword, emailVerified, email };
-  }
-
-  // Telegram user or unauthenticated — hasPassword defaults to true
-  return EMPTY;
-}
-
-describe("hasPassword — web user with passwordHash", () => {
-  it("returns hasPassword: true when user has a password set", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u1", email: "owner@salon.com", webRole: "tenant_owner", tenantId: "t_abc" },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: "pbkdf2:sha256:100000:salt:hash" },
-    });
+  it("tenant_owner with passwordHash set → hasPassword=true", async () => {
+    const { db } = createDbMock([
+      [
+        {
+          createdAt: 1700000000,
+          emailVerified: 1,
+          passwordHash: "pbkdf2:sha256:100000:salt:hash",
+        },
+      ],
+      [
+        {
+          name: "Salon",
+          displayName: null,
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: "cus_x",
+        },
+      ],
+    ]);
+    const result = await callerFactory(makeTenantOwnerCtx(db, "t_abc") as never).getMyRole();
     expect(result.hasPassword).toBe(true);
     expect(result.role).toBe("tenant_owner");
-    expect(result.email).toBe("owner@salon.com");
+    expect(result.email).toBe("owner@test.com");
   });
 
-  it("returns hasPassword: false when passwordHash is NULL (Google registration)", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u2", email: "google@example.com", webRole: "tenant_owner", tenantId: "t_xyz" },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: null },
-    });
+  it("tenant_owner with passwordHash=null (Google reg) → hasPassword=false", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1700000000, emailVerified: 1, passwordHash: null }],
+      [
+        {
+          name: "Salon",
+          displayName: null,
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: null,
+        },
+      ],
+    ]);
+    const result = await callerFactory(makeTenantOwnerCtx(db, "t_xyz") as never).getMyRole();
     expect(result.hasPassword).toBe(false);
-    expect(result.role).toBe("tenant_owner");
-  });
-});
-
-describe("hasPassword — Telegram users default to true", () => {
-  it("returns hasPassword: true for Telegram user (no web session)", () => {
-    const result = getMyRoleLogic({
-      user: { id: 12345 },
-      webUser: null,
-      dbRow: null,
-    });
-    expect(result.hasPassword).toBe(true);
   });
 
-  it("returns hasPassword: true even when EMPTY default is used (unauthenticated)", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: null,
-      dbRow: null,
-    });
-    expect(result.hasPassword).toBe(true);
-    expect(result.role).toBeNull();
-  });
-});
-
-describe("hasPassword — EMPTY default contract", () => {
-  it("EMPTY default has hasPassword: true", () => {
-    expect(EMPTY.hasPassword).toBe(true);
-  });
-
-  it("EMPTY default has role: null", () => {
-    expect(EMPTY.role).toBeNull();
-  });
-
-  it("EMPTY default has email: null", () => {
-    expect(EMPTY.email).toBeNull();
+  it("tenant_owner with passwordHash='' → hasPassword=false (empty hash treated as absent)", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1700000000, emailVerified: 1, passwordHash: "" }],
+      [
+        {
+          name: "Salon",
+          displayName: null,
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: null,
+        },
+      ],
+    ]);
+    const result = await callerFactory(makeTenantOwnerCtx(db, "t_empty") as never).getMyRole();
+    expect(result.hasPassword).toBe(false);
   });
 
-  it("EMPTY default has emailVerified: true", () => {
-    expect(EMPTY.emailVerified).toBe(true);
-  });
-});
-
-describe("hasPassword — various web user roles", () => {
-  it("master with password → hasPassword: true", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u3", email: "master@salon.com", webRole: "master", tenantId: "t_m1" },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: "hashed:something" },
-    });
+  it("master with passwordHash → hasPassword=true", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: "hash" }],
+      [
+        {
+          name: "Salon",
+          displayName: null,
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: null,
+        },
+      ],
+      [{ chatId: 100, avatarUrl: null, avatarEmoji: null }],
+    ]);
+    const result = await callerFactory(makeMasterCtx(db, "t_m") as never).getMyRole();
     expect(result.hasPassword).toBe(true);
     expect(result.role).toBe("master");
   });
 
-  it("master without password (Google) → hasPassword: false", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u4", email: "google-master@example.com", webRole: "master", tenantId: "t_m2" },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: null },
-    });
+  it("master without passwordHash (Google reg) → hasPassword=false", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: null }],
+      [
+        {
+          name: "Salon",
+          displayName: null,
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: null,
+        },
+      ],
+      [{ chatId: 100, avatarUrl: null, avatarEmoji: null }],
+    ]);
+    const result = await callerFactory(makeMasterCtx(db, "t_m") as never).getMyRole();
     expect(result.hasPassword).toBe(false);
-    expect(result.role).toBe("master");
   });
 
-  it("system_admin with password → hasPassword: true", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u5", email: "admin@manicbot.com", webRole: "system_admin", tenantId: null },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: "hashed:adminpass" },
-    });
+  it("support with passwordHash → hasPassword=true", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: "hash" }],
+    ]);
+    const result = await callerFactory(makeSupportCtx(db) as never).getMyRole();
+    expect(result.hasPassword).toBe(true);
+    expect(result.role).toBe("support");
+  });
+
+  it("system_admin with passwordHash → hasPassword=true", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: "admin-hash" }],
+    ]);
+    const result = await callerFactory(makeAdminCtx(db) as never).getMyRole();
     expect(result.hasPassword).toBe(true);
     expect(result.role).toBe("system_admin");
   });
 
-  it("support without password → hasPassword: false", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u6", email: "support@manicbot.com", webRole: "support", tenantId: null },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: null },
-    });
-    expect(result.hasPassword).toBe(false);
-    expect(result.role).toBe("support");
-  });
-});
-
-describe("hasPassword — edge cases", () => {
-  it("empty string passwordHash is truthy → hasPassword: true", () => {
-    // !! of empty string is false, so empty string would mean hasPassword: false
-    // This is consistent: if hash is "" it means no real hash is stored
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u7", email: "edge@example.com", webRole: "tenant_owner", tenantId: "t_e1" },
-      dbRow: { createdAt: 1700000000, emailVerified: 1, passwordHash: "" },
-    });
-    // !! "" === false
-    expect(result.hasPassword).toBe(false);
-  });
-
-  it("DB row missing (query failed) → hasPassword: false", () => {
-    // When ctx.dbRow is null (DB error catch path), passwordHash is undefined
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { id: "u8", email: "broken@example.com", webRole: "tenant_owner", tenantId: "t_e2" },
-      dbRow: null,
-    });
-    expect(result.hasPassword).toBe(false);
-  });
-});
-
-describe("hasPassword — conversion from DB to boolean", () => {
-  it("double-bang of non-null string is true", () => {
-    const hash: string | null = "pbkdf2:sha256:100000:salt:hash";
-    expect(!!hash).toBe(true);
-  });
-
-  it("double-bang of null is false", () => {
-    const hash: string | null = null;
-    expect(!!hash).toBe(false);
-  });
-
-  it("double-bang of undefined is false", () => {
-    const hash: string | undefined = undefined;
-    expect(!!hash).toBe(false);
-  });
-
-  it("double-bang of empty string is false", () => {
-    const hash: string | null = "";
-    expect(!!hash).toBe(false);
+  // ─── EMPTY-default contract (unauthenticated context) ───
+  it("unauthenticated → hasPassword=true (defensive default in EMPTY)", async () => {
+    const { db } = createDbMock();
+    const result = await callerFactory(makeUnauthCtx(db) as never).getMyRole();
+    expect(result.hasPassword).toBe(true);
+    expect(result.role).toBeNull();
+    expect(result.email).toBeNull();
+    expect(result.emailVerified).toBe(true);
   });
 });

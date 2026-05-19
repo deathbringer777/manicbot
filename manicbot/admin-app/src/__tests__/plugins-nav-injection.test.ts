@@ -1,111 +1,75 @@
 /**
- * Pure unit tests for the nav-injection logic inside useNavItems.
- * We don't render the hook (that needs a tRPC provider + mocked query); we
- * test the shape of the nav-contribution filter helpers we added.
+ * Plugin nav-injection — real-source pin + real helper exercise.
  *
- * Covers:
- *   - role gate on contributions
- *   - personalTenant gate
- *   - duplicate id dedup
- *   - label source (self.name vs. raw)
+ * Phase 2 cleanup: dropped the local `filterContributionsFor` mirror that
+ * duplicated the filter logic inside `useNavItems`. The contribution
+ * filter lives inline in the hook (not exported), so we structurally
+ * pin its three gates (id-dedup, role-include, requiresPersonalTenant)
+ * against the real source file. `resolvePluginIcon` is the one exported
+ * helper this file used — we exercise it directly.
  */
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { resolvePluginIcon } from "~/lib/nav/pluginNavIcons";
-import type { NavContribution, PluginRole, PluginManifest } from "@plugins/types";
-import { PLUGIN_LANGS } from "@plugins/types";
+import { PLUGIN_LANGS, type PluginManifest } from "@plugins/types";
 
-// Mirror of the filter logic in useNavItems — kept in sync when that file changes.
-function filterContributionsFor(
-  contribs: NavContribution[],
-  role: PluginRole | null,
-  isPersonalTenant: boolean,
-) {
-  const seen = new Set<string>();
-  const out: NavContribution[] = [];
-  for (const c of contribs) {
-    if (seen.has(c.id)) continue;
-    if (role && !c.roles.includes(role)) continue;
-    if (c.requiresPersonalTenant && !isPersonalTenant) continue;
-    seen.add(c.id);
-    out.push(c);
-  }
-  return out;
-}
+const HOOK_SRC = readFileSync(
+  path.resolve(__dirname, "../lib/nav/useNavItems.ts"),
+  "utf8",
+);
 
-const basic: NavContribution = {
-  id: "plugin.task-board",
-  href: "/plugins/task-board/settings",
-  iconName: "LayoutGrid",
-  labelKey: "self.name",
-  roles: ["tenant_owner"],
-};
-
-const personalOnly: NavContribution = {
-  id: "plugin.master-portfolio",
-  href: "/plugins/portfolio",
-  iconName: "Image",
-  labelKey: "self.name",
-  roles: ["master"],
-  requiresPersonalTenant: true,
-};
-
-describe("plugin nav contribution filtering", () => {
-  it("passes contribution matching current role", () => {
-    const r = filterContributionsFor([basic], "tenant_owner", false);
-    expect(r).toHaveLength(1);
+describe("useNavItems — plugin nav-contribution filter (structural pin)", () => {
+  it("declares a per-call dedup set keyed on contrib.id", () => {
+    expect(HOOK_SRC).toMatch(/const\s+seenIds\s*=\s*new\s+Set<string>\(\)/);
+    expect(HOOK_SRC).toMatch(/if\s*\(\s*seenIds\.has\(contrib\.id\)\s*\)\s*continue/);
+    expect(HOOK_SRC).toMatch(/seenIds\.add\(contrib\.id\)/);
   });
 
-  it("rejects contribution for mismatched role", () => {
-    const r = filterContributionsFor([basic], "master", false);
-    expect(r).toHaveLength(0);
+  it("gates contributions by role membership in contrib.roles", () => {
+    expect(HOOK_SRC).toMatch(
+      /if\s*\(\s*effectiveRoleStr\s*&&\s*!contrib\.roles\.includes\(effectiveRoleStr\)\s*\)\s*continue/,
+    );
   });
 
-  it("rejects personal-tenant-only contribution when not personal", () => {
-    const r = filterContributionsFor([personalOnly], "master", false);
-    expect(r).toHaveLength(0);
+  it("gates contributions by requiresPersonalTenant when set", () => {
+    expect(HOOK_SRC).toMatch(
+      /if\s*\(\s*contrib\.requiresPersonalTenant\s*&&\s*!isPersonalTenant\s*\)\s*continue/,
+    );
   });
 
-  it("accepts personal-tenant-only contribution when personal tenant", () => {
-    const r = filterContributionsFor([personalOnly], "master", true);
-    expect(r).toHaveLength(1);
+  it("skips installs where enabled !== 1 (paid-addon billing state can disable)", () => {
+    expect(HOOK_SRC).toMatch(/if\s*\(\s*row\.enabled\s*!==\s*1\s*\)\s*continue/);
   });
 
-  it("deduplicates contributions by id", () => {
-    const r = filterContributionsFor([basic, basic], "tenant_owner", false);
-    expect(r).toHaveLength(1);
-  });
-
-  it("passes contribution for any role in the allowed list", () => {
-    const multi: NavContribution = { ...basic, id: "plugin.x", roles: ["tenant_owner", "master"] };
-    expect(filterContributionsFor([multi], "tenant_owner", false)).toHaveLength(1);
-    expect(filterContributionsFor([multi], "master", false)).toHaveLength(1);
-  });
-
-  it("rejects for unauthenticated (null role)", () => {
-    const r = filterContributionsFor([basic], null, false);
-    // Our live hook doesn't inject for null role via query disabled, but the
-    // filter helper is permissive; assert: role===null acts pass-through here.
-    // In practice, `installedQ` is gated by `enabled: !!role` in the hook,
-    // which short-circuits the injection before filtering.
-    expect(r).toHaveLength(1); // because `role && !c.roles.includes(role)` is false
+  it("uses the plugin's manifest.capabilities.nav as the contribution source", () => {
+    expect(HOOK_SRC).toMatch(/p\.manifest\.capabilities\.nav/);
   });
 });
 
-describe("resolvePluginIcon fallback", () => {
-  it("resolves a known lucide name", () => {
+describe("resolvePluginIcon — exported helper", () => {
+  it("resolves a known lucide name to a renderable component", () => {
     const icon = resolvePluginIcon("Bell");
-    expect(typeof icon).toBe("object"); // lucide icons are FC objects
+    expect(icon).toBeTruthy();
+    // lucide icons render as function components / object refs
+    expect(["function", "object"]).toContain(typeof icon);
   });
 
-  it("falls back to Puzzle for unknown names", () => {
+  it("falls back to Puzzle (no crash) for unknown names", () => {
     const icon = resolvePluginIcon("NonExistent9000");
-    expect(typeof icon).toBe("object");
-    // We can't assert identity easily without importing Puzzle separately,
-    // but existence means no crash.
+    expect(icon).toBeTruthy();
+    expect(["function", "object"]).toContain(typeof icon);
   });
 
-  it("all 4 languages are still present on manifests using self.name", () => {
+  it("falls back gracefully when iconName is empty string", () => {
+    const icon = resolvePluginIcon("");
+    expect(icon).toBeTruthy();
+  });
+});
+
+describe("PluginManifest.name contract — all four supported languages", () => {
+  it("self.name labels carry RU / UA / EN / PL", () => {
     const fakeManifest: Pick<PluginManifest, "name"> = {
       name: { ru: "R", ua: "U", en: "E", pl: "P" },
     };

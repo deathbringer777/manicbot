@@ -90,9 +90,17 @@ describe('splitWelcomeForStaging — grouping logic', () => {
     return m ? m[0] : null;
   })();
 
+  // Phase 2 cleanup: removed the empty `it.skip` placeholder that fired here
+  // when the regex couldn't locate the function. Now we fail loud at suite
+  // setup time so a rename of `splitWelcomeForStaging` shows up immediately
+  // instead of being silently skipped.
   if (!fnSrc) {
-    it.skip('could not locate splitWelcomeForStaging in DEMO_CHAT_SRC', () => {});
-  } else {
+    throw new Error(
+      'welcome-animation.test.js: could not locate `splitWelcomeForStaging` in DEMO_CHAT_SRC — was the function renamed?',
+    );
+  }
+
+  {
     const ctx = vm.createContext({});
     vm.runInContext(fnSrc + '; this.split = splitWelcomeForStaging;', ctx);
     const split = ctx.split;

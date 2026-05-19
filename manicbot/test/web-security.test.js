@@ -19,16 +19,24 @@ import { isAdmin, isPlatformAdmin, getRole, isWebSessionLocked } from '../src/se
 import { resolveRole, ROLES } from '../src/roles/roles.js';
 
 // Capture all fetch calls (tgApi uses global fetch)
+// Phase 2 cleanup: use vi.stubGlobal + unstubAllGlobals so the fetch stub
+// is bounded per test instead of leaking into the next isolate.
+import { afterEach } from 'vitest';
+
 const fetchCalls = [];
 beforeEach(() => {
   fetchCalls.length = 0;
-  globalThis.fetch = vi.fn(async (url, init) => {
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
     fetchCalls.push({ url: String(url), method: init?.method ?? 'GET', body: init?.body });
     return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  });
+  }));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 function makeKv() {

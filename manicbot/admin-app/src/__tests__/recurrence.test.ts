@@ -1,193 +1,99 @@
+/**
+ * Recurrence DSL parity tests — admin-app side.
+ *
+ * Phase 2 cleanup: cases now loaded from
+ *   src/__tests__/helpers/parity-fixtures/recurrence-cases.json
+ * The Worker mirror at manicbot/test/recurrence.test.js loads the SAME
+ * file (via relative path) so the two packages cannot drift. Drift is
+ * structurally impossible with a single fixture source.
+ */
 import { describe, it, expect } from "vitest";
 import {
   validateRecurrence,
   expandOccurrences,
   nextOccurrenceAfter,
+  type Recurrence,
 } from "~/lib/recurrence";
+import fixture from "./helpers/parity-fixtures/recurrence-cases.json";
 
-// Identical cases to manicbot/test/recurrence.test.js — if the two diverge,
-// CI fails on one side. The admin-app version + worker JS mirror are the
-// canonical pair (no path alias shared between the two packages).
+type ExpandCase = {
+  name: string;
+  rule: Recurrence;
+  anchor: string;
+  fromIso?: string;
+  toIso?: string;
+  expectIso?: string[];
+  expectIsoDateOnly?: string[];
+};
 
-describe("validateRecurrence", () => {
-  it("accepts once", () => {
-    expect(validateRecurrence({ type: "once" })).toEqual({ type: "once" });
-  });
+type NextCase = {
+  name: string;
+  rule: Recurrence;
+  anchor: string;
+  afterIso: string;
+  expectIso: string | null;
+};
 
-  it("accepts daily with time", () => {
-    expect(validateRecurrence({ type: "daily", time: "09:00" })).toEqual({
-      type: "daily",
-      time: "09:00",
-      until: undefined,
+function normalizeUntil(obj: unknown) {
+  if (obj && typeof obj === "object" && "until" in obj) {
+    const u = (obj as { until: unknown }).until;
+    if (u === undefined) (obj as { until: unknown }).until = null;
+  }
+  return obj;
+}
+
+describe("validateRecurrence (admin-app, fixture-driven)", () => {
+  for (const tc of fixture.validateRecurrence) {
+    it(tc.name, () => {
+      if ("throws" in tc) {
+        if (typeof tc.throws === "string") {
+          expect(() => validateRecurrence(tc.input)).toThrow(new RegExp(tc.throws));
+        } else {
+          expect(() => validateRecurrence(tc.input)).toThrow();
+        }
+      } else {
+        const result = validateRecurrence(tc.input);
+        expect(normalizeUntil(result)).toEqual(tc.expect);
+      }
     });
-  });
-
-  it("accepts weekly with weekdays + dedups and sorts", () => {
-    const r = validateRecurrence({ type: "weekly", time: "09:00", weekdays: [3, 1, 5, 1] });
-    expect(r).toEqual({ type: "weekly", time: "09:00", weekdays: [1, 3, 5], until: undefined });
-  });
-
-  it("rejects time with bad shape", () => {
-    expect(() => validateRecurrence({ type: "daily", time: "9:00" })).toThrow(/time must match HH:MM/);
-    expect(() => validateRecurrence({ type: "daily", time: "24:00" })).toThrow();
-    expect(() => validateRecurrence({ type: "daily", time: "09:60" })).toThrow();
-  });
-
-  it("rejects weekly with empty weekdays", () => {
-    expect(() => validateRecurrence({ type: "weekly", time: "09:00", weekdays: [] })).toThrow(/non-empty/);
-  });
-
-  it("rejects weekly weekday out of range", () => {
-    expect(() => validateRecurrence({ type: "weekly", time: "09:00", weekdays: [0] })).toThrow(/1\.\.7/);
-    expect(() => validateRecurrence({ type: "weekly", time: "09:00", weekdays: [8] })).toThrow(/1\.\.7/);
-  });
-
-  it("rejects monthly_day outside 1..28", () => {
-    expect(() => validateRecurrence({ type: "monthly_day", time: "09:00", dayOfMonth: 0 })).toThrow();
-    expect(() => validateRecurrence({ type: "monthly_day", time: "09:00", dayOfMonth: 29 })).toThrow();
-  });
-
-  it("rejects until with wrong shape", () => {
-    expect(() => validateRecurrence({ type: "daily", time: "09:00", until: "2026/12/31" })).toThrow(/YYYY-MM-DD/);
-  });
-
-  it("rejects unknown type", () => {
-    expect(() => validateRecurrence({ type: "yearly", time: "09:00" })).toThrow(/unknown type/);
-  });
-
-  it("rejects non-object input", () => {
-    expect(() => validateRecurrence(null)).toThrow();
-    expect(() => validateRecurrence("once")).toThrow();
-  });
+  }
 });
 
-describe("expandOccurrences", () => {
-  const anchor = "2026-05-18"; // Monday
-  const from = new Date(Date.UTC(2026, 4, 18, 0, 0, 0));
-  const to = new Date(Date.UTC(2026, 4, 24, 23, 59, 59));
+describe("expandOccurrences (admin-app, fixture-driven)", () => {
+  const defaultFrom = new Date(fixture.expandOccurrences.windowFromIso);
+  const defaultTo = new Date(fixture.expandOccurrences.windowToIso);
 
-  it("once: returns anchor when inside window", () => {
-    const occs = expandOccurrences({ type: "once" }, anchor, from, to);
-    expect(occs).toHaveLength(1);
-    expect(occs[0]!.toISOString()).toBe("2026-05-18T00:00:00.000Z");
-  });
+  for (const tc of fixture.expandOccurrences.cases as ExpandCase[]) {
+    it(tc.name, () => {
+      const from = tc.fromIso ? new Date(tc.fromIso) : defaultFrom;
+      const to = tc.toIso ? new Date(tc.toIso) : defaultTo;
+      const occs = expandOccurrences(tc.rule, tc.anchor, from, to);
+      if (tc.expectIsoDateOnly) {
+        expect(occs.map((d) => d.toISOString().slice(0, 10))).toEqual(tc.expectIsoDateOnly);
+      } else {
+        expect(occs.map((d) => d.toISOString())).toEqual(tc.expectIso ?? []);
+      }
+    });
+  }
 
-  it("once: returns empty when anchor before window", () => {
-    const earlier = new Date(Date.UTC(2026, 4, 19, 0, 0, 0));
-    expect(expandOccurrences({ type: "once" }, anchor, earlier, to)).toHaveLength(0);
-  });
-
-  it("daily: emits one per day in window", () => {
-    const occs = expandOccurrences({ type: "daily", time: "09:00" }, anchor, from, to);
-    expect(occs).toHaveLength(7);
-    expect(occs[0]!.toISOString()).toBe("2026-05-18T09:00:00.000Z");
-    expect(occs[6]!.toISOString()).toBe("2026-05-24T09:00:00.000Z");
-  });
-
-  it("weekly Mon/Wed/Fri: emits 3 across the week", () => {
-    const occs = expandOccurrences(
-      { type: "weekly", time: "09:00", weekdays: [1, 3, 5] },
-      anchor, from, to,
-    );
-    expect(occs.map((d) => d.toISOString())).toEqual([
-      "2026-05-18T09:00:00.000Z",
-      "2026-05-20T09:00:00.000Z",
-      "2026-05-22T09:00:00.000Z",
-    ]);
-  });
-
-  it("weekly Sun (ISO 7): includes Sunday", () => {
-    const occs = expandOccurrences(
-      { type: "weekly", time: "09:00", weekdays: [7] },
-      anchor, from, to,
-    );
-    expect(occs).toHaveLength(1);
-    expect(occs[0]!.toISOString()).toBe("2026-05-24T09:00:00.000Z");
-  });
-
-  it("monthly_day: only the matching day", () => {
-    const from2 = new Date(Date.UTC(2026, 4, 1, 0, 0, 0));
-    const to2 = new Date(Date.UTC(2026, 7, 1, 0, 0, 0));
-    const occs = expandOccurrences(
-      { type: "monthly_day", time: "09:00", dayOfMonth: 15 },
-      "2026-05-01", from2, to2,
-    );
-    expect(occs.map((d) => d.toISOString().slice(0, 10))).toEqual([
-      "2026-05-15",
-      "2026-06-15",
-      "2026-07-15",
-    ]);
-  });
-
-  it("honors until cutoff", () => {
-    const occs = expandOccurrences(
-      { type: "daily", time: "09:00", until: "2026-05-20" },
-      anchor, from, to,
-    );
-    expect(occs).toHaveLength(3);
-    expect(occs[2]!.toISOString()).toBe("2026-05-20T09:00:00.000Z");
-  });
-
-  it("honors anchor (does not emit before)", () => {
-    const occs = expandOccurrences(
-      { type: "daily", time: "09:00" },
-      "2026-05-22", from, to,
-    );
-    expect(occs.map((d) => d.toISOString())).toEqual([
-      "2026-05-22T09:00:00.000Z",
-      "2026-05-23T09:00:00.000Z",
-      "2026-05-24T09:00:00.000Z",
-    ]);
-  });
-
-  it("rejects from > to", () => {
-    expect(() => expandOccurrences({ type: "daily", time: "09:00" }, anchor, to, from)).toThrow();
-  });
-
-  it("rejects bad anchor", () => {
-    expect(() => expandOccurrences({ type: "daily", time: "09:00" }, "2026/05/18", from, to)).toThrow();
-  });
+  for (const tc of fixture.expandOccurrences.throws as ExpandCase[]) {
+    it(tc.name, () => {
+      const from = tc.fromIso ? new Date(tc.fromIso) : defaultFrom;
+      const to = tc.toIso ? new Date(tc.toIso) : defaultTo;
+      expect(() => expandOccurrences(tc.rule, tc.anchor, from, to)).toThrow();
+    });
+  }
 });
 
-describe("nextOccurrenceAfter", () => {
-  it("once: returns anchor when in future", () => {
-    const after = new Date(Date.UTC(2026, 4, 17, 0, 0, 0));
-    expect(nextOccurrenceAfter({ type: "once" }, "2026-05-18", after)?.toISOString())
-      .toBe("2026-05-18T00:00:00.000Z");
-  });
-
-  it("once: returns null when anchor already past", () => {
-    const after = new Date(Date.UTC(2026, 4, 19, 0, 0, 0));
-    expect(nextOccurrenceAfter({ type: "once" }, "2026-05-18", after)).toBeNull();
-  });
-
-  it("daily: returns next day at fire time if today already fired", () => {
-    const after = new Date(Date.UTC(2026, 4, 18, 10, 0, 0));
-    const next = nextOccurrenceAfter({ type: "daily", time: "09:00" }, "2026-05-18", after);
-    expect(next?.toISOString()).toBe("2026-05-19T09:00:00.000Z");
-  });
-
-  it("daily: returns today if fire time still in future", () => {
-    const after = new Date(Date.UTC(2026, 4, 18, 8, 0, 0));
-    const next = nextOccurrenceAfter({ type: "daily", time: "09:00" }, "2026-05-18", after);
-    expect(next?.toISOString()).toBe("2026-05-18T09:00:00.000Z");
-  });
-
-  it("weekly Mon/Wed/Fri: skips to next matching weekday", () => {
-    const after = new Date(Date.UTC(2026, 4, 18, 10, 0, 0));
-    const next = nextOccurrenceAfter(
-      { type: "weekly", time: "09:00", weekdays: [1, 3, 5] },
-      "2026-05-18", after,
-    );
-    expect(next?.toISOString()).toBe("2026-05-20T09:00:00.000Z");
-  });
-
-  it("returns null past until cutoff", () => {
-    const after = new Date(Date.UTC(2026, 4, 21, 0, 0, 0));
-    const next = nextOccurrenceAfter(
-      { type: "daily", time: "09:00", until: "2026-05-20" },
-      "2026-05-18", after,
-    );
-    expect(next).toBeNull();
-  });
+describe("nextOccurrenceAfter (admin-app, fixture-driven)", () => {
+  for (const tc of fixture.nextOccurrenceAfter as NextCase[]) {
+    it(tc.name, () => {
+      const next = nextOccurrenceAfter(tc.rule, tc.anchor, new Date(tc.afterIso));
+      if (tc.expectIso === null) {
+        expect(next).toBeNull();
+      } else {
+        expect(next?.toISOString()).toBe(tc.expectIso);
+      }
+    });
+  }
 });

@@ -24,14 +24,19 @@ import { tryAdminKeyRoutes } from '../src/http/adminKeyHttp.js';
 const APP_ID = '1568224577592551';
 const APP_SECRET = 'app-secret-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
 const ENC_KEY = 'k'.repeat(32);
+const ADMIN_KEY = 'test-admin-key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 
 function call(path, env, body = {}) {
+  const finalEnv = { ADMIN_KEY, ...env };
   const req = new Request(`https://manicbot.com${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      authorization: `Bearer ${ADMIN_KEY}`,
+    },
     body: JSON.stringify(body),
   });
-  return tryAdminKeyRoutes(req, env, new URL(req.url));
+  return tryAdminKeyRoutes(req, finalEnv, new URL(req.url));
 }
 
 describe('POST /admin/ig-app-subscribe', () => {

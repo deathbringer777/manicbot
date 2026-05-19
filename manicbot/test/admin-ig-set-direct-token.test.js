@@ -31,13 +31,17 @@ vi.mock('../src/utils/security.js', async () => {
 
 import { tryAdminKeyRoutes } from '../src/http/adminKeyHttp.js';
 
+const ADMIN_KEY = 'test-admin-key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 const ENC_KEY = 'k'.repeat(32);
 const IG_BUSINESS_ID = '25881183448226493';
 
 function makeRequest(body, opts = {}) {
   return new Request('https://manicbot.com/admin/ig-set-direct-token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      authorization: `Bearer ${ADMIN_KEY}`,
+    },
     body: JSON.stringify(body),
     ...opts,
   });
@@ -50,6 +54,7 @@ function call(env, body) {
 
 function makeEnv({ row = null, updates = [] } = {}) {
   return {
+    ADMIN_KEY,
     BOT_ENCRYPTION_KEY: ENC_KEY,
     DB: {
       prepare(sql) {

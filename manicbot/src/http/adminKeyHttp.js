@@ -471,9 +471,13 @@ export async function tryAdminKeyRoutes(request, env, url) {
   // Used after generating a token via Meta App Dashboard →
   // Instagram → API setup with Instagram login → Generate token.
   //
-  // No Bearer auth — self-gated like /admin/ig-recover: refuses unless the
-  // supplied token authenticates as the SAME ig_business_id already stored.
+  // Auth: Bearer <ADMIN_KEY>. The previous "self-gate" (token must match
+  // stored ig_business_id) FAILED OPEN when ig_business_id and the config
+  // fallbacks were null — letting any attacker overwrite a tenant's token
+  // with a free IGAA token and a tenantId from the public API. The
+  // self-gate still runs as defense-in-depth below.
   if (request.method === 'POST' && url.pathname === '/admin/ig-set-direct-token') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     if (!env.BOT_ENCRYPTION_KEY) return Response.json({ error: 'no enc key' }, { status: 503 });
     try {
@@ -554,8 +558,11 @@ export async function tryAdminKeyRoutes(request, env, url) {
   //   • If `psid` in body: POST /me/messages → sends a test text to verify
   //     outbound and Page-Messaging permission
   //   • GET /{app_id}/subscriptions → current App-level wiring
-  // No auth — read-only on D1, only credentials it uses are env-side.
+  // Auth: Bearer <ADMIN_KEY>. Reads the encrypted Page token and can send
+  // outbound DMs on the tenant's behalf when `psid` is supplied — must
+  // not be reachable without operator authority.
   if (request.method === 'POST' && url.pathname === '/admin/ig-diag') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     if (!env.BOT_ENCRYPTION_KEY) return Response.json({ error: 'no enc key' }, { status: 503 });
     try {
@@ -610,9 +617,10 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // POST /admin/ig-app-subscribe — (re)register App-level webhook for IG.
   // Distinct from Page-level subscribed_apps; both must be active. Idempotent.
-  // No auth: uses META_APP_ID+META_APP_SECRET in env, can only re-establish
-  // the App's own callback URL — no tenant data touched.
+  // Auth: Bearer <ADMIN_KEY>. Re-registering the App-level webhook is an
+  // operator action that affects every tenant's IG delivery.
   if (request.method === 'POST' && url.pathname === '/admin/ig-app-subscribe') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.META_APP_ID || !env.META_APP_SECRET) {
       return Response.json({ error: 'META_APP_ID + META_APP_SECRET required in env' }, { status: 503 });
     }

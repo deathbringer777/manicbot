@@ -1,4 +1,4 @@
--- 0073_user_avatar.sql — DRIFT FIX (2026-05-18)
+-- 0079_user_avatar.sql — DRIFT FIX (2026-05-18)
 --
 -- Original content of this migration (3 × ALTER TABLE users ADD COLUMN
 -- avatar_emoji / avatar_url / avatar_r2_key) was already applied to prod D1

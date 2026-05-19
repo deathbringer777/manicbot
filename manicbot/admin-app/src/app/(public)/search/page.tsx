@@ -76,10 +76,13 @@ export default async function SearchPage({ searchParams }: Props) {
       <JsonLd data={itemListJsonLd} />
       {/* SSR shadow listing: invisible to users (the client UI takes over),
           but present in the source HTML so crawlers and AI agents see the
-          actual salon links. Plain anchors with semantic markup. */}
+          actual salon links. Plain anchors with semantic markup.
+          SEO audit 2026-05-20 P1-8: was rendering its own <h1>, colliding
+          with the client-side <h1> in SearchClient. Demoted to <h2> here so
+          the page never ships two H1s in a crawler-visible response. */}
       <noscript>
         <div className="mx-auto max-w-6xl px-4 py-8">
-          <h1>Каталог nail-салонов</h1>
+          <h2>Каталог nail-салонов</h2>
           {city && <p>Город: {city}</p>}
           {items.length === 0 ? (
             <p>Салоны не найдены.</p>

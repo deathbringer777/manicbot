@@ -25,6 +25,10 @@ export function isAdminAppPath(pathname) {
   if (pathname.startsWith('/api/trpc/')) return true;
   if (pathname.startsWith('/api/auth/')) return true;
   if (pathname.startsWith('/salon/')) return true;
+  // SEO audit 2026-05-20 P1-1 — programmatic city directory pages live
+  // under /salons/{city-slug} on the Next.js admin-app. Worker must route
+  // them to admin-app, NOT the landing SPA (which would 200-soft-404 them).
+  if (pathname === '/salons' || pathname.startsWith('/salons/')) return true;
   if (pathname === '/search' || pathname.startsWith('/search/')) return true;
   const dash = [
     '/tenants',

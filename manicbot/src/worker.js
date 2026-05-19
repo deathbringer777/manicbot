@@ -38,7 +38,7 @@ import { handleHealthRequest } from './http/healthHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
 import { captureError } from './utils/errorCapture.js';
-import { generateSitemapResponse, generateRobotsResponse } from './utils/seo.js';
+import { generateSitemapResponse, generateRobotsResponse, generateLlmsTxtResponse } from './utils/seo.js';
 
 async function proxyToAdminApp(request, env, url) {
   const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
@@ -288,6 +288,12 @@ export default {
     // sitemap.xml — dynamic (static entries + DB-driven salons)
     if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
       return addSecurityHeaders(await generateSitemapResponse(env, url.origin));
+    }
+
+    // llms.txt — SEO audit 2026-05-20 P1-7. Served by the Worker before the
+    // landing proxy so the static file from the Vite SPA never wins.
+    if (url.pathname === '/llms.txt' && request.method === 'GET') {
+      return addSecurityHeaders(generateLlmsTxtResponse(url.origin));
     }
 
     // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath).

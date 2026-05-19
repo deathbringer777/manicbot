@@ -7,6 +7,9 @@ import {
   renderRobotsTxt,
   generateSitemapResponse,
   generateRobotsResponse,
+  generateLlmsTxtResponse,
+  renderLlmsTxt,
+  citySlug,
   coerceLastmodDate,
 } from '../src/utils/seo.js';
 
@@ -286,6 +289,52 @@ describe('seo', () => {
       }
     });
 
+    // SEO audit 2026-05-20 P0-3 + P1-10 — auto-generated sitemap MUST exclude
+    // synthetic test accounts. Previously the sitemap query was
+    // `public_active=1 AND slug IS NOT NULL` and emitted all 16 demo/test
+    // salons because they all had `public_active=1`. Filter `is_test=0` to
+    // keep test accounts out of the production index.
+    it('excludes test/demo salons (is_test=1) from sitemap', async () => {
+      const calls = [];
+      const mockDb = {
+        prepare: (sql) => {
+          calls.push(sql);
+          return {
+            all: async () => ({
+              // The DB returns the FILTERED rows — proves the WHERE clause is right.
+              results: [
+                { slug: 'real-salon-a', updated_at: 1774796426 },
+                { slug: 'real-salon-b', updated_at: 1774796426 },
+              ],
+            }),
+          };
+        },
+      };
+      const res = await generateSitemapResponse({ DB: mockDb }, 'https://manicbot.com');
+      const body = await res.text();
+      // Filter must be in the SELECT clause so the DB does the work.
+      expect(calls[0]).toMatch(/is_test\s*=\s*0/i);
+      expect(body).toContain('/salon/real-salon-a');
+      expect(body).toContain('/salon/real-salon-b');
+    });
+
+    // SEO audit 2026-05-20 P1-1 — programmatic city directory pages.
+    // The sitemap must surface `/salons/{slug}` so Google can discover them.
+    it('includes programmatic city pages at /salons/{city-slug}', async () => {
+      const mockDb = {
+        prepare: () => ({
+          all: async () => ({ results: [] }),
+        }),
+      };
+      const res = await generateSitemapResponse({ DB: mockDb }, 'https://manicbot.com');
+      const body = await res.text();
+      // POPULAR_CITIES from src/lib/popularCities.js — Warszawa, Gdańsk, Wrocław.
+      // The Worker URL-slugifies the city name (lowercase, ASCII).
+      expect(body).toContain('/salons/warszawa');
+      expect(body).toContain('/salons/gdansk');
+      expect(body).toContain('/salons/wroclaw');
+    });
+
     it('survives DB errors and still returns static sitemap', async () => {
       const mockDb = { prepare: () => ({ all: async () => { throw new Error('db down'); } }) };
       const res = await generateSitemapResponse({ DB: mockDb }, 'https://manicbot.com');
@@ -310,6 +359,86 @@ describe('seo', () => {
       expect(res.headers.get('cache-control')).toContain('max-age=86400');
       const body = await res.text();
       expect(body).toContain('Sitemap: https://manicbot.com/sitemap.xml');
+    });
+
+    // SEO audit 2026-05-20 P2-5 — explicit allow blocks for AI bots so the
+    // policy is on the public record. Defaults to `*` allow today; this is
+    // belt-and-suspenders for paper trail.
+    it('explicitly allows AI bots (GPTBot, ClaudeBot, Google-Extended, PerplexityBot)', async () => {
+      const res = generateRobotsResponse('https://manicbot.com');
+      const body = await res.text();
+      expect(body).toContain('User-agent: GPTBot');
+      expect(body).toContain('User-agent: ClaudeBot');
+      expect(body).toContain('User-agent: Google-Extended');
+      expect(body).toContain('User-agent: PerplexityBot');
+    });
+  });
+
+  // SEO audit 2026-05-20 P1-7 — /llms.txt (https://llmstxt.org).
+  describe('renderLlmsTxt', () => {
+    const txt = renderLlmsTxt('https://manicbot.com');
+
+    it('starts with a single H1 line (llmstxt.org requires this)', () => {
+      const firstLine = txt.split('\n')[0];
+      expect(firstLine).toMatch(/^# /);
+    });
+
+    it('describes ManicBot in a single short paragraph (the "blockquote" summary)', () => {
+      // The spec calls for a short summary immediately after the H1.
+      expect(txt).toMatch(/AI[\s-]?booking|nail salon|salon paznokci/i);
+    });
+
+    it('links to the salon directory + blog as primary resources', () => {
+      expect(txt).toContain('https://manicbot.com/search');
+      expect(txt).toContain('https://manicbot.com/blog');
+      expect(txt).toContain('https://manicbot.com/sitemap.xml');
+    });
+
+    it('lists supported languages', () => {
+      // Should mention all 4 languages.
+      expect(txt).toMatch(/ru|Russian/i);
+      expect(txt).toMatch(/pl|Polish/i);
+      expect(txt).toMatch(/en|English/i);
+      expect(txt).toMatch(/uk|ua|Ukrainian/i);
+    });
+
+    it('emits pricing summary so LLMs can answer cost questions correctly', () => {
+      expect(txt).toMatch(/45.*PLN|from\s+45|od\s+45/i);
+    });
+  });
+
+  describe('generateLlmsTxtResponse', () => {
+    it('returns text/markdown with 24h cache', async () => {
+      const res = generateLlmsTxtResponse('https://manicbot.com');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toMatch(/text\/(markdown|plain)/);
+      expect(res.headers.get('cache-control')).toContain('max-age=86400');
+    });
+  });
+
+  // SEO audit 2026-05-20 — used by both the sitemap and the
+  // /salons/{city} route to keep slug shape consistent. ASCII-fold so
+  // "Wrocław" → "wroclaw" and "Gdańsk" → "gdansk".
+  describe('citySlug', () => {
+    it.each([
+      ['Warszawa', 'warszawa'],
+      ['Gdańsk', 'gdansk'],
+      ['Wrocław', 'wroclaw'],
+      ['Kraków', 'krakow'],
+      ['Łódź', 'lodz'],
+      ['Poznań', 'poznan'],
+    ])('citySlug(%s) → %s', (input, expected) => {
+      expect(citySlug(input)).toBe(expected);
+    });
+
+    it('returns empty string for null/undefined/empty', () => {
+      expect(citySlug(null)).toBe('');
+      expect(citySlug(undefined)).toBe('');
+      expect(citySlug('')).toBe('');
+    });
+
+    it('strips leading/trailing dashes and collapses whitespace', () => {
+      expect(citySlug('  Hello World  ')).toBe('hello-world');
     });
   });
 });

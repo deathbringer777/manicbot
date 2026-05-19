@@ -8,8 +8,40 @@
  */
 
 import { log } from './logger.js';
+import { POPULAR_CITIES } from '../lib/popularCities.js';
 
 export const DEFAULT_SITE_ORIGIN = 'https://manicbot.com';
+
+/**
+ * URL-slugify a city name. ASCII-fold Polish diacritics so "Wrocław" →
+ * "wroclaw" and "Gdańsk" → "gdansk". Lowercase, collapse whitespace,
+ * strip leading/trailing dashes. Used by `/salons/{city}` programmatic
+ * routes (SEO audit P1-1) and the corresponding sitemap entries.
+ *
+ * @param {unknown} input
+ * @returns {string}
+ */
+export function citySlug(input) {
+  if (input == null || input === '') return '';
+  const s = String(input)
+    .normalize('NFKD')
+    // Strip combining marks (the "ogonek" / acute / dot-above we just split out).
+    .replace(/[̀-ͯ]/g, '')
+    // Map any remaining non-decomposed Latin special letters.
+    .replace(/[łŁ]/g, 'l')
+    .replace(/[ąĄ]/g, 'a')
+    .replace(/[ęĘ]/g, 'e')
+    .replace(/[óÓ]/g, 'o')
+    .replace(/[śŚ]/g, 's')
+    .replace(/[źżŹŻ]/g, 'z')
+    .replace(/[ćĆ]/g, 'c')
+    .replace(/[ńŃ]/g, 'n')
+    .toLowerCase()
+    // Anything non-alphanumeric → dash, collapse runs, trim edges.
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s;
+}
 
 /**
  * Static routes served by the landing SPA (manicbot-landing.pages.dev proxy).
@@ -184,18 +216,41 @@ export function renderSitemapXml(entries, base = DEFAULT_SITE_ORIGIN) {
 
 /**
  * Build a complete sitemap response — static entries + DB-driven salon slugs.
+ *
+ * SEO audit 2026-05-20 P0-3 + P1-10: the SELECT now filters `is_test = 0`
+ * so the 16 test / demo accounts that previously dominated the production
+ * sitemap stop reaching Googlebot. Real-customer salons (publicActive=1
+ * AND isTest=0) are emitted with `lastmod` derived from `updated_at`.
+ *
+ * SEO audit 2026-05-20 P1-1: programmatic city directory pages
+ * (`/salons/{slug}`) are surfaced for every POPULAR_CITIES entry — this is
+ * how Google discovers the new content-SEO route class.
+ *
  * @param {{ DB?: D1Database | null }} env
  * @param {string} origin Request origin (so it works on preview hosts too).
  */
 export async function generateSitemapResponse(env, origin) {
   const base = (origin || DEFAULT_SITE_ORIGIN).replace(/\/$/, '');
   const entries = buildStaticSitemapEntries();
+  const today = todayIso();
+
+  // P1-1: programmatic city directory pages.
+  for (const city of POPULAR_CITIES) {
+    const slug = citySlug(city);
+    if (!slug) continue;
+    entries.push({
+      loc: `/salons/${slug}`,
+      priority: '0.8',
+      changefreq: 'weekly',
+      lastmod: today,
+    });
+  }
 
   if (env && env.DB) {
     try {
-      const today = todayIso();
+      // P0-3 + P1-10: filter out test accounts.
       const result = await env.DB
-        .prepare('SELECT slug, updated_at FROM tenants WHERE public_active = 1 AND slug IS NOT NULL')
+        .prepare('SELECT slug, updated_at FROM tenants WHERE public_active = 1 AND is_test = 0 AND slug IS NOT NULL')
         .all();
       for (const row of result.results || []) {
         if (!row.slug) continue;
@@ -224,6 +279,13 @@ export async function generateSitemapResponse(env, origin) {
 
 /**
  * Render robots.txt. Public pages allowed; all internal/API/auth paths blocked.
+ *
+ * SEO audit 2026-05-20 P2-5: explicit allow blocks for the major AI bots
+ * (GPTBot, ClaudeBot, Google-Extended, PerplexityBot, CCBot). Today's
+ * `User-agent: *` default already allows everything; the explicit blocks
+ * are paper trail and make our AI visibility intent legible to the
+ * operators of those crawlers.
+ *
  * @param {string} origin Request origin (e.g. https://manicbot.com).
  */
 export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
@@ -232,6 +294,7 @@ export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
     'User-agent: *',
     'Allow: /',
     'Allow: /search',
+    'Allow: /salons/',
     'Allow: /blog',
     'Allow: /help',
     'Allow: /rules',
@@ -268,9 +331,103 @@ export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
     'Disallow: /verify-email',
     'Disallow: /confirm-email-change',
     '',
+    '# AI bots — explicit allow (P2-5). Mirrors the `*` default but makes',
+    '# our AI-visibility intent legible to operators of each crawler.',
+    'User-agent: GPTBot',
+    'Allow: /',
+    '',
+    'User-agent: ClaudeBot',
+    'Allow: /',
+    '',
+    'User-agent: Google-Extended',
+    'Allow: /',
+    '',
+    'User-agent: PerplexityBot',
+    'Allow: /',
+    '',
+    'User-agent: CCBot',
+    'Allow: /',
+    '',
     `Sitemap: ${base}/sitemap.xml`,
     '',
   ].join('\n');
+}
+
+/**
+ * Render `/llms.txt` per <https://llmstxt.org/>. Static markdown that LLM
+ * crawlers consume for a one-page overview of the site. Goes alongside
+ * sitemap.xml + robots.txt as a third "machine-readable site index" file.
+ *
+ * SEO audit 2026-05-20 P1-7.
+ *
+ * @param {string} origin
+ */
+export function renderLlmsTxt(origin = DEFAULT_SITE_ORIGIN) {
+  const base = origin.replace(/\/$/, '');
+  return [
+    '# ManicBot',
+    '',
+    '> AI booking platform for nail salons. Online booking via web widget, Telegram, Instagram, and WhatsApp — 24/7, in Russian, Polish, English and Ukrainian. Pricing from 45 PLN/month with 0% commission. Operating in Poland and Europe.',
+    '',
+    '## About',
+    '',
+    'ManicBot is a multi-tenant booking SaaS for nail salons and independent nail masters. Salons connect their existing channels (Telegram, Instagram DM, WhatsApp, web chat) and the AI receptionist handles the entire booking flow — slot selection, service catalog, master selection, confirmation, reminders — without human intervention.',
+    '',
+    'Supported languages: Russian (ru), Polish (pl), English (en), Ukrainian (uk).',
+    '',
+    'Pricing (PLN/month):',
+    '- Start — 45 PLN/mo — 1 master',
+    '- Pro — 60 PLN/mo — 5 masters, AI assistant, Google Calendar sync',
+    '- Max — 90 PLN/mo — unlimited masters, white label, all features',
+    '',
+    'No per-booking commission. 14-day free trial. Billed monthly via Stripe.',
+    '',
+    '## Key URLs',
+    '',
+    `- [Salon directory](${base}/search) — browse all public salons by city/service`,
+    `- [Blog](${base}/blog) — guides on running a nail salon, AI receptionist, automation, channel strategy`,
+    `- [Help center](${base}/help) — product documentation`,
+    `- [Rules](${base}/rules) — terms of service, acceptable use`,
+    `- [Sitemap](${base}/sitemap.xml) — full list of indexable URLs`,
+    '',
+    '## City directories',
+    '',
+    ...POPULAR_CITIES.map((c) => `- [Nail salons in ${c}](${base}/salons/${citySlug(c)})`),
+    '',
+    '## Programmatic surfaces',
+    '',
+    `- Salon profiles: ${base}/salon/{slug}`,
+    `- City directory pages: ${base}/salons/{city-slug}`,
+    `- Blog articles: ${base}/blog/{slug}`,
+    '',
+    '## Channels',
+    '',
+    'Each salon can connect any combination of: Telegram bot, Instagram Direct, WhatsApp Business, and an embeddable web chat widget. The same AI receptionist serves every channel with a unified conversation history.',
+    '',
+    '## Contact',
+    '',
+    `- Telegram: https://t.me/manicbot_com`,
+    `- Website: ${base}`,
+    '',
+  ].join('\n');
+}
+
+/**
+ * Build the `/llms.txt` HTTP response.
+ *
+ * @param {string} origin
+ */
+export function generateLlmsTxtResponse(origin) {
+  return new Response(renderLlmsTxt(origin), {
+    status: 200,
+    headers: {
+      // text/markdown is correct per RFC 7763 but many older parsers expect
+      // text/plain; Cloudflare's CDN handles both — pick markdown because
+      // that's what the llmstxt.org spec recommends.
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+    },
+  });
 }
 
 /**

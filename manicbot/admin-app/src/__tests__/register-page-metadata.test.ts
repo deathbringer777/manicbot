@@ -159,10 +159,16 @@ describe("/register generateMetadata — end-to-end shape", () => {
   });
 
   it("title is in the locale-appropriate language (sanity check on copy hookup)", () => {
-    expect(fakeMetadata("ru").title).toMatch(/онлайн-запись/);
-    expect(fakeMetadata("ua").title).toMatch(/онлайн-запис/);
-    expect(fakeMetadata("en").title).toMatch(/online booking/);
-    expect(fakeMetadata("pl").title).toMatch(/rezerwacje online/);
+    // SEO audit 2026-05-20 P1-3: long bare titles are emitted as
+    // `{ absolute: "..." }` so the (public) layout's template doesn't
+    // push them past Google's 60c SERP cap. Helper normalises both
+    // string and absolute-object shapes for assertion convenience.
+    const titleString = (t: unknown) =>
+      typeof t === "string" ? t : (t as { absolute?: string }).absolute ?? "";
+    expect(titleString(fakeMetadata("ru").title)).toMatch(/онлайн-запись/);
+    expect(titleString(fakeMetadata("ua").title)).toMatch(/онлайн-запис/);
+    expect(titleString(fakeMetadata("en").title)).toMatch(/online booking/);
+    expect(titleString(fakeMetadata("pl").title)).toMatch(/rezerwacje online/);
   });
 
   it("?ref= present switches description to the warmer 'friend invited' variant", () => {

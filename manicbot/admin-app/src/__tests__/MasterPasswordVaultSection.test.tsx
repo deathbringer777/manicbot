@@ -28,7 +28,7 @@ const resetMutate = vi.fn();
 // flip the server response (e.g. add `bootstrapped: true`) without re-mocking
 // the whole trpc module.
 let peekReturn: { password: string; bootstrapped?: boolean } = {
-  password: "test-fixture-pw-only-12345",
+  password: "pw-fixture",
 };
 
 vi.mock("~/trpc/react", () => ({
@@ -90,7 +90,7 @@ afterEach(() => {
   peekMutate.mockClear();
   resetMutate.mockClear();
   // Reset peek payload to the default for the next test.
-  peekReturn = { password: "test-fixture-pw-only-12345" };
+  peekReturn = { password: "pw-fixture" };
 });
 
 describe("MasterPasswordVaultSection — gating", () => {
@@ -147,14 +147,14 @@ describe("MasterPasswordVaultSection — empty-vault bootstrap reveal", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("master-password-reveal").textContent).toBe(
-        "test-fixture-pw-only-12345",
+        "pw-fixture",
       );
     });
     expect(screen.queryByTestId("master-password-bootstrap-hint")).toBeNull();
   });
 
   it("when server signals bootstrapped=true, reveals the new password and shows the bootstrap hint", async () => {
-    peekReturn = { password: "FreshlyGeneratedPw_9X", bootstrapped: true };
+    peekReturn = { password: "pw-bootstrap", bootstrapped: true };
     renderSection({
       webUser: { email: "owner@manicbot.com", emailVerified: 1, hasVaultedPassword: false },
     });
@@ -169,7 +169,7 @@ describe("MasterPasswordVaultSection — empty-vault bootstrap reveal", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("master-password-reveal").textContent).toBe(
-        "FreshlyGeneratedPw_9X",
+        "pw-bootstrap",
       );
     });
     expect(screen.getByTestId("master-password-bootstrap-hint")).toBeTruthy();
@@ -211,7 +211,7 @@ describe("MasterPasswordVaultSection — peek flow", () => {
       otpCode: "123456",
     });
     await waitFor(() => {
-      expect(screen.getByTestId("master-password-reveal").textContent).toBe("test-fixture-pw-only-12345");
+      expect(screen.getByTestId("master-password-reveal").textContent).toBe("pw-fixture");
     });
   });
 

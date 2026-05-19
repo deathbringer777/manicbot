@@ -1,0 +1,12 @@
+# Historical Gitleaks fingerprints we've audited as fixture-only.
+# Format: <commit>:<path>:<rule>:<line>
+#
+# MasterPasswordVaultSection.test.tsx — Vitest fixtures for the
+# OTP-gated master-password peek flow. The flagged strings
+# ("test-fixture-pw-only-12345", "FreshlyGeneratedPw_9X") are static
+# RTL render fodder, never sent to any provider. HEAD has been
+# rewritten to use low-entropy placeholders ("pw-fixture", "pw-bootstrap")
+# so new commits don't regress; these two entries waive the existing
+# git history.
+79ae7922a240e8cb552246c189d2313f8b02e36f:manicbot/admin-app/src/__tests__/MasterPasswordVaultSection.test.tsx:generic-api-key:46
+f8eaea3565967a18b2155e41bda2301ca9247f19:manicbot/admin-app/src/__tests__/MasterPasswordVaultSection.test.tsx:generic-api-key:157

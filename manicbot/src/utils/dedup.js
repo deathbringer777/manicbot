@@ -7,6 +7,26 @@
  *
  * KV-backed: short TTL because replays only happen within the platform's
  * retry window (Telegram ~10min, Meta ~24h).
+ *
+ * ## Concurrency / eventual-consistency caveat
+ *
+ * Cloudflare Workers KV is globally distributed and eventually consistent.
+ * It has no compare-and-swap / conditional-PUT primitive, so these claim
+ * helpers use a GET-then-PUT pattern. Two truly concurrent claims for the
+ * same key against the SAME edge node race on a window of <~100ms; against
+ * DIFFERENT edge nodes the window can extend to KV's convergence time
+ * (typically <1s, occasionally a few seconds).
+ *
+ * In practice this is acceptable here because:
+ *   - Telegram retries are spaced ≥1s apart (and only on 5xx).
+ *   - Meta WA/IG retries are spaced ≥5s apart with exponential backoff.
+ *   - The original webhook delivery is single-shot; the race only exists
+ *     between original + retry, never original + original.
+ *
+ * If true at-most-once semantics are ever required (e.g. for billing-bearing
+ * webhooks), migrate the claim into a Durable Object (single-writer, strong
+ * consistency) — the function signatures here are intentionally narrow so
+ * the call sites need only swap the implementation, not the API.
  */
 
 const TG_TTL_SEC = 300;     // Telegram retries within ~5 min

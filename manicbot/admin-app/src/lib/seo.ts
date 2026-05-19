@@ -90,6 +90,29 @@ export interface PageSeoInput {
 }
 
 /**
+ * Google truncates SERP titles around 60-65 chars. The `(public)` layout
+ * appends " — ManicBot" (12c) automatically, so any bare title >47c risks
+ * truncation. For blog posts (which run 60-100c per the SEO audit), the
+ * suffix tips them past 70c and the brand gets cut off in SERPs.
+ *
+ * SEO audit 2026-05-20 P1-3: use `truncateTitleForSerp()` to decide
+ * whether to emit a `title.absolute` (which suppresses the template) or
+ * a bare string (which lets the template append the brand). The cutoff
+ * is 55c — anything longer goes `absolute` to keep total length ≤ ~67c.
+ */
+export const TITLE_SUFFIX_LENGTH = ` — ${SITE_NAME}`.length;
+export const TITLE_SOFT_CAP = 60;
+export const TITLE_BREAKPOINT_FOR_ABSOLUTE = TITLE_SOFT_CAP - TITLE_SUFFIX_LENGTH;
+
+/**
+ * Returns true if `bareTitle` (without the " — ManicBot" suffix) would
+ * push past the SERP soft cap once the suffix is appended.
+ */
+export function shouldUseAbsoluteTitle(bareTitle: string): boolean {
+  return bareTitle.length > TITLE_BREAKPOINT_FOR_ABSOLUTE;
+}
+
+/**
  * Normalise third-party image URLs so the served file matches our declared
  * 1200×630 OG dimensions. Pexels URLs ship with `?w=400&h=...` from the API,
  * which loses the social-card preview entirely. Rewriting the query keeps the
@@ -137,9 +160,16 @@ export function buildSeo(input: PageSeoInput & { ogLocale?: string }): Metadata 
   // For OG/Twitter we need the full title (no template applies to those).
   const fullTitle =
     input.title === SITE_NAME ? SITE_NAME : `${input.title} — ${SITE_NAME}`;
+  // SEO audit 2026-05-20 P1-3: long titles (>47c) push past Google's 60c
+  // SERP truncation once "— ManicBot" is appended. Use `title.absolute`
+  // for those so the brand suffix is dropped and the headline survives.
+  const titleField =
+    bareTitle !== SITE_NAME && shouldUseAbsoluteTitle(bareTitle)
+      ? { absolute: bareTitle }
+      : bareTitle;
 
   return {
-    title: bareTitle,
+    title: titleField,
     description: input.description,
     keywords: input.keywords,
     alternates: {

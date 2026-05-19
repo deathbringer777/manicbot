@@ -50,6 +50,34 @@ describe("regression: relax.md §3 P0-1 (title double-suffix)", () => {
   });
 });
 
+describe("regression: SEO audit 2026-05-20 P1-3 (long titles exceed SERP cap)", () => {
+  // Google truncates SERP titles around 60-65c. The (public) layout's
+  // `title.template: "%s — ManicBot"` appends 12 chars. Anything over 47c
+  // in the bare title therefore needs to be emitted as `title.absolute`
+  // to drop the brand suffix and survive truncation.
+  const longBlogTitle =
+    "Recepcja AI 24/7: jak salon paznokci zarabia o 3 nad ranem (i dlaczego to nowa baza)";
+
+  it("long titles emit title.absolute (suppressing the template suffix)", () => {
+    const meta = buildSeo({ title: longBlogTitle, description: "x", path: "/blog/x" });
+    // `title.absolute` is Next.js's instruction to skip the template.
+    expect(typeof meta.title).toBe("object");
+    expect((meta.title as { absolute: string }).absolute).toBe(longBlogTitle);
+  });
+
+  it("short titles still return a bare string (template applies as before)", () => {
+    const meta = buildSeo({ title: "Поиск", description: "x", path: "/search" });
+    expect(typeof meta.title).toBe("string");
+    expect(meta.title).toBe("Поиск");
+  });
+
+  it("OG title keeps the brand suffix even for absolute titles (OG is unaffected by template)", () => {
+    const meta = buildSeo({ title: longBlogTitle, description: "x", path: "/blog/x" });
+    const og = (meta.openGraph as { title: string }).title;
+    expect(og).toBe(`${longBlogTitle} — ManicBot`);
+  });
+});
+
 describe("regression: relax.md §3 P0-2 (canonical lang collapse)", () => {
   it("each path self-canonicalises (no lang query in canonical)", () => {
     for (const path of ["/", "/search", "/blog", "/help", "/salon/foo"]) {

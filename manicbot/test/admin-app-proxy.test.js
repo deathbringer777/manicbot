@@ -18,6 +18,14 @@ describe('isAdminAppPath', () => {
     ['/api/trpc/x.y'],
     ['/api/auth/callback/google'],
     ['/salon/my-salon'],
+    // SEO audit 2026-05-20 P1-1 — programmatic city directory pages live on
+    // admin-app, NOT the landing SPA. Without this entry, /salons/warszawa
+    // would proxy to the landing site and return a soft-404 (HTTP 200 with
+    // the marketing HTML).
+    ['/salons'],
+    ['/salons/warszawa'],
+    ['/salons/gdansk'],
+    ['/salons/wroclaw'],
     ['/search'],
     ['/search/'],
     ['/tenants'],

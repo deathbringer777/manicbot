@@ -57,7 +57,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "clsx": "^2.1.1",
-    "drizzle-kit": "^0.30.5",
+    "drizzle-kit": "^0.31.10",
     "happy-dom": "^20.9.0",
     "jsdom": "^29.0.2",
     "lucide-react": "^0.577.0",

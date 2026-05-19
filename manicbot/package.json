@@ -16,7 +16,7 @@
 		"seed:calendar-demo:dry": "node scripts/seed-calendar-demo.mjs"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.12.20",
+		"@cloudflare/vitest-pool-workers": "^0.16.7",
 		"vitest": "^4.0.18",
 		"wrangler": "^4.92.0"
 	}

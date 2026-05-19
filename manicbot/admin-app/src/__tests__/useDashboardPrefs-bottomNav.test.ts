@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   loadDashboardPrefs,
   saveDashboardPrefs,
@@ -9,6 +9,32 @@ import {
 } from "~/lib/useDashboardPrefs";
 
 const TENANT = "t_demo";
+
+// happy-dom's built-in localStorage is unreliable across Node versions —
+// stub a deterministic in-memory store (mirrors useMasterVisibility.test.ts).
+beforeEach(() => {
+  const store: Record<string, string> = {};
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => (k in store ? store[k] : null),
+    setItem: (k: string, v: string) => {
+      store[k] = String(v);
+    },
+    removeItem: (k: string) => {
+      delete store[k];
+    },
+    clear: () => {
+      for (const k of Object.keys(store)) delete store[k];
+    },
+    key: (i: number) => Object.keys(store)[i] ?? null,
+    get length() {
+      return Object.keys(store).length;
+    },
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("useDashboardPrefs — bottom-nav additions", () => {
   beforeEach(() => {
@@ -96,8 +122,6 @@ vi.mock("~/trpc/react", () => ({
     },
   },
 }));
-
-import { vi } from "vitest";
 
 describe("useDashboardPrefs — bottom-nav setters", () => {
   beforeEach(() => {

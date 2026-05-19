@@ -81,6 +81,7 @@ async function hmacSha256(secret, message) {
  * @param {string} params.kind             'logo'|'cover'|'photo'|'portfolio'
  * @param {string} params.secret           UPLOAD_TOKEN_SECRET
  * @param {number} [params.ttlSec]         default 300s
+ * @param {string} [params.uid]            optional web_users.id embedded for audit trail
  * @returns {Promise<string>} signed token
  */
 export async function signUploadToken({ tid, kind, secret, ttlSec = DEFAULT_TOKEN_TTL_SEC, uid }) {
@@ -102,7 +103,7 @@ export async function signUploadToken({ tid, kind, secret, ttlSec = DEFAULT_TOKE
  *
  * @param {string} token
  * @param {string} secret
- * @returns {Promise<{tid:string, kind:string, exp:number}|null>}
+ * @returns {Promise<{tid:string, kind:string, exp:number, uid:string|null}|null>}
  */
 export async function verifyUploadToken(token, secret) {
   if (!token || typeof token !== 'string' || !secret) return null;

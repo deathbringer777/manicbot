@@ -46,7 +46,7 @@ describe("ownership.getPending — auth gates", () => {
     const { db } = createDbMock();
     const caller = callerFactory(makeUnauthCtx(db) as never);
     await expect(caller.getPending({ tenantId: TENANT } as never))
-      .rejects.toMatchObject({ code: "FORBIDDEN" });
+      .rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejects masters (tenant_owner+system_admin only)", async () => {
@@ -121,7 +121,7 @@ describe("ownership.cancelTransfer — auth gates", () => {
     const { db } = createDbMock();
     const caller = callerFactory(makeUnauthCtx(db) as never);
     await expect(caller.cancelTransfer({ tenantId: TENANT } as never))
-      .rejects.toMatchObject({ code: "FORBIDDEN" });
+      .rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejects masters", async () => {

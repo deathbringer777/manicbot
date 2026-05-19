@@ -1135,6 +1135,7 @@ export const salonRouter = createTRPCRouter({
         tid: input.tenantId,
         kind: input.kind as UploadKind,
         secret: env.UPLOAD_TOKEN_SECRET,
+        uid: ctx.webUser?.id,
       });
       const base = env.WORKER_PUBLIC_URL.replace(/\/$/, "");
       return {

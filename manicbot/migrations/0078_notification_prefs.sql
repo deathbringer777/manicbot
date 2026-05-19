@@ -25,6 +25,6 @@
 -- NOTE: This file was originally filed as 0077_notification_prefs.sql, which
 -- conflicted with 0077_service_categories.sql and was renamed in PR #198.
 -- Production D1 already has this column (applied under the old filename).
--- Using ADD COLUMN IF NOT EXISTS (SQLite 3.37+ / D1) so this migration is
--- idempotent whether or not the column was applied under the previous name.
-ALTER TABLE web_users ADD COLUMN IF NOT EXISTS notification_prefs TEXT;
+-- The d1_migrations table has this filename registered so wrangler skips it
+-- on deploys; the ALTER below is a no-op historically but kept for clarity.
+ALTER TABLE web_users ADD COLUMN notification_prefs TEXT;

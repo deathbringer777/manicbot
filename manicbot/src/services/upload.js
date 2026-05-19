@@ -10,7 +10,12 @@
  *
  * Token format:  base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, secret))
  *
- * Payload shape: { tid: string, kind: 'logo'|'cover'|'photo'|'portfolio', exp: number }
+ * Payload shape: { tid: string, kind: 'logo'|'cover'|'photo'|'portfolio'|..., exp: number, uid?: string }
+ *
+ * `uid` (when present) is the `web_users.id` of the user that requested the
+ * token from the admin-app tRPC layer. It is NOT used to authorize the upload
+ * (the HMAC + TTL is the auth); it is surfaced back to the caller for audit
+ * logging so a leaked / replayed token can be traced to the minting user.
  *
  * Edge-runtime compatible (uses Web Crypto API only — no Node-specific imports).
  */
@@ -78,13 +83,14 @@ async function hmacSha256(secret, message) {
  * @param {number} [params.ttlSec]         default 300s
  * @returns {Promise<string>} signed token
  */
-export async function signUploadToken({ tid, kind, secret, ttlSec = DEFAULT_TOKEN_TTL_SEC }) {
+export async function signUploadToken({ tid, kind, secret, ttlSec = DEFAULT_TOKEN_TTL_SEC, uid }) {
   if (!tid || typeof tid !== 'string') throw new Error('tid required');
   if (!ALLOWED_KINDS.has(kind)) throw new Error(`invalid kind: ${kind}`);
   if (!secret || typeof secret !== 'string' || secret.length < 16) {
     throw new Error('UPLOAD_TOKEN_SECRET missing or too short (>= 16 chars)');
   }
   const payload = { tid, kind, exp: Math.floor(Date.now() / 1000) + ttlSec };
+  if (uid && typeof uid === 'string') payload.uid = uid;
   const payloadB64 = b64urlEncodeString(JSON.stringify(payload));
   const sig = await hmacSha256(secret, payloadB64);
   return `${payloadB64}.${b64urlEncode(sig)}`;
@@ -127,7 +133,8 @@ export async function verifyUploadToken(token, secret) {
   if (!ALLOWED_KINDS.has(payload.kind)) return null;
   if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) return null;
 
-  return { tid: payload.tid, kind: payload.kind, exp: payload.exp };
+  const uid = typeof payload.uid === 'string' ? payload.uid : null;
+  return { tid: payload.tid, kind: payload.kind, exp: payload.exp, uid };
 }
 
 /**

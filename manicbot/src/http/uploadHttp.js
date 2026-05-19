@@ -177,7 +177,7 @@ export async function tryUpload(request, env, url) {
       tenantId: claim.tid,
       level: 'info',
       message: `${claim.kind} uploaded (${size} bytes)`,
-      data: { kind: claim.kind, size, key },
+      data: { kind: claim.kind, size, key, uid: claim.uid ?? null },
     });
 
     return new Response(JSON.stringify({ ok: true, key, url: publicUrl }), {

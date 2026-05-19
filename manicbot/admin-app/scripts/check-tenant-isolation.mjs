@@ -125,7 +125,7 @@ const ALLOWLIST = new Set([
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1741",
+  "src/server/api/routers/salon.ts:1742",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

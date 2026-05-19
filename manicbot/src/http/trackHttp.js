@@ -28,31 +28,50 @@ import {
   parseTrackPayload,
 } from './trackHttpLogic.js';
 import { dbRun } from '../utils/db.js';
+import { checkAndIncrement } from '../utils/rateLimit.js';
 import { nowSec } from '../utils/time.js';
 import { log } from '../utils/logger.js';
 
 const MAX_BODY_BYTES = 8_192;
+const TRACK_RATE_LIMIT_WINDOW_SEC = Math.floor(TRACK_RATE_LIMIT_WINDOW_MS / 1000);
 
 /**
- * In-memory token bucket per IP. The Worker isolate is short-lived (seconds to
- * a few minutes), so this is best-effort + cheap; the D1-backed rate limit on
- * the admin-app side handles the durable case. Here we're protecting the
- * Worker from a single hot client during a single isolate lifetime.
+ * D1-backed rate limit per IP — replaces the previous in-memory `ipBuckets`
+ * Map (M-A, audit 2026-05-20). The Worker isolate is short-lived (seconds to
+ * minutes) and a single attacker across multiple Cloudflare edge POPs gets
+ * independent buckets from a Map. The D1 row is durable and shared across
+ * isolates so the 60/min cap is global.
+ *
+ * Fallback: if no DB binding is present (legacy ctx, test isolation), allow
+ * the request. The handler still drops the body on parse / consent failure,
+ * so the worst case is one row of garbage in analytics_events per call.
+ *
+ * #S-05 inherited: same TOCTOU window as every other D1-backed limiter
+ * (admin-Basic-Auth, ownership.confirmTransfer). Caps abuse at ~2× declared
+ * rate at the window boundary, which is vastly better than today's
+ * "unlimited per POP".
+ *
+ * @param {{ DB?: D1Database }} env
+ * @param {string} ip
+ * @returns {Promise<boolean>} true if the request is within the rate cap
  */
-const ipBuckets = new Map();
-
-function rateLimitOk(ip) {
-  const now = Date.now();
-  const cutoff = now - TRACK_RATE_LIMIT_WINDOW_MS;
-  const bucket = ipBuckets.get(ip) || [];
-  const fresh = bucket.filter((t) => t >= cutoff);
-  if (fresh.length >= TRACK_RATE_LIMIT_MAX) {
-    ipBuckets.set(ip, fresh);
-    return false;
+async function rateLimitOk(env, ip) {
+  if (!env?.DB) return true;
+  try {
+    const res = await checkAndIncrement(
+      { db: env.DB },
+      ip,
+      'track',
+      TRACK_RATE_LIMIT_MAX,
+      TRACK_RATE_LIMIT_WINDOW_SEC,
+    );
+    return !res.limited;
+  } catch (e) {
+    // Rate-limit failures must never crash the ingest path. Fail open so a
+    // transient D1 hiccup doesn't drop legitimate analytics.
+    log.error('trackHttp.rateLimit', e instanceof Error ? e : new Error(String(e)));
+    return true;
   }
-  fresh.push(now);
-  ipBuckets.set(ip, fresh);
-  return true;
 }
 
 function clientIp(request) {
@@ -115,7 +134,7 @@ export async function handleTrackRequest(request, env) {
   }
 
   const ip = clientIp(request);
-  if (!rateLimitOk(ip)) {
+  if (!(await rateLimitOk(env, ip))) {
     // 429 is fine — the rate limit applies to the IP, not the user. The body
     // is generic so an attacker cannot probe stored state through it.
     return new Response('rate limited', { status: 429 });
@@ -165,8 +184,8 @@ export async function handleTrackRequest(request, env) {
 
 export const __test = {
   rateLimitOk,
-  ipBuckets,
   // Whitelist the test surface so we don't accidentally export internals.
   ALLOWED_TRACK_EVENTS,
   MAX_PROPERTY_BYTES,
+  TRACK_RATE_LIMIT_WINDOW_SEC,
 };

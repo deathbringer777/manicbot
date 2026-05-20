@@ -325,6 +325,16 @@ export const tenantConfig = sqliteTable("tenant_config", {
   value: text("value"),
 }, (t) => [uniqueIndex("idx_tenant_config_key").on(t.tenantId, t.key)]);
 
+// Migration 0083 — platform-level key/value config (no tenant scope).
+// Currently powers /about (editable from God Mode); future uses include
+// marketing banners and feature-flag defaults.
+export const platformConfig = sqliteTable("platform_config", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
 export const blockedUsers = sqliteTable("blocked_users", {
   tenantId: text("tenant_id").notNull(),
   chatId: integer("chat_id").notNull(),

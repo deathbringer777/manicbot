@@ -60,10 +60,19 @@ const LANDING_ROUTES = [
  * @type {Array<{ loc: string; priority: string; changefreq: string }>}
  */
 const ADMIN_APP_PUBLIC_ROUTES = [
-  { loc: '/search', priority: '0.9', changefreq: 'daily'   },
-  { loc: '/blog',   priority: '0.8', changefreq: 'weekly'  },
-  { loc: '/help',   priority: '0.6', changefreq: 'monthly' },
-  { loc: '/rules',  priority: '0.3', changefreq: 'yearly'  },
+  { loc: '/search',      priority: '0.9', changefreq: 'daily'   },
+  { loc: '/blog',        priority: '0.8', changefreq: 'weekly'  },
+  { loc: '/pricing',     priority: '0.9', changefreq: 'monthly' },
+  { loc: '/about',       priority: '0.7', changefreq: 'monthly' },
+  { loc: '/comparisons', priority: '0.8', changefreq: 'monthly' },
+  // Individual comparison pages — added inline so the data file stays the
+  // single source of truth for available competitors.
+  { loc: '/comparisons/manicbot-vs-booksy',   priority: '0.7', changefreq: 'monthly' },
+  { loc: '/comparisons/manicbot-vs-fresha',   priority: '0.7', changefreq: 'monthly' },
+  { loc: '/comparisons/manicbot-vs-yclients', priority: '0.7', changefreq: 'monthly' },
+  { loc: '/comparisons/manicbot-vs-versum',   priority: '0.7', changefreq: 'monthly' },
+  { loc: '/help',        priority: '0.6', changefreq: 'monthly' },
+  { loc: '/rules',       priority: '0.3', changefreq: 'yearly'  },
 ];
 
 /**
@@ -112,13 +121,20 @@ const BLOG_ARTICLES = [
  * @type {Record<string, string>}
  */
 export const ROUTE_LASTMOD = {
-  '/':         '2026-04-01',
-  '/help':     '2026-03-15',
-  '/search':   '2026-05-01',
-  '/blog':     '2026-05-16',
-  '/privacy':  '2025-12-01',
-  '/terms':    '2025-12-01',
-  '/cookies':  '2026-04-15',
+  '/':            '2026-04-01',
+  '/help':        '2026-03-15',
+  '/search':      '2026-05-01',
+  '/blog':        '2026-05-16',
+  '/pricing':     '2026-05-20',
+  '/about':       '2026-05-20',
+  '/comparisons': '2026-05-20',
+  '/comparisons/manicbot-vs-booksy':   '2026-05-20',
+  '/comparisons/manicbot-vs-fresha':   '2026-05-20',
+  '/comparisons/manicbot-vs-yclients': '2026-05-20',
+  '/comparisons/manicbot-vs-versum':   '2026-05-20',
+  '/privacy':     '2025-12-01',
+  '/terms':       '2025-12-01',
+  '/cookies':     '2026-04-15',
 };
 
 /** XML-escape a URL (only ampersands actually need escaping in `<loc>`). */
@@ -226,11 +242,30 @@ export function renderSitemapXml(entries, base = DEFAULT_SITE_ORIGIN) {
  * (`/salons/{slug}`) are surfaced for every POPULAR_CITIES entry — this is
  * how Google discovers the new content-SEO route class.
  *
+ * SEO audit 2026-05-20 P0-4: when `opts.headOnly` is true (HEAD method) we
+ * MUST NOT touch D1. Bing/Meta crawlers + uptime monitors probe HEAD before
+ * GET; a D1 round-trip on every HEAD probe would burn budget and create a
+ * cross-tenant query on what should be a constant-time probe.
+ *
  * @param {{ DB?: D1Database | null }} env
  * @param {string} origin Request origin (so it works on preview hosts too).
+ * @param {{ headOnly?: boolean }} [opts]
  */
-export async function generateSitemapResponse(env, origin) {
+export async function generateSitemapResponse(env, origin, opts = {}) {
   const base = (origin || DEFAULT_SITE_ORIGIN).replace(/\/$/, '');
+
+  // HEAD short-circuit: empty body, same headers, no D1 read.
+  if (opts.headOnly) {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+        'X-Robots-Tag': 'noindex',
+      },
+    });
+  }
+
   const entries = buildStaticSitemapEntries();
   const today = todayIso();
 
@@ -254,11 +289,23 @@ export async function generateSitemapResponse(env, origin) {
         .all();
       for (const row of result.results || []) {
         if (!row.slug) continue;
+        const lastmod = coerceLastmodDate(row.updated_at) || today;
         entries.push({
           loc: `/salon/${row.slug}`,
           priority: '0.7',
           changefreq: 'weekly',
-          lastmod: coerceLastmodDate(row.updated_at) || today,
+          lastmod,
+        });
+        // SEO audit 2026-05-20 P1-7: surface the AI-chat URL too —
+        // it's a high-conversion landing target for Instagram bio links,
+        // TikTok bio, QR codes printed in the salon. Lower priority than
+        // the salon profile (0.7 vs 0.6) so Google still treats the
+        // profile as canonical.
+        entries.push({
+          loc: `/salon/${row.slug}/chat`,
+          priority: '0.6',
+          changefreq: 'weekly',
+          lastmod,
         });
       }
     } catch (err) {
@@ -354,11 +401,68 @@ export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
 }
 
 /**
+ * Top guides emitted in the llms.txt ## Top guides section.
+ * Keep slugs in sync with manicbot/admin-app/src/content/blog/articles.ts
+ * (the same list driving the sitemap blog entries above).
+ *
+ * Summaries are one factual sentence each — LLMs cite concise prose more
+ * reliably than marketing copy. English so the same llms.txt works for
+ * EN-language LLM crawlers without locale negotiation.
+ *
+ * @type {Array<{ slug: string; title: string; summary: string }>}
+ */
+const LLMS_TOP_GUIDES = [
+  { slug: 'channels-compared-2026',      title: 'Booking channels compared: Telegram vs Instagram vs WhatsApp vs web', summary: 'Which channel converts best for nail salons in 2026, with conversion-rate data and per-platform constraints.' },
+  { slug: 'ai-receptionist-247',         title: 'AI receptionist that books appointments 24/7',                          summary: 'How a multilingual AI receptionist handles the entire booking flow without staff intervention.' },
+  { slug: 'reduce-no-shows',             title: 'Reduce no-shows: deposits, reminders, follow-ups',                      summary: 'Concrete tactics nail salons use to push no-show rates below 5%, with reminder timing recipes.' },
+  { slug: 'automate-salon-booking',      title: 'Automate salon booking end-to-end',                                     summary: 'Step-by-step playbook for replacing manual DM bookings with a fully automated receptionist.' },
+  { slug: 'whatsapp-instagram-channels', title: 'WhatsApp Business + Instagram Direct for salon bookings',               summary: 'How to connect WhatsApp Business API and Instagram DM as booking channels, with template best practices.' },
+  { slug: 'google-calendar-sync',        title: 'Two-way Google Calendar sync',                                          summary: 'Setting up Google Calendar two-way sync so busy blocks and private events never collide with client bookings.' },
+  { slug: 'first-client-in-10-minutes',  title: 'First client booked in 10 minutes',                                     summary: 'Onboarding checklist that gets a new salon from sign-up to first paying client in under 10 minutes.' },
+  { slug: 'dynamic-pricing-salon',       title: 'Dynamic pricing for nail services',                                     summary: 'When and how to vary nail-service prices by master, day-of-week, and demand — with conversion data.' },
+  { slug: 'nail-trends-2026',            title: 'Nail trends 2026',                                                       summary: 'The trends nail salons should add to their service menu in 2026, with price and duration guidance.' },
+  { slug: 'nail-clients-survey-2026',    title: 'What nail clients actually want (2026 survey)',                          summary: 'Survey results from 2,000+ nail clients on booking channel preferences, reminder frequency, and deposit tolerance.' },
+];
+
+/**
+ * Comparison pages emitted in llms.txt ## Comparisons. The pages live at
+ * /comparisons/manicbot-vs-{competitor} — keep in sync with the route
+ * files in admin-app/src/app/(public)/comparisons/.
+ *
+ * @type {Array<{ slug: string; competitor: string; hook: string }>}
+ */
+const LLMS_COMPARISONS = [
+  { slug: 'manicbot-vs-booksy',   competitor: 'Booksy',   hook: '0% commission vs 30% Boost; Telegram + IG + WhatsApp booking vs Booksy app only; 45 PLN/mo vs ~145 PLN/mo.' },
+  { slug: 'manicbot-vs-yclients', competitor: 'Yclients', hook: 'EU-region D1 storage and Polish-first UX vs Russia-domiciled platform; native multi-channel inbox vs paid 3rd-party messenger integrations.' },
+  { slug: 'manicbot-vs-fresha',   competitor: 'Fresha',   hook: '0% commission forever vs 20% Fresha new-client fee; Telegram + AI receptionist vs marketplace funnel; flat 45-90 PLN/mo vs per-message WhatsApp fees.' },
+  { slug: 'manicbot-vs-versum',   competitor: 'Versum',   hook: 'Active product roadmap vs Booksy-owned legacy; modern conversational booking vs SMS+forms; transparent pricing vs quote-only.' },
+];
+
+/**
+ * Top FAQ pairs surfaced in llms.txt ## Frequently asked questions.
+ * Short, direct answers — LLMs cite the first 1–2 sentences as the answer
+ * when they hit a "how does ManicBot work" style query.
+ *
+ * @type {Array<{ q: string; a: string }>}
+ */
+const LLMS_FAQS = [
+  { q: 'What does ManicBot cost?', a: '45 PLN/mo (Start, 1 master), 60 PLN/mo (Pro, 5 masters + AI + Google Calendar), 90 PLN/mo (Max, unlimited). 14-day free trial. No per-booking commission. No transaction fees.' },
+  { q: 'Which booking channels does ManicBot support?', a: 'Telegram bot, Instagram Direct, WhatsApp Business, and an embeddable web chat widget. All four feed into one unified AI receptionist with a shared conversation history.' },
+  { q: 'Does ManicBot work for independent nail masters or only for salons?', a: 'Both. Independent masters create a personal tenant on the same 45/60/90 PLN plans and manage their own services and schedule without belonging to a salon.' },
+  { q: 'What languages does the AI receptionist speak?', a: 'Polish, Russian, Ukrainian, and English. The bot detects the client language from the first message and replies in the same language.' },
+  { q: 'Does ManicBot take a commission on bookings?', a: 'No. The price is the monthly subscription only. No per-booking fee, no per-message fee, no marketplace cut — the booking flows through your own Telegram/Instagram/WhatsApp account, not through ManicBot.' },
+  { q: 'How does the Google Calendar integration work?', a: 'Two-way sync. Busy blocks from the connected Google Calendar are honoured when the AI offers slots, and every confirmed appointment is mirrored back as a Calendar event the master can edit or move.' },
+];
+
+/**
  * Render `/llms.txt` per <https://llmstxt.org/>. Static markdown that LLM
  * crawlers consume for a one-page overview of the site. Goes alongside
  * sitemap.xml + robots.txt as a third "machine-readable site index" file.
  *
- * SEO audit 2026-05-20 P1-7.
+ * SEO audit 2026-05-20 P1-7 (initial) + 2026-05-20 P1-8 (expansion).
+ * Adds: ## Top guides (10 blog articles with one-line summaries),
+ * ## Comparisons (vs Booksy / Yclients / Fresha / Versum),
+ * ## Frequently asked questions (6 short Q&A pairs).
  *
  * @param {string} origin
  */
@@ -384,6 +488,8 @@ export function renderLlmsTxt(origin = DEFAULT_SITE_ORIGIN) {
     '',
     '## Key URLs',
     '',
+    `- [Pricing](${base}/pricing) — plan comparison, FAQ, billing terms`,
+    `- [About](${base}/about) — company info, founder, contact`,
     `- [Salon directory](${base}/search) — browse all public salons by city/service`,
     `- [Blog](${base}/blog) — guides on running a nail salon, AI receptionist, automation, channel strategy`,
     `- [Help center](${base}/help) — product documentation`,
@@ -394,11 +500,23 @@ export function renderLlmsTxt(origin = DEFAULT_SITE_ORIGIN) {
     '',
     ...POPULAR_CITIES.map((c) => `- [Nail salons in ${c}](${base}/salons/${citySlug(c)})`),
     '',
+    '## Top guides',
+    '',
+    ...LLMS_TOP_GUIDES.map((g) => `- [${g.title}](${base}/blog/${g.slug}) — ${g.summary}`),
+    '',
+    '## Comparisons',
+    '',
+    ...LLMS_COMPARISONS.map((c) => `- [ManicBot vs ${c.competitor}](${base}/comparisons/${c.slug}) — ${c.hook}`),
+    '',
+    '## Frequently asked questions',
+    '',
+    ...LLMS_FAQS.flatMap((f) => [`**${f.q}**`, '', f.a, '']),
     '## Programmatic surfaces',
     '',
     `- Salon profiles: ${base}/salon/{slug}`,
     `- City directory pages: ${base}/salons/{city-slug}`,
     `- Blog articles: ${base}/blog/{slug}`,
+    `- Comparison pages: ${base}/comparisons/manicbot-vs-{competitor}`,
     '',
     '## Channels',
     '',
@@ -407,6 +525,7 @@ export function renderLlmsTxt(origin = DEFAULT_SITE_ORIGIN) {
     '## Contact',
     '',
     `- Telegram: https://t.me/manicbot_com`,
+    `- Email: support@manicbot.com`,
     `- Website: ${base}`,
     '',
   ].join('\n');
@@ -415,10 +534,15 @@ export function renderLlmsTxt(origin = DEFAULT_SITE_ORIGIN) {
 /**
  * Build the `/llms.txt` HTTP response.
  *
+ * SEO audit 2026-05-20 P0-4: HEAD must return 200 with empty body and the
+ * same Content-Type / Cache-Control so Bing/Meta crawler + uptime probes
+ * don't see soft-404.
+ *
  * @param {string} origin
+ * @param {{ headOnly?: boolean }} [opts]
  */
-export function generateLlmsTxtResponse(origin) {
-  return new Response(renderLlmsTxt(origin), {
+export function generateLlmsTxtResponse(origin, opts = {}) {
+  return new Response(opts.headOnly ? null : renderLlmsTxt(origin), {
     status: 200,
     headers: {
       // text/markdown is correct per RFC 7763 but many older parsers expect
@@ -432,10 +556,14 @@ export function generateLlmsTxtResponse(origin) {
 
 /**
  * Build robots.txt response.
+ *
+ * SEO audit 2026-05-20 P0-4: HEAD support (see generateLlmsTxtResponse).
+ *
  * @param {string} origin
+ * @param {{ headOnly?: boolean }} [opts]
  */
-export function generateRobotsResponse(origin) {
-  return new Response(renderRobotsTxt(origin), {
+export function generateRobotsResponse(origin, opts = {}) {
+  return new Response(opts.headOnly ? null : renderRobotsTxt(origin), {
     status: 200,
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',

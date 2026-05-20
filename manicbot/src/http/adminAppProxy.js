@@ -30,6 +30,12 @@ export function isAdminAppPath(pathname) {
   // them to admin-app, NOT the landing SPA (which would 200-soft-404 them).
   if (pathname === '/salons' || pathname.startsWith('/salons/')) return true;
   if (pathname === '/search' || pathname.startsWith('/search/')) return true;
+  // SEO audit 2026-05-20 — new public pages (/pricing, /about, /comparisons/*)
+  // live in the admin-app under (public). Without these the Worker would
+  // fall through to the landing soft-404 guard (P0-7) and return 404.
+  if (pathname === '/pricing' || pathname.startsWith('/pricing/')) return true;
+  if (pathname === '/about' || pathname.startsWith('/about/')) return true;
+  if (pathname === '/comparisons' || pathname.startsWith('/comparisons/')) return true;
   const dash = [
     '/tenants',
     '/users',

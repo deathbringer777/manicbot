@@ -13,6 +13,95 @@ import { resolveLandingOrigin, isLandingPath, buildLandingFetchUrl } from '../ut
  *
  * No CSS class name selectors — works with plain CSS, Tailwind, CSS Modules.
  */
+/**
+ * SEO audit 2026-05-20 P0-5 — LLM-crawler visibility block.
+ *
+ * The landing is a Vite SPA — the upstream HTML body is `<div id="root">
+ * </div>`. Googlebot renders JS so it sees the page, but GPTBot, ClaudeBot,
+ * PerplexityBot, CCBot, Google-Extended (and almost every other LLM
+ * training crawler) do NOT execute JavaScript. Without this block they
+ * see a blank page and skip indexing.
+ *
+ * The injection has two layers, both shipped before `</body>`:
+ *
+ *   1. `<noscript>` block with the H1, USP, pricing table, top features,
+ *      and contact info in plain Polish text (primary market). LLM
+ *      crawlers read noscript content as part of plain HTML. JS-enabled
+ *      browsers never render it.
+ *
+ *   2. `<script type="application/ld+json">` with a
+ *      `SoftwareApplication` schema + three `Offer` rows. Crawlers that
+ *      ignore noscript content still pick this up; it also enables rich
+ *      SERP cards (price + rating chips).
+ *
+ * Keep the Polish copy short and factual — LLMs cite shorter passages
+ * more reliably than marketing prose. Do not embed JS or interactive
+ * widgets here; this block is for crawlers, not humans.
+ */
+const LLM_NOSCRIPT_BLOCK = `<noscript><div style="max-width:760px;margin:48px auto;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#1a1a1a;line-height:1.55">
+<h1 style="font-size:32px;margin:0 0 12px">ManicBot — AI-asystent rezerwacji dla salonów paznokci</h1>
+<p>Booking 24/7 przez Telegram, Instagram Direct, WhatsApp Business i widget na stronie. AI-recepcjonista rozmawia z klientami po polsku, rosyjsku, ukraińsku i angielsku. Od 45 PLN miesięcznie, <strong>0% prowizji</strong> od rezerwacji.</p>
+<h2 style="font-size:20px;margin:28px 0 8px">Cennik</h2>
+<table style="border-collapse:collapse;width:100%;margin-bottom:16px">
+<thead><tr><th align="left" style="padding:6px 0;border-bottom:1px solid #ddd">Plan</th><th align="left" style="padding:6px 0;border-bottom:1px solid #ddd">Cena</th><th align="left" style="padding:6px 0;border-bottom:1px solid #ddd">Co dostajesz</th></tr></thead>
+<tbody>
+<tr><td style="padding:6px 0">Start</td><td style="padding:6px 0">45 PLN / miesiąc</td><td style="padding:6px 0">1 mistrz, booking przez Telegram + IG + WhatsApp + web</td></tr>
+<tr><td style="padding:6px 0">Pro</td><td style="padding:6px 0">60 PLN / miesiąc</td><td style="padding:6px 0">5 mistrzów, asystent AI, synchronizacja Google Calendar</td></tr>
+<tr><td style="padding:6px 0">Max</td><td style="padding:6px 0">90 PLN / miesiąc</td><td style="padding:6px 0">Bez limitu mistrzów, white-label, wszystkie funkcje</td></tr>
+</tbody>
+</table>
+<p>14-dniowy okres próbny. Brak prowizji od rezerwacji. Brak opłaty za nowych klientów. Rozliczenie miesięczne przez Stripe.</p>
+<h2 style="font-size:20px;margin:28px 0 8px">Dlaczego ManicBot</h2>
+<ul>
+<li>Jeden AI-recepcjonista obsługuje wszystkie kanały (Telegram, Instagram, WhatsApp, web) w jednej skrzynce</li>
+<li>Działa 24/7 — odpowiada na pytania, dobiera termin, potwierdza rezerwację bez udziału właściciela</li>
+<li>Dwukierunkowa synchronizacja z Google Calendar — busy bloki nigdy nie kolidują z prywatnym kalendarzem</li>
+<li>Zero prowizji od rezerwacji — Booksy bierze 30% od nowych klientów, Fresha 20%, ManicBot 0% na zawsze</li>
+<li>Polski-pierwszy interfejs, GDPR-natywny, hostowany na Cloudflare w regionie EU</li>
+</ul>
+<h2 style="font-size:20px;margin:28px 0 8px">Najczęściej zadawane pytania</h2>
+<p><strong>Czy klient musi instalować nową aplikację?</strong> Nie — klient pisze do salonu w tym samym kanale, którego już używa (Telegram, Instagram DM, WhatsApp lub czat na stronie).</p>
+<p><strong>Czy AI sam potwierdza rezerwacje?</strong> Tak, jeśli właściciel włączył auto-confirm dla danego kanału. W innym przypadku rezerwacja czeka na ręczne potwierdzenie w panelu salonu.</p>
+<p><strong>Czy ManicBot obsługuje master niezależnego (bez salonu)?</strong> Tak — niezależny mistrz tworzy własne osobiste konto z tymi samymi planami 45/60/90 PLN.</p>
+<p><strong>Kontakt:</strong> <a href="mailto:support@manicbot.com">support@manicbot.com</a> · <a href="https://t.me/manicbot_com">t.me/manicbot_com</a></p>
+</div></noscript>`;
+
+const LLM_JSONLD_BLOCK = `<script type="application/ld+json">${JSON.stringify({
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://manicbot.com/#org",
+      "name": "ManicBot",
+      "url": "https://manicbot.com/",
+      "logo": "https://manicbot.com/manicbot-mark-ui.png",
+      "sameAs": ["https://t.me/manicbot_com"],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "support@manicbot.com",
+        "contactType": "customer support",
+        "availableLanguage": ["Polish", "Russian", "Ukrainian", "English"],
+      },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://manicbot.com/#software",
+      "name": "ManicBot",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://manicbot.com/",
+      "publisher": { "@id": "https://manicbot.com/#org" },
+      "description": "AI booking platform for nail salons. Multi-channel booking via Telegram, Instagram, WhatsApp and web. 0% commission, plans from 45 PLN/month.",
+      "inLanguage": ["pl", "ru", "uk", "en"],
+      "offers": [
+        { "@type": "Offer", "name": "Start", "price": "45", "priceCurrency": "PLN", "category": "Subscription" },
+        { "@type": "Offer", "name": "Pro", "price": "60", "priceCurrency": "PLN", "category": "Subscription" },
+        { "@type": "Offer", "name": "Max", "price": "90", "priceCurrency": "PLN", "category": "Subscription" },
+      ],
+    },
+  ],
+})}</script>`;
+
 const BRIDGE_SCRIPT = `<script>
 (function () {
   if (document.querySelector('script[src*="/embed/demo-chat.js"]')) return;
@@ -157,6 +246,16 @@ const BRIDGE_SCRIPT = `<script>
 <\/script>`;
 
 /**
+ * SEO audit 2026-05-20 P0-4 — HEAD support.
+ *
+ * Bing crawler + Meta crawler + uptime monitors (Pingdom, BetterStack,
+ * UptimeRobot) probe HEAD before GET. Before this fix, `tryLanding`
+ * rejected non-GET → worker.js fell through to 404 → soft-404 for crawlers
+ * and flapping uptime alerts. Now HEAD is proxied upstream the same way
+ * GET is, but the body is stripped so Workers don't pay egress for HEAD
+ * probes and the bridge-script injection is skipped (HEAD has no body to
+ * inject into).
+ *
  * @param {Request} request
  * @param {any} env
  * @param {URL} url
@@ -164,10 +263,35 @@ const BRIDGE_SCRIPT = `<script>
  * @returns {Promise<Response | null>}
  */
 export async function tryLanding(request, env, url, force) {
-  if (request.method !== 'GET' || (!force && !isLandingPath(url.pathname))) return null;
+  const isProbe = request.method === 'HEAD';
+  if (request.method !== 'GET' && !isProbe) return null;
+  if (!force && !isLandingPath(url.pathname)) return null;
+
   const landingOrigin = resolveLandingOrigin(env);
   const landingUrl = buildLandingFetchUrl(url.pathname, landingOrigin);
-  const res = await fetch(landingUrl, { headers: request.headers });
+  const res = await fetch(landingUrl, { method: request.method, headers: request.headers });
+
+  // SEO audit 2026-05-20 P0-7 — soft-404 guard.
+  //
+  // The Vite SPA serves `dist/index.html` for any unknown path, so the
+  // upstream returns HTTP 200 + the landing shell for `/pricing`,
+  // `/cennik`, `/cities`, `/pl/about` etc. Google treats these as
+  // soft-404s and penalises the entire domain. When `force=true` AND
+  // the path is NOT in the curated `isLandingPath` allowlist, override
+  // the response status to 404. Body is preserved (the SPA's branded
+  // 404 page still renders for humans); crawlers see 404 and stop.
+  const isAllowlisted = isLandingPath(url.pathname);
+  const shouldRewriteToSoft404 = force && !isAllowlisted && res.status === 200;
+
+  // HEAD path: pass through status + headers, no body, no bridge inject.
+  // Cloudflare Pages handles HEAD natively for static and SSR assets.
+  if (isProbe) {
+    return new Response(null, {
+      status: shouldRewriteToSoft404 ? 404 : res.status,
+      statusText: shouldRewriteToSoft404 ? 'Not Found' : res.statusText,
+      headers: res.headers,
+    });
+  }
 
   // Inject bridge into homepage HTML.
   const ct = res.headers.get('content-type') || '';
@@ -178,11 +302,18 @@ export async function tryLanding(request, env, url, force) {
     newHeaders.delete('content-length');
     // Never cache the injected HTML — bridge changes must propagate immediately.
     newHeaders.set('Cache-Control', 'no-cache');
+    // P0-5: prepend LLM noscript + JSON-LD before the bridge script so
+    // crawlers see SEO content even though the body is otherwise empty.
+    const SEO_BLOCK = LLM_NOSCRIPT_BLOCK + LLM_JSONLD_BLOCK;
     const injected = html.includes('</body>')
-      ? html.replace('</body>', BRIDGE_SCRIPT + '</body>')
-      : html + BRIDGE_SCRIPT;
+      ? html.replace('</body>', SEO_BLOCK + BRIDGE_SCRIPT + '</body>')
+      : html + SEO_BLOCK + BRIDGE_SCRIPT;
     return new Response(injected, { status: 200, headers: newHeaders });
   }
 
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers });
+  return new Response(res.body, {
+    status: shouldRewriteToSoft404 ? 404 : res.status,
+    statusText: shouldRewriteToSoft404 ? 'Not Found' : res.statusText,
+    headers: res.headers,
+  });
 }

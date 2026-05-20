@@ -133,3 +133,41 @@ export function shouldCacheTrpcPath(pathParam: string | null | undefined): boole
   if (procs.length === 0) return false;
   return procs.every((p) => PUBLIC_CACHEABLE_PROCEDURES.includes(p));
 }
+
+/**
+ * Minimal row shape used by the is_test visibility filter. Any row matching
+ * this contract can be passed to `isPublicTenantRow` / `filterOutTestTenants`.
+ */
+interface VisibilityRow {
+  slug: string | null;
+  publicActive: number;
+  isTest: number;
+}
+
+/**
+ * SEO audit 2026-05-20 P0-3 — visibility predicate for the public catalog.
+ *
+ * Returns true ONLY when the row is a real, indexable, linkable salon:
+ *   - `slug` is set (without one we can't link to `/salon/{slug}`)
+ *   - `publicActive = 1` (owner opted in to the directory)
+ *   - `isTest = 0` (not a seed / preview / demo row)
+ *
+ * The router applies the same predicates at the SQL layer via the WHERE
+ * clause (defence-in-depth). This helper is what tests pin so the contract
+ * is reviewable in one place.
+ */
+export function isPublicTenantRow(row: VisibilityRow): boolean {
+  if (row.slug == null || row.slug === "") return false;
+  if (row.publicActive !== 1) return false;
+  if (row.isTest !== 0) return false;
+  return true;
+}
+
+/**
+ * Filter a list of tenant rows down to those that may appear in the public
+ * catalog. Pure, order-preserving, non-mutating — safe to use in render
+ * paths and snapshot tests.
+ */
+export function filterOutTestTenants<T extends VisibilityRow>(rows: readonly T[]): T[] {
+  return rows.filter((r) => isPublicTenantRow(r));
+}

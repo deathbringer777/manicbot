@@ -302,20 +302,39 @@ export default {
     }
     const url = new URL(request.url);
     try {
-    // robots.txt — served BEFORE landing proxy so Workers own it
-    if (url.pathname === '/robots.txt' && request.method === 'GET') {
-      return addSecurityHeaders(generateRobotsResponse(url.origin));
+    // robots.txt — served BEFORE landing proxy so Workers own it.
+    // SEO audit 2026-05-20 P0-4: HEAD must return 200 (empty body, same
+    // headers) so Bing crawler + uptime monitors don't see soft-404.
+    if (
+      url.pathname === '/robots.txt' &&
+      (request.method === 'GET' || request.method === 'HEAD')
+    ) {
+      return addSecurityHeaders(
+        generateRobotsResponse(url.origin, { headOnly: request.method === 'HEAD' }),
+      );
     }
 
-    // sitemap.xml — dynamic (static entries + DB-driven salons)
-    if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
-      return addSecurityHeaders(await generateSitemapResponse(env, url.origin));
+    // sitemap.xml — dynamic (static entries + DB-driven salons).
+    // P0-4: HEAD short-circuits BEFORE the D1 read.
+    if (
+      url.pathname === '/sitemap.xml' &&
+      (request.method === 'GET' || request.method === 'HEAD')
+    ) {
+      return addSecurityHeaders(
+        await generateSitemapResponse(env, url.origin, { headOnly: request.method === 'HEAD' }),
+      );
     }
 
     // llms.txt — SEO audit 2026-05-20 P1-7. Served by the Worker before the
     // landing proxy so the static file from the Vite SPA never wins.
-    if (url.pathname === '/llms.txt' && request.method === 'GET') {
-      return addSecurityHeaders(generateLlmsTxtResponse(url.origin));
+    // P0-4: HEAD support.
+    if (
+      url.pathname === '/llms.txt' &&
+      (request.method === 'GET' || request.method === 'HEAD')
+    ) {
+      return addSecurityHeaders(
+        generateLlmsTxtResponse(url.origin, { headOnly: request.method === 'HEAD' }),
+      );
     }
 
     // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath).

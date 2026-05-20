@@ -45,6 +45,7 @@ import { notificationsRouter } from "~/server/api/routers/notifications";
 import { pushSubscriptionsRouter } from "~/server/api/routers/pushSubscriptions";
 import { metaOAuthRouter } from "~/server/api/routers/metaOAuth";
 import { ownerPairingRouter } from "~/server/api/routers/ownerPairing";
+import { blogRouter } from "~/server/api/routers/blog";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -93,6 +94,7 @@ export const appRouter = createTRPCRouter({
   pushSubscriptions: pushSubscriptionsRouter,
   metaOAuth: metaOAuthRouter,
   ownerPairing: ownerPairingRouter,
+  blog: blogRouter,
 });
 
 export type AppRouter = typeof appRouter;

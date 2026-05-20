@@ -7,11 +7,11 @@ import { Calendar, Tag } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import type { Lang } from "~/lib/i18n";
 import {
-  BLOG_ARTICLES,
   BLOG_CATEGORY_LABELS,
   BLOG_CATEGORY_ORDER,
   type BlogCategory,
 } from "~/content/blog/articles";
+import type { BlogArticle } from "~/content/blog/types";
 
 const UI: Record<
   Lang,
@@ -85,16 +85,16 @@ function readingMinutes(body: string): number {
   return Math.max(1, Math.round(words / 200));
 }
 
-export function BlogClient() {
+export function BlogClient({ articles: source }: { articles: BlogArticle[] }) {
   const { lang } = useLang();
   const copy = UI[lang] ?? UI.en;
   const [filter, setFilter] = useState<BlogCategory | null>(null);
 
   const articles = useMemo(() => {
-    const sorted = [...BLOG_ARTICLES].sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = [...source].sort((a, b) => b.date.localeCompare(a.date));
     if (!filter) return sorted;
     return sorted.filter((a) => a.categoryKey === filter);
-  }, [filter]);
+  }, [filter, source]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 pb-20 animate-fade-in">

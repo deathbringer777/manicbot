@@ -4,8 +4,11 @@ import type { Metadata } from "next";
 import { buildSeo, langToOgLocale, breadcrumbJsonLd } from "~/lib/seo";
 import { JsonLd } from "~/components/public/JsonLd";
 import { BLOG_ARTICLES } from "~/content/blog/articles";
+import type { BlogArticle } from "~/content/blog/types";
 import type { Lang } from "~/lib/i18n";
 import { BlogClient } from "./BlogClient";
+import { api } from "~/trpc/server";
+import { dtoToArticle } from "~/server/blog/dtoToArticle";
 
 type Props = { searchParams: Promise<{ lang?: string | string[] }> };
 
@@ -84,9 +87,27 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   });
 }
 
+/**
+ * Pull published posts from D1; fall back to the static `BLOG_ARTICLES`
+ * during the pre-seed window so the public site keeps rendering even before
+ * an admin clicks "Import default articles" on `/system/blog`.
+ *
+ * Any error from the tRPC call is swallowed and we degrade to the static
+ * articles so a transient D1 hiccup doesn't 500 the public page.
+ */
+async function loadArticles(): Promise<BlogArticle[]> {
+  try {
+    const dbPosts = await api.blog.listPublic({});
+    if (dbPosts.length > 0) return dbPosts.map(dtoToArticle);
+  } catch {
+    /* fall through */
+  }
+  return [...BLOG_ARTICLES];
+}
+
 /** ItemList of every published article — helps Google render rich blog listings. */
-function blogItemListJsonLd() {
-  const ordered = [...BLOG_ARTICLES].sort((a, b) => b.date.localeCompare(a.date));
+function blogItemListJsonLd(articles: BlogArticle[]) {
+  const ordered = [...articles].sort((a, b) => b.date.localeCompare(a.date));
   return {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -103,6 +124,7 @@ function blogItemListJsonLd() {
 export default async function BlogPage({ searchParams }: Props) {
   const { lang: langRaw } = await searchParams;
   const lang = pickLang(langRaw);
+  const articles = await loadArticles();
   return (
     <>
       <JsonLd
@@ -111,10 +133,10 @@ export default async function BlogPage({ searchParams }: Props) {
             { name: BREADCRUMB_HOME[lang], path: "/" },
             { name: BREADCRUMB_BLOG[lang], path: "/blog" },
           ]),
-          blogItemListJsonLd(),
+          blogItemListJsonLd(articles),
         ]}
       />
-      <BlogClient />
+      <BlogClient articles={articles} />
     </>
   );
 }

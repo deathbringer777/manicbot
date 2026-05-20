@@ -79,14 +79,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 }
 
-/**
- * Generate the param set at build time so the route is statically
- * pre-rendered for every popular city (edge runtime still requires the
- * param list to be enumerable).
- */
-export async function generateStaticParams() {
-  return POPULAR_CITIES.map((city) => ({ city: citySlug(city) }));
-}
+// Next.js edge runtime cannot coexist with generateStaticParams (the build
+// rejects this combination). The dynamic route is server-rendered on each
+// request via Cloudflare Pages; the allowlist enforcement happens inside
+// the page itself via `cityNameFromSlug(slug)` — unknown slugs hit
+// notFound(). This was the build failure that blocked PR #205's deploy.
 
 export default async function CityDirectoryPage({ params }: Props) {
   const { city: slug } = await params;

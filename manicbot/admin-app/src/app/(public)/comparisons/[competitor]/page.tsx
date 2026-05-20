@@ -24,9 +24,10 @@ function pickLang(raw: string | string[] | undefined): Lang {
   return "pl";
 }
 
-export async function generateStaticParams() {
-  return COMPARISONS.map((c) => ({ competitor: c.slug }));
-}
+// Build-time: Next.js edge runtime cannot use generateStaticParams. The
+// dynamic route is server-rendered on each request via Cloudflare Pages.
+// The allowlist is `findComparison(competitor)` — any slug NOT in the
+// COMPARISONS array hits `notFound()` and returns 404.
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const [{ competitor }, { lang: langRaw }] = await Promise.all([params, searchParams]);

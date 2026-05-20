@@ -3,6 +3,7 @@ export const runtime = "edge";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BLOG_ARTICLES, CATEGORY_KEYWORDS, pickRelated } from "~/content/blog/articles";
+import type { BlogArticle } from "~/content/blog/types";
 import { ArticleClient } from "./ArticleClient";
 import { JsonLd } from "~/components/public/JsonLd";
 import {
@@ -14,6 +15,8 @@ import {
 } from "~/lib/seo";
 import { blogFaqPageJsonLd, resolveBlogFaqs } from "~/content/blog/blogFaqs";
 import type { Lang } from "~/lib/i18n";
+import { api } from "~/trpc/server";
+import { dtoToArticle } from "~/server/blog/dtoToArticle";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -34,12 +37,40 @@ function pickLang(raw: string | string[] | undefined): Lang {
 const BREADCRUMB_HOME: Record<Lang, string> = { ru: "Главная", ua: "Головна", en: "Home", pl: "Strona główna" };
 const BREADCRUMB_BLOG: Record<Lang, string> = { ru: "Блог", ua: "Блог", en: "Blog", pl: "Blog" };
 
+/**
+ * Look up the article by slug:
+ *   1. Try D1 (`blog.getPublic` returns only `status='published'` rows).
+ *   2. Fall back to the legacy static `BLOG_ARTICLES` so a slug published
+ *      pre-seed keeps resolving.
+ * Returns the article along with the full list (for the `pickRelated` helper).
+ */
+async function loadArticleBundle(slug: string): Promise<{
+  article: BlogArticle | null;
+  all: BlogArticle[];
+}> {
+  let dbList: BlogArticle[] = [];
+  try {
+    const rows = await api.blog.listPublic({});
+    if (rows.length > 0) dbList = rows.map(dtoToArticle);
+  } catch {
+    /* fall through to static */
+  }
+  if (dbList.length > 0) {
+    const article = dbList.find((a) => a.slug === slug) ?? null;
+    if (article) return { article, all: dbList };
+    // DB has posts but not this slug — still try static for safety.
+  }
+  const staticArticle = BLOG_ARTICLES.find((a) => a.slug === slug) ?? null;
+  const all = dbList.length > 0 ? dbList : [...BLOG_ARTICLES];
+  return { article: staticArticle ?? null, all };
+}
+
 export async function generateMetadata({
   params,
   searchParams,
 }: Props): Promise<Metadata> {
   const [{ slug }, { lang: langRaw }] = await Promise.all([params, searchParams]);
-  const article = BLOG_ARTICLES.find((a) => a.slug === slug);
+  const { article } = await loadArticleBundle(slug);
   if (!article) return { title: "404" };
   const lang = pickLang(langRaw);
   const title = article.titles[lang] ?? article.titles.en;
@@ -66,15 +97,12 @@ export async function generateMetadata({
 
 export default async function ArticlePage({ params, searchParams }: Props) {
   const [{ slug }, { lang: langRaw }] = await Promise.all([params, searchParams]);
-  const article = BLOG_ARTICLES.find((a) => a.slug === slug);
+  const { article, all } = await loadArticleBundle(slug);
   if (!article) notFound();
   const lang = pickLang(langRaw);
   const title = article.titles[lang] ?? article.titles.en;
   const description = article.excerpts[lang] ?? article.excerpts.en;
-  // The `pickRelated` helper is independent of language, so we can compute
-  // related slugs in metadata generation if needed later. Currently we surface
-  // them client-side in ArticleClient.
-  void pickRelated;
+  const related = pickRelated(article, all);
   // SEO audit 2026-05-20 P1-9 — FAQ schema for the article.
   // Each post emits a FAQPage payload + a visible "Quick answers" block
   // at the end (rendered below). Together they unlock the FAQ rich-result
@@ -86,7 +114,6 @@ export default async function ArticlePage({ params, searchParams }: Props) {
     ua: "Найчастіші запитання",
     en: "Frequently asked questions",
   };
-
   return (
     <>
       <JsonLd
@@ -107,7 +134,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
           blogFaqPageJsonLd(article.slug, lang),
         ]}
       />
-      <ArticleClient slug={slug} />
+      <ArticleClient article={article} related={related} />
       {/* Visible "Quick answers" block — server-rendered so crawlers
           see the FAQ text directly under the article body. Matches
           the JSON-LD payload above, satisfying Google's "FAQ must be

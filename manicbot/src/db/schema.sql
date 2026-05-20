@@ -1567,3 +1567,36 @@ CREATE TABLE IF NOT EXISTS platform_broadcasts (
 );
 CREATE INDEX IF NOT EXISTS idx_platform_broadcasts_created
   ON platform_broadcasts(created_at);
+
+-- 0083: blog_posts — self-hosted marketing blog CMS (system_admin only).
+-- See migrations/0083_blog_posts.sql for column rationale.
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id                       TEXT PRIMARY KEY,
+  slug                     TEXT NOT NULL,
+  status                   TEXT NOT NULL DEFAULT 'draft',
+  category                 TEXT NOT NULL DEFAULT 'tips',
+  cover_url                TEXT,
+  cover_alt_json           TEXT,
+  cover_credit             TEXT,
+  titles_json              TEXT NOT NULL DEFAULT '{}',
+  excerpts_json            TEXT NOT NULL DEFAULT '{}',
+  bodies_json              TEXT NOT NULL DEFAULT '{}',
+  keywords_json            TEXT,
+  related_slugs_json       TEXT,
+  published_date           TEXT,
+  updated_date             TEXT,
+  created_at               INTEGER NOT NULL,
+  updated_at               INTEGER NOT NULL,
+  published_at             INTEGER,
+  archived_at              INTEGER,
+  created_by_web_user_id   TEXT,
+  updated_by_web_user_id   TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_posts_slug
+  ON blog_posts(slug);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_status_pubdate
+  ON blog_posts(status, published_date DESC);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_status_created
+  ON blog_posts(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_category_status
+  ON blog_posts(category, status);

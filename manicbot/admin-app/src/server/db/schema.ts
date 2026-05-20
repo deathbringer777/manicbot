@@ -1579,3 +1579,41 @@ export const platformBroadcasts = sqliteTable("platform_broadcasts", {
 }, (t) => [
   index("idx_platform_broadcasts_created").on(t.createdAt),
 ]);
+
+// 0083: self-hosted marketing blog CMS. Drives admin CRUD at /system/blog +
+// public /blog and /blog/[slug] pages. Multilingual content stored as JSON
+// blobs keyed by Lang to match the existing static `BlogArticle` shape so
+// the public renderer can be reused 1:1 (titlesJson → titles, etc.).
+// status ∈ draft | published | archived; slug is globally unique.
+export const blogPosts = sqliteTable("blog_posts", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull(),
+  status: text("status").notNull().default("draft"),
+  category: text("category").notNull().default("tips"),
+
+  coverUrl: text("cover_url"),
+  coverAltJson: text("cover_alt_json"),
+  coverCredit: text("cover_credit"),
+
+  titlesJson: text("titles_json").notNull().default("{}"),
+  excerptsJson: text("excerpts_json").notNull().default("{}"),
+  bodiesJson: text("bodies_json").notNull().default("{}"),
+  keywordsJson: text("keywords_json"),
+  relatedSlugsJson: text("related_slugs_json"),
+
+  publishedDate: text("published_date"),
+  updatedDate: text("updated_date"),
+
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  publishedAt: integer("published_at"),
+  archivedAt: integer("archived_at"),
+
+  createdByWebUserId: text("created_by_web_user_id"),
+  updatedByWebUserId: text("updated_by_web_user_id"),
+}, (t) => [
+  uniqueIndex("idx_blog_posts_slug").on(t.slug),
+  index("idx_blog_posts_status_pubdate").on(t.status, t.publishedDate),
+  index("idx_blog_posts_status_created").on(t.status, t.createdAt),
+  index("idx_blog_posts_category_status").on(t.category, t.status),
+]);

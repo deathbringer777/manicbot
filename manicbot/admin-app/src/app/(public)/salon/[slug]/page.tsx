@@ -79,7 +79,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       "салон красоты",
     ],
   });
-  if (profile.publicActive !== 1) {
+  // SEO audit 2026-05-20 P1 follow-up: noindex non-public salons AND
+  // is_test=1 salons. GSC reported 10+ test-tenant `/salon/*` URLs in
+  // the "Discovered – currently not indexed" bucket — without the
+  // noindex hint, Google would eventually crawl them and either
+  // index test data or burn crawl budget on profiles that we don't
+  // want surfaced.
+  if (profile.publicActive !== 1 || profile.isTest) {
     seo.robots = { index: false, follow: false };
   }
   return seo;

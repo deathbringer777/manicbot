@@ -72,31 +72,29 @@ describe("salon page description fallback (P1-4)", () => {
 });
 
 // Replication of the inline FAQ-JSON-LD generation decision.
-function shouldEmitFaq(
-  publicActive: number,
-  services: Array<{ price?: number | null }> | null | undefined,
-): boolean {
-  if (publicActive !== 1) return false;
-  if (!services) return false;
-  return services.some((s) => typeof s.price === "number" && s.price > 0);
+//
+// SEO audit 2026-05-20 P1-6: gate relaxed. Previously emission required
+// `hasPricedServices` because an earlier draft included an "ile kosztuje?"
+// answer that needed a service price to be honest. The shipped 3
+// questions (booking flow / 24-7 / supported languages) are all service-
+// agnostic — they hold for every public salon. Only `publicActive=1`
+// gates emission now.
+function shouldEmitFaq(publicActive: number): boolean {
+  return publicActive === 1;
 }
 
-describe("salon page FAQ JSON-LD gating (P1-9)", () => {
+describe("salon page FAQ JSON-LD gating (P1-6 relaxation)", () => {
   it("does NOT emit FAQ for unpublished salons", () => {
-    expect(shouldEmitFaq(0, [{ price: 100 }])).toBe(false);
+    expect(shouldEmitFaq(0)).toBe(false);
   });
 
-  it("does NOT emit FAQ when services array is empty", () => {
-    expect(shouldEmitFaq(1, [])).toBe(false);
-    expect(shouldEmitFaq(1, null)).toBe(false);
+  it("emits FAQ for published salons with NO priced services (relaxed gate)", () => {
+    // Previously this case was false (the P1-9 gate). Now true — generic
+    // FAQ questions (booking / 24-7 / languages) don't depend on prices.
+    expect(shouldEmitFaq(1)).toBe(true);
   });
 
-  it("does NOT emit FAQ when no service has a real price", () => {
-    expect(shouldEmitFaq(1, [{ price: 0 }, { price: null }])).toBe(false);
-  });
-
-  it("emits FAQ when at least one priced service exists", () => {
-    expect(shouldEmitFaq(1, [{ price: 60 }])).toBe(true);
-    expect(shouldEmitFaq(1, [{ price: null }, { price: 120 }])).toBe(true);
+  it("emits FAQ for published salons regardless of service catalog", () => {
+    expect(shouldEmitFaq(1)).toBe(true);
   });
 });

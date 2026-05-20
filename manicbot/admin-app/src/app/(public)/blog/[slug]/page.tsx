@@ -12,6 +12,7 @@ import {
   breadcrumbJsonLd,
   SITE_NAME,
 } from "~/lib/seo";
+import { blogFaqPageJsonLd, resolveBlogFaqs } from "~/content/blog/blogFaqs";
 import type { Lang } from "~/lib/i18n";
 
 type Props = {
@@ -74,6 +75,18 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   // related slugs in metadata generation if needed later. Currently we surface
   // them client-side in ArticleClient.
   void pickRelated;
+  // SEO audit 2026-05-20 P1-9 — FAQ schema for the article.
+  // Each post emits a FAQPage payload + a visible "Quick answers" block
+  // at the end (rendered below). Together they unlock the FAQ rich-result
+  // and give AEO crawlers a topic-anchored snippet to extract.
+  const faqs = resolveBlogFaqs(article.slug, lang);
+  const QUICK_ANSWERS_HEADING: Record<Lang, string> = {
+    pl: "Najczęściej zadawane pytania",
+    ru: "Часто задаваемые вопросы",
+    ua: "Найчастіші запитання",
+    en: "Frequently asked questions",
+  };
+
   return (
     <>
       <JsonLd
@@ -91,9 +104,41 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             { name: BREADCRUMB_BLOG[lang], path: "/blog" },
             { name: title, path: `/blog/${article.slug}` },
           ]),
+          blogFaqPageJsonLd(article.slug, lang),
         ]}
       />
       <ArticleClient slug={slug} />
+      {/* Visible "Quick answers" block — server-rendered so crawlers
+          see the FAQ text directly under the article body. Matches
+          the JSON-LD payload above, satisfying Google's "FAQ must be
+          visible on page" rich-result requirement. */}
+      <section
+        className="mx-auto max-w-3xl px-4 py-12 border-t border-slate-200 dark:border-slate-800"
+        aria-labelledby="article-faq-heading"
+        data-blog-faq
+      >
+        <h2
+          id="article-faq-heading"
+          className="text-2xl font-bold text-slate-900 dark:text-white mb-6"
+        >
+          {QUICK_ANSWERS_HEADING[lang]}
+        </h2>
+        <div className="space-y-6">
+          {faqs.map((faq, idx) => (
+            <details
+              key={idx}
+              className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4"
+            >
+              <summary className="cursor-pointer font-semibold text-slate-900 dark:text-white">
+                {faq.q}
+              </summary>
+              <p className="mt-3 text-slate-600 dark:text-slate-300 leading-relaxed">
+                {faq.a}
+              </p>
+            </details>
+          ))}
+        </div>
+      </section>
     </>
   );
 }

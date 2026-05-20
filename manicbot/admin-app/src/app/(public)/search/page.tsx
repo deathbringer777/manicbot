@@ -83,6 +83,13 @@ export default async function SearchPage({ searchParams }: Props) {
       <noscript>
         <div className="mx-auto max-w-6xl px-4 py-8">
           <h2>Каталог nail-салонов</h2>
+          {/* SEO audit 2026-05-20 P1-8 — featured-snippet intro.
+              Google extracts featured snippets from the first 40-60 words
+              after the heading. Without this, /search jumped from H2
+              straight to the salon list — nothing to extract. */}
+          <p>
+            Znajdź najlepszy salon paznokci w Polsce. Katalog salonów manicure i pedicure z rezerwacją online przez Telegram, Instagram, WhatsApp i widget na stronie. Wszystkie salony w katalogu obsługiwane są przez AI-recepcjonistę, który przyjmuje rezerwacje 24 godziny na dobę w czterech językach.
+          </p>
           {city && <p>Город: {city}</p>}
           {items.length === 0 ? (
             <p>Салоны не найдены.</p>
@@ -109,6 +116,16 @@ export default async function SearchPage({ searchParams }: Props) {
           </li>
         ))}
       </ul>
+      {/* SEO audit 2026-05-20 P1-8 — featured-snippet intro. Server-
+          rendered so it's in source HTML for crawlers + LLM bots. Sits
+          ABOVE the client-side filter UI so Google extracts the first
+          40-60 words after the H1 from here, not from the deep page
+          structure. Polish primary (the platform operates in PL); the
+          client-side H1+subtitle handles per-language rendering via i18n
+          for human visitors. */}
+      <p className="sr-only" aria-hidden="true" data-ssr-intro>
+        Znajdź najlepszy salon paznokci w Polsce. Katalog salonów manicure i pedicure z rezerwacją online przez Telegram, Instagram, WhatsApp i widget na stronie. Каталог nail-салонов и независимых мастеров маникюра по городам Польши с онлайн-записью 24/7 через мессенджеры. Wszystkie salony w katalogu obsługiwane są przez AI-recepcjonistę, który przyjmuje rezerwacje 24 godziny na dobę w czterech językach (polski, rosyjski, ukraiński, angielski).
+      </p>
       <SearchClient />
     </>
   );

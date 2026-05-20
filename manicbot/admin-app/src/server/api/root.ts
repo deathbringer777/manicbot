@@ -45,6 +45,7 @@ import { notificationsRouter } from "~/server/api/routers/notifications";
 import { pushSubscriptionsRouter } from "~/server/api/routers/pushSubscriptions";
 import { metaOAuthRouter } from "~/server/api/routers/metaOAuth";
 import { ownerPairingRouter } from "~/server/api/routers/ownerPairing";
+import { platformConfigRouter } from "~/server/api/routers/platformConfig";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -55,6 +56,7 @@ export const appRouter = createTRPCRouter({
   conversations: conversationsRouter,
   googleCalendar: googleCalendarRouter,
   system: systemRouter,
+  platformConfig: platformConfigRouter,
   metrics: metricsRouter,
   users: usersRouter,
   billing: billingRouter,

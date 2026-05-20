@@ -121,12 +121,15 @@ export default async function SalonProfilePage({ params, searchParams }: Props) 
     }
   }
 
-  // SEO audit 2026-05-20 P1-9 — FAQ schema. Generic top-buyer questions
-  // localized to the salon's likely audience. Only emitted when the salon
-  // is public AND has services priced (so the "ile kosztuje" answer is honest).
-  const hasPricedServices = (profile.services ?? []).some((s) => typeof s.price === "number" && s.price > 0);
+  // SEO audit 2026-05-20 P1-6 — FAQ schema. Generic top-buyer questions
+  // localized to the salon's likely audience. The 3 questions are all
+  // service-agnostic (booking flow, 24/7 availability, supported
+  // languages) — they hold for every salon regardless of priced services.
+  // Previously gated on `hasPricedServices` which excluded the majority
+  // of seed-stage salons from FAQ rich results. Only `publicActive=1`
+  // remains as the gate.
   const isPl = ogLocaleForCity(profile.city) === "pl_PL";
-  const faqJsonLd = hasPricedServices && profile.publicActive === 1
+  const faqJsonLd = profile.publicActive === 1
     ? {
         "@context": "https://schema.org",
         "@type": "FAQPage",

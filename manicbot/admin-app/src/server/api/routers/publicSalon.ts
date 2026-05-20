@@ -301,9 +301,15 @@ export const publicSalonRouter = createTRPCRouter({
       // Require slug — salons without a slug cannot be opened via /salon/[slug],
       // so clicking their card would lead to "#". Hide them from the directory
       // until an owner sets one (also hides half-configured personal tenants).
+      //
+      // SEO audit 2026-05-20 P0-3: `is_test = 0` is enforced at the SQL layer
+      // here AND at the projection layer via `filterOutTestTenants`. Seeded
+      // test accounts (TEST_ACCOUNTS.md) + legacy demo / preview rows must
+      // never reach Google or the public directory.
       const conditions: any[] = [
         eq(tenants.publicActive, 1),
         isNotNull(tenants.slug),
+        eq(tenants.isTest, 0),
       ];
 
       // When we have a free-text query/city we drive the SELECT via an
@@ -411,10 +417,12 @@ export const publicSalonRouter = createTRPCRouter({
       const { query, city, page, limit } = input;
       const offset = (page - 1) * limit;
 
+      // SEO audit 2026-05-20 P0-3: same is_test=0 gate as `search` above.
       const conditions: any[] = [
         eq(tenants.isPersonal, 1),
         eq(tenants.publicActive, 1),
         isNotNull(tenants.slug),
+        eq(tenants.isTest, 0),
       ];
       if (city) {
         conditions.push(or(like(tenants.city, `%${city}%`), searchLike(tenants.searchText, city))!);
@@ -486,6 +494,9 @@ export const publicSalonRouter = createTRPCRouter({
         return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
       }
 
+      // SEO audit 2026-05-20 P0-3: autocomplete must not surface test rows
+      // either (was the original leak vector — Google indexed autocomplete-
+      // discovered URLs on the salon-search dropdown).
       const rows = await ctx.db
         .select({
           slug: tenants.slug,
@@ -498,7 +509,7 @@ export const publicSalonRouter = createTRPCRouter({
           sql`tenant_fts`,
           sql`tenant_fts.tenant_id = ${tenants.id} AND tenant_fts MATCH ${matchExpr}`,
         )
-        .where(eq(tenants.publicActive, 1))
+        .where(and(eq(tenants.publicActive, 1), eq(tenants.isTest, 0)))
         .limit(5);
 
       const salons = rows.map((t) => {

@@ -318,6 +318,30 @@ describe('seo', () => {
       expect(body).toContain('/salon/real-salon-b');
     });
 
+    // SEO audit 2026-05-20 P1-7 — /salon/{slug}/chat URLs in sitemap.
+    // Each salon profile carries a paired chat URL used as the landing
+    // target for IG bio, TikTok bio, QR codes printed in the salon.
+    it('emits a paired /salon/{slug}/chat entry for every salon', async () => {
+      const mockDb = {
+        prepare: () => ({
+          all: async () => ({
+            results: [
+              { slug: 'studio-paznokci-warsaw', updated_at: 1774796426 },
+            ],
+          }),
+        }),
+      };
+      const res = await generateSitemapResponse({ DB: mockDb }, 'https://manicbot.com');
+      const body = await res.text();
+      expect(body).toContain('/salon/studio-paznokci-warsaw');
+      expect(body).toContain('/salon/studio-paznokci-warsaw/chat');
+      // Chat URL is one notch below the salon profile in priority so the
+      // profile remains the canonical landing.
+      const chatBlock = body.match(/<url>[^]*?\/salon\/studio-paznokci-warsaw\/chat[^]*?<\/url>/)?.[0];
+      expect(chatBlock).toBeTruthy();
+      expect(chatBlock).toContain('<priority>0.6</priority>');
+    });
+
     // SEO audit 2026-05-20 P1-1 — programmatic city directory pages.
     // The sitemap must surface `/salons/{slug}` so Google can discover them.
     it('includes programmatic city pages at /salons/{city-slug}', async () => {
@@ -439,6 +463,123 @@ describe('seo', () => {
 
     it('strips leading/trailing dashes and collapses whitespace', () => {
       expect(citySlug('  Hello World  ')).toBe('hello-world');
+    });
+  });
+
+  // SEO audit 2026-05-20 P1-7 — llms.txt expansion (top guides, comparisons, FAQ).
+  describe('renderLlmsTxt (P1-7 expansion)', () => {
+    const txt = renderLlmsTxt('https://manicbot.com');
+
+    it('still contains the original sections', () => {
+      expect(txt).toContain('# ManicBot');
+      expect(txt).toContain('## About');
+      expect(txt).toContain('## Key URLs');
+      expect(txt).toContain('## City directories');
+      expect(txt).toContain('## Channels');
+      expect(txt).toContain('## Contact');
+    });
+
+    it('emits ## Top guides with deep links to all 10 blog articles', () => {
+      expect(txt).toContain('## Top guides');
+      expect(txt).toContain('/blog/channels-compared-2026');
+      expect(txt).toContain('/blog/ai-receptionist-247');
+      expect(txt).toContain('/blog/reduce-no-shows');
+      expect(txt).toContain('/blog/automate-salon-booking');
+      expect(txt).toContain('/blog/whatsapp-instagram-channels');
+      expect(txt).toContain('/blog/google-calendar-sync');
+      expect(txt).toContain('/blog/first-client-in-10-minutes');
+      expect(txt).toContain('/blog/dynamic-pricing-salon');
+      expect(txt).toContain('/blog/nail-trends-2026');
+      expect(txt).toContain('/blog/nail-clients-survey-2026');
+    });
+
+    it('emits ## Comparisons with all 4 competitor pages', () => {
+      expect(txt).toContain('## Comparisons');
+      expect(txt).toContain('/comparisons/manicbot-vs-booksy');
+      expect(txt).toContain('/comparisons/manicbot-vs-yclients');
+      expect(txt).toContain('/comparisons/manicbot-vs-fresha');
+      expect(txt).toContain('/comparisons/manicbot-vs-versum');
+    });
+
+    it('emits ## Frequently asked questions with at least 6 Q&A pairs', () => {
+      expect(txt).toContain('## Frequently asked questions');
+      // Each FAQ is rendered as `**Question**` markdown — count the pairs.
+      const questionCount = (txt.match(/\*\*[^*]+\?\*\*/g) || []).length;
+      expect(questionCount).toBeGreaterThanOrEqual(6);
+    });
+
+    it('links to /pricing and /about under ## Key URLs (forward-looking)', () => {
+      expect(txt).toContain('(https://manicbot.com/pricing)');
+      expect(txt).toContain('(https://manicbot.com/about)');
+    });
+  });
+
+  // SEO audit 2026-05-20 P0-4 — HEAD vs GET asymmetry.
+  //
+  // Bing crawler probes HEAD before GET; Meta crawler also probes HEAD
+  // (see comment in legalPagesHttp.js). Before this fix, HEAD on
+  // /robots.txt, /sitemap.xml, /llms.txt fell through the GET-only
+  // branch in worker.js, hit the landing proxy, and returned 404 — soft-404
+  // for crawlers + flapping uptime monitors.
+  //
+  // The generators now accept `{ headOnly: true }` and return 200 with
+  // empty body + the same headers (Content-Type, Cache-Control). Worker.js
+  // detects HEAD at the route and passes headOnly through.
+  describe('HEAD method support (P0-4)', () => {
+    describe('generateRobotsResponse', () => {
+      it('returns 200 with empty body and same Content-Type on HEAD', async () => {
+        const res = generateRobotsResponse('https://manicbot.com', { headOnly: true });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toMatch(/text\/plain/);
+        expect(res.headers.get('cache-control')).toContain('max-age=86400');
+        const text = await res.text();
+        expect(text).toBe('');
+      });
+
+      it('GET path is unchanged (renders the body)', async () => {
+        const res = generateRobotsResponse('https://manicbot.com');
+        expect(res.status).toBe(200);
+        const text = await res.text();
+        expect(text).toContain('User-agent: *');
+        expect(text).toContain('Sitemap: https://manicbot.com/sitemap.xml');
+      });
+    });
+
+    describe('generateSitemapResponse', () => {
+      it('returns 200 with empty body and XML content-type on HEAD', async () => {
+        const mockDb = {
+          prepare: () => ({ all: async () => ({ results: [] }) }),
+        };
+        const res = await generateSitemapResponse({ DB: mockDb }, 'https://manicbot.com', { headOnly: true });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toMatch(/application\/xml/);
+        expect(res.headers.get('cache-control')).toContain('max-age=3600');
+        const text = await res.text();
+        expect(text).toBe('');
+      });
+
+      it('HEAD skips the DB call (cheap probes must not hit D1)', async () => {
+        let dbCalled = false;
+        const mockDb = {
+          prepare: () => {
+            dbCalled = true;
+            return { all: async () => ({ results: [] }) };
+          },
+        };
+        await generateSitemapResponse({ DB: mockDb }, 'https://manicbot.com', { headOnly: true });
+        expect(dbCalled).toBe(false);
+      });
+    });
+
+    describe('generateLlmsTxtResponse', () => {
+      it('returns 200 with empty body and markdown content-type on HEAD', async () => {
+        const res = generateLlmsTxtResponse('https://manicbot.com', { headOnly: true });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toMatch(/text\/markdown/);
+        expect(res.headers.get('cache-control')).toContain('max-age=86400');
+        const text = await res.text();
+        expect(text).toBe('');
+      });
     });
   });
 });

@@ -72,6 +72,18 @@ function pickLang(raw: string | string[] | undefined): Lang {
 const BREADCRUMB_HOME: Record<Lang, string> = { ru: "Главная", ua: "Головна", en: "Home", pl: "Strona główna" };
 const BREADCRUMB_BLOG: Record<Lang, string> = { ru: "Блог", ua: "Блог", en: "Blog", pl: "Blog" };
 
+// SEO audit 2026-05-20 P1-8 — featured-snippet intro per locale.
+// Google extracts featured snippets from the first 40-60 words after the
+// page heading. Previously /blog rendered only JSON-LD + the client UI,
+// leaving crawlers with no extractable prose. The intro is server-rendered
+// and visible (not sr-only) so it's the strongest possible snippet anchor.
+const BLOG_INTROS: Record<Lang, string> = {
+  pl: "Praktyczny blog dla właścicieli salonów paznokci. Co tydzień nowe artykuły o automatyzacji rezerwacji, AI-recepcjoniście, redukcji no-show, dynamicznym cenniku i kanałach komunikacji (Telegram, Instagram, WhatsApp). Wszystkie poradniki napisane przez praktyków, którzy prowadzili lub obsługują salony beauty.",
+  ru: "Практический блог для владельцев nail-салонов и независимых мастеров. Каждую неделю — статьи об автоматизации записи, AI-ресепшене, борьбе с no-show, динамическом ценообразовании и каналах коммуникации (Telegram, Instagram, WhatsApp). Все материалы пишут практики, которые ведут или обслуживают beauty-салоны.",
+  ua: "Практичний блог для власників nail-салонів та незалежних майстрів. Щотижня — статті про автоматизацію запису, AI-ресепшен, боротьбу з no-show, динамічне ціноутворення та канали комунікації (Telegram, Instagram, WhatsApp). Всі матеріали пишуть практики, які ведуть або обслуговують beauty-салони.",
+  en: "Practical blog for nail salon owners and independent masters. Every week — articles on booking automation, AI receptionist, fighting no-shows, dynamic pricing, and communication channels (Telegram, Instagram, WhatsApp). Every guide written by practitioners who run or serve beauty salons.",
+};
+
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { lang: langRaw } = await searchParams;
   const lang = pickLang(langRaw);
@@ -114,6 +126,15 @@ export default async function BlogPage({ searchParams }: Props) {
           blogItemListJsonLd(),
         ]}
       />
+      {/* SEO audit 2026-05-20 P1-8 — SSR intro paragraph for featured snippets.
+          Visible to humans AND crawlers without JS. Sits above BlogClient so
+          Google extracts from this prose (40-60 words after the heading). */}
+      <p
+        className="mx-auto max-w-3xl px-4 pt-6 pb-2 text-slate-600 dark:text-slate-300"
+        data-ssr-intro
+      >
+        {BLOG_INTROS[lang]}
+      </p>
       <BlogClient />
     </>
   );

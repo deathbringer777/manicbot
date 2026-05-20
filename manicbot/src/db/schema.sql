@@ -235,6 +235,18 @@ CREATE TABLE IF NOT EXISTS tenant_config (
   PRIMARY KEY (tenant_id, key)
 );
 
+-- Platform-level key/value config (migration 0083). One row per setting,
+-- no tenant scope. Currently powers the /about page (editable from God
+-- Mode); future uses include marketing banners + feature-flag defaults.
+CREATE TABLE IF NOT EXISTS platform_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
+  updated_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_platform_config_updated
+  ON platform_config(updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS blocked_users (
   tenant_id TEXT NOT NULL,
   chat_id INTEGER NOT NULL,

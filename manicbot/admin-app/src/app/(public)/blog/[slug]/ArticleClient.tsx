@@ -4,11 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Calendar, Tag, Clock } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import {
-  BLOG_ARTICLES,
-  BLOG_CATEGORY_LABELS,
-  pickRelated,
-} from "~/content/blog/articles";
+import { BLOG_CATEGORY_LABELS } from "~/content/blog/articles";
+import type { BlogArticle } from "~/content/blog/types";
 import { CATEGORY_STYLE } from "../BlogClient";
 import { MarkdownArticle, readingMinutes } from "~/components/public/MarkdownArticle";
 import { RelatedArticles } from "~/components/public/RelatedArticles";
@@ -34,15 +31,17 @@ function formatDate(iso: string, lang: Lang) {
   return d.toLocaleDateString(locales[lang], { day: "numeric", month: "long", year: "numeric" });
 }
 
-export function ArticleClient({ slug }: { slug: string }) {
+export function ArticleClient({
+  article,
+  related,
+}: {
+  article: BlogArticle;
+  related: BlogArticle[];
+}) {
   const { lang } = useLang();
-  const article = BLOG_ARTICLES.find((a) => a.slug === slug);
-  if (!article) return null;
-
   const style = CATEGORY_STYLE[article.categoryKey];
   const body = article.bodies[lang] ?? article.bodies.en ?? article.bodies.ru;
   const mins = readingMinutes(body);
-  const related = pickRelated(article, BLOG_ARTICLES);
 
   return (
     <article className="animate-fade-in">

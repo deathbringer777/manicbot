@@ -18,7 +18,7 @@
  * guard.
  */
 
-export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo" | "client_avatar" | "master_avatar" | "chat_attachment";
+export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo" | "client_avatar" | "master_avatar" | "chat_attachment" | "blog_cover" | "blog_photo";
 
 const ALLOWED_KINDS: ReadonlySet<UploadKind> = new Set([
   "logo",
@@ -29,6 +29,8 @@ const ALLOWED_KINDS: ReadonlySet<UploadKind> = new Set([
   "client_avatar",
   "master_avatar",
   "chat_attachment",
+  "blog_cover",
+  "blog_photo",
 ]);
 
 const DEFAULT_TTL_SEC = 300; // 5 minutes

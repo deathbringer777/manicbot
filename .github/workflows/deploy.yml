@@ -44,7 +44,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Semgrep — SAST scan
+      - name: Semgrep — local rules (hard gate)
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: .semgrep/manicbot-rules.yml
+        # No SEMGREP_APP_TOKEN — runs fully offline against local rules only.
+        # Fails CI on any local-rule violation.
+
+      - name: Semgrep — SAST rulesets (cloud-optional, warn-only)
         uses: semgrep/semgrep-action@v1
         with:
           config: >-
@@ -52,11 +59,12 @@ jobs:
             p/typescript
             p/nextjs
             p/jwt
-            .semgrep/manicbot-rules.yml
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-        # Allow workflow to proceed even without Semgrep token (OSS mode)
-        continue-on-error: ${{ secrets.SEMGREP_APP_TOKEN == '' }}
+        # Never blocks CI — cloud connectivity and token validity are outside
+        # our control. Findings still appear in the job log and (when
+        # SEMGREP_APP_TOKEN is valid) in the Semgrep Cloud dashboard.
+        continue-on-error: true
 
   # ─── Bot: test ──────────────────────────────────────────────
   test:

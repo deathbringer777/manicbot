@@ -24,12 +24,16 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     name: Security — Gitleaks + Semgrep
-    # Gitleaks-action needs `pull-requests: read` to list PR commits when
-    # event is pull_request. Default GITHUB_TOKEN is read-only on contents,
-    # so without this block the action 403s and downstream jobs skip.
+    # gitleaks-action@v2 needs `pull-requests: write` (since ~v2.3) to post
+    # inline PR annotations on findings. `read` was sufficient in earlier
+    # versions but the action now creates review comments, which requires
+    # write access. `security-events: write` is needed to upload SARIF to
+    # GitHub Code Scanning (Advanced Security). Both are still least-privilege
+    # within the security-scan job scope.
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
+      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:

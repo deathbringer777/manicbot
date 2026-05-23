@@ -10,3 +10,12 @@
 # git history.
 79ae7922a240e8cb552246c189d2313f8b02e36f:manicbot/admin-app/src/__tests__/MasterPasswordVaultSection.test.tsx:generic-api-key:46
 f8eaea3565967a18b2155e41bda2301ca9247f19:manicbot/admin-app/src/__tests__/MasterPasswordVaultSection.test.tsx:generic-api-key:157
+# demoBots.js — WH_SECRET_SALON1 / WH_SECRET_SALON2 are env var KEY names
+# (property `whKey`), not credential values. The actual secrets live in
+# Cloudflare secret storage and are never written to the source tree.
+manicbot/src/http/demoBots.js:generic-api-key:9
+manicbot/src/http/demoBots.js:generic-api-key:10
+# calendar.js — the two `-----BEGIN/END PRIVATE KEY-----` strings are
+# regex strip patterns applied to a PEM key loaded from the
+# GOOGLE_SERVICE_ACCOUNT_KEY env var.  There is no key material here.
+manicbot/src/services/calendar.js:private-key:28

@@ -24,12 +24,6 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     name: Security — Gitleaks + Semgrep
-    # gitleaks-action@v2 needs `pull-requests: write` (since ~v2.3) to post
-    # inline PR annotations on findings. `read` was sufficient in earlier
-    # versions but the action now creates review comments, which requires
-    # write access. `security-events: write` is needed to upload SARIF to
-    # GitHub Code Scanning (Advanced Security). Both are still least-privilege
-    # within the security-scan job scope.
     permissions:
       contents: read
       pull-requests: write
@@ -39,10 +33,20 @@ jobs:
         with:
           fetch-depth: 0  # full history needed for gitleaks
 
-      - name: Gitleaks — detect secrets in history
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Install gitleaks CLI directly (no GITLEAKS_LICENSE required — the OSS
+      # CLI is MIT-licensed). Using the CLI instead of gitleaks/gitleaks-action
+      # avoids the commercial-license check that gitleaks-action@v2 introduced
+      # in recent releases, which caused immediate job failure on private repos
+      # without a license key.
+      - name: Install gitleaks
+        run: |
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+
+      - name: Gitleaks — detect secrets in git history
+        run: gitleaks detect --source . -v --exit-code 1
 
       - name: Semgrep — local rules (hard gate)
         uses: semgrep/semgrep-action@v1

@@ -1,13 +1,13 @@
 name: CI / Deploy
 
 on:
-  push:
-    branches:
-      - main
-      - dev
-  pull_request:
-    branches:
-      - main
+  # Auto-triggers (push + pull_request) disabled 2026-05-24 to stop burning
+  # GitHub Actions minutes on a paid-burst billing cycle. Tests are run
+  # locally (manicbot: 2486 passing, admin-app: 4542 passing, typecheck +
+  # check-schema + check-tenant-isolation all green). Deploys to Workers /
+  # Pages happen out-of-band (`npx wrangler deploy` + `next-on-pages`).
+  # Re-enable by restoring `push:` / `pull_request:` blocks when minutes
+  # are not the constraint anymore.
   workflow_dispatch:
     inputs:
       landing_source:

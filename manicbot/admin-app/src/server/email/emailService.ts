@@ -12,6 +12,7 @@ import {
   passwordResetEmailHtml,
   passwordResetCodeEmailHtml,
   welcomeEmailHtml,
+  subscriptionWelcomeEmailHtml,
   emailChangeEmailHtml,
   emailChangeCodeEmailHtml,
   loginAlertEmailHtml,
@@ -116,6 +117,33 @@ export async function sendWelcomeEmail(
     to,
     subject: copy.welcome.subject,
     html: welcomeEmailHtml(name, dashboardUrl, lang),
+  });
+}
+
+/**
+ * Newsletter "Stay in the loop" confirmation. Mirror of `sendWelcomeEmail`
+ * for non-registered subscribers (migration 0086 — `newsletter_subscribers`).
+ *
+ * Distinct from registration welcome:
+ *   * The subscriber is NOT necessarily a web_user.
+ *   * No dashboard CTA — newsletters point to the marketing list, not to
+ *     an account they may not own.
+ *   * The unsubscribe link is a placeholder until the one-click flow
+ *     ships (deliberate follow-up PR). Today's URL is a stub so the
+ *     anchor never renders as a dead `<a href="">`.
+ */
+export async function sendNewsletterWelcomeEmail(
+  to: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  // Token placeholder — replaced by the real one-click token when that
+  // PR lands. The URL itself is stable so existing emails don't break.
+  const unsubscribeUrl = `${baseUrl()}/unsubscribe?token=placeholder`;
+  const copy = getEmailCopy(lang);
+  return sendResendEmail({
+    to,
+    subject: copy.subscriptionWelcome.subject,
+    html: subscriptionWelcomeEmailHtml(unsubscribeUrl, lang),
   });
 }
 

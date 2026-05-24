@@ -1609,3 +1609,24 @@ CREATE TABLE IF NOT EXISTS google_prefill_consumed (
   exp          INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_gpc_exp ON google_prefill_consumed(exp);
+
+-- Migration 0086 — newsletter subscribers (landing form ingest).
+-- See migrations/0086_newsletter_subscribers.sql for the full rationale.
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  email               TEXT NOT NULL,
+  source              TEXT NOT NULL DEFAULT 'landing',
+  lang                TEXT,
+  anonymous_id        TEXT,
+  ip                  TEXT,
+  user_agent          TEXT,
+  created_at          INTEGER NOT NULL,
+  confirmed_at        INTEGER,
+  unsubscribed_at     INTEGER,
+  welcome_sent_at     INTEGER,
+  welcome_send_error  TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
+  ON newsletter_subscribers(email);
+CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_created
+  ON newsletter_subscribers(created_at DESC);

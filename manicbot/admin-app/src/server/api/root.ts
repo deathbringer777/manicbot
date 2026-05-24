@@ -47,6 +47,7 @@ import { metaOAuthRouter } from "~/server/api/routers/metaOAuth";
 import { ownerPairingRouter } from "~/server/api/routers/ownerPairing";
 import { platformConfigRouter } from "~/server/api/routers/platformConfig";
 import { blogRouter } from "~/server/api/routers/blog";
+import { platformCustomersRouter } from "~/server/api/routers/platformCustomers";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -97,6 +98,7 @@ export const appRouter = createTRPCRouter({
   metaOAuth: metaOAuthRouter,
   ownerPairing: ownerPairingRouter,
   blog: blogRouter,
+  platformCustomers: platformCustomersRouter,
 });
 
 export type AppRouter = typeof appRouter;

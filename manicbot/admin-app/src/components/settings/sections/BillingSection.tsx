@@ -9,6 +9,7 @@ import { t } from "~/lib/i18n";
 import type { Lang } from "~/lib/i18n";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
+import { RetentionFlow } from "~/components/billing/RetentionFlow";
 
 // Stripe.js loaded once — publishable key is baked in at build time
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
@@ -21,6 +22,7 @@ const LABELS: Record<Lang, {
   current: string;
   upgrade: string;
   manageSub: string;
+  cancelSub: string;
   perMonth: string;
   popular: string;
   trialBanner: string;
@@ -41,6 +43,7 @@ const LABELS: Record<Lang, {
     current: "Текущий",
     upgrade: "Перейти",
     manageSub: "Управление подпиской",
+    cancelSub: "Отменить подписку",
     perMonth: "/мес",
     popular: "Популярный",
     trialBanner: "Пробный период",
@@ -61,6 +64,7 @@ const LABELS: Record<Lang, {
     current: "Поточний",
     upgrade: "Перейти",
     manageSub: "Керування підпискою",
+    cancelSub: "Скасувати підписку",
     perMonth: "/міс",
     popular: "Популярний",
     trialBanner: "Пробний період",
@@ -81,6 +85,7 @@ const LABELS: Record<Lang, {
     current: "Current",
     upgrade: "Upgrade",
     manageSub: "Manage subscription",
+    cancelSub: "Cancel subscription",
     perMonth: "/mo",
     popular: "Popular",
     trialBanner: "Trial period",
@@ -101,6 +106,7 @@ const LABELS: Record<Lang, {
     current: "Obecny",
     upgrade: "Zmień",
     manageSub: "Zarządzanie subskrypcją",
+    cancelSub: "Anuluj subskrypcję",
     perMonth: "/mies",
     popular: "Popularny",
     trialBanner: "Okres próbny",
@@ -193,6 +199,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
   const plans = api.salon.getPlans.useQuery();
 
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [retentionOpen, setRetentionOpen] = useState(false);
 
   // Detect return from Stripe Embedded Checkout (checkout=success in URL)
   const [showSuccess, setShowSuccess] = useState(false);
@@ -426,6 +433,37 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
             </>
           )}
         </button>
+      )}
+
+      {/* Cancel subscription — opens 3-stage retention flow.
+          Shown only when the subscription is active AND not already
+          scheduled to cancel at period end.
+          The historical "go straight to Stripe Customer Portal" path is now
+          unreachable for the explicit cancel intent — Manage subscription
+          stays for invoice/payment-method management. */}
+      {hasStripeCustomer && billing.data && !billing.data.cancelAtPeriodEnd &&
+        (billingStatus === "active" || billingStatus === "trialing") && (
+          <button
+            type="button"
+            onClick={() => setRetentionOpen(true)}
+            className="w-full text-center text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors py-1"
+            data-testid="cancel-subscription-trigger"
+          >
+            {l.cancelSub}
+          </button>
+        )}
+
+      {retentionOpen && (
+        <RetentionFlow
+          tenantId={tenantId}
+          onClose={() => setRetentionOpen(false)}
+          onCancelled={() => {
+            void utils.salon.getBillingStatus.invalidate({ tenantId });
+          }}
+          onRetained={() => {
+            void utils.salon.getBillingStatus.invalidate({ tenantId });
+          }}
+        />
       )}
 
       {mutError && (

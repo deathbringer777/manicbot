@@ -195,3 +195,115 @@ export async function createBillingPortalSession(
   });
   return session.url;
 }
+
+/** Stripe Subscription shape we care about for the retention flow. */
+export interface StripeSubscription {
+  id: string;
+  status: string;
+  cancel_at_period_end?: boolean;
+  current_period_end?: number;
+  items?: {
+    data?: Array<{
+      plan?: { interval?: "month" | "year"; interval_count?: number };
+      price?: { recurring?: { interval?: "month" | "year" } };
+    }>;
+  };
+}
+
+export async function retrieveSubscription(
+  secretKey: string,
+  subscriptionId: string,
+): Promise<StripeSubscription | null> {
+  const res = await fetch(`${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    headers: { Authorization: `Bearer ${secretKey}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (res.status === 404) return null;
+  const json = await res.json() as StripeSubscription & { error?: { message?: string } };
+  if (!res.ok) {
+    throw new Error((json as any).error?.message ?? `Stripe error: ${res.status}`);
+  }
+  return json;
+}
+
+/**
+ * Idempotent Stripe Coupon mint. Mirror of Worker `manicbot/src/billing/stripe.js`
+ * `ensureCoupon` — kept in lockstep so backend logic stays single-source-of-truth.
+ *
+ * 1. GET /v1/coupons/{code}; return existing on 200.
+ * 2. Else POST /v1/coupons; create with our chosen id.
+ * 3. If POST 400-conflicts, re-GET (race-condition guard).
+ */
+export async function ensureCoupon(
+  secretKey: string,
+  code: string,
+  percentOff: number,
+  durationOpts: { duration: "once" | "repeating" | "forever"; months?: number },
+): Promise<{ id: string; percent_off: number; duration: string; duration_in_months?: number | null }> {
+  const getUrl = `${STRIPE_API}/coupons/${encodeURIComponent(code)}`;
+  const headers = { Authorization: `Bearer ${secretKey}` };
+
+  const getRes = await fetch(getUrl, { headers, signal: AbortSignal.timeout(15_000) });
+  if (getRes.ok) return await getRes.json();
+  if (getRes.status !== 404) {
+    const err = await getRes.json().catch(() => ({}));
+    throw new Error((err as any)?.error?.message ?? `Stripe coupon GET failed: ${getRes.status}`);
+  }
+
+  const params: Record<string, string> = {
+    id: code,
+    percent_off: String(percentOff),
+    duration: durationOpts.duration,
+  };
+  if (durationOpts.duration === "repeating" && durationOpts.months != null) {
+    params.duration_in_months = String(durationOpts.months);
+  }
+  const postRes = await fetch(`${STRIPE_API}/coupons`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+    body: encodeForm(params),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (postRes.ok) return await postRes.json();
+
+  let postErr: any = {};
+  try { postErr = await postRes.json(); } catch { /* tolerate empty */ }
+  const errCode = postErr?.error?.code ?? "";
+  const errMsg = postErr?.error?.message ?? "";
+  const isDuplicate =
+    postRes.status === 400 &&
+    (errCode === "resource_already_exists" || /already exists/i.test(errMsg));
+  if (isDuplicate) {
+    const reGet = await fetch(getUrl, { headers, signal: AbortSignal.timeout(15_000) });
+    if (reGet.ok) return await reGet.json();
+    const e = await reGet.json().catch(() => ({}));
+    throw new Error((e as any)?.error?.message ?? `Stripe coupon re-GET failed: ${reGet.status}`);
+  }
+  throw new Error(errMsg || `Stripe coupon POST failed: ${postRes.status}`);
+}
+
+/** Apply an existing coupon to a subscription. */
+export async function applyCouponToSubscription(
+  secretKey: string,
+  subscriptionId: string,
+  couponCode: string,
+): Promise<{ id: string }> {
+  return await stripePost(secretKey, `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    coupon: couponCode,
+  });
+}
+
+/**
+ * Flip a subscription to cancel at the end of the current billing period.
+ * The subscription stays `active` until `current_period_end`; Stripe then
+ * fires `customer.subscription.deleted` which the Worker webhook handler
+ * already maps to `billing_status = inactive`.
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+  secretKey: string,
+  subscriptionId: string,
+): Promise<{ id: string; cancel_at_period_end: boolean; current_period_end: number }> {
+  return await stripePost(secretKey, `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    cancel_at_period_end: "true",
+  });
+}

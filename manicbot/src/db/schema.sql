@@ -1630,3 +1630,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
   ON newsletter_subscribers(email);
 CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_created
   ON newsletter_subscribers(created_at DESC);
+
+-- Migration 0087 — Cancellation retention flow audit trail.
+-- One row per cancel attempt: collects churn reason, optional photo, and
+-- whether the counter-offer was shown / accepted. Drives offer-acceptance
+-- metrics + 12-month cooldown enforcement.
+CREATE TABLE IF NOT EXISTS subscription_cancellations (
+  id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id                   TEXT NOT NULL,
+  web_user_id                 TEXT NOT NULL,
+  plan_at_cancel              TEXT,
+  interval_at_cancel          TEXT,
+  reason_tags                 TEXT NOT NULL DEFAULT '[]',
+  free_text                   TEXT,
+  photo_url                   TEXT,
+  retention_offer_shown       INTEGER NOT NULL DEFAULT 0,
+  retention_offer_accepted    INTEGER NOT NULL DEFAULT 0,
+  retention_coupon_code       TEXT,
+  created_at                  INTEGER NOT NULL,
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_cancellations_tenant
+  ON subscription_cancellations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_subscription_cancellations_created
+  ON subscription_cancellations(created_at DESC);

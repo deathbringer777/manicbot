@@ -1629,3 +1629,26 @@ export const googlePrefillConsumed = sqliteTable("google_prefill_consumed", {
 }, (t) => [
   index("idx_gpc_exp").on(t.exp),
 ]);
+
+// Migration 0086 — newsletter subscribers (landing "Stay in the loop" form).
+// Platform-scoped (no tenant_id). UNIQUE on email + INSERT OR IGNORE in the
+// Worker handler so a re-submit is a silent no-op and doesn't double-send
+// the welcome email. `welcome_sent_at` / `welcome_send_error` are stamped
+// by the admin-app /api/internal/newsletter-welcome route.
+export const newsletterSubscribers = sqliteTable("newsletter_subscribers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull(),
+  source: text("source").notNull().default("landing"),
+  lang: text("lang"),
+  anonymousId: text("anonymous_id"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: integer("created_at").notNull(),
+  confirmedAt: integer("confirmed_at"),
+  unsubscribedAt: integer("unsubscribed_at"),
+  welcomeSentAt: integer("welcome_sent_at"),
+  welcomeSendError: text("welcome_send_error"),
+}, (t) => [
+  uniqueIndex("idx_newsletter_subscribers_email").on(t.email),
+  index("idx_newsletter_subscribers_created").on(t.createdAt),
+]);

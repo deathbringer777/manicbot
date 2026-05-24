@@ -13,6 +13,21 @@ const emailCopy: Record<Lang, {
   passwordReset: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
   passwordResetCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
   welcome: { subject: string; heading: string; body: string; cta: string };
+  /**
+   * Newsletter "Stay in the loop" subscription confirmation. Sent once per
+   * NEW row in `newsletter_subscribers` (migration 0086). NOT the same as
+   * `welcome` above — that one fires after registration + email verification.
+   */
+  subscriptionWelcome: {
+    subject: string;
+    heading: string;
+    body: string;
+    bullet1: string;
+    bullet2: string;
+    bullet3: string;
+    footerNote: string;
+    unsubscribeHint: string;
+  };
   emailChange: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
   emailChangeCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
   loginAlert: { subject: string; heading: string; body: string; ip: string; time: string; warning: string };
@@ -104,6 +119,16 @@ const emailCopy: Record<Lang, {
       heading: "Добро пожаловать!",
       body: "Ваш email подтверждён. Теперь вы можете войти и начать настройку вашего салона.",
       cta: "Войти в кабинет",
+    },
+    subscriptionWelcome: {
+      subject: "Вы подписались на новости ManicBot",
+      heading: "Вы в списке!",
+      body: "Спасибо за подписку на новости ManicBot. Раз в месяц мы будем присылать письма с тем, что действительно стоит вашего внимания:",
+      bullet1: "Обновления продукта и новые возможности для салонов и мастеров.",
+      bullet2: "Практические советы по росту: запись, удержание клиентов, маркетинг.",
+      bullet3: "Истории команд, которые уже работают на ManicBot.",
+      footerNote: "Никакого спама. Если разонравится — отписаться можно одной кнопкой ниже.",
+      unsubscribeHint: "Отписаться",
     },
     emailChange: {
       subject: "Подтвердите новый email — ManicBot",
@@ -226,6 +251,16 @@ const emailCopy: Record<Lang, {
       body: "Ваш email підтверджено. Тепер ви можете увійти та почати налаштування вашого салону.",
       cta: "Увійти до кабінету",
     },
+    subscriptionWelcome: {
+      subject: "Ви підписалися на новини ManicBot",
+      heading: "Ви у списку!",
+      body: "Дякуємо за підписку на новини ManicBot. Раз на місяць ми будемо надсилати листи з тим, що справді варте вашої уваги:",
+      bullet1: "Оновлення продукту та нові можливості для салонів і майстрів.",
+      bullet2: "Практичні поради зі зростання: запис, утримання клієнтів, маркетинг.",
+      bullet3: "Історії команд, які вже працюють на ManicBot.",
+      footerNote: "Жодного спаму. Якщо набридне — відписатися можна однією кнопкою нижче.",
+      unsubscribeHint: "Відписатися",
+    },
     emailChange: {
       subject: "Підтвердіть новий email — ManicBot",
       heading: "Зміна email",
@@ -347,6 +382,16 @@ const emailCopy: Record<Lang, {
       body: "Your email is verified. You can now sign in and start setting up your salon.",
       cta: "Go to dashboard",
     },
+    subscriptionWelcome: {
+      subject: "You're subscribed to ManicBot updates",
+      heading: "You're on the list!",
+      body: "Thanks for subscribing to ManicBot updates. Once a month we'll send you what's actually worth your attention:",
+      bullet1: "Product updates and new features for salons and individual masters.",
+      bullet2: "Practical growth tips: booking, client retention, marketing.",
+      bullet3: "Stories from teams already running on ManicBot.",
+      footerNote: "Zero spam. Don't like it? One-click unsubscribe below.",
+      unsubscribeHint: "Unsubscribe",
+    },
     emailChange: {
       subject: "Confirm your new email — ManicBot",
       heading: "Email change",
@@ -467,6 +512,16 @@ const emailCopy: Record<Lang, {
       heading: "Witamy!",
       body: "Twój email został zweryfikowany. Możesz się zalogować i zacząć konfigurację salonu.",
       cta: "Przejdź do panelu",
+    },
+    subscriptionWelcome: {
+      subject: "Zapisałeś się na nowości ManicBot",
+      heading: "Jesteś na liście!",
+      body: "Dziękujemy za subskrypcję ManicBot. Raz w miesiącu prześlemy Ci to, co naprawdę warte Twojej uwagi:",
+      bullet1: "Aktualizacje produktu i nowe funkcje dla salonów oraz mistrzów.",
+      bullet2: "Praktyczne porady dotyczące rozwoju: rezerwacje, utrzymanie klientów, marketing.",
+      bullet3: "Historie zespołów, które już działają na ManicBot.",
+      footerNote: "Zero spamu. Nie podoba Ci się? Wypisz się jednym kliknięciem poniżej.",
+      unsubscribeHint: "Wypisz się",
     },
     emailChange: {
       subject: "Potwierdź nowy email — ManicBot",
@@ -656,6 +711,32 @@ export function welcomeEmailHtml(name: string | null, dashboardUrl: string, lang
   return baseLayout(
     greeting,
     paragraph(c.body) + ctaButton(dashboardUrl, c.cta),
+    getEmailCopy(lang).footer,
+  );
+}
+
+/**
+ * Newsletter "Stay in the loop" confirmation. Sent once per NEW row in
+ * `newsletter_subscribers` (migration 0086). Not to be confused with
+ * `welcomeEmailHtml` above — that one fires post-registration after the
+ * verification code is consumed.
+ *
+ * `unsubscribeUrl` is a placeholder until the real one-click unsubscribe
+ * flow ships (deliberate follow-up PR). Today's value points to the
+ * forms-level marketing unsubscribe so we don't ship a dead link.
+ */
+export function subscriptionWelcomeEmailHtml(unsubscribeUrl: string, lang: Lang): string {
+  const c = getEmailCopy(lang).subscriptionWelcome;
+  const bullets = `<ul style="margin:18px 0 6px;padding-left:20px;color:#d1d5db;font-size:14px;line-height:1.7;">
+      <li style="margin:0 0 6px;">${c.bullet1}</li>
+      <li style="margin:0 0 6px;">${c.bullet2}</li>
+      <li style="margin:0;">${c.bullet3}</li>
+    </ul>`;
+  const unsubscribe = `<p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#64748b;text-align:center;">${c.footerNote}<br>
+    <a href="${unsubscribeUrl}" style="color:#a78bfa;text-decoration:underline;">${c.unsubscribeHint}</a></p>`;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + bullets + unsubscribe,
     getEmailCopy(lang).footer,
   );
 }

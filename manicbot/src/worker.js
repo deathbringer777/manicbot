@@ -33,6 +33,7 @@ import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
+import { handleSubscribeRequest } from './http/subscribeHttp.js';
 import { handleUnsubscribeRequest } from './http/unsubscribeHttp.js';
 import { handleHealthRequest } from './http/healthHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
@@ -360,6 +361,28 @@ export default {
       const token = url.pathname.slice('/u/'.length).split('/')[0] ?? '';
       const res = await handleUnsubscribeRequest(request, token, env);
       return addSecurityHeaders(res);
+    }
+
+    // Newsletter subscribe ingest (CORS-enabled). Two paths:
+    //   * /api/subscribe         — canonical (Worker-native).
+    //   * /api/email-subscribe   — alias the landing form already targets.
+    // Behind a single handler so both paths converge on one D1 table.
+    if (url.pathname === '/api/subscribe' || url.pathname === '/api/email-subscribe') {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Max-Age': '86400',
+          },
+        });
+      }
+      const subRes = await handleSubscribeRequest(request, env, executionCtx);
+      const merged = new Response(subRes.body, subRes);
+      merged.headers.set('Access-Control-Allow-Origin', '*');
+      return addSecurityHeaders(merged);
     }
 
     // Landing analytics ingest (CORS-enabled, consent-gated server-side).

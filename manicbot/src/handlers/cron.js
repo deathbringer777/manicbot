@@ -265,8 +265,10 @@ export async function phaseChannelHealth(ctx, nowMs) {
 }
 
 /**
- * P1-1 idempotency guard. Returns true if the phase should run; false to skip.
- * Window is taken from PHASE_WINDOWS. Always-run phases pass `windowSec=0`.
+ * P1-1 idempotency probe. Returns true if the phase has not run within its
+ * window. Read-only — does NOT claim the slot. Kept for backward compat with
+ * existing tests and any external callers; the real gate is `tryClaimPhase`
+ * called inside `runPhase`.
  */
 export async function shouldRunPhase(ctx, phase, nowSec) {
   const windowSec = PHASE_WINDOWS[phase];
@@ -276,16 +278,61 @@ export async function shouldRunPhase(ctx, phase, nowSec) {
 }
 
 /**
+ * P0-2 (2026-05-24 audit) — atomic claim of a phase window in a SINGLE D1
+ * round-trip. Replaces the read-then-write pattern (shouldRunPhase →
+ * setPhaseLastRun) that had a TOCTOU race: two concurrent cron ticks could
+ * both pass the read-side check and both run the phase, double-firing
+ * non-idempotent side-effects (duplicate reminders, duplicate promo codes,
+ * doubled `review_requested_at` updates, duplicated marketing-campaign
+ * sends).
+ *
+ * Mechanics:
+ *   INSERT new row with current epoch → succeeds (changes=1, claim won).
+ *   ON CONFLICT row exists → DO UPDATE only when `value < threshold`
+ *   (= the stored last-run is older than now - windowSec). If the WHERE
+ *   doesn't match (someone claimed inside the window), changes=0.
+ *
+ * Returns true iff this caller won the claim and should run the work.
+ */
+async function tryClaimPhase(ctx, phase, nowSec, windowSec) {
+  if (!ctx?.db || !ctx?.tenantId) return true; // local/test fallback
+  const threshold = nowSec - windowSec;
+  try {
+    const result = await dbRun(
+      ctx,
+      `INSERT INTO tenant_config (tenant_id, key, value) VALUES (?, ?, ?)
+       ON CONFLICT(tenant_id, key) DO UPDATE
+         SET value = excluded.value
+         WHERE CAST(tenant_config.value AS INTEGER) < ?`,
+      ctx.tenantId,
+      `cron:phase:${phase}:last`,
+      String(nowSec),
+      threshold,
+    );
+    return (result?.meta?.changes ?? 0) > 0;
+  } catch (e) {
+    log.warn('handlers.cron', { action: 'phase_claim_failed', phase, error: e?.message });
+    return false; // fail closed — better to skip a tick than double-fire
+  }
+}
+
+/**
  * Wrap a phase function with idempotency + per-phase try/catch + event log.
- * `fn` is invoked only if the phase's window has elapsed; on throw, the
- * orchestrator emits `cron.phase.error` and continues.
+ * The phase window is claimed atomically BEFORE running the work — if a
+ * concurrent tick already claimed it, this call returns
+ * `{ ran: false, skipped: 'window' }`. Phases without a window (referral_expiry)
+ * always run.
  */
 async function runPhase(ctx, phase, fn) {
   const nowSec = Math.floor(Date.now() / 1000);
+  const windowSec = PHASE_WINDOWS[phase] ?? 0;
   try {
-    if (!(await shouldRunPhase(ctx, phase, nowSec))) return { ran: false, skipped: 'window' };
+    if (windowSec > 0) {
+      if (!(await tryClaimPhase(ctx, phase, nowSec, windowSec))) {
+        return { ran: false, skipped: 'window' };
+      }
+    }
     await fn();
-    await setPhaseLastRun(ctx, phase, nowSec);
     return { ran: true };
   } catch (e) {
     log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { phase });

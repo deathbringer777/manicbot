@@ -8,6 +8,12 @@ export type GooglePrefillPayload = {
   name: string | null;
   sub: string;
   exp: number;
+  // Single-use claim id minted via crypto.randomUUID() per signed token.
+  // webUsers.register does INSERT OR IGNORE into google_prefill_consumed
+  // keyed on jti — a replay (same token reused inside the 15-min TTL) is
+  // rejected at the atomic-claim step, closing the takeover window
+  // identified in the 2026-05-24 security audit (#1 / P0).
+  jti: string;
 };
 
 function uint8ToBase64Url(bytes: Uint8Array): string {
@@ -46,7 +52,7 @@ export const GOOGLE_PREFILL_TTL_SEC = 15 * 60;
 
 export async function signGooglePrefillToken(
   secret: string,
-  input: { email: string; name: string | null; sub: string; ttlSec?: number },
+  input: { email: string; name: string | null; sub: string; ttlSec?: number; jti?: string },
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const payload: GooglePrefillPayload = {
@@ -54,6 +60,10 @@ export async function signGooglePrefillToken(
     name: input.name?.trim() ? input.name.trim() : null,
     sub: input.sub,
     exp: now + (input.ttlSec ?? GOOGLE_PREFILL_TTL_SEC),
+    // Allow caller to supply a jti (used in unit tests for deterministic
+    // assertions); in production the OAuth callback omits it and we mint
+    // a fresh UUID per token.
+    jti: input.jti ?? crypto.randomUUID(),
   };
   const payloadJson = JSON.stringify(payload);
   const payloadBytes = new TextEncoder().encode(payloadJson);
@@ -101,8 +111,12 @@ export async function verifyGooglePrefillToken(
   if (
     typeof payload.email !== "string" ||
     typeof payload.sub !== "string" ||
-    typeof payload.exp !== "number"
+    typeof payload.exp !== "number" ||
+    typeof payload.jti !== "string" ||
+    payload.jti.length < 8
   ) {
+    // jti is required (post 2026-05-24 audit). Tokens minted before this
+    // change are rejected here — TTL is 15 min so the dead-zone is short.
     return null;
   }
   if (payload.name != null && typeof payload.name !== "string") return null;
@@ -114,5 +128,6 @@ export async function verifyGooglePrefillToken(
     name: payload.name?.trim() ? payload.name.trim() : null,
     sub: payload.sub,
     exp: payload.exp,
+    jti: payload.jti,
   };
 }

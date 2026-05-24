@@ -27,6 +27,16 @@
  * webhooks), migrate the claim into a Durable Object (single-writer, strong
  * consistency) — the function signatures here are intentionally narrow so
  * the call sites need only swap the implementation, not the API.
+ *
+ * TODO(2026-05-24 audit #3, deferred): the pre-launch audit re-flagged this
+ * theoretical race. We chose not to address it now because in practice
+ * Meta's ≥5s retry spacing makes the window unreachable, and a Durable
+ * Object migration is a 1-2 day project (binding, migration plan, cold-start
+ * cost). When DO migration happens, the swap is:
+ *   - bind a `WEBHOOK_DEDUP` Durable Object class
+ *   - replace `kv.get` / `kv.put` here with `stub.fetch('/claim?key=...')`
+ *   - the DO holds an in-memory set + persists to its private storage; CAS
+ *     is implicit because the DO is single-threaded per id.
  */
 
 const TG_TTL_SEC = 300;     // Telegram retries within ~5 min

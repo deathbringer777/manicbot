@@ -1617,3 +1617,15 @@ export const blogPosts = sqliteTable("blog_posts", {
   index("idx_blog_posts_status_created").on(t.status, t.createdAt),
   index("idx_blog_posts_category_status").on(t.category, t.status),
 ]);
+
+// Migration 0085 — Google prefill token replay protection.
+// One row per consumed jti. webUsers.register does INSERT OR IGNORE; if
+// `changes = 0` (jti already present) the request is rejected.
+export const googlePrefillConsumed = sqliteTable("google_prefill_consumed", {
+  jti: text("jti").primaryKey(),
+  email: text("email").notNull(),
+  consumedAt: integer("consumed_at").notNull(),
+  exp: integer("exp").notNull(),
+}, (t) => [
+  index("idx_gpc_exp").on(t.exp),
+]);

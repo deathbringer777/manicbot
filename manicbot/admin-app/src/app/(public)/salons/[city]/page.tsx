@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createCaller } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
 import { JsonLd } from "~/components/public/JsonLd";
+import { TestBadge } from "~/components/ui/TestBadge";
 import {
   buildSeo,
   canonicalUrl,
@@ -94,7 +95,7 @@ export default async function CityDirectoryPage({ params }: Props) {
   const caller = createCaller(ctx);
   const result = await caller.publicSalon
     .search({ city: cityName, page: 1, limit: 50 })
-    .catch(() => ({ items: [] as Array<{ id: string; slug: string | null; name: string; city: string | null; address: string | null; coverPhoto: string | null }>, hasMore: false, page: 1, total: 0 }));
+    .catch(() => ({ items: [] as Array<{ id: string; slug: string | null; name: string; city: string | null; address: string | null; coverPhoto: string | null; isTest: boolean }>, hasMore: false, page: 1, total: 0 }));
 
   const salons = (result.items ?? []).filter((s) => s.slug);
 
@@ -233,11 +234,25 @@ export default async function CityDirectoryPage({ params }: Props) {
                     className="block rounded-2xl border border-slate-200/80 bg-white p-4 transition hover:border-violet-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
                   >
                     {s.coverPhoto ? (
-                      <img
-                        src={s.coverPhoto}
-                        alt={`${s.name} — salon paznokci w ${cityName}`}
-                        className="mb-3 h-40 w-full rounded-xl object-cover"
-                      />
+                      <div className="relative mb-3">
+                        <img
+                          src={s.coverPhoto}
+                          alt={`${s.name} — salon paznokci w ${cityName}`}
+                          className="h-40 w-full rounded-xl object-cover"
+                        />
+                        {s.isTest ? (
+                          <TestBadge
+                            className="absolute left-2 top-2 shadow-sm"
+                            title="Konto testowe. Utworzone przez seed-test-accounts; nie jest używane przez prawdziwych klientów."
+                          />
+                        ) : null}
+                      </div>
+                    ) : s.isTest ? (
+                      <div className="mb-3">
+                        <TestBadge
+                          title="Konto testowe. Utworzone przez seed-test-accounts; nie jest używane przez prawdziwych klientów."
+                        />
+                      </div>
                     ) : null}
                     <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                       {s.name}

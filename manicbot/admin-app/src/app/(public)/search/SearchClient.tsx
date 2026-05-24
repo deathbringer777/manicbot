@@ -6,7 +6,9 @@ import { api } from "~/trpc/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { SearchAutocomplete } from "~/components/public/SearchAutocomplete";
+import { TestBadge } from "~/components/ui/TestBadge";
 import { t } from "~/lib/i18n";
+import type { Lang } from "~/lib/i18n";
 import { useLang } from "~/components/LangContext";
 import { POPULAR_CITY_COORDS } from "~/lib/popularCities";
 
@@ -21,14 +23,17 @@ const SERVICE_CHIPS = [
   { label: "Снятие", value: "снятие" },
 ];
 
-function SalonCard({ item }: { item: {
+function SalonCard({ item, lang }: { item: {
   id: string; slug: string | null; name: string; city: string | null;
   address: string | null; description: string | null; coverPhoto: string | null;
   distanceKm: number | null; mapsUrl: string | null;
-} }) {
+  isTest?: boolean;
+}; lang: Lang }) {
   return (
     <Link
       href={item.slug ? `/salon/${item.slug}` : "#"}
+      data-testid="salon-card"
+      data-is-test={item.isTest ? "1" : "0"}
       className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white transition hover:border-violet-300 hover:shadow-lg hover:shadow-violet-500/10 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-500/40 dark:hover:shadow-brand-500/10"
     >
       <div className="relative h-44 bg-slate-100 dark:bg-slate-800">
@@ -37,6 +42,12 @@ function SalonCard({ item }: { item: {
         ) : (
           <div className="flex h-full items-center justify-center text-4xl">💅</div>
         )}
+        {item.isTest ? (
+          <TestBadge
+            className="absolute left-2 top-2 shadow-sm"
+            title={t("master.testAccountBanner", lang)}
+          />
+        ) : null}
         {item.distanceKm != null && (
           <span className="absolute right-2 top-2 rounded-full bg-white/80 px-2 py-0.5 text-xs font-medium text-slate-700 backdrop-blur dark:bg-slate-950/80 dark:text-slate-300">
             {item.distanceKm < 1
@@ -388,7 +399,7 @@ function SearchPageContent() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((item) => (
-                <SalonCard key={item.id} item={item} />
+                <SalonCard key={item.id} item={item} lang={lang} />
               ))}
             </div>
             {hasMore && (

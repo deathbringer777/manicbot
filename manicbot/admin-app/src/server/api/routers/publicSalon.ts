@@ -302,14 +302,16 @@ export const publicSalonRouter = createTRPCRouter({
       // so clicking their card would lead to "#". Hide them from the directory
       // until an owner sets one (also hides half-configured personal tenants).
       //
-      // SEO audit 2026-05-20 P0-3: `is_test = 0` is enforced at the SQL layer
-      // here AND at the projection layer via `filterOutTestTenants`. Seeded
-      // test accounts (TEST_ACCOUNTS.md) + legacy demo / preview rows must
-      // never reach Google or the public directory.
+      // Decision change 2026-05-24 — test tenants (`is_test = 1`) DO appear in
+      // the public catalog so demos are reachable for the founder + operators.
+      // The card carries a `<TestBadge />` for human disclosure. SEO leakage
+      // is blocked one layer up: `/salon/[slug]` emits `robots: noindex,nofollow`
+      // for test profiles (see `app/(public)/salon/[slug]/page.tsx`) and the
+      // Worker sitemap continues to exclude `is_test = 1` rows. The earlier
+      // P0-3 audit hid them at this layer; that was over-correction.
       const conditions: any[] = [
         eq(tenants.publicActive, 1),
         isNotNull(tenants.slug),
-        eq(tenants.isTest, 0),
       ];
 
       // When we have a free-text query/city we drive the SELECT via an
@@ -417,12 +419,13 @@ export const publicSalonRouter = createTRPCRouter({
       const { query, city, page, limit } = input;
       const offset = (page - 1) * limit;
 
-      // SEO audit 2026-05-20 P0-3: same is_test=0 gate as `search` above.
+      // Decision change 2026-05-24 — see the matching note in `search` above.
+      // Test tenants stay visible in the catalog; `<TestBadge />` + per-detail-
+      // page `noindex` handle disclosure and SEO.
       const conditions: any[] = [
         eq(tenants.isPersonal, 1),
         eq(tenants.publicActive, 1),
         isNotNull(tenants.slug),
-        eq(tenants.isTest, 0),
       ];
       if (city) {
         conditions.push(or(like(tenants.city, `%${city}%`), searchLike(tenants.searchText, city))!);
@@ -483,7 +486,7 @@ export const publicSalonRouter = createTRPCRouter({
     .input(z.object({ q: z.string().min(1).max(100) }))
     .query(async ({ ctx, input }) => {
       const q = input.q.trim();
-      if (q.length < 2) return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
+      if (q.length < 2) return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null; isTest: boolean }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
 
       // FTS5 path — see relax.md §4 P0-5. The autocomplete dropdown
       // fires on every keystroke; the previous `LIKE '%q%'` ran a full
@@ -491,25 +494,28 @@ export const publicSalonRouter = createTRPCRouter({
       // gives us prefix matching for free.
       const matchExpr = buildFtsMatchExpression(q);
       if (!matchExpr) {
-        return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
+        return { salons: [] as Array<{ slug: string | null; name: string; city: string | null; coverPhoto: string | null; isTest: boolean }>, articles: [] as Array<{ slug: string; title: string; lang: "ru" }> };
       }
 
-      // SEO audit 2026-05-20 P0-3: autocomplete must not surface test rows
-      // either (was the original leak vector — Google indexed autocomplete-
-      // discovered URLs on the salon-search dropdown).
+      // Decision change 2026-05-24 — see the matching note in `search` above.
+      // Autocomplete surfaces test tenants too (they were getting hidden by
+      // the older P0-3 gate, which over-corrected). The `<TestBadge />` on
+      // the dropdown row + the per-detail-page `noindex` keep them clearly
+      // disclosed to humans and unreachable from Google.
       const rows = await ctx.db
         .select({
           slug: tenants.slug,
           name: tenants.name,
           city: tenants.city,
           photos: tenants.photos,
+          isTest: tenants.isTest,
         })
         .from(tenants)
         .innerJoin(
           sql`tenant_fts`,
           sql`tenant_fts.tenant_id = ${tenants.id} AND tenant_fts MATCH ${matchExpr}`,
         )
-        .where(and(eq(tenants.publicActive, 1), eq(tenants.isTest, 0)))
+        .where(eq(tenants.publicActive, 1))
         .limit(5);
 
       const salons = rows.map((t) => {
@@ -518,7 +524,7 @@ export const publicSalonRouter = createTRPCRouter({
           const photos = t.photos ? JSON.parse(t.photos) : [];
           coverPhoto = photos[0] ?? null;
         } catch { /* ignore */ }
-        return { slug: t.slug, name: t.name, city: t.city, coverPhoto };
+        return { slug: t.slug, name: t.name, city: t.city, coverPhoto, isTest: !!t.isTest };
       });
 
       // Match articles using simple substring match

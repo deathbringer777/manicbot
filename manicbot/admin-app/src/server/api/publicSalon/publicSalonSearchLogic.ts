@@ -135,31 +135,36 @@ export function shouldCacheTrpcPath(pathParam: string | null | undefined): boole
 }
 
 /**
- * Minimal row shape used by the is_test visibility filter. Any row matching
- * this contract can be passed to `isPublicTenantRow` / `filterOutTestTenants`.
+ * Minimal row shape used by the public catalog visibility predicate. Any
+ * row matching this contract can be passed to `isPublicTenantRow` /
+ * `filterToPublicCatalog`.
+ *
+ * `isTest` is intentionally NOT part of the predicate (see helper docs
+ * below). It's an informational field the UI uses to render a `<TestBadge />`
+ * on the card.
  */
 interface VisibilityRow {
   slug: string | null;
   publicActive: number;
-  isTest: number;
 }
 
 /**
- * SEO audit 2026-05-20 P0-3 — visibility predicate for the public catalog.
+ * Visibility predicate for the public catalog.
  *
- * Returns true ONLY when the row is a real, indexable, linkable salon:
+ * Returns true when the row is a linkable, opt-in tenant:
  *   - `slug` is set (without one we can't link to `/salon/{slug}`)
  *   - `publicActive = 1` (owner opted in to the directory)
- *   - `isTest = 0` (not a seed / preview / demo row)
  *
- * The router applies the same predicates at the SQL layer via the WHERE
- * clause (defence-in-depth). This helper is what tests pin so the contract
- * is reviewable in one place.
+ * Decision change 2026-05-24 — test tenants (`is_test = 1`) ARE visible
+ * in the public catalog but the UI renders a `<TestBadge />` on the card
+ * so visitors can tell them apart from real salons. SEO indexation is
+ * blocked one layer up: `/salon/[slug]` emits `robots: noindex,nofollow`
+ * for `is_test = 1` profiles (see `app/(public)/salon/[slug]/page.tsx`)
+ * and the Worker sitemap continues to exclude them.
  */
 export function isPublicTenantRow(row: VisibilityRow): boolean {
   if (row.slug == null || row.slug === "") return false;
   if (row.publicActive !== 1) return false;
-  if (row.isTest !== 0) return false;
   return true;
 }
 
@@ -168,6 +173,6 @@ export function isPublicTenantRow(row: VisibilityRow): boolean {
  * catalog. Pure, order-preserving, non-mutating — safe to use in render
  * paths and snapshot tests.
  */
-export function filterOutTestTenants<T extends VisibilityRow>(rows: readonly T[]): T[] {
+export function filterToPublicCatalog<T extends VisibilityRow>(rows: readonly T[]): T[] {
   return rows.filter((r) => isPublicTenantRow(r));
 }

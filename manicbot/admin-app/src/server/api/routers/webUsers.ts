@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
-import { webUsers, auditLog, tenants, masters, tenantConfig, tenantRoles, masterInvitations } from "~/server/db/schema";
+import { webUsers, auditLog, tenants, masters, tenantConfig, tenantRoles, masterInvitations, googlePrefillConsumed } from "~/server/db/schema";
 import type { Lang } from "~/lib/i18n";
 import { and, eq } from "drizzle-orm";
 import { assertTenantMember } from "~/server/api/tenantAccess";
@@ -145,6 +145,28 @@ export const webUsersRouter = createTRPCRouter({
         }
         const payload = await verifyGooglePrefillToken(secret, input.googlePrefillToken);
         if (!payload || payload.email !== email) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid or expired Google sign-in. Please use Google sign-in again or register without it.",
+          });
+        }
+        // #P0-1 (2026-05-24 audit) — atomic single-use claim on the prefill
+        // token's jti. INSERT OR IGNORE returns an empty rowset when the jti
+        // already exists, which means the token was already consumed (within
+        // the 15-min TTL). Reject with the same error string as an
+        // invalid/expired token so an attacker can't distinguish replay
+        // from expiry.
+        const claim = await ctx.db
+          .insert(googlePrefillConsumed)
+          .values({
+            jti: payload.jti,
+            email: payload.email,
+            consumedAt: Math.floor(Date.now() / 1000),
+            exp: payload.exp,
+          })
+          .onConflictDoNothing()
+          .returning({ jti: googlePrefillConsumed.jti });
+        if (claim.length === 0) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Invalid or expired Google sign-in. Please use Google sign-in again or register without it.",

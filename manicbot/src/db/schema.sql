@@ -1600,3 +1600,12 @@ CREATE INDEX IF NOT EXISTS idx_blog_posts_status_created
   ON blog_posts(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_blog_posts_category_status
   ON blog_posts(category, status);
+
+-- Migration 0085 — Google prefill token replay protection (single-use jti).
+CREATE TABLE IF NOT EXISTS google_prefill_consumed (
+  jti          TEXT PRIMARY KEY,
+  email        TEXT NOT NULL,
+  consumed_at  INTEGER NOT NULL,
+  exp          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gpc_exp ON google_prefill_consumed(exp);

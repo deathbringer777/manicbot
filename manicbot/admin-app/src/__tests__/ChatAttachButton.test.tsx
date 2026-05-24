@@ -26,12 +26,11 @@ import { cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
 import { renderWithLang } from "./helpers/renderWithLang";
 import { ChatAttachButton } from "~/components/chat/ChatAttachButton";
 
-const origFetch = globalThis.fetch;
-
+// Phase 2 cleanup: vi.stubGlobal + unstubAllGlobals — no manual save/restore.
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  globalThis.fetch = origFetch;
+  vi.unstubAllGlobals();
 });
 
 function pngFile(): File {
@@ -72,10 +71,10 @@ describe("ChatAttachButton", () => {
   });
 
   it("happy path: mintToken → upload → onUploaded(url) fires", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ ok: true, url: "https://w/cdn/x.png" }),
       { status: 200, headers: { "Content-Type": "application/json" } },
-    )) as never;
+    )));
     const mintToken = vi.fn(async () => ({ token: "T", uploadUrl: "https://w/upload" }));
     const onUploaded = vi.fn();
     const onError = vi.fn();
@@ -93,7 +92,8 @@ describe("ChatAttachButton", () => {
   });
 
   it("oversize file: onError fires with the Russian 'too_large' message; no upload attempted", async () => {
-    globalThis.fetch = vi.fn() as never;
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
     const mintToken = vi.fn();
     const onUploaded = vi.fn();
     const onError = vi.fn();
@@ -110,12 +110,12 @@ describe("ChatAttachButton", () => {
     });
     expect(onError.mock.calls[0]![0]).toMatch(/больше 2 МБ/);
     expect(mintToken).not.toHaveBeenCalled();
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(onUploaded).not.toHaveBeenCalled();
   });
 
   it("unsupported MIME: onError fires, no network call", async () => {
-    globalThis.fetch = vi.fn() as never;
+    vi.stubGlobal("fetch", vi.fn());
     const onUploaded = vi.fn();
     const onError = vi.fn();
     renderWithLang(
@@ -135,10 +135,10 @@ describe("ChatAttachButton", () => {
   });
 
   it("worker rejects the upload: onError fires with 'upload_failed' message", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ ok: false, error: "expired" }),
       { status: 200 },
-    )) as never;
+    )));
     const onUploaded = vi.fn();
     const onError = vi.fn();
     renderWithLang(
@@ -182,10 +182,10 @@ describe("ChatAttachButton", () => {
   });
 
   it("clears the input value after upload so the same file can be re-selected", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ ok: true, url: "https://w/cdn/x.png" }),
       { status: 200, headers: { "Content-Type": "application/json" } },
-    )) as never;
+    )));
     renderWithLang(
       <ChatAttachButton
         mintToken={async () => ({ token: "T", uploadUrl: "https://w/u" })}

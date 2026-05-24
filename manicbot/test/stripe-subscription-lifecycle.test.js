@@ -146,6 +146,35 @@ describe('verifyStripeSignature — edge cases', () => {
   it('rejects null secret', async () => {
     expect(await verifyStripeSignature('{}', 't=1,v1=abc', null)).toBe(false);
   });
+
+  // Phase 2 cleanup: ported from the deleted billing-webhooks.test.js. The
+  // tightened ±120s window (#P0-2) must be pinned exactly — a refactor that
+  // loosens it back to ±300s should fail the suite.
+  it('rejects timestamps just outside the 120s window (#P0-2)', async () => {
+    const payload = '{"id":"evt_replay"}';
+    const oldTs = Math.floor(Date.now() / 1000) - 121;
+    const { signature } = await signPayload(payload, SECRET, oldTs);
+    expect(await verifyStripeSignature(payload, signature, SECRET)).toBe(false);
+  });
+
+  it('accepts timestamps just inside the 120s window (#P0-2)', async () => {
+    const payload = '{"id":"evt_fresh"}';
+    const ts = Math.floor(Date.now() / 1000) - 119;
+    const { signature } = await signPayload(payload, SECRET, ts);
+    expect(await verifyStripeSignature(payload, signature, SECRET)).toBe(true);
+  });
+
+  it('accepts uppercase v1 hex (timing-safe compare)', async () => {
+    const payload = '{"id":"evt_case"}';
+    const { signature } = await signPayload(payload, SECRET);
+    const upper = signature.replace(/v1=([0-9a-f]+)/, (_, hex) => `v1=${hex.toUpperCase()}`);
+    expect(upper).not.toBe(signature);
+    expect(await verifyStripeSignature(payload, upper, SECRET)).toBe(true);
+  });
+
+  it('returns false for empty secret', async () => {
+    expect(await verifyStripeSignature('{}', '', '')).toBe(false);
+  });
 });
 
 // ─── checkout.session.completed ───────────────────────────────────────────────

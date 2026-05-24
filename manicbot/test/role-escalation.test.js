@@ -10,7 +10,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isCreator, isAdmin, isPlatformAdmin, getRole } from '../src/services/users.js';
+import {
+  isCreator,
+  isAdmin,
+  isPlatformAdmin,
+  getRole,
+  saveMaster,
+  listMasters,
+  getMaster,
+  getUser,
+  saveUser,
+} from '../src/services/users.js';
 import {
   resolveRole,
   setPlatformRole,
@@ -327,5 +337,113 @@ describe('web session lock prevents role escalation', () => {
     ctx._lockToClientRole = true;
     ctx._webSessionChatId = 402;
     expect(await isPlatformAdmin(ctx, 402)).toBe(false);
+  });
+});
+
+// ── Edge cases ported from the deleted roles-users.test.js ─────────────────
+// (Phase 2 cleanup — kept the unique negative-edge assertions; the positive
+// happy-path cases were already covered above.)
+
+describe('isCreator — negative edge cases', () => {
+  it('returns false when cid differs', () => {
+    expect(isCreator({ adminChatId: '12345' }, 999)).toBe(false);
+    expect(isCreator({ adminChatId: '12345' }, null)).toBe(false);
+  });
+
+  it('returns false when adminChatId is missing or null', () => {
+    expect(isCreator({}, 12345)).toBe(false);
+    expect(isCreator({ adminChatId: null }, 12345)).toBe(false);
+  });
+
+  it('returns false when cid is null or undefined', () => {
+    expect(isCreator({ adminChatId: '12345' }, null)).toBe(false);
+    expect(isCreator({ adminChatId: '12345' }, undefined)).toBe(false);
+  });
+});
+
+describe('isPlatformAdmin — non-creator without DB', () => {
+  it('non-creator without db is not platform admin', async () => {
+    const ctx = { adminChatId: '777', db: null };
+    expect(await isPlatformAdmin(ctx, 888)).toBe(false);
+  });
+});
+
+// ── Merged from role-master-tenant.test.js (Phase 2 cleanup) ───────────────
+
+const _phase2MasterData = {
+  chatId: 111,
+  name: 'Test',
+  tgUsername: null,
+  phone: null,
+  addedAt: Date.now(),
+  active: true,
+};
+
+describe('Master assignment — tenant isolation (D1)', () => {
+  it('masters are stored under tenant (listMasters only sees own tenant)', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const ctx1 = { db, kv, prefix: 't:t_salon1:', tenantId: 't_salon1' };
+    const ctx2 = { db, kv, prefix: 't:t_salon2:', tenantId: 't_salon2' };
+    await saveMaster(ctx1, 100, { ..._phase2MasterData, chatId: 100, name: 'Salon1' });
+    await saveMaster(ctx2, 200, { ..._phase2MasterData, chatId: 200, name: 'Salon2' });
+    const list1 = await listMasters(ctx1);
+    const list2 = await listMasters(ctx2);
+    expect(list1).toHaveLength(1);
+    expect(list2).toHaveLength(1);
+    expect(list1[0].name).toBe('Salon1');
+    expect(list2[0].name).toBe('Salon2');
+  });
+
+  it('getMaster in tenant A does not see master record from tenant B', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const ctx1 = { db, kv, prefix: 't:t_salon1:', tenantId: 't_salon1' };
+    const ctx2 = { db, kv, prefix: 't:t_salon2:', tenantId: 't_salon2' };
+    await saveMaster(ctx1, 333, { ..._phase2MasterData, chatId: 333, name: 'OnlyInA' });
+    expect(await getMaster(ctx1, 333)).not.toBeNull();
+    expect(await getMaster(ctx2, 333)).toBeNull();
+  });
+
+  it('same chatId can be master in two different tenants', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const ctx1 = { db, kv, prefix: 't:t_salon1:', tenantId: 't_salon1' };
+    const ctx2 = { db, kv, prefix: 't:t_salon2:', tenantId: 't_salon2' };
+    await saveMaster(ctx1, 555, { ..._phase2MasterData, chatId: 555, name: 'Multi' });
+    await saveMaster(ctx2, 555, { ..._phase2MasterData, chatId: 555, name: 'Multi' });
+    expect(await listMasters(ctx1)).toHaveLength(1);
+    expect(await listMasters(ctx2)).toHaveLength(1);
+  });
+});
+
+describe('User-in-tenant requirement (D1)', () => {
+  function makeTenantCtx(tenantId = 't_salon1') {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    return { db, kv, prefix: `t:${tenantId}:`, tenantId };
+  }
+
+  it('getUser returns null for chatId with no record in this tenant', async () => {
+    const ctx = makeTenantCtx();
+    expect(await getUser(ctx, 12345)).toBeNull();
+  });
+
+  it('getUser returns user when record exists in this tenant', async () => {
+    const ctx = makeTenantCtx();
+    await saveUser(ctx, 999, { chatId: 999, name: 'Alice', tgUsername: 'alice' });
+    const u = await getUser(ctx, 999);
+    expect(u).not.toBeNull();
+    expect(u.name).toBe('Alice');
+  });
+
+  it('user in tenant A is not visible to tenant B getUser', async () => {
+    const db = createMockD1();
+    const kv = makeMockKv();
+    const ctxA = { db, kv, prefix: 't:t_salon1:', tenantId: 't_salon1' };
+    const ctxB = { db, kv, prefix: 't:t_salon2:', tenantId: 't_salon2' };
+    await saveUser(ctxA, 777, { chatId: 777, name: 'Bob' });
+    expect(await getUser(ctxA, 777)).not.toBeNull();
+    expect(await getUser(ctxB, 777)).toBeNull();
   });
 });

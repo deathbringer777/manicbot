@@ -1,0 +1,216 @@
+{
+  "validateRecurrence": [
+    {
+      "name": "accepts once",
+      "input": { "type": "once" },
+      "expect": { "type": "once" }
+    },
+    {
+      "name": "accepts daily with time",
+      "input": { "type": "daily", "time": "09:00" },
+      "expect": { "type": "daily", "time": "09:00", "until": null }
+    },
+    {
+      "name": "accepts weekly with weekdays + dedups and sorts",
+      "input": { "type": "weekly", "time": "09:00", "weekdays": [3, 1, 5, 1] },
+      "expect": { "type": "weekly", "time": "09:00", "weekdays": [1, 3, 5], "until": null }
+    },
+    {
+      "name": "rejects time with bad shape (9:00 — missing zero pad)",
+      "input": { "type": "daily", "time": "9:00" },
+      "throws": "time must match HH:MM"
+    },
+    {
+      "name": "rejects time with bad shape (24:00 — out of range)",
+      "input": { "type": "daily", "time": "24:00" },
+      "throws": true
+    },
+    {
+      "name": "rejects time with bad shape (09:60 — minute out of range)",
+      "input": { "type": "daily", "time": "09:60" },
+      "throws": true
+    },
+    {
+      "name": "rejects weekly with empty weekdays",
+      "input": { "type": "weekly", "time": "09:00", "weekdays": [] },
+      "throws": "non-empty"
+    },
+    {
+      "name": "rejects weekly weekday out of range (0)",
+      "input": { "type": "weekly", "time": "09:00", "weekdays": [0] },
+      "throws": "1\\.\\.7"
+    },
+    {
+      "name": "rejects weekly weekday out of range (8)",
+      "input": { "type": "weekly", "time": "09:00", "weekdays": [8] },
+      "throws": "1\\.\\.7"
+    },
+    {
+      "name": "rejects monthly_day outside 1..28 (0)",
+      "input": { "type": "monthly_day", "time": "09:00", "dayOfMonth": 0 },
+      "throws": true
+    },
+    {
+      "name": "rejects monthly_day outside 1..28 (29)",
+      "input": { "type": "monthly_day", "time": "09:00", "dayOfMonth": 29 },
+      "throws": true
+    },
+    {
+      "name": "rejects until with wrong shape",
+      "input": { "type": "daily", "time": "09:00", "until": "2026/12/31" },
+      "throws": "YYYY-MM-DD"
+    },
+    {
+      "name": "rejects unknown type",
+      "input": { "type": "yearly", "time": "09:00" },
+      "throws": "unknown type"
+    },
+    {
+      "name": "rejects null input",
+      "input": null,
+      "throws": true
+    },
+    {
+      "name": "rejects string input",
+      "input": "once",
+      "throws": true
+    }
+  ],
+  "expandOccurrences": {
+    "windowAnchor": "2026-05-18",
+    "windowFromIso": "2026-05-18T00:00:00.000Z",
+    "windowToIso": "2026-05-24T23:59:59.000Z",
+    "cases": [
+      {
+        "name": "once: returns anchor when inside window",
+        "rule": { "type": "once" },
+        "anchor": "2026-05-18",
+        "expectIso": ["2026-05-18T00:00:00.000Z"]
+      },
+      {
+        "name": "once: returns empty when anchor before window",
+        "rule": { "type": "once" },
+        "anchor": "2026-05-18",
+        "fromIso": "2026-05-19T00:00:00.000Z",
+        "toIso": "2026-05-24T23:59:59.000Z",
+        "expectIso": []
+      },
+      {
+        "name": "daily: emits one per day in window (7 days)",
+        "rule": { "type": "daily", "time": "09:00" },
+        "anchor": "2026-05-18",
+        "expectIso": [
+          "2026-05-18T09:00:00.000Z",
+          "2026-05-19T09:00:00.000Z",
+          "2026-05-20T09:00:00.000Z",
+          "2026-05-21T09:00:00.000Z",
+          "2026-05-22T09:00:00.000Z",
+          "2026-05-23T09:00:00.000Z",
+          "2026-05-24T09:00:00.000Z"
+        ]
+      },
+      {
+        "name": "weekly Mon/Wed/Fri: emits 3 across the week",
+        "rule": { "type": "weekly", "time": "09:00", "weekdays": [1, 3, 5] },
+        "anchor": "2026-05-18",
+        "expectIso": [
+          "2026-05-18T09:00:00.000Z",
+          "2026-05-20T09:00:00.000Z",
+          "2026-05-22T09:00:00.000Z"
+        ]
+      },
+      {
+        "name": "weekly Sun (ISO 7): includes Sunday",
+        "rule": { "type": "weekly", "time": "09:00", "weekdays": [7] },
+        "anchor": "2026-05-18",
+        "expectIso": ["2026-05-24T09:00:00.000Z"]
+      },
+      {
+        "name": "monthly_day: only the matching day",
+        "rule": { "type": "monthly_day", "time": "09:00", "dayOfMonth": 15 },
+        "anchor": "2026-05-01",
+        "fromIso": "2026-05-01T00:00:00.000Z",
+        "toIso": "2026-08-01T00:00:00.000Z",
+        "expectIsoDateOnly": ["2026-05-15", "2026-06-15", "2026-07-15"]
+      },
+      {
+        "name": "honors until cutoff",
+        "rule": { "type": "daily", "time": "09:00", "until": "2026-05-20" },
+        "anchor": "2026-05-18",
+        "expectIso": [
+          "2026-05-18T09:00:00.000Z",
+          "2026-05-19T09:00:00.000Z",
+          "2026-05-20T09:00:00.000Z"
+        ]
+      },
+      {
+        "name": "honors anchor (does not emit before)",
+        "rule": { "type": "daily", "time": "09:00" },
+        "anchor": "2026-05-22",
+        "expectIso": [
+          "2026-05-22T09:00:00.000Z",
+          "2026-05-23T09:00:00.000Z",
+          "2026-05-24T09:00:00.000Z"
+        ]
+      }
+    ],
+    "throws": [
+      {
+        "name": "rejects from > to",
+        "rule": { "type": "daily", "time": "09:00" },
+        "anchor": "2026-05-18",
+        "fromIso": "2026-05-24T23:59:59.000Z",
+        "toIso": "2026-05-18T00:00:00.000Z"
+      },
+      {
+        "name": "rejects bad anchor",
+        "rule": { "type": "daily", "time": "09:00" },
+        "anchor": "2026/05/18"
+      }
+    ]
+  },
+  "nextOccurrenceAfter": [
+    {
+      "name": "once: returns anchor when in future",
+      "rule": { "type": "once" },
+      "anchor": "2026-05-18",
+      "afterIso": "2026-05-17T00:00:00.000Z",
+      "expectIso": "2026-05-18T00:00:00.000Z"
+    },
+    {
+      "name": "once: returns null when anchor already past",
+      "rule": { "type": "once" },
+      "anchor": "2026-05-18",
+      "afterIso": "2026-05-19T00:00:00.000Z",
+      "expectIso": null
+    },
+    {
+      "name": "daily: returns next day at fire time if today already fired",
+      "rule": { "type": "daily", "time": "09:00" },
+      "anchor": "2026-05-18",
+      "afterIso": "2026-05-18T10:00:00.000Z",
+      "expectIso": "2026-05-19T09:00:00.000Z"
+    },
+    {
+      "name": "daily: returns today if fire time still in future",
+      "rule": { "type": "daily", "time": "09:00" },
+      "anchor": "2026-05-18",
+      "afterIso": "2026-05-18T08:00:00.000Z",
+      "expectIso": "2026-05-18T09:00:00.000Z"
+    },
+    {
+      "name": "weekly Mon/Wed/Fri: skips to next matching weekday",
+      "rule": { "type": "weekly", "time": "09:00", "weekdays": [1, 3, 5] },
+      "anchor": "2026-05-18",
+      "afterIso": "2026-05-18T10:00:00.000Z",
+      "expectIso": "2026-05-20T09:00:00.000Z"
+    },
+    {
+      "name": "returns null past until cutoff",
+      "rule": { "type": "daily", "time": "09:00", "until": "2026-05-20" },
+      "anchor": "2026-05-18",
+      "afterIso": "2026-05-21T00:00:00.000Z",
+      "expectIso": null
+    }
+  ]
+}

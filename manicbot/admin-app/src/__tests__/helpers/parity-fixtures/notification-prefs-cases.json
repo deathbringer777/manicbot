@@ -1,0 +1,110 @@
+{
+  "notificationCategories": [
+    "appointment",
+    "support",
+    "birthday",
+    "platform",
+    "master",
+    "reminder",
+    "messenger",
+    "billing",
+    "marketing"
+  ],
+  "defaultPrefs": {
+    "appointment": { "inapp": true, "push": true },
+    "marketing": { "inapp": true, "push": false },
+    "birthday": { "inapp": true, "push": false }
+  },
+  "categoryForKind": [
+    { "kind": "appointment.created", "expect": "appointment" },
+    { "kind": "appointment.no_show_master", "expect": "appointment" },
+    { "kind": "support.reply", "expect": "support" },
+    { "kind": "birthday.client", "expect": "birthday" },
+    { "kind": "platform.message", "expect": "platform" },
+    { "kind": "master.invite", "expect": "master" },
+    { "kind": "reminder.fired", "expect": "reminder" },
+    { "kind": "messenger.thread.new", "expect": "messenger" },
+    { "kind": "thread.message.new", "expect": "messenger" },
+    { "kind": "billing.alert", "expect": "billing" },
+    { "kind": "marketing.campaign.sent", "expect": "marketing" },
+    { "kind": "totally.unknown", "expect": null },
+    { "kind": "", "expect": null }
+  ],
+  "parsePrefsMalformed": [
+    { "name": "null input", "input": null },
+    { "name": "empty string", "input": "" },
+    { "name": "not json string", "input": "not json" },
+    { "name": "JSON array (not object)", "input": "[]" },
+    { "name": "empty JSON object", "input": "{}" }
+  ],
+  "parsePrefsPartial": [
+    {
+      "name": "fills in missing categories with defaults",
+      "input": { "categories": { "appointment": { "inapp": false, "push": false } } },
+      "checks": [
+        { "category": "appointment", "expect": { "inapp": false, "push": false } }
+      ]
+    },
+    {
+      "name": "recovers from partially-typed category objects (missing channels)",
+      "input": { "categories": { "support": { "inapp": false }, "appointment": { "push": false } } },
+      "checks": [
+        { "category": "support", "channel": "inapp", "expect": false },
+        { "category": "support", "channel": "push", "expect": true },
+        { "category": "appointment", "channel": "inapp", "expect": true },
+        { "category": "appointment", "channel": "push", "expect": false }
+      ]
+    }
+  ],
+  "shouldDeliver": [
+    {
+      "name": "respects opt-out on inapp channel",
+      "prefsInput": { "categories": { "marketing": { "inapp": false, "push": false } } },
+      "kind": "marketing.campaign.sent",
+      "channel": "inapp",
+      "expect": false
+    },
+    {
+      "name": "respects opt-out on push channel",
+      "prefsInput": { "categories": { "marketing": { "inapp": false, "push": false } } },
+      "kind": "marketing.campaign.sent",
+      "channel": "push",
+      "expect": false
+    },
+    {
+      "name": "unknown kind always delivers (inapp)",
+      "prefsInput": null,
+      "kind": "totally.unknown",
+      "channel": "inapp",
+      "expect": true
+    },
+    {
+      "name": "unknown kind always delivers (push)",
+      "prefsInput": null,
+      "kind": "totally.unknown",
+      "channel": "push",
+      "expect": true
+    },
+    {
+      "name": "each channel independent — push off ≠ inapp off (inapp on)",
+      "prefsInput": { "categories": { "support": { "inapp": true, "push": false } } },
+      "kind": "support.reply",
+      "channel": "inapp",
+      "expect": true
+    },
+    {
+      "name": "each channel independent — push off ≠ inapp off (push off)",
+      "prefsInput": { "categories": { "support": { "inapp": true, "push": false } } },
+      "kind": "support.reply",
+      "channel": "push",
+      "expect": false
+    },
+    {
+      "name": "support opt-out on both channels — appointment unaffected",
+      "prefsInput": { "categories": { "support": { "inapp": false, "push": false } } },
+      "kind": "appointment.created",
+      "channel": "inapp",
+      "expect": true
+    }
+  ]
+}

@@ -47,3 +47,8 @@ describe('provision-bots.js — check for hardcoded tokens', () => {
     expect(scriptCode).not.toBeNull();
   });
 });
+
+// Note: structural pins on validateSecurityConfig are no longer added here —
+// the real `security-config.test.js` upstream now exports + exercises the
+// function directly (PR #206 / H-A fixer), which is the stronger pattern.
+

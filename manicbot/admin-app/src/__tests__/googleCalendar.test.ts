@@ -176,8 +176,7 @@ describe("googleCalendarRouter", () => {
       expect(JSON.parse(opts?.body || "{}")).toMatchObject({ tenantId: "tenant_demo", scope: "tenant" });
       return new Response(JSON.stringify({ ok: true, connectUrl: "https://manicbot.com/google/connect?session=abc" }), { status: 200, headers: { "Content-Type": "application/json" } });
     }) as unknown as typeof fetch;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal("fetch", fetchMock);
 
     try {
       const dbMock = createDbMock();
@@ -185,7 +184,7 @@ describe("googleCalendarRouter", () => {
       const res = await caller.createWebConnectUrl({ tenantId: "tenant_demo", scope: "tenant" });
       expect(res.connectUrl).toContain("/google/connect?session=");
     } finally {
-      globalThis.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 
@@ -193,8 +192,7 @@ describe("googleCalendarRouter", () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ error: "tenant_not_found" }), { status: 400, headers: { "Content-Type": "application/json" } })
     ) as unknown as typeof fetch;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = fetchMock;
+    vi.stubGlobal("fetch", fetchMock);
 
     try {
       const dbMock = createDbMock();
@@ -202,7 +200,7 @@ describe("googleCalendarRouter", () => {
       await expect(caller.createWebConnectUrl({ tenantId: "tenant_demo", scope: "tenant" }))
         .rejects.toThrowError(/tenant_not_found/);
     } finally {
-      globalThis.fetch = originalFetch;
+      vi.unstubAllGlobals();
     }
   });
 

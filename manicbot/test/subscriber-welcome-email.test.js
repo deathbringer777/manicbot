@@ -81,9 +81,8 @@ describe('subscriberWelcomeEmail — localization', () => {
 });
 
 describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {
-  let originalFetch;
-  beforeEach(() => { originalFetch = global.fetch; });
-  afterEach(() => { global.fetch = originalFetch; });
+  // Phase 2 cleanup: vi.stubGlobal + unstubAllGlobals.
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it('returns false when required args are missing', async () => {
     expect(await sendSubscriberWelcomeEmail({ resendKey: '', fromAddr: 'x', email: 'a@b.com' })).toBe(false);
@@ -93,7 +92,7 @@ describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {
 
   it('POSTs to Resend with correct auth header, from, to, subject, and HTML body', async () => {
     const fetchMock = vi.fn(async () => new Response('{"id":"e_1"}', { status: 200 }));
-    global.fetch = fetchMock;
+    vi.stubGlobal('fetch', fetchMock);
 
     const ok = await sendSubscriberWelcomeEmail({
       resendKey: 'rk_live_123',
@@ -120,10 +119,10 @@ describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {
 
   it('returns false and logs when Resend responds non-2xx (e.g. domain not verified)', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    global.fetch = vi.fn(async () => new Response(
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ name: 'validation_error', message: 'The manicbot.com domain is not verified.' }),
       { status: 403 },
-    ));
+    )));
 
     const ok = await sendSubscriberWelcomeEmail({
       resendKey: 'rk',
@@ -142,7 +141,7 @@ describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {
 
   it('returns false on network/timeout errors (fetch throws)', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    global.fetch = vi.fn(async () => { throw new Error('TimeoutError'); });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('TimeoutError'); }));
     const ok = await sendSubscriberWelcomeEmail({
       resendKey: 'rk', fromAddr: 'ManicBot <x@y.com>', email: 'a@b.com', locale: 'en',
     });
@@ -153,10 +152,10 @@ describe('subscriberWelcomeEmail — sendSubscriberWelcomeEmail()', () => {
 
   it('uses the correct locale → subject mapping', async () => {
     const subjects = [];
-    global.fetch = vi.fn(async (_url, init) => {
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
       subjects.push(JSON.parse(init.body).subject);
       return new Response('{}', { status: 200 });
-    });
+    }));
     for (const loc of ['ru', 'uk', 'ua', 'en', 'pl', 'zz']) {
       await sendSubscriberWelcomeEmail({
         resendKey: 'rk', fromAddr: 'from@x.com', email: 'a@b.com', locale: loc,

@@ -1,205 +1,226 @@
-import { describe, it, expect } from "vitest";
-import type { AppRole } from "~/server/api/routers/auth";
-
 /**
- * Tests for auth router getMyRole logic.
- * We extract the pure decision logic since the actual tRPC context
- * requires D1 bindings that aren't available in test.
+ * authRouter.getMyRole — direct router test.
+ *
+ * Phase 2 cleanup: replaced the previous "getMyRoleLogic" mirror-function
+ * with a real `createCaller(authRouter)` exercise. The previous file
+ * tested decision-tree logic that was already gone from the production
+ * router (Telegram-user codepath was removed during the web-auth
+ * migration), so deleting the mirror revealed zero coverage gap.
  */
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-interface MockCtx {
-  user: { id: number } | null;
-  webUser: { email: string; webRole: string; tenantId: string | null } | null;
-  adminChatId: string | null;
-  platformRows: Array<{ chatId: number; role: string }>;
-  tenantRows: Array<{ chatId: number; role: string; tenantId: string }>;
-}
+vi.mock("~/server/db", () => ({ getDb: () => null }));
+vi.mock("~/env", () => ({
+  env: {
+    ADMIN_CHAT_ID: "12345",
+    AUTH_SECRET: "test",
+    TELEGRAM_BOT_TOKEN: "0:TEST",
+    WORKER_PUBLIC_URL: "https://worker.test.local",
+    UPLOAD_TOKEN_SECRET: "0123456789abcdef0123456789abcdef",
+  },
+}));
 
-function getMyRoleLogic(ctx: MockCtx): { role: AppRole; tenantId: string | null } {
-  // Web session path
-  if (!ctx.user && ctx.webUser) {
-    return { role: ctx.webUser.webRole as AppRole, tenantId: ctx.webUser.tenantId };
-  }
+import { createCallerFactory } from "~/server/api/trpc";
+import { authRouter } from "~/server/api/routers/auth";
+import {
+  createDbMock,
+  makeAdminCtx,
+  makeTenantOwnerCtx,
+  makeMasterCtx,
+  makeUnauthCtx,
+  makeSupportCtx,
+} from "./helpers/db-mock";
 
-  if (!ctx.user) {
-    return { role: null, tenantId: null };
-  }
+const callerFactory = createCallerFactory(authRouter);
 
-  // Creator fallback
-  if (ctx.adminChatId && String(ctx.user.id) === ctx.adminChatId) {
-    return { role: "system_admin", tenantId: null };
-  }
+describe("authRouter.getMyRole — unauthenticated", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-  const platformRow = ctx.platformRows.find((r) => r.chatId === ctx.user!.id);
-  if (platformRow) {
-    const role = platformRow.role as AppRole;
-    if (role === "system_admin") {
-      if (ctx.adminChatId && String(ctx.user!.id) === ctx.adminChatId) {
-        return { role: "system_admin", tenantId: null };
-      }
-    } else if (role === "support" || role === "technical_support") {
-      return { role, tenantId: null };
-    }
-  }
-
-  // Tenant roles
-  const tenantRow = ctx.tenantRows.find((r) => r.chatId === ctx.user!.id);
-  if (tenantRow) {
-    const role = tenantRow.role as AppRole;
-    if (role === "tenant_owner" || role === "master") {
-      return { role, tenantId: tenantRow.tenantId };
-    }
-  }
-
-  return { role: null, tenantId: null };
-}
-
-describe("getMyRole — web session path", () => {
-  it("returns webUser role when no Telegram user", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { email: "admin@test.com", webRole: "system_admin", tenantId: null },
-      adminChatId: null,
-      platformRows: [],
-      tenantRows: [],
-    });
-    expect(result.role).toBe("system_admin");
+  it("returns EMPTY (role=null) for an unauthenticated context", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeUnauthCtx(db) as never);
+    const result = await caller.getMyRole();
+    expect(result.role).toBeNull();
     expect(result.tenantId).toBeNull();
+    expect(result.email).toBeNull();
+    expect(result.webUserId).toBeNull();
+    expect(result.permissions).toEqual([]);
   });
 
-  it("returns tenant_owner with tenantId for web user", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: { email: "owner@salon.com", webRole: "tenant_owner", tenantId: "t_abc" },
-      adminChatId: null,
-      platformRows: [],
-      tenantRows: [],
-    });
+  it("EMPTY defaults: hasPassword=true, emailVerified=true, isTrialExpired=false", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeUnauthCtx(db) as never);
+    const result = await caller.getMyRole();
+    expect(result.hasPassword).toBe(true);
+    expect(result.emailVerified).toBe(true);
+    expect(result.isTrialExpired).toBe(false);
+  });
+});
+
+describe("authRouter.getMyRole — system_admin web user", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns role=system_admin with no tenantId for an admin web user", async () => {
+    // First select: webUsers row (createdAt, emailVerified, passwordHash)
+    // No tenantId so tenant-row select is skipped.
+    const { db } = createDbMock([
+      [
+        {
+          createdAt: 1700000000,
+          emailVerified: 1,
+          passwordHash: "pbkdf2:sha256:100000:salt:hash",
+        },
+      ],
+    ]);
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    const result = await caller.getMyRole();
+    expect(result.role).toBe("system_admin");
+    expect(result.tenantId).toBeNull();
+    expect(result.email).toBe("admin@test.com");
+    expect(result.hasPassword).toBe(true);
+    expect(result.emailVerified).toBe(true);
+  });
+});
+
+describe("authRouter.getMyRole — tenant_owner web user", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns role=tenant_owner + tenantId enrichment", async () => {
+    // 1. webUsers row, 2. tenants row
+    const { db } = createDbMock([
+      [
+        {
+          createdAt: 1700000000,
+          emailVerified: 1,
+          passwordHash: "hash",
+        },
+      ],
+      [
+        {
+          name: "Salon Test",
+          displayName: "Salon Test",
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: "cus_X",
+        },
+      ],
+    ]);
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t_abc") as never);
+    const result = await caller.getMyRole();
     expect(result.role).toBe("tenant_owner");
     expect(result.tenantId).toBe("t_abc");
+    expect(result.tenantName).toBe("Salon Test");
+    expect(result.isPersonalTenant).toBe(false);
+    expect(result.isTest).toBe(false);
+  });
+
+  it("flags isPersonalTenant when tenants.is_personal=1", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1700000000, emailVerified: 1, passwordHash: "hash" }],
+      [
+        {
+          name: "Personal",
+          displayName: null,
+          logo: null,
+          isPersonal: 1,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: null,
+        },
+      ],
+    ]);
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t_personal") as never);
+    const result = await caller.getMyRole();
+    expect(result.isPersonalTenant).toBe(true);
   });
 });
 
-describe("getMyRole — unauthenticated", () => {
-  it("returns null role when no user and no webUser", () => {
-    const result = getMyRoleLogic({
-      user: null,
-      webUser: null,
-      adminChatId: null,
-      platformRows: [],
-      tenantRows: [],
-    });
-    expect(result.role).toBeNull();
-  });
-});
+describe("authRouter.getMyRole — master web user", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-describe("getMyRole — ADMIN_CHAT_ID fallback", () => {
-  it("returns system_admin for creator chat ID", () => {
-    const result = getMyRoleLogic({
-      user: { id: 12345 },
-      webUser: null,
-      adminChatId: "12345",
-      platformRows: [],
-      tenantRows: [],
-    });
-    expect(result.role).toBe("system_admin");
-  });
-
-  it("does not match different chat ID", () => {
-    const result = getMyRoleLogic({
-      user: { id: 99999 },
-      webUser: null,
-      adminChatId: "12345",
-      platformRows: [],
-      tenantRows: [],
-    });
-    expect(result.role).toBeNull();
-  });
-});
-
-describe("getMyRole — platform roles", () => {
-  it("ignores system_admin in DB when user is not ADMIN_CHAT_ID", () => {
-    const result = getMyRoleLogic({
-      user: { id: 100 },
-      webUser: null,
-      adminChatId: "999",
-      platformRows: [{ chatId: 100, role: "system_admin" }],
-      tenantRows: [],
-    });
-    expect(result.role).toBeNull();
-  });
-
-  it("returns support role from platform_roles", () => {
-    const result = getMyRoleLogic({
-      user: { id: 100 },
-      webUser: null,
-      adminChatId: null,
-      platformRows: [{ chatId: 100, role: "support" }],
-      tenantRows: [],
-    });
-    expect(result.role).toBe("support");
-    expect(result.tenantId).toBeNull();
-  });
-
-  it("ignores non-staff platform roles", () => {
-    const result = getMyRoleLogic({
-      user: { id: 100 },
-      webUser: null,
-      adminChatId: null,
-      platformRows: [{ chatId: 100, role: "tenant_owner" }],
-      tenantRows: [],
-    });
-    expect(result.role).toBeNull();
-  });
-});
-
-describe("getMyRole — tenant roles", () => {
-  it("returns tenant_owner with tenantId", () => {
-    const result = getMyRoleLogic({
-      user: { id: 200 },
-      webUser: null,
-      adminChatId: null,
-      platformRows: [],
-      tenantRows: [{ chatId: 200, role: "tenant_owner", tenantId: "t_xyz" }],
-    });
-    expect(result.role).toBe("tenant_owner");
-    expect(result.tenantId).toBe("t_xyz");
-  });
-
-  it("returns master with tenantId", () => {
-    const result = getMyRoleLogic({
-      user: { id: 300 },
-      webUser: null,
-      adminChatId: null,
-      platformRows: [],
-      tenantRows: [{ chatId: 300, role: "master", tenantId: "t_salon" }],
-    });
+  it("returns role=master + master enrichment (masterId, avatar fields)", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1700000000, emailVerified: 1, passwordHash: "hash" }],
+      [
+        {
+          name: "Salon",
+          displayName: null,
+          logo: null,
+          isPersonal: 0,
+          isTest: 0,
+          billingStatus: "active",
+          trialEndsAt: null,
+          graceEndsAt: null,
+          stripeCustomerId: null,
+        },
+      ],
+      [{ chatId: 4242, avatarUrl: null, avatarEmoji: null }],
+    ]);
+    const caller = callerFactory(makeMasterCtx(db, "t_salon") as never);
+    const result = await caller.getMyRole();
     expect(result.role).toBe("master");
     expect(result.tenantId).toBe("t_salon");
+    expect(result.masterId).toBe(4242);
   });
 });
 
-describe("getMyRole — priority", () => {
-  it("ADMIN_CHAT_ID takes priority over platform roles", () => {
-    const result = getMyRoleLogic({
-      user: { id: 42 },
-      webUser: null,
-      adminChatId: "42",
-      platformRows: [{ chatId: 42, role: "support" }],
-      tenantRows: [],
-    });
-    expect(result.role).toBe("system_admin");
-  });
+describe("authRouter.getMyRole — support web user", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-  it("platform role takes priority over tenant role", () => {
-    const result = getMyRoleLogic({
-      user: { id: 55 },
-      webUser: null,
-      adminChatId: null,
-      platformRows: [{ chatId: 55, role: "support" }],
-      tenantRows: [{ chatId: 55, role: "tenant_owner", tenantId: "t_1" }],
-    });
+  it("returns role=support without tenant enrichment", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1700000000, emailVerified: 1, passwordHash: "hash" }],
+    ]);
+    const caller = callerFactory(makeSupportCtx(db, "support") as never);
+    const result = await caller.getMyRole();
     expect(result.role).toBe("support");
     expect(result.tenantId).toBeNull();
+  });
+
+  it("returns role=technical_support without tenant enrichment", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1700000000, emailVerified: 1, passwordHash: "hash" }],
+    ]);
+    const caller = callerFactory(makeSupportCtx(db, "technical_support") as never);
+    const result = await caller.getMyRole();
+    expect(result.role).toBe("technical_support");
+    expect(result.tenantId).toBeNull();
+  });
+});
+
+describe("authRouter.getMyRole — hasPassword field", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("hasPassword=true when DB row has a non-empty passwordHash", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: "pbkdf2:hash" }],
+    ]);
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    const result = await caller.getMyRole();
+    expect(result.hasPassword).toBe(true);
+  });
+
+  it("hasPassword=false when DB row has passwordHash=null (Google-only registration)", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: null }],
+    ]);
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    const result = await caller.getMyRole();
+    expect(result.hasPassword).toBe(false);
+  });
+
+  it("hasPassword=false when DB row has passwordHash=''", async () => {
+    const { db } = createDbMock([
+      [{ createdAt: 1, emailVerified: 1, passwordHash: "" }],
+    ]);
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    const result = await caller.getMyRole();
+    expect(result.hasPassword).toBe(false);
   });
 });

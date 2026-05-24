@@ -1,100 +1,104 @@
-import { describe, it, expect } from "vitest";
-
 /**
- * Pure helpers mirroring NextAuth jwt/session callbacks in auth.ts
- * (Google redirect + signIn DB branch are covered by google-prefill-token + auth-base-url tests).
+ * NextAuth callbacks — structural pin on the real source.
+ *
+ * Phase 2 cleanup: the NextAuth callbacks (signIn / jwt / session) are
+ * defined inline inside `NextAuth({ ... })` in
+ * `~/server/auth/auth.ts` and are not exported as standalone functions.
+ * The previous test file reimplemented findWebUserRow / buildToken /
+ * buildSession in the test, so a refactor that broke the real callbacks
+ * (e.g. dropped the .toLowerCase() in the email lookup) would still pass.
+ *
+ * This rewrite pins the EXACT lines we care about in the real source —
+ * a regression on case-insensitive email match, tenantId/webRole
+ * copy, default-role fallback, or the #S8 stale-token rejection breaks
+ * the suite.
  */
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
-describe("Google web_users match (case / trim)", () => {
-  function findWebUserRow(
-    email: string | undefined,
-    rows: Array<{ id: string; email: string; role: string; tenantId: string | null }>,
-  ) {
-    if (!email) return undefined;
-    const normalized = email.toLowerCase().trim();
-    return rows.find((r) => r.email === normalized);
-  }
+const ROOT = path.resolve(__dirname, "..");
+const SRC = readFileSync(path.join(ROOT, "server/auth/auth.ts"), "utf8");
 
-  it("matches email case-insensitively", () => {
-    const rows = [{ id: "1", email: "admin@test.com", role: "system_admin", tenantId: null }];
-    expect(findWebUserRow("Admin@Test.COM", rows)?.role).toBe("system_admin");
+describe("NextAuth signIn callback — Google web_users lookup", () => {
+  it("normalizes email case + trim before the DB lookup", () => {
+    // The lookup must compare against the lowercased+trimmed email so
+    // the user typing `Admin@Test.COM` matches the stored `admin@test.com`.
+    expect(SRC).toMatch(
+      /user\.email\.toLowerCase\(\)\.trim\(\)/,
+    );
+    // It must run inside the `eq(webUsers.email, ...)` clause specifically.
+    expect(SRC).toMatch(
+      /eq\(\s*webUsers\.email\s*,\s*user\.email\.toLowerCase\(\)\.trim\(\)\s*\)/,
+    );
   });
 
-  it("trims email whitespace", () => {
-    const rows = [{ id: "1", email: "admin@test.com", role: "system_admin", tenantId: null }];
-    expect(findWebUserRow("  admin@test.com  ", rows)?.role).toBe("system_admin");
+  it("only runs the Google branch for account.provider === 'google'", () => {
+    expect(SRC).toMatch(/account\?\.provider\s*===\s*"google"/);
   });
 
-  it("returns undefined when email not in web_users", () => {
-    const rows = [{ id: "1", email: "admin@test.com", role: "system_admin", tenantId: null }];
-    expect(findWebUserRow("stranger@example.com", rows)).toBeUndefined();
+  it("returns false (refuses sign-in) when AUTH_SECRET is missing", () => {
+    expect(SRC).toMatch(/AUTH_SECRET missing/);
+    expect(SRC).toMatch(/return false;/);
+  });
+
+  it("redirects unknown Google emails to /register?g=<prefill-token>", () => {
+    expect(SRC).toMatch(/signGooglePrefillToken\(/);
+    expect(SRC).toMatch(/\/register\?g=/);
+  });
+
+  it("copies tenantId, webRole, id, isEmailVerified from the matched webUsers row onto the NextAuth user", () => {
+    expect(SRC).toMatch(/user\.tenantId\s*=\s*webUser\.tenantId\s*\?\?\s*null/);
+    expect(SRC).toMatch(/user\.webRole\s*=\s*webUser\.role/);
+    expect(SRC).toMatch(/user\.id\s*=\s*webUser\.id/);
+    expect(SRC).toMatch(/user\.isEmailVerified\s*=\s*!!webUser\.emailVerified/);
   });
 });
 
-describe("JWT callback logic", () => {
-  function buildToken(
-    token: Record<string, unknown>,
-    user: Record<string, unknown> | undefined,
-  ) {
-    if (user) {
-      return {
-        ...token,
-        tenantId: (user as any).tenantId ?? null,
-        webRole: (user as any).webRole ?? "tenant_owner",
-      };
-    }
-    return token;
-  }
-
-  it("copies tenantId and webRole from user to token on first sign-in", () => {
-    const token = buildToken({}, { tenantId: "t_123", webRole: "system_admin" });
-    expect(token.tenantId).toBe("t_123");
-    expect(token.webRole).toBe("system_admin");
+describe("NextAuth jwt callback — token enrichment", () => {
+  it("copies tenantId, webRole, emailVerified from user → token on first sign-in", () => {
+    expect(SRC).toMatch(/t\.tenantId\s*=\s*user\.tenantId\s*\?\?\s*null/);
+    expect(SRC).toMatch(/t\.webRole\s*=\s*user\.webRole\s*\?\?\s*"tenant_owner"/);
+    expect(SRC).toMatch(/t\.emailVerified\s*=\s*user\.isEmailVerified\s*\?\?\s*true/);
   });
 
-  it("defaults webRole to tenant_owner when not set", () => {
-    const token = buildToken({}, { tenantId: null });
-    expect(token.webRole).toBe("tenant_owner");
+  it("snapshots password_changed_at (#S8 — stale-token defense)", () => {
+    expect(SRC).toMatch(/passwordChangedAt:\s*webUsers\.passwordChangedAt/);
+    expect(SRC).toMatch(/t\.passwordChangedAt\s*=\s*rows\[0\]\?\.pca\s*\?\?\s*0/);
   });
 
-  it("preserves existing token when no user (session refresh)", () => {
-    const existing = { tenantId: "t_x", webRole: "support", sub: "abc" };
-    const token = buildToken(existing, undefined);
-    expect(token.tenantId).toBe("t_x");
-    expect(token.webRole).toBe("support");
+  it("re-checks DB on every refresh for role demotions + password changes", () => {
+    // The else-if branch on token.sub queries webUsers fresh.
+    expect(SRC).toMatch(/eq\(webUsers\.id,\s*t\.sub\)/);
+    expect(SRC).toMatch(/sessionsInvalidatedAt:\s*webUsers\.sessionsInvalidatedAt/);
+  });
+
+  it("marks token stale when passwordChangedAt OR sessionsInvalidatedAt is newer than the JWT iat", () => {
+    expect(SRC).toMatch(/storedPca\s*>\s*jwtIat\s*\|\|\s*storedSia\s*>\s*jwtIat/);
+    expect(SRC).toMatch(/\.stale\s*=\s*true/);
   });
 });
 
-describe("session callback logic", () => {
-  function buildSession(
-    session: { user: Record<string, unknown> },
-    token: Record<string, unknown>,
-  ) {
-    return {
-      ...session,
-      user: {
-        ...session.user,
-        tenantId: token.tenantId ?? null,
-        webRole: token.webRole ?? "tenant_owner",
-      },
-    };
-  }
-
-  it("attaches tenantId and webRole to session.user", () => {
-    const session = buildSession(
-      { user: { email: "a@b.com" } },
-      { tenantId: "t_1", webRole: "system_admin" },
-    );
-    expect(session.user.tenantId).toBe("t_1");
-    expect(session.user.webRole).toBe("system_admin");
+describe("NextAuth session callback — token → session", () => {
+  it("rejects stale sessions (returns null) so client is forced to re-login", () => {
+    expect(SRC).toMatch(/if \(t\.stale\)/);
+    expect(SRC).toMatch(/return null as unknown as typeof session/);
   });
 
-  it("defaults webRole to tenant_owner", () => {
-    const session = buildSession(
-      { user: {} },
-      {},
-    );
-    expect(session.user.webRole).toBe("tenant_owner");
-    expect(session.user.tenantId).toBeNull();
+  it("copies tenantId, webRole, isEmailVerified onto session.user", () => {
+    expect(SRC).toMatch(/session\.user\.id\s*=\s*token\.sub\s*\?\?\s*""/);
+    expect(SRC).toMatch(/session\.user\.tenantId\s*=\s*t\.tenantId\s*\?\?\s*null/);
+    expect(SRC).toMatch(/session\.user\.webRole\s*=\s*t\.webRole\s*\?\?\s*"tenant_owner"/);
+    expect(SRC).toMatch(/session\.user\.isEmailVerified\s*=\s*t\.emailVerified\s*\?\?\s*true/);
+  });
+});
+
+describe("NextAuth session strategy", () => {
+  it("uses JWT strategy with an 8-hour max age", () => {
+    expect(SRC).toMatch(/strategy:\s*"jwt"\s*,\s*maxAge:\s*8\s*\*\s*60\s*\*\s*60/);
+  });
+
+  it("uses /login as the signIn page", () => {
+    expect(SRC).toMatch(/signIn:\s*"\/login"/);
   });
 });

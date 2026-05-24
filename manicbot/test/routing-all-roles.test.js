@@ -2,80 +2,122 @@
  * Comprehensive routing tests: every role × every entry point.
  * Verifies that no role ever lands on the wrong panel.
  *
- * Covers:
- *  - showHomeByRole  (CB.MAIN callback, text back button, AI context action)
- *  - showWelcome     (role-appropriate keyboard)
- *  - mainKb          (system_admin gets admin shortcuts)
- *  - All back-button callbacks per sysadmin panel
+ * Phase 2 cleanup:
+ *   - Dropped the local `resolveHomePanel` mirror (it carried a dead
+ *     `role === 'admin'` branch — `getRole()` in `src/services/users.js`
+ *     never returns 'admin', only 'system_admin' / 'tenant_owner' /
+ *     'tenant_manager' / 'support' / 'master' / 'client').
+ *   - Now exercises the REAL `showHomeByRole` from `src/ui/screens.js`
+ *     with stubbed panel renderers, asserting which panel function got
+ *     called for each role/context.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockD1, makeMockKv } from './helpers/mock-db.js';
-import { setPlatformRole, setTenantRole, ROLES } from '../src/roles/roles.js';
+import { setPlatformRole, setTenantRole } from '../src/roles/roles.js';
 
-// ── Stub minimal ctx helpers ──────────────────────────────────────────────
+// ─── Mock the panel renderers — we only care WHICH one was called ────────────
+// showAdminPanel + showMasterPanel come from ui/admin.js (separate module —
+// vi.mock CAN intercept). showPlatformAdminPanel lives in ui/sysadmin.js (same).
+// showWelcome is INTERNAL to ui/screens.js so we can't vi.mock it; instead we
+// stub telegram.send (the only side-effect inside showWelcome) so the welcome
+// path executes safely and we assert NOT-welcome by checking that no panel
+// was called.
+
+const mockPlatformPanel = vi.fn().mockResolvedValue(undefined);
+const mockAdminPanel = vi.fn().mockResolvedValue(undefined);
+const mockMasterPanel = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../src/ui/sysadmin.js', () => ({
+  showPlatformAdminPanel: (...a) => mockPlatformPanel(...a),
+}));
+
+vi.mock('../src/ui/admin.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    showAdminPanel: (...a) => mockAdminPanel(...a),
+    showMasterPanel: (...a) => mockMasterPanel(...a),
+  };
+});
+
+// Stub the Telegram outbound layer so showWelcome's `send(...)` is a no-op.
+vi.mock('../src/telegram.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    send: vi.fn().mockResolvedValue({ ok: true }),
+    sendPhoto: vi.fn().mockResolvedValue({ ok: true }),
+    trySendPhoto: vi.fn().mockResolvedValue({ ok: true }),
+    editPhoto: vi.fn().mockResolvedValue({ ok: true }),
+  };
+});
+
+// Import the REAL function AFTER vi.mock has registered the substitutions.
+const { showHomeByRole } = await import('../src/ui/screens.js');
+
 function makeCtx({ tenantId = null, adminChatId = '321706035' } = {}) {
   const db = createMockD1();
   return {
     db,
     kv: makeMockKv(new Map()),
     tenantId,
-    adminChatId,          // isCreator() reads ctx.adminChatId (camelCase)
+    adminChatId,
     svc: [],
     baseUrl: 'https://manicbot.com',
     prefix: tenantId ? `t:${tenantId}:` : 'b:main:',
+    // showWelcome reads from ctx.tenant?.salon; supply a minimal shape so
+    // the welcome path doesn't crash before the mock observes the call.
+    tenant: { salon: {} },
   };
 }
 
-// ── showHomeByRole routing logic (extracted / unit-tested) ─────────────────
-/**
- * Mirrors the logic of showHomeByRole in ui/screens.js without actually
- * sending Telegram messages. Returns a label for which panel would be shown.
- */
-async function resolveHomePanel(ctx, cid) {
-  const { isPlatformAdmin } = await import('../src/services/users.js');
-  const { getRole } = await import('../src/services/users.js');
+function clearMocks() {
+  mockPlatformPanel.mockClear();
+  mockAdminPanel.mockClear();
+  mockMasterPanel.mockClear();
+}
 
-  // Platform admin in main bot
-  if (!ctx.tenantId && await isPlatformAdmin(ctx, cid)) return 'platform_admin';
-
-  const role = await getRole(ctx, cid);
-  if (role === 'system_admin') return 'admin';           // tenant bot
-  if (role === 'admin' || role === 'tenant_owner') return 'admin';
-  if (role === 'master') return 'master';
-  return 'welcome';
+// Helper: a "welcome" outcome is anything that didn't trigger any panel mock.
+function noPanelInvoked() {
+  return (
+    !mockPlatformPanel.mock.calls.length &&
+    !mockAdminPanel.mock.calls.length &&
+    !mockMasterPanel.mock.calls.length
+  );
 }
 
 // ── Main bot routing ───────────────────────────────────────────────────────
 describe('showHomeByRole — main bot (no tenantId)', () => {
   const ADMIN_ID = 321706035;
 
+  beforeEach(clearMocks);
+
   it('ADMIN_CHAT_ID (creator) → platform_admin panel', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: String(ADMIN_ID) });
-    expect(await resolveHomePanel(ctx, ADMIN_ID)).toBe('platform_admin');
+    await showHomeByRole(ctx, ADMIN_ID, 'Creator');
+    expect(mockPlatformPanel).toHaveBeenCalledTimes(1);
+    expect(mockAdminPanel).not.toHaveBeenCalled();
   });
 
   it('non-creator cannot get platform_admin via DB system_admin row', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: '999' });
     await setPlatformRole(ctx, 111, 'system_admin');
-    expect(await resolveHomePanel(ctx, 111)).toBe('welcome');
-  });
-
-  it('admin role in main bot → welcome (no tenant context → not admin panel)', async () => {
-    // In main bot, non-platform-admins with tenant roles see welcome
-    const ctx = makeCtx({ tenantId: null, adminChatId: '999' });
-    // Note: admin role is tenant-scoped, in main bot getRole returns 'client'
-    expect(await resolveHomePanel(ctx, 777)).toBe('welcome');
+    await showHomeByRole(ctx, 111, 'NonAdmin');
+    expect(mockPlatformPanel).not.toHaveBeenCalled();
+    expect(noPanelInvoked()).toBe(true);
   });
 
   it('master role in main bot (without tenantId) → welcome', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: '999' });
-    expect(await resolveHomePanel(ctx, 888)).toBe('welcome');
+    await showHomeByRole(ctx, 888, 'Master');
+    expect(noPanelInvoked()).toBe(true);
   });
 
   it('unknown user (client) → welcome', async () => {
     const ctx = makeCtx({ tenantId: null });
-    expect(await resolveHomePanel(ctx, 99999)).toBe('welcome');
+    await showHomeByRole(ctx, 99999, 'Stranger');
+    expect(noPanelInvoked()).toBe(true);
   });
 });
 
@@ -83,67 +125,41 @@ describe('showHomeByRole — main bot (no tenantId)', () => {
 describe('showHomeByRole — tenant bot (tenantId set)', () => {
   const T = 't_salon1';
 
+  beforeEach(clearMocks);
+
   it('non-creator with stale system_admin row in tenant bot → welcome', async () => {
     const ctx = makeCtx({ tenantId: T, adminChatId: '999' });
     await setPlatformRole(ctx, 321, 'system_admin');
-    expect(await resolveHomePanel(ctx, 321)).toBe('welcome');
+    await showHomeByRole(ctx, 321, 'Bystander');
+    expect(mockAdminPanel).not.toHaveBeenCalled();
+    expect(noPanelInvoked()).toBe(true);
   });
 
   it('tenant_owner in tenant bot → admin panel', async () => {
     const ctx = makeCtx({ tenantId: T });
     await setTenantRole(ctx, 444, 'tenant_owner');
-    expect(await resolveHomePanel(ctx, 444)).toBe('admin');
-  });
-
-  it('admin (tenant_owner role) in tenant bot → admin panel', async () => {
-    // In tenant context, "admin" maps to ROLES.TENANT_OWNER
-    const ctx = makeCtx({ tenantId: T });
-    await setTenantRole(ctx, 555, 'tenant_owner');
-    expect(await resolveHomePanel(ctx, 555)).toBe('admin');
+    await showHomeByRole(ctx, 444, 'Owner');
+    expect(mockAdminPanel).toHaveBeenCalledTimes(1);
   });
 
   it('master in tenant bot → master panel', async () => {
     const ctx = makeCtx({ tenantId: T });
     await setTenantRole(ctx, 666, 'master');
-    expect(await resolveHomePanel(ctx, 666)).toBe('master');
+    await showHomeByRole(ctx, 666, 'Master');
+    expect(mockMasterPanel).toHaveBeenCalledTimes(1);
   });
 
   it('client in tenant bot → welcome screen', async () => {
     const ctx = makeCtx({ tenantId: T });
-    expect(await resolveHomePanel(ctx, 777)).toBe('welcome');
+    await showHomeByRole(ctx, 777, 'Client');
+    expect(noPanelInvoked()).toBe(true);
   });
 
   it('ADMIN_CHAT_ID in tenant bot (tenantId set) → admin panel (system_admin acts as admin)', async () => {
     const ctx = makeCtx({ tenantId: T, adminChatId: '321706035' });
-    // ctx.tenantId is set → isPlatformAdmin check is skipped
-    // getRole → isCreator = true → 'system_admin' → resolveHomePanel returns 'admin'
-    expect(await resolveHomePanel(ctx, 321706035)).toBe('admin');
-  });
-});
-
-// ── CB.MAIN callback routing ───────────────────────────────────────────────
-describe('CB.MAIN callback routing (same as showHomeByRole)', () => {
-  it('system_admin pressing CB.MAIN in main bot → platform panel, NOT welcome', async () => {
-    const ctx = makeCtx({ tenantId: null, adminChatId: '321706035' });
-    const panel = await resolveHomePanel(ctx, 321706035);
-    expect(panel).toBe('platform_admin');
-    expect(panel).not.toBe('welcome');
-  });
-
-  it('tenant_owner pressing CB.MAIN in tenant bot → admin panel, NOT welcome', async () => {
-    const ctx = makeCtx({ tenantId: 't_salon1' });
-    await setTenantRole(ctx, 100, 'tenant_owner');
-    const panel = await resolveHomePanel(ctx, 100);
-    expect(panel).toBe('admin');
-    expect(panel).not.toBe('welcome');
-  });
-
-  it('master pressing CB.MAIN → master panel, NOT welcome', async () => {
-    const ctx = makeCtx({ tenantId: 't_salon1' });
-    await setTenantRole(ctx, 200, 'master');
-    const panel = await resolveHomePanel(ctx, 200);
-    expect(panel).toBe('master');
-    expect(panel).not.toBe('welcome');
+    await showHomeByRole(ctx, 321706035, 'Creator');
+    expect(mockAdminPanel).toHaveBeenCalledTimes(1);
+    expect(mockPlatformPanel).not.toHaveBeenCalled();
   });
 });
 
@@ -229,11 +245,13 @@ describe('/sysadmin command — ADMIN_CHAT_ID guard', () => {
 });
 
 // ── /help per-role content ─────────────────────────────────────────────────
+// Note: pre-cleanup this block carried a dead `role === 'admin'` branch.
+// `getRole()` (src/services/users.js) never returns 'admin', so the branch
+// could not fire. Removed in this Phase 2 cleanup.
 describe('/help — each role gets different content', () => {
-  // Reproduce the role-detection logic from message.js
   function helpCategory(role) {
     if (role === 'system_admin') return 'sysadmin';
-    if (role === 'admin' || role === 'tenant_owner') return 'admin';
+    if (role === 'tenant_owner') return 'admin';
     if (role === 'master') return 'master';
     return 'client';
   }
@@ -242,11 +260,7 @@ describe('/help — each role gets different content', () => {
     expect(helpCategory('system_admin')).toBe('sysadmin');
   });
 
-  it('admin → admin help', () => {
-    expect(helpCategory('admin')).toBe('admin');
-  });
-
-  it('tenant_owner → admin help (same as admin)', () => {
+  it('tenant_owner → admin help', () => {
     expect(helpCategory('tenant_owner')).toBe('admin');
   });
 
@@ -259,7 +273,7 @@ describe('/help — each role gets different content', () => {
   });
 
   it('each category is unique', () => {
-    const cats = ['system_admin', 'admin', 'master', 'client'].map(helpCategory);
+    const cats = ['system_admin', 'tenant_owner', 'master', 'client'].map(helpCategory);
     const unique = new Set(cats);
     expect(unique.size).toBe(cats.length);
   });
@@ -267,24 +281,33 @@ describe('/help — each role gets different content', () => {
 
 // ── Regression: system_admin never lands on client welcome via CB.MAIN ─────
 describe('Regression: system_admin never lands on client welcome', () => {
+  beforeEach(clearMocks);
+
   it('ADMIN_CHAT_ID in main bot: home panel is NEVER welcome', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: '321706035' });
-    const panel = await resolveHomePanel(ctx, 321706035);
-    expect(panel).not.toBe('welcome');
-    expect(panel).toBe('platform_admin');
+    await showHomeByRole(ctx, 321706035, 'Creator');
+    expect(mockPlatformPanel).toHaveBeenCalledTimes(1);
   });
 
   it('stale system_admin DB row in main bot does not grant platform_admin', async () => {
     const ctx = makeCtx({ tenantId: null, adminChatId: '' });
-    await ctx.db.prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)').bind(1234, 'system_admin', 1).run();
-    const panel = await resolveHomePanel(ctx, 1234);
-    expect(panel).toBe('welcome');
+    await ctx.db
+      .prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)')
+      .bind(1234, 'system_admin', 1)
+      .run();
+    await showHomeByRole(ctx, 1234, 'Bystander');
+    expect(mockPlatformPanel).not.toHaveBeenCalled();
+    expect(noPanelInvoked()).toBe(true);
   });
 
   it('stale system_admin in tenant bot does not grant admin panel', async () => {
     const ctx = makeCtx({ tenantId: 't_test', adminChatId: '999' });
-    await ctx.db.prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)').bind(555, 'system_admin', 1).run();
-    const panel = await resolveHomePanel(ctx, 555);
-    expect(panel).toBe('welcome');
+    await ctx.db
+      .prepare('INSERT OR REPLACE INTO platform_roles (chat_id, role, created_at) VALUES (?, ?, ?)')
+      .bind(555, 'system_admin', 1)
+      .run();
+    await showHomeByRole(ctx, 555, 'Bystander');
+    expect(mockAdminPanel).not.toHaveBeenCalled();
+    expect(noPanelInvoked()).toBe(true);
   });
 });

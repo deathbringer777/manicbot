@@ -6,6 +6,7 @@ import { api } from "~/trpc/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { t, type Lang } from "~/lib/i18n";
+import { TestBadge } from "~/components/ui/TestBadge";
 
 function useLang(): Lang {
   if (typeof navigator !== "undefined") {
@@ -242,7 +243,15 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{salon.name}</p>
+                        <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                          {salon.name}
+                          {salon.isTest ? (
+                            <TestBadge
+                              className="ml-2 align-middle"
+                              title={t("master.testAccountBanner", lang)}
+                            />
+                          ) : null}
+                        </p>
                         {salon.city && (
                           <p className="flex items-center gap-1 text-xs text-slate-500">
                             <MapPin className="h-3 w-3" />

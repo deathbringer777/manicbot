@@ -43,6 +43,8 @@ const MODAL_FILES = [
   "src/components/salon/tabs/masters/MasterAvatarPicker.tsx",
   // Service categories manage modal (0077 — "lists of services")
   "src/components/salon/tabs/services/ServiceCategoriesModal.tsx",
+  // Cancellation retention flow (0086 — counter-offer + reason collection)
+  "src/components/billing/RetentionFlow.tsx",
 ];
 
 function read(rel: string): string {

@@ -455,3 +455,24 @@ export async function sendActionOtpEmail(
     text: actionOtpEmailText({ code, actionLabel }, lang),
   });
 }
+
+/**
+ * "We're sorry to see you go" — sent after the retention flow confirms
+ * cancellation (migration 0086). Fire-and-forget; a Resend hiccup must NOT
+ * block the Stripe cancel mutation.
+ */
+export async function sendSubscriptionCancelledEmail(
+  to: string,
+  lang: Lang = "en",
+): Promise<SendEmailResult> {
+  const {
+    subscriptionCancelledEmailHtml,
+    getSubscriptionCancelledSubject,
+  } = await import("./templates");
+  const resumeUrl = `${baseUrl()}/settings?section=billing`;
+  return sendResendEmail({
+    to,
+    subject: getSubscriptionCancelledSubject(lang),
+    html: subscriptionCancelledEmailHtml(resumeUrl, lang),
+  });
+}

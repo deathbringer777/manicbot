@@ -143,6 +143,135 @@ export async function getSubscription(secretKey, subscriptionId) {
 }
 
 /**
+ * Idempotent Stripe Coupon mint. Used by the cancellation retention flow
+ * to surface a discount counter-offer to the salon owner.
+ *
+ * Contract:
+ *   1. GET /v1/coupons/{code} first. If 200, return the existing coupon.
+ *   2. Else POST /v1/coupons with the supplied {id, percent_off, duration,
+ *      duration_in_months?}. Stripe lets us choose our own id so a second
+ *      call to this function with the same code becomes a single GET.
+ *   3. If POST returns 400 because another process raced us and just
+ *      created the coupon ("resource_already_exists" / "already exists"),
+ *      re-GET and return that row. The user sees one coupon either way.
+ *
+ * @param {string} secretKey Stripe API secret.
+ * @param {string} code Coupon id (we set this — e.g. "RETENTION_MONTHLY_50_3M").
+ * @param {number} percentOff Discount percent (0-100).
+ * @param {{duration: 'once'|'repeating'|'forever', months?: number}} durationOpts
+ * @returns {Promise<{id: string, percent_off: number, duration: string, duration_in_months?: number}>}
+ * @throws {Error} when Stripe returns a non-recoverable error (auth, network, etc.).
+ */
+export async function ensureCoupon(secretKey, code, percentOff, durationOpts) {
+  // 1. Try to retrieve existing coupon first.
+  const getRes = await fetch(`${STRIPE_API}/coupons/${encodeURIComponent(code)}`, {
+    method: 'GET',
+    headers: authHeader(secretKey),
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  if (getRes.ok) {
+    return await getRes.json();
+  }
+  if (getRes.status !== 404) {
+    const err = await getRes.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Stripe coupon GET failed: ${getRes.status}`);
+  }
+
+  // 2. Not found — try to create with our chosen id.
+  const params = {
+    id: code,
+    percent_off: String(percentOff),
+    duration: durationOpts.duration,
+  };
+  if (durationOpts.duration === 'repeating' && durationOpts.months != null) {
+    params.duration_in_months = String(durationOpts.months);
+  }
+  const postRes = await fetch(`${STRIPE_API}/coupons`, {
+    method: 'POST',
+    headers: { ...authHeader(secretKey), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody(params),
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  if (postRes.ok) {
+    return await postRes.json();
+  }
+
+  // 3. POST failed — if the error is a duplicate-id collision, re-GET.
+  // Stripe's exact message for this case has changed over the years; match
+  // both the modern `resource_already_exists` code and the textual
+  // "already exists" fallback for older API versions.
+  let postErrBody = {};
+  try { postErrBody = await postRes.json(); } catch { /* tolerate empty body */ }
+  const msg = postErrBody?.error?.message || '';
+  const errCode = postErrBody?.error?.code || '';
+  const isDuplicate =
+    postRes.status === 400 &&
+    (errCode === 'resource_already_exists' || /already exists/i.test(msg));
+  if (isDuplicate) {
+    const reGet = await fetch(`${STRIPE_API}/coupons/${encodeURIComponent(code)}`, {
+      method: 'GET',
+      headers: authHeader(secretKey),
+      signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+    });
+    if (reGet.ok) return await reGet.json();
+    const err2 = await reGet.json().catch(() => ({}));
+    throw new Error(err2?.error?.message || `Stripe coupon re-GET failed: ${reGet.status}`);
+  }
+
+  throw new Error(msg || `Stripe coupon POST failed: ${postRes.status}`);
+}
+
+/**
+ * Apply a coupon to an existing subscription. Used after `ensureCoupon` —
+ * the discount is applied for the coupon's `duration` (e.g. repeating/3
+ * months from the next invoice).
+ *
+ * @param {string} secretKey
+ * @param {string} subscriptionId
+ * @param {string} couponCode
+ * @returns {Promise<{id: string, discount?: object}>}
+ */
+export async function applyCouponToSubscription(secretKey, subscriptionId, couponCode) {
+  const params = formBody({ coupon: couponCode });
+  const res = await fetch(`${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: 'POST',
+    headers: { ...authHeader(secretKey), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params,
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Stripe subscription update failed: ${res.status}`);
+  }
+  return data;
+}
+
+/**
+ * Flip a subscription to cancel at the end of the current billing period.
+ * The subscription stays `active` until `current_period_end`; Stripe then
+ * fires `customer.subscription.deleted` which the worker webhook handler
+ * already maps to `billing_status = inactive`.
+ *
+ * @param {string} secretKey
+ * @param {string} subscriptionId
+ * @returns {Promise<{id: string, cancel_at_period_end: boolean, current_period_end: number}>}
+ */
+export async function cancelSubscriptionAtPeriodEnd(secretKey, subscriptionId) {
+  const params = formBody({ cancel_at_period_end: 'true' });
+  const res = await fetch(`${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: 'POST',
+    headers: { ...authHeader(secretKey), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params,
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Stripe subscription cancel failed: ${res.status}`);
+  }
+  return data;
+}
+
+/**
  * Map Stripe subscription status to internal BILLING_STATUS.
  */
 export function mapStripeStatusToBilling(stripeStatus) {

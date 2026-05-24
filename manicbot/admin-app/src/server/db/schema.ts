@@ -1629,3 +1629,26 @@ export const googlePrefillConsumed = sqliteTable("google_prefill_consumed", {
 }, (t) => [
   index("idx_gpc_exp").on(t.exp),
 ]);
+
+// Migration 0086 — Cancellation retention flow audit trail.
+// One row per cancel attempt (regardless of outcome). Drives offer-acceptance
+// metrics + the 12-month cooldown that prevents abuse of the discount.
+// `reason_tags` is a JSON-encoded array of enum slugs (zod-validated at the
+// tRPC boundary; this layer is best-effort and the column is TEXT, not JSON).
+export const subscriptionCancellations = sqliteTable("subscription_cancellations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  webUserId: text("web_user_id").notNull(),
+  planAtCancel: text("plan_at_cancel"),
+  intervalAtCancel: text("interval_at_cancel"),
+  reasonTags: text("reason_tags").notNull().default("[]"),
+  freeText: text("free_text"),
+  photoUrl: text("photo_url"),
+  retentionOfferShown: integer("retention_offer_shown").notNull().default(0),
+  retentionOfferAccepted: integer("retention_offer_accepted").notNull().default(0),
+  retentionCouponCode: text("retention_coupon_code"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_subscription_cancellations_tenant").on(t.tenantId),
+  index("idx_subscription_cancellations_created").on(t.createdAt),
+]);

@@ -1599,3 +1599,76 @@ export function getPasswordResetByOwnerSubject(lang: Lang, salonName: string): s
 export function getActionOtpSubject(lang: Lang): string {
   return actionOtpCopy(lang, "").subject;
 }
+
+// ─── Subscription cancellation confirmation (migration 0087) ────────────────
+// Sent after the salon owner confirms cancel-at-period-end via the retention
+// flow. Self-contained copy table (does NOT piggy-back on the `emailCopy`
+// dictionary above) — minimal copy, four languages, plain feedback link CTA.
+
+function subscriptionCancelledCopy(lang: Lang): {
+  subject: string;
+  heading: string;
+  body: string;
+  cta: string;
+  footer: string;
+} {
+  switch (lang) {
+    case "ru":
+      return {
+        subject: "Подписка ManicBot отменена",
+        heading: "Жаль, что вы уходите",
+        body:
+          "Ваша подписка будет активна до конца оплаченного периода — после этого бот и панель будут приостановлены. " +
+          "Если передумаете, вы всегда можете возобновить подписку из настроек.",
+        cta: "Возобновить подписку",
+        footer: "Спасибо, что были с ManicBot.",
+      };
+    case "ua":
+      return {
+        subject: "Підписку ManicBot скасовано",
+        heading: "Шкода, що ви йдете",
+        body:
+          "Ваша підписка буде активна до кінця сплаченого періоду — після цього бот і панель буде призупинено. " +
+          "Якщо передумаєте, ви завжди можете відновити підписку з налаштувань.",
+        cta: "Відновити підписку",
+        footer: "Дякуємо, що були з ManicBot.",
+      };
+    case "pl":
+      return {
+        subject: "Subskrypcja ManicBot anulowana",
+        heading: "Przykro nam, że odchodzisz",
+        body:
+          "Twoja subskrypcja pozostanie aktywna do końca opłaconego okresu, po czym bot i panel zostaną wstrzymane. " +
+          "Jeśli zmienisz zdanie, możesz wznowić subskrypcję z poziomu ustawień.",
+        cta: "Wznów subskrypcję",
+        footer: "Dziękujemy, że byłeś z ManicBot.",
+      };
+    case "en":
+    default:
+      return {
+        subject: "Your ManicBot subscription has been cancelled",
+        heading: "We're sorry to see you go",
+        body:
+          "Your subscription stays active through the end of the current billing period — after that, the bot and " +
+          "dashboard will be paused. If you change your mind, you can restart your subscription from Settings.",
+        cta: "Resume subscription",
+        footer: "Thanks for being part of ManicBot.",
+      };
+  }
+}
+
+export function subscriptionCancelledEmailHtml(
+  resumeUrl: string,
+  lang: Lang,
+): string {
+  const c = subscriptionCancelledCopy(lang);
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) + ctaButton(resumeUrl, c.cta),
+    c.footer,
+  );
+}
+
+export function getSubscriptionCancelledSubject(lang: Lang): string {
+  return subscriptionCancelledCopy(lang).subject;
+}

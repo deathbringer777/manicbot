@@ -1652,3 +1652,26 @@ export const newsletterSubscribers = sqliteTable("newsletter_subscribers", {
   uniqueIndex("idx_newsletter_subscribers_email").on(t.email),
   index("idx_newsletter_subscribers_created").on(t.createdAt),
 ]);
+
+// Migration 0087 — Cancellation retention flow audit trail.
+// One row per cancel attempt (regardless of outcome). Drives offer-acceptance
+// metrics + the 12-month cooldown that prevents abuse of the discount.
+// `reason_tags` is a JSON-encoded array of enum slugs (zod-validated at the
+// tRPC boundary; this layer is best-effort and the column is TEXT, not JSON).
+export const subscriptionCancellations = sqliteTable("subscription_cancellations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: text("tenant_id").notNull(),
+  webUserId: text("web_user_id").notNull(),
+  planAtCancel: text("plan_at_cancel"),
+  intervalAtCancel: text("interval_at_cancel"),
+  reasonTags: text("reason_tags").notNull().default("[]"),
+  freeText: text("free_text"),
+  photoUrl: text("photo_url"),
+  retentionOfferShown: integer("retention_offer_shown").notNull().default(0),
+  retentionOfferAccepted: integer("retention_offer_accepted").notNull().default(0),
+  retentionCouponCode: text("retention_coupon_code"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_subscription_cancellations_tenant").on(t.tenantId),
+  index("idx_subscription_cancellations_created").on(t.createdAt),
+]);

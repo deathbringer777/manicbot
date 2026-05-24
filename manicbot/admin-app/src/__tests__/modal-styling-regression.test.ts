@@ -45,6 +45,8 @@ const MODAL_FILES = [
   "src/components/salon/tabs/services/ServiceCategoriesModal.tsx",
   // Platform Customers detail modal (sysadmin /system/customers)
   "src/components/system/PlatformCustomerDetailModal.tsx",
+  // Cancellation retention flow (0087 — counter-offer + reason collection)
+  "src/components/billing/RetentionFlow.tsx",
 ];
 
 function read(rel: string): string {

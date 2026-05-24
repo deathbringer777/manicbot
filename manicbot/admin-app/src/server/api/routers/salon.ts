@@ -1123,7 +1123,7 @@ export const salonRouter = createTRPCRouter({
   mintUploadToken: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
-      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar", "master_avatar"]),
+      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar", "master_avatar", "cancellation_feedback"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

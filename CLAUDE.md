@@ -8,6 +8,36 @@
 - **If you skip something on purpose** (out of scope, blocked, won't fix), say so explicitly. Silent omission = bug.
 - **Re-read context before assuming.** When a long CLAUDE.md / system reminder / file is in scope, scan for the relevant section instead of answering from a guess at the middle.
 
+## Task structuring (treat every non-trivial ask as a workflow)
+
+Before coding, mentally fill out a `task.md`: **Goal** (one sentence — what does "done" look like?), **Context** (which files / past decisions matter?), **Constraints** (what must NOT change — compat, scope, security), **Success criteria** (concrete, checkable), **Verification** (how you'll prove it works).
+
+Then follow the sequence:
+
+1. **Separate goal, context, and constraints when reading the prompt.** Don't conflate "what" with "how" with "off-limits." Mixing them is why edits drift into out-of-scope refactors.
+2. **State the success criterion upfront** — write it down before the first edit. If the user didn't give one, infer the smallest checkable thing (a specific test passing, a specific UI flow working, a specific log line appearing) and name it explicitly.
+3. **Propose the plan in one or two sentences, then execute.** Autonomy mode means don't pause for approval — but a brief plan-before-edit lets the user redirect if you misread the ask. Ask only when truly blocked (decision the user must own, missing input, conflicting constraints).
+4. **Break complex edits into stages.** Migration → router → UI as separate logical units; verify each before stacking the next. A 20-file change that breaks at file 3 wastes the other 17. Same rule applies to large refactors — slice by layer or by feature, not "all at once."
+5. **After the fix, run the verification — don't write a pretty explanation.** Type-check, run the test, reload the preview, query D1, hit the endpoint. Show the output (or describe what you saw). "Should work" / "this looks correct" is not done. If you can't verify (no preview, no test harness for that surface), say so explicitly instead of claiming success.
+
+## Reasoning budget (don't skimp on hard code)
+
+Reasoning level is set at invocation (`low / med / high / xhigh / max / ultrathink`) — Claude doesn't pick it. Within whatever budget is given:
+
+- **Don't artificially shorten thinking on hard code.** Truncating reasoning to "save tokens" produces sloppy edits, missed edge cases, and wrong root-cause guesses. Pour reasoning into refactors, debugging, cross-file consistency, security boundaries.
+- **Match effort to task complexity.** Typos / one-line edits / known-pattern lookups don't need elaborate thinking — keep it tight there so the heavy budget is available when it matters.
+- **Flag a reasoning mismatch only when actually blocking.** If a task really wants `xhigh` / `ultrathink` and the invocation feels lower, say so once ("this is a hard refactor — better at xhigh") and proceed with what you have. Don't preface every routine reply with "I'd think harder if you bumped me."
+
+User-side cheatsheet (which level to invoke at):
+
+- simple / one-liners → `low` / `med`
+- code review / debug-explain → `high`
+- hard refactor / new architecture → `xhigh`
+- deep pass (full repo audit, novel design, multi-system migration) → `max` / `ultrathink`
+- always: verify after fix
+
+Reminder: reasoning level alone doesn't save bad instructions. Big-think mode is multiplicative with the Task-structuring rules above (Goal / Context / Constraints / Success criteria / Verification) — not a substitute for them.
+
 ## Overview
 
 Multi-tenant Telegram bot platform for nail salon booking. Two deployable units:

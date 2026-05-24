@@ -3,7 +3,7 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
-  Puzzle, Megaphone, AlertOctagon, Plug, BookOpen,
+  Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -59,6 +59,11 @@ export const NAV_ITEMS: NavItemDef[] = [
   // (providers, errors, events) per the IA split shipped in PR 1 of the
   // marketing roadmap. Pinned by `system-marketing-ia.test.ts`.
   { id: "god.marketing",     href: "/system/marketing",   icon: Megaphone,       labelKey: "Marketing Center", roles: ["system_admin"], group: "platform" },
+  // Sysadmin "Platform Customers" — who registered as a salon owner, what
+  // plan, who pays, who churned + newsletter subscribers. Distinct from
+  // /system/marketing (per-tenant CLIENT CRM) and from /tenants (raw tenant
+  // table). See SystemCustomersClient.tsx + platformCustomers router.
+  { id: "god.customers",     href: "/system/customers",   icon: UsersRound,      labelKey: "Platform Customers", roles: ["system_admin"], group: "platform" },
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },

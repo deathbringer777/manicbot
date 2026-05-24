@@ -43,6 +43,8 @@ const MODAL_FILES = [
   "src/components/salon/tabs/masters/MasterAvatarPicker.tsx",
   // Service categories manage modal (0077 — "lists of services")
   "src/components/salon/tabs/services/ServiceCategoriesModal.tsx",
+  // Platform Customers detail modal (sysadmin /system/customers)
+  "src/components/system/PlatformCustomerDetailModal.tsx",
 ];
 
 function read(rel: string): string {

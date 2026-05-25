@@ -1,126 +1,136 @@
-# DMARC reporting setup (P2-17, relax.md §3)
+# DMARC + SPF + DKIM в DNS (Blocker 2 pre-launch)
 
-> Operator-facing instructions for Kirill. **No CLI tooling here** — every
-> step is a UI action in the Cloudflare DNS dashboard. Nothing in this
-> file is auto-applied; it's a runbook.
+> Оператор-инструкция для Кирилла. CLI-кода нет — все шаги это клики
+> в Cloudflare dashboard. Файл сам ничего не применяет.
 
-## Why
+## Текущее состояние (проверь `dig` перед правкой)
 
-`dig TXT _dmarc.manicbot.com` currently returns:
+На момент запуска remediation-sprint (2026-05-25) в DNS уже было:
 
 ```
+$ dig +short TXT _dmarc.manicbot.com
 "v=DMARC1; p=reject;"
+
+$ dig +short TXT manicbot.com | grep -i spf
+"v=spf1 include:_spf.mx.cloudflare.net include:_spf.resend.com ~all"
+
+$ dig +short TXT resend._domainkey.manicbot.com
+"p=MIGfMA0GCSqGSIb3DQ..."
 ```
 
-Strict `p=reject` is excellent for deliverability and impersonation
-defence — but **we have no idea when DMARC is rejecting legitimate mail**
-because there is no `rua` (aggregate reporting) address. If a partner's
-forwarder breaks SPF/DKIM, or a new sending IP is silently dropped, we
-find out from a missing reply, never from a report.
+DMARC, SPF и DKIM **уже опубликованы**. Это значит:
 
-Adding `rua=mailto:postmaster@manicbot.com` flips on aggregate XML
-reports — once per ~24 h, every receiving MX that supports DMARC
-(Google, Microsoft, Yahoo, etc.) emails a summary of pass/fail counts to
-that address. The report addresses tell us:
+- **Защита от спуфинга работает.** Любое письмо, не прошедшее SPF/DKIM
+  alignment, отклоняется получающим сервером (`p=reject`).
+- **Однако** мы не видим отчётов о том, что отклоняется. Если завтра
+  легитимный поставщик (CRM, новый transactional-сервис) начнёт слать
+  под именем manicbot.com — его письма уйдут в /dev/null, и узнаем мы
+  об этом из жалоб пользователей.
 
-- which senders are passing or failing SPF / DKIM alignment
-- whether we have a stray legitimate sending source (Brevo, Resend, a
-  forwarder, a CRM tool) that's being rejected
-- whether anyone is actually trying to spoof `@manicbot.com`
+## Что меняем (одна правка)
 
-## Target value
+Добавляем `rua=mailto:vdovin.kyrylo@gmail.com` к existing DMARC-записи.
+Это активирует ежедневные XML-отчёты от Google / Microsoft / Yahoo и
+прочих больших MX о том, кто шлёт под domain'ом и проходит ли DMARC.
 
-```
-v=DMARC1; p=reject; rua=mailto:postmaster@manicbot.com
-```
+**Не меняем `p=reject` на `p=none`.** Существующая жёсткая защита
+работает; ослабление = регрессия. Если когда-нибудь нужно мягче —
+делается отдельной правкой.
 
-We are deliberately **not** adding `ruf=` (forensic / per-message
-reports). `ruf` ships full message contents and IPs to the reporting
-address; most MTAs ignore it anyway, and the privacy cost on EU SMB
-mailboxes (potentially containing client PII in support emails) is not
-worth the marginal signal.
+## Шаг за шагом (Cloudflare DNS dashboard)
 
-Keep `p=reject` — do not weaken to `quarantine` or `none`.
-
-## Step-by-step (Cloudflare DNS dashboard)
-
-1. Open https://dash.cloudflare.com → select the **manicbot.com** zone.
+1. Открыть https://dash.cloudflare.com → выбрать зону **manicbot.com**.
 2. **DNS → Records.**
-3. Filter on **Type = TXT** and **Name contains `_dmarc`**.
-4. You should see exactly one record:
-   - **Type:** `TXT`
-   - **Name:** `_dmarc`
-   - **Content:** `v=DMARC1; p=reject;`
-   - **TTL:** Auto (or whatever was set)
-   - **Proxy status:** DNS only (TXT records are never proxied)
-5. Click the **Edit** (pencil) icon on that row.
-6. Replace the **Content** field with **exactly**:
+3. Фильтр **Type = TXT**, **Name contains `_dmarc`**.
+4. Должна быть ровно одна запись:
+   - Type: `TXT`
+   - Name: `_dmarc`
+   - Content: `v=DMARC1; p=reject;`
+   - TTL: Auto
+   - Proxy status: DNS only (TXT никогда не проксируются)
+5. Клик на **Edit** (карандаш).
+6. Заменить **Content** на точно:
+
    ```
-   v=DMARC1; p=reject; rua=mailto:postmaster@manicbot.com
+   v=DMARC1; p=reject; rua=mailto:vdovin.kyrylo@gmail.com
    ```
-   No quotation marks. No trailing semicolon. Single line.
-7. Click **Save**.
-8. From a terminal anywhere on the internet, verify:
+
+   Без кавычек. Без точки в конце. Одной строкой.
+
+7. **Save.**
+8. Из терминала проверить:
+
    ```
    dig +short TXT _dmarc.manicbot.com
    ```
-   Expected output:
+
+   Ожидаемый вывод:
+
    ```
-   "v=DMARC1; p=reject; rua=mailto:postmaster@manicbot.com"
+   "v=DMARC1; p=reject; rua=mailto:vdovin.kyrylo@gmail.com"
    ```
 
-## `postmaster@manicbot.com` mailbox
+Или одной командой запустить готовый верификатор:
 
-The address you point `rua` at must accept mail. **Don't ship the new
-DMARC record before the mailbox exists** — receiving MTAs sometimes drop
-zones whose `rua` mailbox bounces, which is the opposite of what we
-want.
+```bash
+cd manicbot/
+node scripts/verify-deliverability.mjs
+```
 
-Two acceptable patterns:
+Скрипт проверит SPF, DKIM, DMARC и покажет, что готово/что нет. Если
+хочешь дополнительно отправить тестовое письмо через Resend на твою
+почту:
 
-### Option A — Cloudflare Email Routing (simplest)
+```bash
+node scripts/verify-deliverability.mjs --send-test vdovin.kyrylo@gmail.com
+```
 
-1. Cloudflare dashboard → zone `manicbot.com` → **Email → Email Routing**.
-2. Enable Email Routing if not already on. Cloudflare adds three MX
-   records and an SPF include automatically — do NOT remove them.
-3. Add a **Custom Address** route:
-   - From: `postmaster@manicbot.com`
-   - Action: Send to → your Gmail / Proton / Fastmail of choice
-4. Verify the destination (Cloudflare emails a confirm link).
-5. The mailbox is now live in ~30 seconds.
+(нужны env `RESEND_API_KEY` + `RESEND_FROM` — они уже стоят в проде).
 
-### Option B — Resend inbound address
+## Где увидеть отчёты
 
-Already paying for Resend for outbound mail; Resend also supports inbound
-on a paid plan. Less recommended because mixing transactional outbound
-and admin-only inbound on the same provider risks one outage taking down
-both. Use Option A unless there's a billing reason not to.
+Через 24-48 ч после правки на `vdovin.kyrylo@gmail.com` начнут падать
+XML-отчёты от Google, Microsoft, Yahoo. Это **обычные письма** с XML-
+вложением. Содержимое — статистика отправителей домена за сутки.
 
-## Aftercare
+Прочитать руками XML тяжело — загрузи в один из бесплатных
+DMARC-парсеров:
 
-- Wait 24–48 h after the DNS update.
-- First aggregate XML reports should arrive in `postmaster@manicbot.com`.
-- Use any DMARC report viewer (Postmark's free dmarc-reports, dmarcian,
-  Valimail Monitor) to upload / forward the XML. **Do not** publish the
-  raw XML — IPs are operational data.
-- If a legitimate sender starts failing, add it to SPF (`include:`) or
-  publish DKIM, then re-check.
-- Keep `p=reject`. Do NOT switch to `p=none` "temporarily" — you'd lose
-  the impersonation defence while gaining no extra visibility.
+- https://dmarc.postmarkapp.com (без регистрации, drag-and-drop)
+- https://dmarcian.com — есть бесплатный тариф
 
-## Rollback
+**Что искать** в первый месяц:
 
-If `rua=` ever causes downstream issues (extremely unlikely), the rollback
-is a one-line DNS edit back to:
+- Все ли отправители под manicbot.com проходят SPF/DKIM (должны быть
+  `_spf.mx.cloudflare.net` для Email Routing + `_spf.resend.com` для
+  transactional).
+- Если появится незнакомый отправитель — это либо новый сервис, либо
+  спуфинг. Если не помнишь, что подключал — поднять вопрос.
+- Если легитимный сервис фейлит DKIM/SPF — добавить его в SPF (правка
+  `manicbot.com TXT`) или попросить поставщика опубликовать DKIM.
+
+## Что НЕ делать
+
+- **Не убирать `p=reject`**. Это снизит защиту от спуфинга.
+- **Не добавлять `ruf=`** (forensic reports). Они шлют полные тела
+  писем — содержат PII клиентов салонов. Польза маргинальная.
+- **Не менять SPF без понимания**. Если убрать `include:_spf.resend.com`
+  — Resend-почта перестанет проходить DMARC alignment, начнёт падать
+  в спам у получателей. Сначала тест в логах за 24 ч после правки.
+
+## Если `rua=` сломал доставку (крайне редко)
+
+Откат — одна правка обратно:
 
 ```
 v=DMARC1; p=reject;
 ```
 
-No queues, no waits — DNS TTL is the only timer.
+DNS TTL единственный таймер; никаких очередей и подтверждений нет.
 
-## References
+## Аутреф
 
-- [RFC 7489 — DMARC](https://datatracker.ietf.org/doc/html/rfc7489)
-- [Cloudflare docs — DNS records for DMARC](https://developers.cloudflare.com/dns/manage-dns-records/how-to/email-records/#dmarc-records)
-- [Postmark DMARC checker](https://dmarc.postmarkapp.com/)
+- RFC 7489 — DMARC
+- Cloudflare docs: DNS records for DMARC
+- Google Postmaster Tools: https://postmaster.google.com (для глубокой
+  аналитики деливерабилити с Gmail)

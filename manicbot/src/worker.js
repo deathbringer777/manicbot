@@ -8,6 +8,7 @@ import { listTenantIds, getBotIdsByTenantId, getTenant } from './tenant/storage.
 import { tenantHasActiveChannel } from './channels/resolver.js';
 import { handleCron } from './handlers/cron.js';
 import { phaseInstagramAutopilot } from './marketing/autopilot.js';
+import { maybeRunD1Backup } from './services/d1Backup.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
@@ -620,6 +621,26 @@ export default {
           }),
         );
       }
+
+      // Platform D1 → R2 backup. Runs once per cron tick (not per tenant);
+      // internal 6h idempotency window (see d1Backup.js maybeRunD1Backup)
+      // means three out of every four 15-min ticks no-op cheaply. Failures
+      // do NOT block the rest of the cron — fire-and-forget via waitUntil.
+      _scheduledCtx.waitUntil(
+        maybeRunD1Backup(env).then(
+          (r) => {
+            if (r?.status === 'success') {
+              log.info('worker.d1Backup', { key: r.key, rows: r.rowCount });
+            } else if (r?.status === 'failed') {
+              log.error('worker.d1Backup', new Error(r.error || 'unknown'));
+            }
+          },
+          (e) => {
+            log.error('worker.d1Backup', e instanceof Error ? e : new Error(String(e?.message || e)));
+            void captureError(env, e, { source: 'worker.scheduled', phase: 'd1_backup' });
+          },
+        ),
+      );
 
       // Queues fan-out path
       if (ec.db && env.MANICBOT_TENANT_CRON?.sendBatch) {

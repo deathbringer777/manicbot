@@ -1675,3 +1675,24 @@ export const subscriptionCancellations = sqliteTable("subscription_cancellations
   index("idx_subscription_cancellations_tenant").on(t.tenantId),
   index("idx_subscription_cancellations_created").on(t.createdAt),
 ]);
+
+// ─── D1 backup log (Migration 0088) ─────────────────────────────────────────
+// Audit trail of D1 → R2 backup runs. Read by maybeRunD1Backup() to enforce
+// the 6h idempotency window; surfaced to system_admin via a future
+// `/system/backups` page (not in PR scope).
+export const d1BackupLog = sqliteTable("d1_backup_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startedAt: integer("started_at").notNull(),
+  finishedAt: integer("finished_at").notNull(),
+  bucketKey: text("bucket_key").notNull(),
+  kind: text("kind").notNull(),
+  tableCount: integer("table_count").notNull(),
+  rowCount: integer("row_count").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  sha256: text("sha256").notNull(),
+  status: text("status").notNull(),
+  errorMessage: text("error_message"),
+}, (t) => [
+  index("idx_d1_backup_log_finished").on(t.finishedAt),
+  index("idx_d1_backup_log_kind_status").on(t.kind, t.status, t.finishedAt),
+]);

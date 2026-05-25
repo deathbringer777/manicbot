@@ -226,6 +226,15 @@ const translations = {
   "settings.passwordMismatch":  { ru: "Пароли не совпадают",       ua: "Паролі не збігаються",       en: "Passwords don't match",        pl: "Hasła nie pasują" },
   "settings.passwordChangedOk": { ru: "Пароль успешно изменён",    ua: "Пароль успішно змінено",     en: "Password changed successfully",pl: "Hasło zmienione pomyślnie" },
   "settings.passwordError":     { ru: "Ошибка изменения пароля",   ua: "Помилка зміни пароля",       en: "Error changing password",      pl: "Błąd zmiany hasła" },
+
+  // ─── Blocker 4 (pre-launch): registration input validation ────────────
+  "auth.errors.nameContainsForbiddenChars": {
+    ru: "Имя содержит недопустимые символы. Уберите HTML-теги, переносы строк и спецсимволы.",
+    ua: "Ім'я містить неприпустимі символи. Приберіть HTML-теги, переноси рядків і спецсимволи.",
+    en: "Name contains forbidden characters. Remove HTML tags, line breaks, and special symbols.",
+    pl: "Imię zawiera niedozwolone znaki. Usuń tagi HTML, podziały wierszy i znaki specjalne.",
+  },
+
   "settings.changeEmail":       { ru: "Сменить email",             ua: "Змінити email",              en: "Change email",                   pl: "Zmień email" },
   "settings.newEmail":          { ru: "Новый email",               ua: "Новий email",                en: "New email",                      pl: "Nowy email" },
   "settings.changeEmailBtn":    { ru: "Отправить подтверждение",   ua: "Надіслати підтвердження",    en: "Send verification",              pl: "Wyślij weryfikację" },

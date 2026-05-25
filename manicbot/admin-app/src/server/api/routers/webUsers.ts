@@ -22,6 +22,7 @@ import { checkRateLimit } from "~/server/auth/rateLimit";
 import { log } from "~/server/utils/logger";
 import { writeAudit } from "~/server/security/audit";
 import { isSafeDisplayName } from "~/server/security/sanitize";
+import { recordEvent, ANALYTICS_EVENTS } from "~/server/services/recordEvent";
 
 /*
  * D1-based rate limiting — durable across Cloudflare edge isolates.
@@ -332,6 +333,32 @@ export const webUsersRouter = createTRPCRouter({
         }
       }
 
+      // Blocker 5 — fire signup analytics (fire-and-forget; failure never
+      // blocks the user-visible flow). We fire BOTH signup.started AND
+      // signup.completed here because we don't have a separate /register
+      // page-view event yet. Once the analytics layer is wired into the
+      // client too, we can split them.
+      void recordEvent({
+        db: ctx.db,
+        event: ANALYTICS_EVENTS.SIGNUP_STARTED,
+        userId: id,
+        properties: {
+          role: input.role,
+          lang: input.lang,
+          via_google: googleVerified,
+          referral_source: input.referralSource ?? null,
+          had_referral_code: !!input.referralCode,
+        },
+      });
+      if (skipEmailVerification) {
+        void recordEvent({
+          db: ctx.db,
+          event: ANALYTICS_EVENTS.SIGNUP_COMPLETED,
+          userId: id,
+          properties: { role: input.role, lang: input.lang, via_google: true },
+        });
+      }
+
       return {
         id,
         email,
@@ -419,6 +446,20 @@ export const webUsersRouter = createTRPCRouter({
 
       // Non-blocking welcome email
       sendWelcomeEmail(user.email, user.name ?? null, (user.lang ?? "en") as Lang).catch(() => {});
+
+      // Blocker 5 — fire signup.email_verified + signup.completed events.
+      void recordEvent({
+        db: ctx.db,
+        event: ANALYTICS_EVENTS.SIGNUP_EMAIL_VERIFIED,
+        userId: user.id,
+        properties: { role: user.role, lang: user.lang ?? "en" },
+      });
+      void recordEvent({
+        db: ctx.db,
+        event: ANALYTICS_EVENTS.SIGNUP_COMPLETED,
+        userId: user.id,
+        properties: { role: user.role, lang: user.lang ?? "en" },
+      });
 
       return { success: true, loginToken, loginTokenExpiresAt };
     }),

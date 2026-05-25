@@ -3,7 +3,7 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
-  Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound,
+  Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound, TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -67,6 +67,12 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },
+  // Blocker 5 — pre-launch funnel analytics. Cross-tenant view of
+  // analytics_events with per-slug 24h/7d counters + paginated filter.
+  // Distinct from god.events (activity feed) — that one is operational
+  // events (cron skips, error logs, audit log); this one is product
+  // funnel events (signup.started, bot.linked, subscription.started…).
+  { id: "god.analytics",     href: "/system/events",      icon: TrendingUp,      labelKey: "Analytics Events", roles: ["system_admin"], group: "platform" },
   { id: "god.errors",        href: "/errors",             icon: AlertOctagon,    labelKey: "Errors",           roles: ["system_admin"], group: "platform" },
   { id: "god.system",        href: "/system",             icon: Activity,        labelKey: "System",           roles: ["system_admin"], group: "platform" },
   { id: "god.providers",     href: "/system/providers",   icon: Plug,            labelKey: "Providers",        roles: ["system_admin"], group: "platform" },

@@ -9,6 +9,7 @@ import { tenantHasActiveChannel } from './channels/resolver.js';
 import { handleCron } from './handlers/cron.js';
 import { phaseInstagramAutopilot } from './marketing/autopilot.js';
 import { maybeRunD1Backup } from './services/d1Backup.js';
+import { pruneExpiredDedupRows } from './utils/dedup.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
@@ -638,6 +639,23 @@ export default {
           (e) => {
             log.error('worker.d1Backup', e instanceof Error ? e : new Error(String(e?.message || e)));
             void captureError(env, e, { source: 'worker.scheduled', phase: 'd1_backup' });
+          },
+        ),
+      );
+
+      // Webhook dedup cleanup (migration 0089). Prunes rows where
+      // `expires_at < now` so the table never grows unbounded. Platform-
+      // level (one D1, one webhook_dedup table); fire-and-forget like
+      // the backup above.
+      _scheduledCtx.waitUntil(
+        pruneExpiredDedupRows(env).then(
+          (r) => {
+            if (r?.deleted > 0) {
+              log.info('worker.dedupCleanup', { deleted: r.deleted });
+            }
+          },
+          (e) => {
+            log.error('worker.dedupCleanup', e instanceof Error ? e : new Error(String(e?.message || e)));
           },
         ),
       );

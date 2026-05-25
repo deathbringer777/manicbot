@@ -1696,3 +1696,14 @@ export const d1BackupLog = sqliteTable("d1_backup_log", {
   index("idx_d1_backup_log_finished").on(t.finishedAt),
   index("idx_d1_backup_log_kind_status").on(t.kind, t.status, t.finishedAt),
 ]);
+
+// ─── Webhook dedup (Migration 0089) ─────────────────────────────────────────
+// Atomic claim store backing the D1 backend in src/utils/dedup.js. Read by
+// no router today; cleanup cron in worker.scheduled does the DELETE pass.
+export const webhookDedup = sqliteTable("webhook_dedup", {
+  key: text("key").primaryKey(),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  index("idx_webhook_dedup_expires").on(t.expiresAt),
+]);

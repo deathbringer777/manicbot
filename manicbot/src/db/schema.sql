@@ -1677,3 +1677,17 @@ CREATE INDEX IF NOT EXISTS idx_d1_backup_log_finished
   ON d1_backup_log(finished_at DESC);
 CREATE INDEX IF NOT EXISTS idx_d1_backup_log_kind_status
   ON d1_backup_log(kind, status, finished_at DESC);
+
+-- ─── WEBHOOK DEDUP (Migration 0089) ─────────────────────────────────────────
+-- Atomic claim store replacing the KV GET-then-PUT race in
+-- `src/utils/dedup.js`. `INSERT INTO webhook_dedup ... ON CONFLICT(key) DO
+-- NOTHING` is a single SQLite statement — exactly one claim wins under
+-- truly concurrent calls. Pruned by `pruneExpiredDedupRows()` from
+-- worker.scheduled.
+CREATE TABLE IF NOT EXISTS webhook_dedup (
+  key         TEXT PRIMARY KEY,
+  expires_at  INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_dedup_expires
+  ON webhook_dedup(expires_at);

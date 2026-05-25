@@ -1654,3 +1654,26 @@ CREATE INDEX IF NOT EXISTS idx_subscription_cancellations_tenant
   ON subscription_cancellations(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_subscription_cancellations_created
   ON subscription_cancellations(created_at DESC);
+
+-- ─── D1 BACKUP LOG (Migration 0088) ─────────────────────────────────────────
+-- Audit trail of D1 → R2 backup runs. Written by `src/services/d1Backup.js`
+-- `runBackup()` once per 6h cron tick (orchestrated from `worker.scheduled`).
+-- Used by `maybeRunD1Backup` to decide whether the 6h idempotency window
+-- has elapsed and by `scripts/restore-d1.mjs --list` to enumerate snapshots.
+CREATE TABLE IF NOT EXISTS d1_backup_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at      INTEGER NOT NULL,
+  finished_at     INTEGER NOT NULL,
+  bucket_key      TEXT NOT NULL,
+  kind            TEXT NOT NULL CHECK (kind IN ('daily', 'weekly')),
+  table_count     INTEGER NOT NULL,
+  row_count       INTEGER NOT NULL,
+  byte_size       INTEGER NOT NULL,
+  sha256          TEXT NOT NULL,
+  status          TEXT NOT NULL CHECK (status IN ('success', 'partial', 'failed')),
+  error_message   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_d1_backup_log_finished
+  ON d1_backup_log(finished_at DESC);
+CREATE INDEX IF NOT EXISTS idx_d1_backup_log_kind_status
+  ON d1_backup_log(kind, status, finished_at DESC);

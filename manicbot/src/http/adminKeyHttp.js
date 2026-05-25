@@ -1429,6 +1429,75 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: allOk, chunks: results.length, results });
   }
 
+  // POST /admin/notify-document — upload a file to the admin chat via
+  // Telegram sendDocument. Sibling of /admin/notify (which is text-only).
+  // Auth: Bearer NOTIFY_TOKEN (low-priv, notify-only) OR Bearer ADMIN_KEY.
+  // Body: multipart/form-data with fields:
+  //   file     — required; the file blob
+  //   caption  — optional; ≤1024 chars, surfaced as the document caption
+  //   filename — optional; overrides the file's own .name
+  // Uses NOTIFY_BOT_TOKEN / NOTIFY_CHAT_ID with fallback to BOT_TOKEN /
+  // ADMIN_CHAT_ID (same resolution as /admin/notify).
+  if (request.method === 'POST' && url.pathname === '/admin/notify-document') {
+    if (!isNotifyAuthValid(env, request)) return forbidden();
+    const token = env.NOTIFY_BOT_TOKEN || env.BOT_TOKEN;
+    const chatId = env.NOTIFY_CHAT_ID || env.ADMIN_CHAT_ID;
+    if (!token || !chatId) {
+      return Response.json({ error: 'bot_token_or_chat_id_missing' }, { status: 503 });
+    }
+
+    const ctype = (request.headers.get('content-type') || '').toLowerCase();
+    if (!ctype.startsWith('multipart/form-data')) {
+      return Response.json({ error: 'multipart_form_data_required' }, { status: 400 });
+    }
+
+    let form;
+    try {
+      form = await request.formData();
+    } catch {
+      return Response.json({ error: 'invalid_form_data' }, { status: 400 });
+    }
+
+    const file = form.get('file');
+    const isFileLike =
+      file && typeof file === 'object' && typeof file.arrayBuffer === 'function';
+    if (!isFileLike) {
+      return Response.json({ error: 'file_required' }, { status: 400 });
+    }
+
+    const captionRaw = form.get('caption');
+    const caption = typeof captionRaw === 'string' ? captionRaw.slice(0, 1024) : '';
+    const filenameOverride = form.get('filename');
+    const filename =
+      (typeof filenameOverride === 'string' && filenameOverride.trim()) ||
+      file.name ||
+      'document.bin';
+
+    const tgForm = new FormData();
+    tgForm.append('chat_id', String(chatId));
+    tgForm.append('document', file, filename);
+    if (caption) tgForm.append('caption', caption);
+
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+        method: 'POST',
+        body: tgForm,
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await r.json().catch(() => ({}));
+      const ok = r.ok && data.ok === true;
+      return Response.json(
+        { ok, status: r.status, description: data.description || null },
+        { status: ok ? 200 : 502 },
+      );
+    } catch (e) {
+      return Response.json(
+        { ok: false, error: e?.message || 'fetch_failed' },
+        { status: 502 },
+      );
+    }
+  }
+
   // ─── Marketing IG autopilot — admin manual triggers ─────────────────────
   // Run the IG autopilot phase once for ALL eligible @manicbot_com slots.
   // Useful for kicking generation outside the 15-min cron tick, or before

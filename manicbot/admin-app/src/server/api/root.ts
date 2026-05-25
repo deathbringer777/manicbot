@@ -48,6 +48,7 @@ import { ownerPairingRouter } from "~/server/api/routers/ownerPairing";
 import { platformConfigRouter } from "~/server/api/routers/platformConfig";
 import { blogRouter } from "~/server/api/routers/blog";
 import { platformCustomersRouter } from "~/server/api/routers/platformCustomers";
+import { analyticsEventsRouter } from "~/server/api/routers/analyticsEvents";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -99,6 +100,7 @@ export const appRouter = createTRPCRouter({
   ownerPairing: ownerPairingRouter,
   blog: blogRouter,
   platformCustomers: platformCustomersRouter,
+  analyticsEvents: analyticsEventsRouter,
 });
 
 export type AppRouter = typeof appRouter;

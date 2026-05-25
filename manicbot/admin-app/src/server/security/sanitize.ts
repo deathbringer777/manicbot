@@ -180,6 +180,100 @@ export function sanitizeText(input: string, maxLen = 5000): string {
 }
 
 /**
+ * Sanitise a user-controlled string that will be interpolated into the
+ * HTML body of an outbound email. Defends against:
+ *
+ *   - HTML injection (`<script>`, `<img onerror=>`, `<a href=javascript:>`),
+ *     including unclosed tags that bleed into surrounding markup
+ *   - Email header injection via CRLF (`\r\n` followed by a forged
+ *     `Bcc:` / `Content-Type:` etc.). Resend uses JSON-bodied API so
+ *     SMTP header smuggling is structurally blocked at the transport,
+ *     but a CRLF in a display name still ends up in the visible
+ *     greeting text and looks broken
+ *   - RTL override (`U+202E`) — classic homograph trick that renders
+ *     "doc.exe" as "exe.cod"; refuse leading override, allow legit
+ *     embedded use (some Arabic / Hebrew names need it)
+ *   - Zero-width characters (`U+200B-200D`, `U+FEFF`) used for invisible
+ *     phishing payloads
+ *   - Null bytes (`\x00`) — SQLite refuses them; render as empty
+ *
+ * Length cap: defaults to 100 chars (mailbox display name SHOULD fit
+ * comfortably below the RFC 5322 `display-name` advisory 76-char line
+ * limit, but we accept up to 100 to support multi-part names).
+ *
+ * @param input - raw user-supplied value (may be null/undefined)
+ * @param maxLen - cap (default 100)
+ * @returns sanitized string safe for HTML email interpolation; empty
+ *          string if the input was null/undefined/non-string
+ */
+export function sanitizeEmailDisplayName(input: string | null | undefined, maxLen = 100): string {
+  if (typeof input !== "string") return "";
+  let s = input;
+  // 1. Drop control bytes (NUL, CR, LF, TAB-newline, vertical tab, etc.)
+  //    EXCEPT regular space U+0020. This kills CRLF header injection and
+  //    any binary smuggling.
+  // eslint-disable-next-line no-control-regex
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  s = s.replace(/[\r\n\t]/g, " ");
+  // 2. Strip zero-width characters used for invisible payloads.
+  s = s.replace(/[​-‍﻿]/g, "");
+  // 3. Refuse a LEADING RTL override / LRO / RLO. A legit Arabic name
+  //    may carry embedded override codepoints, but a leading one is
+  //    almost always a phishing trick (e.g. "‮exe.doc" rendering as
+  //    "doc.exe").
+  s = s.replace(/^[‪-‮⁦-⁩‎‏]+/g, "");
+  // 4. Strip all HTML tags. We're rendering into HTML email, so any
+  //    user-supplied `<tag>` must be neutralised.
+  s = stripHtml(s);
+  // 5. HTML-escape the residue. After step 4 there shouldn't be any
+  //    angle brackets left, but ampersands / quotes still need it.
+  s = escapeHtml(s);
+  // 6. Collapse runs of whitespace and trim.
+  s = s.replace(/\s+/g, " ").trim();
+  // 7. Cap length.
+  return s.slice(0, maxLen);
+}
+
+/**
+ * Sanitise a string that will become an email Subject:. Removes CRLF
+ * (which would smuggle headers in non-JSON transports), tabs, and
+ * caps at 200 chars (longer subjects are truncated by every major
+ * MUA anyway).
+ */
+export function sanitizeEmailSubject(input: string | null | undefined, maxLen = 200): string {
+  if (typeof input !== "string") return "";
+  // eslint-disable-next-line no-control-regex
+  const cleaned = input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .replace(/[\r\n\t]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, maxLen);
+}
+
+/**
+ * Cheap zod-friendly predicate: returns true if a name string contains
+ * any character that would be rejected by `sanitizeEmailDisplayName`.
+ * Used at the tRPC boundary in `webUsers.register` so we can fail-fast
+ * with a localised error instead of silently rewriting the user's name.
+ *
+ * Allowed: letters (any script), digits, space, hyphen, apostrophe,
+ * period. Almost every real-world name in RU/UA/EN/PL fits.
+ *
+ * Rejected (by negation): control chars, CRLF, `<`, `>`, `&`, `"`,
+ * leading RTL/LRO/RLO override, zero-width chars.
+ */
+export function isSafeDisplayName(input: string): boolean {
+  if (typeof input !== "string" || input.length === 0) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1F\x7F]/.test(input)) return false;
+  if (/[<>&"]/.test(input)) return false;
+  if (/[​-‍﻿]/.test(input)) return false;
+  if (/^[‪-‮⁦-⁩‎‏]/.test(input)) return false;
+  return true;
+}
+
+/**
  * Sanitise AI model output before storing or forwarding to a client.
  * AI outputs must never contain raw HTML action tags or injection payloads.
  */

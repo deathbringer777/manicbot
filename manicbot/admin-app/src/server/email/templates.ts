@@ -4,6 +4,7 @@
  */
 
 import type { Lang } from "~/lib/i18n";
+import { sanitizeEmailDisplayName, sanitizeEmailSubject } from "~/server/security/sanitize";
 
 // ─── i18n copy for emails ───────────────────────────────────────────────────
 
@@ -707,7 +708,11 @@ export function passwordResetCodeEmailHtml(code: string, lang: Lang): string {
 
 export function welcomeEmailHtml(name: string | null, dashboardUrl: string, lang: Lang): string {
   const c = getEmailCopy(lang).welcome;
-  const greeting = name ? c.heading.replace("!", `, ${name}!`) : c.heading;
+  // Blocker 4 — sanitize user-controlled name before HTML interpolation.
+  // Without this, an attacker who registered with `<script>...</script>` in
+  // the name field would land that script in the rendered welcome email.
+  const safeName = sanitizeEmailDisplayName(name);
+  const greeting = safeName ? c.heading.replace("!", `, ${safeName}!`) : c.heading;
   return baseLayout(
     greeting,
     paragraph(c.body) + ctaButton(dashboardUrl, c.cta),
@@ -743,10 +748,12 @@ export function subscriptionWelcomeEmailHtml(unsubscribeUrl: string, lang: Lang)
 
 export function emailChangeEmailHtml(confirmUrl: string, newEmail: string, lang: Lang): string {
   const c = getEmailCopy(lang).emailChange;
+  // Blocker 4 — newEmail is user-controlled; sanitize before HTML interp.
+  const safeEmail = sanitizeEmailDisplayName(newEmail, 320); // RFC 5321 max
   return baseLayout(
     c.heading,
     paragraph(c.body) +
-    paragraph(`<strong>${newEmail}</strong>`, "#e2e8f0") +
+    paragraph(`<strong>${safeEmail}</strong>`, "#e2e8f0") +
     ctaButton(confirmUrl, c.cta) +
     muted(c.expires) +
     muted(c.ignore),
@@ -761,6 +768,8 @@ export function emailChangeEmailHtml(confirmUrl: string, newEmail: string, lang:
  */
 export function emailChangeCodeEmailHtml(code: string, newEmail: string, lang: Lang): string {
   const c = getEmailCopy(lang).emailChangeCode;
+  const safeEmail = sanitizeEmailDisplayName(newEmail, 320);
+  // `code` is server-generated (6-digit numeric); no sanitization needed.
   const codeBlock = `<div style="margin:24px auto;text-align:center;">
     <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${code}</div>
     <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
@@ -768,7 +777,7 @@ export function emailChangeCodeEmailHtml(code: string, newEmail: string, lang: L
   return baseLayout(
     c.heading,
     paragraph(c.body) +
-    paragraph(`<strong>${newEmail}</strong>`, "#e2e8f0") +
+    paragraph(`<strong>${safeEmail}</strong>`, "#e2e8f0") +
     codeBlock +
     muted(c.expires) +
     muted(c.ignore),
@@ -809,13 +818,19 @@ export function roleRequestAdminEmailHtml(
   lang: Lang,
 ): string {
   const c = getEmailCopy(lang).roleRequestAdmin;
-  const reasonRow = reason
-    ? `<tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.reason}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;">${reason}</td></tr>`
+  // Blocker 4 — sanitize all user-controlled strings before HTML interp.
+  // userName + userEmail + reason are all attacker-controlled fields.
+  // currentRole / requestedRole come from an enum and are safe.
+  const safeName = sanitizeEmailDisplayName(userName);
+  const safeEmail = sanitizeEmailDisplayName(userEmail, 320);
+  const safeReason = reason ? sanitizeEmailDisplayName(reason, 500) : null;
+  const reasonRow = safeReason
+    ? `<tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.reason}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;">${safeReason}</td></tr>`
     : "";
   return baseLayout(
     c.heading,
     paragraph(c.body) +
-    paragraph(`<strong>${userName}</strong> (${userEmail})`, "#e2e8f0") +
+    paragraph(`<strong>${safeName}</strong> (${safeEmail})`, "#e2e8f0") +
     `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
       <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.from}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${currentRole}</td></tr>
       <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;${reason ? "border-bottom:1px solid rgba(255,255,255,0.06);" : ""}">${c.to}</td><td style="padding:8px 12px;font-size:13px;color:#a78bfa;font-weight:600;${reason ? "border-bottom:1px solid rgba(255,255,255,0.06);" : ""}">${requestedRole}</td></tr>

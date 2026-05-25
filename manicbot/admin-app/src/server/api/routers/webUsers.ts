@@ -21,6 +21,7 @@ import {
 import { checkRateLimit } from "~/server/auth/rateLimit";
 import { log } from "~/server/utils/logger";
 import { writeAudit } from "~/server/security/audit";
+import { isSafeDisplayName } from "~/server/security/sanitize";
 
 /*
  * D1-based rate limiting — durable across Cloudflare edge isolates.
@@ -103,7 +104,18 @@ export const webUsersRouter = createTRPCRouter({
         email: z.string().email(),
         password: z.string().min(12, "Минимум 12 символов").optional(),
         role: z.enum(["tenant_owner", "master"]),
-        name: z.string().max(200).nullish(),
+        // Blocker 4 — reject names that contain HTML metacharacters, CRLF,
+        // leading RTL override, control bytes, or zero-width characters
+        // before they reach the DB or any email template. See
+        // `~/server/security/sanitize.ts` for the predicate; the
+        // localized failure key is `auth.errors.nameContainsForbiddenChars`.
+        name: z
+          .string()
+          .max(200)
+          .nullish()
+          .refine((v) => v == null || v === "" || isSafeDisplayName(v), {
+            message: "auth.errors.nameContainsForbiddenChars",
+          }),
         lang: z.enum(["ru", "ua", "en", "pl"]).default("en"),
         referralSource: z.enum(["google", "instagram", "telegram", "friends", "other"]).nullish(),
         referralNote: z.string().max(200).nullish(),

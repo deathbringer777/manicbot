@@ -16,6 +16,26 @@ import {
 } from "~/components/auth/AuthShell";
 import { authCopy } from "~/components/auth/copy";
 import { ReferralSourceSelect } from "~/components/auth/ReferralSourceSelect";
+import { t as tr } from "~/lib/i18n";
+
+/**
+ * Client-side mirror of the server-side `isSafeDisplayName` predicate
+ * in `~/server/security/sanitize.ts`. Kept in lockstep with the server
+ * — any change here MUST be reflected there and vice versa.
+ *
+ * Blocks names that contain HTML metacharacters, CRLF, leading RTL
+ * override, zero-width chars, or control bytes — the same set the
+ * email-template sanitizer would silently strip.
+ */
+function isSafeDisplayNameClient(input: string): boolean {
+  if (input.length === 0) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1F\x7F]/.test(input)) return false;
+  if (/[<>&"]/.test(input)) return false;
+  if (/[​-‍﻿]/.test(input)) return false;
+  if (/^[‪-‮⁦-⁩‎‏]/.test(input)) return false;
+  return true;
+}
 
 export default function RegisterPageClient() {
   const router = useRouter();
@@ -25,6 +45,14 @@ export default function RegisterPageClient() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
+  // Blocker 4 — inline validation against `isSafeDisplayNameClient`.
+  // Computed each render (cheap, regex-based); shown below the input.
+  // The submit handler also re-checks before firing the mutation so the
+  // user can't bypass via dev-tools-disabled aria-invalid styling.
+  const nameValidationError =
+    name.length > 0 && !isSafeDisplayNameClient(name)
+      ? tr("auth.errors.nameContainsForbiddenChars", lang)
+      : null;
   const [role, setRole] = useState<"tenant_owner" | "master">("tenant_owner");
   const [referralSource, setReferralSource] = useState<"google" | "instagram" | "telegram" | "friends" | "other" | "">("");
   const [referralNote, setReferralNote] = useState("");
@@ -160,6 +188,10 @@ export default function RegisterPageClient() {
     }
     if (!tosAccepted) {
       setError(copy.register.tosRequired);
+      return;
+    }
+    if (nameValidationError) {
+      setError(nameValidationError);
       return;
     }
 
@@ -307,8 +339,14 @@ export default function RegisterPageClient() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder={role === "tenant_owner" ? "Beauty Studio" : "Anna Ivanova"}
                 className={authFieldWithIconsClassName}
+                aria-invalid={nameValidationError ? "true" : undefined}
               />
             </div>
+            {nameValidationError && (
+              <p className="mt-1.5 text-xs text-red-500" role="alert">
+                {nameValidationError}
+              </p>
+            )}
           </div>
 
           {!emailFromGoogleLocked && (

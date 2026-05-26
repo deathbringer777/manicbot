@@ -28,6 +28,7 @@ import { notifyWorker } from "~/server/utils/notifyWorker";
 import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
+import { notifyOrCapture } from "~/server/services/notifyOrCapture";
 import { captureError } from "~/server/utils/captureError";
 import {
   IG_ALL_ERROR_TYPES,
@@ -2549,6 +2550,16 @@ export const salonRouter = createTRPCRouter({
       // a D1 hiccup writing the audit row can never break the primary flow.
       let emailQueued = true;
       let transportError: string | undefined;
+      // Bell-write verdict (PR-B). Only set on existing_user scenario —
+      // new_user has no web_users row yet, so there's no bell row to
+      // write. The send-time bell write is the in-app counterpart of
+      // the email send; pre-PR-B it was `void notifyWebUser(...)` and
+      // got silently dropped on Cloudflare Pages because the D1 binding
+      // dies with the request context. See notifyOrCapture.ts for the
+      // full mechanism + fix rationale.
+      let bellQueued: boolean | undefined;
+      let bellSkippedByPrefs = false;
+      let bellError: string | undefined;
 
       if (scenario === "existing_user") {
         const emailResult = await sendMasterInviteExistingUserEmail(email, invitationId, salonName, lang).catch(
@@ -2604,18 +2615,27 @@ export const salonRouter = createTRPCRouter({
             default:   return "You're invited to join as a master. Click to accept.";
           }
         })();
-        void notifyWebUser(ctx.db, {
-          webUserId: inviteeId,
-          kind: "master.invite",
-          title: inviteeLabel,
-          body: inviteeBody,
-          link: `/invitations/${invitationId}`,
-          tenantId: input.tenantId,
-          sourceSlug: "master_invitations",
-          sourceId: invitationId,
-        }).catch((e) =>
-          log.error("salon.invite.notify", e instanceof Error ? e : new Error(String(e))),
+        const bellResult = await notifyOrCapture(
+          ctx.db,
+          {
+            webUserId: inviteeId,
+            kind: "master.invite",
+            title: inviteeLabel,
+            body: inviteeBody,
+            link: `/invitations/${invitationId}`,
+            tenantId: input.tenantId,
+            sourceSlug: "master_invitations",
+            sourceId: invitationId,
+          },
+          {
+            path: "salon.sendMasterInvitation",
+            userId: inviter.id,
+            extraContext: { invitationId, scenario },
+          },
         );
+        bellQueued = bellResult.bellQueued;
+        bellSkippedByPrefs = bellResult.bellSkippedByPrefs === true;
+        bellError = bellResult.bellError;
       } else {
         const emailResult = await sendMasterInviteNewUserEmail(email, rawToken, salonName, lang).catch(
           (e): { ok: false; error: string } => {
@@ -2663,6 +2683,9 @@ export const salonRouter = createTRPCRouter({
         scenario,
         emailQueued,
         ...(transportError ? { transportError } : {}),
+        ...(typeof bellQueued === "boolean" ? { bellQueued } : {}),
+        ...(bellSkippedByPrefs ? { bellSkippedByPrefs: true as const } : {}),
+        ...(bellError ? { bellError } : {}),
       };
     }),
 

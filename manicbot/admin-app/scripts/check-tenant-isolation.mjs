@@ -123,12 +123,14 @@ const ALLOWLIST = new Set([
   // CRUD added ~200 lines around line 567 in the categories-PR) → 1750
   // (0082 owner-pairing PR added the salon-JSON name mirror, +8 lines in
   // updateSalonProfile body) → 1751 (PR-A added the captureError import
-  // at the top of the file, shifting everything below by 1 line).
+  // at the top of the file, shifting everything below by 1 line) → 1752
+  // (PR-B added notifyOrCapture import + 6 lines of bell-state vars +
+  // the awaited bellResult block in sendMasterInvitation body; net +1).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1751",
+  "src/server/api/routers/salon.ts:1752",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

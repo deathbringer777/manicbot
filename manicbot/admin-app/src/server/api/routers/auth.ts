@@ -217,14 +217,28 @@ export const authRouter = createTRPCRouter({
       } catch { /* non-critical */ }
     }
 
-    // Fire-and-forget backfill: surface any pending master invitations
-    // for this user's email in the bell. Idempotent on the partial
-    // UNIQUE `(web_user_id, source_slug, source_id, kind)` so re-runs are
+    // Awaited backfill: surface any pending master invitations for
+    // this user's email in the bell. Idempotent on the partial UNIQUE
+    // `(web_user_id, source_slug, source_id, kind)` so re-runs are
     // no-ops. Recovers the pre-PR-#151 invites that never got their
-    // send-time `notifyWebUser` row, and acts as a safety net for any
-    // future race where the send-time write is lost.
+    // send-time `notifyWebUser` row, and acts as the safety net for any
+    // race where the send-time write was lost (Resend hiccup, request
+    // abort, the pre-PR-B fire-and-forget D1-binding-tear-down trap).
+    //
+    // PR-B: was `void` — that pattern silently dropped on Cloudflare
+    // Pages because the underlying D1 binding is invalidated with the
+    // request context. We now await: one SELECT + at most a handful of
+    // INSERT OR IGNORE per call, ~50ms p50. Worth the latency on the
+    // hot path because this is the difference between the bell showing
+    // a pending invite immediately or never.
     if (email) {
-      void backfillPendingInviteNotifications(ctx.db, ctx.webUser.id, email);
+      await backfillPendingInviteNotifications(ctx.db, ctx.webUser.id, email).catch(
+        (e) => {
+          // backfill is internally swallow-everything, but defense in depth:
+          // a thrown error here must never break `getMyRole`.
+          void e;
+        },
+      );
     }
 
     return {

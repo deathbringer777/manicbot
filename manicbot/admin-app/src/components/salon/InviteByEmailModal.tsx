@@ -33,16 +33,32 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "error"; message: string }
-    | { kind: "success"; scenario: "existing_user" | "new_user"; emailQueued: boolean; transportError?: string }
+    | {
+        kind: "success";
+        scenario: "existing_user" | "new_user";
+        emailQueued: boolean;
+        transportError?: string;
+        // PR-B: bell-write verdict. Only set for existing_user (new_user
+        // has no web_users row to notify). undefined ≡ "field absent in
+        // response" — render as a happy path.
+        bellQueued?: boolean;
+        bellError?: string;
+      }
   >({ kind: "idle" });
 
   const send = api.salon.sendMasterInvitation.useMutation({
     onSuccess: (data) => {
+      const d = data as typeof data & {
+        bellQueued?: boolean;
+        bellError?: string;
+      };
       setStatus({
         kind: "success",
-        scenario: data.scenario,
-        emailQueued: data.emailQueued ?? true,
-        transportError: data.transportError,
+        scenario: d.scenario,
+        emailQueued: d.emailQueued ?? true,
+        transportError: d.transportError,
+        bellQueued: d.bellQueued,
+        bellError: d.bellError,
       });
       void utils.salon.listMasterInvitations.invalidate({ tenantId });
     },
@@ -65,6 +81,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           successNew: "Отправлено — мы попросили зарегистрироваться по ссылке из письма.",
           warningEmailFailedExisting: "Приглашение создано — оно появится в колокольчике пользователя. Но письмо отправить не удалось: проверь /errors и настройки Resend в Cloudflare Pages.",
           warningEmailFailedNew: "Приглашение создано, но письмо отправить не удалось. Это значит, что новый пользователь его не увидит до регистрации. Проверь /errors и настройки Resend в Cloudflare Pages.",
+          warningBellFailed: "Email отправлен, но запись в колокольчик не сохранилась. Получатель не увидит уведомление в дашборде до перезахода. Проверь /errors.",
+          warningBothFailed: "Не сохранилось ни в колокольчик, ни в email. Получатель ничего не увидит. Проверь /errors и настройки Resend.",
           errorRate: "Слишком много приглашений за час. Подождите.",
           errorDup: "Приглашение уже отправлено. Отмените его и попробуйте снова.",
           errorPersonal: "Нельзя приглашать в персональный салон.",
@@ -86,6 +104,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           successNew: "Надіслано — ми попросили зареєструватися за посиланням з листа.",
           warningEmailFailedExisting: "Запрошення створено — воно з'явиться у дзвіночку користувача. Але листа не вдалося надіслати: перевір /errors і налаштування Resend у Cloudflare Pages.",
           warningEmailFailedNew: "Запрошення створено, але листа надіслати не вдалося. Це означає, що новий користувач його не побачить до реєстрації. Перевір /errors і налаштування Resend у Cloudflare Pages.",
+          warningBellFailed: "Email надіслано, але запис у дзвіночок не зберігся. Одержувач не побачить сповіщення в дашборді до перезаходу. Перевір /errors.",
+          warningBothFailed: "Не збереглося ні у дзвіночок, ні у email. Одержувач нічого не побачить. Перевір /errors і налаштування Resend.",
           errorRate: "Забагато запрошень за годину. Зачекайте.",
           errorDup: "Запрошення вже надіслано. Скасуйте його і спробуйте знову.",
           errorPersonal: "Не можна запрошувати в персональний салон.",
@@ -107,6 +127,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           successNew: "Wysłano — poprosiliśmy o rejestrację linkiem z e-maila.",
           warningEmailFailedExisting: "Zaproszenie utworzone — pojawi się w dzwonku użytkownika. Ale e-mail nie został wysłany: sprawdź /errors i ustawienia Resend w Cloudflare Pages.",
           warningEmailFailedNew: "Zaproszenie utworzone, ale e-mail nie został wysłany. Nowy użytkownik nie zobaczy go do rejestracji. Sprawdź /errors i ustawienia Resend w Cloudflare Pages.",
+          warningBellFailed: "E-mail wysłany, ale wpis w dzwonku nie został zapisany. Odbiorca nie zobaczy powiadomienia w dashboardzie do następnego zalogowania. Sprawdź /errors.",
+          warningBothFailed: "Nie zapisano ani w dzwonku, ani w e-mailu. Odbiorca niczego nie zobaczy. Sprawdź /errors i ustawienia Resend.",
           errorRate: "Za dużo zaproszeń w godzinę. Poczekaj.",
           errorDup: "Zaproszenie już wysłane. Anuluj je i spróbuj ponownie.",
           errorPersonal: "Nie można zapraszać do osobistego salonu.",
@@ -128,6 +150,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           successNew: "Sent — they've been asked to register via the email link.",
           warningEmailFailedExisting: "Invitation created — it'll appear in the recipient's bell. But the email failed to send: check /errors and your Resend settings in Cloudflare Pages.",
           warningEmailFailedNew: "Invitation created, but the email failed to send. The new user won't see it until they register. Check /errors and your Resend settings in Cloudflare Pages.",
+          warningBellFailed: "Email sent, but the bell entry didn't land. Recipient won't see the in-app notification until they sign in again. Check /errors.",
+          warningBothFailed: "Neither the bell entry nor the email landed. Recipient won't see anything. Check /errors and Resend settings.",
           errorRate: "Too many invitations this hour. Try again later.",
           errorDup: "Invitation already pending. Revoke it and try again.",
           errorPersonal: "Cannot invite into a personal-master tenant.",
@@ -156,10 +180,30 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
     let transportNote: string | undefined;
 
     if (status.kind === "success") {
-      if (status.emailQueued) {
+      // bellQueued can be:
+      //   true       — bell row landed (happy)
+      //   false      — bell write failed (yellow warn)
+      //   undefined  — field absent in response (new_user scenario, or pre-PR-B server)
+      const bellFailed = status.bellQueued === false;
+      const emailFailed = !status.emailQueued;
+
+      if (!emailFailed && !bellFailed) {
         tone = "ok";
         text = status.scenario === "existing_user" ? labels.successExisting : labels.successNew;
+      } else if (emailFailed && bellFailed) {
+        tone = "warn";
+        text = labels.warningBothFailed;
+        transportNote = [status.transportError, status.bellError]
+          .filter(Boolean)
+          .join(" / ") || undefined;
+      } else if (bellFailed) {
+        // Email OK, bell failed — the in-app surface is the primary path
+        // for an existing user, so this is a real degradation.
+        tone = "warn";
+        text = labels.warningBellFailed;
+        transportNote = status.bellError;
       } else {
+        // Email failed, bell OK (or absent).
         tone = "warn";
         text =
           status.scenario === "existing_user"

@@ -398,7 +398,12 @@ export const messengerRouter = createTRPCRouter({
               : thread.kind === "staff_group"
                 ? `Сообщение в группе`
                 : `Новое сообщение от ${senderLabel}`;
-          void notifyManyWebUsers(ctx.db, recipientIds, {
+          // PR-B: was `void` — fire-and-forget loses the D1 binding on
+          // Cloudflare Pages once the response returns, so the bell
+          // fan-out silently dropped every message. Await it; the
+          // outer try/catch still keeps the primary sendMessage flow
+          // safe if the fan-out blows up.
+          await notifyManyWebUsers(ctx.db, recipientIds, {
             kind: "messenger.message",
             title,
             body: preview(body),

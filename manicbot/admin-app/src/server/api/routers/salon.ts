@@ -28,6 +28,7 @@ import { notifyWorker } from "~/server/utils/notifyWorker";
 import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
+import { captureError } from "~/server/utils/captureError";
 import {
   IG_ALL_ERROR_TYPES,
   IG_BROKEN_ERROR_TYPES,
@@ -2538,18 +2539,54 @@ export const salonRouter = createTRPCRouter({
       const salonName = tenantRow[0].name ?? "ManicBot";
       const lang = ((existingUser[0]?.lang as Lang | null) ?? "en") as Lang;
 
-      // Fire-and-forget email. Caller still sees success state when D1 row
-      // landed; the email outcome lands in logs.
+      // We AWAIT the email send so the mutation result can carry the verdict.
+      // Pre-PR-A the call was fire-and-forget — when RESEND_API_KEY was unset
+      // (or Resend returned a 4xx/5xx) the failure landed silently in logs
+      // and the UI showed a misleading green toast. Now the call site sees
+      // `emailQueued: false` + `transportError` and renders a yellow chip;
+      // the operator also sees an `error_events` row in /errors via
+      // `captureError`. The sidecar `captureError` is wrapped in try/catch so
+      // a D1 hiccup writing the audit row can never break the primary flow.
+      let emailQueued = true;
+      let transportError: string | undefined;
+
       if (scenario === "existing_user") {
-        void sendMasterInviteExistingUserEmail(email, invitationId, salonName, lang).catch((e) =>
-          log.error("salon.invite.existing", e instanceof Error ? e : new Error(String(e))),
+        const emailResult = await sendMasterInviteExistingUserEmail(email, invitationId, salonName, lang).catch(
+          (e): { ok: false; error: string } => {
+            log.error("salon.invite.existing", e instanceof Error ? e : new Error(String(e)));
+            return { ok: false, error: "send_threw" };
+          },
         );
+        if (!emailResult.ok) {
+          emailQueued = false;
+          transportError = emailResult.error;
+          try {
+            await captureError(ctx.db, {
+              errorType: "email.transport_failed",
+              severity: "error",
+              message: `Master invite email failed (existing_user): ${emailResult.error}`,
+              tenantId: input.tenantId,
+              userId: inviter.id,
+              path: "salon.sendMasterInvitation",
+              context: {
+                recipient: email,
+                scenario: "existing_user",
+                reason: emailResult.error,
+                invitationId,
+              },
+            });
+          } catch (e) {
+            log.warn(
+              "salon.invite.captureError_failed",
+              e instanceof Error ? { message: e.message } : { raw: String(e) },
+            );
+          }
+        }
 
         // In-app Bell entry for the invitee. Email is unreliable (spam, DNS,
-        // delayed delivery) — the Bell drop is what guarantees the recipient
-        // sees the invite next time they open the dashboard. Idempotent on
-        // (web_user_id, source_slug, source_id, kind) so a duplicate-send
-        // retry collapses to the same row.
+        // delayed delivery, missing RESEND_API_KEY) — the Bell drop is what
+        // guarantees the recipient sees the invite next time they open the
+        // dashboard. Idempotent on (web_user_id, source_slug, source_id, kind).
         const inviteeId = existingUser[0]!.id;
         const inviteeLabel = ((): string => {
           switch (lang) {
@@ -2580,20 +2617,53 @@ export const salonRouter = createTRPCRouter({
           log.error("salon.invite.notify", e instanceof Error ? e : new Error(String(e))),
         );
       } else {
-        void sendMasterInviteNewUserEmail(email, rawToken, salonName, lang).catch((e) =>
-          log.error("salon.invite.new", e instanceof Error ? e : new Error(String(e))),
+        const emailResult = await sendMasterInviteNewUserEmail(email, rawToken, salonName, lang).catch(
+          (e): { ok: false; error: string } => {
+            log.error("salon.invite.new", e instanceof Error ? e : new Error(String(e)));
+            return { ok: false, error: "send_threw" };
+          },
         );
+        if (!emailResult.ok) {
+          emailQueued = false;
+          transportError = emailResult.error;
+          try {
+            await captureError(ctx.db, {
+              errorType: "email.transport_failed",
+              severity: "error",
+              message: `Master invite email failed (new_user): ${emailResult.error}`,
+              tenantId: input.tenantId,
+              userId: inviter.id,
+              path: "salon.sendMasterInvitation",
+              context: {
+                recipient: email,
+                scenario: "new_user",
+                reason: emailResult.error,
+                invitationId,
+              },
+            });
+          } catch (e) {
+            log.warn(
+              "salon.invite.captureError_failed",
+              e instanceof Error ? { message: e.message } : { raw: String(e) },
+            );
+          }
+        }
       }
 
       await writeAudit(ctx.db, {
         actor: inviter.email ?? null,
         action: "tenant.master.invite",
         tenantId: input.tenantId,
-        detail: `email=${email} scenario=${scenario}`,
+        detail: `email=${email} scenario=${scenario} emailQueued=${emailQueued}${transportError ? ` transportError=${transportError}` : ""}`,
         ip: ctxIp(ctx),
       });
 
-      return { invitationId, scenario };
+      return {
+        invitationId,
+        scenario,
+        emailQueued,
+        ...(transportError ? { transportError } : {}),
+      };
     }),
 
   /**

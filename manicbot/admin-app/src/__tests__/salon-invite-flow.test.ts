@@ -56,11 +56,24 @@ vi.mock("~/server/services/notifyWebUser", () => ({
   notifyWebUser: (...args: unknown[]) => notifyWebUserMock(...(args as Parameters<typeof notifyWebUserMock>)),
 }));
 
-// Email senders — silenced so they don't try to contact Resend.
+// captureError — spy so we can assert the transport-failure path writes
+// an error_events row. Real impl is exercised by its own unit test.
+const captureErrorMock = vi.fn(async () => ({ ok: true, id: 1 }));
+vi.mock("~/server/utils/captureError", () => ({
+  captureError: (...args: unknown[]) => captureErrorMock(...(args as Parameters<typeof captureErrorMock>)),
+}));
+
+// Email senders — silenced so they don't try to contact Resend. Per-test
+// overrides via `.mockResolvedValueOnce` simulate transport failures.
+type EmailResult = { ok: true } | { ok: false; error: string };
+const sendMasterInviteExistingUserEmailMock = vi.fn(async (): Promise<EmailResult> => ({ ok: true }));
+const sendMasterInviteNewUserEmailMock = vi.fn(async (): Promise<EmailResult> => ({ ok: true }));
 vi.mock("~/server/email/emailService", () => ({
   sendMasterInviteEmail: vi.fn(async () => ({ ok: true })),
-  sendMasterInviteExistingUserEmail: vi.fn(async () => ({ ok: true })),
-  sendMasterInviteNewUserEmail: vi.fn(async () => ({ ok: true })),
+  sendMasterInviteExistingUserEmail: (...args: unknown[]) =>
+    sendMasterInviteExistingUserEmailMock(...(args as Parameters<typeof sendMasterInviteExistingUserEmailMock>)),
+  sendMasterInviteNewUserEmail: (...args: unknown[]) =>
+    sendMasterInviteNewUserEmailMock(...(args as Parameters<typeof sendMasterInviteNewUserEmailMock>)),
   sendMasterPasswordResetByOwnerEmail: vi.fn(async () => ({ ok: true })),
 }));
 
@@ -199,6 +212,161 @@ describe("salonRouter.sendMasterInvitation — bell notification for existing_us
     await new Promise((r) => setTimeout(r, 0));
 
     expect(notifyWebUserMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("salonRouter.sendMasterInvitation — email transport visibility (PR-A)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendMasterInviteExistingUserEmailMock.mockResolvedValue({ ok: true });
+    sendMasterInviteNewUserEmailMock.mockResolvedValue({ ok: true });
+  });
+
+  it("returns emailQueued=true and does NOT call captureError on existing_user happy path", async () => {
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      emailQueued: true,
+    });
+    expect(out.transportError).toBeUndefined();
+    expect(captureErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("returns emailQueued=true on new_user happy path", async () => {
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [], // no existing user → new_user
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "newperson@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "new_user",
+      emailQueued: true,
+    });
+    expect(out.transportError).toBeUndefined();
+    expect(captureErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("returns emailQueued=false + transportError + calls captureError when existing_user transport fails (resend_not_configured)", async () => {
+    sendMasterInviteExistingUserEmailMock.mockResolvedValueOnce({
+      ok: false,
+      error: "resend_not_configured",
+    });
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    // The invitation row is still created (idempotent). Email failure is
+    // surfaced via the return value so the UI can render a yellow chip
+    // instead of the misleading green toast.
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      emailQueued: false,
+      transportError: "resend_not_configured",
+    });
+    expect(typeof out.invitationId).toBe("string");
+
+    // Bell row still lands — the in-app path is independent of email.
+    expect(notifyWebUserMock).toHaveBeenCalledTimes(1);
+
+    // error_events row written so operators see the misconfig in /errors.
+    expect(captureErrorMock).toHaveBeenCalledTimes(1);
+    const [, capturePayload] = captureErrorMock.mock.calls[0]! as unknown as [
+      unknown,
+      { errorType: string; severity: string; tenantId: string | null; context: Record<string, unknown> },
+    ];
+    expect(capturePayload.errorType).toBe("email.transport_failed");
+    expect(capturePayload.severity).toBe("error");
+    expect(capturePayload.tenantId).toBe(TENANT);
+    expect(capturePayload.context).toMatchObject({
+      recipient: "invitee@example.com",
+      scenario: "existing_user",
+      reason: "resend_not_configured",
+    });
+  });
+
+  it("returns emailQueued=false + transportError + calls captureError when new_user transport fails", async () => {
+    sendMasterInviteNewUserEmailMock.mockResolvedValueOnce({
+      ok: false,
+      error: "resend_http_500",
+    });
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [], // no existing user → new_user
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "newperson@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "new_user",
+      emailQueued: false,
+      transportError: "resend_http_500",
+    });
+    expect(captureErrorMock).toHaveBeenCalledTimes(1);
+    const [, capturePayload] = captureErrorMock.mock.calls[0]! as unknown as [
+      unknown,
+      { errorType: string; context: Record<string, unknown> },
+    ];
+    expect(capturePayload.errorType).toBe("email.transport_failed");
+    expect(capturePayload.context).toMatchObject({
+      recipient: "newperson@example.com",
+      scenario: "new_user",
+      reason: "resend_http_500",
+    });
+  });
+
+  it("captureError failure does NOT break the mutation (best-effort sidecar)", async () => {
+    sendMasterInviteExistingUserEmailMock.mockResolvedValueOnce({
+      ok: false,
+      error: "resend_not_configured",
+    });
+    captureErrorMock.mockRejectedValueOnce(new Error("D1 unavailable"));
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    // Mutation must still succeed — captureError is sidecar, must never throw upstream.
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      emailQueued: false,
+      transportError: "resend_not_configured",
+    });
   });
 });
 

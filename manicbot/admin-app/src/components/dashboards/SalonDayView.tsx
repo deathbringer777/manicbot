@@ -127,6 +127,21 @@ interface Props {
   tenantId?: string;
   services?: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
   onUpdated?: () => void;
+  /**
+   * Single-column mode — used by the master "Расписание" tab where the
+   * grid is scoped to one master (this master). In single-column mode:
+   *   - the per-column avatar+name header strip is suppressed (the
+   *     master knows whose calendar they're looking at — showing
+   *     "?" + "#10968255038" for synthetic ids is pure noise);
+   *   - an empty-state overlay is rendered inside the grid when the
+   *     visible day has zero appointments AND zero blocks;
+   *   - auto-scroll-to-now is skipped when the day is empty so the
+   *     master sees from `HOUR_START` (working hours start) instead
+   *     of landing on a blank "current time" 14h into the day.
+   * Default `false` preserves the existing multi-master owner-side
+   * behavior in SalonDashboard.
+   */
+  singleColumnMode?: boolean;
 }
 
 function pad(n: number): string {
@@ -255,6 +270,7 @@ export function SalonDayView({
   tenantId,
   services,
   onUpdated,
+  singleColumnMode = false,
 }: Props) {
   // Drag-to-reschedule — single hook owns the cross-column ghost state.
   // Both the date+master pair are resolved from the column under the
@@ -328,8 +344,18 @@ export function SalonDayView({
   const showInlineRail = hiddenMasterIdsProp === undefined;
 
   // Auto-scroll to current time when viewing today (delayed so layout settles).
+  // In single-column (master self-view) mode, skip the scroll when the day is
+  // empty — scrolling a blank grid 14h forward looks like "where did my
+  // calendar go?" instead of an inviting empty state. Multi-master owner mode
+  // keeps the existing behavior.
+  const hasContentToday = useMemo(() => {
+    if (apts.some((a) => a.date === isoDate)) return true;
+    if ((blocks ?? []).some((b) => (b.endDate ? b.date <= isoDate && b.endDate >= isoDate : b.date === isoDate))) return true;
+    return false;
+  }, [apts, blocks, isoDate]);
   useEffect(() => {
     if (!isToday || !scrollerRef.current) return;
+    if (singleColumnMode && !hasContentToday) return;
     const now = new Date();
     const minutes = now.getHours() * 60 + now.getMinutes();
     const offset = ((minutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
@@ -338,7 +364,7 @@ export function SalonDayView({
       scrollerRef.current?.scrollTo({ top: Math.max(0, offset - HOUR_HEIGHT * 1.5), behavior: "smooth" });
     }, 100);
     return () => window.clearTimeout(t);
-  }, [isToday]);
+  }, [isToday, singleColumnMode, hasContentToday]);
 
   // Filter apts for this day, group by masterId.
   const aptsByMaster = useMemo(() => {
@@ -642,18 +668,34 @@ export function SalonDayView({
                   // column non-draggable as a drop target.
                   {...(master.chatId !== -1 ? { "data-day": isoDate } : {})}
                 >
-                  {/* Header */}
-                  <div className="h-12 flex items-center gap-2 px-3 border-b border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm">
-                    <span
-                      className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                      style={{ background: tone.text }}
+                  {/* Header — kept as a 48px band even in single-column mode
+                      so the hour-scale alignment (and the +48 offset on the
+                      `now` red line at line ~893) stays correct. In single-
+                      column mode the avatar + name strip is suppressed: the
+                      master knows whose calendar they're looking at, and the
+                      "?" + "#<chatId>" fallback for missing names is pure
+                      noise. */}
+                  {singleColumnMode ? (
+                    <div
+                      data-testid="day-view-master-column-header-blank"
+                      className="h-12 border-b border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm"
+                    />
+                  ) : (
+                    <div
+                      data-testid="day-view-master-column-header"
+                      className="h-12 flex items-center gap-2 px-3 border-b border-slate-200 dark:border-white/10 bg-white/70 dark:bg-slate-900/40 sticky top-0 z-10 backdrop-blur-sm"
                     >
-                      {(master.name ?? "?").charAt(0).toUpperCase()}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">
-                      {master.name ?? `#${master.chatId}`}
-                    </span>
-                  </div>
+                      <span
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                        style={{ background: tone.text }}
+                      >
+                        {(master.name ?? "?").charAt(0).toUpperCase()}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">
+                        {master.name ?? `#${master.chatId}`}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Body — Google-Calendar-style ruled grid (solid hour lines
                       + dashed half-hour lines) + flat non-working tint.
@@ -810,6 +852,29 @@ export function SalonDayView({
                         </button>
                       );
                     })}
+
+                    {/* Empty-state overlay — single-column (master self-view)
+                        mode only, fires when the visible day has zero
+                        appointments AND zero blocks for THIS master. Sits
+                        on top of the empty grid lines but doesn't block
+                        DragCreateLayer's pointer events, so the master can
+                        still click-drag in the empty grid to create a block. */}
+                    {singleColumnMode &&
+                      list.length === 0 &&
+                      (blocksByMaster.get(master.chatId as number) ?? []).length === 0 && (
+                        <div
+                          data-testid="day-view-empty-master"
+                          className="absolute inset-x-2 pointer-events-none flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 px-4"
+                          style={{ top: 0, height: TOTAL_HOURS * HOUR_HEIGHT }}
+                        >
+                          <p className="text-sm font-semibold">
+                            {t("master.schedule.emptyDay.title", lang)}
+                          </p>
+                          <p className="text-xs mt-1 max-w-[240px]">
+                            {t("master.schedule.emptyDay.subtitle", lang)}
+                          </p>
+                        </div>
+                      )}
 
                     {/* Drag-to-reschedule ghost — rendered in whichever
                         master column is currently under the cursor. The

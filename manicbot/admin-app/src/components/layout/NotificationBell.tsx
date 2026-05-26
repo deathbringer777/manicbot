@@ -34,6 +34,7 @@ import {
   kindMeta,
   type BellGroup,
 } from "~/lib/notifications/kindMeta";
+import { groupNotifications } from "~/lib/notifications/grouping";
 import { usePushSubscription } from "~/lib/notifications/usePushSubscription";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -100,7 +101,14 @@ export function NotificationBell() {
     const items = list.data ?? [];
     const buckets: Record<BellGroup, typeof items> = { new: [], earlier: [] };
     for (const n of items) buckets[bellGroup(n.createdAt)].push(n);
-    return buckets;
+    // PR-C: smart-group consecutive same-(kind, sourceSlug) bursts inside
+    // each time bucket. Trades one bell row per message for one row per
+    // burst → cleaner visual when a noisy salon gets 7 bookings in an
+    // hour. Empty buckets pass through as [].
+    return {
+      new: groupNotifications(buckets.new),
+      earlier: groupNotifications(buckets.earlier),
+    };
   }, [list.data]);
 
   const titleText = t("notifications.title", lang);
@@ -213,32 +221,39 @@ export function NotificationBell() {
             )}
 
             {(["new", "earlier"] as const).map((group) => {
-              const rows = grouped[group];
-              if (!rows.length) return null;
+              const items = grouped[group];
+              if (!items.length) return null;
               return (
                 <section key={group} data-testid={`notification-bell-group-${group}`}>
                   <h3 className="px-4 pt-2.5 pb-1 text-[10px] uppercase font-bold tracking-wider text-slate-400">
                     {bellGroupTitle(group, lang)}
                   </h3>
                   <ul>
-                    {rows.map((n) => {
-                      const isUnread = n.readAt === null;
-                      const meta = kindMeta(n.kind);
+                    {items.map((item) => {
+                      const rep = item.type === "single" ? item.row : item.representative;
+                      const allRows = item.type === "single" ? [item.row] : item.rows;
+                      const isUnread = allRows.some((r) => r.readAt === null);
+                      const unreadIds = allRows.filter((r) => r.readAt === null).map((r) => r.id);
+                      const meta = kindMeta(rep.kind);
                       const Icon = meta.icon;
+                      const collapsedCount = item.type === "group" ? item.count : 0;
+                      const onRowClick = () => {
+                        if (unreadIds.length > 0) markRead.mutate({ ids: unreadIds });
+                        if (rep.link) {
+                          router.push(rep.link);
+                          setOpen(false);
+                        }
+                      };
                       return (
-                        <li key={n.id}>
+                        <li key={rep.id}>
                           <button
                             type="button"
                             data-testid="notification-bell-row"
-                            data-kind={n.kind}
+                            data-kind={rep.kind}
+                            data-grouped={item.type === "group" ? "true" : "false"}
+                            data-group-count={collapsedCount || undefined}
                             data-unread={isUnread ? "true" : "false"}
-                            onClick={() => {
-                              if (isUnread) markRead.mutate({ ids: [n.id] });
-                              if (n.link) {
-                                router.push(n.link);
-                                setOpen(false);
-                              }
-                            }}
+                            onClick={onRowClick}
                             className={`w-full text-left px-4 py-2.5 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.04] ${
                               isUnread ? "bg-indigo-500/[0.04]" : ""
                             }`}
@@ -250,19 +265,27 @@ export function NotificationBell() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-baseline gap-2">
                                   <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                                    {n.title}
+                                    {rep.title}
                                   </p>
+                                  {collapsedCount > 0 && (
+                                    <span
+                                      className="inline-flex items-center rounded-full bg-slate-200/80 dark:bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 shrink-0"
+                                      data-testid="notification-bell-group-count"
+                                    >
+                                      +{collapsedCount}
+                                    </span>
+                                  )}
                                   {isUnread && (
                                     <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
                                   )}
                                 </div>
-                                {n.body && (
+                                {rep.body && (
                                   <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
-                                    {n.body}
+                                    {rep.body}
                                   </p>
                                 )}
                                 <p className="text-[10px] text-slate-400 mt-0.5">
-                                  {formatRelative(n.createdAt, lang)}
+                                  {formatRelative(rep.createdAt, lang)}
                                 </p>
                               </div>
                             </div>

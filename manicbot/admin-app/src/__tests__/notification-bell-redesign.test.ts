@@ -47,7 +47,11 @@ describe("NotificationBell — PR2 redesign contract", () => {
 
   it("rows expose kind + unread state for downstream tests", () => {
     expect(src).toContain('data-testid="notification-bell-row"');
-    expect(src).toContain("data-kind={n.kind}");
+    // PR-C smart grouping landed: the per-row `kind` attribute reads from
+    // the group-representative (`rep`) instead of `n`. Singles use rep too
+    // (rep === item.row in the type==='single' branch), so the attribute
+    // still surfaces the kind on every row regardless of grouping.
+    expect(src).toContain("data-kind={rep.kind}");
     expect(src).toContain('data-unread={isUnread ? "true" : "false"}');
   });
 

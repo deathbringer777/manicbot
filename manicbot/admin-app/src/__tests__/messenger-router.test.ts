@@ -541,6 +541,110 @@ describe("messengerRouter.sendMessage", () => {
   });
 });
 
+// ─── PR-B: bell fan-out for other web_user thread members ────────────────
+
+describe("messengerRouter.sendMessage — PR-B bell fan-out", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("inserts a user_notifications row for every other web_user member", async () => {
+    const dbMock = createDbMock([
+      // 1. thread row (assertThreadMember)
+      [{
+        id: "th_dm",
+        tenantId: "t_a",
+        kind: "staff_dm",
+        title: null,
+        clientConversationId: null,
+        dmKey: "w_owner:w_other",
+        createdByWebUserId: "w_owner",
+        createdAt: 1,
+        lastMessageAt: 2,
+        lastMessagePreview: null,
+        archived: 0,
+      }],
+      // 2. caller member-row (assertThreadMember)
+      [{
+        threadId: "th_dm",
+        memberKind: "web_user",
+        memberRef: "w_owner",
+        role: "member",
+        joinedAt: 1,
+        mutedUntil: null,
+        lastReadMessageId: null,
+        lastReadAt: null,
+      }],
+      // 3. PR-B bell fan-out: other web_user members of the thread.
+      [{ memberRef: "w_other" }],
+      // 4. Sender email lookup (for the bell row title)
+      [{ email: "owner@example.com" }],
+      // 5. notifyManyWebUsers → loadPrefsForWebUser (prefs read for w_other)
+      [{ raw: null }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_a") as never);
+    await caller.sendMessage({
+      tenantId: "t_a",
+      threadId: "th_dm",
+      body: "Hello there",
+    });
+
+    // The bell row must have been inserted with the right kind + source.
+    // notifyManyWebUsers → notifyWebUser → INSERT INTO user_notifications.
+    const bellInsert = dbMock.insertCalls.find((c) => {
+      const v = c.values as Record<string, unknown>;
+      return v.kind === "messenger.message";
+    });
+    expect(bellInsert).toBeDefined();
+    const bellValues = bellInsert!.values as Record<string, unknown>;
+    expect(bellValues.webUserId).toBe("w_other");
+    expect(bellValues.sourceSlug).toBe("thread");
+    expect(String(bellValues.sourceId)).toMatch(/^th_dm:/);
+    expect(bellValues.tenantId).toBe("t_a");
+    expect(String(bellValues.link)).toMatch(/^\/messages\?thread=th_dm/);
+  });
+
+  it("does NOT write a bell row when the sender is the only web_user member", async () => {
+    const dbMock = createDbMock([
+      [{
+        id: "th_solo",
+        tenantId: "t_a",
+        kind: "staff_dm",
+        title: null,
+        clientConversationId: null,
+        dmKey: "w_owner:w_owner",
+        createdByWebUserId: "w_owner",
+        createdAt: 1,
+        lastMessageAt: 2,
+        lastMessagePreview: null,
+        archived: 0,
+      }],
+      [{
+        threadId: "th_solo",
+        memberKind: "web_user",
+        memberRef: "w_owner",
+        role: "member",
+        joinedAt: 1,
+        mutedUntil: null,
+        lastReadMessageId: null,
+        lastReadAt: null,
+      }],
+      // No other web_user members.
+      [],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, "t_a") as never);
+    await caller.sendMessage({
+      tenantId: "t_a",
+      threadId: "th_solo",
+      body: "Note to self",
+    });
+
+    const bellInsert = dbMock.insertCalls.find((c) => {
+      const v = c.values as Record<string, unknown>;
+      return v.kind === "messenger.message";
+    });
+    expect(bellInsert).toBeUndefined();
+  });
+});
+
 // ─── listStaff ──────────────────────────────────────────────────────────
 // Full coverage lives in `messenger-list-staff.test.ts`. The contract here
 // (web_users-only filter) was retired — masters whose `web_users.tenant_id`

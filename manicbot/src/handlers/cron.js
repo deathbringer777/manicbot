@@ -200,6 +200,50 @@ export async function phaseChannelHealth(ctx, nowMs) {
 
   const { captureError } = await import('../utils/errorCapture.js');
   const { CHANNEL_ERROR_TYPE } = await import('../channels/error-types.js');
+  const { notifyTenantOwner } = await import('../services/userNotify.js');
+
+  // PR-B (Notification Center 2.0) — bell-row fan-out for channel state.
+  // The error_events write below lights up the /errors dashboard for ops;
+  // the bell row in front of the salon owner is what gets THEM to take
+  // action without a sysadmin tap. Idempotent via the partial UNIQUE on
+  // (web_user_id, source_slug, source_id, kind) — same probe firing every
+  // 6h while the channel stays broken collapses to one row per state.
+  // `sourceId` includes the date so a recurring weekly outage gets its own
+  // row each day rather than reusing the cobwebbed first one.
+  const todayBucket = new Date(nowSec * 1000).toISOString().slice(0, 10);
+  async function bellChannelBroken(slug, body) {
+    try {
+      await notifyTenantOwner(ctx, {
+        kind: 'channel.broken',
+        title: 'Instagram-канал не работает',
+        body,
+        link: '/dashboard?tab=channels',
+        sourceSlug: 'channel',
+        sourceId: `instagram:${slug}:${todayBucket}`,
+        inapp: true,
+        telegram: false,
+      });
+    } catch (e) {
+      log.warn('handlers.cron', { action: 'channel_broken_bell_failed', error: e?.message });
+    }
+  }
+  async function bellChannelDegraded(slug, body) {
+    try {
+      await notifyTenantOwner(ctx, {
+        kind: 'channel.degraded',
+        title: 'Instagram-канал требует внимания',
+        body,
+        link: '/dashboard?tab=channels',
+        sourceSlug: 'channel',
+        sourceId: `instagram:${slug}:${todayBucket}`,
+        inapp: true,
+        telegram: false,
+      });
+    } catch (e) {
+      log.warn('handlers.cron', { action: 'channel_degraded_bell_failed', error: e?.message });
+    }
+  }
+
   if (!igConfig.token) {
     await captureError(ctx, new Error('IG token decrypt failed — bot is dead until recovery'), {
       source: 'cron.channel_health',
@@ -210,6 +254,10 @@ export async function phaseChannelHealth(ctx, nowMs) {
       channelType: 'instagram',
       pageId: String(igConfig.page_id || ''),
     });
+    await bellChannelBroken(
+      'token_decrypt',
+      'Токен Instagram не расшифровывается. Переподключи канал в настройках салона.',
+    );
     await setPhaseLastRun(ctx, 'channel_health', nowSec);
     return;
   }
@@ -231,6 +279,10 @@ export async function phaseChannelHealth(ctx, nowMs) {
         graphCode: String(data?.error?.code ?? ''),
         graphSubcode: String(data?.error?.error_subcode ?? ''),
       });
+      await bellChannelBroken(
+        'token_rejected',
+        `Meta отвергает токен (${data?.error?.message ?? `HTTP ${r.status}`}). Открой Каналы → Instagram → Переподключить.`,
+      );
     } else {
       // Verify Page subscribed_apps is healthy; if missing, capture warning.
       const sR = await fetch(
@@ -253,6 +305,10 @@ export async function phaseChannelHealth(ctx, nowMs) {
             pageId: String(igConfig.page_id || ''),
             missingFields: missing.join(','),
           },
+        );
+        await bellChannelDegraded(
+          'subscription_lost',
+          `Meta не получает события (${missing.join(', ') || 'нет подписки'}). Сообщения от клиентов могут не доходить — переподпиши канал.`,
         );
       }
     }

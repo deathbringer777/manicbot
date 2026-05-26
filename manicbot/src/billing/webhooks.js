@@ -26,6 +26,7 @@ import {
   handleReferralInvoicePaid,
   handleReferralSubscriptionDeleted,
 } from './referralWebhooks.js';
+import { notifyTenantOwner } from '../services/userNotify.js';
 
 // #P1-5 (relax.md §5) — plan tier order is the single source of truth for
 // upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
@@ -348,6 +349,24 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           sendPaymentFailedEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
             .catch(e => log.error('webhook.paymentFailedEmail', e));
         }
+        // PR-B: in-app bell row. Salon owner needs to know their card was
+        // declined BEFORE the grace period runs out. Dedup'd by invoice id
+        // so Stripe retries (paid → declined → re-attempted) collapse into
+        // one bell row per invoice cycle.
+        try {
+          await notifyTenantOwner({ ...ctx, tenantId }, {
+            kind: 'billing.payment_failed',
+            title: 'Платёж не прошёл',
+            body: 'Оплата подписки отклонена. Зайди в Настройки → Биллинг, чтобы обновить карту, пока не истёк grace-период.',
+            link: '/settings?section=billing',
+            sourceSlug: 'billing',
+            sourceId: `payment_failed:${invoice?.id || subscriptionId}`,
+            inapp: true,
+            telegram: false,
+          });
+        } catch (e) {
+          log.warn('webhooks', { action: 'billing_payment_failed_bell', error: e?.message });
+        }
       }
     }
   }
@@ -370,6 +389,22 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           nowSec(),
         );
       } catch { /* best-effort */ }
+      // PR-B: bell row. Dedup'd by subscriptionId so Stripe's repeated
+      // trial_will_end webhooks (3-day fire + retries) collapse to one row.
+      try {
+        await notifyTenantOwner({ ...ctx, tenantId }, {
+          kind: 'billing.trial_expiring_soon',
+          title: 'Триал заканчивается',
+          body: 'Через 3 дня закончится пробный период. Выбери план в Настройки → Биллинг, чтобы салон продолжил работу без перерыва.',
+          link: '/settings?section=billing',
+          sourceSlug: 'billing',
+          sourceId: `trial_will_end:${sub.id}`,
+          inapp: true,
+          telegram: false,
+        });
+      } catch (e) {
+        log.warn('webhooks', { action: 'billing_trial_will_end_bell', error: e?.message });
+      }
     }
   }
 

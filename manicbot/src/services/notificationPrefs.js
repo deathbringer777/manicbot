@@ -14,6 +14,9 @@ export const NOTIFICATION_CATEGORIES = [
   'messenger',
   'billing',
   'marketing',
+  // PR-B: channel (IG/WA/TG outages) + client (new client lifecycle).
+  'channel',
+  'client',
 ];
 
 /**
@@ -31,6 +34,11 @@ export const DEFAULT_PREFS = {
     messenger:   { inapp: true, push: true },
     billing:     { inapp: true, push: true },
     marketing:   { inapp: true, push: false },
+    // PR-B: urgent operator-action signals — push by default so a dead IG
+    // token (last incident took 6 weeks to detect) lights up immediately.
+    channel:     { inapp: true, push: true },
+    // PR-B: new-client signal is informational; push off by default.
+    client:      { inapp: true, push: false },
   },
 };
 

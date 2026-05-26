@@ -244,3 +244,56 @@ function newNotificationId() {
     Math.random().toString(36).slice(2, 14);
   return `n_${ts}_${rand}`;
 }
+
+/**
+ * Look up the `tenant_owner` web_user_id for `ctx.tenantId`. Returns null
+ * if the tenant has no owner row (orphan tenant — should not happen in
+ * practice, but we don't blow up if it does).
+ *
+ * Lazy helper used by cron + Stripe webhook + plugin webhook writers
+ * that want to fire a single bell row at the tenant owner without
+ * threading the lookup through every call site.
+ *
+ * @param {object} ctx — must carry `db` + `tenantId`.
+ * @returns {Promise<string | null>}
+ */
+export async function getTenantOwnerWebUserId(ctx) {
+  if (!ctx?.db || !ctx?.tenantId) return null;
+  try {
+    const row = await dbGet(
+      ctx,
+      "SELECT id FROM web_users WHERE tenant_id = ? AND role = 'tenant_owner' LIMIT 1",
+      ctx.tenantId,
+    );
+    return row?.id ?? null;
+  } catch (e) {
+    log.warn('services.userNotify', {
+      action: 'tenant_owner_lookup_failed',
+      error: e?.message?.slice(0, 200),
+    });
+    return null;
+  }
+}
+
+/**
+ * Convenience: fire a bell row at the tenant owner. Best-effort — silent
+ * no-op when the tenant has no owner row, or when notifyWebUser rejects.
+ *
+ * @param {object} ctx
+ * @param {object} opts — same shape as notifyWebUser opts.
+ * @returns {Promise<{ok: boolean}>}
+ */
+export async function notifyTenantOwner(ctx, opts) {
+  const ownerId = await getTenantOwnerWebUserId(ctx);
+  if (!ownerId) return { ok: false };
+  try {
+    const r = await notifyWebUser(ctx, ownerId, opts);
+    return { ok: r?.ok ?? false };
+  } catch (e) {
+    log.warn('services.userNotify', {
+      action: 'notify_tenant_owner_failed',
+      error: e?.message?.slice(0, 200),
+    });
+    return { ok: false };
+  }
+}

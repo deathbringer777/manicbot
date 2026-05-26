@@ -18,7 +18,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq, desc, lt, sql, inArray, gt, isNull } from "drizzle-orm";
+import { and, eq, desc, lt, sql, inArray, gt, isNull, ne } from "drizzle-orm";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import {
   threads,
@@ -39,6 +39,7 @@ import { mintWsToken } from "~/lib/wsToken";
 import { signUploadToken } from "~/server/lib/uploadToken";
 import { env } from "~/env";
 import { log } from "~/server/utils/logger";
+import { notifyManyWebUsers } from "~/server/services/notifyWebUser";
 
 // ─── Attachment limits ─────────────────────────────────────────────
 
@@ -364,6 +365,65 @@ export const messengerRouter = createTRPCRouter({
             eq(threadMembers.memberRef, webUserId),
           ),
         );
+
+      // PR-B (Notification Center 2.0): in-app bell fan-out. Every other
+      // web_user member of this thread gets one bell row per message. Uses
+      // `messageId` in the sourceId so each post is a distinct row (PR-C
+      // smart grouping will collapse them visually). Internal notes are
+      // staff-only — they STILL trigger the bell because staff members
+      // need to see the note land. Skip silently when the only other
+      // member is the sender themselves.
+      try {
+        const otherWebUserMembers = await ctx.db
+          .select({ memberRef: threadMembers.memberRef })
+          .from(threadMembers)
+          .where(
+            and(
+              eq(threadMembers.threadId, input.threadId),
+              eq(threadMembers.memberKind, "web_user"),
+              ne(threadMembers.memberRef, webUserId),
+            ),
+          );
+        const recipientIds = otherWebUserMembers.map((m) => m.memberRef);
+        if (recipientIds.length > 0) {
+          const senderRow = await ctx.db
+            .select({ email: webUsers.email })
+            .from(webUsers)
+            .where(eq(webUsers.id, webUserId))
+            .limit(1);
+          const senderLabel = senderRow[0]?.email?.split("@")[0] ?? "Сотрудник";
+          const title =
+            thread.kind === "client_conv"
+              ? `Клиент: ${senderLabel}`
+              : thread.kind === "staff_group"
+                ? `Сообщение в группе`
+                : `Новое сообщение от ${senderLabel}`;
+          void notifyManyWebUsers(ctx.db, recipientIds, {
+            kind: "messenger.message",
+            title,
+            body: preview(body),
+            link: `/messages?thread=${encodeURIComponent(input.threadId)}`,
+            tenantId: input.tenantId,
+            sourceSlug: "thread",
+            // Distinct sourceId per message → each post is its own bell
+            // row. PR-C grouping will collapse multi-message-from-same-thread
+            // into "Анна · 3 новых сообщения" client-side.
+            sourceId: `${input.threadId}:${id}`,
+          }).catch((e) =>
+            log.warn(
+              "messenger.sendMessage.bell_fanout_failed",
+              e instanceof Error ? { message: e.message } : { raw: String(e) },
+            ),
+          );
+        }
+      } catch (e) {
+        // Bell fan-out is sidecar — a D1 hiccup here must not abort the
+        // primary sendMessage flow (the message is already persisted).
+        log.warn(
+          "messenger.sendMessage.bell_fanout_lookup_failed",
+          e instanceof Error ? { message: e.message } : { raw: String(e) },
+        );
+      }
 
       // Phase 2 — relay to Worker → channel adapter for client_conv threads.
       // Internal notes never relay (they're staff-only by design). Phase 3

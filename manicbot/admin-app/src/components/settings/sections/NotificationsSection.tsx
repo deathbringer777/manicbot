@@ -73,10 +73,21 @@ const SCENARIOS: Record<NotificationCategory, string[]> = {
     "messenger.* / thread.* — новые сообщения во внутренних чатах",
   ],
   billing: [
-    "billing.alert — проблемы с оплатой, окончание триала, переход в grace",
+    "billing.payment_failed — платёж не прошёл, начался grace-период",
+    "billing.trial_expiring_soon — триал заканчивается через 3 дня",
+    "billing.grace_started — салон перешёл в grace-период",
+    "billing.subscription_renewed — подписка успешно продлена",
   ],
   marketing: [
     "marketing.campaign.sent — статус доставки маркетинговой кампании",
+  ],
+  // PR-B (Notification Center 2.0) additions.
+  channel: [
+    "channel.broken — IG / WA / Telegram токен умер, клиенты не дозванниваются",
+    "channel.degraded — канал работает, но Meta теряет события",
+  ],
+  client: [
+    "client.new — новый клиент зарегистрировался в боте",
   ],
 };
 

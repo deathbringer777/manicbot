@@ -240,11 +240,18 @@ export const DEMO_CHAT_SRC = `
     '.mb-btn-row-grid .mb-btn{width:100%;min-width:0;padding:8px 6px;font-variant-numeric:tabular-nums}' +
     // Buttons use explicit --mb-btn-text (not color:inherit) so the label
     // stays readable regardless of the surrounding bubble's text colour.
-    '.mb-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6.5px 11px;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:9px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;letter-spacing:-.005em;transition:border-color .15s ease,background .15s ease,transform .12s ease,box-shadow .15s ease;text-decoration:none;box-shadow:0 1px 0 rgba(15,23,42,.02);white-space:nowrap}' +
+    // white-space:normal + tight line-height allows long Telegram-style
+    // labels ("Классический маникюр", "◀ Главное меню") to wrap to a 2nd
+    // line inside the chip instead of bleeding past the right edge and
+    // being painted over by the next button in the row.
+    '.mb-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6.5px 11px;border:1px solid var(--mb-btn-border);background:var(--mb-btn-bg);color:var(--mb-btn-text);border-radius:9px;cursor:pointer;font:inherit;font-size:12px;font-weight:500;letter-spacing:-.005em;line-height:1.15;text-align:center;transition:border-color .15s ease,background .15s ease,transform .12s ease,box-shadow .15s ease;text-decoration:none;box-shadow:0 1px 0 rgba(15,23,42,.02);white-space:normal;overflow-wrap:break-word}' +
     '.mb-btn:active{transform:translateY(1px);box-shadow:none}' +
     '.mb-btn:hover{border-color:var(--mb-btn-hover-border);background:var(--mb-btn-hover);box-shadow:0 2px 6px rgba(15,23,42,.06)}' +
     // Multi-button rows (nav arrows, pagination): chips share row evenly.
-    '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn{flex:1 1 auto;min-width:38px}' +
+    // flex-basis:0 + min-width:0 lets the row distribute width evenly across
+    // siblings and lets each chip shrink to whatever the wrapped label needs,
+    // so a 2-button row ("Записаться" + "◀ Главное меню") never overflows.
+    '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn{flex:1 1 0;min-width:0}' +
     // Photo carousel — replaces the Telegram-style [◀️] [n/m] [▶️] nav row
     // with a native iPhone-style overlay (chevron arrows on hover/focus +
     // pill-shaped dots indicator). Tapping the chevrons / dots dispatches

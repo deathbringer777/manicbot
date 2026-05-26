@@ -1854,6 +1854,9 @@ const translations = {
   "notifications.cat.channel.desc": { ru: "Сбои IG / WA / Telegram, потеря токена, разрыв подписки.", ua: "Збої IG / WA / Telegram, втрата токена, розрив підписки.", en: "IG / WA / Telegram outages, token loss, subscription drift.", pl: "Awarie IG / WA / Telegram, utrata tokenu, rozspójnienie subskrypcji." },
   "notifications.cat.client":       { ru: "Клиенты",                ua: "Клієнти",                 en: "Clients",                pl: "Klienci" },
   "notifications.cat.client.desc":  { ru: "Новые клиенты регистрируются в боте, первые записи.", ua: "Нові клієнти реєструються в боті, перші записи.", en: "New clients registering with the bot, first bookings.", pl: "Nowi klienci rejestrują się w bocie, pierwsze rezerwacje." },
+  // PR-D: per-category test-fire column header + tooltip.
+  "notifications.settings.col.test":    { ru: "Тест",                   ua: "Тест",                    en: "Test",                   pl: "Test" },
+  "notifications.settings.testBtnTitle":{ ru: "Отправить тестовое уведомление этой категории", ua: "Надіслати тестове сповіщення цієї категорії", en: "Send a test notification of this category", pl: "Wyślij testowe powiadomienie tej kategorii" },
 
   // ── Activity-feed action labels (gender-neutral) ───────────────────────────
   "activity.tenantCreated":       { ru: "Новый салон в системе",  ua: "Новий салон у системі",  en: "joined the platform",    pl: "dołączył do platformy" },

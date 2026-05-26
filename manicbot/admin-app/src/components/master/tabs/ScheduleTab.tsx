@@ -227,6 +227,11 @@ export function ScheduleTab({
             onMoveAppointment={canMutate ? handleMoveAppointment : undefined}
             // Empty hiddenMasterIds — single-column means no rail toggle.
             hiddenMasterIds={new Set<number>()}
+            // Master self-view: hide redundant per-column avatar + name strip,
+            // show empty-state when the day is empty, skip auto-scroll-to-now
+            // on empty days. Owner-side SalonDashboard leaves this off and
+            // keeps the multi-master header. See SalonDayView Props.
+            singleColumnMode
           />
         )}
 

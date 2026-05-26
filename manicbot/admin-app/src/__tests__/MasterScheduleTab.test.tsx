@@ -181,6 +181,45 @@ describe("MasterDashboard / ScheduleTab (modernized)", () => {
     expect(screen.getAllByTestId("agenda-row").length).toBe(1);
   });
 
+  it("suppresses the per-column avatar+name header strip in single-column mode (no #chatId noise)", () => {
+    // Pre-fix: when masterName was null (salon-created master account whose
+    // `masters.name` was not backfilled) the column header showed
+    // "?" + "#10968255038" — incomprehensible to the user. ScheduleTab now
+    // passes singleColumnMode={true} which suppresses that strip entirely.
+    renderWithLang(
+      <ScheduleTab
+        {...baseProps}
+        masterName={null}
+        schedule={{ isLoading: false, isError: false, data: [] }}
+      />,
+      "ru",
+    );
+    expect(screen.queryByTestId("day-view-master-column-header")).toBeNull();
+    expect(screen.getByTestId("day-view-master-column-header-blank")).toBeTruthy();
+    // The raw #777 fallback text must not leak anywhere in the day-view.
+    expect(screen.queryByText("#777")).toBeNull();
+  });
+
+  it("renders the master.schedule.emptyDay overlay when the visible day has no appointments and no blocks", () => {
+    renderWithLang(
+      <ScheduleTab
+        {...baseProps}
+        masterName="Olga"
+        schedule={{ isLoading: false, isError: false, data: [] }}
+      />,
+      "ru",
+    );
+    const empty = screen.getByTestId("day-view-empty-master");
+    expect(empty).toBeTruthy();
+    // Title is localized via i18n key "master.schedule.emptyDay.title".
+    expect(empty.textContent).toContain("Сегодня записей нет");
+  });
+
+  it("does NOT render the empty-state overlay when the day has at least one appointment", () => {
+    renderWithLang(<ScheduleTab {...baseProps} />, "ru");
+    expect(screen.queryByTestId("day-view-empty-master")).toBeNull();
+  });
+
   it("does NOT render confirm / reject action buttons in list mode (master role lacks the mutation)", () => {
     // Today's row is confirmed, not pending, so the menu trigger should appear.
     // The "..." menu must not include a Cancel option (master has no

@@ -258,7 +258,16 @@ export function MasterDashboard({
           schedule={schedule}
           canMutate={canMutate}
           markNoShowMut={markNoShowMut}
-          masterName={(profile.data as any)?.name ?? null}
+          // Fallback chain: masters.name → localized "Master". The synthetic
+          // `#<chatId>` fallback inside SalonDayView's column header used to
+          // surface as e.g. "#10968255038" for salon-created masters whose
+          // `masters.name` row was never backfilled. SingleColumnMode also
+          // suppresses the header strip entirely, but downstream consumers
+          // (AppointmentDetailPanel, masters select) still expect a string.
+          masterName={
+            (((profile.data as any)?.name ?? "") as string).trim() ||
+            t("master.fallback.name", lang)
+          }
           masterWorkHours={(profile.data as any)?.workHours}
           isDelegating={isDelegating}
         />

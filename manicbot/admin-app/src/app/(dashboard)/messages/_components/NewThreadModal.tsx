@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { X, User as DmIcon, Users as GroupIcon, Check, UserPlus } from "lucide-react";
+import {
+  X,
+  User as DmIcon,
+  Users as GroupIcon,
+  Check,
+  UserPlus,
+  Send as TelegramIcon,
+  MailWarning,
+} from "lucide-react";
 import { api } from "~/trpc/react";
 
 type Mode = "pick" | "dm" | "group";
@@ -14,33 +22,18 @@ interface Props {
 }
 
 /**
- * Contextual empty-state copy for the staff picker. Falls back to the
- * "invite via Команда tab" hint whenever there are no DM-able candidates.
- * Reads `pendingInviteCount` from listStaff so the message can call out
- * still-pending email invitations instead of looking like a dead end.
+ * Fallback empty state — only triggered when the salon literally has zero
+ * masters (no DM-able peers AND no placeholders AND no pending invites).
+ * Surfaces the path back to the Team tab so the owner can invite somebody.
  */
-function EmptyStaffHint({
-  pendingInviteCount,
-  onClose,
-}: {
-  pendingInviteCount: number;
-  onClose: () => void;
-}) {
+function EmptyStaffHint({ onClose }: { onClose: () => void }) {
   return (
     <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-center dark:border-slate-700">
       <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-        {pendingInviteCount > 0
-          ? `${pendingInviteCount} ${
-              pendingInviteCount === 1
-                ? "приглашение ещё не принято"
-                : "приглашений ещё не приняты"
-            }`
-          : "Нет других сотрудников"}
+        В команде пока никого нет
       </p>
       <p className="mt-1 text-[11px] text-slate-500">
-        {pendingInviteCount > 0
-          ? "Мастера появятся здесь, как только подключатся к панели."
-          : "Пригласите мастеров — после подключения они станут доступны для прямых сообщений."}
+        Пригласите мастеров — после подключения они станут доступны для прямых сообщений.
       </p>
       <Link
         href="/settings?section=team"
@@ -60,9 +53,23 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
   const [groupTitle, setGroupTitle] = useState("");
 
   const staffQ = api.messenger.listStaff.useQuery({ tenantId }, { enabled: !!tenantId });
-  const candidates = staffQ.data?.candidates ?? [];
+  const allCandidates = useMemo(() => staffQ.data?.candidates ?? [], [staffQ.data]);
   const pendingInviteCount = staffQ.data?.pendingInviteCount ?? 0;
   const utils = api.useUtils();
+
+  // Group split: web_user (canDm=true) first; master placeholders (canDm=false) below.
+  const { dmable, placeholders } = useMemo(() => {
+    const dm: typeof allCandidates = [];
+    const ph: typeof allCandidates = [];
+    for (const c of allCandidates) {
+      (c.canDm ? dm : ph).push(c);
+    }
+    return { dmable: dm, placeholders: ph };
+  }, [allCandidates]);
+
+  // Only DM-able rows can be added to a group chat (a group requires every
+  // member to be reachable in-app).
+  const groupCandidates = dmable;
 
   const dmMutation = api.messenger.createStaffDm.useMutation({
     onSuccess: async ({ threadId }) => {
@@ -79,6 +86,16 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
   });
 
   const isBusy = dmMutation.isPending || groupMutation.isPending;
+
+  function openDmWithCandidate(c: (typeof allCandidates)[number]): void {
+    if (c.refKind === "web_user") {
+      dmMutation.mutate({ tenantId, otherWebUserId: c.id });
+    } else {
+      // Placeholder: opens a thread that auto-promotes the moment the master
+      // creates / links a web account (see linkMasterPlaceholderToWebUser).
+      dmMutation.mutate({ tenantId, otherMasterChatId: c.masterChatId! });
+    }
+  }
 
   return (
     <div
@@ -156,32 +173,80 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                     <div key={i} className="h-10 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
                   ))}
                 </div>
-              ) : !candidates.length ? (
-                <EmptyStaffHint
-                  pendingInviteCount={pendingInviteCount}
-                  onClose={onClose}
-                />
+              ) : allCandidates.length === 0 && pendingInviteCount === 0 ? (
+                <EmptyStaffHint onClose={onClose} />
               ) : (
-                candidates.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() =>
-                      dmMutation.mutate({ tenantId, otherWebUserId: u.id })
-                    }
-                    disabled={isBusy}
-                    data-testid={`dm-target-${u.id}`}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
-                  >
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500/20 text-[11px] font-bold text-brand-500">
-                      {(u.name ?? "?").charAt(0).toUpperCase()}
+                <>
+                  {/* — DM-able rows ───────────────────────────────────── */}
+                  {dmable.map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => openDmWithCandidate(u)}
+                      disabled={isBusy}
+                      data-testid={`dm-target-${u.id}`}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+                    >
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500/20 text-[11px] font-bold text-brand-500">
+                        {(u.name ?? "?").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-slate-900 dark:text-slate-100">{u.name}</p>
+                        <p className="truncate text-[10px] text-slate-500">{u.role}</p>
+                      </div>
+                    </button>
+                  ))}
+
+                  {/* — Placeholder rows (no web account) ─────────────── */}
+                  {placeholders.length > 0 && (
+                    <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+                      <p className="mb-1 px-2 text-[10px] uppercase tracking-wider text-slate-400">
+                        Без веб-аккаунта
+                      </p>
+                      {placeholders.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => openDmWithCandidate(u)}
+                          disabled={isBusy}
+                          data-testid={`dm-target-${u.id}`}
+                          title="Сообщения сохранятся; мастер увидит их когда подключит веб-аккаунт"
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
+                        >
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                            {(u.name ?? "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm text-slate-900 dark:text-slate-100">
+                              {u.name}
+                            </p>
+                            <div className="flex items-center gap-1">
+                              <TelegramIcon className="h-2.5 w-2.5 text-slate-400" />
+                              <p className="truncate text-[10px] text-slate-500">Только Telegram</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-slate-900 dark:text-slate-100">{u.name}</p>
-                      <p className="truncate text-[10px] text-slate-500">{u.role}</p>
+                  )}
+
+                  {/* — Pending invitations hint ──────────────────────── */}
+                  {pendingInviteCount > 0 && (
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-900/40 dark:bg-amber-950/20">
+                      <MailWarning className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <div className="flex-1">
+                        <p className="text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                          {pendingInviteCount === 1
+                            ? "1 приглашение ещё не принято"
+                            : `${pendingInviteCount} приглашений ещё не приняты`}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-amber-700/80 dark:text-amber-300/70">
+                          Мастер появится здесь сразу после подключения.
+                        </p>
+                      </div>
                     </div>
-                  </button>
-                ))
+                  )}
+                </>
               )}
             </div>
             {dmMutation.error && (
@@ -211,8 +276,8 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
 
             <p className="mb-2 mt-3 text-xs text-slate-500">Участники</p>
             <div className="max-h-60 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
-              {candidates.length ? (
-                candidates.map((u) => {
+              {groupCandidates.length ? (
+                groupCandidates.map((u) => {
                   const selected = selectedIds.includes(u.id);
                   return (
                     <button
@@ -239,12 +304,17 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                   );
                 })
               ) : (
-                <EmptyStaffHint
-                  pendingInviteCount={pendingInviteCount}
-                  onClose={onClose}
-                />
+                <EmptyStaffHint onClose={onClose} />
               )}
             </div>
+
+            {placeholders.length > 0 && (
+              <p className="mt-2 text-[10px] text-slate-500">
+                {placeholders.length === 1
+                  ? "1 мастер с Telegram-привязкой пока не доступен для группы — подключите веб-аккаунт."
+                  : `${placeholders.length} мастеров с Telegram-привязкой пока не доступны для группы — подключите веб-аккаунт.`}
+              </p>
+            )}
 
             {groupMutation.error && (
               <p className="mt-2 text-[11px] text-red-500">{groupMutation.error.message}</p>

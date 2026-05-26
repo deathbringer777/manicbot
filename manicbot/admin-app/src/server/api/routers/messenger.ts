@@ -425,41 +425,127 @@ export const messengerRouter = createTRPCRouter({
   // ═══════════════════════════════════════════════════════════════
   //  CREATE — staff DM
   // ═══════════════════════════════════════════════════════════════
+  //
+  //  Two input branches, exactly one required:
+  //    - { otherWebUserId }         → real DM with another web_user.
+  //    - { otherMasterChatId }      → placeholder DM with a master who has
+  //                                   no web account yet. Backfilled to a
+  //                                   real DM by `linkMasterPlaceholder...`
+  //                                   the moment the master creates / links
+  //                                   a web account.
+  //
+  //  Tenant guard:
+  //    Same-tenant web_users are accepted directly.
+  //    Cross-tenant web_users are accepted iff they're linked to an active
+  //    `masters` row in THIS salon — covers the canonical
+  //    `acceptInvitationExistingUser` path where `web_users.tenant_id`
+  //    keeps pointing at the master's personal tenant.
   createStaffDm: protectedProcedure
     .input(
       z.object({
         tenantId: z.string().min(1),
-        otherWebUserId: z.string().min(1),
+        otherWebUserId: z.string().min(1).optional(),
+        otherMasterChatId: z.string().min(1).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await assertMessengerTenantAccess(ctx, input.tenantId);
-      const webUserId = ctx.webUser!.id;
+      const callerWebUserId = ctx.webUser!.id;
 
-      if (input.otherWebUserId === webUserId) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot DM yourself" });
-      }
-
-      // Verify the other web_user actually has access to this tenant. Without
-      // this check, a tenant_owner could open a DM with ANY user in the
-      // platform, which would then appear in that user's inbox.
-      const [other] = await ctx.db
-        .select({ id: webUsers.id, tenantId: webUsers.tenantId, name: webUsers.name })
-        .from(webUsers)
-        .where(eq(webUsers.id, input.otherWebUserId))
-        .limit(1);
-      if (!other || other.tenantId !== input.tenantId) {
+      const hasWebTarget = !!input.otherWebUserId;
+      const hasMasterTarget = !!input.otherMasterChatId;
+      if (hasWebTarget === hasMasterTarget) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Other user is not a member of this tenant",
+          code: "BAD_REQUEST",
+          message: "Provide exactly one of otherWebUserId or otherMasterChatId",
         });
       }
 
-      const dmKey = computeDmKey(webUserId, input.otherWebUserId);
+      let effectiveOtherWebUserId: string | null = null;
+      let effectiveOtherMasterChatId: string | null = null;
 
-      // Try to find an existing DM thread first (partial UNIQUE enforces
-      // single-row, but SELECT first lets us avoid the conflict path most
-      // of the time).
+      if (hasMasterTarget) {
+        // — Master placeholder branch ─────────────────────────────────
+        const chatIdNum = Number(input.otherMasterChatId);
+        if (!Number.isFinite(chatIdNum)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid master chatId" });
+        }
+        const [m] = await ctx.db
+          .select({
+            chatId: masters.chatId,
+            webUserId: masters.webUserId,
+          })
+          .from(masters)
+          .where(
+            and(
+              eq(masters.tenantId, input.tenantId),
+              eq(masters.chatId, chatIdNum),
+              isNull(masters.archivedAt),
+            ),
+          )
+          .limit(1);
+        if (!m) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Master is not in this tenant or has been archived",
+          });
+        }
+        if (m.webUserId) {
+          // Promote to a real web-user DM so we never create an orphan
+          // placeholder when the master already has a web account.
+          if (m.webUserId === callerWebUserId) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot DM yourself" });
+          }
+          effectiveOtherWebUserId = m.webUserId;
+        } else {
+          effectiveOtherMasterChatId = String(m.chatId);
+        }
+      } else {
+        // — Web-user branch ───────────────────────────────────────────
+        if (input.otherWebUserId === callerWebUserId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot DM yourself" });
+        }
+        const [other] = await ctx.db
+          .select({ id: webUsers.id, tenantId: webUsers.tenantId })
+          .from(webUsers)
+          .where(eq(webUsers.id, input.otherWebUserId!))
+          .limit(1);
+        if (!other) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Other user is not a member of this tenant",
+          });
+        }
+        if (other.tenantId !== input.tenantId) {
+          // web_users.tenant_id may point at the master's personal tenant
+          // even when they're a fully-active staff member here. Accept the
+          // DM iff there's an active masters row linking them to this
+          // salon.
+          const [linked] = await ctx.db
+            .select({ chatId: masters.chatId })
+            .from(masters)
+            .where(
+              and(
+                eq(masters.tenantId, input.tenantId),
+                eq(masters.webUserId, input.otherWebUserId!),
+                isNull(masters.archivedAt),
+              ),
+            )
+            .limit(1);
+          if (!linked) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Other user is not a member of this tenant",
+            });
+          }
+        }
+        effectiveOtherWebUserId = input.otherWebUserId!;
+      }
+
+      // ── dm_key + dedup lookup ───────────────────────────────────────
+      const otherRef = effectiveOtherWebUserId ?? `m:${effectiveOtherMasterChatId!}`;
+      const dmKey = computeDmKey(callerWebUserId, otherRef);
+
       const [existing] = await ctx.db
         .select()
         .from(threads)
@@ -486,34 +572,47 @@ export const messengerRouter = createTRPCRouter({
           title: null,
           clientConversationId: null,
           dmKey,
-          createdByWebUserId: webUserId,
+          createdByWebUserId: callerWebUserId,
           createdAt: now,
           lastMessageAt: now,
           lastMessagePreview: null,
           archived: 0,
         });
 
+        const otherMember = effectiveOtherWebUserId
+          ? {
+              threadId,
+              memberKind: "web_user" as const,
+              memberRef: effectiveOtherWebUserId,
+              role: "member",
+              joinedAt: now,
+              mutedUntil: null,
+              lastReadMessageId: null,
+              lastReadAt: null,
+            }
+          : {
+              threadId,
+              memberKind: "master" as const,
+              memberRef: effectiveOtherMasterChatId!,
+              role: "member",
+              joinedAt: now,
+              mutedUntil: null,
+              lastReadMessageId: null,
+              lastReadAt: null,
+            };
+
         await ctx.db.insert(threadMembers).values([
           {
             threadId,
             memberKind: "web_user",
-            memberRef: webUserId,
+            memberRef: callerWebUserId,
             role: "member",
             joinedAt: now,
             mutedUntil: null,
             lastReadMessageId: null,
             lastReadAt: null,
           },
-          {
-            threadId,
-            memberKind: "web_user",
-            memberRef: input.otherWebUserId,
-            role: "member",
-            joinedAt: now,
-            mutedUntil: null,
-            lastReadMessageId: null,
-            lastReadAt: null,
-          },
+          otherMember,
         ]);
         return { threadId, created: true };
       } catch (e) {
@@ -699,47 +798,105 @@ export const messengerRouter = createTRPCRouter({
   // ═══════════════════════════════════════════════════════════════
   //  STAFF DIRECTORY — for "+ New chat" picker
   // ═══════════════════════════════════════════════════════════════
-  //  Returns:
-  //   - candidates:        web_users in this tenant that the caller can DM
-  //                        (self filtered out). These are the ONLY rows the
-  //                        messenger can reach today — recipients with their
-  //                        web_users.tenantId pointing at a different tenant
-  //                        can't open the salon's messenger surface, so we
-  //                        intentionally omit them to avoid sending DMs that
-  //                        would never be read. They show up via the
-  //                        notification bell once cross-tenant messenger view
-  //                        ships in a follow-up.
-  //   - pendingInviteCount Pending (not-yet-accepted, not-expired) email
-  //                        invitations for this tenant — drives the
-  //                        contextual empty-state hint in NewThreadModal.
+  //  Returns the FULL salon staff so the picker reflects reality:
+  //
+  //   - Every active `masters` row (origin/web-link agnostic). Includes:
+  //       * web-linked masters → rendered as DM-able (canDm=true).
+  //       * Telegram-paired masters with no web account → rendered as
+  //         disabled-DM "placeholder" candidates (canDm=false). Clicking
+  //         them in the UI opens a placeholder thread that the master
+  //         joins once they create a web account (see `createStaffDm
+  //         { otherMasterChatId }` for the placeholder branch).
+  //   - The `tenant_owner` web_user, even when they don't have a
+  //     corresponding `masters` row (most owners don't).
+  //   - Caller is filtered out via `id !== webUserId` so they can't DM
+  //     themselves.
+  //
+  //  Source of truth = `masters` + `web_users WHERE role='tenant_owner'`,
+  //  NOT `web_users.tenant_id = salon`. The previous implementation only
+  //  joined on `web_users.tenant_id`, which silently dropped every master
+  //  whose `web_users.tenant_id` resolves to a personal tenant (a master
+  //  who self-registered before being invited to a salon — the most common
+  //  path for the `invited_email`/Scenario A accept flow).
+  //
+  //  pendingInviteCount = pending (not expired) email invites where the
+  //  invitee hasn't yet accepted → drives the "N invitations not accepted"
+  //  hint copy.
+  //
+  //  Returned candidate shape:
+  //    {
+  //      id, refKind, masterChatId?, name, email, role, canDm, connectStatus
+  //    }
+  //  where:
+  //    refKind        = 'web_user' | 'master' — distinguishes a real
+  //                     web-DM target from a placeholder.
+  //    masterChatId   = (only when refKind='master') masters.chat_id as
+  //                     string; the UI passes it back to
+  //                     `createStaffDm({ otherMasterChatId })`.
+  //    canDm          = true iff a web_user exists.
+  //    connectStatus  = 'connected' | 'telegram_only' | 'pending_invite'
+  //
+  //  Query order (locked by `messenger-list-staff.test.ts`):
+  //    1. masters             — active rows in tenant
+  //    2. web_users           — by IN (master.webUserId), or sentinel-false
+  //                              when no webUserIds (kept for deterministic
+  //                              SELECT count so mocks don't drift)
+  //    3. tenant_owner row    — web_users WHERE tenant_id AND role
+  //    4. master_invitations  — count(pending, not expired)
   listStaff: protectedProcedure
     .input(z.object({ tenantId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       await assertMessengerTenantAccess(ctx, input.tenantId);
-      const webUserId = ctx.webUser!.id;
+      const callerWebUserId = ctx.webUser!.id;
 
-      const rows = await ctx.db
+      // 1 — active masters in this tenant.
+      const masterRows = await ctx.db
+        .select({
+          chatId: masters.chatId,
+          name: masters.name,
+          webUserId: masters.webUserId,
+          isSynthetic: masters.isSynthetic,
+          origin: masters.origin,
+          telegramChatId: masters.telegramChatId,
+        })
+        .from(masters)
+        .where(and(eq(masters.tenantId, input.tenantId), isNull(masters.archivedAt)));
+
+      // 2 — web_users for masters that have a web account.
+      //
+      // We always issue the SELECT (with a `1=0` sentinel when there are no
+      // webUserIds) so the SELECT count is deterministic. That keeps the test
+      // mocks simple: every code path issues exactly four SELECTs in the same
+      // order regardless of whether intermediate sets are empty.
+      const webUserIds = masterRows
+        .map((m) => m.webUserId)
+        .filter((id): id is string => id != null);
+      const webUserRows = await ctx.db
         .select({
           id: webUsers.id,
           name: webUsers.name,
           email: webUsers.email,
+          tenantId: webUsers.tenantId,
           role: webUsers.role,
         })
         .from(webUsers)
-        .where(eq(webUsers.tenantId, input.tenantId));
+        .where(webUserIds.length ? inArray(webUsers.id, webUserIds) : sql`1=0`);
+      const webUserById = new Map(webUserRows.map((u) => [u.id, u]));
 
-      // Display-name fallback from the masters table (active rows only).
-      const masterRows = await ctx.db
-        .select({ webUserId: masters.webUserId, name: masters.name })
-        .from(masters)
-        .where(and(eq(masters.tenantId, input.tenantId), isNull(masters.archivedAt)));
-      const masterByWebUserId = new Map<string, string>();
-      for (const m of masterRows) {
-        if (m.webUserId && m.name) masterByWebUserId.set(m.webUserId, m.name);
-      }
+      // 3 — tenant_owner web_user (so owners without a `masters` row are
+      // still visible to masters as a DM target).
+      const ownerRows = await ctx.db
+        .select({
+          id: webUsers.id,
+          name: webUsers.name,
+          email: webUsers.email,
+          tenantId: webUsers.tenantId,
+          role: webUsers.role,
+        })
+        .from(webUsers)
+        .where(and(eq(webUsers.tenantId, input.tenantId), eq(webUsers.role, "tenant_owner")));
 
-      // Pending email invitations — drives the empty-state hint copy in the
-      // modal ("3 invited masters haven't joined yet").
+      // 4 — pending invitations count.
       const nowSecLocal = nowSec();
       const pendingRows = await ctx.db
         .select({ count: sql<number>`count(*)`.as("count") })
@@ -753,15 +910,74 @@ export const messengerRouter = createTRPCRouter({
         );
       const pendingInviteCount = Number(pendingRows[0]?.count ?? 0);
 
-      const candidates = rows
-        .filter((r) => r.id !== webUserId) // hide self from the picker
-        .map((r) => ({
-          id: r.id,
-          name: r.name ?? masterByWebUserId.get(r.id) ?? r.email ?? r.id,
-          email: r.email,
-          role: r.role,
-        }));
+      // ── Build candidate list ─────────────────────────────────────────
 
-      return { candidates, pendingInviteCount };
+      type Candidate = {
+        id: string;
+        refKind: "web_user" | "master";
+        masterChatId?: string;
+        name: string;
+        email: string | null;
+        role: string;
+        canDm: boolean;
+        connectStatus: "connected" | "telegram_only" | "pending_invite";
+      };
+
+      const seenWebUserIds = new Set<string>();
+      const candidates: Candidate[] = [];
+
+      for (const m of masterRows) {
+        if (m.webUserId) {
+          const u = webUserById.get(m.webUserId);
+          // web account exists — DM-able (canDm=true).
+          const displayName =
+            u?.name ?? m.name ?? u?.email ?? String(m.chatId);
+          candidates.push({
+            id: m.webUserId,
+            refKind: "web_user",
+            name: displayName,
+            email: u?.email ?? null,
+            role: u?.role ?? "master",
+            canDm: true,
+            connectStatus: "connected",
+          });
+          seenWebUserIds.add(m.webUserId);
+        } else {
+          // No web account — placeholder. The UI shows them with a
+          // "Только Telegram" chip; clicking opens a placeholder thread
+          // (see createStaffDm `{ otherMasterChatId }`).
+          candidates.push({
+            id: String(m.chatId),
+            refKind: "master",
+            masterChatId: String(m.chatId),
+            name: m.name ?? String(m.chatId),
+            email: null,
+            role: "master",
+            canDm: false,
+            connectStatus: "telegram_only",
+          });
+        }
+      }
+
+      // Owner row (deduped against masters → web_user already pushed).
+      for (const o of ownerRows) {
+        if (seenWebUserIds.has(o.id)) continue;
+        candidates.push({
+          id: o.id,
+          refKind: "web_user",
+          name: o.name ?? o.email ?? o.id,
+          email: o.email,
+          role: o.role,
+          canDm: true,
+          connectStatus: "connected",
+        });
+        seenWebUserIds.add(o.id);
+      }
+
+      // Self-filter + stable sort: DM-able first, placeholders after.
+      const visible = candidates.filter((c) => c.id !== callerWebUserId);
+      visible.sort((a, b) => Number(b.canDm) - Number(a.canDm));
+
+      return { candidates: visible, pendingInviteCount };
     }),
 });

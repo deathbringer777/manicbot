@@ -217,26 +217,65 @@ export const notificationsRouter = createTRPCRouter({
   // ------------------------------------------------------------------
   // sendTestNotification — drops a test row into the bell + (optionally)
   // a push. Used by the settings panel to let the user verify the
-  // delivery pipeline works for their account. Server-side gate: 5/min
-  // by IP isn't possible from a tRPC ctx, but the partial UNIQUE on the
-  // table (sourceSlug='self_test', sourceId=fixed-day-bucket) dedups
-  // accidental double-clicks so the row count cannot blow up.
+  // delivery pipeline works for their account.
+  //
+  // PR-D: optional `category` input lets the settings UI fire a test
+  // PER CATEGORY (`<category>.test`) so the user can confirm that
+  // toggling, say, the billing category actually gates whether they
+  // see a billing row. Without `category` we keep the legacy
+  // `support.test` behavior (always delivered, even when support is
+  // opted-out — the notifyWebUser helper has a special case for
+  // `support.test`).
+  //
+  // Server-side gate: the partial UNIQUE on
+  // (sourceSlug='self_test', sourceId) dedups accidental double-clicks
+  // so the row count cannot blow up. SourceId buckets by the minute so
+  // a user can still re-trigger after 60s.
   // ------------------------------------------------------------------
-  sendTestNotification: protectedProcedure.mutation(async ({ ctx }) => {
-    const uid = ctx.webUser!.id;
-    const now = Math.floor(Date.now() / 1000);
-    // Bucket sourceId to the minute so 60s of rapid clicks dedup but
-    // the user can still re-trigger after a minute.
-    const minuteBucket = Math.floor(now / 60);
-    const r = await notifyWebUser(ctx.db, {
-      webUserId: uid,
-      kind: "support.test",
-      title: "ManicBot · тест уведомлений",
-      body: "Если вы видите это в звонке — система доставки работает.",
-      link: "/notifications",
-      sourceSlug: "self_test",
-      sourceId: `t_${uid}_${minuteBucket}`,
-    });
-    return { ok: r.ok, deduped: r.deduped ?? false };
-  }),
+  sendTestNotification: protectedProcedure
+    .input(
+      z
+        .object({
+          category: CATEGORY_ENUM.optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const uid = ctx.webUser!.id;
+      const now = Math.floor(Date.now() / 1000);
+      const minuteBucket = Math.floor(now / 60);
+      const category = input?.category;
+      const kind = category ? `${category}.test` : "support.test";
+      const titleByCategory: Record<string, string> = {
+        appointment: "ManicBot · тест категории «Записи»",
+        support: "ManicBot · тест категории «Поддержка»",
+        birthday: "ManicBot · тест категории «Дни рождения»",
+        platform: "ManicBot · тест категории «Платформа»",
+        master: "ManicBot · тест категории «Мастера»",
+        reminder: "ManicBot · тест категории «Напоминания»",
+        messenger: "ManicBot · тест категории «Сообщения»",
+        billing: "ManicBot · тест категории «Биллинг»",
+        marketing: "ManicBot · тест категории «Маркетинг»",
+        channel: "ManicBot · тест категории «Каналы»",
+        client: "ManicBot · тест категории «Клиенты»",
+      };
+      const title = category
+        ? (titleByCategory[category] ?? `ManicBot · тест «${category}»`)
+        : "ManicBot · тест уведомлений";
+      const r = await notifyWebUser(ctx.db, {
+        webUserId: uid,
+        kind,
+        title,
+        body: "Если вы видите это в звонке — пайплайн доставки этой категории работает.",
+        link: "/notifications",
+        sourceSlug: "self_test",
+        sourceId: `t_${uid}_${category ?? "support"}_${minuteBucket}`,
+      });
+      return {
+        ok: r.ok,
+        deduped: r.deduped ?? false,
+        skippedByPrefs: r.skippedByPrefs ?? false,
+        kind,
+      };
+    }),
 });

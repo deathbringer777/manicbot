@@ -107,3 +107,64 @@ describe("notificationsRouter — happy path", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
+
+// PR-D: per-category test fire. The mutation accepts an optional
+// `category` input and dispatches `<category>.test` to notifyWebUser.
+// Legacy no-arg invocations keep firing `support.test` (always
+// delivered, bypasses prefs gate).
+describe("notificationsRouter — sendTestNotification per-category (PR-D)", () => {
+  it("rejects unauthenticated", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeUnauthCtx(db) as never);
+    await expect(caller.sendTestNotification()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("defaults to support.test when no category is passed", async () => {
+    // notifyWebUser → prefs read returns null (DEFAULT_PREFS), then INSERT.
+    const { db, insertCalls } = createDbMock([[{ raw: null }]]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
+    const out = await caller.sendTestNotification();
+    expect(out.kind).toBe("support.test");
+    const bellRow = insertCalls.find(
+      (c) => (c.values as Record<string, unknown>).kind === "support.test",
+    );
+    expect(bellRow).toBeDefined();
+  });
+
+  it("dispatches the requested category as <category>.test", async () => {
+    const { db, insertCalls } = createDbMock([[{ raw: null }]]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
+    const out = await caller.sendTestNotification({ category: "billing" });
+    expect(out.kind).toBe("billing.test");
+    const bellRow = insertCalls.find(
+      (c) => (c.values as Record<string, unknown>).kind === "billing.test",
+    );
+    expect(bellRow).toBeDefined();
+    // Source slug stays 'self_test' regardless of category — so dedup +
+    // dismissal target the right family of synthetic test rows.
+    expect((bellRow!.values as Record<string, unknown>).sourceSlug).toBe("self_test");
+  });
+
+  it("rejects an unknown category via zod enum", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
+    await expect(
+      caller.sendTestNotification({ category: "totally_made_up" as never }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("supports every channel + client category (PR-B)", async () => {
+    // Smoke-check that the two new PR-B categories accept the test fire.
+    for (const cat of ["channel", "client"] as const) {
+      const { db, insertCalls } = createDbMock([[{ raw: null }]]);
+      const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
+      const out = await caller.sendTestNotification({ category: cat });
+      expect(out.kind).toBe(`${cat}.test`);
+      expect(
+        insertCalls.find(
+          (c) => (c.values as Record<string, unknown>).kind === `${cat}.test`,
+        ),
+      ).toBeDefined();
+    }
+  });
+});

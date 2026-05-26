@@ -132,8 +132,8 @@ export function NotificationsSection() {
     });
   }
 
-  async function handleTest() {
-    await testMut.mutateAsync();
+  async function handleTest(category?: NotificationCategory) {
+    await testMut.mutateAsync(category ? { category } : undefined);
     setTestSent(true);
     setTimeout(() => setTestSent(false), 4000);
   }
@@ -202,7 +202,7 @@ export function NotificationsSection() {
               {push.enabled && (
                 <button
                   type="button"
-                  onClick={handleTest}
+                  onClick={() => handleTest()}
                   disabled={testMut.isPending}
                   data-testid="notifications-section-test"
                   className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold"
@@ -252,10 +252,11 @@ export function NotificationsSection() {
           </button>
         </header>
         <div className="px-3 sm:px-5">
-          <div className="hidden sm:grid grid-cols-[1fr,auto,auto] gap-x-6 px-2 pb-1 text-[10px] uppercase tracking-wider font-bold text-slate-400">
+          <div className="hidden sm:grid grid-cols-[1fr,auto,auto,auto] gap-x-6 px-2 pb-1 text-[10px] uppercase tracking-wider font-bold text-slate-400">
             <span></span>
             <span className="text-center">{t("notifications.settings.col.inapp", lang)}</span>
             <span className="text-center">{t("notifications.settings.col.push", lang)}</span>
+            <span className="text-center">{t("notifications.settings.col.test", lang)}</span>
           </div>
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {NOTIFICATION_CATEGORIES.map((cat) => {
@@ -263,7 +264,7 @@ export function NotificationsSection() {
               return (
                 <li
                   key={cat}
-                  className="grid grid-cols-[1fr,auto,auto] gap-x-6 items-center py-3 px-2"
+                  className="grid grid-cols-[1fr,auto,auto,auto] gap-x-6 items-center py-3 px-2"
                   data-testid={`notifications-section-row-${cat}`}
                 >
                   <div className="min-w-0">
@@ -287,6 +288,26 @@ export function NotificationsSection() {
                     disabled={!push.enabled && !pref.push}
                     testId={`toggle-${cat}-push`}
                   />
+                  {/*
+                    PR-D: per-category test fire. Click drops a
+                    <category>.test row into the bell so the user can
+                    verify the in-app+push pipeline end-to-end. The
+                    notifyWebUser prefs gate is honoured — if the user
+                    has the in-app toggle off for this category, the
+                    row will be silently skipped (the returned
+                    skippedByPrefs flag confirms it landed at the
+                    server but was deliberately not delivered).
+                  */}
+                  <button
+                    type="button"
+                    onClick={() => void handleTest(cat)}
+                    disabled={testMut.isPending}
+                    data-testid={`notifications-section-test-${cat}`}
+                    title={t("notifications.settings.testBtnTitle", lang)}
+                    className="p-1.5 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 disabled:opacity-50 transition-colors"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </button>
                 </li>
               );
             })}

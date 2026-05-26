@@ -51,7 +51,19 @@ vi.mock("~/server/lib/uploadToken", () => ({
 }));
 
 // notifyWebUser — spy so we can assert it's called for existing_user.
-const notifyWebUserMock = vi.fn(async () => ({ ok: true, id: "n_test" }));
+// Return type is the union `NotifyWebUserResult`, not the narrowed
+// happy-path literal — otherwise `mockResolvedValueOnce({ ok: false, id: null, ... })`
+// in the PR-B bell-failure tests below fails TS inference.
+type MockNotifyResult = {
+  ok: boolean;
+  id: string | null;
+  deduped?: boolean;
+  skippedByPrefs?: boolean;
+  error?: string;
+};
+const notifyWebUserMock = vi.fn(
+  async (): Promise<MockNotifyResult> => ({ ok: true, id: "n_test" }),
+);
 vi.mock("~/server/services/notifyWebUser", () => ({
   notifyWebUser: (...args: unknown[]) => notifyWebUserMock(...(args as Parameters<typeof notifyWebUserMock>)),
 }));
@@ -367,6 +379,171 @@ describe("salonRouter.sendMasterInvitation — email transport visibility (PR-A)
       emailQueued: false,
       transportError: "resend_not_configured",
     });
+  });
+});
+
+describe("salonRouter.sendMasterInvitation — bell-write visibility (PR-B)", () => {
+  // Mirror of the email-transport visibility block above. The bell write
+  // is the in-app counterpart of the email send. Pre-PR-B it was
+  // `void notifyWebUser(...).catch(log)` — a returned `{ok:false}` was
+  // silently swallowed because `.catch()` only catches throws. On
+  // Cloudflare Pages the underlying D1 binding is torn down with the
+  // request context, so fire-and-forget writes that race past the
+  // response are dropped. The fix awaits the write and surfaces the
+  // verdict via `bellQueued / bellSkippedByPrefs / bellError`, mirroring
+  // the existing `emailQueued / transportError` shape.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendMasterInviteExistingUserEmailMock.mockResolvedValue({ ok: true });
+    sendMasterInviteNewUserEmailMock.mockResolvedValue({ ok: true });
+    notifyWebUserMock.mockResolvedValue({ ok: true, id: "n_test" });
+  });
+
+  it("returns bellQueued=true and does NOT call captureError on the happy path", async () => {
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      bellQueued: true,
+    });
+    expect(out.bellError).toBeUndefined();
+    expect(out.bellSkippedByPrefs).toBeFalsy();
+    // No captureError calls of either kind (email or bell).
+    expect(captureErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("returns bellQueued=false + bellError + calls captureError when notifyWebUser fails", async () => {
+    notifyWebUserMock.mockResolvedValueOnce({
+      ok: false,
+      id: null,
+      error: "db_insert_failed",
+    });
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      bellQueued: false,
+      bellError: "db_insert_failed",
+    });
+    // Invitation row is still created — the bell failure must not roll back
+    // the user-visible operation, only flag the in-app delivery as broken.
+    expect(typeof out.invitationId).toBe("string");
+
+    // captureError fires so the silent-fail blind spot is closed.
+    expect(captureErrorMock).toHaveBeenCalledTimes(1);
+    const [, capturePayload] = captureErrorMock.mock.calls[0]! as unknown as [
+      unknown,
+      { errorType: string; severity: string; tenantId: string | null; context: Record<string, unknown> },
+    ];
+    expect(capturePayload.errorType).toBe("notify.bell_write_failed");
+    expect(capturePayload.severity).toBe("error");
+    expect(capturePayload.tenantId).toBe(TENANT);
+    expect(capturePayload.context).toMatchObject({
+      webUserId: "w_invitee",
+      kind: "master.invite",
+      reason: "db_insert_failed",
+    });
+  });
+
+  it("returns bellQueued=true + bellSkippedByPrefs=true when the invitee opted out (no captureError)", async () => {
+    notifyWebUserMock.mockResolvedValueOnce({
+      ok: true,
+      id: null,
+      skippedByPrefs: true,
+    });
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      bellQueued: true,
+      bellSkippedByPrefs: true,
+    });
+    // Opt-out is a legitimate user choice, not an error. No captureError.
+    expect(captureErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("captureError failure does NOT break the mutation (best-effort sidecar)", async () => {
+    notifyWebUserMock.mockResolvedValueOnce({
+      ok: false,
+      id: null,
+      error: "db_insert_failed",
+    });
+    captureErrorMock.mockRejectedValueOnce(new Error("D1 unavailable"));
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    const out = await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(out).toMatchObject({
+      scenario: "existing_user",
+      bellQueued: false,
+      bellError: "db_insert_failed",
+    });
+  });
+
+  it("awaits notifyWebUser before returning (no fire-and-forget on the D1 binding)", async () => {
+    // Regression pin: the underlying bug was `void notifyWebUser(...)` —
+    // on Cloudflare Pages the request context (and the D1 binding) is
+    // torn down with the response, so any in-flight insert races and
+    // fails silently. The contract here is that the write is COMPLETE
+    // by the time the mutation resolves.
+    let resolvedBeforeReturn = false;
+    notifyWebUserMock.mockImplementationOnce(async () => {
+      // Simulate ~one D1 roundtrip; if the mutation didn't await us, we
+      // would set this AFTER the mutation already resolved.
+      await new Promise((r) => setTimeout(r, 5));
+      resolvedBeforeReturn = true;
+      return { ok: true, id: "n_test" };
+    });
+
+    const dbMock = createDbMock([
+      [{ name: "Demo Salon", isPersonal: 0 }],
+      [{ id: "w_invitee", lang: "ru" }],
+    ]);
+    const caller = ownerCallerWithEmail(dbMock.db, "owner@example.com");
+
+    await caller.sendMasterInvitation({
+      tenantId: TENANT,
+      email: "invitee@example.com",
+    });
+
+    expect(resolvedBeforeReturn).toBe(true);
   });
 });
 

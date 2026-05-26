@@ -117,6 +117,30 @@ Side-effect dispatch is unified in `manicbot/src/services/appointmentAutomations
 - `manicbot/test/appointment-automations-dispatcher.test.js` — dispatcher fires lifetime_visits update, reminder cleanup, analytics, and the correct default message per event type.
 - Full suites: admin-app 3918/3918 green, Worker 2082/2082 green, `npx tsc --noEmit` clean, `check-schema` OK (68 tables), `check-tenant-isolation` clean (allowlist entry for `salon.ts` cross-tenant bot collision check moved 964 → 1074 to reflect line drift).
 
+### H8 — Bell pipeline silently dropped 100% of writes on Cloudflare Pages ✅ FIXED (2026-05-26)
+**Where:** every `notifyWebUser` call site in admin-app — specifically [salon.ts:2607](manicbot/admin-app/src/server/api/routers/salon.ts), [auth.ts:227](manicbot/admin-app/src/server/api/routers/auth.ts), [support.ts:165 / :291 / :415](manicbot/admin-app/src/server/api/routers/support.ts), [messenger.ts:401](manicbot/admin-app/src/server/api/routers/messenger.ts). All five used the `void notifyWebUser(...)` fire-and-forget pattern.
+
+**What:** the `user_notifications` table was **empty globally in production** despite migration 0070 correctly creating the table + indexes (verified via `wrangler d1 execute manicbot-db --remote --command "SELECT COUNT(*) FROM user_notifications"` returning 0). Every bell write — master invites, support replies, cross-staff DMs, appointment notifications, birthday promos — silently dropped. Salon owners reported never seeing a single notification in their bell since registering.
+
+**Root mechanism:** [admin-app `getDb()`](manicbot/admin-app/src/server/db/index.ts) reads the D1 binding from `@cloudflare/next-on-pages`'s `getRequestContext().env.DB`. On Next.js 15 over the Cloudflare Pages adapter, the request context (and the `env.DB` handle it carries) is torn down with the response. The pattern `void notifyWebUser(...)` returns the Promise WITHOUT awaiting it; by the time the Drizzle `INSERT OR IGNORE` reaches `db.prepare()` the binding is dead → throw inside `notifyWebUser` → caught at the wrapper's own try/catch → `{ ok: false, error: 'db_insert_failed' }` returned → caller's `.catch()` (which only catches throws, not returned error objects) never fires → no row in D1, no log line, no `error_events` row. 100% silent loss.
+
+This is an availability defect (not confidentiality — no data leaked). But every operator-visible signal that depends on the bell was broken, including the master-invite flow that is on the salon-onboarding critical path. Pre-launch blocker.
+
+**Fix:**
+1. Converted all five `void notifyWebUser(...)` / `void notifyManyWebUsers(...)` / `void notifyPlatformSupportStaff(...)` call sites to `await`. Latency cost: one prefs read + one INSERT per write (~50ms p50), trivially absorbable on a mutation hot path. The await keeps the request context (and D1 binding) alive until the write commits.
+2. New shared wrapper [`notifyOrCapture`](manicbot/admin-app/src/server/services/notifyOrCapture.ts) layered on top of `notifyWebUser` — awaits the call, surfaces the verdict as `{ bellQueued, bellSkippedByPrefs, bellError }` for the mutation response, and on `{ ok: false }` writes an `error_events` row with `errorType='notify.bell_write_failed'`. Used by `salon.sendMasterInvitation` (the user-visible path that motivated the audit); other 4 call sites use plain `await notifyWebUser(...).catch(log)` since their mutations don't surface bell-status to the client.
+3. `salon.sendMasterInvitation` mutation response extended with `{ bellQueued, bellSkippedByPrefs?, bellError? }` (mirrors PR-A's `emailQueued / transportError`). UI in [InviteByEmailModal.tsx](manicbot/admin-app/src/components/salon/InviteByEmailModal.tsx) renders an amber chip when either bell or email failed, with per-case copy localized in 4 languages.
+
+**Operator visibility going forward:** every silent bell-write failure now writes a row to `error_events` with `errorType='notify.bell_write_failed'`. Monitor `/errors` for 24h post-deploy; zero rows = healthy. PR-A added the same loud-fail contract for email transport; this PR closes the parallel blind spot for in-app delivery so no future regression can hide behind the fire-and-forget shape again.
+
+**Verification:**
+- [salon-invite-flow.test.ts](manicbot/admin-app/src/__tests__/salon-invite-flow.test.ts) — 5 new tests for the bell-write visibility contract (TDD red-first then green): happy path, failure surfacing + captureError, opt-out, captureError-throw-doesn't-break-mutation, await-before-return regression pin.
+- [notify-or-capture.test.ts](manicbot/admin-app/src/__tests__/notify-or-capture.test.ts) — 6 new tests pinning the shared helper's contract (happy, opt-out, failure + captureError, internal-throw caught, captureError-throw never propagates, tenantId fallback).
+- Full suites green: admin-app 278 files / 4987 passed (+ 7 skipped), Worker 196 files / 2656 passed, `npm run typecheck` clean, `npm run check-schema` 91/91 tables match.
+- Tenant-isolation allowlist [check-tenant-isolation.mjs:131](manicbot/admin-app/scripts/check-tenant-isolation.mjs) bumped 1751 → 1752 to reflect the +1 line drift from the bell-state vars block.
+
+**Follow-up (out of scope for this PR):** session-id fail-loud (defense-in-depth — [trpc.ts:31](manicbot/admin-app/src/server/api/trpc.ts) silently coerces empty `session.user.id` to the email string, which is harmless today but would mis-route every user-scoped query if a future NextAuth callback regression dropped the `sub` claim).
+
 ### H5 — `INSTAGRAM_ACCESS_TOKEN` env-var fallback ✅ FIXED
 **Verified:** `manicbot/src/http/metaWebhooksHttp.js:146-150` — if `channelConfig.token` is unset, code logs warning + error and `continue`s, no platform-wide fallback. The fallback to `env.INSTAGRAM_ACCESS_TOKEN` is removed; comment confirms "INSTAGRAM_ACCESS_TOKEN platform fallback removed; set token via POST /admin/ig-token".
 

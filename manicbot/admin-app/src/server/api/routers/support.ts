@@ -162,7 +162,9 @@ export const supportRouter = createTRPCRouter({
             // reply produces a fresh bell row (multiple replies to the
             // same ticket don't collapse into one).
             const sourceId = `${input.ticketId}:${Math.floor(Date.now() / 1000)}`;
-            void notifyWebUser(ctx.db, {
+            // PR-B: was `void` — fire-and-forget loses the D1 binding
+            // on Cloudflare Pages once the response returns. Await it.
+            await notifyWebUser(ctx.db, {
               webUserId: recipientWebUserId,
               tenantId,
               kind: "support.reply",
@@ -288,7 +290,9 @@ export const supportRouter = createTRPCRouter({
       // Fan-out to support staff so they see the follow-up in their bell.
       // Skip the original ticket creator (no self-notify), and use a
       // per-reply sourceId so multiple follow-ups don't collapse.
-      void notifyPlatformSupportStaff(ctx.db, {
+      // PR-B: was `void` — fire-and-forget loses the D1 binding on
+      // Cloudflare Pages once the response returns. Await it.
+      await notifyPlatformSupportStaff(ctx.db, {
         excludeWebUserId: ctx.webUser?.id ?? null,
         ticketId: input.ticketId,
         kindSlug: "support.ticket.reply",
@@ -410,9 +414,11 @@ export const supportRouter = createTRPCRouter({
       });
 
       // Fan-out: notify every support staff member that a new ticket is
-      // waiting. Fire-and-forget so a notification-write failure cannot
-      // block the user's ticket from being created.
-      void notifyPlatformSupportStaff(ctx.db, {
+      // waiting. PR-B: was `void` — fire-and-forget loses the D1
+      // binding on Cloudflare Pages once the response returns. Await
+      // it; the inner `.catch()` still prevents a notification write
+      // failure from breaking the ticket creation.
+      await notifyPlatformSupportStaff(ctx.db, {
         excludeWebUserId: ctx.webUser.id,
         ticketId,
         kindSlug: "support.ticket.new",

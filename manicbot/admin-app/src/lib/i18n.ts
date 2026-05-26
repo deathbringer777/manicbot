@@ -1849,6 +1849,11 @@ const translations = {
   "notifications.cat.messenger.desc":{ ru: "Новые сообщения в чатах и тредах.", ua: "Нові повідомлення в чатах та тредах.", en: "New messages in chats and threads.", pl: "Nowe wiadomości w czatach i wątkach." },
   "notifications.cat.billing.desc":{ ru: "Проблемы оплаты, продление, окончание триала.", ua: "Проблеми оплати, продовження, кінець триалу.", en: "Payment issues, renewals, trial expiry.", pl: "Problemy z płatnościami, odnowienia, koniec triala." },
   "notifications.cat.marketing.desc":{ ru: "Статусы маркетинговых кампаний.", ua: "Статуси маркетингових кампаній.", en: "Marketing campaign status updates.", pl: "Statusy kampanii marketingowych." },
+  // PR-B additions: channel + client categories.
+  "notifications.cat.channel":      { ru: "Каналы",                 ua: "Канали",                  en: "Channels",               pl: "Kanały" },
+  "notifications.cat.channel.desc": { ru: "Сбои IG / WA / Telegram, потеря токена, разрыв подписки.", ua: "Збої IG / WA / Telegram, втрата токена, розрив підписки.", en: "IG / WA / Telegram outages, token loss, subscription drift.", pl: "Awarie IG / WA / Telegram, utrata tokenu, rozspójnienie subskrypcji." },
+  "notifications.cat.client":       { ru: "Клиенты",                ua: "Клієнти",                 en: "Clients",                pl: "Klienci" },
+  "notifications.cat.client.desc":  { ru: "Новые клиенты регистрируются в боте, первые записи.", ua: "Нові клієнти реєструються в боті, перші записи.", en: "New clients registering with the bot, first bookings.", pl: "Nowi klienci rejestrują się w bocie, pierwsze rezerwacje." },
 
   // ── Activity-feed action labels (gender-neutral) ───────────────────────────
   "activity.tenantCreated":       { ru: "Новый салон в системе",  ua: "Новий салон у системі",  en: "joined the platform",    pl: "dołączył do platformy" },

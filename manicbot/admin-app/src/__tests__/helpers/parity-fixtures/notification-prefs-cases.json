@@ -8,7 +8,9 @@
     "reminder",
     "messenger",
     "billing",
-    "marketing"
+    "marketing",
+    "channel",
+    "client"
   ],
   "defaultPrefs": {
     "appointment": { "inapp": true, "push": true },

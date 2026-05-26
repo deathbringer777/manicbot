@@ -35,6 +35,9 @@ import {
   MessageCircle,
   Star,
   UserPlus,
+  // PR-B additions: channel = urgent operator signal, client = informational.
+  AlertTriangle,
+  Users,
 } from "lucide-react";
 import { formatRelativeShort, t, type Lang } from "~/lib/i18n";
 
@@ -55,6 +58,8 @@ export interface KindMeta {
     | "platform"
     | "reminder"
     | "master"
+    | "channel"
+    | "client"
     | "generic";
 }
 
@@ -69,6 +74,10 @@ const META_BY_PREFIX: Array<[string, KindMeta]> = [
   ["thread.", { icon: MessageCircle, accent: "text-indigo-500 bg-indigo-500/10", category: "messenger" }],
   ["reminder.", { icon: Bell, accent: "text-cyan-500 bg-cyan-500/10", category: "reminder" }],
   ["master.", { icon: UserPlus, accent: "text-emerald-500 bg-emerald-500/10", category: "master" }],
+  // PR-B: channel.broken / channel.degraded — red triangle, urgent operator action.
+  ["channel.", { icon: AlertTriangle, accent: "text-rose-500 bg-rose-500/10", category: "channel" }],
+  // PR-B: client.new / client.first_booking — neutral teal, informational.
+  ["client.", { icon: Users, accent: "text-teal-500 bg-teal-500/10", category: "client" }],
 ];
 
 const GENERIC: KindMeta = { icon: Bell, accent: "text-slate-500 bg-slate-500/10", category: "generic" };

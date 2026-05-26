@@ -23,6 +23,7 @@ import { log } from "~/server/utils/logger";
 import { writeAudit } from "~/server/security/audit";
 import { isSafeDisplayName } from "~/server/security/sanitize";
 import { recordEvent, ANALYTICS_EVENTS } from "~/server/services/recordEvent";
+import { linkMasterPlaceholderToWebUserFireAndForget } from "~/server/messenger/linkMasterPlaceholder";
 
 /*
  * D1-based rate limiting — durable across Cloudflare edge isolates.
@@ -1314,6 +1315,16 @@ export const webUsersRouter = createTRPCRouter({
         ip: clientIp(ctx as { headers?: Headers | null }),
       });
 
+      // Fire-and-forget: backfill any placeholder messenger threads that
+      // the salon owner opened with this master BEFORE the invite was
+      // accepted. Failure must NOT abort the accept flow — the master
+      // would otherwise be stuck unable to confirm membership.
+      void linkMasterPlaceholderToWebUserFireAndForget(ctx.db, {
+        tenantId: inv.tenantId,
+        masterChatId: syntheticChatId,
+        webUserId: caller.id,
+      });
+
       return { tenantId: inv.tenantId, masterChatId: syntheticChatId };
     }),
 
@@ -1428,6 +1439,17 @@ export const webUsersRouter = createTRPCRouter({
         tenantId: inv.tenantId,
         detail: `invitationId=${inv.id} masterChatId=${syntheticChatId} webUserId=${id}`,
         ip: clientIp(ctx as { headers?: Headers | null }),
+      });
+
+      // Fire-and-forget: this Scenario B path is "fresh user registers" so
+      // a placeholder thread is extremely unlikely (the owner couldn't have
+      // started one — there was no masters row yet). Calling the helper is
+      // still cheap (one SELECT returning zero rows), and it cleans up the
+      // weird edge where someone races invite_telegram + invite_email.
+      void linkMasterPlaceholderToWebUserFireAndForget(ctx.db, {
+        tenantId: inv.tenantId,
+        masterChatId: syntheticChatId,
+        webUserId: id,
       });
 
       return { loginToken, tenantId: inv.tenantId };

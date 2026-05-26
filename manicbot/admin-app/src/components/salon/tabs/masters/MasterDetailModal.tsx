@@ -46,6 +46,7 @@ import { api, type RouterOutputs } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { resolveMasterAvatarEmoji } from "~/lib/masterAvatar";
+import { DatePicker } from "~/components/ui/DatePicker";
 import { MasterAvatarPicker } from "./MasterAvatarPicker";
 import { MasterTelegramInlineSection } from "./MasterTelegramInlineSection";
 import { MasterPasswordVaultSection } from "./MasterPasswordVaultSection";
@@ -773,25 +774,39 @@ function SettingsPane({
         <p className="text-[11px] text-slate-500 dark:text-slate-400">
           {t("masterDetail.settings.vacation.hint", lang)}
         </p>
+        {/* NB: DatePicker can't live inside <Field> because Field renders a
+            <label>, and clicking ANY button inside a <label> re-dispatches
+            the click to the label's first form control — which would toggle
+            our DatePicker trigger every time the user clicks a day cell or
+            month-step arrow, closing the popover. Use a div+span wrapper
+            instead. */}
         <div className="grid grid-cols-2 gap-2">
-          <Field label={t("masterDetail.field.vacationFrom", lang)}>
-            <input
-              type="date"
+          <div className="block">
+            <span className="mb-1 block text-[11px] font-medium text-slate-500">
+              {t("masterDetail.field.vacationFrom", lang)}
+            </span>
+            <DatePicker
               value={vacationForm.vacationFrom}
-              onChange={(e) => onVacationChange({ vacationFrom: e.target.value })}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100"
-              data-testid="master-detail-vacation-from"
+              onChange={(v) => onVacationChange({ vacationFrom: v })}
+              lang={lang}
+              max={vacationForm.vacationUntil || undefined}
+              placeholder={t("masterDetail.field.vacationFrom", lang)}
+              testIdPrefix="master-detail-vacation-from"
             />
-          </Field>
-          <Field label={t("masterDetail.field.vacationUntil", lang)}>
-            <input
-              type="date"
+          </div>
+          <div className="block">
+            <span className="mb-1 block text-[11px] font-medium text-slate-500">
+              {t("masterDetail.field.vacationUntil", lang)}
+            </span>
+            <DatePicker
               value={vacationForm.vacationUntil}
-              onChange={(e) => onVacationChange({ vacationUntil: e.target.value })}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100"
-              data-testid="master-detail-vacation-until"
+              onChange={(v) => onVacationChange({ vacationUntil: v })}
+              lang={lang}
+              min={vacationForm.vacationFrom || undefined}
+              placeholder={t("masterDetail.field.vacationUntil", lang)}
+              testIdPrefix="master-detail-vacation-until"
             />
-          </Field>
+          </div>
         </div>
 
         {errorMsg && (

@@ -19,7 +19,7 @@
  *     password; absent for self_registered.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { LangContext } from "~/components/LangContext";
 import { MasterDetailModal } from "~/components/salon/tabs/masters/MasterDetailModal";
 
@@ -222,27 +222,55 @@ describe("MasterDetailModal — salon_created (editable)", () => {
   });
 
   it("Vacation Save calls updateMaster with vacation fields only (no profile)", () => {
-    setMaster();
-    renderModal();
-    fireEvent.click(screen.getByTestId("master-detail-settings"));
-    fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
-    fireEvent.change(screen.getByTestId("master-detail-vacation-from"), {
-      target: { value: "2026-06-01" },
-    });
-    fireEvent.change(screen.getByTestId("master-detail-vacation-until"), {
-      target: { value: "2026-06-10" },
-    });
-    fireEvent.click(screen.getByTestId("master-detail-vacation-save"));
-    expect(updateMutate).toHaveBeenCalledTimes(1);
-    const call = updateMutate.mock.calls[0]![0];
-    expect(call.tenantId).toBe("t_demo");
-    expect(call.chatId).toBe(10_000_000_001);
-    expect(typeof call.vacationFrom).toBe("number");
-    expect(typeof call.vacationUntil).toBe("number");
-    expect(call.vacationUntil).toBeGreaterThan(call.vacationFrom);
-    // The new contract: Vacation save does NOT touch profile fields.
-    expect(call).not.toHaveProperty("name");
-    expect(call).not.toHaveProperty("bio");
+    // Pin "today" so the picker's initial visible month is deterministic.
+    // May 1 2026 falls on a Friday — June 1..7 are visible as spillover in
+    // the May grid, so we can pick 2026-06-01 without stepping months and
+    // 2026-06-10 after exactly one next-month click.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T10:00:00Z"));
+    try {
+      setMaster();
+      renderModal();
+      fireEvent.click(screen.getByTestId("master-detail-settings"));
+      fireEvent.click(screen.getByTestId("master-detail-tab-settings"));
+
+      // From picker
+      const fromWrap = screen.getByTestId("master-detail-vacation-from");
+      fireEvent.click(within(fromWrap).getByTestId("master-detail-vacation-from-trigger"));
+      const fromCells = within(fromWrap)
+        .getAllByTestId("master-detail-vacation-from-day")
+        .filter((el) => el.getAttribute("data-iso") === "2026-06-01");
+      expect(fromCells.length).toBe(1);
+      fireEvent.click(fromCells[0]!);
+
+      // Until picker — step to June, then click 2026-06-10
+      const untilWrap = screen.getByTestId("master-detail-vacation-until");
+      fireEvent.click(within(untilWrap).getByTestId("master-detail-vacation-until-trigger"));
+      fireEvent.click(within(untilWrap).getByTestId("master-detail-vacation-until-next-month"));
+      const untilCells = within(untilWrap)
+        .getAllByTestId("master-detail-vacation-until-day")
+        .filter(
+          (el) =>
+            el.getAttribute("data-iso") === "2026-06-10" &&
+            el.getAttribute("data-in-month") === "1",
+        );
+      expect(untilCells.length).toBe(1);
+      fireEvent.click(untilCells[0]!);
+
+      fireEvent.click(screen.getByTestId("master-detail-vacation-save"));
+      expect(updateMutate).toHaveBeenCalledTimes(1);
+      const call = updateMutate.mock.calls[0]![0];
+      expect(call.tenantId).toBe("t_demo");
+      expect(call.chatId).toBe(10_000_000_001);
+      expect(typeof call.vacationFrom).toBe("number");
+      expect(typeof call.vacationUntil).toBe("number");
+      expect(call.vacationUntil).toBeGreaterThan(call.vacationFrom);
+      // The new contract: Vacation save does NOT touch profile fields.
+      expect(call).not.toHaveProperty("name");
+      expect(call).not.toHaveProperty("bio");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("Visibility toggle calls setMasterPublicHidden with hidden=1", () => {

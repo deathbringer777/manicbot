@@ -603,6 +603,7 @@ const translations = {
   "completeness.public":                 { ru: "Публичный профиль активен", ua: "Публічний профіль активний", en: "Public profile active", pl: "Profil publiczny aktywny" },
 
   "salon.rail.autoConfirmHint":          { ru: "Записи через канал подтверждаются автоматически", ua: "Записи через канал підтверджуються автоматично", en: "Bookings via this channel are auto-accepted", pl: "Rezerwacje przez ten kanał są akceptowane automatycznie" },
+  "salon.rail.filters":                  { ru: "Фильтры",           ua: "Фільтри",              en: "Filters",                    pl: "Filtry" },
   "salon.rail.statusFilter":             { ru: "Статус записи",     ua: "Статус запису",        en: "Status",                     pl: "Status" },
   "salon.rail.serviceFilter":            { ru: "Услуги",            ua: "Послуги",              en: "Services",                   pl: "Usługi" },
   "salon.agenda.duration":               { ru: "мин",               ua: "хв",                   en: "min",                        pl: "min" },
@@ -925,6 +926,8 @@ const translations = {
   // 0074 — random master + favorite label
   "appointments.manual.masterRandom":    { ru: "🎲 Случайный мастер", ua: "🎲 Випадковий майстер", en: "🎲 Random master", pl: "🎲 Losowy mistrz" },
   "appointments.manual.masterFavorite":  { ru: "⭐ любимый",        ua: "⭐ улюблений",     en: "⭐ favorite", pl: "⭐ ulubiony" },
+  // 2026-05-26 — unassigned master sentinel for owner-side bookings.
+  "appointments.manual.masterUnassigned": { ru: "— Без мастера —",  ua: "— Без майстра —",  en: "— No master —", pl: "— Bez mistrza —" },
   "appointments.manual.noRandomCandidate": { ru: "Нет доступных мастеров для случайного выбора.", ua: "Немає доступних майстрів для випадкового вибору.", en: "No masters available for random pick.", pl: "Brak dostępnych mistrzów do losowego wyboru." },
   "appointments.manual.pickPlaceholder": { ru: "— выбрать —",      ua: "— вибрати —",      en: "— select —", pl: "— wybierz —" },
   "appointments.manual.service":         { ru: "Услуга",           ua: "Послуга",          en: "Service",    pl: "Usługa" },

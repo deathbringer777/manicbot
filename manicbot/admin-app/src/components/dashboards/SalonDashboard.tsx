@@ -21,7 +21,7 @@ import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
 import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
 import { Bell, Repeat } from "lucide-react";
-import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
+import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
 import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
 import { useInWebShell } from "~/components/layout/WebShell";
@@ -1782,55 +1782,40 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   );
   // Auto-confirm settings — surfaced in the calendar left rail so the
   // owner can flip channels without leaving the appointments view.
-  const autoConfirmQuery = api.salon.getAutoConfirmSettings.useQuery(
-    { tenantId },
-    { enabled: tab === "appointments" },
-  );
-  const autoConfirmMut = api.salon.setAutoConfirm.useMutation({
-    onSuccess: () => { void utils.salon.getAutoConfirmSettings.invalidate({ tenantId }); },
-  });
+  // Auto-confirm settings used to live on the appointments rail; they
+  // moved to /settings?section=salon (MySalonSection → AutoConfirmSettings)
+  // on 2026-05-26 so there's exactly one surface owners reach for. The
+  // query/mutation hooks were removed alongside the rail block.
   // Shared master-visibility state — both CalendarLeftRail and SalonDayView
   // read from the same source. localStorage-backed so the owner's
   // preference survives reloads.
   const masterVis = useMasterVisibility();
-  // Calendar/agenda filter state — local to the appointments tab. Status
-  // filter persists on page reload via localStorage so the user's choice
-  // survives refresh; service filter is session-local since the service
-  // catalog can change.
-  const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
+  // Calendar/agenda filter state — local to the appointments tab.
+  // 2026-05-26: switched from Set<string> (multi-toggle) to a single
+  // selected status / service. The dropdown UI in the rail is single-
+  // select, matching the FilterDropdown pattern used elsewhere
+  // (/errors, /conversations, /system/marketing/sends, etc).
+  // Status filter persists across reloads via localStorage; service
+  // filter stays session-local because the catalog can shift.
+  const [statusFilter, setStatusFilterState] = useState<StatusKey | null>(() => {
+    if (typeof window === "undefined") return null;
     try {
-      const raw = window.localStorage.getItem("manicbot_apt_hidden_statuses");
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw);
-      return new Set<string>(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
+      const raw = window.localStorage.getItem("manicbot_apt_status_filter");
+      if (!raw) return null;
+      const valid = ["pending", "confirmed", "cancelled", "no_show", "done"];
+      return valid.includes(raw) ? (raw as StatusKey) : null;
     } catch {
-      return new Set();
+      return null;
     }
   });
-  const toggleStatusHidden = (s: string) => {
-    setHiddenStatuses((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      try { window.localStorage.setItem("manicbot_apt_hidden_statuses", JSON.stringify(Array.from(next))); } catch { /* noop */ }
-      return next;
-    });
+  const setStatusFilter = (next: StatusKey | null) => {
+    setStatusFilterState(next);
+    try {
+      if (next == null) window.localStorage.removeItem("manicbot_apt_status_filter");
+      else window.localStorage.setItem("manicbot_apt_status_filter", next);
+    } catch { /* noop */ }
   };
-  const showAllStatuses = () => {
-    setHiddenStatuses(new Set());
-    try { window.localStorage.setItem("manicbot_apt_hidden_statuses", "[]"); } catch { /* noop */ }
-  };
-  const [hiddenServiceIds, setHiddenServiceIds] = useState<Set<string>>(new Set());
-  const toggleServiceHidden = (svcId: string) => {
-    setHiddenServiceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(svcId)) next.delete(svcId);
-      else next.add(svcId);
-      return next;
-    });
-  };
-  const showAllServices = () => setHiddenServiceIds(new Set());
+  const [serviceFilter, setServiceFilter] = useState<string | null>(null);
   // Services list is needed in the appointments tab too — we use it both
   // for the rail filter and to look up service display names in the
   // agenda/list rows.
@@ -2245,8 +2230,10 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           });
 
         // ── Apply filters to whichever apt set we're rendering ────────
+        // Single-select dropdown: only the explicitly chosen status /
+        // service is kept when the filter is set; null = "show all".
         const filterApt = (a: any): boolean => {
-          const status = a.noShow
+          const status: StatusKey = a.noShow
             ? "no_show"
             : a.cancelled || a.status === "cancelled" || a.status === "rejected"
               ? "cancelled"
@@ -2255,14 +2242,14 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 : a.status === "confirmed"
                   ? "confirmed"
                   : "pending";
-          if (hiddenStatuses.has(status)) return false;
-          if (a.svcId && hiddenServiceIds.has(a.svcId)) return false;
+          if (statusFilter != null && status !== statusFilter) return false;
+          if (serviceFilter != null && a.svcId !== serviceFilter) return false;
           if (a.masterId != null && masterVis.hiddenMasterIds.has(Number(a.masterId))) return false;
           return true;
         };
         const filtersActive =
-          hiddenStatuses.size > 0 ||
-          hiddenServiceIds.size > 0 ||
+          statusFilter != null ||
+          serviceFilter != null ||
           masterVis.hiddenMasterIds.size > 0;
 
         const aptsFiltered = applyPendingStatusChanges((apts.data ?? []).filter(filterApt));
@@ -2293,18 +2280,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
             hiddenMasterIds={masterVis.hiddenMasterIds}
             toggleMasterVisible={masterVis.toggleMasterVisible}
             showAllMasters={masterVis.showAllMasters}
-            hiddenStatuses={hiddenStatuses as Set<any>}
-            toggleStatusVisible={(s) => toggleStatusHidden(s)}
-            showAllStatuses={showAllStatuses}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
             services={serviceRailItems}
-            hiddenServiceIds={hiddenServiceIds}
-            toggleServiceVisible={toggleServiceHidden}
-            showAllServices={showAllServices}
-            autoConfirm={autoConfirmQuery.data}
-            autoConfirmLoading={autoConfirmMut.isPending}
-            setAutoConfirm={(channel, enabled) =>
-              autoConfirmMut.mutate({ tenantId, channel, enabled })
-            }
+            serviceFilter={serviceFilter}
+            setServiceFilter={setServiceFilter}
           />
           {/* Main column — header + view */}
           <div className="flex-1 min-w-0 space-y-3">

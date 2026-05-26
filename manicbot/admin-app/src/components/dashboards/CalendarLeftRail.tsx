@@ -13,22 +13,26 @@
  *   │ ☑ Olga  🟢 👁       │
  *   │ ☐ Petr  🔵 ✕       │
  *   ├────────────────────┤
- *   │ Auto-confirm       │
- *   │ Web         [ON]   │
- *   │ Telegram    [OFF]  │
- *   │ ...                │
+ *   │ Status: [Все ▾]    │
+ *   │ Service: [Все ▾]   │
  *   └────────────────────┘
  *
- * The rail is stateless w.r.t. selectedDate (parent owns) but does
- * forward master-visibility + auto-confirm controls. When a `masters`
- * list is supplied, the "My calendars" section renders. When
- * `autoConfirm` settings are supplied, the auto-confirm block renders.
+ * 2026-05-26: status + service filters switched from per-row toggle lists
+ * to single-select FilterDropdown (UX complaint — the vertical toggle
+ * stack hogged rail space and looked clumsy). The auto-confirm section
+ * was removed entirely — it lives canonically in /settings?section=salon
+ * (MySalonSection → AutoConfirmSettings) and having it duplicated in the
+ * rail confused owners about which surface was the source of truth.
+ *
+ * The rail is stateless w.r.t. selectedDate (parent owns) but forwards
+ * master-visibility, status filter, and service filter to the parent
+ * via the supplied setters.
  */
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
-import { Switch } from "~/components/ui/Switch";
+import { FilterDropdown } from "~/components/ui/FilterDropdown";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
  *  same master gets the same color in the rail and the grid. */
@@ -57,8 +61,6 @@ export const STATUS_TONE: Record<string, { dot: string; bg: string; text: string
 export type StatusKey = "pending" | "confirmed" | "cancelled" | "no_show" | "done";
 export const STATUS_KEYS: StatusKey[] = ["pending", "confirmed", "cancelled", "no_show", "done"];
 
-export type AutoConfirmChannel = "web" | "telegram" | "whatsapp" | "instagram";
-
 export interface MasterRailItem {
   chatId: number;
   name: string | null;
@@ -68,13 +70,6 @@ export interface ServiceRailItem {
   svcId: string;
   name: string;
   count?: number;
-}
-
-export interface AutoConfirmState {
-  web: boolean;
-  telegram: boolean;
-  whatsapp: boolean;
-  instagram: boolean;
 }
 
 interface Props {
@@ -91,21 +86,14 @@ interface Props {
   toggleMasterVisible?: (chatId: number) => void;
   showAllMasters?: () => void;
 
-  /** ── Status filter section ────────────────────────────────────── */
-  hiddenStatuses?: Set<StatusKey>;
-  toggleStatusVisible?: (status: StatusKey) => void;
-  showAllStatuses?: () => void;
+  /** ── Status filter section (single-select dropdown) ───────────── */
+  statusFilter?: StatusKey | null;
+  setStatusFilter?: (next: StatusKey | null) => void;
 
-  /** ── Service filter section ───────────────────────────────────── */
+  /** ── Service filter section (single-select dropdown) ──────────── */
   services?: ServiceRailItem[];
-  hiddenServiceIds?: Set<string>;
-  toggleServiceVisible?: (svcId: string) => void;
-  showAllServices?: () => void;
-
-  /** ── Auto-confirm section ─────────────────────────────────────── */
-  autoConfirm?: AutoConfirmState;
-  autoConfirmLoading?: boolean;
-  setAutoConfirm?: (channel: AutoConfirmChannel, enabled: boolean) => void;
+  serviceFilter?: string | null;
+  setServiceFilter?: (next: string | null) => void;
 }
 
 function pad(n: number): string {
@@ -133,16 +121,11 @@ export function CalendarLeftRail({
   hiddenMasterIds,
   toggleMasterVisible,
   showAllMasters,
-  hiddenStatuses,
-  toggleStatusVisible,
-  showAllStatuses,
+  statusFilter,
+  setStatusFilter,
   services,
-  hiddenServiceIds,
-  toggleServiceVisible,
-  showAllServices,
-  autoConfirm,
-  autoConfirmLoading,
-  setAutoConfirm,
+  serviceFilter,
+  setServiceFilter,
 }: Props) {
   const viewMonth = viewMonthProp ?? selectedDate;
   // Local month nav uses an internal callback if the parent didn't supply one.
@@ -322,184 +305,61 @@ export function CalendarLeftRail({
         </section>
       )}
 
-      {/* Status filter — checkboxes per appointment status. GCal-parity:
-          each status renders as its own "calendar" toggle. */}
-      {hiddenStatuses && toggleStatusVisible && (
-        <section className="glass-card rounded-2xl p-3" data-testid="rail-status-filter">
-          <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-              <Filter className="h-3 w-3" />
-              {t("salon.rail.statusFilter", lang)}
-            </p>
-            {hiddenStatuses.size > 0 && showAllStatuses && (
-              <button
-                type="button"
-                onClick={showAllStatuses}
-                data-testid="rail-show-all-statuses"
-                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
-              >
-                {t("salon.day.showAll", lang)}
-              </button>
-            )}
-          </header>
-          <ul className="space-y-0.5">
-            {STATUS_KEYS.map((status) => {
-              const tone = STATUS_TONE[status]!;
-              const visible = !hiddenStatuses.has(status);
-              return (
-                <li key={status}>
-                  <button
-                    type="button"
-                    onClick={() => toggleStatusVisible(status)}
-                    data-testid="rail-status-toggle"
-                    data-status={status}
-                    data-visible={visible ? "1" : "0"}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
-                      visible
-                        ? "hover:bg-slate-100 dark:hover:bg-white/[0.04]"
-                        : "opacity-50 hover:opacity-80"
-                    }`}
-                  >
-                    <span
-                      className="h-3 w-3 rounded-sm shrink-0 border"
-                      style={{
-                        background: visible ? tone.dot : "transparent",
-                        borderColor: tone.dot,
-                      }}
-                    />
-                    <span
-                      className={`flex-1 text-[11px] font-medium truncate text-left ${
-                        visible
-                          ? "text-slate-700 dark:text-slate-200"
-                          : "text-slate-400 dark:text-slate-500 line-through"
-                      }`}
-                    >
-                      {t(`status.${status}` as any, lang)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {/* Service filter — toggle per service. Optional: render only when a
-          services list is provided (e.g. caller derives it from the active
-          service catalog or from the visible appointments). */}
-      {services && services.length > 0 && hiddenServiceIds && toggleServiceVisible && (
-        <section className="glass-card rounded-2xl p-3" data-testid="rail-service-filter">
-          <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-              <Scissors className="h-3 w-3" />
-              {t("salon.rail.serviceFilter", lang)}
-            </p>
-            {hiddenServiceIds.size > 0 && showAllServices && (
-              <button
-                type="button"
-                onClick={showAllServices}
-                data-testid="rail-show-all-services"
-                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
-              >
-                {t("salon.day.showAll", lang)}
-              </button>
-            )}
-          </header>
-          <ul className="space-y-0.5 max-h-48 overflow-y-auto pr-0.5">
-            {services.map((svc) => {
-              const visible = !hiddenServiceIds.has(svc.svcId);
-              return (
-                <li key={svc.svcId}>
-                  <button
-                    type="button"
-                    onClick={() => toggleServiceVisible(svc.svcId)}
-                    data-testid="rail-service-toggle"
-                    data-service-id={svc.svcId}
-                    data-visible={visible ? "1" : "0"}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
-                      visible
-                        ? "hover:bg-slate-100 dark:hover:bg-white/[0.04]"
-                        : "opacity-50 hover:opacity-80"
-                    }`}
-                  >
-                    <span
-                      className="h-3 w-3 rounded-sm shrink-0 border border-slate-400 dark:border-slate-500"
-                      style={{
-                        background: visible ? "rgb(100 116 139)" : "transparent",
-                      }}
-                    />
-                    <span
-                      className={`flex-1 text-[11px] font-medium truncate text-left ${
-                        visible
-                          ? "text-slate-700 dark:text-slate-200"
-                          : "text-slate-400 dark:text-slate-500 line-through"
-                      }`}
-                    >
-                      {svc.name}
-                    </span>
-                    {typeof svc.count === "number" && svc.count > 0 && (
-                      <span className="text-[10px] tabular-nums text-slate-400 dark:text-slate-500 shrink-0">
-                        {svc.count}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {/* Auto-confirm — channel toggles. Mirrors AutoConfirmSettings on
-          the dashboard but in a compact rail-friendly layout. */}
-      {autoConfirm && setAutoConfirm && (
-        <section className="glass-card rounded-2xl p-3" data-testid="rail-auto-confirm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 flex items-center gap-1.5">
-            <Zap className="h-3 w-3" />
-            {t("salon.autoConfirm.title", lang)}
+      {/* Filters card — status + service, single-select dropdowns. Replaces
+          the per-row toggle list. The Set-based multi-toggle UX hogged
+          rail space and stopped scaling once a salon added more than 3
+          services. */}
+      {(setStatusFilter || (services && setServiceFilter)) && (
+        <section className="glass-card rounded-2xl p-3 space-y-2" data-testid="rail-filters">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+            <Filter className="h-3 w-3" />
+            {t("salon.rail.filters", lang)}
           </p>
-          <p className="text-[10px] text-slate-500 dark:text-slate-500 mb-2 leading-snug">
-            {t("salon.rail.autoConfirmHint", lang)}
-          </p>
-          <ul className="space-y-1">
-            {(["web", "telegram", "whatsapp", "instagram"] as const).map((ch) => {
-              const enabled = autoConfirm[ch];
-              const channelLabel =
-                ch === "web"
-                  ? t("salon.channels.web.label", lang)
-                  : ch === "instagram"
-                    ? t("salon.channels.instagram.label", lang)
-                    : ch === "telegram"
-                      ? "Telegram"
-                      : "WhatsApp";
-              return (
-                <li
-                  key={ch}
-                  className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.04] transition-colors"
-                  data-testid="rail-auto-confirm-row"
-                  data-channel={ch}
-                  data-enabled={enabled ? "1" : "0"}
-                >
-                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-200 truncate">
-                    {channelLabel}
-                  </span>
-                  <Switch
-                    size="xs"
-                    checked={enabled}
-                    onChange={(next) => setAutoConfirm(ch, next)}
-                    disabled={!!autoConfirmLoading}
-                    aria-label={`${t("salon.autoConfirm.title", lang)}: ${channelLabel}`}
-                    data-testid="rail-auto-confirm-toggle"
-                    data-channel={ch}
-                    className={autoConfirmLoading ? "cursor-wait" : ""}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+
+          {setStatusFilter && (
+            <div data-testid="rail-status-filter">
+              <p className="mb-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                {t("salon.rail.statusFilter", lang)}
+              </p>
+              <FilterDropdown<StatusKey>
+                label={t("salon.day.showAll", lang)}
+                allLabel={t("salon.day.showAll", lang)}
+                value={statusFilter ?? null}
+                onChange={(v) => setStatusFilter(v)}
+                triggerTestId="rail-status-filter-trigger"
+                options={STATUS_KEYS.map((s) => ({
+                  value: s,
+                  label: t(`status.${s}` as any, lang),
+                  testId: `rail-status-filter-option-${s}`,
+                }))}
+              />
+            </div>
+          )}
+
+          {services && services.length > 0 && setServiceFilter && (
+            <div data-testid="rail-service-filter">
+              <p className="mb-1 text-[10px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Scissors className="h-3 w-3" />
+                {t("salon.rail.serviceFilter", lang)}
+              </p>
+              <FilterDropdown<string>
+                label={t("salon.day.showAll", lang)}
+                allLabel={t("salon.day.showAll", lang)}
+                value={serviceFilter ?? null}
+                onChange={(v) => setServiceFilter(v)}
+                triggerTestId="rail-service-filter-trigger"
+                options={services.map((svc) => ({
+                  value: svc.svcId,
+                  label: typeof svc.count === "number" && svc.count > 0
+                    ? `${svc.name} (${svc.count})`
+                    : svc.name,
+                  testId: `rail-service-filter-option-${svc.svcId}`,
+                }))}
+              />
+            </div>
+          )}
         </section>
       )}
-
     </aside>
   );
 }

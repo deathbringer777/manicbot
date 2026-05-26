@@ -89,8 +89,10 @@ export default function AppointmentsPageClient() {
   const [aptViewMode, setAptViewMode] = useState<AptViewMode>(() => normalizeViewMode("week"));
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [hiddenStatuses, setHiddenStatuses] = useState<Set<StatusKey>>(new Set());
-  const [hiddenServiceIds, setHiddenServiceIds] = useState<Set<string>>(new Set());
+  // 2026-05-26: single-select dropdown (was Set<StatusKey>) to match the
+  // new CalendarLeftRail FilterDropdown contract — see SalonDashboard.
+  const [statusFilter, setStatusFilter] = useState<StatusKey | null>(null);
+  const [serviceFilter, setServiceFilter] = useState<string | null>(null);
   const [hiddenTenantHashes, setHiddenTenantHashes] = useState<Set<number>>(new Set());
 
   // God Mode booking modal flow:
@@ -207,39 +209,23 @@ export default function AppointmentsPageClient() {
     });
   const showAllMasters = () => setHiddenTenantHashes(new Set());
 
-  const toggleStatusVisible = (s: StatusKey) =>
-    setHiddenStatuses((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  const showAllStatuses = () => setHiddenStatuses(new Set());
-
-  const toggleServiceVisible = (svcId: string) =>
-    setHiddenServiceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(svcId)) next.delete(svcId);
-      else next.add(svcId);
-      return next;
-    });
-  const showAllServices = () => setHiddenServiceIds(new Set());
-
   // ── Combined filter applied to every view ──
+  // Single-select dropdown semantics: only the chosen status / service
+  // passes through when set; null = "show all".
   const filterApt = (a: Record<string, unknown>): boolean => {
     const status = getStatusOf(a);
-    if (hiddenStatuses.has(status)) return false;
+    if (statusFilter != null && status !== statusFilter) return false;
     const svc = a.svcId;
-    if (typeof svc === "string" && hiddenServiceIds.has(svc)) return false;
+    if (serviceFilter != null && (typeof svc !== "string" || svc !== serviceFilter)) return false;
     const masterId = a.masterId;
     if (typeof masterId === "number" && hiddenTenantHashes.has(masterId)) return false;
     return true;
   };
 
-  const dayFiltered = useMemo(() => dayRows.filter(filterApt), [dayRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
-  const weekFiltered = useMemo(() => weekRows.filter(filterApt), [weekRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
-  const calFiltered = useMemo(() => calRows.filter(filterApt), [calRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
-  const listFiltered = useMemo(() => listRows.filter(filterApt), [listRows, hiddenStatuses, hiddenServiceIds, hiddenTenantHashes]);
+  const dayFiltered = useMemo(() => dayRows.filter(filterApt), [dayRows, statusFilter, serviceFilter, hiddenTenantHashes]);
+  const weekFiltered = useMemo(() => weekRows.filter(filterApt), [weekRows, statusFilter, serviceFilter, hiddenTenantHashes]);
+  const calFiltered = useMemo(() => calRows.filter(filterApt), [calRows, statusFilter, serviceFilter, hiddenTenantHashes]);
+  const listFiltered = useMemo(() => listRows.filter(filterApt), [listRows, statusFilter, serviceFilter, hiddenTenantHashes]);
 
   // ── Mutations ──
   const updateStatus = api.appointments.updateStatus.useMutation({
@@ -260,7 +246,7 @@ export default function AppointmentsPageClient() {
   };
 
   const filtersActive =
-    hiddenStatuses.size > 0 || hiddenServiceIds.size > 0 || hiddenTenantHashes.size > 0;
+    statusFilter != null || serviceFilter != null || hiddenTenantHashes.size > 0;
 
   return (
     <Shell>
@@ -291,13 +277,11 @@ export default function AppointmentsPageClient() {
             hiddenMasterIds={hiddenTenantHashes}
             toggleMasterVisible={toggleMasterVisible}
             showAllMasters={showAllMasters}
-            hiddenStatuses={hiddenStatuses}
-            toggleStatusVisible={toggleStatusVisible}
-            showAllStatuses={showAllStatuses}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
             services={serviceRailItems}
-            hiddenServiceIds={hiddenServiceIds}
-            toggleServiceVisible={toggleServiceVisible}
-            showAllServices={showAllServices}
+            serviceFilter={serviceFilter}
+            setServiceFilter={setServiceFilter}
           />
 
           <div className="flex-1 min-w-0 space-y-3">

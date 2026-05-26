@@ -11,6 +11,11 @@ import { Select } from "~/components/ui/Select";
 // Keeping it as a stable string lets the existing controlled-Select
 // signature (string in / string out) stay untouched.
 const RANDOM_MASTER_VALUE = "random";
+// 2026-05-26: sentinel for the "no master / unassigned" option. Owners
+// can book a slot without a master (empty roster, assign later). The
+// router accepts `masterId: undefined` and DayView surfaces the row in
+// its synthetic Unassigned column.
+const UNASSIGNED_MASTER_VALUE = "unassigned";
 
 interface Props {
   tenantId: string;
@@ -68,11 +73,16 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
     defaultMasterId != null ? String(defaultMasterId) : "",
   );
   const resolvedMasterId = useMemo(() => {
-    if (!masterSelectValue || masterSelectValue === RANDOM_MASTER_VALUE) return null;
+    if (
+      !masterSelectValue ||
+      masterSelectValue === RANDOM_MASTER_VALUE ||
+      masterSelectValue === UNASSIGNED_MASTER_VALUE
+    ) return null;
     const n = Number(masterSelectValue);
     return Number.isFinite(n) ? n : null;
   }, [masterSelectValue]);
   const isRandomMaster = masterSelectValue === RANDOM_MASTER_VALUE;
+  const isUnassignedMaster = masterSelectValue === UNASSIGNED_MASTER_VALUE;
   const [serviceId, setServiceId] = useState<string>("");
   const [date, setDate] = useState<string>(defaultDate ?? "");
   const [time, setTime] = useState<string>(defaultTime ?? "");
@@ -169,7 +179,9 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
   const newClientValid =
     useExistingClient || (clientName.trim().length > 0 && hasContact);
   // 0074 — Random satisfies the master requirement (resolved on submit).
-  const masterChosen = resolvedMasterId !== null || isRandomMaster;
+  // 2026-05-26 — Unassigned also satisfies (the booking is created with
+  // `master_id = NULL`).
+  const masterChosen = resolvedMasterId !== null || isRandomMaster || isUnassignedMaster;
   const formValid =
     masterChosen && serviceId !== "" && date !== "" && time !== "" && newClientValid;
   const submitDisabled = !formValid || create.isPending;
@@ -179,6 +191,8 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
   // (separate UX from the bottom-of-form `manual-booking-issues` list
   // which was removed 2026-05-16 per user feedback — the disabled submit
   // button is signal enough that something is missing).
+  // mastersEmpty no longer disables the Select — the "no master" option
+  // is always available so an empty-roster salon can still book.
   const mastersEmpty = !masters.isLoading && (masters.data?.length ?? 0) === 0;
   const servicesEmpty = !services.isLoading && (services.data?.length ?? 0) === 0;
 
@@ -203,10 +217,12 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
       const pick = candidates[Math.floor(Math.random() * candidates.length)]!;
       finalMasterId = pick.chatId;
     }
-    if (finalMasterId == null) return;
+    // Unassigned booking → omit masterId entirely (router accepts undefined).
+    // Random + explicit picks land here with a resolved numeric id.
+    if (finalMasterId == null && !isUnassignedMaster) return;
     create.mutate({
       tenantId,
-      masterId: finalMasterId,
+      ...(finalMasterId != null ? { masterId: finalMasterId } : {}),
       serviceId,
       date,
       time,
@@ -337,12 +353,22 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
                   setFavoriteAutoApplied(true);
                   setMasterSelectValue(v);
                 }}
-                disabled={defaultMasterId != null || mastersEmpty}
+                disabled={defaultMasterId != null}
                 placeholder={t("appointments.manual.pickPlaceholder", lang)}
                 options={[
-                  // 0074 — Random option at the top. Hidden when there's
-                  // only one master (nothing to randomize) or when the
-                  // modal is locked to a specific master.
+                  // 2026-05-26 — Unassigned option at the very top so the
+                  // empty-roster case is always recoverable. Hidden when
+                  // the modal is locked to a specific master (drag-to-
+                  // create on a master column already binds the row).
+                  ...(defaultMasterId == null
+                    ? [{
+                        value: UNASSIGNED_MASTER_VALUE,
+                        label: t("appointments.manual.masterUnassigned", lang),
+                      }]
+                    : []),
+                  // 0074 — Random option below Unassigned. Hidden when
+                  // there's only one master (nothing to randomize) or
+                  // when the modal is locked to a specific master.
                   ...(defaultMasterId == null && (masters.data?.length ?? 0) > 1
                     ? [{
                         value: RANDOM_MASTER_VALUE,
@@ -364,7 +390,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
               {mastersEmpty && (
                 <p
                   data-testid="manual-booking-need-masters"
-                  className="mt-1 text-[11px] text-amber-600 dark:text-amber-400"
+                  className="mt-1 text-[11px] text-slate-500 dark:text-slate-400"
                 >
                   {t("appointments.manual.needMasters", lang)}
                 </p>

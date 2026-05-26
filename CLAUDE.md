@@ -624,6 +624,77 @@ follow-up; it's harmless because the stat grid is unconditionally gone
 from `SalonDashboard.tsx`.
 
 
+### Appointments rail cleanup (2026-05-26)
+
+Three UX papercuts on the Appointments tab, all addressed in one PR:
+
+- **Status filter — vertical 5-row toggle list → single-select `FilterDropdown`.**
+  The old card hogged ~180 px of rail height and looked clumsy next to
+  the mini-month. The new dropdown matches the brand pattern used in
+  `/errors`, `/conversations`, `/system/marketing/sends`. State changes
+  in [SalonDashboard.tsx](manicbot/admin-app/src/components/dashboards/SalonDashboard.tsx)
+  and [AppointmentsPageClient.tsx](manicbot/admin-app/src/app/(dashboard)/appointments/AppointmentsPageClient.tsx):
+  `hiddenStatuses: Set<StatusKey>` → `statusFilter: StatusKey | null`.
+  Persistence in localStorage switched key
+  `manicbot_apt_hidden_statuses` → `manicbot_apt_status_filter`.
+- **Service filter — same treatment.** `hiddenServiceIds: Set<string>` →
+  `serviceFilter: string | null`. Service catalog can grow large, the
+  toggle list scrolled awkwardly; single-select is cleaner.
+- **Auto-confirm section deleted from the rail.** It already lives
+  canonically in `/settings?section=salon` (MySalonSection →
+  AutoConfirmSettings); having a second copy in the rail confused
+  owners about which surface was the source of truth.
+  `autoConfirmQuery` / `autoConfirmMut` removed from SalonDashboard.
+
+[CalendarLeftRail.tsx](manicbot/admin-app/src/components/dashboards/CalendarLeftRail.tsx)
+prop surface shrunk: dropped `hiddenStatuses / toggleStatusVisible /
+showAllStatuses / hiddenServiceIds / toggleServiceVisible /
+showAllServices / autoConfirm / autoConfirmLoading / setAutoConfirm`;
+added `statusFilter / setStatusFilter / serviceFilter /
+setServiceFilter`. New i18n key `salon.rail.filters` (ru/ua/en/pl).
+Test coverage: [CalendarLeftRail.test.tsx](manicbot/admin-app/src/__tests__/CalendarLeftRail.test.tsx)
+(21 cases — full re-pin for the dropdown contract + an explicit
+"auto-confirm panel must NOT render anywhere on the rail" regression
+guard).
+
+
+### Unassigned-master manual bookings (2026-05-26)
+
+`appointments.createManual` now accepts `masterId: undefined` for
+owner / system_admin role. Salons with an empty master roster (just
+registered, or in onboarding) can finally create bookings without
+having to add a master first — the row lands in D1 with
+`master_id = NULL` and the synthetic Unassigned column in `SalonDayView`
+(chatId = -1) surfaces it. Master role is still required to specify
+their own `masterId`; a master attempting to create an unassigned
+booking gets `FORBIDDEN: Masters can only book on their own calendar`.
+
+Backend ([routers/appointments.ts](manicbot/admin-app/src/server/api/routers/appointments.ts)):
+- zod input relaxed: `masterId: z.number().int().optional()`.
+- Master-role IDOR check: rejects when `masterId` is undefined before
+  any DB work.
+- Per-master block check (`master_client_blocks`) skipped when masterId
+  is undefined — the block is keyed by (tenant, master, client), so
+  there is no per-master scope without a master.
+- `slotsBusy` skipped when masterId is undefined — slot conflicts are
+  per-master; once the owner assigns a master via
+  `appointments.update` the conflict guard fires there.
+- Insert writes `masterId: input.masterId ?? null`.
+
+UI ([ManualBookingModal.tsx](manicbot/admin-app/src/components/dashboard/ManualBookingModal.tsx)):
+new sentinel `UNASSIGNED_MASTER_VALUE = "unassigned"` shown as
+«— Без мастера —» at the top of the master Select. Hidden when the
+modal is locked to a specific master (drag-to-create on a master
+column already binds the row). Submit omits the `masterId` field
+entirely when chosen. `mastersEmpty` no longer disables the Select —
+the unassigned option is always available, so the previous "Najpierw
+dodaj mistrza w zakładce «Mistrzowie»" dead-end is gone. New i18n key
+`appointments.manual.masterUnassigned` (ru/ua/en/pl). Test coverage:
+[appointments-create-manual-unassigned.test.ts](manicbot/admin-app/src/__tests__/appointments-create-manual-unassigned.test.ts)
+(4 cases — new-client + existing-client happy paths, master-role
+refusal, and a backward-compat regression with `masterId` set).
+
+
 ### Masters tab row → MasterDetailModal (2026-05-17)
 
 Owner UX parity with the Clients tab. Previously the master row in

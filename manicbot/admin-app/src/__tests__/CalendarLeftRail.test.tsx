@@ -12,7 +12,7 @@
  *     gets the full width on phone / tablet).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, screen, fireEvent } from "@testing-library/react";
+import { cleanup, screen, fireEvent, within } from "@testing-library/react";
 import { CalendarLeftRail } from "~/components/dashboards/CalendarLeftRail";
 import { renderWithLang } from "./helpers/renderWithLang";
 
@@ -221,164 +221,80 @@ describe("CalendarLeftRail", () => {
     });
   });
 
-  // ── Auto-confirm section ──────────────────────────────────────────
-  describe("Auto-confirm section", () => {
-    const allOff = { web: false, telegram: false, whatsapp: false, instagram: false };
-
-    it("renders one row per channel when autoConfirm + setAutoConfirm are passed", () => {
+  // ── Status filter dropdown (FilterDropdown, single-select) ────────
+  // 2026-05-26: was a Set-based multi-toggle list; replaced with a
+  // single-select dropdown. Auto-confirm rail section was removed
+  // entirely — the settings live in /settings?section=salon now.
+  describe("Status filter dropdown", () => {
+    it("renders the filters card when setStatusFilter is supplied", () => {
       renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}
           lang="en"
-          autoConfirm={allOff}
-          setAutoConfirm={() => undefined}
+          statusFilter={null}
+          setStatusFilter={() => undefined}
         />,
         "en",
       );
-      expect(screen.getByTestId("rail-auto-confirm")).toBeTruthy();
-      const rows = screen.getAllByTestId("rail-auto-confirm-row");
-      expect(rows.length).toBe(4);
-      const channels = rows.map((r) => r.getAttribute("data-channel"));
-      expect(channels).toEqual(["web", "telegram", "whatsapp", "instagram"]);
-    });
-
-    it("data-enabled mirrors the autoConfirm state per channel", () => {
-      renderWithLang(
-        <CalendarLeftRail
-          selectedDate={FIXED_NOW}
-          setSelectedDate={() => undefined}
-          lang="en"
-          autoConfirm={{ web: true, telegram: false, whatsapp: true, instagram: false }}
-          setAutoConfirm={() => undefined}
-        />,
-        "en",
-      );
-      const rows = screen.getAllByTestId("rail-auto-confirm-row");
-      const byChannel: Record<string, string | null> = {};
-      for (const r of rows) {
-        byChannel[r.getAttribute("data-channel")!] = r.getAttribute("data-enabled");
-      }
-      expect(byChannel.web).toBe("1");
-      expect(byChannel.telegram).toBe("0");
-      expect(byChannel.whatsapp).toBe("1");
-      expect(byChannel.instagram).toBe("0");
-    });
-
-    it("clicking a toggle calls setAutoConfirm with the inverted value", () => {
-      const setAutoConfirm = vi.fn();
-      renderWithLang(
-        <CalendarLeftRail
-          selectedDate={FIXED_NOW}
-          setSelectedDate={() => undefined}
-          lang="en"
-          autoConfirm={{ web: true, telegram: false, whatsapp: false, instagram: false }}
-          setAutoConfirm={setAutoConfirm}
-        />,
-        "en",
-      );
-      const toggles = screen.getAllByTestId("rail-auto-confirm-toggle");
-      const tg = toggles.find((t) => t.getAttribute("data-channel") === "telegram");
-      fireEvent.click(tg!);
-      expect(setAutoConfirm).toHaveBeenCalledWith("telegram", true);
-    });
-
-    it("does NOT render Auto-confirm when settings are not passed", () => {
-      renderWithLang(
-        <CalendarLeftRail
-          selectedDate={FIXED_NOW}
-          setSelectedDate={() => undefined}
-          lang="en"
-        />,
-        "en",
-      );
-      expect(screen.queryByTestId("rail-auto-confirm")).toBeNull();
-    });
-  });
-
-  // ── Status filter section ─────────────────────────────────────────
-  describe("Status filter section", () => {
-    it("renders one toggle per status when hiddenStatuses + handler are passed", () => {
-      renderWithLang(
-        <CalendarLeftRail
-          selectedDate={FIXED_NOW}
-          setSelectedDate={() => undefined}
-          lang="en"
-          hiddenStatuses={new Set()}
-          toggleStatusVisible={() => undefined}
-        />,
-        "en",
-      );
+      expect(screen.getByTestId("rail-filters")).toBeTruthy();
       expect(screen.getByTestId("rail-status-filter")).toBeTruthy();
-      const toggles = screen.getAllByTestId("rail-status-toggle");
-      const statuses = toggles.map((t) => t.getAttribute("data-status"));
-      expect(statuses).toEqual(["pending", "confirmed", "cancelled", "no_show", "done"]);
-      expect(toggles.every((t) => t.getAttribute("data-visible") === "1")).toBe(true);
+      expect(screen.getByTestId("rail-status-filter-trigger")).toBeTruthy();
     });
 
-    it("hides toggle visually when status is in hiddenStatuses", () => {
+    it("trigger shows the selected status label when one is chosen", () => {
       renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}
           lang="en"
-          hiddenStatuses={new Set(["cancelled"]) as Set<any>}
-          toggleStatusVisible={() => undefined}
+          statusFilter="confirmed"
+          setStatusFilter={() => undefined}
         />,
         "en",
       );
-      const toggles = screen.getAllByTestId("rail-status-toggle");
-      const cancelled = toggles.find((t) => t.getAttribute("data-status") === "cancelled");
-      const confirmed = toggles.find((t) => t.getAttribute("data-status") === "confirmed");
-      expect(cancelled?.getAttribute("data-visible")).toBe("0");
-      expect(confirmed?.getAttribute("data-visible")).toBe("1");
+      const trigger = screen.getByTestId("rail-status-filter-trigger");
+      expect(trigger.textContent).toContain("Confirmed");
     });
 
-    it("clicking a status toggle calls toggleStatusVisible with the status key", () => {
-      const toggleStatusVisible = vi.fn();
+    it("selecting a status calls setStatusFilter with that key", () => {
+      const setStatusFilter = vi.fn();
       renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}
           lang="en"
-          hiddenStatuses={new Set()}
-          toggleStatusVisible={toggleStatusVisible}
+          statusFilter={null}
+          setStatusFilter={setStatusFilter}
         />,
         "en",
       );
-      const toggles = screen.getAllByTestId("rail-status-toggle");
-      const pending = toggles.find((t) => t.getAttribute("data-status") === "pending");
-      fireEvent.click(pending!);
-      expect(toggleStatusVisible).toHaveBeenCalledWith("pending");
+      fireEvent.click(screen.getByTestId("rail-status-filter-trigger"));
+      fireEvent.click(screen.getByTestId("rail-status-filter-option-pending"));
+      expect(setStatusFilter).toHaveBeenCalledWith("pending");
     });
 
-    it("Show all link only appears when at least one status is hidden", () => {
-      const { rerender } = renderWithLang(
+    it("selecting the 'All' option calls setStatusFilter(null)", () => {
+      const setStatusFilter = vi.fn();
+      renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}
           lang="en"
-          hiddenStatuses={new Set()}
-          toggleStatusVisible={() => undefined}
-          showAllStatuses={() => undefined}
+          statusFilter="pending"
+          setStatusFilter={setStatusFilter}
         />,
         "en",
       );
-      expect(screen.queryByTestId("rail-show-all-statuses")).toBeNull();
-      rerender(
-        <CalendarLeftRail
-          selectedDate={FIXED_NOW}
-          setSelectedDate={() => undefined}
-          lang="en"
-          hiddenStatuses={new Set(["pending"]) as Set<any>}
-          toggleStatusVisible={() => undefined}
-          showAllStatuses={() => undefined}
-        />,
-      );
-      expect(screen.getByTestId("rail-show-all-statuses")).toBeTruthy();
+      fireEvent.click(screen.getByTestId("rail-status-filter-trigger"));
+      // FilterDropdown renders the "all" row as the first <li> inside the listbox.
+      const menu = screen.getByRole("listbox");
+      const items = within(menu).getAllByRole("option");
+      fireEvent.click(items[0]!);
+      expect(setStatusFilter).toHaveBeenCalledWith(null);
     });
 
-    it("does NOT render Status filter when no handler passed", () => {
+    it("does NOT render filters card when no filter handler is supplied", () => {
       renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
@@ -387,34 +303,32 @@ describe("CalendarLeftRail", () => {
         />,
         "en",
       );
-      expect(screen.queryByTestId("rail-status-filter")).toBeNull();
+      expect(screen.queryByTestId("rail-filters")).toBeNull();
     });
   });
 
-  // ── Service filter section ────────────────────────────────────────
-  describe("Service filter section", () => {
+  // ── Service filter dropdown (FilterDropdown, single-select) ───────
+  describe("Service filter dropdown", () => {
     const services = [
       { svcId: "manicure_classic", name: "Classic manicure", count: 3 },
       { svcId: "gel_polish", name: "Gel polish", count: 5 },
       { svcId: "pedicure_spa", name: "Pedicure spa" },
     ];
 
-    it("renders one toggle per service", () => {
+    it("renders the service dropdown when services + setServiceFilter passed", () => {
       renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}
           lang="en"
           services={services}
-          hiddenServiceIds={new Set()}
-          toggleServiceVisible={() => undefined}
+          serviceFilter={null}
+          setServiceFilter={() => undefined}
         />,
         "en",
       );
       expect(screen.getByTestId("rail-service-filter")).toBeTruthy();
-      const toggles = screen.getAllByTestId("rail-service-toggle");
-      expect(toggles.length).toBe(3);
-      expect(toggles[0]?.getAttribute("data-service-id")).toBe("manicure_classic");
+      expect(screen.getByTestId("rail-service-filter-trigger")).toBeTruthy();
     });
 
     it("does NOT render when services list is empty", () => {
@@ -424,31 +338,68 @@ describe("CalendarLeftRail", () => {
           setSelectedDate={() => undefined}
           lang="en"
           services={[]}
-          hiddenServiceIds={new Set()}
-          toggleServiceVisible={() => undefined}
+          serviceFilter={null}
+          setServiceFilter={() => undefined}
         />,
         "en",
       );
       expect(screen.queryByTestId("rail-service-filter")).toBeNull();
     });
 
-    it("clicking a service toggle calls toggleServiceVisible with the svcId", () => {
-      const toggleServiceVisible = vi.fn();
+    it("selecting a service calls setServiceFilter with the svcId", () => {
+      const setServiceFilter = vi.fn();
       renderWithLang(
         <CalendarLeftRail
           selectedDate={FIXED_NOW}
           setSelectedDate={() => undefined}
           lang="en"
           services={services}
-          hiddenServiceIds={new Set()}
-          toggleServiceVisible={toggleServiceVisible}
+          serviceFilter={null}
+          setServiceFilter={setServiceFilter}
         />,
         "en",
       );
-      const toggles = screen.getAllByTestId("rail-service-toggle");
-      const gel = toggles.find((t) => t.getAttribute("data-service-id") === "gel_polish");
-      fireEvent.click(gel!);
-      expect(toggleServiceVisible).toHaveBeenCalledWith("gel_polish");
+      fireEvent.click(screen.getByTestId("rail-service-filter-trigger"));
+      fireEvent.click(screen.getByTestId("rail-service-filter-option-gel_polish"));
+      expect(setServiceFilter).toHaveBeenCalledWith("gel_polish");
+    });
+
+    it("rendered label includes the count suffix when count > 0", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          services={services}
+          serviceFilter={null}
+          setServiceFilter={() => undefined}
+        />,
+        "en",
+      );
+      fireEvent.click(screen.getByTestId("rail-service-filter-trigger"));
+      const gel = screen.getByTestId("rail-service-filter-option-gel_polish");
+      expect(gel.textContent).toContain("Gel polish");
+      expect(gel.textContent).toContain("(5)");
+    });
+  });
+
+  // ── Removed: Auto-confirm section ────────────────────────────────
+  // The rail no longer renders an auto-confirm panel. It moved to
+  // /settings?section=salon (MySalonSection → AutoConfirmSettings).
+  describe("Auto-confirm section (removed)", () => {
+    it("does NOT render the auto-confirm panel anywhere on the rail", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          statusFilter={null}
+          setStatusFilter={() => undefined}
+        />,
+        "en",
+      );
+      expect(screen.queryByTestId("rail-auto-confirm")).toBeNull();
+      expect(screen.queryByTestId("rail-auto-confirm-toggle")).toBeNull();
     });
   });
 

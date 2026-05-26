@@ -202,7 +202,11 @@ export const appointmentsRouter = createTRPCRouter({
       clientEmail: z.union([z.string().email(), z.literal("")]).optional(),
       clientTgUsername: z.string().max(64).optional(),
       clientIgUsername: z.string().max(64).optional(),
-      masterId: z.number().int(),
+      // Optional (2026-05-26): salon owners may book a slot without
+      // assigning a specific master — useful for empty-roster onboarding
+      // or when the owner wants to assign later. Master role still must
+      // specify their own masterId (enforced below).
+      masterId: z.number().int().optional(),
       serviceId: z.string().min(1),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       time: z.string().regex(/^\d{2}:\d{2}$/),
@@ -224,6 +228,14 @@ export const appointmentsRouter = createTRPCRouter({
       // the IDOR check (mirrors the masterRouter.assertCallerIsMaster
       // pattern, #P0-4).
       if (ctx.webUser?.webRole === "master") {
+        // Masters must always own the booking. Refuse unassigned creates
+        // outright — there is nothing to validate against.
+        if (input.masterId === undefined) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Masters can only book on their own calendar",
+          });
+        }
         const [masterRow] = await ctx.db
           .select({ chatId: masters.chatId })
           .from(masters)
@@ -259,17 +271,21 @@ export const appointmentsRouter = createTRPCRouter({
         if (existingClient?.isBlockedGlobal === 1) {
           throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
         }
-        const [earlyMblock] = await ctx.db
-          .select({ id: masterClientBlocks.id })
-          .from(masterClientBlocks)
-          .where(and(
-            eq(masterClientBlocks.tenantId, input.tenantId),
-            eq(masterClientBlocks.masterChatId, input.masterId),
-            eq(masterClientBlocks.clientChatId, input.clientChatId),
-          ))
-          .limit(1);
-        if (earlyMblock) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+        // Per-master block check only when a master is assigned. With
+        // masterId omitted there is no per-master scope to enforce.
+        if (input.masterId !== undefined) {
+          const [earlyMblock] = await ctx.db
+            .select({ id: masterClientBlocks.id })
+            .from(masterClientBlocks)
+            .where(and(
+              eq(masterClientBlocks.tenantId, input.tenantId),
+              eq(masterClientBlocks.masterChatId, input.masterId),
+              eq(masterClientBlocks.clientChatId, input.clientChatId),
+            ))
+            .limit(1);
+          if (earlyMblock) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+          }
         }
       }
 
@@ -289,20 +305,26 @@ export const appointmentsRouter = createTRPCRouter({
       // a master can't be double-booked between a client and a self-block.
       // Calendar overhaul (2026-05-16): replaces the old appointments-only
       // walk that let bookings slip through reservations / time-off rows.
-      const busy = await slotsBusy({
-        db: ctx.db,
-        tenantId: input.tenantId,
-        masterId: input.masterId,
-        date: input.date,
-        startTime: input.time,
-        durationMin: svc.duration,
-      });
-      if (busy.busy) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "slot_conflict",
-          cause: busy.conflict,
+      //
+      // Unassigned (no master) bookings skip this check — there is no
+      // per-master schedule to conflict against. The slot conflict guard
+      // re-runs in `appointments.update` once the owner assigns a master.
+      if (input.masterId !== undefined) {
+        const busy = await slotsBusy({
+          db: ctx.db,
+          tenantId: input.tenantId,
+          masterId: input.masterId,
+          date: input.date,
+          startTime: input.time,
+          durationMin: svc.duration,
         });
+        if (busy.busy) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "slot_conflict",
+            cause: busy.conflict,
+          });
+        }
       }
       const [h, m] = input.time.split(":").map(Number);
 
@@ -377,17 +399,20 @@ export const appointmentsRouter = createTRPCRouter({
       if (blockedRow?.isBlockedGlobal === 1) {
         throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
       }
-      const [mblock] = await ctx.db
-        .select({ id: masterClientBlocks.id })
-        .from(masterClientBlocks)
-        .where(and(
-          eq(masterClientBlocks.tenantId, input.tenantId),
-          eq(masterClientBlocks.masterChatId, input.masterId),
-          eq(masterClientBlocks.clientChatId, chatId),
-        ))
-        .limit(1);
-      if (mblock) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+      // Per-master block re-check — skipped for unassigned bookings.
+      if (input.masterId !== undefined) {
+        const [mblock] = await ctx.db
+          .select({ id: masterClientBlocks.id })
+          .from(masterClientBlocks)
+          .where(and(
+            eq(masterClientBlocks.tenantId, input.tenantId),
+            eq(masterClientBlocks.masterChatId, input.masterId),
+            eq(masterClientBlocks.clientChatId, chatId),
+          ))
+          .limit(1);
+        if (mblock) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_for_master" });
+        }
       }
 
       // Create appointment
@@ -406,7 +431,7 @@ export const appointmentsRouter = createTRPCRouter({
           time: input.time,
           ts: startTs,
           status: "confirmed",
-          masterId: input.masterId,
+          masterId: input.masterId ?? null,
           userName: input.clientName ?? null,
           userPhone: input.clientPhone ?? null,
           confirmedBy: null,
@@ -431,7 +456,7 @@ export const appointmentsRouter = createTRPCRouter({
       try {
         const d1 = (ctx as unknown as { db: { $client?: { prepare?: (s: string) => { bind: (...a: unknown[]) => { run: () => Promise<unknown> } } } } }).db.$client;
         const actorId = String(ctx.webUser?.id ?? "unknown");
-        const props = JSON.stringify({ source: "manual_dashboard", masterId: input.masterId, serviceId: input.serviceId, aptId });
+        const props = JSON.stringify({ source: "manual_dashboard", masterId: input.masterId ?? null, serviceId: input.serviceId, aptId });
         if (d1?.prepare) {
           await d1.prepare("INSERT INTO analytics_events (tenant_id, user_id, event, properties, created_at) VALUES (?, ?, ?, ?, ?)")
             .bind(input.tenantId, actorId, "booking.created", props, now).run();

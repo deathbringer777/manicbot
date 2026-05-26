@@ -134,3 +134,31 @@ describe("system.getConsentLog — adminProcedure gate", () => {
     expect(Array.isArray(result)).toBe(true);
   });
 });
+
+// PR-A: Resend transport self-test for the silent-fail invite path.
+describe("system.testResendTransport — adminProcedure gate + transport probe", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("rejects unauthenticated callers", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeUnauthCtx(db) as never);
+    await expect(caller.testResendTransport()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects tenant_owner (system_admin-only)", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t") as never);
+    await expect(caller.testResendTransport()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects when ctx.webUser has no email (PRECONDITION_FAILED)", async () => {
+    const { db } = createDbMock();
+    const ctx = makeAdminCtx(db) as any;
+    ctx.webUser.email = ""; // edge case: admin row created without email
+    const caller = callerFactory(ctx);
+    await expect(caller.testResendTransport()).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+      message: "no_sysadmin_email_on_record",
+    });
+  });
+});

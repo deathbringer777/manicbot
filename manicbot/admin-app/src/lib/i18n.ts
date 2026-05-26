@@ -1590,6 +1590,16 @@ const translations = {
   "gmSystem.supportAgents":     { ru: "Агенты поддержки",       ua: "Агенти підтримки",       en: "Support agents",         pl: "Agenci wsparcia" },
   "gmSystem.webUsers":          { ru: "Web-пользователи",       ua: "Web-користувачі",        en: "Web users",              pl: "Użytkownicy web" },
   "gmSystem.d1Tables":          { ru: "Таблицы D1",             ua: "Таблиці D1",             en: "D1 tables",              pl: "Tabele D1" },
+  // PR-A: Resend transport self-test card. Surfaces operator-actionable
+  // status when invitation emails silently fail because RESEND_API_KEY /
+  // RESEND_FROM aren't wired up on Cloudflare Pages.
+  "gmSystem.resendTest.title":         { ru: "Resend transport",             ua: "Resend transport",                en: "Resend transport",                pl: "Resend transport" },
+  "gmSystem.resendTest.subtitle":      { ru: "Отправь тестовое письмо себе и проверь, что приглашения мастерам реально доходят.",  ua: "Надішли тестового листа собі та переконайся, що запрошення майстрам справді доходять.",  en: "Send yourself a test email and confirm that master invitations actually deliver.",  pl: "Wyślij sobie testowego e-maila i sprawdź, czy zaproszenia mistrzów rzeczywiście dochodzą." },
+  "gmSystem.resendTest.button":        { ru: "Отправить себе тест",          ua: "Надіслати собі тест",             en: "Send myself a test",              pl: "Wyślij sobie test" },
+  "gmSystem.resendTest.sending":       { ru: "Отправка…",                    ua: "Надсилання…",                     en: "Sending…",                        pl: "Wysyłanie…" },
+  "gmSystem.resendTest.okPrefix":      { ru: "✅ Доставлено на",             ua: "✅ Доставлено на",                en: "✅ Delivered to",                 pl: "✅ Dostarczono do" },
+  "gmSystem.resendTest.notConfigured": { ru: "❌ Транспорт не настроен. Выстави RESEND_API_KEY и RESEND_FROM в Cloudflare Pages → Settings → Environment variables, потом передеплой.",  ua: "❌ Транспорт не налаштовано. Виставте RESEND_API_KEY і RESEND_FROM у Cloudflare Pages → Settings → Environment variables, потім передеплой.",  en: "❌ Transport not configured. Set RESEND_API_KEY and RESEND_FROM in Cloudflare Pages → Settings → Environment variables, then redeploy.",  pl: "❌ Transport nieskonfigurowany. Ustaw RESEND_API_KEY i RESEND_FROM w Cloudflare Pages → Settings → Environment variables, potem redeploy." },
+  "gmSystem.resendTest.apiFailedPrefix": { ru: "❌ Resend отверг запрос:",   ua: "❌ Resend відхилив запит:",       en: "❌ Resend rejected the request:", pl: "❌ Resend odrzucił żądanie:" },
 
   // ── God Mode: Leads extra ──────────────────────────────────────────────────
   "gmLeads.statusNew":          { ru: "Новые",                  ua: "Нові",                   en: "New",                    pl: "Nowe" },

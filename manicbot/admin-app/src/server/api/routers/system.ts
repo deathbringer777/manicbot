@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { env } from "~/env";
 import {
@@ -18,6 +19,8 @@ import {
   supportAgents,
 } from "~/server/db/schema";
 import { sql, eq, desc } from "drizzle-orm";
+import { isResendConfigured, sendResendEmail } from "~/server/email/resend";
+import { log } from "~/server/utils/logger";
 
 const TABLE_LIST = [
   { name: "tenants", table: tenants },
@@ -110,5 +113,91 @@ export const systemRouter = createTRPCRouter({
       webUserCount,
       agentCount,
     };
+  }),
+
+  /**
+   * Send a self-test email through the configured Resend transport to the
+   * currently-authenticated sysadmin. Surfaces three failure modes:
+   *
+   *   1. `configured: false`     — RESEND_API_KEY / RESEND_FROM unset on Pages.
+   *   2. `ok: false`             — transport reached Resend but the API
+   *                                rejected the call (bad key, unverified
+   *                                domain, sender mismatch, rate limit).
+   *   3. `ok: true`              — Resend accepted the message id. Delivery
+   *                                still depends on DNS / inbox provider, but
+   *                                anything past this is no longer a Pages
+   *                                env-var problem.
+   *
+   * One-click cure for the silent-fail UX that motivated PR-A — operator
+   * clicks the button in /system and immediately sees whether `email.transport_failed`
+   * captures will start firing.
+   */
+  testResendTransport: adminProcedure.mutation(async ({ ctx }) => {
+    const recipient = ctx.webUser?.email?.trim();
+    if (!recipient) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "no_sysadmin_email_on_record",
+      });
+    }
+
+    if (!isResendConfigured()) {
+      return {
+        ok: false as const,
+        configured: false as const,
+        sentTo: recipient,
+        error: "resend_not_configured",
+      };
+    }
+
+    const now = new Date().toISOString();
+    const subject = "ManicBot — Resend transport self-test";
+    const html = `
+      <div style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0f172a;">
+        <h2 style="margin:0 0 8px;font-size:18px;">Resend transport OK</h2>
+        <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5;">
+          Это диагностическое сообщение от ManicBot.
+          Если ты видишь его в своём ящике, значит <code>RESEND_API_KEY</code>
+          и <code>RESEND_FROM</code> на Cloudflare Pages выставлены корректно
+          и приглашения мастерам теперь дойдут до адресатов.
+        </p>
+        <p style="margin:0;color:#94a3b8;font-size:12px;">Отправлено в ${now}.</p>
+      </div>
+    `;
+    const text = `ManicBot — Resend transport OK\n\nЭто диагностическое сообщение. ${now}.`;
+
+    try {
+      const result = await sendResendEmail({
+        to: recipient,
+        subject,
+        html,
+        text,
+      });
+      if (!result.ok) {
+        log.warn("system.testResendTransport.send_failed", { reason: result.error });
+        return {
+          ok: false as const,
+          configured: true as const,
+          sentTo: recipient,
+          error: result.error,
+        };
+      }
+      return {
+        ok: true as const,
+        configured: true as const,
+        sentTo: recipient,
+      };
+    } catch (e) {
+      log.warn(
+        "system.testResendTransport.threw",
+        e instanceof Error ? { message: e.message } : { raw: String(e) },
+      );
+      return {
+        ok: false as const,
+        configured: true as const,
+        sentTo: recipient,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
   }),
 });

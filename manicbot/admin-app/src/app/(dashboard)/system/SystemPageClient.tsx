@@ -1,14 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import {
   Activity, Database, ShieldCheck, AlertTriangle, RefreshCw,
   ScrollText, CheckCircle2, XCircle, Globe, Headphones,
-  CreditCard, Mail, Bot, MessageSquare,
+  CreditCard, Mail, Bot, MessageSquare, Send, Loader2,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+
+type TestResendResult =
+  | { ok: true; configured: true; sentTo: string }
+  | { ok: false; configured: false; sentTo: string; error: string }
+  | { ok: false; configured: true; sentTo: string; error: string };
 
 function EnvBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -42,7 +48,19 @@ export default function SystemPageClient() {
     isFetching: tFetching,
   } = api.system.getTableStats.useQuery(undefined, { refetchInterval: 60_000 });
   const { data: consentLog, isLoading: cLoading } = api.system.getConsentLog.useQuery(undefined, { refetchInterval: 60_000 });
-  const { data: envStatus, isLoading: eLoading } = api.system.getEnvStatus.useQuery(undefined, { refetchInterval: 120_000 });
+  const { data: envStatus, isLoading: eLoading, refetch: refetchEnv } = api.system.getEnvStatus.useQuery(undefined, { refetchInterval: 120_000 });
+
+  const [resendResult, setResendResult] = useState<TestResendResult | null>(null);
+  const testResend = api.system.testResendTransport.useMutation({
+    onSuccess: (data) => {
+      setResendResult(data as TestResendResult);
+      // Refresh env status so the RESEND_API_KEY badge reflects reality.
+      void refetchEnv();
+    },
+    onError: (e) => {
+      setResendResult({ ok: false, configured: true, sentTo: "", error: e.message });
+    },
+  });
 
   const isOk = health?.status === "ok";
   const isFetching = hFetching || tFetching;
@@ -131,6 +149,69 @@ export default function SystemPageClient() {
                 <EnvBadge ok={envStatus?.hasResendKey ?? false} label="RESEND_API_KEY" />
                 <EnvBadge ok={envStatus?.hasWorkerUrl ?? false} label="WORKER_PUBLIC_URL" />
                 <EnvBadge ok={envStatus?.hasAdminKey ?? false} label="ADMIN_KEY" />
+
+                {/*
+                  Resend transport self-test. The env badge above only tells
+                  us whether the secret is set; it doesn't tell us whether
+                  Resend will actually accept a send. This button closes that
+                  gap — one click, real send, real verdict.
+                */}
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5">
+                  <div className="flex items-start gap-2 mb-2">
+                    <Mail className="w-3.5 h-3.5 text-violet-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-900 dark:text-white">{t("gmSystem.resendTest.title", lang)}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{t("gmSystem.resendTest.subtitle", lang)}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResendResult(null);
+                      testResend.mutate();
+                    }}
+                    disabled={testResend.isPending}
+                    className="w-full mt-1 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+                  >
+                    {testResend.isPending ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        {t("gmSystem.resendTest.sending", lang)}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        {t("gmSystem.resendTest.button", lang)}
+                      </>
+                    )}
+                  </button>
+                  {resendResult ? (
+                    <div
+                      className={`mt-2 rounded-xl px-3 py-2 text-[11px] border leading-relaxed ${
+                        resendResult.ok
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : !resendResult.configured
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                            : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                      }`}
+                      role="status"
+                    >
+                      {resendResult.ok ? (
+                        <>
+                          {t("gmSystem.resendTest.okPrefix", lang)} <span className="font-mono">{resendResult.sentTo}</span>
+                        </>
+                      ) : !resendResult.configured ? (
+                        t("gmSystem.resendTest.notConfigured", lang)
+                      ) : (
+                        <>
+                          {t("gmSystem.resendTest.apiFailedPrefix", lang)}{" "}
+                          <span className="font-mono break-all">{resendResult.error}</span>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
           </div>

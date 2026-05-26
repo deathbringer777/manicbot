@@ -33,12 +33,17 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
   const [status, setStatus] = useState<
     | { kind: "idle" }
     | { kind: "error"; message: string }
-    | { kind: "success"; scenario: "existing_user" | "new_user" }
+    | { kind: "success"; scenario: "existing_user" | "new_user"; emailQueued: boolean; transportError?: string }
   >({ kind: "idle" });
 
   const send = api.salon.sendMasterInvitation.useMutation({
     onSuccess: (data) => {
-      setStatus({ kind: "success", scenario: data.scenario });
+      setStatus({
+        kind: "success",
+        scenario: data.scenario,
+        emailQueued: data.emailQueued ?? true,
+        transportError: data.transportError,
+      });
       void utils.salon.listMasterInvitations.invalidate({ tenantId });
     },
     onError: (e) => {
@@ -58,6 +63,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           submit: "Отправить приглашение",
           successExisting: "Отправлено — у пользователя уже есть аккаунт. Уведомление появится в его колокольчике и письмом на email.",
           successNew: "Отправлено — мы попросили зарегистрироваться по ссылке из письма.",
+          warningEmailFailedExisting: "Приглашение создано — оно появится в колокольчике пользователя. Но письмо отправить не удалось: проверь /errors и настройки Resend в Cloudflare Pages.",
+          warningEmailFailedNew: "Приглашение создано, но письмо отправить не удалось. Это значит, что новый пользователь его не увидит до регистрации. Проверь /errors и настройки Resend в Cloudflare Pages.",
           errorRate: "Слишком много приглашений за час. Подождите.",
           errorDup: "Приглашение уже отправлено. Отмените его и попробуйте снова.",
           errorPersonal: "Нельзя приглашать в персональный салон.",
@@ -77,6 +84,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           submit: "Надіслати запрошення",
           successExisting: "Надіслано — у користувача вже є акаунт. Сповіщення з'явиться у його дзвіночку та листом на email.",
           successNew: "Надіслано — ми попросили зареєструватися за посиланням з листа.",
+          warningEmailFailedExisting: "Запрошення створено — воно з'явиться у дзвіночку користувача. Але листа не вдалося надіслати: перевір /errors і налаштування Resend у Cloudflare Pages.",
+          warningEmailFailedNew: "Запрошення створено, але листа надіслати не вдалося. Це означає, що новий користувач його не побачить до реєстрації. Перевір /errors і налаштування Resend у Cloudflare Pages.",
           errorRate: "Забагато запрошень за годину. Зачекайте.",
           errorDup: "Запрошення вже надіслано. Скасуйте його і спробуйте знову.",
           errorPersonal: "Не можна запрошувати в персональний салон.",
@@ -96,6 +105,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           submit: "Wyślij zaproszenie",
           successExisting: "Wysłano — użytkownik ma już konto. Powiadomienie pojawi się w jego dzwonku oraz mailem.",
           successNew: "Wysłano — poprosiliśmy o rejestrację linkiem z e-maila.",
+          warningEmailFailedExisting: "Zaproszenie utworzone — pojawi się w dzwonku użytkownika. Ale e-mail nie został wysłany: sprawdź /errors i ustawienia Resend w Cloudflare Pages.",
+          warningEmailFailedNew: "Zaproszenie utworzone, ale e-mail nie został wysłany. Nowy użytkownik nie zobaczy go do rejestracji. Sprawdź /errors i ustawienia Resend w Cloudflare Pages.",
           errorRate: "Za dużo zaproszeń w godzinę. Poczekaj.",
           errorDup: "Zaproszenie już wysłane. Anuluj je i spróbuj ponownie.",
           errorPersonal: "Nie można zapraszać do osobistego salonu.",
@@ -115,6 +126,8 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
           submit: "Send invitation",
           successExisting: "Sent — recipient already has an account. They'll see it in their bell and inbox.",
           successNew: "Sent — they've been asked to register via the email link.",
+          warningEmailFailedExisting: "Invitation created — it'll appear in the recipient's bell. But the email failed to send: check /errors and your Resend settings in Cloudflare Pages.",
+          warningEmailFailedNew: "Invitation created, but the email failed to send. The new user won't see it until they register. Check /errors and your Resend settings in Cloudflare Pages.",
           errorRate: "Too many invitations this hour. Try again later.",
           errorDup: "Invitation already pending. Revoke it and try again.",
           errorPersonal: "Cannot invite into a personal-master tenant.",
@@ -132,39 +145,62 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
 
   function statusBar() {
     if (status.kind === "idle") return null;
-    const isOk = status.kind === "success";
-    const text =
-      status.kind === "success"
-        ? status.scenario === "existing_user"
-          ? labels.successExisting
-          : labels.successNew
-        : (() => {
-            const m = status.message;
-            if (m === "rate_limited") return labels.errorRate;
-            if (m === "invitation_already_pending") return labels.errorDup;
-            if (m === "personal_tenant_cannot_invite") return labels.errorPersonal;
-            if (m === "cannot_invite_self") return labels.errorSelf;
-            // Zod email validation failure surfaces as a long messages-array
-            // JSON string starting with `[` — show the friendlier copy.
-            if (m.startsWith("[") || /email/i.test(m) && /invalid|format/i.test(m)) {
-              return labels.errorBadEmail;
-            }
-            // Last-resort: show the raw server message in dev / staging so a
-            // future "Не удалось отправить" doesn't hide the real root cause.
-            // Prod still gets the localized fallback, but the message is at
-            // least visible in DevTools and Sentry.
-            return labels.errorOther + (m ? ` (${m.slice(0, 120)})` : "");
-          })();
+
+    // Three visual tones: green (success + email queued), yellow (success
+    // but email transport failed — recipient still gets bell for existing_user,
+    // sees nothing at all for new_user until operator fixes Resend), red (any
+    // hard error before the invitation row was created).
+    type Tone = "ok" | "warn" | "err";
+    let tone: Tone;
+    let text: string;
+    let transportNote: string | undefined;
+
+    if (status.kind === "success") {
+      if (status.emailQueued) {
+        tone = "ok";
+        text = status.scenario === "existing_user" ? labels.successExisting : labels.successNew;
+      } else {
+        tone = "warn";
+        text =
+          status.scenario === "existing_user"
+            ? labels.warningEmailFailedExisting
+            : labels.warningEmailFailedNew;
+        transportNote = status.transportError;
+      }
+    } else {
+      tone = "err";
+      const m = status.message;
+      if (m === "rate_limited") text = labels.errorRate;
+      else if (m === "invitation_already_pending") text = labels.errorDup;
+      else if (m === "personal_tenant_cannot_invite") text = labels.errorPersonal;
+      else if (m === "cannot_invite_self") text = labels.errorSelf;
+      // Zod email validation failure surfaces as a long messages-array
+      // JSON string starting with `[` — show the friendlier copy.
+      else if (m.startsWith("[") || (/email/i.test(m) && /invalid|format/i.test(m))) {
+        text = labels.errorBadEmail;
+      } else {
+        // Last-resort: show the raw server message in dev / staging so a
+        // future "Не удалось отправить" doesn't hide the real root cause.
+        // Prod still gets the localized fallback, but the message is at
+        // least visible in DevTools and Sentry.
+        text = labels.errorOther + (m ? ` (${m.slice(0, 120)})` : "");
+      }
+    }
+
+    const toneClasses: Record<Tone, string> = {
+      ok: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      warn: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
+      err: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    };
     return (
       <div
-        className={`mt-3 rounded-xl px-3 py-2 text-sm ${
-          isOk
-            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-            : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
-        }`}
+        className={`mt-3 rounded-xl px-3 py-2 text-sm border ${toneClasses[tone]}`}
         role="status"
       >
         {text}
+        {transportNote ? (
+          <div className="mt-1 font-mono text-[11px] opacity-70">{transportNote}</div>
+        ) : null}
       </div>
     );
   }

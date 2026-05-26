@@ -26,6 +26,7 @@ import {
   timeBucketTitle,
   type TimeBucket,
 } from "~/lib/notifications/kindMeta";
+import { groupNotifications } from "~/lib/notifications/grouping";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
@@ -61,15 +62,20 @@ export default function NotificationsClient() {
 
   const grouped = useMemo(() => {
     const items = list.data ?? [];
-    const buckets: Record<TimeBucket, typeof items> = {
+    const rawBuckets: Record<TimeBucket, typeof items> = {
       today: [],
       week: [],
       older: [],
     };
     for (const n of items) {
-      buckets[timeBucket(n.createdAt)].push(n);
+      rawBuckets[timeBucket(n.createdAt)].push(n);
     }
-    return buckets;
+    // PR-C: smart-group consecutive same-(kind, sourceSlug) bursts per bucket.
+    return {
+      today: groupNotifications(rawBuckets.today),
+      week: groupNotifications(rawBuckets.week),
+      older: groupNotifications(rawBuckets.older),
+    };
   }, [list.data]);
 
   const totalCount = (list.data ?? []).length;
@@ -156,23 +162,33 @@ export default function NotificationsClient() {
 
       <div className="space-y-6">
         {(["today", "week", "older"] as const).map((bucket) => {
-          const rows = grouped[bucket];
-          if (!rows.length) return null;
+          const items = grouped[bucket];
+          if (!items.length) return null;
           return (
             <section key={bucket}>
               <h2 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2 px-1">
                 {timeBucketTitle(bucket, lang)}
               </h2>
               <ul className="space-y-1.5">
-                {rows.map((n) => {
-                  const meta = kindMeta(n.kind);
+                {items.map((item) => {
+                  const rep = item.type === "single" ? item.row : item.representative;
+                  const allRows = item.type === "single" ? [item.row] : item.rows;
+                  const meta = kindMeta(rep.kind);
                   const Icon = meta.icon;
                   const accent = meta.accent;
-                  const isUnread = n.readAt === null;
+                  const isUnread = allRows.some((r) => r.readAt === null);
+                  const collapsedCount = item.type === "group" ? item.count : 0;
+                  const onClickRep = () => {
+                    const unreadIds = allRows.filter((r) => r.readAt === null).map((r) => r.id);
+                    if (unreadIds.length > 0) markRead.mutate({ ids: unreadIds });
+                    if (rep.link) router.push(rep.link);
+                  };
                   return (
                     <li
-                      key={n.id}
+                      key={rep.id}
                       data-testid="notifications-row"
+                      data-grouped={item.type === "group" ? "true" : "false"}
+                      data-group-count={collapsedCount || undefined}
                       data-unread={isUnread ? "true" : "false"}
                       className={`group rounded-xl border transition-all ${
                         isUnread
@@ -183,7 +199,7 @@ export default function NotificationsClient() {
                       <div className="flex items-start gap-3 p-3">
                         <button
                           type="button"
-                          onClick={() => handleRowClick(n)}
+                          onClick={onClickRep}
                           className="flex flex-1 items-start gap-3 text-left min-w-0"
                         >
                           <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${accent}`}>
@@ -192,27 +208,40 @@ export default function NotificationsClient() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline gap-2">
                               <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                                {n.title}
+                                {rep.title}
                               </p>
+                              {collapsedCount > 0 && (
+                                <span
+                                  className="inline-flex items-center rounded-full bg-slate-200/80 dark:bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-200 shrink-0"
+                                  data-testid="notifications-group-count"
+                                >
+                                  +{collapsedCount}
+                                </span>
+                              )}
                               {isUnread && (
                                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
                               )}
                             </div>
-                            {n.body && (
+                            {rep.body && (
                               <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
-                                {n.body}
+                                {rep.body}
                               </p>
                             )}
                             <p className="text-[10px] text-slate-400 mt-1">
-                              {formatRelative(n.createdAt, lang)}
-                              {n.link && <span className="ml-2 text-indigo-500">{t("notifications.openLink", lang)} →</span>}
+                              {formatRelative(rep.createdAt, lang)}
+                              {rep.link && <span className="ml-2 text-indigo-500">{t("notifications.openLink", lang)} →</span>}
                             </p>
                           </div>
                         </button>
                         <button
                           type="button"
                           aria-label={t("notifications.delete", lang)}
-                          onClick={() => dismiss.mutate({ id: n.id })}
+                          onClick={() => {
+                            // Dismiss every row of the burst — the user
+                            // is dismissing the visual entry, not a single
+                            // "Anna sent N messages" pseudo-row.
+                            for (const r of allRows) dismiss.mutate({ id: r.id });
+                          }}
                           disabled={dismiss.isPending}
                           className="p-1.5 rounded-md text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 transition-all"
                         >

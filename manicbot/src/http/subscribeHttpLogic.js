@@ -89,7 +89,7 @@ export function parseSubscribePayload(payload) {
  * Build the row that will be INSERT OR IGNORE-d into newsletter_subscribers.
  *
  * @param {{email:string, lang:string|null, anonymousId:string|null, source:string}} parsed
- * @param {{ip:string|null, userAgent:string|null, nowSec:number}} ctx
+ * @param {{ip:string|null, userAgent:string|null, nowSec:number, unsubscribeToken:string}} ctx
  */
 export function buildSubscriberInsertParams(parsed, ctx) {
   return {
@@ -100,5 +100,22 @@ export function buildSubscriberInsertParams(parsed, ctx) {
     ip: ctx.ip || null,
     userAgent: (ctx.userAgent || '').slice(0, 500) || null,
     createdAt: ctx.nowSec,
+    unsubscribeToken: ctx.unsubscribeToken || null,
   };
+}
+
+/**
+ * Mint a 32-hex-character unsubscribe token (16 random bytes, 128-bit entropy).
+ *
+ * Matches the shape used by `marketing_contacts.unsubscribe_token` so the
+ * Worker `/u/<token>` endpoint can serve both tables with the same handler.
+ *
+ * @returns {string} 32-character lowercase hex.
+ */
+export function generateUnsubscribeToken() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out;
 }

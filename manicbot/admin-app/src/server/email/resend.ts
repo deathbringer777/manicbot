@@ -35,12 +35,17 @@ export function isResendConfigured(): boolean {
  * filters, accessibility tools) get a real text payload instead of falling
  * back to a tag-stripped HTML rendering. Templates that ship a `text` body
  * should pass it here; everything else continues to be HTML-only.
+ *
+ * 0090 — `headers` is an optional map of additional message headers to
+ * include in the Resend payload. First consumer is the newsletter welcome
+ * (`List-Unsubscribe` + `List-Unsubscribe-Post` for RFC 8058 one-click).
  */
 export async function sendResendEmail(opts: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  headers?: Record<string, string>;
 }): Promise<SendEmailResult> {
   const key = getKey();
   const from = getFrom();
@@ -57,6 +62,9 @@ export async function sendResendEmail(opts: {
       html: opts.html,
     };
     if (opts.text) body.text = opts.text;
+    if (opts.headers && Object.keys(opts.headers).length > 0) {
+      body.headers = opts.headers;
+    }
     const res = await fetch(RESEND_API, {
       method: "POST",
       headers: {

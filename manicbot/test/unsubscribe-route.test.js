@@ -13,13 +13,16 @@
 import { describe, it, expect } from 'vitest';
 import { handleUnsubscribeRequest } from '../src/http/unsubscribeHttp.js';
 
-function makeDb({ contacts = [] } = {}) {
+function makeDb({ contacts = [], subscribers = [] } = {}) {
   const updates = [];
   const inserts = [];
+  const newsletterUpdates = [];
   return {
     updates,
     inserts,
+    newsletterUpdates,
     contacts,
+    subscribers,
     prepare(sql) {
       const self = this;
       return {
@@ -29,6 +32,10 @@ function makeDb({ contacts = [] } = {}) {
           if (/FROM marketing_contacts WHERE unsubscribe_token = \?/i.test(sql)) {
             const [token] = this.bound ?? [];
             return self.contacts.find((c) => c.unsubscribe_token === token) ?? null;
+          }
+          if (/FROM newsletter_subscribers WHERE unsubscribe_token = \?/i.test(sql)) {
+            const [token] = this.bound ?? [];
+            return self.subscribers.find((s) => s.unsubscribe_token === token) ?? null;
           }
           return null;
         },
@@ -42,6 +49,17 @@ function makeDb({ contacts = [] } = {}) {
             inserts.push({ sql, args: this.bound });
             return { meta: { changes: 1 } };
           }
+          if (/UPDATE newsletter_subscribers/i.test(sql)) {
+            newsletterUpdates.push({ sql, args: this.bound });
+            // Mirror the side effect on the in-memory subscriber row so
+            // idempotency assertions hold for follow-up calls.
+            const id = this.bound?.[this.bound.length - 1];
+            const sub = self.subscribers.find((s) => s.id === id);
+            if (sub && /SET unsubscribed_at = \?/i.test(sql)) {
+              sub.unsubscribed_at = this.bound?.[0] ?? null;
+            }
+            return { meta: { changes: 1 } };
+          }
           return { meta: { changes: 0 } };
         },
       };
@@ -49,8 +67,14 @@ function makeDb({ contacts = [] } = {}) {
   };
 }
 
-function makeRequest({ ip = '1.2.3.4', userAgent = 'Mozilla/Test', acceptLang = 'ru' } = {}) {
+function makeRequest({
+  ip = '1.2.3.4',
+  userAgent = 'Mozilla/Test',
+  acceptLang = 'ru',
+  method = 'GET',
+} = {}) {
   return {
+    method,
     headers: {
       get(name) {
         const k = name.toLowerCase();
@@ -132,5 +156,83 @@ describe('handleUnsubscribeRequest', () => {
     expect(res.status).toBe(404);
     const html = await res.text();
     expect(html).toMatch(/Link wygasł/);
+  });
+});
+
+describe('handleUnsubscribeRequest — newsletter_subscribers fallthrough', () => {
+  it('flips unsubscribed_at and renders 200 when token belongs to a newsletter subscriber', async () => {
+    const db = makeDb({
+      subscribers: [
+        { id: 7, lang: 'ru', unsubscribed_at: null, unsubscribe_token: '1234567890abcdef1234567890abcdef' },
+      ],
+    });
+    const res = await handleUnsubscribeRequest(
+      makeRequest(),
+      '1234567890abcdef1234567890abcdef',
+      { DB: db },
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Вы отписались');
+    expect(db.newsletterUpdates.length).toBe(1);
+    const args = db.newsletterUpdates[0].args ?? [];
+    // [unsubscribed_at, id]
+    expect(typeof args[0]).toBe('number');
+    expect(args[1]).toBe(7);
+    // No marketing-side writes.
+    expect(db.updates.length).toBe(0);
+    expect(db.inserts.length).toBe(0);
+  });
+
+  it('returns 204 + flips unsubscribed_at on POST (RFC 8058 one-click)', async () => {
+    const db = makeDb({
+      subscribers: [
+        { id: 8, lang: 'en', unsubscribed_at: null, unsubscribe_token: 'feedface00112233feedface00112233' },
+      ],
+    });
+    const res = await handleUnsubscribeRequest(
+      makeRequest({ method: 'POST' }),
+      'feedface00112233feedface00112233',
+      { DB: db },
+    );
+    expect(res.status).toBe(204);
+    expect(db.newsletterUpdates.length).toBe(1);
+  });
+
+  it('is idempotent — second GET on the same token does not re-stamp', async () => {
+    const db = makeDb({
+      subscribers: [
+        { id: 9, lang: 'en', unsubscribed_at: null, unsubscribe_token: 'cafefacecafefacecafefacecafeface0' },
+      ],
+    });
+    const first = await handleUnsubscribeRequest(
+      makeRequest(),
+      'cafefacecafefacecafefacecafeface0',
+      { DB: db },
+    );
+    expect(first.status).toBe(200);
+    expect(db.newsletterUpdates.length).toBe(1);
+    const second = await handleUnsubscribeRequest(
+      makeRequest(),
+      'cafefacecafefacecafefacecafeface0',
+      { DB: db },
+    );
+    expect(second.status).toBe(200);
+    // No additional UPDATE on the second visit — the in-memory mirror
+    // flipped `unsubscribed_at` so the handler's skip-condition fires.
+    expect(db.newsletterUpdates.length).toBe(1);
+  });
+
+  it('marketing_contacts wins when the same token matches both tables (precedence)', async () => {
+    const token = 'deadbeefdeadbeefdeadbeefdeadbeef';
+    const db = makeDb({
+      contacts: [{ id: 100, locale: 'ru', unsubscribed: 0, unsubscribe_token: token }],
+      subscribers: [{ id: 200, lang: 'ru', unsubscribed_at: null, unsubscribe_token: token }],
+    });
+    const res = await handleUnsubscribeRequest(makeRequest(), token, { DB: db });
+    expect(res.status).toBe(200);
+    // Marketing path fired — newsletter path did NOT.
+    expect(db.updates.length).toBe(1);
+    expect(db.newsletterUpdates.length).toBe(0);
   });
 });

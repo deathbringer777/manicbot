@@ -28,7 +28,7 @@ export interface ProcessWelcomeInput {
   authorizationHeader: string | null;
   body: unknown;
   expectedToken: string | null;
-  sendEmail: (email: string, lang: Lang) => Promise<SendEmailResult>;
+  sendEmail: (email: string, lang: Lang, unsubscribeToken: string) => Promise<SendEmailResult>;
   stampSentAt: (email: string, nowSec: number) => Promise<void>;
   stampSendError: (email: string, error: string) => Promise<void>;
   now?: () => number;
@@ -37,6 +37,10 @@ export interface ProcessWelcomeInput {
 const ALLOWED_LANGS: ReadonlySet<Lang> = new Set(["ru", "ua", "en", "pl"]);
 const MAX_EMAIL_LEN = 254;
 const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@.]+\.[^\s@]{2,}$/;
+// 0090 — newsletter unsubscribe token. 32 lowercase hex chars (16 random
+// bytes, 128-bit). Same shape as marketing_contacts.unsubscribe_token so the
+// Worker /u/<token> endpoint can serve both backends behind one URL pattern.
+const UNSUBSCRIBE_TOKEN_REGEX = /^[a-f0-9]{32}$/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -94,8 +98,14 @@ export async function processNewsletterWelcomeRequest(
       ? (rawLang as Lang)
       : "en";
 
+  const rawToken = input.body.unsubscribeToken;
+  if (typeof rawToken !== "string" || !UNSUBSCRIBE_TOKEN_REGEX.test(rawToken)) {
+    return { status: 400 };
+  }
+  const unsubscribeToken = rawToken;
+
   try {
-    const result = await input.sendEmail(email, lang);
+    const result = await input.sendEmail(email, lang, unsubscribeToken);
     if (!result.ok) {
       const err = result.error ?? "send_failed";
       await input.stampSendError(email, err);

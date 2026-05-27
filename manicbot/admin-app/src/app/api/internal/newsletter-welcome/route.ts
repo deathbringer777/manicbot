@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     authorizationHeader: req.headers.get("authorization"),
     body,
     expectedToken,
-    sendEmail: (email, lang) => sendNewsletterWelcomeEmail(email, lang),
+    sendEmail: (email, lang, token) => sendNewsletterWelcomeEmail(email, lang, token),
     stampSentAt: async (email, nowSec) => {
       await db
         .update(newsletterSubscribers)

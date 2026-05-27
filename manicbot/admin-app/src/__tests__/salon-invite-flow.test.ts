@@ -86,7 +86,7 @@ vi.mock("~/server/email/emailService", () => ({
     sendMasterInviteExistingUserEmailMock(...(args as Parameters<typeof sendMasterInviteExistingUserEmailMock>)),
   sendMasterInviteNewUserEmail: (...args: unknown[]) =>
     sendMasterInviteNewUserEmailMock(...(args as Parameters<typeof sendMasterInviteNewUserEmailMock>)),
-  sendMasterPasswordResetByOwnerEmail: vi.fn(async () => ({ ok: true })),
+  sendMasterPasswordResetCredentialsToOwnerEmail: vi.fn(async () => ({ ok: true })),
 }));
 
 // Rate-limit always allows in this suite — we test the guard logic, not

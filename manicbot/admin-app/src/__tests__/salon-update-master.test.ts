@@ -36,7 +36,7 @@ vi.mock("~/server/email/emailService", () => ({
   sendMasterInviteEmail: vi.fn(async () => undefined),
   sendMasterInviteExistingUserEmail: vi.fn(async () => undefined),
   sendMasterInviteNewUserEmail: vi.fn(async () => undefined),
-  sendMasterPasswordResetByOwnerEmail: vi.fn(async () => undefined),
+  sendMasterPasswordResetCredentialsToOwnerEmail: vi.fn(async () => undefined),
 }));
 
 import { createCallerFactory } from "~/server/api/trpc";

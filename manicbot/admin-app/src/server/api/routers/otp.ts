@@ -109,6 +109,11 @@ export const otpRouter = createTRPCRouter({
           ),
       );
 
-      return { otpId };
+      // `sentTo` lets the UI display the authoritative recipient address.
+      // Some surfaces (master detail modal) render mixed identities — the
+      // master's synthetic salon.manicbot.local email lives in props, but
+      // the OTP went to the CALLER (the salon owner). Without this field
+      // the UI had to guess and showed the wrong address.
+      return { otpId, sentTo: webUser.email };
     }),
 });

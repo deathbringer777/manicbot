@@ -140,12 +140,18 @@ export function MasterPasswordVaultSection({
       masterName ?? `#${masterChatId}`,
     );
     try {
-      await requestOtp.mutateAsync({
+      // The OTP code is delivered to the LOGGED-IN owner (ctx.webUser.email
+      // server-side), NOT the master's stored email — for salon_created
+      // accounts the master's email is a synthetic *.salon.manicbot.local
+      // mailbox that doesn't accept mail. We trust the server's `sentTo`
+      // rather than `webUser.email` from props so the displayed recipient
+      // matches reality.
+      const res = await requestOtp.mutateAsync({
         action: action === "peek" ? "peek_master_password" : "reset_master_password",
         payload: { tenantId, masterChatId },
         actionLabel,
       });
-      setPhase({ kind: "code", action, sentTo: webUser.email });
+      setPhase({ kind: "code", action, sentTo: res.sentTo });
     } catch (e) {
       const msg = e instanceof TRPCClientError ? e.message : String(e);
       setError(mapOtpError(msg, lang));

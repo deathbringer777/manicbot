@@ -292,7 +292,7 @@ Billing models: `free | included_in_plan (→ canUse) | paid_addon_monthly | pai
 
 Lock precedence (catalog UI): `coming_soon` > `role_mismatch` > `platform_only` > `plan` > `none`.
 
-Seed catalog (post 2026-05-16 Phase 1 cleanup + first Variant A wave + GCal restore): **10 first-party plugins** — 7 retained from the cleanup (loyalty-stamps, shift-planner, task-board, availability-share, earnings-goal, export-hub, message-templates), the restored **google-calendar** (manifest-only marketplace facade over the core OAuth flow — `googleCalendar.ts` router + `GoogleCalendarRuntime.tsx` were never removed during the cleanup, only the manifest was), plus two Variant A plugins: **review-collector** (free, post-visit 4★/5★ Google/Yandex CTA wired into [src/handlers/callback.js](manicbot/src/handlers/callback.js) via [src/plugins/reviewCollectorCta.js](manicbot/src/plugins/reviewCollectorCta.js)) and **inventory-lite** (free, JSON-backed inventory with low-stock highlighting, no D1 migration — fits ~80 items inside the 8 KB settings_json cap). 12 prior slugs were either duplicates of already-shipped core features (`booking-reminder`, `client-crm-lite`, `quick-notes`) or had their UI folded back into core (`ai-abuse-monitor`, `gdpr-center`, `sla-tracker`, `escalation-playbook`, `kb-search`, `ticket-templates`, `keyboard-shortcuts`, `dark-plus`, `portfolio-gallery`). The fold-into-core work itself ships in a follow-up PR — see [manicbot/plugins/registry.ts](manicbot/plugins/registry.ts) header + [manicbot/admin-app/src/__tests__/plugins-removed-duplicates.test.ts](manicbot/admin-app/src/__tests__/plugins-removed-duplicates.test.ts) for the full removed-slug list and rationale.
+Seed catalog (post 2026-05-16 Phase 1 cleanup + first Variant A wave + GCal restore): **12 first-party plugins** — 7 retained from the cleanup (loyalty-stamps, shift-planner, task-board, availability-share, earnings-goal, export-hub, message-templates), the restored **google-calendar** (manifest-only marketplace facade over the core OAuth flow — `googleCalendar.ts` router + `GoogleCalendarRuntime.tsx` were never removed during the cleanup, only the manifest was), two Variant A plugins: **review-collector** (free, post-visit 4★/5★ Google/Yandex CTA wired into [src/handlers/callback.js](manicbot/src/handlers/callback.js) via [src/plugins/reviewCollectorCta.js](manicbot/src/plugins/reviewCollectorCta.js)) and **inventory-lite** (free, JSON-backed inventory with low-stock highlighting, no D1 migration — fits ~80 items inside the 8 KB settings_json cap), plus two later additions documented separately in the migration list above: **reminders** (cron-backed, see migration 0070) and **master-telegram-pairing** (UI facade over the core pairing flow, see migration 0074). 12 prior slugs were either duplicates of already-shipped core features (`booking-reminder`, `client-crm-lite`, `quick-notes`) or had their UI folded back into core (`ai-abuse-monitor`, `gdpr-center`, `sla-tracker`, `escalation-playbook`, `kb-search`, `ticket-templates`, `keyboard-shortcuts`, `dark-plus`, `portfolio-gallery`). The fold-into-core work itself ships in a follow-up PR — see [manicbot/plugins/registry.ts](manicbot/plugins/registry.ts) header + [manicbot/admin-app/src/__tests__/plugins-removed-duplicates.test.ts](manicbot/admin-app/src/__tests__/plugins-removed-duplicates.test.ts) for the full removed-slug list and rationale.
 
 The Variant A roadmap (recommended for the next launch slot) adds 10 more plugins on top — including the platform's first `paid_addon_monthly` / `paid_addon_onetime` revenue lines: `sms-reminders` (hybrid BYO / Resale Premium billing), `review-collector`, `instagram-autopost`, `inventory-lite`, `loyalty-stamps` (real rebuild), `gift-cards`, `multi-location`, `accounting-export`, `domain-setup`, `data-migration`. Phase 2 plumbing must land before any of those plugins can ship a real backend — the four `PLUGIN_*_LOADERS` maps in `registry.ts` are currently empty and need to be wired through to the admin-app router and worker.
 
@@ -1001,12 +1001,12 @@ plus FIFO behaviour at cap with a localized warning string.
 
 ```bash
 cd manicbot/
-npm test                     # Worker Vitest (~2038 tests, 150 files)
+npm test                     # Worker Vitest (~2656 tests, 196 files)
 npm run check-schema         # D1: table + column parity between schema.sql and Drizzle schema.ts
 
 cd admin-app/
 npm run typecheck
-npm test                     # Mini App Vitest (~3635 tests, 116 files)
+npm test                     # Mini App Vitest (~4987 tests, 278 files)
 ```
 
 GitHub Actions `test` job runs the same checks (Worker tests + `check-schema` + admin-app typecheck + tests) before Worker/Pages deploys.

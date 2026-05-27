@@ -132,6 +132,9 @@ export function SalonSettingsEditor({ tenantId, profile }: { tenantId: string; p
           <Input label={t("salon.workHoursFrom", lang)} value={hoursFrom} onChange={setHoursFrom} type="number" />
           <Input label={t("salon.workHoursTo", lang)} value={hoursTo} onChange={setHoursTo} type="number" />
         </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 -mt-1">
+          {t("salon.workHoursHint", lang)}
+        </p>
         <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
           <AssetUploadField
             label={t("salon.branding.logo", lang)}

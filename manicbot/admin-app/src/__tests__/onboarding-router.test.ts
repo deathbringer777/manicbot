@@ -1,20 +1,19 @@
 /**
  * onboarding router — integration tests for the `getStatus` procedure.
  *
- * The 2026-05-16 dashboard cleanup merged the legacy `ProfileCompletenessCard`
- * gamification widget into the operational onboarding checklist. `STEP_IDS`
- * went from 6 to 10 — the four new ids (`fill_description`, `add_logo`,
- * `add_cover`, `activate_public`) are derived from the `tenants` table.
+ * 2026-05-27 rework: the legacy 10-id checklist became a 4 + 4 split.
  *
- * These tests pin the derivation so a future tenants-schema refactor (a
- * column rename, an `active` flag change, the description being moved into
- * a JSON blob) can't silently break the visible checklist completeness
- * without surfacing a red CI build.
+ * Essentials (block the booking flow): connect_bot / add_master /
+ *   set_master_schedule / add_service.
+ * Optional (public-page polish): fill_salon_info / add_branding /
+ *   activate_public / share_link.
  *
- * The router calls `assertTenantOwner` which fast-paths for system_admin
- * sessions without hitting the db — that's what `makeAdminCtx` produces,
- * so the seven SELECTs the router runs are exactly the ones our mock
- * needs to seed (in FIFO order).
+ * Dropped ids (no longer reported): add_logo + add_cover (merged into
+ * add_branding which is AND of both), first_booking (vanity, not a gate).
+ *
+ * `assertTenantOwner` fast-paths for system_admin sessions without
+ * touching the db, so `makeAdminCtx` produces a ctx with exactly the
+ * SELECTs `getStatus` needs.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -33,20 +32,18 @@ import { createCallerFactory } from "~/server/api/trpc";
 import { onboardingRouter } from "~/server/api/routers/onboarding";
 import { createDbMock, makeAdminCtx } from "./helpers/db-mock";
 
-// Order matches the Promise.all + the trailing scheduleRows query in
-// onboardingRouter.getStatus. Slots:
+// SELECT order in onboardingRouter.getStatus (Promise.all + trailing
+// schedule query). Slots:
 //   [0] services count
 //   [1] bots count
 //   [2] masters count
-//   [3] appointments count
-//   [4] tenant_onboarding row (manual steps JSON)
-//   [5] tenants row (description / logo / cover_photo / public_active)
-//   [6] masters-with-workHours count
+//   [3] tenant_onboarding row (manual steps JSON)
+//   [4] tenants row (description / logo / cover_photo / public_active)
+//   [5] masters-with-workHours count
 function seedSelects(opts: {
   services?: number;
   bots?: number;
   masters?: number;
-  appointments?: number;
   manualSteps?: string[];
   description?: string | null;
   logo?: string | null;
@@ -58,7 +55,6 @@ function seedSelects(opts: {
     [{ n: opts.services ?? 0 }],
     [{ n: opts.bots ?? 0 }],
     [{ n: opts.masters ?? 0 }],
-    [{ n: opts.appointments ?? 0 }],
     opts.manualSteps
       ? [{ completedSteps: JSON.stringify(opts.manualSteps) }]
       : [],
@@ -84,39 +80,70 @@ describe("onboardingRouter.getStatus", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns zero completed steps and totalSteps=10 on a freshly-provisioned tenant", async () => {
+  it("returns zero completed steps and totalSteps=8 on a freshly-provisioned tenant", async () => {
     const { db } = createDbMock(seedSelects({}));
     const caller = createCaller(makeAdminCtx(db) as never);
     const res = await caller.getStatus({ tenantId: "t_demo" });
     expect(res.completedSteps).toEqual([]);
-    expect(res.totalSteps).toBe(10);
+    expect(res.totalSteps).toBe(8);
     expect(res.allCompletedAt).toBeNull();
   });
 
-  it("marks fill_description when tenants.description is non-empty", async () => {
+  it("marks add_service / connect_bot / add_master / set_master_schedule independently when the underlying counts flip", async () => {
+    const { db } = createDbMock(
+      seedSelects({ services: 1, bots: 1, masters: 1, schedule: 1 }),
+    );
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    expect(res.completedSteps).toEqual(
+      expect.arrayContaining([
+        "add_service",
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+      ]),
+    );
+    expect(res.completedSteps).toHaveLength(4);
+  });
+
+  it("marks fill_salon_info when tenants.description is non-empty", async () => {
     const { db } = createDbMock(
       seedSelects({ description: "Профессиональный салон в центре Варшавы" }),
     );
     const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
-    expect(res.completedSteps).toContain("fill_description");
+    expect(res.completedSteps).toContain("fill_salon_info");
   });
 
-  it("does NOT mark fill_description for whitespace-only descriptions (defensive trim)", async () => {
+  it("does NOT mark fill_salon_info for whitespace-only descriptions (defensive trim)", async () => {
     const { db } = createDbMock(seedSelects({ description: "   \n  " }));
     const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
-    expect(res.completedSteps).not.toContain("fill_description");
+    expect(res.completedSteps).not.toContain("fill_salon_info");
   });
 
-  it("marks add_logo when tenants.logo is non-empty", async () => {
-    const { db } = createDbMock(seedSelects({ logo: "https://r2.example/logo.png" }));
+  it("add_branding requires BOTH logo and coverPhoto — logo alone is not enough", async () => {
+    const { db } = createDbMock(
+      seedSelects({ logo: "https://r2.example/logo.png", coverPhoto: null }),
+    );
     const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
-    expect(res.completedSteps).toContain("add_logo");
+    expect(res.completedSteps).not.toContain("add_branding");
   });
 
-  it("marks add_cover when tenants.cover_photo is non-empty", async () => {
-    const { db } = createDbMock(seedSelects({ coverPhoto: "https://r2.example/cover.jpg" }));
+  it("add_branding requires BOTH logo and coverPhoto — cover alone is not enough", async () => {
+    const { db } = createDbMock(
+      seedSelects({ logo: null, coverPhoto: "https://r2.example/cover.jpg" }),
+    );
     const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
-    expect(res.completedSteps).toContain("add_cover");
+    expect(res.completedSteps).not.toContain("add_branding");
+  });
+
+  it("add_branding flips ON when logo AND coverPhoto are both non-empty", async () => {
+    const { db } = createDbMock(
+      seedSelects({
+        logo: "https://r2.example/logo.png",
+        coverPhoto: "https://r2.example/cover.jpg",
+      }),
+    );
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    expect(res.completedSteps).toContain("add_branding");
   });
 
   it("marks activate_public ONLY when tenants.public_active === 1 (treats 0 / null as off)", async () => {
@@ -130,13 +157,42 @@ describe("onboardingRouter.getStatus", () => {
     expect(res.completedSteps).toContain("activate_public");
   });
 
-  it("marks every operational step in concert with the new profile signals on a fully-set-up tenant", async () => {
+  it("share_link honors the persisted tenant_onboarding manualSteps flag", async () => {
+    const { db } = createDbMock(seedSelects({ manualSteps: ["share_link"] }));
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    expect(res.completedSteps).toContain("share_link");
+  });
+
+  it("never reports the dropped legacy ids (add_logo / add_cover / first_booking / invite_master / set_schedule / fill_description)", async () => {
+    const { db } = createDbMock(
+      seedSelects({
+        services: 1,
+        bots: 1,
+        masters: 1,
+        manualSteps: ["share_link"],
+        description: "x",
+        logo: "logo.png",
+        coverPhoto: "cover.jpg",
+        publicActive: 1,
+        schedule: 1,
+      }),
+    );
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    const ids = res.completedSteps as readonly string[];
+    expect(ids).not.toContain("add_logo");
+    expect(ids).not.toContain("add_cover");
+    expect(ids).not.toContain("first_booking");
+    expect(ids).not.toContain("invite_master");
+    expect(ids).not.toContain("set_schedule");
+    expect(ids).not.toContain("fill_description");
+  });
+
+  it("marks every step in concert on a fully-set-up tenant — 8 / 8", async () => {
     const { db } = createDbMock(
       seedSelects({
         services: 3,
         bots: 1,
         masters: 2,
-        appointments: 1,
         manualSteps: ["share_link"],
         description: "Описание",
         logo: "logo.png",
@@ -148,36 +204,41 @@ describe("onboardingRouter.getStatus", () => {
     const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
     expect(res.completedSteps).toEqual(
       expect.arrayContaining([
-        "add_service",
         "connect_bot",
-        "invite_master",
-        "set_schedule",
-        "share_link",
-        "first_booking",
-        "fill_description",
-        "add_logo",
-        "add_cover",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+        "fill_salon_info",
+        "add_branding",
         "activate_public",
+        "share_link",
       ]),
     );
-    expect(res.completedSteps).toHaveLength(10);
+    expect(res.completedSteps).toHaveLength(8);
+    expect(res.totalSteps).toBe(8);
   });
 
-  it("returns an empty allCompletedAt when only profile signals are missing — totalSteps still 10", async () => {
+  it("returns 4 essentials done when only operational signals are set — public-polish ids stay off", async () => {
     const { db } = createDbMock(
       seedSelects({
         services: 1,
         bots: 1,
         masters: 1,
-        appointments: 1,
-        manualSteps: ["share_link"],
         schedule: 1,
-        // No description / logo / cover / public_active.
+        // No description / logo / cover / public_active / share.
       }),
     );
     const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
-    expect(res.completedSteps).toHaveLength(6);
-    expect(res.totalSteps).toBe(10);
+    expect(res.completedSteps).toHaveLength(4);
+    expect(res.completedSteps).toEqual(
+      expect.arrayContaining([
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+      ]),
+    );
+    expect(res.totalSteps).toBe(8);
     expect(res.allCompletedAt).toBeNull();
   });
 });

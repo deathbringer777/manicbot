@@ -10,14 +10,19 @@ import { describe, it, expect } from "vitest";
 import { t, type TranslationKey } from "~/lib/i18n";
 
 const KEYS: TranslationKey[] = [
-  // Onboarding checklist (PR cd66d9b)
+  // Onboarding checklist (rework 2026-05-27 — 4 essentials + 4 optional).
   "onboarding.checklist.title",
-  "onboarding.checklist.add_service",
+  "onboarding.checklist.headline.setup",
+  "onboarding.checklist.headline.ready",
+  "onboarding.checklist.tier.optional",
   "onboarding.checklist.connect_bot",
-  "onboarding.checklist.invite_master",
-  "onboarding.checklist.set_schedule",
+  "onboarding.checklist.add_master",
+  "onboarding.checklist.set_master_schedule",
+  "onboarding.checklist.add_service",
+  "onboarding.checklist.fill_salon_info",
+  "onboarding.checklist.add_branding",
+  "onboarding.checklist.activate_public",
   "onboarding.checklist.share_link",
-  "onboarding.checklist.first_booking",
 
   // Appointments quick actions
   "appointments.newBooking",

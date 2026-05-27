@@ -1,5 +1,5 @@
 /**
- * `publicSalon.getProfileForChat` — chat-page reader (migration 0090).
+ * `publicSalon.getProfileForChat` — chat-page reader (migration 0091).
  *
  * Twin of `publicSalon.getProfile` with one critical change: the WHERE
  * clause filters on `tenants.chatEnabled = 1` instead of
@@ -16,7 +16,7 @@
  *   • Source-code pin: the procedure references `tenants.chatEnabled`
  *     and NOT `tenants.publicActive` in its WHERE clause. Drift here
  *     would silently re-couple the chat to catalog visibility — exactly
- *     the bug 0090 was written to fix.
+ *     the bug 0091 was written to fix.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
@@ -54,7 +54,7 @@ describe("publicSalon.getProfileForChat — chat-only gate", () => {
 
   it("returns a projection when a tenant row is yielded (independent of publicActive)", async () => {
     // Note the deliberate publicActive=0 here: this is the whole point
-    // of 0090 — a salon with the catalog hidden can still serve chat.
+    // of 0091 — a salon with the catalog hidden can still serve chat.
     const tenantRow = {
       id: "t_chat",
       slug: "crystal",

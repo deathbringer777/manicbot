@@ -138,7 +138,7 @@ export async function resolveTenantFromInstagram(ctx, igPageId) {
  * Returns a *synthetic* channelConfig so `buildChannelCtx` works unchanged.
  *
  * Only salons with `chat_enabled = 1` are reachable via the web widget
- * (migration 0090). This decouples chat availability from catalog
+ * (migration 0091). This decouples chat availability from catalog
  * publication: an owner can keep their `public_active = 0` (hidden
  * from the directory) and still serve a working chat URL they share
  * manually — printed QR, Instagram bio, business card.

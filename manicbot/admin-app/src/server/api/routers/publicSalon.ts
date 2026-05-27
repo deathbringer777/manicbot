@@ -264,7 +264,7 @@ export const publicSalonRouter = createTRPCRouter({
    * Get a salon profile for the web-chat page (`/salon/{slug}/chat`).
    *
    * Twin of `getProfile` with one critical change in the WHERE clause:
-   * gates on `tenants.chatEnabled = 1` (migration 0090) instead of
+   * gates on `tenants.chatEnabled = 1` (migration 0091) instead of
    * `tenants.publicActive = 1`. This is what lets a salon owner serve
    * a working chat URL — e.g. printed on a business card or pinned to
    * their Instagram bio — while keeping their public-catalog card

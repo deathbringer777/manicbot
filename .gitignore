@@ -29,3 +29,11 @@ manicbot-blog/dist/
 ig-direct-token*
 fb-page-token*
 **/.config/manicbot/**
+
+# Seed scripts with plaintext credentials — kept on developer machine only.
+# A `.example` template (with `process.env.SEED_*_PASSWORD` placeholders) lives
+# in the repo so anyone can reconstruct the structure without learning a real
+# password. See manicbot/scripts/seed-web-users.example.mjs.
+manicbot/scripts/seed-web-users.mjs
+manicbot/scripts/seed-*-users.mjs
+!manicbot/scripts/seed-*-users.example.mjs

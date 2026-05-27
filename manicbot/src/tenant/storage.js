@@ -86,7 +86,7 @@ function docToTenantParams(data) {
     lng: data.lng ?? null,
     city: data.city || null,
     public_active: data.publicActive ? 1 : 0,
-    // 0090 — chat surface independence flag. Default ON for new tenants so
+    // 0091 — chat surface independence flag. Default ON for new tenants so
     // the chat URL works the moment a slug is set; callers that want a
     // paused chat must pass `chatEnabled: false` explicitly.
     chat_enabled: data.chatEnabled === false ? 0 : 1,

@@ -1,10 +1,10 @@
 /**
- * `salon.updateSalonProfile` — `chatEnabled` flag (migration 0090).
+ * `salon.updateSalonProfile` — `chatEnabled` flag (migration 0091).
  *
  * Decouples the salon web-chat surface from public-profile publication.
- * Before 0090 the only knob was `publicActive`: turning it on listed the
+ * Before 0091 the only knob was `publicActive`: turning it on listed the
  * salon in the catalog AND made the chat URL resolve, conflating two
- * decisions. After 0090, `chatEnabled` is independent — owners can keep
+ * decisions. After 0091, `chatEnabled` is independent — owners can keep
  * their public card hidden while still running a working chat link they
  * share manually (business card / Instagram bio / printed QR).
  *
@@ -43,7 +43,7 @@ function makeCaller(tenantRow: Record<string, unknown>, extraSelects: unknown[] 
   return { caller, updateCalls };
 }
 
-describe("salon.updateSalonProfile — chatEnabled (0090)", () => {
+describe("salon.updateSalonProfile — chatEnabled (0091)", () => {
   beforeEach(() => { vi.clearAllMocks(); });
   afterEach(() => { vi.restoreAllMocks(); });
 

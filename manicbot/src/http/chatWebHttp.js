@@ -97,10 +97,14 @@ async function readJson(request) {
 
 /** Salon branding response shape — matches what ChatClient expects. */
 async function loadSalonBranding(ctx, slug) {
+  // 0090 — gate switched from `public_active` to `chat_enabled`. The
+  // chat surface is now independent of catalog publication, so an
+  // owner can keep their salon card hidden while still serving a
+  // working chat URL shared via business card / Instagram bio / QR.
   const rows = await dbAll(
     ctx,
     `SELECT id, name, display_name, logo, cover_photo, brand_palette, slug, description, city
-       FROM tenants WHERE slug = ? AND public_active = 1 LIMIT 1`,
+       FROM tenants WHERE slug = ? AND chat_enabled = 1 LIMIT 1`,
     slug,
   );
   const t = rows[0];

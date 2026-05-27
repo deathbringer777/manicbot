@@ -1,0 +1,32 @@
+-- Decouple the salon web-chat surface from public-catalog publication.
+--
+-- Before this migration the chat URL (`/salon/{slug}/chat`) was only
+-- usable when `tenants.public_active = 1`. Both the admin-app reader
+-- (`publicSalon.getProfile`) and the Worker session resolver
+-- (`/chat/init` in `src/http/chatWebHttp.js`) filtered on that single
+-- flag. The result: a salon owner who wanted a private chat URL — one
+-- they share manually via business card, Instagram bio or printed QR —
+-- had no way to enable it without also exposing their salon card in the
+-- public catalog. The Channels → Web chat tab in the dashboard reflected
+-- that limitation: when the public profile was hidden, the tab redirected
+-- the user to the Public Profile tab and refused any inline configuration.
+--
+-- This migration adds an independent `chat_enabled` flag so the two
+-- decisions become orthogonal:
+--   * `public_active = 1` → salon card appears in the public catalog
+--   * `chat_enabled = 1`  → /salon/{slug}/chat resolves and accepts traffic
+--
+-- Default is `1` (chat on) for brand-new tenants. Existing rows are
+-- backfilled from `public_active` so deploy-time behaviour is identical
+-- to today: published salons keep their working chat, hidden salons
+-- keep their disabled chat until the owner explicitly toggles it on
+-- via the rewritten Web chat tab.
+--
+-- The accompanying tRPC procedure `publicSalon.getProfileForChat` and
+-- the Worker change in `src/http/chatWebHttp.js` switch their gate from
+-- `public_active` to `chat_enabled`. The existing `publicSalon.getProfile`
+-- still gates on `public_active` so the catalog visibility contract is
+-- preserved.
+
+ALTER TABLE tenants ADD COLUMN chat_enabled INTEGER NOT NULL DEFAULT 1;
+UPDATE tenants SET chat_enabled = public_active;

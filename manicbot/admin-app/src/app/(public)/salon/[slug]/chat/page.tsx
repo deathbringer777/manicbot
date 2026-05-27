@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const ctx = await createTRPCContext({ headers: new Headers() });
   const caller = createCaller(ctx);
-  const profile = await caller.publicSalon.getProfile({ slug }).catch(() => null);
+  const profile = await caller.publicSalon.getProfileForChat({ slug }).catch(() => null);
   if (!profile) {
     return {
       title: "Чат",
@@ -49,7 +49,7 @@ export default async function SalonChatPage({ params }: Props) {
   const { slug } = await params;
   const ctx = await createTRPCContext({ headers: new Headers() });
   const caller = createCaller(ctx);
-  const profile = await caller.publicSalon.getProfile({ slug }).catch(() => null);
+  const profile = await caller.publicSalon.getProfileForChat({ slug }).catch(() => null);
   if (!profile) notFound();
 
   // Extract the tiny branding subset we actually need for first paint.

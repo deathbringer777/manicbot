@@ -2937,6 +2937,7 @@ export const salonRouter = createTRPCRouter({
         .select({
           origin: masters.origin,
           webUserId: masters.webUserId,
+          name: masters.name,
         })
         .from(masters)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterChatId)))
@@ -2990,13 +2991,27 @@ export const salonRouter = createTRPCRouter({
       const salonName = tenantRow[0]?.name ?? "ManicBot";
       const lang = ((userRow[0]?.lang as Lang | null) ?? "en") as Lang;
 
-      void sendMasterPasswordResetCredentialsToOwnerEmail(userRow[0].email, newPassword, salonName, lang).catch(
-        (e: unknown) =>
+      // Email the SALON OWNER (the caller) with the master's new credentials so
+      // the owner can pass them to the master out-of-band. Signature:
+      // (ownerEmail, masterName, masterLogin, newPassword, salonName, lang).
+      const ownerEmail = ctx.webUser.email ?? "";
+      const masterName = m.name ?? "Master";
+      const masterLogin = userRow[0].email;
+      if (ownerEmail) {
+        void sendMasterPasswordResetCredentialsToOwnerEmail(
+          ownerEmail,
+          masterName,
+          masterLogin,
+          newPassword,
+          salonName,
+          lang,
+        ).catch((e: unknown) =>
           log.error(
             "salon.resetMasterPassword.email",
             e instanceof Error ? e : new Error(String(e)),
           ),
-      );
+        );
+      }
 
       await writeAudit(ctx.db, {
         actor: ctx.webUser.email ?? null,

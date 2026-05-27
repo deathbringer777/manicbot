@@ -2989,14 +2989,20 @@ export const salonRouter = createTRPCRouter({
         .where(eq(tenants.id, input.tenantId))
         .limit(1);
       const salonName = tenantRow[0]?.name ?? "ManicBot";
-      const lang = ((userRow[0]?.lang as Lang | null) ?? "en") as Lang;
 
-      // Email the SALON OWNER (the caller) with the master's new credentials so
-      // the owner can pass them to the master out-of-band. Signature:
-      // (ownerEmail, masterName, masterLogin, newPassword, salonName, lang).
-      const ownerEmail = ctx.webUser.email ?? "";
+      // Look up the OWNER (caller) row for their email + lang. We email the
+      // owner, not the master — the master's email is a synthetic
+      // `*.salon.manicbot.local` for salon-created accounts.
+      const ownerRow = await ctx.db
+        .select({ email: webUsers.email, lang: webUsers.lang })
+        .from(webUsers)
+        .where(eq(webUsers.id, ctx.webUser.id))
+        .limit(1);
+      const ownerEmail = ownerRow[0]?.email ?? ctx.webUser.email ?? "";
+      const ownerLang = ((ownerRow[0]?.lang as Lang | null) ?? "en") as Lang;
       const masterName = m.name ?? "Master";
       const masterLogin = userRow[0].email;
+
       if (ownerEmail) {
         void sendMasterPasswordResetCredentialsToOwnerEmail(
           ownerEmail,
@@ -3004,7 +3010,7 @@ export const salonRouter = createTRPCRouter({
           masterLogin,
           newPassword,
           salonName,
-          lang,
+          ownerLang,
         ).catch((e: unknown) =>
           log.error(
             "salon.resetMasterPassword.email",
@@ -3017,14 +3023,13 @@ export const salonRouter = createTRPCRouter({
         actor: ctx.webUser.email ?? null,
         action: "tenant.master.password.reset",
         tenantId: input.tenantId,
-        detail: `masterChatId=${input.masterChatId} (password emailed to master, salon never sees it)`,
+        detail: `masterChatId=${input.masterChatId} (credentials emailed to owner; master receives them out-of-band)`,
         ip: ctxIp(ctx),
       });
 
-      // Mask email in response so the salon UI can show "sent to a***@example.com".
-      const e = userRow[0].email;
-      const at = e.indexOf("@");
-      const masked = at > 1 ? `${e[0]}***${e.slice(at - 1)}` : e;
+      // Mask the OWNER's email in the response (the recipient of the email).
+      const at = ownerEmail.indexOf("@");
+      const masked = at > 1 ? `${ownerEmail[0]}***${ownerEmail.slice(at - 1)}` : ownerEmail;
       return { ok: true, emailSentTo: masked };
     }),
 

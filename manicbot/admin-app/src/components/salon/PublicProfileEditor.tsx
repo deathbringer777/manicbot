@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import {
-  Pencil, X, Save, Loader2, Plus, Globe, ExternalLink, MapPin,
+  Pencil, X, Save, Loader2, Globe, ExternalLink, MapPin,
   ToggleLeft, ToggleRight, AlertCircle,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { Btn } from "~/components/salon/SalonShared";
+import { SalonGalleryUploader } from "~/components/salon/SalonGalleryUploader";
 
 function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
   const validate = (lat: number, lng: number) =>
@@ -44,7 +45,6 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const [isPublic, setIsPublic] = useState(false);
   const [slugError, setSlugError] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
-  const [newPhotoUrl, setNewPhotoUrl] = useState("");
 
   const data = profile.data as any;
 
@@ -134,13 +134,6 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
       publicActive: isPublic ? 1 : 0,
       photos,
     });
-  }
-
-  function addPhoto() {
-    const url = newPhotoUrl.trim();
-    if (!url) return;
-    setPhotos((prev) => [...prev, url]);
-    setNewPhotoUrl("");
   }
 
   const publicUrl = slug ? `/salon/${slug}` : null;
@@ -326,48 +319,11 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             </div>
 
             <div className="border-t border-slate-200 dark:border-white/5 pt-3">
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">{t("salon.publicProfile.gallery", lang)} ({photos.length})</label>
-              {photos.length > 0 && (
-                <div className="space-y-2 mb-3">
-                  {photos.map((url, i) => (
-                    <div key={i} className="flex items-center gap-2 group">
-                      <img src={url} alt="" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
-                      <span className="flex-1 text-xs text-slate-500 truncate">{url}</span>
-                      <div className="flex gap-1 shrink-0">
-                        <button type="button" disabled={i === 0}
-                          onClick={() => setPhotos((prev) => { const a = [...prev]; const t = a[i-1]!; a[i-1] = a[i]!; a[i] = t; return a; })}
-                          className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-300 dark:hover:bg-slate-600">
-                          ↑
-                        </button>
-                        <button type="button" disabled={i === photos.length - 1}
-                          onClick={() => setPhotos((prev) => { const a = [...prev]; const t = a[i+1]!; a[i+1] = a[i]!; a[i] = t; return a; })}
-                          className="h-6 w-6 flex items-center justify-center rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-300 dark:hover:bg-slate-600">
-                          ↓
-                        </button>
-                        <button type="button"
-                          onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                          className="h-6 w-6 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/20">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <input
-                  value={newPhotoUrl}
-                  onChange={(e) => setNewPhotoUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addPhoto())}
-                  placeholder="https://example.com/photo.jpg"
-                  className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
-                />
-                <button type="button" onClick={addPhoto}
-                  className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center gap-1">
-                  <Plus className="h-3.5 w-3.5" />
-                  {t("common.add", lang)}
-                </button>
-              </div>
+              <SalonGalleryUploader
+                tenantId={tenantId}
+                photos={photos}
+                onChange={setPhotos}
+              />
             </div>
           </div>
 

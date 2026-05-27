@@ -32,10 +32,12 @@ interface TestInputWithMocks extends TestInput {
   stampSendError: Mock<TestInput["stampSendError"]>;
 }
 
+const VALID_TOKEN = "a".repeat(32);
+
 function makeInput(overrides: Partial<TestInputWithMocks> = {}): TestInputWithMocks {
   return {
     authorizationHeader: `Bearer ${TOKEN}`,
-    body: { email: "foo@example.com", lang: "ru" },
+    body: { email: "foo@example.com", lang: "ru", unsubscribeToken: VALID_TOKEN },
     expectedToken: TOKEN,
     sendEmail: vi.fn<TestInput["sendEmail"]>(async () => ({ ok: true as const })),
     stampSentAt: vi.fn<TestInput["stampSentAt"]>(async () => undefined),
@@ -117,11 +119,11 @@ describe("processNewsletterWelcomeRequest — body validation", () => {
 
 describe("processNewsletterWelcomeRequest — happy path", () => {
   it("returns 200 and calls sendEmail with normalized args", async () => {
-    const i = makeInput({ body: { email: "  USER@Example.COM ", lang: "ru" } });
+    const i = makeInput({ body: { email: "  USER@Example.COM ", lang: "ru", unsubscribeToken: VALID_TOKEN } });
     const r = await processNewsletterWelcomeRequest(i);
     expect(r.status).toBe(200);
     expect(i.sendEmail).toHaveBeenCalledTimes(1);
-    expect(i.sendEmail).toHaveBeenCalledWith("user@example.com", "ru");
+    expect(i.sendEmail).toHaveBeenCalledWith("user@example.com", "ru", VALID_TOKEN);
   });
 
   it("stamps welcome_sent_at via stampSentAt", async () => {
@@ -135,17 +137,50 @@ describe("processNewsletterWelcomeRequest — happy path", () => {
   });
 
   it("defaults lang to en when omitted", async () => {
-    const i = makeInput({ body: { email: "x@y.io" } });
+    const i = makeInput({ body: { email: "x@y.io", unsubscribeToken: VALID_TOKEN } });
     const r = await processNewsletterWelcomeRequest(i);
     expect(r.status).toBe(200);
-    expect(i.sendEmail).toHaveBeenCalledWith("x@y.io", "en");
+    expect(i.sendEmail).toHaveBeenCalledWith("x@y.io", "en", VALID_TOKEN);
   });
 
   it("defaults lang to en when value is outside the allowlist", async () => {
-    const i = makeInput({ body: { email: "x@y.io", lang: "de" } });
+    const i = makeInput({ body: { email: "x@y.io", lang: "de", unsubscribeToken: VALID_TOKEN } });
     const r = await processNewsletterWelcomeRequest(i);
     expect(r.status).toBe(200);
-    expect(i.sendEmail).toHaveBeenCalledWith("x@y.io", "en");
+    expect(i.sendEmail).toHaveBeenCalledWith("x@y.io", "en", VALID_TOKEN);
+  });
+});
+
+describe("processNewsletterWelcomeRequest — unsubscribe token contract", () => {
+  it("returns 400 when unsubscribeToken is missing", async () => {
+    const i = makeInput({ body: { email: "x@y.io", lang: "en" } });
+    const r = await processNewsletterWelcomeRequest(i);
+    expect(r.status).toBe(400);
+    expect(i.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when unsubscribeToken has wrong shape (too short)", async () => {
+    const i = makeInput({ body: { email: "x@y.io", lang: "en", unsubscribeToken: "tooshort" } });
+    const r = await processNewsletterWelcomeRequest(i);
+    expect(r.status).toBe(400);
+    expect(i.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when unsubscribeToken contains non-hex chars", async () => {
+    const i = makeInput({
+      body: { email: "x@y.io", lang: "en", unsubscribeToken: "z".repeat(32) },
+    });
+    const r = await processNewsletterWelcomeRequest(i);
+    expect(r.status).toBe(400);
+    expect(i.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("forwards the token verbatim to sendEmail as the third arg", async () => {
+    const tok = "0123456789abcdef0123456789abcdef";
+    const i = makeInput({ body: { email: "x@y.io", lang: "pl", unsubscribeToken: tok } });
+    const r = await processNewsletterWelcomeRequest(i);
+    expect(r.status).toBe(200);
+    expect(i.sendEmail).toHaveBeenCalledWith("x@y.io", "pl", tok);
   });
 });
 

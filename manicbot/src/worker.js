@@ -355,11 +355,17 @@ export default {
       return addSecurityHeaders(handleHealthRequest(request));
     }
 
-    // PR-A: public unsubscribe endpoint. `/u/{token}` is reached from the
-    // footer of every marketing email; the handler flips the contact's
-    // `unsubscribed=1` and appends a `marketing_consent_log` row. Public
-    // by design — token-only, no auth, GET-only.
-    if (request.method === 'GET' && url.pathname.startsWith('/u/')) {
+    // Public unsubscribe endpoint. `/u/{token}` is reached from the footer
+    // of every marketing email AND every newsletter welcome (0090). The
+    // handler routes to marketing_contacts first, then to newsletter_subscribers
+    // as a fallthrough. Public by design — token-only, no auth.
+    //   - GET  → renders a localised HTML confirmation page (200) / 404.
+    //   - POST → RFC 8058 one-click (Gmail / Apple Mail). Returns 204 on
+    //            success, 404 on unknown token. No body.
+    if (
+      (request.method === 'GET' || request.method === 'POST') &&
+      url.pathname.startsWith('/u/')
+    ) {
       const token = url.pathname.slice('/u/'.length).split('/')[0] ?? '';
       const res = await handleUnsubscribeRequest(request, token, env);
       return addSecurityHeaders(res);

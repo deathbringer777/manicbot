@@ -1648,9 +1648,12 @@ export const newsletterSubscribers = sqliteTable("newsletter_subscribers", {
   unsubscribedAt: integer("unsubscribed_at"),
   welcomeSentAt: integer("welcome_sent_at"),
   welcomeSendError: text("welcome_send_error"),
+  // 0090: 32-hex one-click unsub token. Stable across resub, partial UNIQUE.
+  unsubscribeToken: text("unsubscribe_token"),
 }, (t) => [
   uniqueIndex("idx_newsletter_subscribers_email").on(t.email),
   index("idx_newsletter_subscribers_created").on(t.createdAt),
+  uniqueIndex("idx_newsletter_subscribers_unsub_tok").on(t.unsubscribeToken),
 ]);
 
 // Migration 0087 — Cancellation retention flow audit trail.

@@ -28,6 +28,7 @@ import {
 import {
   parseSubscribePayload,
   buildSubscriberInsertParams,
+  generateUnsubscribeToken,
   SUBSCRIBE_RATE_LIMIT_MAX,
 } from '../src/http/subscribeHttpLogic.js';
 import { dbGet, dbRun } from '../src/utils/db.js';
@@ -376,6 +377,128 @@ describe('buildSubscriberInsertParams', () => {
     });
     expect(row.ip).toBe(null);
     expect(row.userAgent).toBe(null);
+  });
+});
+
+describe('generateUnsubscribeToken — token shape contract', () => {
+  it('returns 32 lowercase hex characters', () => {
+    const t = generateUnsubscribeToken();
+    expect(t).toMatch(/^[a-f0-9]{32}$/);
+  });
+
+  it('each call returns a unique token (uses CSPRNG)', () => {
+    const set = new Set();
+    for (let i = 0; i < 64; i++) set.add(generateUnsubscribeToken());
+    expect(set.size).toBe(64);
+  });
+});
+
+describe('handleSubscribeRequest — unsubscribe_token contract', () => {
+  let fetchMock;
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('persists a 32-hex unsubscribe_token on the new row', async () => {
+    const ctx = makeCtx({ tenantId: 't_news_tok' });
+    const env = buildEnv(ctx);
+    await handleSubscribeRequest(postBody({ email: 'tok@example.com' }), env);
+    const row = await dbGet(
+      ctx,
+      'SELECT unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
+      'tok@example.com',
+    );
+    expect(row?.unsubscribe_token).toMatch(/^[a-f0-9]{32}$/);
+  });
+
+  it('forwards the unsubscribe_token to admin-app in the welcome dispatch body', async () => {
+    const ctx = makeCtx({ tenantId: 't_news_disp_tok' });
+    const env = buildEnv(ctx);
+    await handleSubscribeRequest(postBody({ email: 'disp@example.com' }), env);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.unsubscribeToken).toMatch(/^[a-f0-9]{32}$/);
+
+    const row = await dbGet(
+      ctx,
+      'SELECT unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
+      'disp@example.com',
+    );
+    // Token in the dispatch matches the token in D1.
+    expect(body.unsubscribeToken).toBe(row.unsubscribe_token);
+  });
+});
+
+describe('handleSubscribeRequest — resubscribe after unsubscribe', () => {
+  let fetchMock;
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('clears unsubscribed_at, keeps the same token, re-fires welcome', async () => {
+    const ctx = makeCtx({ tenantId: 't_news_resub' });
+    const env = buildEnv(ctx);
+
+    // First subscribe.
+    await handleSubscribeRequest(postBody({ email: 'resub@example.com' }), env);
+    const firstRow = await dbGet(
+      ctx,
+      'SELECT id, unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
+      'resub@example.com',
+    );
+    const originalToken = firstRow.unsubscribe_token;
+    expect(originalToken).toMatch(/^[a-f0-9]{32}$/);
+
+    // Simulate unsubscribe (the /u/ endpoint would do this).
+    await dbRun(
+      ctx,
+      'UPDATE newsletter_subscribers SET unsubscribed_at = ? WHERE id = ?',
+      Math.floor(Date.now() / 1000),
+      firstRow.id,
+    );
+    fetchMock.mockClear();
+
+    // Resub.
+    const second = await handleSubscribeRequest(
+      postBody({ email: 'resub@example.com' }),
+      env,
+    );
+    expect(second.status).toBe(202);
+
+    const after = await dbGet(
+      ctx,
+      'SELECT unsubscribed_at, unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
+      'resub@example.com',
+    );
+    expect(after.unsubscribed_at).toBeNull();
+    expect(after.unsubscribe_token).toBe(originalToken);
+
+    // Welcome dispatch fired exactly once (the resub fire-and-forget).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.unsubscribeToken).toBe(originalToken);
+  });
+
+  it('does NOT re-fire welcome when the row is active (current dedup behaviour)', async () => {
+    const ctx = makeCtx({ tenantId: 't_news_active' });
+    const env = buildEnv(ctx);
+    await handleSubscribeRequest(postBody({ email: 'active@example.com' }), env);
+    fetchMock.mockClear();
+    const second = await handleSubscribeRequest(
+      postBody({ email: 'active@example.com' }),
+      env,
+    );
+    expect(second.status).toBe(202);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

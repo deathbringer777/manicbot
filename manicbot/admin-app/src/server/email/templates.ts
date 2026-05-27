@@ -722,13 +722,14 @@ export function welcomeEmailHtml(name: string | null, dashboardUrl: string, lang
 
 /**
  * Newsletter "Stay in the loop" confirmation. Sent once per NEW row in
- * `newsletter_subscribers` (migration 0086). Not to be confused with
- * `welcomeEmailHtml` above — that one fires post-registration after the
- * verification code is consumed.
+ * `newsletter_subscribers` (migrations 0086 + 0090). Not to be confused
+ * with `welcomeEmailHtml` above — that one fires post-registration after
+ * the verification code is consumed.
  *
- * `unsubscribeUrl` is a placeholder until the real one-click unsubscribe
- * flow ships (deliberate follow-up PR). Today's value points to the
- * forms-level marketing unsubscribe so we don't ship a dead link.
+ * `unsubscribeUrl` is built by `sendNewsletterWelcomeEmail` against the
+ * real Worker `/u/<token>` endpoint (0090). The same URL is also emitted
+ * as the `List-Unsubscribe` header so Gmail / Apple Mail render an inline
+ * one-click unsub affordance (RFC 8058).
  */
 export function subscriptionWelcomeEmailHtml(unsubscribeUrl: string, lang: Lang): string {
   const c = getEmailCopy(lang).subscriptionWelcome;

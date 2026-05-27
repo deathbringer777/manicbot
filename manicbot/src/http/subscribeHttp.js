@@ -34,6 +34,7 @@ import {
   SUBSCRIBE_RATE_LIMIT_MAX,
   SUBSCRIBE_RATE_LIMIT_WINDOW_MS,
   buildSubscriberInsertParams,
+  generateUnsubscribeToken,
   parseSubscribePayload,
 } from './subscribeHttpLogic.js';
 import { dbGet, dbRun } from '../utils/db.js';
@@ -94,32 +95,59 @@ async function readBoundedJson(request) {
 }
 
 /**
- * Atomically insert a new subscriber. Returns { inserted: boolean } —
- * `false` means the email was already present (UNIQUE collision).
+ * Atomically insert a new subscriber. Returns one of:
+ *   { kind: 'inserted', token }   — fresh subscriber, token freshly minted.
+ *   { kind: 'reactivated', token } — previously unsubscribed, now active
+ *                                    again; token re-used (stable).
+ *   { kind: 'noop' }              — active row already exists; silent dedup.
+ *
+ * In all cases the public response is 202 — the kind drives the welcome
+ * dispatch decision: 'inserted' and 'reactivated' fire welcome, 'noop' does
+ * not.
  *
  * @param {{ DB: D1Database }} env
  * @param {ReturnType<typeof buildSubscriberInsertParams>} row
  */
 async function tryInsertSubscriber(env, row) {
-  // Pre-check + INSERT OR IGNORE. The pre-check short-circuits the welcome
-  // dispatch for known duplicates; INSERT OR IGNORE is the actual durable
-  // guard against two concurrent submits racing past the SELECT.
-  //
-  // We probe by `email` (not `id`) because we don't need the surrogate
-  // key — we only care "does a row exist?". This also keeps the check
-  // mock-friendly (some test mocks don't auto-fill AUTOINCREMENT ids).
+  // Pre-check by email. We need three columns to decide branch:
+  //   - id (for the UPDATE in the reactivate path)
+  //   - unsubscribed_at (active vs. previously-unsubscribed)
+  //   - unsubscribe_token (token survives reactivate)
   const existing = await dbGet(
     { db: env.DB },
-    'SELECT email FROM newsletter_subscribers WHERE email = ?',
+    'SELECT id, unsubscribed_at, unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
     row.email,
   );
-  if (existing) return { inserted: false };
+
+  if (existing) {
+    if (existing.unsubscribed_at == null) {
+      // Active subscriber → silent dedup, preserves email-enumeration defense.
+      return { kind: 'noop' };
+    }
+    // Previously unsubscribed → reactivate. Token is stable when present
+    // (covers the legacy-row case where 0090 backfill assigned one). On the
+    // off chance the token is missing we mint a fresh one here as a self-heal
+    // so the welcome can carry a working /u/ link.
+    const token = existing.unsubscribe_token || generateUnsubscribeToken();
+    // SQL kept on ONE line — the test mock-db UPDATE parser uses a single-line
+    // regex (no `s` flag) and silently drops SET clauses after the first newline.
+    await dbRun(
+      { db: env.DB },
+      'UPDATE newsletter_subscribers SET unsubscribed_at = ?, welcome_sent_at = ?, welcome_send_error = ?, unsubscribe_token = ? WHERE id = ?',
+      null,
+      null,
+      null,
+      token,
+      existing.id,
+    );
+    return { kind: 'reactivated', token };
+  }
 
   const res = await dbRun(
     { db: env.DB },
     `INSERT OR IGNORE INTO newsletter_subscribers
-       (email, source, lang, anonymous_id, ip, user_agent, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (email, source, lang, anonymous_id, ip, user_agent, created_at, unsubscribe_token)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     row.email,
     row.source,
     row.lang,
@@ -127,18 +155,21 @@ async function tryInsertSubscriber(env, row) {
     row.ip,
     row.userAgent,
     row.createdAt,
+    row.unsubscribeToken,
   );
 
   // D1 returns `meta.changes` for INSERTs. When the UNIQUE-collision path
   // fires inside INSERT OR IGNORE, `changes` is 0 and we treat that as a
-  // dedup (race-loser).
+  // race-loser dedup (another isolate inserted between our SELECT and INSERT).
   const changes =
     typeof res?.meta?.changes === 'number'
       ? res.meta.changes
       : typeof res?.changes === 'number'
         ? res.changes
         : 1; // default to "inserted" when the binding doesn't surface meta
-  return { inserted: changes > 0 };
+  return changes > 0
+    ? { kind: 'inserted', token: row.unsubscribeToken }
+    : { kind: 'noop' };
 }
 
 /**
@@ -154,7 +185,7 @@ async function tryInsertSubscriber(env, row) {
  *
  * Returns the welcome-state string so callers can pin behavior in tests.
  */
-export async function dispatchWelcomeEmail(env, email, lang) {
+export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
   let errorCode = null;
   try {
     if (!env?.ADMIN_APP_URL) {
@@ -173,7 +204,11 @@ export async function dispatchWelcomeEmail(env, email, lang) {
             'content-type': 'application/json',
             authorization: `Bearer ${env.INTERNAL_API_TOKEN}`,
           },
-          body: JSON.stringify({ email, lang: lang ?? 'en' }),
+          body: JSON.stringify({
+            email,
+            lang: lang ?? 'en',
+            unsubscribeToken,
+          }),
           signal: ac.signal,
         });
         if (!res.ok) {
@@ -260,12 +295,18 @@ export async function handleSubscribeRequest(request, env, executionCtx) {
     ip,
     userAgent: request.headers.get('user-agent') || null,
     nowSec: nowSec(),
+    unsubscribeToken: generateUnsubscribeToken(),
   });
 
-  let inserted = false;
+  let dispatchToken = null;
   try {
     const ins = await tryInsertSubscriber(env, row);
-    inserted = ins.inserted;
+    // 'inserted' = new row, fresh token; 'reactivated' = re-subscribe after
+    // unsub, the token persists across the gap. Both branches fire welcome.
+    // 'noop' = active row exists — silent dedup, no welcome.
+    if (ins.kind === 'inserted' || ins.kind === 'reactivated') {
+      dispatchToken = ins.token;
+    }
   } catch (e) {
     // Persist failure is a hard error — we don't want to leak it back,
     // but we MUST log + return 500 so retry logic can decide what to do.
@@ -276,8 +317,8 @@ export async function handleSubscribeRequest(request, env, executionCtx) {
     return new Response('internal error', { status: 500 });
   }
 
-  if (inserted) {
-    const welcome = dispatchWelcomeEmail(env, row.email, row.lang);
+  if (dispatchToken) {
+    const welcome = dispatchWelcomeEmail(env, row.email, row.lang, dispatchToken);
     if (executionCtx?.waitUntil) {
       executionCtx.waitUntil(welcome);
     } else {

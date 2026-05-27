@@ -474,6 +474,17 @@ const translations = {
   "salon.publicProfile.coordsBad":       { ru: "Не удалось определить координаты. Вставьте ссылку Google Maps или координаты (55.7558, 37.6173)", ua: "Не вдалося визначити координати. Вставте посилання Google Maps або координати (55.7558, 37.6173)", en: "Could not parse coordinates. Paste a Google Maps link or coordinates (55.7558, 37.6173)", pl: "Nie udało się odczytać współrzędnych. Wklej link Google Maps lub współrzędne (55.7558, 37.6173)" },
   "salon.publicProfile.gallery":         { ru: "Галерея салона", ua: "Галерея салону", en: "Salon gallery", pl: "Galeria salonu" },
   "salon.publicProfile.gallerySimple":   { ru: "Галерея", ua: "Галерея", en: "Gallery", pl: "Galeria" },
+  "salon.publicProfile.galleryEmptyTitle": { ru: "Перетащите фото сюда или нажмите, чтобы выбрать", ua: "Перетягніть фото сюди або натисніть, щоб обрати", en: "Drop photos here or click to choose", pl: "Przeciągnij zdjęcia tutaj lub kliknij, aby wybrać" },
+  "salon.publicProfile.galleryEmptyHint": { ru: "До {max} фото · PNG, JPEG, WebP · до 2 МБ", ua: "До {max} фото · PNG, JPEG, WebP · до 2 МБ", en: "Up to {max} photos · PNG, JPEG, WebP · max 2 MB each", pl: "Maks. {max} zdjęć · PNG, JPEG, WebP · do 2 MB" },
+  "salon.publicProfile.galleryAddMore":  { ru: "Добавить ещё (осталось {n})", ua: "Додати ще (залишилось {n})", en: "Add more ({n} left)", pl: "Dodaj kolejne (pozostało {n})" },
+  "salon.publicProfile.galleryUploading":{ ru: "Загрузка {done}/{total}…", ua: "Завантаження {done}/{total}…", en: "Uploading {done}/{total}…", pl: "Wysyłanie {done}/{total}…" },
+  "salon.publicProfile.galleryCap":      { ru: "Достигнут лимит фотографий", ua: "Досягнуто ліміту фотографій", en: "Photo limit reached", pl: "Osiągnięto limit zdjęć" },
+  "salon.publicProfile.galleryCover":    { ru: "Обложка", ua: "Обкладинка", en: "Cover", pl: "Okładka" },
+  "salon.publicProfile.galleryMoveLeft": { ru: "Переместить влево", ua: "Перемістити ліворуч", en: "Move left", pl: "Przesuń w lewo" },
+  "salon.publicProfile.galleryMoveRight":{ ru: "Переместить вправо", ua: "Перемістити праворуч", en: "Move right", pl: "Przesuń w prawo" },
+  "salon.publicProfile.galleryShowUrl":  { ru: "Добавить по ссылке", ua: "Додати за посиланням", en: "Add by URL", pl: "Dodaj przez URL" },
+  "salon.publicProfile.galleryHideUrl":  { ru: "Скрыть ввод ссылки", ua: "Сховати ввід посилання", en: "Hide URL input", pl: "Ukryj pole URL" },
+  "salon.publicProfile.galleryUrlError": { ru: "Ссылка должна начинаться с http:// или https://", ua: "Посилання має починатися з http:// або https://", en: "URL must start with http:// or https://", pl: "URL musi zaczynać się od http:// lub https://" },
   "salon.publicProfile.savePublic":      { ru: "Сохранить публичный профиль", ua: "Зберегти публічний профіль", en: "Save public profile", pl: "Zapisz profil publiczny" },
 
   // Public profile editor — branding / contacts / schedule sections

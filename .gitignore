@@ -37,3 +37,18 @@ fb-page-token*
 manicbot/scripts/seed-web-users.mjs
 manicbot/scripts/seed-*-users.mjs
 !manicbot/scripts/seed-*-users.example.mjs
+
+# 2026-05-27 — Internal-only docs kept off the public repo. Working
+# copies live in _docs-local/ on each developer's machine. If you need
+# context that one of these docs would provide, ping the maintainer.
+_docs-local/
+CLAUDE.md
+TEST_ACCOUNTS.md
+CALENDAR_OVERHAUL_PLAN.md
+manicbot/SECURITY_FINDINGS.md
+manicbot/ARCHITECTURE.md
+manicbot/SECRET_ROTATION.md
+manicbot/LANDING_DEMO_INTEGRATION.md
+manicbot/docs/oauth-verification-kit.md
+manicbot/docs/marketing/BRAND_VOICE.md
+docs/pre-launch-blockers-report.md

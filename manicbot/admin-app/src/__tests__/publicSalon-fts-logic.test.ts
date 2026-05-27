@@ -84,9 +84,10 @@ describe("buildFtsMatchExpression", () => {
 });
 
 describe("PUBLIC_CACHEABLE_PROCEDURES", () => {
-  it("contains exactly the three public salon read endpoints", () => {
+  it("contains exactly the four public salon read endpoints", () => {
     expect(PUBLIC_CACHEABLE_PROCEDURES).toEqual([
       "publicSalon.getProfile",
+      "publicSalon.getProfileForChat",
       "publicSalon.getCities",
       "publicSalon.autocomplete",
     ]);
@@ -104,6 +105,7 @@ describe("PUBLIC_CACHE_CONTROL", () => {
 describe("shouldCacheTrpcPath", () => {
   it("returns true for a single allow-listed procedure", () => {
     expect(shouldCacheTrpcPath("publicSalon.getProfile")).toBe(true);
+    expect(shouldCacheTrpcPath("publicSalon.getProfileForChat")).toBe(true);
     expect(shouldCacheTrpcPath("publicSalon.getCities")).toBe(true);
     expect(shouldCacheTrpcPath("publicSalon.autocomplete")).toBe(true);
   });

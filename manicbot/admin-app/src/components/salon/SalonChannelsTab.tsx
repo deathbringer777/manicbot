@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Loader2, Bot, CheckCircle, ExternalLink, Unplug,
   Instagram, MessageCircle, Globe,
-  Download, QrCode, Sparkles,
+  Download, QrCode, Sparkles, Power,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import Link from "next/link";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
-import { SectionHeader } from "./SalonShared";
+import { SectionHeader, Btn } from "./SalonShared";
+import { AssetUploadField } from "./AssetUploadField";
 import { IGHealthCard } from "./IGHealthCard";
 import { InstagramConnect } from "./InstagramConnect";
 import { IGSendTestDialog } from "./IGSendTestDialog";
@@ -453,116 +453,310 @@ function WhatsAppTab({ tenantId }: { tenantId: string }) {
 // ─── Web Chat ────────────────────────────────────────────────────────────────
 
 /**
- * WebChatTab — surfaces the salon's AI chat URL (`/salon/{slug}/chat`),
- * a QR pointing to the same URL, and a live iframe preview. The chat
- * backend (POST /chat/init|send, GET /chat/poll) is owned by the Worker.
+ * WebChatTab — self-sufficient chat configuration surface.
+ *
+ * Before 0090 this tab was a read-only surface that pushed the owner to
+ * the Public Profile tab to set a slug and toggle `publicActive`. Now
+ * the tab carries an inline Setup card (slug + display name + logo +
+ * chat on/off toggle) and the chat URL works whenever `chat_enabled = 1`
+ * regardless of catalog visibility (see migration 0090 +
+ * `publicSalon.getProfileForChat`).
+ *
+ * The Setup fields are NOT duplicated state — `slug`, `displayName`,
+ * `logo`, `logoR2Key` are the same `tenants` columns the Public Profile
+ * editor writes. Both tabs read from `salon.getSalonProfile` and write
+ * through `salon.updateSalonProfile`.
  */
-function WebChatTab({ slug, publicActive }: { slug?: string | null; publicActive?: boolean }) {
+function WebChatTab({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
-  const chatUrl = slug ? `https://manicbot.com/salon/${slug}/chat` : null;
+  const utils = api.useUtils();
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId });
+  const data = profile.data as
+    | { slug?: string | null; displayName?: string | null; logo?: string | null; logoR2Key?: string | null; chatEnabled?: number }
+    | undefined;
 
-  if (!slug) {
+  const [slug, setSlug] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [slugError, setSlugError] = useState("");
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+
+  // Hydrate local form state from the server payload on first load /
+  // refetch. We only overwrite the inputs when the user is NOT actively
+  // editing them, so an in-flight save doesn't blow away typed text.
+  useState(() => {
+    // initialiser only — useEffect below handles updates
+  });
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffectOnDataChange(data, (next) => {
+    if (!editingSlug) setSlug(next.slug ?? "");
+    if (!editingName) setDisplayName(next.displayName ?? "");
+  });
+
+  const update = api.salon.updateSalonProfile.useMutation({
+    onSuccess: () => {
+      void utils.salon.getSalonProfile.invalidate({ tenantId });
+    },
+  });
+  const slugCheck = api.salon.checkSlugAvailable.useQuery(
+    { slug, tenantId },
+    { enabled: editingSlug && slug.length > 0 && !slugError, staleTime: 5000 },
+  );
+
+  function validateSlug(v: string) {
+    if (v && !/^[a-z0-9-]+$/.test(v)) {
+      setSlugError(t("salon.publicProfile.slugError", lang));
+      return false;
+    }
+    setSlugError("");
+    return true;
+  }
+
+  function saveSlug() {
+    if (!validateSlug(slug)) return;
+    if (slugCheck.data?.available === false) return;
+    update.mutate({ tenantId, slug: slug || undefined });
+    setEditingSlug(false);
+  }
+
+  function saveDisplayName() {
+    update.mutate({ tenantId, displayName: displayName.trim() || "" });
+    setEditingName(false);
+  }
+
+  function toggleChat() {
+    if (!data) return;
+    const nextVal = (data.chatEnabled ?? 1) === 1 ? 0 : 1;
+    update.mutate({ tenantId, chatEnabled: nextVal });
+  }
+
+  if (profile.isLoading) {
     return (
-      <section className="glass-card rounded-2xl p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-sky-500/15 flex items-center justify-center">
-            <Globe className="h-5 w-5 text-sky-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.noSlugTitle", lang)}</h3>
-            <p className="text-[11px] text-slate-500">
-              {t("channels.webChat.noSlugHint", lang)}{" "}
-              <Link href="/dashboard?tab=public_profile" className="text-sky-400 hover:underline">{t("channels.webProfileTabLink", lang)}</Link>
-            </p>
-          </div>
-        </div>
+      <section className="glass-card rounded-2xl p-8 text-center">
+        <Loader2 className="h-5 w-5 animate-spin text-brand-400 mx-auto" />
       </section>
     );
   }
 
+  const chatEnabled = (data?.chatEnabled ?? 1) === 1;
+  const slugSaved = data?.slug ?? null;
+  const chatUrl = slugSaved ? `https://manicbot.com/salon/${slugSaved}/chat` : null;
+
   return (
     <div className="space-y-4">
-      {/* Status + chat URL */}
+      {/* Status pill at the top — chat on/off, NOT catalog publication. */}
       <section className="glass-card rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${publicActive ? "bg-emerald-500/15" : "bg-slate-500/15"}`}>
-            <Sparkles className={`h-5 w-5 ${publicActive ? "text-emerald-400" : "text-slate-400"}`} />
+          <div className={`h-10 w-10 rounded-2xl flex items-center justify-center ${chatEnabled ? "bg-emerald-500/15" : "bg-slate-500/15"}`}>
+            <Sparkles className={`h-5 w-5 ${chatEnabled ? "text-emerald-400" : "text-slate-400"}`} />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.title", lang)}</h3>
-            <p className={`text-[11px] ${publicActive ? "text-emerald-400" : "text-slate-500"}`}>
-              {publicActive ? t("channels.published", lang) : t("channels.hiddenFromCatalog", lang)}
+            <p className={`text-[11px] ${chatEnabled ? "text-emerald-400" : "text-slate-500"}`}>
+              {chatEnabled ? t("channels.webChat.state.chatOn", lang) : t("channels.webChat.state.chatOff", lang)}
             </p>
           </div>
-          <a href={chatUrl!} target="_blank" rel="noopener noreferrer"
-            className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
-            {t("channels.open", lang)} <ExternalLink className="h-3 w-3" />
-          </a>
+          {chatUrl && (
+            <a href={chatUrl} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
+              {t("channels.open", lang)} <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
         </div>
-
         <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("channels.webChat.hint", lang)}</p>
-
-        {/* Chat URL */}
-        <div>
-          <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">{t("channels.webChat.chatUrl", lang)}</p>
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/40 rounded-xl px-3 py-2">
-            <code className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate">{chatUrl}</code>
-            <CopyBtn value={chatUrl!} />
-          </div>
-        </div>
       </section>
 
-      {/* QR Code */}
+      {/* Inline Setup — slug + display name + logo + chat on/off. */}
       <section className="glass-card rounded-2xl p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <QrCode className="h-4 w-4 text-slate-400" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.qrCode", lang)}</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.setup.title", lang)}</h3>
+
+        {/* Slug */}
+        <div>
+          <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("channels.webChat.setup.slugLabel", lang)}</label>
+          <div className="flex items-center gap-2">
+            <input
+              value={slug}
+              onChange={(e) => { const v = e.target.value.toLowerCase(); setSlug(v); validateSlug(v); }}
+              onFocus={() => setEditingSlug(true)}
+              onBlur={() => setEditingSlug(false)}
+              placeholder="my-salon"
+              className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+            />
+            {slug && !slugError && (
+              <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
+                {slugCheck.isLoading ? "…" : slugCheck.data?.available === false ? `❌ ${t("salon.publicProfile.taken", lang)}` : slugCheck.data?.available ? "✅" : ""}
+              </span>
+            )}
+            <Btn
+              onClick={saveSlug}
+              disabled={
+                update.isPending ||
+                !!slugError ||
+                slug === (slugSaved ?? "") ||
+                slugCheck.data?.available === false
+              }
+              className="px-3 py-2 text-xs"
+            >
+              {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("common.save", lang)}
+            </Btn>
+          </div>
+          {slugError && <p className="text-xs text-red-400 mt-1">{slugError}</p>}
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-500">{t("channels.webChat.setup.slugHelp", lang)}</p>
         </div>
-        <p className="text-[11px] text-slate-500">{t("channels.webChat.qrHint", lang)}</p>
-        <div className="flex flex-col items-center gap-3">
-          <div className="bg-white p-4 rounded-2xl" data-qr-wrapper="web-chat">
-            <QRCodeSVG value={chatUrl!} size={200} level="M" />
+
+        {/* Display name */}
+        <div>
+          <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("channels.webChat.setup.displayNameLabel", lang)}</label>
+          <div className="flex items-center gap-2">
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onFocus={() => setEditingName(true)}
+              onBlur={() => setEditingName(false)}
+              placeholder={t("channels.webChat.setup.displayNameLabel", lang)}
+              className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+              maxLength={120}
+            />
+            <Btn
+              onClick={saveDisplayName}
+              disabled={update.isPending || displayName === (data?.displayName ?? "")}
+              className="px-3 py-2 text-xs"
+            >
+              {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("common.save", lang)}
+            </Btn>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-500">{t("channels.webChat.setup.displayNameHelp", lang)}</p>
+        </div>
+
+        {/* Logo */}
+        <AssetUploadField
+          label={t("channels.webChat.setup.logoLabel", lang)}
+          hint={t("channels.webChat.setup.logoHelp", lang)}
+          tenantId={tenantId}
+          kind="logo"
+          value={data?.logo ?? ""}
+          onChange={(v) => {
+            update.mutate({
+              tenantId,
+              logo: v.url || "",
+              logoR2Key: v.key || "",
+            });
+          }}
+        />
+
+        {/* Chat on/off — pill toggle, brand-styled */}
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200/50 dark:border-slate-700/40">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-slate-900 dark:text-white">{t("channels.webChat.setup.chatOnLabel", lang)}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{t("channels.webChat.setup.chatOnHelp", lang)}</p>
           </div>
           <button
             type="button"
-            onClick={() => {
-              const wrapper = document.querySelector('[data-qr-wrapper="web-chat"]');
-              const svg = wrapper?.querySelector("svg") as SVGSVGElement | null;
-              downloadQrPng(svg, `qr-chat-${slug}.png`);
-            }}
-            className="flex items-center gap-2 text-xs px-4 py-2 rounded-xl bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-colors font-medium"
+            onClick={toggleChat}
+            disabled={update.isPending}
+            aria-pressed={chatEnabled}
+            aria-label={chatEnabled ? t("channels.webChat.state.chatOn", lang) : t("channels.webChat.state.chatOff", lang)}
+            className={`relative inline-flex h-7 w-12 shrink-0 rounded-full transition-colors ${chatEnabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"} disabled:opacity-50`}
           >
-            <Download className="h-3.5 w-3.5" />
-            {t("channels.downloadPng", lang)}
+            <span
+              className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${chatEnabled ? "translate-x-5" : ""}`}
+            />
           </button>
         </div>
       </section>
 
-      {/* Live preview — same-origin iframe of the actual /chat page. */}
-      <section className="glass-card rounded-2xl p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="h-4 w-4 text-slate-400" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.preview", lang)}</h3>
-        </div>
-        <p className="text-[11px] text-slate-500">{t("channels.webChat.previewHint", lang)}</p>
-        {publicActive ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-900/50">
-            <iframe
-              data-testid="web-chat-preview"
-              src={chatUrl!}
-              title={t("channels.webChat.preview", lang)}
-              loading="lazy"
-              className="w-full h-[480px] sm:h-[560px] border-0"
-            />
+      {/* Chat URL — visible whenever a slug is set, regardless of chat on/off. */}
+      {chatUrl && (
+        <section className="glass-card rounded-2xl p-5 space-y-4">
+          <div>
+            <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">{t("channels.webChat.chatUrl", lang)}</p>
+            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/40 rounded-xl px-3 py-2">
+              <code className="flex-1 text-[11px] text-slate-700 dark:text-slate-300 truncate">{chatUrl}</code>
+              <CopyBtn value={chatUrl} />
+            </div>
+            {!chatEnabled && (
+              <p className="mt-2 text-[11px] text-amber-500">
+                <Power className="inline h-3 w-3 mr-1" />
+                {t("channels.webChat.state.urlHiddenHint", lang)}
+              </p>
+            )}
           </div>
-        ) : (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-3 text-[11px] text-amber-400">
-            {t("channels.webChat.publishToSeePreview", lang)}
+        </section>
+      )}
+
+      {/* QR Code — same gate as URL. */}
+      {chatUrl && (
+        <section className="glass-card rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <QrCode className="h-4 w-4 text-slate-400" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.qrCode", lang)}</h3>
           </div>
-        )}
-      </section>
+          <p className="text-[11px] text-slate-500">{t("channels.webChat.qrHint", lang)}</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="bg-white p-4 rounded-2xl" data-qr-wrapper="web-chat">
+              <QRCodeSVG value={chatUrl} size={200} level="M" />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const wrapper = document.querySelector('[data-qr-wrapper="web-chat"]');
+                const svg = wrapper?.querySelector("svg") as SVGSVGElement | null;
+                downloadQrPng(svg, `qr-chat-${slugSaved}.png`);
+              }}
+              className="flex items-center gap-2 text-xs px-4 py-2 rounded-xl bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-colors font-medium"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t("channels.downloadPng", lang)}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Live preview — gates on chatEnabled (NOT publicActive). 0090. */}
+      {chatUrl && (
+        <section className="glass-card rounded-2xl p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-slate-400" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.preview", lang)}</h3>
+          </div>
+          <p className="text-[11px] text-slate-500">{t("channels.webChat.previewHint", lang)}</p>
+          {chatEnabled ? (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-900/50">
+              <iframe
+                data-testid="web-chat-preview"
+                src={chatUrl}
+                title={t("channels.webChat.preview", lang)}
+                loading="lazy"
+                className="w-full h-[480px] sm:h-[560px] border-0"
+              />
+            </div>
+          ) : (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-3 text-[11px] text-amber-400">
+              {t("channels.webChat.state.previewPausedHint", lang)}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
+}
+
+/**
+ * Tiny helper to mirror the "hydrate form state from server" pattern
+ * used in PublicProfileEditor without re-implementing the same
+ * `useEffect` dance every time. The callback fires whenever the data
+ * reference changes (including `undefined → object` on first load).
+ */
+function useEffectOnDataChange<T>(data: T | undefined, cb: (next: T) => void) {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const ref = useRef<T | undefined>(undefined);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (data === undefined) return;
+    if (ref.current === data) return;
+    ref.current = data;
+    cb(data);
+  }, [data, cb]);
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -580,12 +774,8 @@ function buildChannelTabs(lang: Lang): { key: ChannelTab; label: string; icon: R
 
 export function SalonChannelsTab({
   tenantId,
-  slug,
-  publicActive,
 }: {
   tenantId: string;
-  slug?: string | null;
-  publicActive?: boolean;
 }) {
   const { lang } = useLang();
   const [active, setActive] = useState<ChannelTab>("telegram");
@@ -621,7 +811,7 @@ export function SalonChannelsTab({
       {active === "telegram" && <TelegramTab tenantId={tenantId} />}
       {active === "instagram" && <InstagramTab tenantId={tenantId} />}
       {active === "whatsapp" && <WhatsAppTab tenantId={tenantId} />}
-      {active === "web" && <WebChatTab slug={slug} publicActive={publicActive} />}
+      {active === "web" && <WebChatTab tenantId={tenantId} />}
     </div>
   );
 }

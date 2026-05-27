@@ -260,6 +260,185 @@ export const publicSalonRouter = createTRPCRouter({
       };
     }),
 
+  /**
+   * Get a salon profile for the web-chat page (`/salon/{slug}/chat`).
+   *
+   * Twin of `getProfile` with one critical change in the WHERE clause:
+   * gates on `tenants.chatEnabled = 1` (migration 0090) instead of
+   * `tenants.publicActive = 1`. This is what lets a salon owner serve
+   * a working chat URL — e.g. printed on a business card or pinned to
+   * their Instagram bio — while keeping their public-catalog card
+   * hidden. Catalog visibility (`getProfile`) is unchanged.
+   *
+   * The projection is intentionally the same as `getProfile` so the
+   * chat page can consume identical fields without branching. The two
+   * differing fields below are: `publicActive` (reflects the real
+   * column value, not a literal `1`) and the additional `chatEnabled`
+   * field (always `1` by virtue of the WHERE clause, surfaced for
+   * symmetry).
+   */
+  getProfileForChat: publicProcedure
+    .input(z.object({ slug: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertNotRateLimited(ctx.db, clientIp(ctx), "publicSalon.getProfileForChat");
+
+      const tenantRows = await ctx.db
+        .select()
+        .from(tenants)
+        .where(and(eq(tenants.slug, input.slug), eq(tenants.chatEnabled, 1)))
+        .limit(1);
+
+      const tenant = tenantRows[0];
+      if (!tenant) return null;
+
+      const [serviceRows, masterRows, configRows, botRows, categoryRows] = await Promise.all([
+        ctx.db
+          .select()
+          .from(services)
+          .where(
+            and(
+              eq(services.tenantId, tenant.id),
+              eq(services.active, 1),
+              eq(services.hidden, 0),
+            ),
+          )
+          .orderBy(services.sortOrder),
+        ctx.db
+          .select()
+          .from(masters)
+          .where(and(
+            eq(masters.tenantId, tenant.id),
+            eq(masters.active, 1),
+            eq(masters.publicHidden, 0),
+          )),
+        ctx.db
+          .select()
+          .from(tenantConfig)
+          .where(eq(tenantConfig.tenantId, tenant.id)),
+        ctx.db
+          .select()
+          .from(bots)
+          .where(and(eq(bots.tenantId, tenant.id), eq(bots.active, 1)))
+          .limit(1),
+        ctx.db
+          .select({ id: serviceCategories.id, name: serviceCategories.name, sortOrder: serviceCategories.sortOrder })
+          .from(serviceCategories)
+          .where(eq(serviceCategories.tenantId, tenant.id))
+          .orderBy(serviceCategories.sortOrder, serviceCategories.name),
+      ]);
+
+      const cfg = Object.fromEntries(
+        configRows.map((r: any) => [r.key, r.value]),
+      );
+      let salon: Record<string, unknown> = {};
+      try { salon = tenant.salon ? JSON.parse(tenant.salon) : {}; } catch { /* ignore */ }
+
+      let photos: string[] = [];
+      try { photos = tenant.photos ? JSON.parse(tenant.photos) : []; } catch { /* ignore */ }
+
+      const botUsername = botRows[0]?.botUsername ?? null;
+
+      const reviewsCfg = configRows.find((c: any) => c.key === "reviews_public");
+      const reviewsPublic = !reviewsCfg || reviewsCfg.value !== "false";
+      let rating: { avg: number; count: number } | null = null;
+      if (reviewsPublic) {
+        const ratingRow = await ctx.db.select({
+          avg: sql<number>`ROUND(AVG(rating), 1)`,
+          count: sql<number>`count(*)`,
+        }).from(reviews).where(and(
+          eq(reviews.tenantId, tenant.id),
+          inArray(reviews.status, ["active", "featured"]),
+        ));
+        const r = ratingRow[0];
+        if (r && r.count > 0) rating = { avg: r.avg, count: r.count };
+      }
+
+      let brandPalette: Record<string, string> | null = null;
+      try { brandPalette = tenant.brandPalette ? JSON.parse(tenant.brandPalette) : null; } catch { /* ignore */ }
+
+      return {
+        id: tenant.id,
+        slug: tenant.slug,
+        // Real values here (unlike `getProfile` which pins `publicActive: 1`).
+        // The catalog state and the chat state are now independent.
+        publicActive: (tenant.publicActive ?? 0) as 0 | 1,
+        chatEnabled: 1 as const,
+        isTest: !!tenant.isTest,
+        name: tenant.name,
+        displayName: tenant.displayName ?? null,
+        logo: tenant.logo ?? null,
+        coverPhoto: tenant.coverPhoto ?? null,
+        brandPalette,
+        description: tenant.description,
+        city: tenant.city,
+        lat: tenant.lat,
+        lng: tenant.lng,
+        address: (salon.address as string) ?? cfg.address ?? null,
+        phone: (salon.phone as string) ?? cfg.phone ?? null,
+        workHours: salon.workHours ?? cfg.work_hours ?? null,
+        photos,
+        mapsUrl: tenant.mapsUrl,
+        instagramUrl: tenant.instagramUrl,
+        botUsername,
+        rating,
+        services: serviceRows.map((s: any) => {
+          let names: Record<string, string> = {};
+          try { names = s.names ? JSON.parse(s.names) : {}; } catch { /* ignore */ }
+          let svcPhotos: string[] = [];
+          try { svcPhotos = s.photos ? JSON.parse(s.photos) : []; } catch { /* ignore */ }
+          return {
+            svcId: s.svcId,
+            emoji: s.emoji,
+            name: names.ru ?? names.en ?? names.pl ?? s.svcId,
+            names,
+            description: (() => {
+              if (!s.description) return null;
+              try {
+                const parsed = JSON.parse(s.description);
+                if (typeof parsed === 'string') return parsed;
+                return parsed.ru ?? parsed.en ?? parsed.ua ?? parsed.pl ?? null;
+              } catch {
+                return s.description;
+              }
+            })(),
+            duration: s.duration,
+            price: s.price,
+            photos: svcPhotos,
+            category: s.category ?? null,
+          };
+        }),
+        serviceCategories: categoryRows.map((c: any) => ({
+          id: c.id as string,
+          name: c.name as string,
+          sortOrder: c.sortOrder as number,
+        })),
+        masters: masterRows.map((m: any) => {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const inRange =
+            typeof m.vacationFrom === "number" &&
+            typeof m.vacationUntil === "number" &&
+            m.vacationFrom <= nowSec &&
+            nowSec <= m.vacationUntil;
+          const onVacation = !!m.onVacation || inRange;
+          return {
+            chatId: m.chatId,
+            name: m.name,
+            onVacation,
+            vacationUntil: onVacation && typeof m.vacationUntil === "number" ? m.vacationUntil : null,
+            services: (() => {
+              try { return m.services ? JSON.parse(m.services) : []; } catch { return []; }
+            })(),
+            workHours: (() => {
+              try { return m.workHours ? JSON.parse(m.workHours) : null; } catch { return null; }
+            })(),
+            workDays: (() => {
+              try { return m.workDays ? JSON.parse(m.workDays) : null; } catch { return null; }
+            })(),
+          };
+        }),
+      };
+    }),
+
   /** Search public salons by city, query, service type. */
   search: publicProcedure
     .input(

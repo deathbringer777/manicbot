@@ -2788,7 +2788,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       {tab === "staff" && <StaffTab tenantId={tenantId} />}
 
       {/* ── CHANNELS ── */}
-      {tab === "channels" && <SalonChannelsTab tenantId={tenantId} slug={profile.data?.slug ?? null} publicActive={!!profile.data?.publicActive} />}
+      {tab === "channels" && <SalonChannelsTab tenantId={tenantId} />}
 
       {/* `?tab=settings` and `?tab=public_profile` redirect to /settings
           (see useEffect above) — no inline render here. */}

@@ -137,8 +137,11 @@ export async function resolveTenantFromInstagram(ctx, igPageId) {
  * channel is a first-party transport and needs no external credentials.
  * Returns a *synthetic* channelConfig so `buildChannelCtx` works unchanged.
  *
- * Only salons with `public_active = 1` are reachable via the web widget so
- * unpublished drafts stay private.
+ * Only salons with `chat_enabled = 1` are reachable via the web widget
+ * (migration 0090). This decouples chat availability from catalog
+ * publication: an owner can keep their `public_active = 0` (hidden
+ * from the directory) and still serve a working chat URL they share
+ * manually — printed QR, Instagram bio, business card.
  *
  * @param {{ db: D1Database }} ctx
  * @param {string} slug
@@ -148,7 +151,7 @@ export async function resolveTenantFromSlug(ctx, slug) {
   if (!ctx?.db || !slug || typeof slug !== 'string') return null;
   const rows = await dbAll(
     ctx,
-    'SELECT id, name, display_name, logo, cover_photo, brand_palette, slug, public_active FROM tenants WHERE slug = ? AND public_active = 1 LIMIT 1',
+    'SELECT id, name, display_name, logo, cover_photo, brand_palette, slug, public_active, chat_enabled FROM tenants WHERE slug = ? AND chat_enabled = 1 LIMIT 1',
     slug,
   );
   if (!rows.length) return null;

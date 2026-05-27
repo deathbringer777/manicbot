@@ -125,12 +125,15 @@ const ALLOWLIST = new Set([
   // updateSalonProfile body) → 1751 (PR-A added the captureError import
   // at the top of the file, shifting everything below by 1 line) → 1752
   // (PR-B added notifyOrCapture import + 6 lines of bell-state vars +
-  // the awaited bellResult block in sendMasterInvitation body; net +1).
+  // the awaited bellResult block in sendMasterInvitation body; net +1) →
+  // 1760 (migration 0090 added the `chatEnabled` zod field + `chatEnabled`
+  // → `tenants` write + the `chatEnabled` projection in `getSalonProfile`;
+  // net +8 lines in updateSalonProfile body and the proc above).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1752",
+  "src/server/api/routers/salon.ts:1760",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

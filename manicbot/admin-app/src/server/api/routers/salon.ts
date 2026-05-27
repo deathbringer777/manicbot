@@ -256,6 +256,7 @@ export const salonRouter = createTRPCRouter({
       lng: tenantRow[0]?.lng ?? null,
       mapsUrl: tenantRow[0]?.mapsUrl ?? null,
       publicActive: tenantRow[0]?.publicActive ?? 0,
+      chatEnabled: tenantRow[0]?.chatEnabled ?? 1,
       photos: tenantRow[0]?.photos ? (() => { try { return JSON.parse(tenantRow[0]!.photos!); } catch { return []; } })() : [],
       logo: tenantRow[0]?.logo ?? null,
       coverPhoto: tenantRow[0]?.coverPhoto ?? null,
@@ -867,6 +868,12 @@ export const salonRouter = createTRPCRouter({
       lng: z.number().min(-180).max(180).optional(),
       mapsUrl: z.string().max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
+      // 0090 — chat surface independent of catalog publication. Owners
+      // toggle this on to expose `/salon/{slug}/chat` without putting
+      // the salon card in the public directory. The Worker
+      // `/chat/init` and `publicSalon.getProfileForChat` both gate on
+      // this column (not `publicActive`). Default for new tenants is 1.
+      chatEnabled: z.number().min(0).max(1).optional(),
       photos: z.array(z.string()).optional(),
       // Restrict to https-only URLs — `z.string().url()` alone permits
       // `javascript:` / `data:` schemes (WHATWG URL parses them). These fields
@@ -964,6 +971,7 @@ export const salonRouter = createTRPCRouter({
       if (input.lng !== undefined) tenantUpdate.lng = input.lng;
       if (input.mapsUrl !== undefined) tenantUpdate.mapsUrl = input.mapsUrl || null;
       if (input.publicActive !== undefined) tenantUpdate.publicActive = input.publicActive;
+      if (input.chatEnabled !== undefined) tenantUpdate.chatEnabled = input.chatEnabled;
       if (input.photos !== undefined) tenantUpdate.photos = JSON.stringify(input.photos);
       if (input.logo !== undefined) tenantUpdate.logo = input.logo || null;
       if (input.coverPhoto !== undefined) tenantUpdate.coverPhoto = input.coverPhoto || null;

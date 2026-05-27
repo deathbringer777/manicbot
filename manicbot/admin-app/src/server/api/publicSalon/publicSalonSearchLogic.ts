@@ -117,6 +117,7 @@ export const PUBLIC_CACHE_CONTROL =
  */
 export const PUBLIC_CACHEABLE_PROCEDURES: readonly string[] = [
   "publicSalon.getProfile",
+  "publicSalon.getProfileForChat",
   "publicSalon.getCities",
   "publicSalon.autocomplete",
 ];

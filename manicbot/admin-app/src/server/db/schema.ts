@@ -27,6 +27,7 @@ export const tenants = sqliteTable("tenants", {
   lng: real("lng"),
   city: text("city"),
   publicActive: integer("public_active").notNull().default(0),
+  chatEnabled: integer("chat_enabled").notNull().default(1),
   searchText: text("search_text"),
   logo: text("logo"),
   coverPhoto: text("cover_photo"),

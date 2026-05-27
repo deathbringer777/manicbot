@@ -34,6 +34,8 @@ import { tryChatWeb } from '../src/http/chatWebHttp.js';
 const TENANT_ROW = {
   id: 't_demo', name: 'Demo', display_name: 'Demo', logo: null, cover_photo: null,
   brand_palette: null, slug: 'demo', description: null, city: null, public_active: 1,
+  // 0090 — gate column for `loadSalonBranding` is now `chat_enabled = 1`.
+  chat_enabled: 1,
 };
 
 function makeEnv() {

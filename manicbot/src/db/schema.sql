@@ -298,6 +298,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   lng REAL,
   city TEXT,
   public_active INTEGER NOT NULL DEFAULT 0,
+  chat_enabled INTEGER NOT NULL DEFAULT 1,
   search_text TEXT,
   logo TEXT,
   cover_photo TEXT,

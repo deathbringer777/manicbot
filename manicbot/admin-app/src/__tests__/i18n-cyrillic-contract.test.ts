@@ -91,7 +91,7 @@ const KEYS: TranslationKey[] = [
   "channels.igAccountId", "channels.igBusinessId", "channels.igNotConnected",
   "channels.connectIg", "channels.metaContactSupport", "channels.webhookUnavailable",
   "channels.waConnected", "channels.waDisconnectConfirm", "channels.disconnectWa",
-  "channels.webNotSet", "channels.setupWebInTab", "channels.webProfileTabLink",
+  "channels.webNotSet", "channels.setupWebInTab",
   "channels.webProfile", "channels.published", "channels.hiddenFromCatalog",
   "channels.open", "channels.profileUrl", "channels.qrCode", "channels.qrHint",
   "channels.downloadPng", "channels.tabWeb",

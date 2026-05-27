@@ -15,9 +15,10 @@ const emailCopy: Record<Lang, {
   passwordResetCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
   welcome: { subject: string; heading: string; body: string; cta: string };
   /**
-   * Newsletter "Stay in the loop" subscription confirmation. Sent once per
-   * NEW row in `newsletter_subscribers` (migration 0086). NOT the same as
-   * `welcome` above — that one fires after registration + email verification.
+   * Newsletter "Stay in the loop" subscription confirmation. Sent AFTER
+   * the double-opt-in click (migration 0092) — the confirm-click email
+   * itself is `subscriptionConfirm` below. NOT the same as `welcome` —
+   * that one fires after web-user registration + email verification.
    */
   subscriptionWelcome: {
     subject: string;
@@ -28,6 +29,20 @@ const emailCopy: Record<Lang, {
     bullet3: string;
     footerNote: string;
     unsubscribeHint: string;
+  };
+  /**
+   * Newsletter double-opt-in CONFIRM-CLICK email (migration 0092). Sent
+   * on the very first POST /api/subscribe — the recipient must click the
+   * link to be added to the live list. Once clicked, the `subscriptionWelcome`
+   * email above is delivered with a working one-click unsub link.
+   */
+  subscriptionConfirm: {
+    subject: string;
+    heading: string;
+    body: string;
+    cta: string;
+    expires: string;
+    ignore: string;
   };
   emailChange: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
   emailChangeCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
@@ -130,6 +145,14 @@ const emailCopy: Record<Lang, {
       bullet3: "Истории команд, которые уже работают на ManicBot.",
       footerNote: "Никакого спама. Если разонравится — отписаться можно одной кнопкой ниже.",
       unsubscribeHint: "Отписаться",
+    },
+    subscriptionConfirm: {
+      subject: "Подтвердите подписку — ManicBot",
+      heading: "Подтвердите подписку",
+      body: "Кто-то (надеемся, вы) подписался на новости ManicBot этим email. Чтобы добавить вас в список — нажмите кнопку ниже.",
+      cta: "Подтвердить подписку",
+      expires: "Ссылка действует 7 дней.",
+      ignore: "Если вы не подписывались — просто проигнорируйте это письмо. Без подтверждения мы не будем писать.",
     },
     emailChange: {
       subject: "Подтвердите новый email — ManicBot",
@@ -262,6 +285,14 @@ const emailCopy: Record<Lang, {
       footerNote: "Жодного спаму. Якщо набридне — відписатися можна однією кнопкою нижче.",
       unsubscribeHint: "Відписатися",
     },
+    subscriptionConfirm: {
+      subject: "Підтвердіть підписку — ManicBot",
+      heading: "Підтвердіть підписку",
+      body: "Хтось (сподіваємось, ви) підписався на новини ManicBot з цього email. Щоб додати вас до списку — натисніть кнопку нижче.",
+      cta: "Підтвердити підписку",
+      expires: "Посилання дійсне 7 днів.",
+      ignore: "Якщо ви не підписувалися — просто проігноруйте цей лист. Без підтвердження ми не будемо писати.",
+    },
     emailChange: {
       subject: "Підтвердіть новий email — ManicBot",
       heading: "Зміна email",
@@ -393,6 +424,14 @@ const emailCopy: Record<Lang, {
       footerNote: "Zero spam. Don't like it? One-click unsubscribe below.",
       unsubscribeHint: "Unsubscribe",
     },
+    subscriptionConfirm: {
+      subject: "Confirm your subscription — ManicBot",
+      heading: "Confirm your subscription",
+      body: "Someone (hopefully you) just signed up for ManicBot updates with this email. To be added to the list, click the button below.",
+      cta: "Confirm subscription",
+      expires: "This link expires in 7 days.",
+      ignore: "If you didn't subscribe, ignore this email. We won't send anything without your confirmation.",
+    },
     emailChange: {
       subject: "Confirm your new email — ManicBot",
       heading: "Email change",
@@ -523,6 +562,14 @@ const emailCopy: Record<Lang, {
       bullet3: "Historie zespołów, które już działają na ManicBot.",
       footerNote: "Zero spamu. Nie podoba Ci się? Wypisz się jednym kliknięciem poniżej.",
       unsubscribeHint: "Wypisz się",
+    },
+    subscriptionConfirm: {
+      subject: "Potwierdź subskrypcję — ManicBot",
+      heading: "Potwierdź subskrypcję",
+      body: "Ktoś (mamy nadzieję, że Ty) właśnie zapisał ten email na nowości ManicBot. Aby trafić na listę, kliknij przycisk poniżej.",
+      cta: "Potwierdź subskrypcję",
+      expires: "Link ważny 7 dni.",
+      ignore: "Jeśli to nie Ty się zapisałeś — po prostu zignoruj tę wiadomość. Bez potwierdzenia nie wyślemy nic.",
     },
     emailChange: {
       subject: "Potwierdź nowy email — ManicBot",
@@ -721,15 +768,18 @@ export function welcomeEmailHtml(name: string | null, dashboardUrl: string, lang
 }
 
 /**
- * Newsletter "Stay in the loop" confirmation. Sent once per NEW row in
- * `newsletter_subscribers` (migrations 0086 + 0090). Not to be confused
- * with `welcomeEmailHtml` above — that one fires post-registration after
- * the verification code is consumed.
+ * Newsletter post-confirmation acknowledgement ("You're on the list!").
+ * Sent AFTER the subscriber clicks the confirm-click link from
+ * `subscriptionConfirmEmailHtml` (migration 0092) — never on the initial
+ * subscribe POST. Not to be confused with `welcomeEmailHtml` above — that
+ * one fires post-registration after the verification code is consumed.
  *
- * `unsubscribeUrl` is built by `sendNewsletterWelcomeEmail` against the
- * real Worker `/u/<token>` endpoint (0090). The same URL is also emitted
- * as the `List-Unsubscribe` header so Gmail / Apple Mail render an inline
- * one-click unsub affordance (RFC 8058).
+ * `unsubscribeUrl` is a real one-click URL minted at confirm-time
+ * against the Worker `/u/<token>` endpoint (migration 0090). The same URL
+ * is also emitted as the `List-Unsubscribe` header so Gmail / Apple Mail
+ * render an inline one-click unsub affordance (RFC 8058). Footer renders
+ * an inline anchor so the recipient can opt out in a single click —
+ * required by GDPR / CAN-SPAM.
  */
 export function subscriptionWelcomeEmailHtml(unsubscribeUrl: string, lang: Lang): string {
   const c = getEmailCopy(lang).subscriptionWelcome;
@@ -743,6 +793,24 @@ export function subscriptionWelcomeEmailHtml(unsubscribeUrl: string, lang: Lang)
   return baseLayout(
     c.heading,
     paragraph(c.body) + bullets + unsubscribe,
+    getEmailCopy(lang).footer,
+  );
+}
+
+/**
+ * Newsletter DOI confirm-click email (migration 0092). Sent immediately on
+ * POST /api/subscribe; the recipient must click the CTA to land in the
+ * confirmed list. Until that click happens, no welcome email is sent and
+ * no campaign will ever ship to that address.
+ */
+export function subscriptionConfirmEmailHtml(confirmUrl: string, lang: Lang): string {
+  const c = getEmailCopy(lang).subscriptionConfirm;
+  return baseLayout(
+    c.heading,
+    paragraph(c.body) +
+    ctaButton(confirmUrl, c.cta) +
+    muted(c.expires) +
+    muted(c.ignore),
     getEmailCopy(lang).footer,
   );
 }

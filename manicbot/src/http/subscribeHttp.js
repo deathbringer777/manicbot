@@ -7,17 +7,22 @@
  * inbox" — but no D1 row was created and no email was sent. Users were
  * subscribing into a void.
  *
- * Architecture:
+ * Architecture (migration 0092 — double-opt-in):
  *   landing form -> Worker /api/subscribe
  *                -> D1 newsletter_subscribers (UPSERT idempotent on email)
+ *                -> mint confirm_token (32-hex, 7d TTL)
  *                -> fire-and-forget POST to admin-app
- *                   /api/internal/newsletter-welcome
- *                -> admin-app calls Resend, stamps welcome_sent_at
+ *                   /api/internal/newsletter-confirm
+ *                -> admin-app calls Resend with the confirm-click link
  *
  * The Worker MUST NOT call Resend directly — Resend lives in admin-app and
  * its API key is a Pages secret, not a Worker secret. The Bearer token used
- * for the internal call is `INTERNAL_API_TOKEN` (new secret, present on
- * both Worker and Pages).
+ * for the internal call is `INTERNAL_API_TOKEN` (shared with admin-app).
+ *
+ * The WELCOME email (post-confirm acknowledgement) is dispatched from
+ * /confirm-subscription after the subscriber clicks the link — see
+ * confirmSubscriptionHttp.js. That side mints an `unsubscribe_token`
+ * and embeds it in the welcome's one-click unsub URL.
  *
  * Security model:
  *   * Allowlisted languages + sources + a strict email regex.
@@ -25,18 +30,23 @@
  *   * Hard body cap (8 KB), method gate (POST only).
  *   * Always 202 on accept and on dedup — never leak whether an email was
  *     already subscribed (email-enumeration defense).
- *   * If INTERNAL_API_TOKEN or ADMIN_APP_URL is unset, the welcome step is
- *     a graceful no-op + welcome_send_error is stamped. Subscribe still
- *     returns 202 so the form UX never regresses on misconfiguration.
+ *   * If INTERNAL_API_TOKEN or ADMIN_APP_URL is unset, the confirm step is
+ *     a graceful no-op + welcome_send_error is stamped (column reused as
+ *     the dispatch-error bucket for both confirm and welcome paths).
+ *     Subscribe still returns 202 so the form UX never regresses on
+ *     misconfiguration.
  */
 
 import {
   SUBSCRIBE_RATE_LIMIT_MAX,
   SUBSCRIBE_RATE_LIMIT_WINDOW_MS,
   buildSubscriberInsertParams,
-  generateUnsubscribeToken,
   parseSubscribePayload,
 } from './subscribeHttpLogic.js';
+import {
+  generateNewsletterToken,
+  CONFIRM_TOKEN_TTL_SEC,
+} from '../services/newsletterTokens.js';
 import { dbGet, dbRun } from '../utils/db.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { nowSec } from '../utils/time.js';
@@ -46,8 +56,8 @@ const MAX_BODY_BYTES = 8_192;
 const SUBSCRIBE_RATE_LIMIT_WINDOW_SEC = Math.floor(
   SUBSCRIBE_RATE_LIMIT_WINDOW_MS / 1000,
 );
-const WELCOME_PATH = '/api/internal/newsletter-welcome';
-const WELCOME_TIMEOUT_MS = 6_000;
+const CONFIRM_PATH = '/api/internal/newsletter-confirm';
+const CONFIRM_DISPATCH_TIMEOUT_MS = 6_000;
 
 async function rateLimitOk(env, ip) {
   if (!env?.DB) return true;
@@ -76,6 +86,19 @@ function clientIp(request) {
   );
 }
 
+/**
+ * Test-only seam: lets the vitest suite `vi.spyOn(__test,
+ * 'mintConfirmTokenForTest')` to pin the exact CSPRNG output that lands
+ * in the INSERT row + the dispatch body. Re-exported as `__test` at the
+ * end of the file alongside other internal helpers.
+ */
+export const __test = {
+  rateLimitOk,
+  mintConfirmTokenForTest: () => generateNewsletterToken(),
+  // `tryInsertSubscriber` and the SUBSCRIBE_RATE_LIMIT_WINDOW_SEC / CONFIRM_PATH
+  // constants are attached at the bottom of the file once they are in scope.
+};
+
 async function readBoundedJson(request) {
   const contentLength = Number(request.headers.get('content-length') || '0');
   if (contentLength > MAX_BODY_BYTES) return { ok: false, error: 'too_large' };
@@ -95,59 +118,40 @@ async function readBoundedJson(request) {
 }
 
 /**
- * Atomically insert a new subscriber. Returns one of:
- *   { kind: 'inserted', token }   — fresh subscriber, token freshly minted.
- *   { kind: 'reactivated', token } — previously unsubscribed, now active
- *                                    again; token re-used (stable).
- *   { kind: 'noop' }              — active row already exists; silent dedup.
+ * Atomically insert a new subscriber. Returns
+ * `{ inserted: boolean, confirmToken: string | null }`.
  *
- * In all cases the public response is 202 — the kind drives the welcome
- * dispatch decision: 'inserted' and 'reactivated' fire welcome, 'noop' does
- * not.
+ * `confirmToken` is the freshly minted DOI token for newly-inserted rows,
+ * or `null` for dedup (existing row). Callers use it to dispatch the
+ * confirm-click email; for dedup we deliberately don't re-mint or re-send.
  *
  * @param {{ DB: D1Database }} env
  * @param {ReturnType<typeof buildSubscriberInsertParams>} row
  */
 async function tryInsertSubscriber(env, row) {
-  // Pre-check by email. We need three columns to decide branch:
-  //   - id (for the UPDATE in the reactivate path)
-  //   - unsubscribed_at (active vs. previously-unsubscribed)
-  //   - unsubscribe_token (token survives reactivate)
+  // Pre-check + INSERT OR IGNORE. The pre-check short-circuits the confirm
+  // dispatch for known duplicates; INSERT OR IGNORE is the actual durable
+  // guard against two concurrent submits racing past the SELECT.
+  //
+  // We probe by `email` (not `id`) because we don't need the surrogate
+  // key — we only care "does a row exist?". This also keeps the check
+  // mock-friendly (some test mocks don't auto-fill AUTOINCREMENT ids).
   const existing = await dbGet(
     { db: env.DB },
-    'SELECT id, unsubscribed_at, unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
+    'SELECT email FROM newsletter_subscribers WHERE email = ?',
     row.email,
   );
+  if (existing) return { inserted: false, confirmToken: null };
 
-  if (existing) {
-    if (existing.unsubscribed_at == null) {
-      // Active subscriber → silent dedup, preserves email-enumeration defense.
-      return { kind: 'noop' };
-    }
-    // Previously unsubscribed → reactivate. Token is stable when present
-    // (covers the legacy-row case where 0090 backfill assigned one). On the
-    // off chance the token is missing we mint a fresh one here as a self-heal
-    // so the welcome can carry a working /u/ link.
-    const token = existing.unsubscribe_token || generateUnsubscribeToken();
-    // SQL kept on ONE line — the test mock-db UPDATE parser uses a single-line
-    // regex (no `s` flag) and silently drops SET clauses after the first newline.
-    await dbRun(
-      { db: env.DB },
-      'UPDATE newsletter_subscribers SET unsubscribed_at = ?, welcome_sent_at = ?, welcome_send_error = ?, unsubscribe_token = ? WHERE id = ?',
-      null,
-      null,
-      null,
-      token,
-      existing.id,
-    );
-    return { kind: 'reactivated', token };
-  }
+  const confirmToken = __test.mintConfirmTokenForTest();
+  const confirmExpiresAt = row.createdAt + CONFIRM_TOKEN_TTL_SEC;
 
   const res = await dbRun(
     { db: env.DB },
     `INSERT OR IGNORE INTO newsletter_subscribers
-       (email, source, lang, anonymous_id, ip, user_agent, created_at, unsubscribe_token)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (email, source, lang, anonymous_id, ip, user_agent, created_at,
+        confirm_token, confirm_token_expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.email,
     row.source,
     row.lang,
@@ -155,37 +159,39 @@ async function tryInsertSubscriber(env, row) {
     row.ip,
     row.userAgent,
     row.createdAt,
-    row.unsubscribeToken,
+    confirmToken,
+    confirmExpiresAt,
   );
 
   // D1 returns `meta.changes` for INSERTs. When the UNIQUE-collision path
   // fires inside INSERT OR IGNORE, `changes` is 0 and we treat that as a
-  // race-loser dedup (another isolate inserted between our SELECT and INSERT).
+  // dedup (race-loser).
   const changes =
     typeof res?.meta?.changes === 'number'
       ? res.meta.changes
       : typeof res?.changes === 'number'
         ? res.changes
         : 1; // default to "inserted" when the binding doesn't surface meta
-  return changes > 0
-    ? { kind: 'inserted', token: row.unsubscribeToken }
-    : { kind: 'noop' };
+  if (changes <= 0) return { inserted: false, confirmToken: null };
+  return { inserted: true, confirmToken };
 }
 
 /**
- * Fire-and-forget: dispatch the welcome email through the admin-app
+ * Fire-and-forget: dispatch the CONFIRM-click email through the admin-app
  * internal endpoint. The handler never awaits the resulting Resend call;
- * the admin-app route does that internally and stamps `welcome_sent_at`.
+ * the admin-app route does that internally.
  *
- * Failure modes (each stamps `welcome_send_error` on the row):
+ * Failure modes (each stamps `welcome_send_error` on the row — column name
+ * preserved from the single-opt-in era, now used as the generic dispatch
+ * error bucket for both confirm and welcome paths):
  *   * env.ADMIN_APP_URL unset  -> 'admin_app_url_unset'
  *   * env.INTERNAL_API_TOKEN unset  -> 'internal_api_token_unset'
  *   * non-200 from admin-app  -> 'admin_app_<status>'
  *   * network/timeout         -> 'fetch_failed'
  *
- * Returns the welcome-state string so callers can pin behavior in tests.
+ * Returns the dispatch-state string so callers can pin behavior in tests.
  */
-export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
+export async function dispatchConfirmEmail(env, email, lang, confirmToken) {
   let errorCode = null;
   try {
     if (!env?.ADMIN_APP_URL) {
@@ -194,9 +200,9 @@ export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
       errorCode = 'internal_api_token_unset';
     } else {
       const base = String(env.ADMIN_APP_URL).replace(/\/$/, '');
-      const url = `${base}${WELCOME_PATH}`;
+      const url = `${base}${CONFIRM_PATH}`;
       const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), WELCOME_TIMEOUT_MS);
+      const t = setTimeout(() => ac.abort(), CONFIRM_DISPATCH_TIMEOUT_MS);
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -204,11 +210,7 @@ export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
             'content-type': 'application/json',
             authorization: `Bearer ${env.INTERNAL_API_TOKEN}`,
           },
-          body: JSON.stringify({
-            email,
-            lang: lang ?? 'en',
-            unsubscribeToken,
-          }),
+          body: JSON.stringify({ email, lang: lang ?? 'en', confirmToken }),
           signal: ac.signal,
         });
         if (!res.ok) {
@@ -216,7 +218,7 @@ export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
         }
       } catch (e) {
         log.error(
-          'subscribeHttp.dispatchWelcomeEmail',
+          'subscribeHttp.dispatchConfirmEmail',
           e instanceof Error ? e : new Error(String(e?.message || e)),
         );
         errorCode = 'fetch_failed';
@@ -227,7 +229,7 @@ export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
   } catch (e) {
     // Belt-and-braces — must never propagate to the caller.
     log.error(
-      'subscribeHttp.dispatchWelcomeEmail.outer',
+      'subscribeHttp.dispatchConfirmEmail.outer',
       e instanceof Error ? e : new Error(String(e?.message || e)),
     );
     errorCode = errorCode || 'fetch_failed';
@@ -236,7 +238,7 @@ export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
   if (errorCode && env?.DB) {
     // Stamp the error on the subscriber row so ops can see misconfig in
     // a single SELECT. Wrapped in try/catch so a transient D1 fail doesn't
-    // break the (already best-effort) welcome dispatch.
+    // break the (already best-effort) dispatch.
     try {
       await dbRun(
         { db: env.DB },
@@ -248,13 +250,14 @@ export async function dispatchWelcomeEmail(env, email, lang, unsubscribeToken) {
       );
     } catch (e) {
       log.error(
-        'subscribeHttp.dispatchWelcomeEmail.stampError',
+        'subscribeHttp.dispatchConfirmEmail.stampError',
         e instanceof Error ? e : new Error(String(e?.message || e)),
       );
     }
   }
   return errorCode ?? 'sent';
 }
+
 
 /**
  * Public handler. Returns Response. 202 on accept/dedup, 400 on bad
@@ -295,18 +298,14 @@ export async function handleSubscribeRequest(request, env, executionCtx) {
     ip,
     userAgent: request.headers.get('user-agent') || null,
     nowSec: nowSec(),
-    unsubscribeToken: generateUnsubscribeToken(),
   });
 
-  let dispatchToken = null;
+  let inserted = false;
+  let confirmToken = null;
   try {
     const ins = await tryInsertSubscriber(env, row);
-    // 'inserted' = new row, fresh token; 'reactivated' = re-subscribe after
-    // unsub, the token persists across the gap. Both branches fire welcome.
-    // 'noop' = active row exists — silent dedup, no welcome.
-    if (ins.kind === 'inserted' || ins.kind === 'reactivated') {
-      dispatchToken = ins.token;
-    }
+    inserted = ins.inserted;
+    confirmToken = ins.confirmToken;
   } catch (e) {
     // Persist failure is a hard error — we don't want to leak it back,
     // but we MUST log + return 500 so retry logic can decide what to do.
@@ -317,17 +316,17 @@ export async function handleSubscribeRequest(request, env, executionCtx) {
     return new Response('internal error', { status: 500 });
   }
 
-  if (dispatchToken) {
-    const welcome = dispatchWelcomeEmail(env, row.email, row.lang, dispatchToken);
+  if (inserted && confirmToken) {
+    const confirm = dispatchConfirmEmail(env, row.email, row.lang, confirmToken);
     if (executionCtx?.waitUntil) {
-      executionCtx.waitUntil(welcome);
+      executionCtx.waitUntil(confirm);
     } else {
       // No waitUntil (legacy ctx, tests) — fall through awaiting it so
       // tests can observe the side effect.
       try {
-        await welcome;
+        await confirm;
       } catch {
-        // already logged inside dispatchWelcomeEmail
+        // already logged inside dispatchConfirmEmail
       }
     }
   }
@@ -336,9 +335,7 @@ export async function handleSubscribeRequest(request, env, executionCtx) {
   return new Response(null, { status: 202 });
 }
 
-export const __test = {
-  rateLimitOk,
-  tryInsertSubscriber,
-  SUBSCRIBE_RATE_LIMIT_WINDOW_SEC,
-  WELCOME_PATH,
-};
+// Attach the helpers that were declared after the initial __test object.
+__test.tryInsertSubscriber = tryInsertSubscriber;
+__test.SUBSCRIBE_RATE_LIMIT_WINDOW_SEC = SUBSCRIBE_RATE_LIMIT_WINDOW_SEC;
+__test.CONFIRM_PATH = CONFIRM_PATH;

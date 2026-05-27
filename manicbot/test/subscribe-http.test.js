@@ -1,17 +1,18 @@
 /**
- * Unit + integration tests for /api/subscribe (newsletter ingest).
+ * Unit + integration tests for /api/subscribe (newsletter ingest — DOI).
  *
  * The endpoint is the only public surface that writes to
  * `newsletter_subscribers`. The tests pin:
- *   * happy path → row in D1 + welcome dispatched exactly once
+ *   * happy path → row in D1 + confirm dispatched exactly once
  *   * dedup → second submit doesn't double-INSERT or double-send
  *   * bad email → 400, no row
  *   * IP rate limit → 429 after SUBSCRIBE_RATE_LIMIT_MAX calls
  *   * body > 8 KB → 400
  *   * wrong method → 405
  *   * dispatch fires exactly once per new row
- *   * INTERNAL_API_TOKEN absent → graceful no-op, welcome_send_error stamped,
- *     subscribe still 202
+ *   * INTERNAL_API_TOKEN absent → graceful no-op, welcome_send_error stamped
+ *     (column reused as the dispatch-error bucket for both confirm and
+ *     welcome paths), subscribe still 202
  *
  * The handler uses fetch() for the internal call to admin-app, so we stub
  * globalThis.fetch via vi.stubGlobal for every test that asserts on the
@@ -22,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCtx } from './helpers/mock-db.js';
 import {
   handleSubscribeRequest,
-  dispatchWelcomeEmail,
+  dispatchConfirmEmail,
   __test,
 } from '../src/http/subscribeHttp.js';
 import {
@@ -134,19 +135,39 @@ describe('handleSubscribeRequest — happy path', () => {
     expect(row?.lang).toBe('ru');
   });
 
-  it('dispatches the welcome email exactly once per new row', async () => {
+  it('dispatches the confirm email exactly once per new row, with the confirm token', async () => {
     const ctx = makeCtx({ tenantId: 't_news_once' });
     const env = buildEnv(ctx);
     await handleSubscribeRequest(postBody({ email: 'one@example.com' }), env);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [calledUrl, init] = fetchMock.mock.calls[0];
-    expect(calledUrl).toBe(`${ADMIN_APP_URL}${__test.WELCOME_PATH}`);
+    expect(calledUrl).toBe(`${ADMIN_APP_URL}${__test.CONFIRM_PATH}`);
     expect(init.method).toBe('POST');
     expect(init.headers.authorization).toMatch(/^Bearer /);
     const parsed = JSON.parse(init.body);
     expect(parsed.email).toBe('one@example.com');
     // lang defaulted to 'en' when omitted on the wire.
     expect(parsed.lang).toBe('en');
+    // Confirm token is minted server-side and embedded in the dispatch.
+    expect(parsed.confirmToken).toMatch(/^[a-f0-9]{32}$/);
+  });
+
+  it('writes confirm_token + confirm_token_expires_at to the inserted row', async () => {
+    const ctx = makeCtx({ tenantId: 't_news_token_persist' });
+    const env = buildEnv(ctx);
+    const before = Math.floor(Date.now() / 1000);
+    await handleSubscribeRequest(postBody({ email: 'persist@example.com' }), env);
+    const row = await dbGet(
+      ctx,
+      `SELECT confirm_token, confirm_token_expires_at
+         FROM newsletter_subscribers WHERE email = ?`,
+      'persist@example.com',
+    );
+    expect(row?.confirm_token).toMatch(/^[a-f0-9]{32}$/);
+    // Expiry ≈ now + 7 days.
+    const sevenDays = 7 * 24 * 60 * 60;
+    expect(row?.confirm_token_expires_at).toBeGreaterThanOrEqual(before + sevenDays - 5);
+    expect(row?.confirm_token_expires_at).toBeLessThanOrEqual(before + sevenDays + 5);
   });
 });
 
@@ -381,6 +402,11 @@ describe('buildSubscriberInsertParams', () => {
 });
 
 describe('generateUnsubscribeToken — token shape contract', () => {
+  // The helper itself still lives in subscribeHttpLogic.js because
+  // confirmSubscriptionHttp.js mints the unsubscribe_token at confirm time
+  // (post-DOI). Subscribe-time minting is gone, but the function contract
+  // — 32 lowercase hex, CSPRNG-backed — is still load-bearing for the
+  // confirm path.
   it('returns 32 lowercase hex characters', () => {
     const t = generateUnsubscribeToken();
     expect(t).toMatch(/^[a-f0-9]{32}$/);
@@ -393,117 +419,8 @@ describe('generateUnsubscribeToken — token shape contract', () => {
   });
 });
 
-describe('handleSubscribeRequest — unsubscribe_token contract', () => {
-  let fetchMock;
-  beforeEach(() => {
-    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    vi.stubGlobal('fetch', fetchMock);
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('persists a 32-hex unsubscribe_token on the new row', async () => {
-    const ctx = makeCtx({ tenantId: 't_news_tok' });
-    const env = buildEnv(ctx);
-    await handleSubscribeRequest(postBody({ email: 'tok@example.com' }), env);
-    const row = await dbGet(
-      ctx,
-      'SELECT unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
-      'tok@example.com',
-    );
-    expect(row?.unsubscribe_token).toMatch(/^[a-f0-9]{32}$/);
-  });
-
-  it('forwards the unsubscribe_token to admin-app in the welcome dispatch body', async () => {
-    const ctx = makeCtx({ tenantId: 't_news_disp_tok' });
-    const env = buildEnv(ctx);
-    await handleSubscribeRequest(postBody({ email: 'disp@example.com' }), env);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [, init] = fetchMock.mock.calls[0];
-    const body = JSON.parse(init.body);
-    expect(body.unsubscribeToken).toMatch(/^[a-f0-9]{32}$/);
-
-    const row = await dbGet(
-      ctx,
-      'SELECT unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
-      'disp@example.com',
-    );
-    // Token in the dispatch matches the token in D1.
-    expect(body.unsubscribeToken).toBe(row.unsubscribe_token);
-  });
-});
-
-describe('handleSubscribeRequest — resubscribe after unsubscribe', () => {
-  let fetchMock;
-  beforeEach(() => {
-    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    vi.stubGlobal('fetch', fetchMock);
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('clears unsubscribed_at, keeps the same token, re-fires welcome', async () => {
-    const ctx = makeCtx({ tenantId: 't_news_resub' });
-    const env = buildEnv(ctx);
-
-    // First subscribe.
-    await handleSubscribeRequest(postBody({ email: 'resub@example.com' }), env);
-    const firstRow = await dbGet(
-      ctx,
-      'SELECT id, unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
-      'resub@example.com',
-    );
-    const originalToken = firstRow.unsubscribe_token;
-    expect(originalToken).toMatch(/^[a-f0-9]{32}$/);
-
-    // Simulate unsubscribe (the /u/ endpoint would do this).
-    await dbRun(
-      ctx,
-      'UPDATE newsletter_subscribers SET unsubscribed_at = ? WHERE id = ?',
-      Math.floor(Date.now() / 1000),
-      firstRow.id,
-    );
-    fetchMock.mockClear();
-
-    // Resub.
-    const second = await handleSubscribeRequest(
-      postBody({ email: 'resub@example.com' }),
-      env,
-    );
-    expect(second.status).toBe(202);
-
-    const after = await dbGet(
-      ctx,
-      'SELECT unsubscribed_at, unsubscribe_token FROM newsletter_subscribers WHERE email = ?',
-      'resub@example.com',
-    );
-    expect(after.unsubscribed_at).toBeNull();
-    expect(after.unsubscribe_token).toBe(originalToken);
-
-    // Welcome dispatch fired exactly once (the resub fire-and-forget).
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(body.unsubscribeToken).toBe(originalToken);
-  });
-
-  it('does NOT re-fire welcome when the row is active (current dedup behaviour)', async () => {
-    const ctx = makeCtx({ tenantId: 't_news_active' });
-    const env = buildEnv(ctx);
-    await handleSubscribeRequest(postBody({ email: 'active@example.com' }), env);
-    fetchMock.mockClear();
-    const second = await handleSubscribeRequest(
-      postBody({ email: 'active@example.com' }),
-      env,
-    );
-    expect(second.status).toBe(202);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('dispatchWelcomeEmail', () => {
-  it('returns sent on a 200 admin-app response', async () => {
+describe('dispatchConfirmEmail', () => {
+  it('returns sent on a 200 admin-app response and forwards the confirm token', async () => {
     const ctx = makeCtx({ tenantId: 't_news_disp_ok' });
     const env = buildEnv(ctx);
     // Insert a row so the stamp UPDATE has something to write.
@@ -522,8 +439,12 @@ describe('dispatchWelcomeEmail', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
     try {
-      const state = await dispatchWelcomeEmail(env, 'sentcheck@example.com', 'en');
+      const state = await dispatchConfirmEmail(env, 'sentcheck@example.com', 'en', 'a'.repeat(32));
       expect(state).toBe('sent');
+      // Body included the confirm token.
+      const [, init] = fetchMock.mock.calls[0];
+      const body = JSON.parse(init.body);
+      expect(body.confirmToken).toBe('a'.repeat(32));
       const row = await dbGet(
         ctx,
         'SELECT welcome_send_error FROM newsletter_subscribers WHERE email = ?',

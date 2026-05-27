@@ -14,6 +14,7 @@ import {
   passwordResetCodeEmailHtml,
   welcomeEmailHtml,
   subscriptionWelcomeEmailHtml,
+  subscriptionConfirmEmailHtml,
   emailChangeEmailHtml,
   emailChangeCodeEmailHtml,
   loginAlertEmailHtml,
@@ -122,17 +123,19 @@ export async function sendWelcomeEmail(
 }
 
 /**
- * Newsletter "Stay in the loop" confirmation. Mirror of `sendWelcomeEmail`
- * for non-registered subscribers (migrations 0086 + 0090 —
- * `newsletter_subscribers`).
+ * Newsletter "Stay in the loop" post-confirmation acknowledgement.
+ * Sent ONLY after the subscriber clicks the DOI confirm-click link from
+ * `sendNewsletterConfirmEmail` (migration 0092 + Worker
+ * `/confirm-subscription`). The Worker mints `unsubscribe_token` at
+ * confirm-time (migration 0090 column) and passes it in here as
+ * `unsubscribeToken` — we build the absolute one-click URL pointing at
+ * the Worker's `/u/<token>` endpoint, which serves both
+ * `marketing_contacts` and `newsletter_subscribers` via fallthrough.
  *
  * Distinct from registration welcome:
  *   * The subscriber is NOT necessarily a web_user.
  *   * No dashboard CTA — newsletters point to the marketing list, not to
  *     an account they may not own.
- *   * Unsubscribe link is the real Worker `/u/<token>` endpoint, served by
- *     `manicbot/src/http/unsubscribeHttp.js`. Token is minted by the Worker
- *     ingest path and forwarded through the internal welcome dispatch.
  *
  * Headers (RFC 8058 one-click):
  *   * `List-Unsubscribe: <https://manicbot.com/u/<token>>`
@@ -159,6 +162,32 @@ export async function sendNewsletterWelcomeEmail(
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
+  });
+}
+
+/**
+ * Newsletter DOI confirm-click email. First touch after POST /api/subscribe.
+ * The Worker mints a 32-hex `confirm_token` (7-day TTL) and passes it here;
+ * we build the absolute URL pointing at the Worker's `/confirm-subscription`
+ * route which closes the loop (stamps `confirmed_at`, mints unsub token,
+ * triggers the welcome email via this module).
+ */
+export async function sendNewsletterConfirmEmail(
+  to: string,
+  lang: Lang = "en",
+  confirmToken: string,
+): Promise<SendEmailResult> {
+  // Match `sendNewsletterWelcomeEmail` — use `getRuntimeEnv` so the same
+  // helper resolves on edge (where `process.env` is empty at request time).
+  const origin = (
+    getRuntimeEnv("WORKER_PUBLIC_URL") || "https://manicbot.com"
+  ).replace(/\/+$/, "");
+  const confirmUrl = `${origin}/confirm-subscription?token=${encodeURIComponent(confirmToken)}`;
+  const copy = getEmailCopy(lang);
+  return sendResendEmail({
+    to,
+    subject: copy.subscriptionConfirm.subject,
+    html: subscriptionConfirmEmailHtml(confirmUrl, lang),
   });
 }
 

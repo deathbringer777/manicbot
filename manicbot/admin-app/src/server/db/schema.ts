@@ -1649,11 +1649,20 @@ export const newsletterSubscribers = sqliteTable("newsletter_subscribers", {
   unsubscribedAt: integer("unsubscribed_at"),
   welcomeSentAt: integer("welcome_sent_at"),
   welcomeSendError: text("welcome_send_error"),
-  // 0090: 32-hex one-click unsub token. Stable across resub, partial UNIQUE.
+  // Migration 0092 — double-opt-in confirm token (CSPRNG, 7-day TTL).
+  confirmToken: text("confirm_token"),
+  confirmTokenExpiresAt: integer("confirm_token_expires_at"),
+  // Migration 0090 — 32-hex one-click unsub token. Stable across resub, partial UNIQUE.
   unsubscribeToken: text("unsubscribe_token"),
 }, (t) => [
   uniqueIndex("idx_newsletter_subscribers_email").on(t.email),
   index("idx_newsletter_subscribers_created").on(t.createdAt),
+  // Partial UNIQUE on token columns lives in the migrations (Drizzle's
+  // SQLite builder doesn't expose `WHERE` on uniqueIndex). The token
+  // columns are nullable, so SQLite's default UNIQUE-allows-NULLs
+  // behaviour matches the partial-index intent at query time even
+  // without the explicit predicate here.
+  uniqueIndex("idx_newsletter_confirm_token").on(t.confirmToken),
   uniqueIndex("idx_newsletter_subscribers_unsub_tok").on(t.unsubscribeToken),
 ]);
 

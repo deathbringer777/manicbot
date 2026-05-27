@@ -1,4 +1,5 @@
-# Historical Gitleaks fingerprints we've audited as fixture-only.
+# Historical Gitleaks fingerprints we've audited as fixture-only OR
+# already-rotated.
 # Format: <commit>:<path>:<rule>:<line>
 #
 # MasterPasswordVaultSection.test.tsx — Vitest fixtures for the
@@ -10,3 +11,30 @@
 # git history.
 79ae7922a240e8cb552246c189d2313f8b02e36f:manicbot/admin-app/src/__tests__/MasterPasswordVaultSection.test.tsx:generic-api-key:46
 f8eaea3565967a18b2155e41bda2301ca9247f19:manicbot/admin-app/src/__tests__/MasterPasswordVaultSection.test.tsx:generic-api-key:157
+
+# Demo-bot Telegram tokens + webhook secrets leaked in the original
+# self-provisioning commits (Mar 2026). All 4 tokens
+# (manic_salon1bot / manic_salon2bot / manic_master1bot / manic_master2bot)
+# were rotated via BotFather /revoke before this ignore landed, and the
+# corresponding `wrangler secret put BOT_TOKEN_*` calls replaced them in
+# production. The historical commits still carry the original literal
+# strings (cannot be removed without a history rewrite), so gitleaks
+# would otherwise re-flag them on every CI run and block deploy.
+# HEAD (`manicbot/src/http/demoBots.js`) reads tokens from env-var
+# names only — the actual secrets never appear in source again.
+b8fafe6f5bf57f3498815f7ba30beda48e00743a:manicbot/src/worker.js:generic-api-key:44
+b8fafe6f5bf57f3498815f7ba30beda48e00743a:manicbot/src/worker.js:generic-api-key:45
+0fef254c2d7cead5725be83be2dd39fa2d9aa9a4:manicbot/src/worker.js:generic-api-key:46
+0fef254c2d7cead5725be83be2dd39fa2d9aa9a4:manicbot/src/worker.js:generic-api-key:47
+
+# demoBots.js refactor (Mar 2026) — same env-var-name strings as the
+# 0fef254 worker.js lines above; gitleaks matches on entropy alone, the
+# values are `WH_SECRET_SALON1` / `WH_SECRET_SALON2`, i.e. KEY NAMES,
+# not secrets.
+d428997ecfa85d96b291b9153776d458150f0222:manicbot/src/http/demoBots.js:generic-api-key:8
+d428997ecfa85d96b291b9153776d458150f0222:manicbot/src/http/demoBots.js:generic-api-key:9
+
+# SECRET_ROTATION.md operator runbook — gitleaks `curl-auth-header`
+# rule matched on the literal string `Bearer wrong-value` used in a
+# negative-case verification example (`# → 403`). Not a real token.
+d652fdbf2f6ed294e0800195898bfe7540a88a5e:manicbot/SECRET_ROTATION.md:curl-auth-header:57

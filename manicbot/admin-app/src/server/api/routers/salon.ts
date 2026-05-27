@@ -38,7 +38,7 @@ import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
   sendMasterInviteNewUserEmail,
-  sendMasterPasswordResetByOwnerEmail,
+  sendMasterPasswordResetCredentialsToOwnerEmail,
 } from "~/server/email/emailService";
 import { generateToken, hashToken } from "~/server/auth/tokens";
 import { requireOtpConfirmation } from "~/server/auth/otp";
@@ -2990,8 +2990,8 @@ export const salonRouter = createTRPCRouter({
       const salonName = tenantRow[0]?.name ?? "ManicBot";
       const lang = ((userRow[0]?.lang as Lang | null) ?? "en") as Lang;
 
-      void sendMasterPasswordResetByOwnerEmail(userRow[0].email, newPassword, salonName, lang).catch(
-        (e) =>
+      void sendMasterPasswordResetCredentialsToOwnerEmail(userRow[0].email, newPassword, salonName, lang).catch(
+        (e: unknown) =>
           log.error(
             "salon.resetMasterPassword.email",
             e instanceof Error ? e : new Error(String(e)),

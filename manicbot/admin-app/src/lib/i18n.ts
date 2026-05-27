@@ -333,6 +333,7 @@ const translations = {
   "salon.editProfile":      { ru: "Редактировать профиль", ua: "Редагувати профіль", en: "Edit profile", pl: "Edytuj profil" },
   "salon.workHoursFrom":    { ru: "Начало работы",  ua: "Початок роботи",  en: "Start time", pl: "Godzina otwarcia" },
   "salon.workHoursTo":      { ru: "Конец работы",   ua: "Кінець роботи",   en: "End time",   pl: "Godzina zamknięcia" },
+  "salon.workHoursHint":    { ru: "Эти часы показываются на публичной странице салона. Реальные слоты для записи задаёт каждый мастер в своём расписании.", ua: "Ці години показуються на публічній сторінці салону. Реальні слоти для запису задає кожен майстер у своєму розкладі.", en: "These hours appear on your public salon page. Actual booking slots come from each master's individual schedule.", pl: "Te godziny pokazują się na publicznej stronie salonu. Rzeczywiste sloty rezerwacji wynikają z indywidualnego harmonogramu każdego mistrza." },
 
   // ── Confirmations ─────────────────────────────────────────────────────────
   "confirm.deleteService":  { ru: "Удалить услугу?", ua: "Видалити послугу?", en: "Delete service?", pl: "Usunąć usługę?" },
@@ -397,17 +398,23 @@ const translations = {
   "onboarding.createWorkspace":     { ru: "Создать кабинет", ua: "Створити кабінет", en: "Create workspace", pl: "Utwórz gabinet" },
 
   // ── Owner onboarding checklist (dashboard) ──────────────────────────────────
-  "onboarding.checklist.title":          { ru: "Настройте салон за 10 минут",  ua: "Налаштуйте салон за 10 хвилин", en: "Set up your salon in 10 minutes", pl: "Skonfiguruj salon w 10 minut" },
-  "onboarding.checklist.add_service":    { ru: "Добавьте услугу",              ua: "Додайте послугу",               en: "Add a service",                  pl: "Dodaj usługę" },
-  "onboarding.checklist.connect_bot":    { ru: "Подключите бота",              ua: "Підключіть бота",               en: "Connect a bot",                  pl: "Podłącz bota" },
-  "onboarding.checklist.invite_master":  { ru: "Пригласите мастера",           ua: "Запросіть майстра",             en: "Invite a master",                pl: "Zaproś mistrza" },
-  "onboarding.checklist.set_schedule":   { ru: "Настройте расписание",         ua: "Налаштуйте розклад",            en: "Set the schedule",               pl: "Ustaw harmonogram" },
-  "onboarding.checklist.share_link":     { ru: "Поделитесь ссылкой",           ua: "Поділіться посиланням",         en: "Share your link",                pl: "Udostępnij link" },
-  "onboarding.checklist.first_booking":  { ru: "Примите первую запись",        ua: "Прийміть перший запис",         en: "Take your first booking",        pl: "Przyjmij pierwszą rezerwację" },
-  "onboarding.checklist.fill_description": { ru: "Добавьте описание салона",    ua: "Додайте опис салону",           en: "Add a salon description",        pl: "Dodaj opis salonu" },
-  "onboarding.checklist.add_logo":       { ru: "Загрузите логотип",            ua: "Завантажте логотип",            en: "Upload a logo",                  pl: "Wgraj logo" },
-  "onboarding.checklist.add_cover":      { ru: "Загрузите обложку",            ua: "Завантажте обкладинку",         en: "Upload a cover photo",           pl: "Wgraj zdjęcie tła" },
-  "onboarding.checklist.activate_public":{ ru: "Активируйте публичный профиль", ua: "Активуйте публічний профіль",  en: "Activate your public profile",   pl: "Aktywuj profil publiczny" },
+  // 2026-05-27 rework: 4 essentials (blocking) + 4 optional (public-page polish).
+  // Removed legacy keys: invite_master, set_schedule, first_booking,
+  // fill_description, add_logo, add_cover.
+  "onboarding.checklist.title":                { ru: "Настройте салон за 10 минут",  ua: "Налаштуйте салон за 10 хвилин", en: "Set up your salon in 10 minutes", pl: "Skonfiguruj salon w 10 minut" },
+  "onboarding.checklist.headline.setup":       { ru: "Настройте салон",              ua: "Налаштуйте салон",              en: "Set up your salon",              pl: "Skonfiguruj salon" },
+  "onboarding.checklist.headline.ready":       { ru: "✅ Готов принимать записи",   ua: "✅ Готовий приймати записи",   en: "✅ Ready to take bookings",       pl: "✅ Gotowy na rezerwacje" },
+  "onboarding.checklist.tier.optional":        { ru: "Расширьте профиль",            ua: "Розширте профіль",              en: "Polish your profile",            pl: "Rozszerz profil" },
+  // Essentials.
+  "onboarding.checklist.connect_bot":          { ru: "Подключите Telegram-бота",     ua: "Підключіть Telegram-бота",      en: "Connect a Telegram bot",         pl: "Podłącz bota Telegram" },
+  "onboarding.checklist.add_master":           { ru: "Добавьте мастера",             ua: "Додайте майстра",               en: "Add a master",                   pl: "Dodaj mistrza" },
+  "onboarding.checklist.set_master_schedule":  { ru: "Расписание мастера",           ua: "Розклад майстра",               en: "Master's schedule",              pl: "Harmonogram mistrza" },
+  "onboarding.checklist.add_service":          { ru: "Добавьте услугу",              ua: "Додайте послугу",               en: "Add a service",                  pl: "Dodaj usługę" },
+  // Optional polish.
+  "onboarding.checklist.fill_salon_info":      { ru: "Информация о салоне",          ua: "Інформація про салон",          en: "Salon info",                     pl: "Informacje o salonie" },
+  "onboarding.checklist.add_branding":         { ru: "Логотип и обложка",            ua: "Логотип та обкладинка",         en: "Logo and cover",                 pl: "Logo i tło" },
+  "onboarding.checklist.activate_public":      { ru: "Опубликуйте страницу салона",  ua: "Опублікуйте сторінку салону",  en: "Activate your public profile",   pl: "Aktywuj profil publiczny" },
+  "onboarding.checklist.share_link":           { ru: "Поделитесь ссылкой",           ua: "Поділіться посиланням",         en: "Share your link",                pl: "Udostępnij link" },
 
   // ── Appointments quick actions ──────────────────────────────────────────────
   "appointments.newBooking":             { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },

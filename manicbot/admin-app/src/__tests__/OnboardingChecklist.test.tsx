@@ -2,17 +2,27 @@
 /**
  * OnboardingChecklist — visual state contract.
  *
- * Locks in the 2026-05-16 «wake up the 0/10 state» polish:
- *   * the first incomplete step carries `data-next-action="true"` and the
- *     violet pulse halo;
+ * 2026-05-27 rework: the 10-id flat list became a 4 essentials + 4 optional
+ * split. Essentials always visible; optional tier is a collapsible
+ * disclosure that opens automatically when the user has *started* (1..3
+ * essentials done) but not finished, and stays closed otherwise to keep
+ * the «0/4» state focused.
+ *
+ * What this file pins:
+ *   * the first incomplete ESSENTIAL step carries `data-next-action="true"`
+ *     and the violet pulse halo;
  *   * done steps render strike-through + emerald check;
- *   * upcoming steps render visible outline circles (border-2);
- *   * progress bar gets a 4-px anchor at 0/10 so it's never invisible,
- *     and a proportional `width: NN%` at partial progress;
- *   * the whole component hides itself once everything is done.
+ *   * progress fill maps to (essentialsDone / 4) — only essentials drive
+ *     the headline progress bar;
+ *   * the optional tier hides its items behind a disclosure when collapsed;
+ *   * 4 / 4 essentials → top label flips to «Готов принимать записи»;
+ *   * the whole component disappears only when ALL 8 ids are done;
+ *   * fixed click targets — `add_branding` → /settings?section=salon,
+ *     `share_link` → ?tab=public_profile (the two routing bugs the rework
+ *     was chartered to fix).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { LangContext } from "~/components/LangContext";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 
@@ -41,81 +51,212 @@ afterEach(() => {
   cleanup();
   mockData = null;
   mockIsLoading = false;
+  // Clean localStorage so optional-collapse preference doesn't leak between
+  // test cases.
+  if (typeof localStorage !== "undefined") localStorage.clear();
 });
 
-describe("OnboardingChecklist — 0/10 (empty) state", () => {
-  it("first step carries data-next-action and a pulse halo", () => {
-    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 10 };
+describe("OnboardingChecklist — empty (0/8) state", () => {
+  it("renders the 4 essentials, optional tier collapsed by default", () => {
+    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 8 };
     renderChecklist();
 
-    const items = screen.getAllByRole("listitem");
-    const first = items[0]!;
-    expect(first.getAttribute("data-next-action")).toBe("true");
-    expect(first.getAttribute("data-step-id")).toBe("add_service");
+    // Essential rows visible.
+    expect(document.querySelector('[data-step-id="connect_bot"]')).not.toBeNull();
+    expect(document.querySelector('[data-step-id="add_master"]')).not.toBeNull();
+    expect(document.querySelector('[data-step-id="set_master_schedule"]')).not.toBeNull();
+    expect(document.querySelector('[data-step-id="add_service"]')).not.toBeNull();
 
-    // Halo only on the next-action row (not on subsequent rows).
+    // Optional rows NOT in the DOM while collapsed (0/4 essentials → closed).
+    expect(document.querySelector('[data-step-id="fill_salon_info"]')).toBeNull();
+    expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
+    expect(document.querySelector('[data-step-id="activate_public"]')).toBeNull();
+    expect(document.querySelector('[data-step-id="share_link"]')).toBeNull();
+  });
+
+  it("first essential carries data-next-action and exactly one pulse halo renders", () => {
+    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 8 };
+    renderChecklist();
+
+    const next = document.querySelector('[data-next-action="true"]');
+    expect(next?.getAttribute("data-step-id")).toBe("connect_bot");
+
     const halos = document.querySelectorAll('[data-testid="onboarding-next-halo"]');
     expect(halos.length).toBe(1);
-    expect(halos[0]!.className).toContain("animate-pulse");
   });
 
-  it("no other row carries data-next-action", () => {
-    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 10 };
-    renderChecklist();
-    const items = screen.getAllByRole("listitem");
-    for (let i = 1; i < items.length; i++) {
-      expect(items[i]!.getAttribute("data-next-action")).toBeNull();
-    }
-  });
-
-  it("progress bar has a 4px anchor at zero progress", () => {
-    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 10 };
+  it("progress bar maps essentials (0/4) to a 4 px anchor", () => {
+    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 8 };
     renderChecklist();
     const fill = screen.getByTestId("onboarding-progress-fill") as HTMLDivElement;
     expect(fill.style.width).toBe("4px");
   });
+
+  it("counter shows essentials progress (0/4), not total (0/8)", () => {
+    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 8 };
+    renderChecklist();
+    expect(screen.getByTestId("onboarding-counter").textContent).toBe("0/4");
+  });
 });
 
-describe("OnboardingChecklist — partial (4/10) state", () => {
-  it("progress bar maps 4/10 to width: 40%", () => {
+describe("OnboardingChecklist — partial (2/4 essentials) state", () => {
+  it("opens the optional tier automatically once the user has started but not finished essentials", () => {
     mockData = {
-      completedSteps: ["add_service", "invite_master", "first_booking", "activate_public"],
+      completedSteps: ["connect_bot", "add_master"],
       allCompletedAt: null,
-      totalSteps: 10,
+      totalSteps: 8,
+    };
+    renderChecklist();
+    // Optional rows now rendered.
+    expect(document.querySelector('[data-step-id="fill_salon_info"]')).not.toBeNull();
+    expect(document.querySelector('[data-step-id="add_branding"]')).not.toBeNull();
+    expect(document.querySelector('[data-step-id="activate_public"]')).not.toBeNull();
+    expect(document.querySelector('[data-step-id="share_link"]')).not.toBeNull();
+  });
+
+  it("progress bar maps 2/4 to 50 %", () => {
+    mockData = {
+      completedSteps: ["connect_bot", "add_master"],
+      allCompletedAt: null,
+      totalSteps: 8,
     };
     renderChecklist();
     const fill = screen.getByTestId("onboarding-progress-fill") as HTMLDivElement;
-    expect(fill.style.width).toBe("40%");
+    expect(fill.style.width).toBe("50%");
   });
 
-  it("done rows carry line-through and the next-action attribute moves to the first incomplete row", () => {
+  it("done rows carry line-through; next-action moves to the first incomplete essential", () => {
     mockData = {
-      completedSteps: ["add_service", "invite_master", "first_booking", "activate_public"],
+      completedSteps: ["connect_bot"],
       allCompletedAt: null,
-      totalSteps: 10,
+      totalSteps: 8,
     };
     renderChecklist();
 
-    // add_service is done → its <a> has line-through.
-    const doneRow = document.querySelector('[data-step-id="add_service"]') as HTMLElement;
+    const doneRow = document.querySelector('[data-step-id="connect_bot"]') as HTMLElement;
     const doneLink = doneRow.querySelector("a") as HTMLAnchorElement;
     expect(doneLink.className).toContain("line-through");
 
-    // First incomplete step in STEPS order is connect_bot — that one should
-    // be the next-action carrier.
     const next = document.querySelector('[data-next-action="true"]');
-    expect(next?.getAttribute("data-step-id")).toBe("connect_bot");
+    expect(next?.getAttribute("data-step-id")).toBe("add_master");
   });
+});
 
-  it("exactly one pulse halo regardless of how many steps are done", () => {
+describe("OnboardingChecklist — essentials-done (4/4) state", () => {
+  it("top label flips to «Готов принимать записи»", () => {
     mockData = {
-      completedSteps: ["add_service", "invite_master", "first_booking", "activate_public"],
+      completedSteps: [
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+      ],
       allCompletedAt: null,
-      totalSteps: 10,
+      totalSteps: 8,
     };
     renderChecklist();
-    const halos = document.querySelectorAll('[data-testid="onboarding-next-halo"]');
-    expect(halos.length).toBe(1);
+    expect(screen.getByTestId("onboarding-headline").textContent).toContain(
+      "Готов принимать записи",
+    );
+  });
+
+  it("counter still uses essentials denominator (4/4)", () => {
+    mockData = {
+      completedSteps: [
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+      ],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    renderChecklist();
+    expect(screen.getByTestId("onboarding-counter").textContent).toBe("4/4");
+  });
+
+  it("component is still rendered (only auto-hides when ALL 8 are done)", () => {
+    mockData = {
+      completedSteps: [
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+      ],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    const { container } = renderChecklist();
+    expect(container.firstChild).not.toBeNull();
+  });
+
+  it("optional tier collapses back to closed when essentials are complete (no nag) — but the disclosure header is clickable", () => {
+    mockData = {
+      completedSteps: [
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+      ],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    renderChecklist();
+    // Closed → optional rows not in the DOM yet.
+    expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
+    // Header carries the toggle.
+    const toggle = screen.getByTestId("onboarding-optional-toggle");
+    fireEvent.click(toggle);
+    // After click, rows render.
+    expect(document.querySelector('[data-step-id="add_branding"]')).not.toBeNull();
+  });
+});
+
+describe("OnboardingChecklist — fixed routing (closes B2 + B3)", () => {
+  it("«Логотип и обложка» (add_branding) link points at /settings?section=salon — NOT /settings?section=public", () => {
+    mockData = {
+      completedSteps: ["connect_bot", "add_master"], // ensures optional tier auto-opens
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    renderChecklist();
+    const row = document.querySelector('[data-step-id="add_branding"]') as HTMLElement;
+    const link = row.querySelector("a") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/settings?section=salon");
+  });
+
+  it("«Поделитесь ссылкой» (share_link) link points at ?tab=public_profile — NOT ?tab=channels", () => {
+    mockData = {
+      completedSteps: ["connect_bot", "add_master"],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    renderChecklist();
+    const row = document.querySelector('[data-step-id="share_link"]') as HTMLElement;
+    const link = row.querySelector("a") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("?tab=public_profile");
+  });
+
+  it("«Расписание мастера» (set_master_schedule) link still points at ?tab=masters — but the renamed label removes the ambiguity (closes B1)", () => {
+    mockData = { completedSteps: [], allCompletedAt: null, totalSteps: 8 };
+    renderChecklist();
+    const row = document.querySelector('[data-step-id="set_master_schedule"]') as HTMLElement;
+    const link = row.querySelector("a") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("?tab=masters");
+    // Label no longer reads as «общее расписание салона».
+    expect(link.textContent).toContain("Расписание мастера");
+  });
+
+  it("fill_salon_info points at /settings?section=salon", () => {
+    mockData = {
+      completedSteps: ["connect_bot", "add_master"],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    renderChecklist();
+    const row = document.querySelector('[data-step-id="fill_salon_info"]') as HTMLElement;
+    const link = row.querySelector("a") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/settings?section=salon");
   });
 });
 
@@ -127,17 +268,62 @@ describe("OnboardingChecklist — completion + loading edges", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("hides itself once all 10 steps are done", () => {
+  it("hides itself only when ALL 8 ids are done", () => {
     mockData = {
       completedSteps: [
-        "add_service", "connect_bot", "invite_master", "set_schedule",
-        "share_link", "first_booking", "fill_description", "add_logo",
-        "add_cover", "activate_public",
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+        "fill_salon_info",
+        "add_branding",
+        "activate_public",
+        "share_link",
       ],
       allCompletedAt: 1700000000,
-      totalSteps: 10,
+      totalSteps: 8,
     };
     const { container } = renderChecklist();
     expect(container.firstChild).toBeNull();
+  });
+
+  it("does NOT auto-hide on 7/8 (one optional outstanding)", () => {
+    mockData = {
+      completedSteps: [
+        "connect_bot",
+        "add_master",
+        "set_master_schedule",
+        "add_service",
+        "fill_salon_info",
+        "add_branding",
+        "activate_public",
+        // share_link missing
+      ],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    const { container } = renderChecklist();
+    expect(container.firstChild).not.toBeNull();
+  });
+});
+
+describe("OnboardingChecklist — collapse preference persistence", () => {
+  it("user-toggled state persists in localStorage", () => {
+    mockData = {
+      completedSteps: ["connect_bot", "add_master"], // optional tier auto-opens
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    const { unmount } = renderChecklist();
+    // Auto-open path — optional rows visible.
+    expect(document.querySelector('[data-step-id="add_branding"]')).not.toBeNull();
+    // Click toggle to collapse.
+    fireEvent.click(screen.getByTestId("onboarding-optional-toggle"));
+    expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
+    // Persist + remount.
+    unmount();
+    renderChecklist();
+    // Stays collapsed across mounts.
+    expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
   });
 });

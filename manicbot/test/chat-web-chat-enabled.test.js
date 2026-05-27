@@ -1,12 +1,12 @@
 /**
- * Worker chat surface gates on `tenants.chat_enabled = 1` (migration 0090).
+ * Worker chat surface gates on `tenants.chat_enabled = 1` (migration 0091).
  *
- * Before 0090 both `loadSalonBranding` (in `src/http/chatWebHttp.js`) and
+ * Before 0091 both `loadSalonBranding` (in `src/http/chatWebHttp.js`) and
  * `resolveTenantFromSlug` (in `src/channels/resolver.js`) filtered on
  * `public_active = 1`. That coupled the chat URL — something the salon
  * owner shares manually via a printed QR or Instagram bio — to the
  * salon being listed in the public catalog. The two decisions are now
- * independent: see migration 0090 + `publicSalon.getProfileForChat`.
+ * independent: see migration 0091 + `publicSalon.getProfileForChat`.
  *
  * This file is a static source-code pin. The mock-DB in the existing
  * resolver tests does not evaluate WHERE clauses (it returns whatever

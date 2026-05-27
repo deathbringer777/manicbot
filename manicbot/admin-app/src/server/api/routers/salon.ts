@@ -868,7 +868,7 @@ export const salonRouter = createTRPCRouter({
       lng: z.number().min(-180).max(180).optional(),
       mapsUrl: z.string().max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
-      // 0090 — chat surface independent of catalog publication. Owners
+      // 0091 — chat surface independent of catalog publication. Owners
       // toggle this on to expose `/salon/{slug}/chat` without putting
       // the salon card in the public directory. The Worker
       // `/chat/init` and `publicSalon.getProfileForChat` both gate on

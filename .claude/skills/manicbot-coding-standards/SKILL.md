@@ -147,7 +147,7 @@ Code is NOT done until ALL of these pass, IN THIS ORDER:
 - [ ] Any AI-input-handling code calls `sanitizeUserInput` before reaching the LLM
 - [ ] Tenant-scoped queries include `tenant_id` in WHERE clause
 - [ ] Secrets are NOT committed
-- [ ] Migrations follow next sequential number (last is `0048`; the gap at `0040/0041` is known and we continue forward)
+- [ ] Migrations follow next sequential number (last is `0089`; the gap at `0040/0041` is known and we continue forward)
 
 Skipping any stage means the task is not complete.
 
@@ -278,7 +278,7 @@ Never output partial files or "..." placeholders. The user pastes whole files in
 
 - **Worker:** Cloudflare Workers + JS (ESM) + D1 + KV + Workers AI + Queue + Stripe REST
 - **Admin-app:** Next.js 15 (edge) + React 19 + Tailwind 4 + tRPC 11 + Drizzle ORM + NextAuth v5 (beta) + Resend
-- **Shared D1:** `manicbot-db`, 57 tables, migrations in `manicbot/migrations/NNNN_*.sql`
+- **Shared D1:** `manicbot-db`, 91 tables, migrations in `manicbot/migrations/NNNN_*.sql`
 - **Channels:** Telegram (primary), WhatsApp Cloud, Instagram Messenger, Web widget
 - **Roles:** `system_admin`, `technical_support`, `support`, `tenant_owner`, `tenant_manager`, `master`, `client`
 - **Plans:** `start`, `pro`, `max` (gated in `src/billing/features.js`)

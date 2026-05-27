@@ -1306,8 +1306,9 @@ export function ownershipTransferCompletedNewOwnerEmailHtml(opts: {
 //
 // These templates are kept inline (function-local i18n) rather than extending
 // the `emailCopy` type so the schema-foundation PR doesn't grow it for every
-// micro-string. Keys: salonInviteExisting, salonInviteNew, passwordResetByOwner,
-// actionOtp. Each function ships ru/ua/en/pl copy; English is the fallback.
+// micro-string. Keys: salonInviteExisting, salonInviteNew,
+// passwordResetCredentialsForOwner, actionOtp. Each function ships ru/ua/en/pl
+// copy; English is the fallback.
 
 type InviteCopy = {
   subject: string;
@@ -1435,93 +1436,129 @@ export function masterInviteNewUserText(
   return [c.heading, "", c.body, "", options.registerUrl, "", c.note, "", stripTags(getEmailCopy(lang).footer)].join("\n");
 }
 
-type PasswordResetByOwnerCopy = {
+type PasswordResetCredentialsForOwnerCopy = {
   subject: string;
   heading: string;
   body: string;
-  yourPassword: string;
+  loginLabel: string;
+  passwordLabel: string;
   cta: string;
-  warning: string;
+  handoffHint: string;
 };
 
-function passwordResetByOwnerCopy(lang: Lang, salonName: string): PasswordResetByOwnerCopy {
+function passwordResetCredentialsForOwnerCopy(
+  lang: Lang,
+  salonName: string,
+  masterName: string,
+): PasswordResetCredentialsForOwnerCopy {
   const sn = salonName || "ManicBot";
+  const mn = masterName || "—";
   switch (lang) {
     case "ru":
       return {
-        subject: `Ваш пароль был обновлён — ${sn}`,
-        heading: "Новый пароль",
-        body: `Владелец салона «${sn}» сбросил ваш пароль. Используйте новый пароль ниже для входа.`,
-        yourPassword: "Ваш новый пароль:",
-        cta: "Войти в кабинет",
-        warning: "Если это не вы или вы не знаете этот салон — свяжитесь с поддержкой.",
+        subject: `Новый пароль для мастера ${mn} — ${sn}`,
+        heading: `Новый пароль для ${mn}`,
+        body: `Ты запросил сброс пароля для аккаунта мастера «${mn}» в салоне «${sn}». Передай эти данные мастеру через защищённый канал — старый пароль больше не работает.`,
+        loginLabel: "Логин:",
+        passwordLabel: "Новый пароль:",
+        cta: "Открыть кабинет",
+        handoffHint: "Это письмо отправлено тебе, а не мастеру.",
       };
     case "ua":
       return {
-        subject: `Ваш пароль було оновлено — ${sn}`,
-        heading: "Новий пароль",
-        body: `Власник салону «${sn}» скинув ваш пароль. Використайте новий пароль нижче для входу.`,
-        yourPassword: "Ваш новий пароль:",
-        cta: "Увійти в кабінет",
-        warning: "Якщо це не ви або ви не знаєте цей салон — звʼяжіться з підтримкою.",
+        subject: `Новий пароль для майстра ${mn} — ${sn}`,
+        heading: `Новий пароль для ${mn}`,
+        body: `Ти запитав скидання пароля для облікового запису майстра «${mn}» у салоні «${sn}». Передай ці дані майстру через захищений канал — старий пароль більше не працює.`,
+        loginLabel: "Логін:",
+        passwordLabel: "Новий пароль:",
+        cta: "Відкрити кабінет",
+        handoffHint: "Цей лист надіслано тобі, а не майстру.",
       };
     case "pl":
       return {
-        subject: `Twoje hasło zostało zmienione — ${sn}`,
-        heading: "Nowe hasło",
-        body: `Właściciel salonu „${sn}" zresetował Twoje hasło. Użyj nowego hasła poniżej, aby się zalogować.`,
-        yourPassword: "Twoje nowe hasło:",
-        cta: "Zaloguj się",
-        warning: "Jeśli to nie Ty lub nie znasz tego salonu — skontaktuj się z pomocą.",
+        subject: `Nowe hasło dla mistrza ${mn} — ${sn}`,
+        heading: `Nowe hasło dla ${mn}`,
+        body: `Zażądałeś resetu hasła dla konta mistrza „${mn}" w salonie „${sn}". Przekaż te dane mistrzowi przez bezpieczny kanał — stare hasło już nie działa.`,
+        loginLabel: "Login:",
+        passwordLabel: "Nowe hasło:",
+        cta: "Otwórz panel",
+        handoffHint: "Ten e-mail został wysłany do Ciebie, a nie do mistrza.",
       };
     default:
       return {
-        subject: `Your password was reset — ${sn}`,
-        heading: "New password",
-        body: `The owner of "${sn}" has reset your password. Use the new password below to log in.`,
-        yourPassword: "Your new password:",
-        cta: "Sign in",
-        warning: "If this wasn't you, or you don't recognize this salon, contact support.",
+        subject: `New password for ${mn} — ${sn}`,
+        heading: `New password for ${mn}`,
+        body: `You requested a password reset for the master "${mn}" at "${sn}". Pass these credentials to the master through a trusted channel — the old password no longer works.`,
+        loginLabel: "Login:",
+        passwordLabel: "New password:",
+        cta: "Open dashboard",
+        handoffHint: "This email was sent to you, not to the master.",
       };
   }
 }
 
-/** Salon owner triggered a password reset; the new plaintext is emailed
- *  directly to the master. The salon never sees the new password. */
-export function masterPasswordResetByOwnerHtml(
-  options: { salonName: string; newPassword: string; loginUrl: string },
+/** Salon owner triggered a password reset for a salon_created master account.
+ *  The new credentials are emailed to the OWNER so they can hand them over.
+ *  The master's own login (synthetic *.salon.manicbot.local) doesn't accept
+ *  mail, so delivering to the master directly would mean the password
+ *  vanishes into a non-existent inbox. */
+export function masterPasswordResetCredentialsForOwnerHtml(
+  options: {
+    salonName: string;
+    masterName: string;
+    masterLogin: string;
+    newPassword: string;
+    loginUrl: string;
+  },
   lang: Lang,
 ): string {
-  const c = passwordResetByOwnerCopy(lang, options.salonName);
-  const codeBlock = `<div style="margin:24px auto;text-align:center;">
-    <div style="display:inline-block;padding:14px 24px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:18px;font-weight:700;color:#ffffff;letter-spacing:1.5px;user-select:all;-webkit-user-select:all;cursor:text;">${options.newPassword}</div>
-    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.yourPassword}</div>
+  const c = passwordResetCredentialsForOwnerCopy(lang, options.salonName, options.masterName);
+  const credsBlock = `<div style="margin:24px auto;text-align:center;">
+    <div style="display:inline-block;padding:14px 24px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:15px;font-weight:600;color:#ffffff;letter-spacing:0.5px;user-select:all;-webkit-user-select:all;cursor:text;">${options.masterLogin}</div>
+    <div style="margin-top:6px;font-size:12px;color:#64748b;">${c.loginLabel}</div>
+    <div style="margin-top:18px;display:inline-block;padding:14px 24px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:18px;font-weight:700;color:#ffffff;letter-spacing:1.5px;user-select:all;-webkit-user-select:all;cursor:text;">${options.newPassword}</div>
+    <div style="margin-top:6px;font-size:12px;color:#64748b;">${c.passwordLabel}</div>
   </div>`;
   return baseLayout(
     c.heading,
-    paragraph(c.body) + codeBlock + ctaButton(options.loginUrl, c.cta) + muted(c.warning),
+    paragraph(c.body) + credsBlock + ctaButton(options.loginUrl, c.cta) + muted(c.handoffHint),
     getEmailCopy(lang).footer,
   );
 }
 
-export function masterPasswordResetByOwnerText(
-  options: { salonName: string; newPassword: string; loginUrl: string },
+export function masterPasswordResetCredentialsForOwnerText(
+  options: {
+    salonName: string;
+    masterName: string;
+    masterLogin: string;
+    newPassword: string;
+    loginUrl: string;
+  },
   lang: Lang,
 ): string {
-  const c = passwordResetByOwnerCopy(lang, options.salonName);
+  const c = passwordResetCredentialsForOwnerCopy(lang, options.salonName, options.masterName);
   return [
     c.heading,
     "",
     c.body,
     "",
-    `${c.yourPassword} ${options.newPassword}`,
+    `${c.loginLabel} ${options.masterLogin}`,
+    `${c.passwordLabel} ${options.newPassword}`,
     "",
     options.loginUrl,
     "",
-    c.warning,
+    c.handoffHint,
     "",
     stripTags(getEmailCopy(lang).footer),
   ].join("\n");
+}
+
+export function getPasswordResetCredentialsForOwnerSubject(
+  lang: Lang,
+  salonName: string,
+  masterName: string,
+): string {
+  return passwordResetCredentialsForOwnerCopy(lang, salonName, masterName).subject;
 }
 
 type ActionOtpCopy = {
@@ -1608,9 +1645,6 @@ export function getInviteExistingUserSubject(lang: Lang, salonName: string): str
 }
 export function getInviteNewUserSubject(lang: Lang, salonName: string): string {
   return inviteNewUserCopy(lang, salonName).subject;
-}
-export function getPasswordResetByOwnerSubject(lang: Lang, salonName: string): string {
-  return passwordResetByOwnerCopy(lang, salonName).subject;
 }
 export function getActionOtpSubject(lang: Lang): string {
   return actionOtpCopy(lang, "").subject;

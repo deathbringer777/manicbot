@@ -30,6 +30,13 @@ const resetMutate = vi.fn();
 let peekReturn: { password: string; bootstrapped?: boolean } = {
   password: "pw-fixture",
 };
+// Mutable OTP server response — lets a test override the email the server
+// claims it sent the code to. The default mirrors the owner's address so
+// the "sentTo display" tests can pin the source explicitly.
+let otpRequestReturn: { otpId: string; sentTo: string } = {
+  otpId: "otp_1",
+  sentTo: "owner@manicbot.com",
+};
 
 vi.mock("~/trpc/react", () => ({
   api: {
@@ -38,7 +45,7 @@ vi.mock("~/trpc/react", () => ({
         useMutation: () => ({
           mutateAsync: (vars: any) => {
             otpRequest(vars);
-            return Promise.resolve({ otpId: "otp_1" });
+            return Promise.resolve(otpRequestReturn);
           },
           isPending: false,
         }),
@@ -91,6 +98,8 @@ afterEach(() => {
   resetMutate.mockClear();
   // Reset peek payload to the default for the next test.
   peekReturn = { password: "pw-fixture" };
+  // Reset OTP response so per-test overrides don't leak.
+  otpRequestReturn = { otpId: "otp_1", sentTo: "owner@manicbot.com" };
 });
 
 describe("MasterPasswordVaultSection — gating", () => {
@@ -235,6 +244,49 @@ describe("MasterPasswordVaultSection — peek flow", () => {
     const input = screen.getByTestId("master-password-otp-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "12ab34cd5678" } });
     expect(input.value).toBe("123456");
+  });
+});
+
+describe("MasterPasswordVaultSection — 'Code sent to' display uses SERVER's authoritative recipient", () => {
+  // Pre-fix regression: the UI rendered `webUser.email` from props (the
+  // MASTER's synthetic *.salon.manicbot.local mailbox) instead of the
+  // address the server actually emailed (the salon OWNER). User saw
+  // "Kod wysłany na test.09di@salon.manicbot.local" — a non-existent
+  // mailbox — and concluded the feature was broken even though the code
+  // was correctly landing in their own inbox.
+
+  it("after Show → otp.request, renders the SERVER's sentTo (owner email), NOT the master prop email", async () => {
+    otpRequestReturn = { otpId: "otp_x", sentTo: "owner@manicbot.com" };
+    renderSection({
+      // Master's synthetic email — must NOT appear in the "code sent to" copy.
+      webUser: {
+        email: "test.09di@salon.manicbot.local",
+        emailVerified: 1,
+        hasVaultedPassword: true,
+      },
+    });
+    fireEvent.click(screen.getByTestId("master-password-show"));
+    await waitFor(() => expect(screen.getByTestId("master-password-otp-input")).toBeTruthy());
+    // The owner address must be visible.
+    expect(screen.getByText(/owner@manicbot\.com/)).toBeTruthy();
+    // The synthetic master address must NOT appear anywhere in the section.
+    expect(screen.queryByText(/test\.09di@salon\.manicbot\.local/)).toBeNull();
+  });
+
+  it("reset flow: 'Code sent to' also uses the SERVER's sentTo for the OTP step", async () => {
+    otpRequestReturn = { otpId: "otp_y", sentTo: "owner@manicbot.com" };
+    renderSection({
+      webUser: {
+        email: "test.09di@salon.manicbot.local",
+        emailVerified: 1,
+        hasVaultedPassword: true,
+      },
+    });
+    fireEvent.click(screen.getByTestId("master-password-reset"));
+    fireEvent.click(screen.getByTestId("master-password-reset-confirm"));
+    await waitFor(() => expect(screen.getByTestId("master-password-otp-input")).toBeTruthy());
+    expect(screen.getByText(/owner@manicbot\.com/)).toBeTruthy();
+    expect(screen.queryByText(/test\.09di@salon\.manicbot\.local/)).toBeNull();
   });
 });
 

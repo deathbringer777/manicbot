@@ -38,7 +38,7 @@ import {
   sendMasterInviteEmail,
   sendMasterInviteExistingUserEmail,
   sendMasterInviteNewUserEmail,
-  sendMasterPasswordResetByOwnerEmail,
+  sendMasterPasswordResetCredentialsToOwnerEmail,
 } from "~/server/email/emailService";
 import { generateToken, hashToken } from "~/server/auth/tokens";
 import { requireOtpConfirmation } from "~/server/auth/otp";
@@ -2932,9 +2932,13 @@ export const salonRouter = createTRPCRouter({
         code: input.otpCode,
       });
 
-      // Master + linked web_user lookup.
+      // Master row — need `name` for the email body (owner-recipient template
+      // includes "New password for {masterName}") and `webUserId` to resolve
+      // the master's login email (which is the synthetic salon.manicbot.local
+      // address the owner has to hand to the master).
       const masterRow = await ctx.db
         .select({
+          name: masters.name,
           origin: masters.origin,
           webUserId: masters.webUserId,
         })
@@ -2950,14 +2954,18 @@ export const salonRouter = createTRPCRouter({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "master_has_no_web_user" });
       }
 
-      const userRow = await ctx.db
-        .select({ email: webUsers.email, lang: webUsers.lang })
+      // Master's login email — synthetic for salon_created accounts. Goes into
+      // the email body as the login the owner hands to the master. NOT the
+      // recipient — the recipient is the owner (see below).
+      const masterUserRow = await ctx.db
+        .select({ email: webUsers.email })
         .from(webUsers)
         .where(eq(webUsers.id, m.webUserId))
         .limit(1);
-      if (!userRow[0]?.email) {
+      if (!masterUserRow[0]?.email) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "master_has_no_email" });
       }
+      const masterLogin = masterUserRow[0].email;
 
       // Generate fresh password.
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -2988,28 +2996,50 @@ export const salonRouter = createTRPCRouter({
         .where(eq(tenants.id, input.tenantId))
         .limit(1);
       const salonName = tenantRow[0]?.name ?? "ManicBot";
-      const lang = ((userRow[0]?.lang as Lang | null) ?? "en") as Lang;
 
-      void sendMasterPasswordResetByOwnerEmail(userRow[0].email, newPassword, salonName, lang).catch(
-        (e) =>
-          log.error(
-            "salon.resetMasterPassword.email",
-            e instanceof Error ? e : new Error(String(e)),
-          ),
+      // Recipient = OWNER, not master. The master's stored email is the
+      // synthetic salon.manicbot.local mailbox that doesn't accept mail;
+      // delivering the new password there would mean it vanishes. The
+      // owner (caller) is the rightful recipient — they own the account
+      // and hand the credential to the master through a trusted channel.
+      const ownerEmail = ctx.webUser.email ?? null;
+      if (!ownerEmail) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "owner_has_no_email" });
+      }
+      // Owner's lang for the email body — we don't have it on `ctx.webUser`.
+      const ownerLangRow = await ctx.db
+        .select({ lang: webUsers.lang })
+        .from(webUsers)
+        .where(eq(webUsers.id, ctx.webUser.id))
+        .limit(1);
+      const lang = ((ownerLangRow[0]?.lang as Lang | null) ?? "en") as Lang;
+
+      void sendMasterPasswordResetCredentialsToOwnerEmail(
+        ownerEmail,
+        m.name ?? "",
+        masterLogin,
+        newPassword,
+        salonName,
+        lang,
+      ).catch((e) =>
+        log.error(
+          "salon.resetMasterPassword.email",
+          e instanceof Error ? e : new Error(String(e)),
+        ),
       );
 
       await writeAudit(ctx.db, {
-        actor: ctx.webUser.email ?? null,
+        actor: ownerEmail,
         action: "tenant.master.password.reset",
         tenantId: input.tenantId,
-        detail: `masterChatId=${input.masterChatId} (password emailed to master, salon never sees it)`,
+        detail: `masterChatId=${input.masterChatId} (credentials emailed to owner, NOT to master — synthetic mailbox doesn't accept mail)`,
         ip: ctxIp(ctx),
       });
 
-      // Mask email in response so the salon UI can show "sent to a***@example.com".
-      const e = userRow[0].email;
-      const at = e.indexOf("@");
-      const masked = at > 1 ? `${e[0]}***${e.slice(at - 1)}` : e;
+      // Mask the OWNER's email in the response so the UI shows
+      // "sent to o***r@example.com" without leaking the full address.
+      const at = ownerEmail.indexOf("@");
+      const masked = at > 1 ? `${ownerEmail[0]}***${ownerEmail.slice(at - 1)}` : ownerEmail;
       return { ok: true, emailSentTo: masked };
     }),
 

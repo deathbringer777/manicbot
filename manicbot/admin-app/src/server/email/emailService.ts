@@ -455,27 +455,39 @@ export async function sendMasterInviteNewUserEmail(
 }
 
 /**
- * Owner triggered a password reset for a salon-owned master account.
- * The new plaintext lands directly in the master's inbox — the owner never
- * sees it. Caller MUST NOT log this password.
+ * Owner triggered a password reset for a `salon_created` master account.
+ * The new credentials (login + plaintext password) are emailed to the OWNER,
+ * not the master — the master's stored email is a synthetic
+ * `*.salon.manicbot.local` mailbox that doesn't accept mail, so direct
+ * delivery would mean the password vanishes. The owner is expected to hand
+ * the credentials over through a trusted channel. Caller MUST NOT log
+ * `newPassword`.
  */
-export async function sendMasterPasswordResetByOwnerEmail(
-  to: string,
+export async function sendMasterPasswordResetCredentialsToOwnerEmail(
+  ownerEmail: string,
+  masterName: string,
+  masterLogin: string,
   newPassword: string,
   salonName: string,
   lang: Lang = "en",
 ): Promise<SendEmailResult> {
   const {
-    masterPasswordResetByOwnerHtml,
-    masterPasswordResetByOwnerText,
-    getPasswordResetByOwnerSubject,
+    masterPasswordResetCredentialsForOwnerHtml,
+    masterPasswordResetCredentialsForOwnerText,
+    getPasswordResetCredentialsForOwnerSubject,
   } = await import("./templates");
   const loginUrl = `${baseUrl()}/login`;
   return sendResendEmail({
-    to,
-    subject: getPasswordResetByOwnerSubject(lang, salonName),
-    html: masterPasswordResetByOwnerHtml({ salonName, newPassword, loginUrl }, lang),
-    text: masterPasswordResetByOwnerText({ salonName, newPassword, loginUrl }, lang),
+    to: ownerEmail,
+    subject: getPasswordResetCredentialsForOwnerSubject(lang, salonName, masterName),
+    html: masterPasswordResetCredentialsForOwnerHtml(
+      { salonName, masterName, masterLogin, newPassword, loginUrl },
+      lang,
+    ),
+    text: masterPasswordResetCredentialsForOwnerText(
+      { salonName, masterName, masterLogin, newPassword, loginUrl },
+      lang,
+    ),
   });
 }
 

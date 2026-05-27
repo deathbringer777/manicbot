@@ -1625,12 +1625,17 @@ CREATE TABLE IF NOT EXISTS newsletter_subscribers (
   confirmed_at        INTEGER,
   unsubscribed_at     INTEGER,
   welcome_sent_at     INTEGER,
-  welcome_send_error  TEXT
+  welcome_send_error  TEXT,
+  -- 0090: 32-hex one-click unsub token. Stable across resub, partial UNIQUE.
+  unsubscribe_token   TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
   ON newsletter_subscribers(email);
 CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_created
   ON newsletter_subscribers(created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_unsub_tok
+  ON newsletter_subscribers(unsubscribe_token)
+  WHERE unsubscribe_token IS NOT NULL;
 
 -- Migration 0087 — Cancellation retention flow audit trail.
 -- One row per cancel attempt: collects churn reason, optional photo, and

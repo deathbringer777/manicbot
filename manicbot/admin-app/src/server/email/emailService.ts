@@ -6,6 +6,7 @@
 import type { Lang } from "~/lib/i18n";
 import { sendResendEmail, type SendEmailResult } from "./resend";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
+import { getRuntimeEnv } from "~/server/runtimeEnv";
 import {
   verificationEmailHtml,
   verificationCodeEmailHtml,
@@ -122,28 +123,42 @@ export async function sendWelcomeEmail(
 
 /**
  * Newsletter "Stay in the loop" confirmation. Mirror of `sendWelcomeEmail`
- * for non-registered subscribers (migration 0086 — `newsletter_subscribers`).
+ * for non-registered subscribers (migrations 0086 + 0090 —
+ * `newsletter_subscribers`).
  *
  * Distinct from registration welcome:
  *   * The subscriber is NOT necessarily a web_user.
  *   * No dashboard CTA — newsletters point to the marketing list, not to
  *     an account they may not own.
- *   * The unsubscribe link is a placeholder until the one-click flow
- *     ships (deliberate follow-up PR). Today's URL is a stub so the
- *     anchor never renders as a dead `<a href="">`.
+ *   * Unsubscribe link is the real Worker `/u/<token>` endpoint, served by
+ *     `manicbot/src/http/unsubscribeHttp.js`. Token is minted by the Worker
+ *     ingest path and forwarded through the internal welcome dispatch.
+ *
+ * Headers (RFC 8058 one-click):
+ *   * `List-Unsubscribe: <https://manicbot.com/u/<token>>`
+ *   * `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+ * Gmail / Apple Mail render an "Unsubscribe" affordance in the message
+ * header and POST to the URL when the user clicks it. The Worker handler
+ * returns 204 on the POST path.
  */
 export async function sendNewsletterWelcomeEmail(
   to: string,
   lang: Lang = "en",
+  unsubscribeToken: string,
 ): Promise<SendEmailResult> {
-  // Token placeholder — replaced by the real one-click token when that
-  // PR lands. The URL itself is stable so existing emails don't break.
-  const unsubscribeUrl = `${baseUrl()}/unsubscribe?token=placeholder`;
+  const origin = (
+    getRuntimeEnv("WORKER_PUBLIC_URL") || "https://manicbot.com"
+  ).replace(/\/+$/, "");
+  const unsubscribeUrl = `${origin}/u/${unsubscribeToken}`;
   const copy = getEmailCopy(lang);
   return sendResendEmail({
     to,
     subject: copy.subscriptionWelcome.subject,
     html: subscriptionWelcomeEmailHtml(unsubscribeUrl, lang),
+    headers: {
+      "List-Unsubscribe": `<${unsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
   });
 }
 
@@ -440,27 +455,39 @@ export async function sendMasterInviteNewUserEmail(
 }
 
 /**
- * Owner triggered a password reset for a salon-owned master account.
- * The new plaintext lands directly in the master's inbox — the owner never
- * sees it. Caller MUST NOT log this password.
+ * Owner triggered a password reset for a `salon_created` master account.
+ * The new credentials (login + plaintext password) are emailed to the OWNER,
+ * not the master — the master's stored email is a synthetic
+ * `*.salon.manicbot.local` mailbox that doesn't accept mail, so direct
+ * delivery would mean the password vanishes. The owner is expected to hand
+ * the credentials over through a trusted channel. Caller MUST NOT log
+ * `newPassword`.
  */
-export async function sendMasterPasswordResetByOwnerEmail(
-  to: string,
+export async function sendMasterPasswordResetCredentialsToOwnerEmail(
+  ownerEmail: string,
+  masterName: string,
+  masterLogin: string,
   newPassword: string,
   salonName: string,
   lang: Lang = "en",
 ): Promise<SendEmailResult> {
   const {
-    masterPasswordResetByOwnerHtml,
-    masterPasswordResetByOwnerText,
-    getPasswordResetByOwnerSubject,
+    masterPasswordResetCredentialsForOwnerHtml,
+    masterPasswordResetCredentialsForOwnerText,
+    getPasswordResetCredentialsForOwnerSubject,
   } = await import("./templates");
   const loginUrl = `${baseUrl()}/login`;
   return sendResendEmail({
-    to,
-    subject: getPasswordResetByOwnerSubject(lang, salonName),
-    html: masterPasswordResetByOwnerHtml({ salonName, newPassword, loginUrl }, lang),
-    text: masterPasswordResetByOwnerText({ salonName, newPassword, loginUrl }, lang),
+    to: ownerEmail,
+    subject: getPasswordResetCredentialsForOwnerSubject(lang, salonName, masterName),
+    html: masterPasswordResetCredentialsForOwnerHtml(
+      { salonName, masterName, masterLogin, newPassword, loginUrl },
+      lang,
+    ),
+    text: masterPasswordResetCredentialsForOwnerText(
+      { salonName, masterName, masterLogin, newPassword, loginUrl },
+      lang,
+    ),
   });
 }
 

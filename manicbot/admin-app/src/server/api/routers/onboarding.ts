@@ -1,29 +1,47 @@
 /**
- * Tenant onboarding checklist router (Sprint 3).
+ * Tenant onboarding checklist router.
  *
- * Tracks which onboarding steps a tenant owner has completed. Steps auto-mark
- * when the user takes the underlying action (add service, connect bot, etc.);
- * this router just reads + sometimes manually marks.
+ * 2026-05-27 rework: the legacy 10-id checklist
+ *   (add_service / connect_bot / invite_master / set_schedule / share_link /
+ *    first_booking / fill_description / add_logo / add_cover / activate_public)
+ * was reshaped into a 4-essential + 4-optional split. Driver: a tenant
+ * cannot take a booking through the Telegram bot without:
+ *   1. a connected bot,
+ *   2. at least one master,
+ *   3. that master having work hours,
+ *   4. at least one service.
+ * Everything else (description, logo, cover, public toggle, sharing) only
+ * affects the public /salon/{slug} page. `first_booking` was vanity (a
+ * counter, not a setup gate) and is dropped. `add_logo` + `add_cover` were
+ * merged into `add_branding` (AND of both — a public card with only one of
+ * the two looks broken).
+ *
+ * Steps auto-mark when the user takes the underlying action; this router
+ * just reads + manually marks `share_link` (the only step without a
+ * derivable D1 signal).
  */
 
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
-import { tenantOnboarding, services, bots, masters, appointments, tenants } from "~/server/db/schema";
+import { tenantOnboarding, services, bots, masters, tenants } from "~/server/db/schema";
 import { eq, sql, and, isNotNull, ne } from "drizzle-orm";
 
-const STEP_IDS = [
-  "add_service",
+export const ESSENTIAL_STEP_IDS = [
   "connect_bot",
-  "invite_master",
-  "set_schedule",
-  "share_link",
-  "first_booking",
-  "fill_description",
-  "add_logo",
-  "add_cover",
-  "activate_public",
+  "add_master",
+  "set_master_schedule",
+  "add_service",
 ] as const;
+
+export const OPTIONAL_STEP_IDS = [
+  "fill_salon_info",
+  "add_branding",
+  "activate_public",
+  "share_link",
+] as const;
+
+const STEP_IDS = [...ESSENTIAL_STEP_IDS, ...OPTIONAL_STEP_IDS] as const;
 type StepId = (typeof STEP_IDS)[number];
 
 function nowSec(): number {
@@ -38,16 +56,15 @@ export const onboardingRouter = createTRPCRouter({
       const tid = input.tenantId;
 
       // Derive completed steps from real tenant data in parallel.
-      // share_link uses markStep (manual — triggered when user copies/shares the link).
-      const [svcRows, botRows, masterRows, aptRows, manualRow, tenantRow] = await Promise.all([
+      // share_link is manually marked via markStep (no D1 signal — fires when
+      // the user clicks the "copy link" button).
+      const [svcRows, botRows, masterRows, manualRow, tenantRow] = await Promise.all([
         ctx.db.select({ n: sql<number>`count(*)` }).from(services)
           .where(and(eq(services.tenantId, tid), eq(services.active, 1))),
         ctx.db.select({ n: sql<number>`count(*)` }).from(bots)
           .where(eq(bots.tenantId, tid)),
         ctx.db.select({ n: sql<number>`count(*)` }).from(masters)
           .where(and(eq(masters.tenantId, tid), eq(masters.active, 1))),
-        ctx.db.select({ n: sql<number>`count(*)` }).from(appointments)
-          .where(eq(appointments.tenantId, tid)),
         ctx.db.select().from(tenantOnboarding)
           .where(eq(tenantOnboarding.tenantId, tid)).limit(1),
         ctx.db.select({
@@ -58,9 +75,13 @@ export const onboardingRouter = createTRPCRouter({
         }).from(tenants).where(eq(tenants.id, tid)).limit(1),
       ]);
 
-      const manualSteps: StepId[] = manualRow[0] ? JSON.parse(manualRow[0].completedSteps) : [];
+      // Pre-2026-05-27 the persisted JSON may contain dropped ids
+      // (first_booking, invite_master, set_schedule, fill_description,
+      // add_logo, add_cover). We only ever look at "share_link" so the rest
+      // is silently ignored — no D1 cleanup needed.
+      const manualSteps: string[] = manualRow[0] ? JSON.parse(manualRow[0].completedSteps) : [];
 
-      // set_schedule: any master has workHours configured
+      // set_master_schedule: any active master has workHours configured.
       const scheduleRows = await ctx.db.select({ n: sql<number>`count(*)` }).from(masters)
         .where(and(
           eq(masters.tenantId, tid),
@@ -75,16 +96,20 @@ export const onboardingRouter = createTRPCRouter({
       const hasNonEmpty = (v: string | null | undefined) => !!(v && v.trim().length > 0);
 
       const completed: StepId[] = [];
-      if ((svcRows[0]?.n ?? 0) > 0) completed.push("add_service");
       if ((botRows[0]?.n ?? 0) > 0) completed.push("connect_bot");
-      if ((masterRows[0]?.n ?? 0) > 0) completed.push("invite_master");
-      if ((scheduleRows[0]?.n ?? 0) > 0) completed.push("set_schedule");
-      if (manualSteps.includes("share_link")) completed.push("share_link");
-      if ((aptRows[0]?.n ?? 0) > 0) completed.push("first_booking");
-      if (hasNonEmpty(tenantInfo?.description)) completed.push("fill_description");
-      if (hasNonEmpty(tenantInfo?.logo)) completed.push("add_logo");
-      if (hasNonEmpty(tenantInfo?.coverPhoto)) completed.push("add_cover");
+      if ((masterRows[0]?.n ?? 0) > 0) completed.push("add_master");
+      if ((scheduleRows[0]?.n ?? 0) > 0) completed.push("set_master_schedule");
+      if ((svcRows[0]?.n ?? 0) > 0) completed.push("add_service");
+
+      if (hasNonEmpty(tenantInfo?.description)) completed.push("fill_salon_info");
+      // add_branding: AND of logo + cover. One without the other leaves the
+      // public card visually broken, so the step only flips ON when both
+      // are uploaded.
+      if (hasNonEmpty(tenantInfo?.logo) && hasNonEmpty(tenantInfo?.coverPhoto)) {
+        completed.push("add_branding");
+      }
       if ((tenantInfo?.publicActive ?? 0) === 1) completed.push("activate_public");
+      if (manualSteps.includes("share_link")) completed.push("share_link");
 
       const allDone = STEP_IDS.every(s => completed.includes(s));
       return {

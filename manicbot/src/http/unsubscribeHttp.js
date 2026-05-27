@@ -1,22 +1,34 @@
 /**
- * Public unsubscribe endpoint: GET /u/{token}.
+ * Public unsubscribe endpoint: GET /u/{token} and POST /u/{token}.
  *
- * Renders a small "you're unsubscribed" page and flips the contact's
- * `unsubscribed=1`, `consent_email=0`, `consent_sms=0`. Always appends one
- * `marketing_consent_log` row with the source/IP/user-agent for the audit
- * trail.
+ * Serves two backends behind ONE URL pattern:
  *
- * Design notes:
- *   - Token-based — no auth required. The token is 32 random hex chars,
- *     generated on the first send and persisted in marketing_contacts.
- *   - Idempotent — re-visiting after unsubscribe doesn't insert a duplicate
- *     consent row; we check if `unsubscribed = 1` already.
- *   - GET is fine here. Modern MUAs prefetch links but the side effect is
- *     "we'll stop emailing you" — that's the intended behaviour for any
- *     RFC-8058 one-click unsubscribe. No CSRF risk because no authenticated
- *     session is involved.
- *   - Friendly i18n HTML for the four supported locales — picks contact.locale
- *     if set, otherwise Accept-Language, otherwise ru.
+ *   1. `marketing_contacts` (per-tenant CRM, primary). Flips
+ *      `unsubscribed=1`, `consent_email=0`, `consent_sms=0`; appends one
+ *      `marketing_consent_log` row.
+ *
+ *   2. `newsletter_subscribers` (platform-wide newsletter from /api/subscribe,
+ *      0090). Flips `unsubscribed_at = now`. No separate consent log — the
+ *      timestamp on the row IS the audit record.
+ *
+ * Lookup order: marketing_contacts first (it's the bigger table once the
+ * marketing module is in use), then newsletter as a fallthrough. Token
+ * shapes overlap by design — both tables mint 32-hex-char tokens; the
+ * partial-UNIQUE on each side does not coordinate across tables, so in the
+ * cosmically-unlikely event of a collision the marketing row wins.
+ *
+ * HTTP methods:
+ *   - GET → renders a localised HTML "you're unsubscribed" page (200) or
+ *     "link expired" (404). Modern MUAs prefetch links but the side effect
+ *     is benign (we'll stop emailing you) so prefetch == real click here.
+ *   - POST → RFC 8058 one-click (Gmail / Apple Mail "Unsubscribe" button).
+ *     Returns 204 on success, 404 on unknown token. No body.
+ *
+ * Idempotent: re-visiting after unsubscribe doesn't double-flip or
+ * double-log; we check the row's already-unsubscribed flag first.
+ *
+ * Localisation: picks contact.locale / subscriber.lang if set, otherwise
+ * Accept-Language, otherwise ru.
  */
 import { dbGet, dbRun } from '../utils/db.js';
 import { log } from '../utils/logger.js';
@@ -97,9 +109,11 @@ function pageShell({ title, body, home, status }) {
 export async function handleUnsubscribeRequest(request, token, env) {
   // Minimal ctx for db helpers (they accept any object with .db).
   const ctx = { db: env?.DB };
+  const isPost = String(request?.method || 'GET').toUpperCase() === 'POST';
 
   // Token shape check — guard against probing. Real tokens are 32 hex chars.
   if (typeof token !== 'string' || !/^[a-f0-9]{16,64}$/i.test(token)) {
+    if (isPost) return new Response(null, { status: 404 });
     return pageShell({
       title: COPY.ru.notFound,
       body: COPY.ru.notFoundBody,
@@ -108,6 +122,7 @@ export async function handleUnsubscribeRequest(request, token, env) {
     });
   }
 
+  // ── Primary: marketing_contacts (per-tenant CRM) ─────────────────────
   let contact = null;
   try {
     contact = await dbGet(
@@ -119,50 +134,89 @@ export async function handleUnsubscribeRequest(request, token, env) {
     log.error('unsubscribe', e instanceof Error ? e : new Error(String(e?.message)));
   }
 
-  const lang = pickLang(contact?.locale, request.headers.get('accept-language'));
-  const copy = COPY[lang];
-
-  if (!contact) {
+  if (contact) {
+    if (!contact.unsubscribed) {
+      const ip = request.headers.get('cf-connecting-ip') || '';
+      const ua = (request.headers.get('user-agent') || '').slice(0, 500);
+      const now = Math.floor(Date.now() / 1000);
+      try {
+        await dbRun(
+          ctx,
+          `UPDATE marketing_contacts
+             SET unsubscribed = 1, consent_email = 0, consent_sms = 0
+           WHERE id = ?`,
+          contact.id,
+        );
+        await dbRun(
+          ctx,
+          `INSERT INTO marketing_consent_log (contact_id, event, source, ip, user_agent, created_at)
+           VALUES (?, 'unsubscribed', 'unsubscribe_link', ?, ?, ?)`,
+          contact.id,
+          ip,
+          ua,
+          now,
+        );
+      } catch (e) {
+        log.error('unsubscribe', e instanceof Error ? e : new Error(String(e?.message)),
+          { action: 'flip_unsubscribed', contactId: contact.id });
+      }
+    }
+    if (isPost) return new Response(null, { status: 204 });
+    const lang = pickLang(contact.locale, request.headers.get('accept-language'));
+    const copy = COPY[lang];
     return pageShell({
-      title: copy.notFound,
-      body: copy.notFoundBody,
+      title: copy.title,
+      body: copy.body,
       home: copy.home,
-      status: 404,
+      status: 200,
     });
   }
 
-  // Idempotent: only flip + log if not already unsubscribed.
-  if (!contact.unsubscribed) {
-    const ip = request.headers.get('cf-connecting-ip') || '';
-    const ua = (request.headers.get('user-agent') || '').slice(0, 500);
-    const now = Math.floor(Date.now() / 1000);
-    try {
-      await dbRun(
-        ctx,
-        `UPDATE marketing_contacts
-           SET unsubscribed = 1, consent_email = 0, consent_sms = 0
-         WHERE id = ?`,
-        contact.id,
-      );
-      await dbRun(
-        ctx,
-        `INSERT INTO marketing_consent_log (contact_id, event, source, ip, user_agent, created_at)
-         VALUES (?, 'unsubscribed', 'unsubscribe_link', ?, ?, ?)`,
-        contact.id,
-        ip,
-        ua,
-        now,
-      );
-    } catch (e) {
-      log.error('unsubscribe', e instanceof Error ? e : new Error(String(e?.message)),
-        { action: 'flip_unsubscribed', contactId: contact.id });
-    }
+  // ── Fallthrough: newsletter_subscribers (platform newsletter, 0090) ──
+  let subscriber = null;
+  try {
+    subscriber = await dbGet(
+      ctx,
+      `SELECT id, lang, unsubscribed_at FROM newsletter_subscribers WHERE unsubscribe_token = ? LIMIT 1`,
+      token,
+    );
+  } catch (e) {
+    log.error('unsubscribe', e instanceof Error ? e : new Error(String(e?.message)));
   }
 
+  if (subscriber) {
+    if (!subscriber.unsubscribed_at) {
+      try {
+        await dbRun(
+          ctx,
+          `UPDATE newsletter_subscribers SET unsubscribed_at = ? WHERE id = ?`,
+          Math.floor(Date.now() / 1000),
+          subscriber.id,
+        );
+      } catch (e) {
+        log.error('unsubscribe', e instanceof Error ? e : new Error(String(e?.message)),
+          { action: 'flip_newsletter_unsubscribed', subscriberId: subscriber.id });
+      }
+    }
+    if (isPost) return new Response(null, { status: 204 });
+    const lang = pickLang(subscriber.lang, request.headers.get('accept-language'));
+    const copy = COPY[lang];
+    return pageShell({
+      title: copy.title,
+      body: copy.body,
+      home: copy.home,
+      status: 200,
+    });
+  }
+
+  // ── Unknown token ────────────────────────────────────────────────────
+  if (isPost) return new Response(null, { status: 404 });
+  const lang = pickLang(null, request.headers.get('accept-language'));
+  const copy = COPY[lang];
   return pageShell({
-    title: copy.title,
-    body: copy.body,
+    title: copy.notFound,
+    body: copy.notFoundBody,
     home: copy.home,
-    status: 200,
+    status: 404,
   });
 }

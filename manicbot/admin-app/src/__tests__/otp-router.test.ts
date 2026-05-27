@@ -139,6 +139,21 @@ describe("otp.request — payload-binding contract (source pin)", () => {
   });
 });
 
+describe("otp.request — returns sentTo (authoritative recipient address)", () => {
+  // Pre-fix the UI guessed where the OTP went using the master prop's email
+  // (a synthetic *.salon.manicbot.local mailbox). The server is the only
+  // authority on the actual recipient — it MUST surface that back so the UI
+  // can display the truth.
+  it("source pin: return shape carries `sentTo: webUser.email`", () => {
+    const src = readFileSync(
+      path.resolve(__dirname, "../server/api/routers/otp.ts"),
+      "utf8",
+    );
+    // Look for `sentTo: webUser.email` in the final return — that's the contract.
+    expect(src).toMatch(/return\s*\{\s*[\s\S]*?sentTo\s*:\s*webUser\.email/);
+  });
+});
+
 describe("otp.request — system_admin can issue OTPs too", () => {
   it("admin role passes the protectedProcedure gate (precondition: needs email)", async () => {
     // makeAdminCtx supplies webUser with email — the procedure proceeds past

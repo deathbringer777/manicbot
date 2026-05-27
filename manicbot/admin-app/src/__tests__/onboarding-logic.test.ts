@@ -2,26 +2,31 @@ import { describe, it, expect } from "vitest";
 
 /**
  * Onboarding checklist logic tests. Pure functions only — tRPC integration
- * with D1 is covered by the smoke flow in staging.
+ * with D1 is covered by `onboarding-router.test.ts` + the smoke flow in
+ * staging.
  *
- * The checklist merged with the legacy ProfileCompletenessCard widget on
- * 2026-05-16, so this set now mirrors the 10 step IDs that the
- * onboarding.getStatus router resolves (6 operational + 4 profile signals
- * derived from the tenants table).
+ * 2026-05-27 rework: the previous 10-id checklist mixed "blocking" (no bot,
+ * no master, no service) with "polish" (logo, cover, public activation).
+ * The contract is now 4 essentials (must do or the booking flow returns no
+ * slots) + 4 optional (public-page polish). Total 8 ids. See the plan at
+ * /Users/vdovin/.claude/plans/fancy-wiggling-perlis.md.
  */
 
-const STEP_IDS = [
-  "add_service",
+const ESSENTIAL_STEP_IDS = [
   "connect_bot",
-  "invite_master",
-  "set_schedule",
-  "share_link",
-  "first_booking",
-  "fill_description",
-  "add_logo",
-  "add_cover",
-  "activate_public",
+  "add_master",
+  "set_master_schedule",
+  "add_service",
 ] as const;
+
+const OPTIONAL_STEP_IDS = [
+  "fill_salon_info",
+  "add_branding",
+  "activate_public",
+  "share_link",
+] as const;
+
+const STEP_IDS = [...ESSENTIAL_STEP_IDS, ...OPTIONAL_STEP_IDS] as const;
 type StepId = (typeof STEP_IDS)[number];
 
 function computeProgress(completed: StepId[]): number {
@@ -39,24 +44,37 @@ function isAllDone(completed: StepId[]): boolean {
   return STEP_IDS.every((s) => done.has(s));
 }
 
+function essentialsDone(completed: StepId[]): boolean {
+  const done = new Set(completed);
+  return ESSENTIAL_STEP_IDS.every((s) => done.has(s));
+}
+
 describe("onboarding checklist logic", () => {
+  it("STEP_IDS is exactly 8 (4 essential + 4 optional)", () => {
+    expect(STEP_IDS).toHaveLength(8);
+    expect(ESSENTIAL_STEP_IDS).toHaveLength(4);
+    expect(OPTIONAL_STEP_IDS).toHaveLength(4);
+  });
+
+  it("removed legacy ids are gone (add_logo, add_cover, first_booking, invite_master, set_schedule, fill_description)", () => {
+    const ids = STEP_IDS as readonly string[];
+    expect(ids).not.toContain("add_logo");
+    expect(ids).not.toContain("add_cover");
+    expect(ids).not.toContain("first_booking");
+    expect(ids).not.toContain("invite_master");
+    expect(ids).not.toContain("set_schedule");
+    expect(ids).not.toContain("fill_description");
+  });
+
   it("empty progress is 0", () => {
     expect(computeProgress([])).toBe(0);
   });
 
-  it("half progress is 0.5 (5/10)", () => {
-    expect(
-      computeProgress([
-        "add_service",
-        "connect_bot",
-        "invite_master",
-        "set_schedule",
-        "share_link",
-      ]),
-    ).toBeCloseTo(0.5);
+  it("half progress is 0.5 (4/8 — essentials done)", () => {
+    expect(computeProgress([...ESSENTIAL_STEP_IDS])).toBeCloseTo(0.5);
   });
 
-  it("all ten steps → progress = 1.0", () => {
+  it("all eight steps → progress = 1.0", () => {
     expect(computeProgress([...STEP_IDS])).toBe(1);
   });
 
@@ -71,26 +89,22 @@ describe("onboarding checklist logic", () => {
     expect(after).toEqual(["add_service", "connect_bot"]);
   });
 
-  it("isAllDone is true only when all ten are marked", () => {
+  it("isAllDone is true only when all eight are marked", () => {
     expect(isAllDone([])).toBe(false);
-    expect(
-      isAllDone([
-        "add_service",
-        "connect_bot",
-        "invite_master",
-        "set_schedule",
-        "share_link",
-        "first_booking",
-        "fill_description",
-        "add_logo",
-        "add_cover",
-      ]),
-    ).toBe(false);
+    expect(isAllDone([...ESSENTIAL_STEP_IDS])).toBe(false);
     expect(isAllDone([...STEP_IDS])).toBe(true);
   });
 
   it("ordering doesn't affect isAllDone", () => {
     const reversed = [...STEP_IDS].reverse() as StepId[];
     expect(isAllDone(reversed)).toBe(true);
+  });
+
+  it("essentialsDone flips on the 4 must-have ids regardless of optional state", () => {
+    expect(essentialsDone([])).toBe(false);
+    expect(essentialsDone(["connect_bot", "add_master", "set_master_schedule"])).toBe(false);
+    expect(essentialsDone([...ESSENTIAL_STEP_IDS])).toBe(true);
+    // Adding optional items after essentials are done doesn't flip it back.
+    expect(essentialsDone([...ESSENTIAL_STEP_IDS, "add_branding"])).toBe(true);
   });
 });

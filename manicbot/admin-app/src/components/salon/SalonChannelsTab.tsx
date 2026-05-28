@@ -711,32 +711,6 @@ function WebChatTab({ tenantId }: { tenantId: string }) {
           </div>
         </section>
       )}
-
-      {/* Live preview — gates on chatEnabled (NOT publicActive). 0090. */}
-      {chatUrl && (
-        <section className="glass-card rounded-2xl p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="h-4 w-4 text-slate-400" />
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("channels.webChat.preview", lang)}</h3>
-          </div>
-          <p className="text-[11px] text-slate-500">{t("channels.webChat.previewHint", lang)}</p>
-          {chatEnabled ? (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-900/50">
-              <iframe
-                data-testid="web-chat-preview"
-                src={chatUrl}
-                title={t("channels.webChat.preview", lang)}
-                loading="lazy"
-                className="w-full h-[480px] sm:h-[560px] border-0"
-              />
-            </div>
-          ) : (
-            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-3 text-[11px] text-amber-400">
-              {t("channels.webChat.state.previewPausedHint", lang)}
-            </div>
-          )}
-        </section>
-      )}
     </div>
   );
 }

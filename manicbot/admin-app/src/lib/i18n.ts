@@ -744,8 +744,6 @@ const translations = {
   "channels.webChat.title":              { ru: "Веб-чат", ua: "Веб-чат", en: "Web chat", pl: "Chat web" },
   "channels.webChat.hint":               { ru: "AI-чат для онлайн-записи. Делитесь ссылкой или QR-кодом — клиент попадает прямо в чат.", ua: "AI-чат для онлайн-запису. Діліться посиланням або QR-кодом — клієнт потрапляє прямо в чат.", en: "AI chat for online booking. Share the link or QR — clients land directly in the chat.", pl: "Czat AI do rezerwacji online. Udostępnij link lub QR — klient trafia od razu do czatu." },
   "channels.webChat.chatUrl":            { ru: "Адрес чата", ua: "Адреса чату", en: "Chat URL", pl: "Adres czatu" },
-  "channels.webChat.preview":            { ru: "Превью чата", ua: "Прев'ю чату", en: "Chat preview", pl: "Podgląd czatu" },
-  "channels.webChat.previewHint":        { ru: "Так чат выглядит для клиента. Сообщения здесь — реальные, попадают в инбокс.", ua: "Так чат бачить клієнт. Повідомлення реальні — потрапляють в інбокс.", en: "This is exactly what the client sees. Messages here are real — they land in your inbox.", pl: "Tak czat widzi klient. Wiadomości są prawdziwe — trafiają do skrzynki." },
   "channels.webChat.qrHint":             { ru: "Распечатайте QR-код и разместите в салоне — клиенты попадут в чат за один скан.", ua: "Роздрукуйте QR-код і розмістіть у салоні — клієнти потраплять у чат за один скан.", en: "Print the QR code and display it in the salon — clients reach the chat in one scan.", pl: "Wydrukuj kod QR i umieść go w salonie — klienci trafią do czatu jednym skanem." },
   // 0090 — inline Setup card replaces the legacy "Public Profile redirect" placeholder.
   "channels.webChat.setup.title":          { ru: "Настройка веб-чата", ua: "Налаштування веб-чату", en: "Web chat setup", pl: "Konfiguracja czatu web" },
@@ -760,7 +758,6 @@ const translations = {
   "channels.webChat.state.chatOn":          { ru: "Чат работает", ua: "Чат працює", en: "Chat is live", pl: "Czat działa" },
   "channels.webChat.state.chatOff":         { ru: "Чат на паузе", ua: "Чат на паузі", en: "Chat is paused", pl: "Czat wstrzymany" },
   "channels.webChat.state.urlHiddenHint":   { ru: "Ссылка временно не работает — включите чат выше.", ua: "Посилання тимчасово не працює — увімкніть чат вище.", en: "The link is paused — enable chat above to reactivate.", pl: "Link jest wstrzymany — włącz czat powyżej, aby go reaktywować." },
-  "channels.webChat.state.previewPausedHint": { ru: "Чат выключен — включите его выше, чтобы увидеть превью.", ua: "Чат вимкнено — увімкніть його вище, щоб побачити прев'ю.", en: "Chat is off — enable it above to see the preview.", pl: "Czat jest wyłączony — włącz go powyżej, aby zobaczyć podgląd." },
 
   // WhatsApp activation status pill (no backend change — derived from getChannels)
   "channels.waStatusActivated":          { ru: "Канал активирован — Meta доставляет сообщения", ua: "Канал активовано — Meta доставляє повідомлення", en: "Channel activated — Meta is delivering messages", pl: "Kanał aktywowany — Meta dostarcza wiadomości" },

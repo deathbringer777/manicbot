@@ -48,11 +48,8 @@ export function MasterProfileSection() {
   const data = profile.data as any;
 
   return (
-    // Master profile is a single big card; wrap in the settings grid so the
-    // layout stays consistent with sibling sections (header row + main card
-    // both span 2 cols on md+).
-    <div className="grid gap-4 md:grid-cols-2 items-start">
-      <div className="md:col-span-2 flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t("master.profile", lang)}</h2>
         {!bioEdit ? (
           <button onClick={() => setBioEdit(true)}
@@ -67,7 +64,7 @@ export function MasterProfileSection() {
         )}
       </div>
 
-      <div className="glass-card rounded-2xl p-5 space-y-4 md:col-span-2">
+      <div className="glass-card rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-2xl overflow-hidden bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-2xl font-bold text-white shrink-0">
             {data?.photo

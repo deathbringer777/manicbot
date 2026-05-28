@@ -287,10 +287,11 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
         </div>
       </div>
 
-      {/* Section title + content — capped + centered so forms don't stretch on wide screens.
-          max-w-5xl (1024px) leaves room for a 2-col tile grid inside sections without
-          forcing forms to fill the whole dashboard width. */}
-      <div className="mx-auto w-full max-w-5xl">
+      {/* Section title + content — single centered column, ~Linear/Notion width.
+          max-w-4xl (896px): wide enough for the Billing plan-comparison 3-col
+          grid (~290px per card) and the Notifications categories matrix; tight
+          enough that single-card forms read naturally without empty whitespace. */}
+      <div className="mx-auto w-full max-w-4xl">
         {activeSectionData && (
           <div className="mb-4">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">

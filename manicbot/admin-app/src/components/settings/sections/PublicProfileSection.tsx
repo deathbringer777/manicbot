@@ -18,14 +18,5 @@ export function PublicProfileSection() {
     );
   }
 
-  // PublicProfileEditor renders its own glass-card tree internally. Keep the
-  // settings outer grid for consistency with sibling sections — the editor
-  // simply spans the full width (col-span-2 on md+).
-  return (
-    <div className="grid gap-4 md:grid-cols-2 items-start">
-      <div className="md:col-span-2">
-        <PublicProfileEditor tenantId={effectiveTenantId} />
-      </div>
-    </div>
-  );
+  return <PublicProfileEditor tenantId={effectiveTenantId} />;
 }

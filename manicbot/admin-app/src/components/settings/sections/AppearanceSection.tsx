@@ -103,7 +103,9 @@ export function AppearanceSection() {
   ];
 
   return (
-    <div className="space-y-4">
+    // 2-col tile grid: 3 collapsible cards auto-flow, then the wider BottomNav
+    // tile spans both columns (its preview row + reorder list want full width).
+    <div className="grid gap-4 md:grid-cols-2 items-start">
       {/* ── Sidebar Tabs ── */}
       <CollapsibleSection
         icon={LayoutGrid}
@@ -345,7 +347,7 @@ function BottomNavSection({
   const previewItems: NavItem[] = [...included, settingsNavItem];
 
   return (
-    <section className="glass-card rounded-2xl p-4">
+    <section className="glass-card rounded-2xl p-4 md:col-span-2">
       <div className="flex items-center gap-2 mb-1">
         <Smartphone className="w-4 h-4 text-fuchsia-400 shrink-0" />
         <h2 className="text-sm font-bold text-slate-900 dark:text-white">

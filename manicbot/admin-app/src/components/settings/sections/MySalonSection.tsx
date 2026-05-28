@@ -42,11 +42,14 @@ export function MySalonSection() {
   }
 
   return (
-    <div className="space-y-6">
-      <SalonSettingsEditor tenantId={effectiveTenantId} profile={profile.data} />
-      <AutoConfirmSettings tenantId={effectiveTenantId} />
-      <AutoSuggestFavoriteSettings tenantId={effectiveTenantId} />
-      <SalonCalendarSection tenantId={effectiveTenantId} />
+    <div className="grid gap-4 md:grid-cols-2 items-start">
+      {/* Each child renders its own glass-card. Salon settings + AutoConfirm pair
+          on md+. AutoSuggestFavorite sits in the next slot. Calendar takes full
+          width because its internal layout (sync state + accounts list) is wide. */}
+      <div><SalonSettingsEditor tenantId={effectiveTenantId} profile={profile.data} /></div>
+      <div><AutoConfirmSettings tenantId={effectiveTenantId} /></div>
+      <div><AutoSuggestFavoriteSettings tenantId={effectiveTenantId} /></div>
+      <div className="md:col-span-2"><SalonCalendarSection tenantId={effectiveTenantId} /></div>
     </div>
   );
 }

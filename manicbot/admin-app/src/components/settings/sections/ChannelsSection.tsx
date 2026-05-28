@@ -18,5 +18,13 @@ export function ChannelsSection() {
     );
   }
 
-  return <SalonChannelsTab tenantId={effectiveTenantId} />;
+  // SalonChannelsTab renders its own multi-card tree. We wrap in the settings
+  // grid for layout consistency with sibling sections; the tab takes full width.
+  return (
+    <div className="grid gap-4 md:grid-cols-2 items-start">
+      <div className="md:col-span-2">
+        <SalonChannelsTab tenantId={effectiveTenantId} />
+      </div>
+    </div>
+  );
 }

@@ -341,7 +341,7 @@ export function AccountSection() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 md:grid-cols-2 items-start">
       {/* Email verification status */}
       <section className={`glass-card rounded-2xl p-4 border ${
         emailVerified
@@ -466,7 +466,7 @@ export function AccountSection() {
 
       {/* Role change request */}
       {canRequestRoleChange && (
-        <section className="glass-card rounded-2xl p-4 border border-violet-500/10">
+        <section className="glass-card rounded-2xl p-4 border border-violet-500/10 md:col-span-2">
           <div className="flex items-center gap-2 mb-4">
             <ArrowLeftRight className="w-4 h-4 text-violet-400 shrink-0" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">{rcl.heading}</h2>

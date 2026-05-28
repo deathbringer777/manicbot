@@ -52,3 +52,13 @@ manicbot/LANDING_DEMO_INTEGRATION.md
 manicbot/docs/oauth-verification-kit.md
 manicbot/docs/marketing/BRAND_VOICE.md
 docs/pre-launch-blockers-report.md
+
+# 2026-05-28 — Local working notes that previously sat untracked in root.
+# Belong on developer's machine only (audit reports, weekly routine drafts,
+# overview docs). The public repo flipped on 2026-05-27 (commit 1f521ab) and
+# these files are explicitly NOT for distribution.
+/Ревью*/
+/.claude/weekly-routines-drafts/
+/.claude/scheduled_tasks.lock
+/CLAUDE_CODE_MULTI_AGENT_AUDIT_PROMPT.md
+/PROJECT_OVERVIEW_RU.md

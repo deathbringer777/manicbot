@@ -33,24 +33,35 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # full history needed for gitleaks
 
       - name: Gitleaks — detect secrets in history
+        # NOTE: gitleaks-action@v2.3.9 still runs on Node 20 (action.yml
+        # declares `using: node20`). GitHub's Node-20 deprecation deadline
+        # is 2026-06-02; until upstream ships a Node-24 build, this step
+        # will eventually emit deprecation warnings and may fail. Watch
+        # https://github.com/gitleaks/gitleaks-action/releases and bump.
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # semgrep/semgrep-action repo is archived (deprecated upstream).
+      # Per current Semgrep CI docs, install + invoke `semgrep ci` directly
+      # from pip. This runs the same SAST scan without depending on a GH
+      # Action runtime, so it is unaffected by the 2026-06-02 Node-20
+      # deprecation. Pinned version keeps output reproducible.
+      - name: Semgrep — install
+        run: python3 -m pip install --user semgrep==1.164.0
       - name: Semgrep — SAST scan
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: >-
-            p/owasp-top-ten
-            p/typescript
-            p/nextjs
-            p/jwt
-            .semgrep/manicbot-rules.yml
+        run: |
+          semgrep ci \
+            --config p/owasp-top-ten \
+            --config p/typescript \
+            --config p/nextjs \
+            --config p/jwt \
+            --config .semgrep/manicbot-rules.yml
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
@@ -60,10 +71,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Bot — Test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -131,10 +142,10 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -152,7 +163,7 @@ jobs:
       # 0074) silently 500'd in prod for days because the migration sat in
       # `migrations/` without being applied.
       - name: Apply D1 migrations (manicbot-db, remote)
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -161,7 +172,7 @@ jobs:
           command: d1 migrations apply manicbot-db --remote
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -177,7 +188,7 @@ jobs:
     name: Landing — Deploy Pages
     if: false  # disabled — landing source not in repo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Выбор пакета лендинга
         id: landing
@@ -191,7 +202,7 @@ jobs:
           fi
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -214,7 +225,7 @@ jobs:
           echo "OK: dist verified"
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -228,10 +239,10 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -271,7 +282,7 @@ jobs:
           echo "msg=${ascii} (${sha})" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

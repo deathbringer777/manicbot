@@ -119,6 +119,7 @@ export const onboardingRouter = createTRPCRouter({
       };
     }),
 
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   markStep: publicProcedure
     .input(z.object({
       tenantId: z.string(),

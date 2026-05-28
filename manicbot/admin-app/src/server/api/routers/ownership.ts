@@ -236,6 +236,7 @@ export const ownershipRouter = createTRPCRouter({
     }),
 
   /** Public: confirm a transfer using the email token. */
+  // nosemgrep: trpc-public-procedure-mutation -- token-validated public flow (no session by design, rate-limited by IP)
   confirmTransfer: publicProcedure
     .input(z.object({ token: z.string().min(16).max(128) }))
     .mutation(async ({ ctx, input }) => {

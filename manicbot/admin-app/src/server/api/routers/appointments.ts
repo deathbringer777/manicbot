@@ -190,6 +190,7 @@ export const appointmentsRouter = createTRPCRouter({
    * Sprint 3: Manual booking from dashboard (owner → any master; master → self only).
    * Enforces slot-conflict check + auto-creates client if name+phone provided.
    */
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   createManual: publicProcedure
     .input(z.object({
       tenantId: z.string(),
@@ -488,6 +489,7 @@ export const appointmentsRouter = createTRPCRouter({
    *     the detail panel uses `appointments.update` (below) which DOES
    *     notify — separation by user intent.
    */
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   rescheduleAppointment: publicProcedure
     .input(z.object({
       tenantId: z.string(),
@@ -653,6 +655,7 @@ export const appointmentsRouter = createTRPCRouter({
    * Salon-employed masters land at FORBIDDEN — by design the owner
    * reshuffles bookings in a multi-master salon.
    */
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   update: publicProcedure
     .input(
       z.object({

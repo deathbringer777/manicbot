@@ -62,6 +62,7 @@ export const promoCodesRouter = createTRPCRouter({
       return rows;
     }),
 
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   create: publicProcedure
     .input(createInput)
     .mutation(async ({ ctx, input }) => {
@@ -87,6 +88,7 @@ export const promoCodesRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   delete: publicProcedure
     .input(z.object({ tenantId: z.string(), id: z.number().int() }))
     .mutation(async ({ ctx, input }) => {

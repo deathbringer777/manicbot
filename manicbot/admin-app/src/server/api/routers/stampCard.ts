@@ -47,6 +47,7 @@ export const stampCardRouter = createTRPCRouter({
       };
     }),
 
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   updateConfig: publicProcedure
     .input(z.object({
       tenantId: z.string(),
@@ -96,6 +97,7 @@ export const stampCardRouter = createTRPCRouter({
         .limit(input.limit);
     }),
 
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   resetClient: publicProcedure
     .input(z.object({ tenantId: z.string(), clientId: z.string() }))
     .mutation(async ({ ctx, input }) => {

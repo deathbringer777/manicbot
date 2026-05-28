@@ -208,3 +208,55 @@ describe("ClientFormModal — multi-channel contact (0062)", () => {
     expect(payload.patch.email).toBeNull();
   });
 });
+
+describe("ClientFormModal — submit label reflects dirty state in edit mode", () => {
+  const baseInitial = {
+    chatId: 42,
+    name: "Karina",
+    phone: "+48500152948",
+    email: null,
+    tgUsername: null,
+    igUsername: null,
+    tags: null,
+    notes: null,
+    dob: null,
+  };
+
+  it("shows 'Изменить' (clients.action.edit) when nothing changed", () => {
+    renderForm(baseInitial);
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Изменить");
+  });
+
+  it("switches the label to 'Сохранить' (common.save) once a field is modified", () => {
+    renderForm(baseInitial);
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Изменить");
+    fireEvent.change(screen.getByTestId("cf-name"), { target: { value: "Karina K." } });
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Сохранить");
+  });
+
+  it("reverts the label to 'Изменить' when the field is restored to its initial value", () => {
+    renderForm(baseInitial);
+    fireEvent.change(screen.getByTestId("cf-name"), { target: { value: "Karina K." } });
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Сохранить");
+    fireEvent.change(screen.getByTestId("cf-name"), { target: { value: "Karina" } });
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Изменить");
+  });
+
+  it("treats null/empty initial values as equivalent to empty input (no false-positive dirty)", () => {
+    // `email: null` in `initial` must equal `""` typed into the input —
+    // otherwise opening any client with sparse contact data would render
+    // dirty out of the gate. Touch the field then clear it back to "".
+    renderForm(baseInitial);
+    fireEvent.change(screen.getByTestId("cf-email"), { target: { value: "x" } });
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Сохранить");
+    fireEvent.change(screen.getByTestId("cf-email"), { target: { value: "" } });
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Изменить");
+  });
+
+  it("create mode label stays 'Добавить клиента' (no dirty toggle)", () => {
+    renderForm();
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Добавить клиента");
+    fireEvent.change(screen.getByTestId("cf-name"), { target: { value: "Karina" } });
+    expect(screen.getByTestId("cf-submit").textContent?.trim()).toBe("Добавить клиента");
+  });
+});

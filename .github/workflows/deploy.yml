@@ -53,8 +53,6 @@ jobs:
             .semgrep/manicbot-rules.yml
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-        # Allow workflow to proceed even without Semgrep token (OSS mode)
-        continue-on-error: ${{ secrets.SEMGREP_APP_TOKEN == '' }}
 
   # ─── Bot: test ──────────────────────────────────────────────
   test:

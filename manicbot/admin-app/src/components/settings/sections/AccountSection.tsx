@@ -10,6 +10,8 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { friendlyRoleName } from "~/lib/roleLabels";
 import type { Lang } from "~/lib/i18n";
+import { CollapsibleSection } from "~/components/settings/CollapsibleSection";
+import { SettingsHeaderStrip } from "~/components/settings/SettingsHeaderStrip";
 
 /**
  * Returns true while the component is mounted. Use to guard setState calls
@@ -340,234 +342,109 @@ export function AccountSection() {
     verifyMut.mutate({ email: sessionEmail, code });
   };
 
+  // Pending role-change request → open the collapsible by default so the user
+  // sees their status without an extra click. Same for the "set initial
+  // password" flow (Google-only users who haven't picked a password yet).
+  const rolePending = myRequest?.status === "pending";
+
   return (
     <div className="space-y-4">
-      {/* Email verification status */}
-      <section className={`glass-card rounded-2xl p-4 border ${
-        emailVerified
-          ? "border-emerald-500/20"
-          : "border-red-500/20"
-      }`}>
-        <div className="flex items-center gap-3">
-          {emailVerified ? (
-            <div className="h-10 w-10 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-              <ShieldCheck className="h-5 w-5 text-emerald-400" />
-            </div>
-          ) : (
+      {/* Header strip when email is verified — read-only identity + status pill.
+          Unverified case keeps the existing actionable card below (it IS the
+          header in that state). */}
+      {emailVerified ? (
+        <SettingsHeaderStrip
+          icon={User}
+          title={sessionEmail || friendlyRoleName(effectiveRole, lang)}
+          subtitle={sessionEmail ? friendlyRoleName(effectiveRole, lang) : null}
+          rightSlot={
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <ShieldCheck className="h-3 w-3" />
+              {vl.verified}
+            </span>
+          }
+        />
+      ) : (
+        <section className="glass-card rounded-2xl p-4 border border-red-500/20">
+          <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
               <ShieldAlert className="h-5 w-5 text-red-400" />
             </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-red-600 dark:text-red-400">{vl.notVerified}</p>
+              {!verifySuccess && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{codeSent ? vl.enterCode : vl.promptSend}</p>
+              )}
+            </div>
+          </div>
+
+          {!verifySuccess && (
+            <div className="mt-4 space-y-3">
+              {!codeSent ? (
+                <>
+                  {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
+                  <button
+                    type="button"
+                    onClick={() => { setVerifyError(null); resendMut.mutate({ email: sessionEmail }); }}
+                    disabled={resendMut.isPending}
+                    className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+                  >
+                    {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.sendCode}
+                  </button>
+                </>
+              ) : (
+                <form onSubmit={handleVerifyCode} className="space-y-3">
+                  <input
+                    ref={codeInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={code}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setCode(v);
+                      if (verifyError) setVerifyError(null);
+                    }}
+                    placeholder="000000"
+                    className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
+                    autoFocus
+                  />
+                  {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
+                  <button
+                    type="submit"
+                    disabled={code.length !== 6 || verifyMut.isPending}
+                    className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
+                  >
+                    {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.verify}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setVerifyError(null); resendMut.mutate({ email: sessionEmail }); }}
+                    disabled={resendMut.isPending || resendCooldown}
+                    className="w-full flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-600/60 text-sm font-medium text-slate-600 dark:text-slate-400 px-4 py-2.5 rounded-xl hover:border-brand-500/40 transition-colors disabled:opacity-50"
+                  >
+                    {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : resendCooldown ? vl.resendCooldown : vl.resend}
+                  </button>
+                </form>
+              )}
+            </div>
           )}
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-bold ${
-              emailVerified ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-            }`}>
-              {emailVerified ? vl.verified : vl.notVerified}
+
+          {verifySuccess && (
+            <p className="text-xs text-emerald-400 flex items-center gap-1 mt-3">
+              <CheckCircle className="w-3.5 h-3.5" />
+              {vl.success}
             </p>
-            {!emailVerified && !verifySuccess && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{codeSent ? vl.enterCode : vl.promptSend}</p>
-            )}
-          </div>
-        </div>
-
-        {!emailVerified && !verifySuccess && (
-          <div className="mt-4 space-y-3">
-            {!codeSent ? (
-              <>
-                {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
-                <button
-                  type="button"
-                  onClick={() => { setVerifyError(null); resendMut.mutate({ email: sessionEmail }); }}
-                  disabled={resendMut.isPending}
-                  className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
-                >
-                  {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.sendCode}
-                </button>
-              </>
-            ) : (
-              <form onSubmit={handleVerifyCode} className="space-y-3">
-                <input
-                  ref={codeInputRef}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-                    setCode(v);
-                    if (verifyError) setVerifyError(null);
-                  }}
-                  placeholder="000000"
-                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-brand-500/60 text-slate-900 dark:text-white"
-                  autoFocus
-                />
-                {verifyError && <p className="text-xs text-red-400">{verifyError}</p>}
-                <button
-                  type="submit"
-                  disabled={code.length !== 6 || verifyMut.isPending}
-                  className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50"
-                >
-                  {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : vl.verify}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setVerifyError(null); resendMut.mutate({ email: sessionEmail }); }}
-                  disabled={resendMut.isPending || resendCooldown}
-                  className="w-full flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-600/60 text-sm font-medium text-slate-600 dark:text-slate-400 px-4 py-2.5 rounded-xl hover:border-brand-500/40 transition-colors disabled:opacity-50"
-                >
-                  {resendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : resendCooldown ? vl.resendCooldown : vl.resend}
-                </button>
-              </form>
-            )}
-          </div>
-        )}
-
-        {verifySuccess && (
-          <p className="text-xs text-emerald-400 flex items-center gap-1 mt-3">
-            <CheckCircle className="w-3.5 h-3.5" />
-            {vl.success}
-          </p>
-        )}
-      </section>
-
-      {/* Account info */}
-      <section className="glass-card rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <User className="w-4 h-4 text-brand-400 shrink-0" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.account", lang)}</h2>
-        </div>
-        <div className="space-y-3">
-          {sessionEmail && (
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                Email
-              </label>
-              <input
-                type="text"
-                readOnly
-                value={sessionEmail}
-                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
-              />
-            </div>
-          )}
-          <div>
-            <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-              {t("settings.role", lang)}
-            </label>
-            <input
-              type="text"
-              readOnly
-              value={friendlyRoleName(effectiveRole, lang)}
-              className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Role change request */}
-      {canRequestRoleChange && (
-        <section className="glass-card rounded-2xl p-4 border border-violet-500/10">
-          <div className="flex items-center gap-2 mb-4">
-            <ArrowLeftRight className="w-4 h-4 text-violet-400 shrink-0" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{rcl.heading}</h2>
-          </div>
-
-          {/* Show pending request status */}
-          {myRequest?.status === "pending" && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-amber-400">
-                <Clock className="w-4 h-4" />
-                <span className="text-sm font-medium">{rcl.pending}</span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{rcl.pendingDesc}</p>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                {rcl.requestTo}: <span className="font-medium text-violet-400">{friendlyRoleName(myRequest.requestedRole, lang)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Show approved/denied result */}
-          {myRequest && (myRequest.status === "approved" || myRequest.status === "denied") && (
-            <div className="space-y-3">
-              <div className={`flex items-center gap-2 ${myRequest.status === "approved" ? "text-emerald-400" : "text-red-400"}`}>
-                {myRequest.status === "approved" ? <Check className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                <span className="text-sm font-medium">
-                  {myRequest.status === "approved" ? rcl.approved : rcl.denied}
-                </span>
-              </div>
-              {myRequest.adminNote && (
-                <div className="bg-slate-50 dark:bg-slate-900/70 rounded-xl p-3 border border-slate-200 dark:border-slate-700/50">
-                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">{rcl.adminNote}</p>
-                  <p className="text-sm text-slate-700 dark:text-slate-300">{myRequest.adminNote}</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Show request form if no pending request */}
-          {(!myRequest || myRequest.status === "approved" || myRequest.status === "denied") && (
-            <form onSubmit={handleRoleChangeRequest} className="space-y-3 mt-2">
-              <div>
-                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                  {rcl.currentRole}
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  value={friendlyRoleName(effectiveRole, lang)}
-                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                  {rcl.requestTo}
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  value={friendlyRoleName(targetRole, lang)}
-                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-violet-500/20 dark:border-violet-500/20 rounded-xl px-4 py-3 text-sm text-violet-500 dark:text-violet-400 outline-none cursor-default select-none font-medium"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                  {rcl.reason}
-                </label>
-                <textarea
-                  value={rcReason}
-                  onChange={(e) => setRcReason(e.target.value)}
-                  placeholder={rcl.reasonPlaceholder}
-                  maxLength={500}
-                  rows={2}
-                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 text-slate-900 dark:text-white resize-none"
-                />
-              </div>
-              {rcError && <p className="text-xs text-red-400">{rcError}</p>}
-              {rcSuccess && (
-                <p className="text-xs text-emerald-400 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  {rcl.pending}
-                </p>
-              )}
-              <button
-                type="submit"
-                disabled={requestRoleChangeMut.isPending}
-                className="w-full flex items-center justify-center gap-1.5 bg-violet-600 active:bg-violet-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-70 mt-1"
-              >
-                <ArrowLeftRight className="w-4 h-4" />
-                {requestRoleChangeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : rcl.submit}
-              </button>
-            </form>
           )}
         </section>
       )}
 
-      {/* Change email — two-step flow (#N1) */}
-      <section className="glass-card rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changeEmail", lang)}</h2>
-        </div>
+      {/* Change email — collapsed by default. Two-step (#N1) flow lives inside. */}
+      <CollapsibleSection
+        icon={Mail}
+        iconClass="text-cyan-400"
+        title={t("settings.changeEmail", lang)}
+      >
         {!emailRequested ? (
           <form onSubmit={handleChangeEmail} className="space-y-3">
             <div>
@@ -643,17 +520,25 @@ export function AccountSection() {
             </button>
           </form>
         )}
-      </section>
+      </CollapsibleSection>
 
       {/* Set or Change password */}
       {!hasPassword ? (
-        <SetInitialPasswordSection />
+        <CollapsibleSection
+          icon={Key}
+          iconClass="text-amber-400"
+          title={SET_PW_L[lang].heading}
+          desc={SET_PW_L[lang].hint}
+          defaultOpen
+        >
+          <SetInitialPasswordSection />
+        </CollapsibleSection>
       ) : (
-        <section className="glass-card rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Key className="w-4 h-4 text-amber-400 shrink-0" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.changePassword", lang)}</h2>
-          </div>
+        <CollapsibleSection
+          icon={Key}
+          iconClass="text-amber-400"
+          title={t("settings.changePassword", lang)}
+        >
           <form onSubmit={handleChangePassword} className="space-y-3">
             <div>
               <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
@@ -711,7 +596,103 @@ export function AccountSection() {
               {changePasswordMut.isPending ? t("settings.saving", lang) : t("settings.changePasswordBtn", lang)}
             </button>
           </form>
-        </section>
+        </CollapsibleSection>
+      )}
+
+      {/* Role change request — auto-opens if there's a pending one so the user
+          sees their status. Gated on can-request-role-change (owner / master). */}
+      {canRequestRoleChange && (
+        <CollapsibleSection
+          icon={ArrowLeftRight}
+          iconClass="text-violet-400"
+          title={rcl.heading}
+          defaultOpen={rolePending}
+        >
+          {myRequest?.status === "pending" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">{rcl.pending}</span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{rcl.pendingDesc}</p>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {rcl.requestTo}: <span className="font-medium text-violet-400">{friendlyRoleName(myRequest.requestedRole, lang)}</span>
+              </div>
+            </div>
+          )}
+
+          {myRequest && (myRequest.status === "approved" || myRequest.status === "denied") && (
+            <div className="space-y-3">
+              <div className={`flex items-center gap-2 ${myRequest.status === "approved" ? "text-emerald-400" : "text-red-400"}`}>
+                {myRequest.status === "approved" ? <Check className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                <span className="text-sm font-medium">
+                  {myRequest.status === "approved" ? rcl.approved : rcl.denied}
+                </span>
+              </div>
+              {myRequest.adminNote && (
+                <div className="bg-slate-50 dark:bg-slate-900/70 rounded-xl p-3 border border-slate-200 dark:border-slate-700/50">
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">{rcl.adminNote}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">{myRequest.adminNote}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(!myRequest || myRequest.status === "approved" || myRequest.status === "denied") && (
+            <form onSubmit={handleRoleChangeRequest} className="space-y-3 mt-2">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  {rcl.currentRole}
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={friendlyRoleName(effectiveRole, lang)}
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-500 dark:text-slate-400 outline-none cursor-default select-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  {rcl.requestTo}
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={friendlyRoleName(targetRole, lang)}
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-violet-500/20 dark:border-violet-500/20 rounded-xl px-4 py-3 text-sm text-violet-500 dark:text-violet-400 outline-none cursor-default select-none font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  {rcl.reason}
+                </label>
+                <textarea
+                  value={rcReason}
+                  onChange={(e) => setRcReason(e.target.value)}
+                  placeholder={rcl.reasonPlaceholder}
+                  maxLength={500}
+                  rows={2}
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 text-slate-900 dark:text-white resize-none"
+                />
+              </div>
+              {rcError && <p className="text-xs text-red-400">{rcError}</p>}
+              {rcSuccess && (
+                <p className="text-xs text-emerald-400 flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {rcl.pending}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={requestRoleChangeMut.isPending}
+                className="w-full flex items-center justify-center gap-1.5 bg-violet-600 active:bg-violet-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-70 mt-1"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                {requestRoleChangeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : rcl.submit}
+              </button>
+            </form>
+          )}
+        </CollapsibleSection>
       )}
     </div>
   );
@@ -806,13 +787,7 @@ function SetInitialPasswordSection() {
   };
 
   return (
-    <section className="glass-card rounded-2xl p-4 border border-amber-500/20">
-      <div className="flex items-center gap-2 mb-2">
-        <Key className="w-4 h-4 text-amber-400 shrink-0" />
-        <h2 className="text-sm font-bold text-slate-900 dark:text-white">{sl.heading}</h2>
-      </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{sl.hint}</p>
-      <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">{sl.newPassword}</label>
           <input
@@ -848,6 +823,5 @@ function SetInitialPasswordSection() {
           {setPasswordMut.isPending ? t("settings.saving", lang) : sl.submit}
         </button>
       </form>
-    </section>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useRef, useState, useEffect, type ReactNode } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   LayoutGrid, CalendarDays, Scissors, UserRound, Users,
   Wallet, MessageSquare, BarChart3, Star, Globe,
@@ -14,6 +14,7 @@ import { tNav } from "~/lib/nav/navLabels";
 import { useDashboardPrefs, BOTTOM_NAV_LIMIT } from "~/lib/useDashboardPrefs";
 import { useNavItems, type NavItem } from "~/lib/nav/useNavItems";
 import { Switch } from "~/components/ui/Switch";
+import { CollapsibleSection } from "~/components/settings/CollapsibleSection";
 
 /**
  * Sidebar tabs that can be toggled. `navKey` matches the sidebar's tNav key
@@ -34,44 +35,6 @@ const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; navKey: string }[] = [
 
 function tabLabel(navKey: string, lang: Lang): string {
   return tNav(navKey, lang);
-}
-
-interface CollapsibleSectionProps {
-  icon: LucideIcon;
-  iconClass: string;
-  title: string;
-  desc: string;
-  children: ReactNode;
-}
-
-function CollapsibleSection({ icon: Icon, iconClass, title, desc, children }: CollapsibleSectionProps) {
-  const [open, setOpen] = useState(false);
-  const bodyId = useId();
-  return (
-    <section className="glass-card rounded-2xl">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={bodyId}
-        className="w-full text-left p-4 flex items-start gap-2 rounded-2xl hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
-      >
-        <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${iconClass}`} />
-        <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{desc}</p>
-        </div>
-        <ChevronDown
-          className={`w-4 h-4 shrink-0 mt-0.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <div id={bodyId} className="px-4 pb-4">
-          {children}
-        </div>
-      )}
-    </section>
-  );
 }
 
 export function AppearanceSection() {

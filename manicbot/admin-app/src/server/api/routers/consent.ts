@@ -32,6 +32,7 @@ export const consentRouter = createTRPCRouter({
    * echoes back the row — keeps the response surface minimal so a malicious
    * caller cannot probe stored values via this endpoint.
    */
+  // nosemgrep: trpc-public-procedure-mutation -- anonymous consent capture (no session by design, IP-rate-limited)
   record: publicProcedure
     .input(CONSENT_RECORD_INPUT_SCHEMA)
     .mutation(async ({ ctx, input }) => {

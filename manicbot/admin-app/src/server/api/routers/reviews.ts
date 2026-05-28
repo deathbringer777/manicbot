@@ -107,6 +107,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: update review status ─────────────────────────────────
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   updateStatus: publicProcedure
     .input(z.object({
       tenantId: z.string(),
@@ -122,6 +123,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: reply to review ──────────────────────────────────────
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   addReply: publicProcedure
     .input(z.object({
       tenantId: z.string(),
@@ -136,6 +138,7 @@ export const reviewsRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   deleteReply: publicProcedure
     .input(z.object({ tenantId: z.string(), reviewId: z.string() }))
     .mutation(async ({ ctx, input }) => {

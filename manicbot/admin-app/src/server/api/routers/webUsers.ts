@@ -1338,6 +1338,7 @@ export const webUsersRouter = createTRPCRouter({
    * Does NOT create a personal tenant — the invited master joins the
    * inviter's tenant only.
    */
+  // nosemgrep: trpc-public-procedure-mutation -- token-validated public flow (no session by design, rate-limited)
   acceptInvitationByToken: publicProcedure
     .input(z.object({
       token: z.string().min(8).max(200),

@@ -1612,27 +1612,36 @@ CREATE TABLE IF NOT EXISTS google_prefill_consumed (
 CREATE INDEX IF NOT EXISTS idx_gpc_exp ON google_prefill_consumed(exp);
 
 -- Migration 0086 — newsletter subscribers (landing form ingest).
--- See migrations/0086_newsletter_subscribers.sql for the full rationale.
+-- Migration 0090 — one-click unsubscribe token (`unsubscribe_token`).
+-- Migration 0092 — double-opt-in: confirm_token + confirm_token_expires_at.
+-- See migrations/0086_newsletter_subscribers.sql, 0090_newsletter_unsubscribe_token.sql,
+-- and 0092_newsletter_doi.sql for the full rationale.
 CREATE TABLE IF NOT EXISTS newsletter_subscribers (
-  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-  email               TEXT NOT NULL,
-  source              TEXT NOT NULL DEFAULT 'landing',
-  lang                TEXT,
-  anonymous_id        TEXT,
-  ip                  TEXT,
-  user_agent          TEXT,
-  created_at          INTEGER NOT NULL,
-  confirmed_at        INTEGER,
-  unsubscribed_at     INTEGER,
-  welcome_sent_at     INTEGER,
-  welcome_send_error  TEXT,
+  id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+  email                    TEXT NOT NULL,
+  source                   TEXT NOT NULL DEFAULT 'landing',
+  lang                     TEXT,
+  anonymous_id             TEXT,
+  ip                       TEXT,
+  user_agent               TEXT,
+  created_at               INTEGER NOT NULL,
+  confirmed_at             INTEGER,
+  unsubscribed_at          INTEGER,
+  welcome_sent_at          INTEGER,
+  welcome_send_error       TEXT,
+  -- 0092: single-use CSPRNG confirm token + 7-day TTL (UNIX seconds).
+  confirm_token            TEXT,
+  confirm_token_expires_at INTEGER,
   -- 0090: 32-hex one-click unsub token. Stable across resub, partial UNIQUE.
-  unsubscribe_token   TEXT
+  unsubscribe_token        TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
   ON newsletter_subscribers(email);
 CREATE INDEX IF NOT EXISTS idx_newsletter_subscribers_created
   ON newsletter_subscribers(created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_confirm_token
+  ON newsletter_subscribers(confirm_token)
+  WHERE confirm_token IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_unsub_tok
   ON newsletter_subscribers(unsubscribe_token)
   WHERE unsubscribe_token IS NOT NULL;

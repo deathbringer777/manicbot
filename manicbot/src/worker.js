@@ -37,6 +37,8 @@ import { isAdminAppPath } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
 import { handleSubscribeRequest } from './http/subscribeHttp.js';
 import { handleUnsubscribeRequest } from './http/unsubscribeHttp.js';
+import { handleConfirmSubscriptionRequest } from './http/confirmSubscriptionHttp.js';
+import { handleNewsletterUnsubscribeRequest } from './http/newsletterUnsubscribeHttp.js';
 import { handleHealthRequest } from './http/healthHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
@@ -368,6 +370,20 @@ export default {
     ) {
       const token = url.pathname.slice('/u/'.length).split('/')[0] ?? '';
       const res = await handleUnsubscribeRequest(request, token, env);
+      return addSecurityHeaders(res);
+    }
+
+    // Newsletter double-opt-in (migration 0092).
+    //   * /confirm-subscription?token=…   — confirms subscriber + triggers welcome.
+    //   * /newsletter/unsubscribe?token=… — one-click opt-out (newsletter scope).
+    // Distinct from /u/{token} above which operates on marketing_contacts.
+    // Public by design — token-only, no auth, GET-only, IP rate-limited.
+    if (url.pathname === '/confirm-subscription') {
+      const res = await handleConfirmSubscriptionRequest(request, env, executionCtx);
+      return addSecurityHeaders(res);
+    }
+    if (url.pathname === '/newsletter/unsubscribe') {
+      const res = await handleNewsletterUnsubscribeRequest(request, env);
       return addSecurityHeaders(res);
     }
 

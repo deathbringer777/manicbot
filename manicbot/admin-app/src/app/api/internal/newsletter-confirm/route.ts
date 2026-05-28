@@ -1,27 +1,24 @@
 /**
- * POST /api/internal/newsletter-welcome — internal endpoint called by the
- * Worker (manicbot/src/http/subscribeHttp.js) after a new row lands in
- * `newsletter_subscribers`. Resend lives only in admin-app, so the Worker
- * cannot send the email directly — it hands off via this Bearer-authed route.
+ * POST /api/internal/newsletter-confirm — internal endpoint called by the
+ * Worker `subscribeHttp.js dispatchConfirmEmail` after a new row lands in
+ * `newsletter_subscribers`. Sends the DOI confirm-click email via Resend.
  *
  * Auth: `Authorization: Bearer <INTERNAL_API_TOKEN>` (Pages env var, same
  * value as the Worker secret). On mismatch / missing → 401. Constant-time
- * comparison via `processNewsletterWelcomeRequest`.
+ * comparison via `processNewsletterConfirmRequest`.
  *
- * On success → 200, body stamped with `welcome_sent_at`.
- * On send failure → 500, body stamped with `welcome_send_error`.
- *
- * Per-call cost = one Resend POST + one D1 UPDATE. The handler runs at the
- * edge (Next.js edge runtime).
+ * On success → 200. On send failure → 500, `welcome_send_error` stamped
+ * (the column is reused for both confirm and welcome dispatch errors —
+ * one row, one error bucket).
  */
 
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "~/server/db";
 import { newsletterSubscribers } from "~/server/db/schema";
-import { sendNewsletterWelcomeEmail } from "~/server/email/emailService";
+import { sendNewsletterConfirmEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
-import { processNewsletterWelcomeRequest } from "~/server/newsletter/processWelcomeRequest";
+import { processNewsletterConfirmRequest } from "~/server/newsletter/processConfirmRequest";
 
 export const runtime = "edge";
 
@@ -36,18 +33,11 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const result = await processNewsletterWelcomeRequest({
+  const result = await processNewsletterConfirmRequest({
     authorizationHeader: req.headers.get("authorization"),
     body,
     expectedToken,
-    sendEmail: (email, lang, unsubscribeToken) =>
-      sendNewsletterWelcomeEmail(email, lang, unsubscribeToken),
-    stampSentAt: async (email, nowSec) => {
-      await db
-        .update(newsletterSubscribers)
-        .set({ welcomeSentAt: nowSec, welcomeSendError: null })
-        .where(eq(newsletterSubscribers.email, email));
-    },
+    sendEmail: (email, lang, confirmToken) => sendNewsletterConfirmEmail(email, lang, confirmToken),
     stampSendError: async (email, errorText) => {
       await db
         .update(newsletterSubscribers)
@@ -63,7 +53,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "bad_request" }, { status: 400 });
   }
   if (result.status === 500) {
-    log.error("api.newsletter-welcome", new Error(result.error));
+    log.error("api.newsletter-confirm", new Error(result.error));
     return NextResponse.json({ ok: false, error: "send_failed" }, { status: 500 });
   }
   return NextResponse.json({ ok: true });

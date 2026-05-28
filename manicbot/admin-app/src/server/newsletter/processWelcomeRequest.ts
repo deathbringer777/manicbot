@@ -28,6 +28,12 @@ export interface ProcessWelcomeInput {
   authorizationHeader: string | null;
   body: unknown;
   expectedToken: string | null;
+  /**
+   * `unsubscribeToken` is the freshly minted one-click token. The Worker
+   * mints it at confirm-time (DOI flow) or at subscribe-time (legacy /u/
+   * fallback flow); either way the request body MUST carry it so the
+   * welcome email can render a working unsubscribe URL.
+   */
   sendEmail: (email: string, lang: Lang, unsubscribeToken: string) => Promise<SendEmailResult>;
   stampSentAt: (email: string, nowSec: number) => Promise<void>;
   stampSendError: (email: string, error: string) => Promise<void>;

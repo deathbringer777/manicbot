@@ -27,6 +27,7 @@ import { log } from "~/server/utils/logger";
 import { notifyWorker } from "~/server/utils/notifyWorker";
 import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import { addMasterToDefaultGroup } from "~/server/messenger/defaultStaffGroup";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
 import { notifyOrCapture } from "~/server/services/notifyOrCapture";
 import { captureError } from "~/server/utils/captureError";
@@ -1236,6 +1237,12 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.insert(tenantRoles)
         .values({ tenantId: input.tenantId, chatId: input.chatId, role: "master", createdAt: now })
         .onConflictDoUpdate({ target: [tenantRoles.tenantId, tenantRoles.chatId], set: { role: "master", createdAt: now } });
+
+      // 0093: auto-add the new master to the salon's default "Команда" group.
+      // Fire-and-forget — the helper swallows errors so a messenger glitch
+      // never blocks role assignment.
+      void addMasterToDefaultGroup(ctx.db, input.tenantId, input.chatId);
+
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null,
         action: "role.master.add",
@@ -1658,6 +1665,12 @@ export const salonRouter = createTRPCRouter({
           message: `Не удалось создать аккаунт мастера: ${msg.slice(0, 200)}`,
         });
       }
+
+      // 0093: auto-add the brand-new web-account master to the salon's
+      // default "Команда" group. Fire-and-forget — failure is logged but
+      // never aborts the account-creation response (the master would
+      // otherwise be stuck without credentials).
+      void addMasterToDefaultGroup(ctx.db, input.tenantId, syntheticChatId);
 
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null,

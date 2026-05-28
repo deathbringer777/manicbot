@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Archive, StickyNote } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Archive, StickyNote, Users } from "lucide-react";
 import { api } from "~/trpc/react";
 import { MessageComposer } from "./MessageComposer";
+import { GroupMembersModal } from "./GroupMembersModal";
 
 interface Props {
   tenantId: string;
@@ -39,6 +40,9 @@ function parseAttachments(raw: unknown): Array<{ url: string; kind: string }> {
 export function ThreadView({ tenantId, threadId }: Props) {
   const utils = api.useUtils();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Members drawer is opt-in — staff_group only — and is owner-only
+  // edits-wise (the drawer itself respects the role via useRole inside it).
+  const [membersOpen, setMembersOpen] = useState(false);
 
   const detailQ = api.messenger.getThread.useQuery(
     { tenantId, threadId, limit: 50 },
@@ -124,20 +128,41 @@ export function ThreadView({ tenantId, threadId }: Props) {
                   : "Системные"}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            archiveMutation.mutate({ tenantId, threadId, archived: thread.archived === 0 })
-          }
-          data-testid="archive-thread-button"
-          disabled={archiveMutation.isPending}
-          className="flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          title={thread.archived === 0 ? "Архивировать" : "Разархивировать"}
-        >
-          <Archive className="h-3 w-3" />
-          {thread.archived === 0 ? "В архив" : "Из архива"}
-        </button>
+        <div className="flex items-center gap-1">
+          {thread.kind === "staff_group" && (
+            <button
+              type="button"
+              onClick={() => setMembersOpen(true)}
+              data-testid="open-group-members"
+              className="flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              title="Участники"
+            >
+              <Users className="h-3 w-3" />
+              Участники
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              archiveMutation.mutate({ tenantId, threadId, archived: thread.archived === 0 })
+            }
+            data-testid="archive-thread-button"
+            disabled={archiveMutation.isPending}
+            className="flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            title={thread.archived === 0 ? "Архивировать" : "Разархивировать"}
+          >
+            <Archive className="h-3 w-3" />
+            {thread.archived === 0 ? "В архив" : "Из архива"}
+          </button>
+        </div>
       </div>
+      {membersOpen && (
+        <GroupMembersModal
+          tenantId={tenantId}
+          threadId={threadId}
+          onClose={() => setMembersOpen(false)}
+        />
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto bg-slate-50 px-3 py-3 dark:bg-slate-950">

@@ -1170,6 +1170,12 @@ const translations = {
   "masterDetail.error.vacationPair":  { ru: "Заполни обе даты отпуска или очисти обе.", ua: "Заповни обидві дати відпустки або очисти обидві.", en: "Fill in both vacation dates, or clear both.", pl: "Wypełnij obie daty urlopu albo wyczyść obie." },
   "masterDetail.error.vacationInverted": { ru: "Дата окончания отпуска не может быть раньше даты начала.", ua: "Дата завершення відпустки не може бути раніше дати початку.", en: "Vacation end cannot be before the start date.", pl: "Data końca urlopu nie może być wcześniejsza niż początek." },
 
+  // ── Master detail → top-level panel switch (migration 0093) ──────────
+  "masterDetail.panel.profile":       { ru: "Профиль",        ua: "Профіль",       en: "Profile",       pl: "Profil" },
+  "masterDetail.panel.messages":      { ru: "Сообщения",      ua: "Повідомлення",  en: "Messages",      pl: "Wiadomości" },
+  "masterDetail.messages.loading":    { ru: "Открываем переписку…", ua: "Відкриваємо переписку…", en: "Opening the chat…", pl: "Otwieramy czat…" },
+  "masterDetail.messages.error":      { ru: "Не удалось открыть чат с мастером.", ua: "Не вдалося відкрити чат із майстром.", en: "Couldn't open the chat with this master.", pl: "Nie udało się otworzyć czatu z mistrzem." },
+
   // ── Master detail → "Settings" view (tabbed: profile + account settings) ─
   "masterDetail.action.settings":     { ru: "Настройки",      ua: "Налаштування", en: "Settings",      pl: "Ustawienia" },
   "masterDetail.tab.profile":         { ru: "Редактирование", ua: "Редагування",  en: "Edit",          pl: "Edycja" },

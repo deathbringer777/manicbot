@@ -41,6 +41,7 @@ import {
   Loader2,
   ArrowLeft,
   User,
+  MessageSquare,
 } from "lucide-react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
@@ -50,9 +51,11 @@ import { DatePicker } from "~/components/ui/DatePicker";
 import { MasterAvatarPicker } from "./MasterAvatarPicker";
 import { MasterTelegramInlineSection } from "./MasterTelegramInlineSection";
 import { MasterPasswordVaultSection } from "./MasterPasswordVaultSection";
+import { ThreadView } from "~/app/(dashboard)/messages/_components/ThreadView";
 
 type MasterDetail = RouterOutputs["salon"]["getMasterDetail"];
 type TabKey = "profile" | "settings";
+type PanelKey = "profile" | "messages";
 
 interface Props {
   tenantId: string;
@@ -94,6 +97,11 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
 
   const [editing, setEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
+  // Top-level panel switch — "profile" keeps the existing view/settings
+  // surface, "messages" replaces the body with a DM thread between the
+  // salon and this master (migration 0093). Reset to "profile" when the
+  // modal opens for a different master.
+  const [panel, setPanel] = useState<PanelKey>("profile");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [vacationSaved, setVacationSaved] = useState(false);
@@ -319,7 +327,47 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
           </button>
         </div>
 
-        {!editing ? (
+        {/* Panel switch (migration 0093): Профиль | Сообщения */}
+        <div
+          role="tablist"
+          aria-label="Master view"
+          className="mb-3 flex gap-1 rounded-lg bg-slate-100 p-1 text-xs font-medium dark:bg-white/[0.04]"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panel === "profile"}
+            onClick={() => setPanel("profile")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 transition ${
+              panel === "profile"
+                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+            data-testid="master-detail-panel-profile"
+          >
+            <User className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{t("masterDetail.panel.profile", lang)}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panel === "messages"}
+            onClick={() => setPanel("messages")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 transition ${
+              panel === "messages"
+                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+            data-testid="master-detail-panel-messages"
+          >
+            <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{t("masterDetail.panel.messages", lang)}</span>
+          </button>
+        </div>
+
+        {panel === "messages" ? (
+          <MasterDmPanel tenantId={tenantId} masterChatId={chatId} lang={lang} />
+        ) : !editing ? (
           <ViewMode
             master={m}
             tenantId={tenantId}
@@ -401,6 +449,71 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
       />
     )}
   </>
+  );
+}
+
+/**
+ * Personal DM between the salon (caller) and the master, embedded inline in
+ * the master profile modal. Uses `messenger.createStaffDm` to find-or-create
+ * the thread (idempotent via dmKey), then mounts the shared `<ThreadView>`
+ * from /messages.
+ *
+ * Works for every master `origin`:
+ *   - salon_created / invited_email accepted / self_registered with a web
+ *     account → DM is web↔web, dmKey = sorted(webUserIds).
+ *   - invited_telegram or pending-accept → DM is web↔master placeholder,
+ *     dmKey = sorted(web_user_id, "m:<chatId>"). `linkMasterPlaceholder`
+ *     promotes the row to web↔web later if the master joins the web app.
+ */
+function MasterDmPanel({
+  tenantId,
+  masterChatId,
+  lang,
+}: {
+  tenantId: string;
+  masterChatId: number;
+  lang: Lang;
+}) {
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const createDm = api.messenger.createStaffDm.useMutation({
+    onSuccess: (data) => {
+      setThreadId(data.threadId);
+      setErrorMsg(null);
+    },
+    onError: (e) => setErrorMsg(e.message),
+  });
+
+  useEffect(() => {
+    // Reset + (re)open the DM whenever the modal switches between masters.
+    setThreadId(null);
+    setErrorMsg(null);
+    createDm.mutate({ tenantId, otherMasterChatId: String(masterChatId) });
+    // createDm is stable enough — we intentionally don't include it in deps
+    // (would re-fire on every render). tenantId + masterChatId fully scope it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, masterChatId]);
+
+  if (errorMsg) {
+    return (
+      <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-300">
+        <p>{t("masterDetail.messages.error", lang)}</p>
+        <p className="mt-1 opacity-70">{errorMsg}</p>
+      </div>
+    );
+  }
+  if (!threadId) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>{t("masterDetail.messages.loading", lang)}</span>
+      </div>
+    );
+  }
+  return (
+    <div data-testid="master-detail-dm" className="-mx-1">
+      <ThreadView tenantId={tenantId} threadId={threadId} />
+    </div>
   );
 }
 

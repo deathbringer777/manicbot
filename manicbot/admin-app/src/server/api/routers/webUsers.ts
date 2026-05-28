@@ -24,6 +24,7 @@ import { writeAudit } from "~/server/security/audit";
 import { isSafeDisplayName } from "~/server/security/sanitize";
 import { recordEvent, ANALYTICS_EVENTS } from "~/server/services/recordEvent";
 import { linkMasterPlaceholderToWebUserFireAndForget } from "~/server/messenger/linkMasterPlaceholder";
+import { addMasterToDefaultGroup } from "~/server/messenger/defaultStaffGroup";
 
 /*
  * D1-based rate limiting — durable across Cloudflare edge isolates.
@@ -1324,6 +1325,9 @@ export const webUsersRouter = createTRPCRouter({
         masterChatId: syntheticChatId,
         webUserId: caller.id,
       });
+      // 0093: auto-add to the salon's default "Команда" group. Fire-and-
+      // forget like the placeholder backfill above.
+      void addMasterToDefaultGroup(ctx.db, inv.tenantId, syntheticChatId);
 
       return { tenantId: inv.tenantId, masterChatId: syntheticChatId };
     }),
@@ -1452,6 +1456,8 @@ export const webUsersRouter = createTRPCRouter({
         masterChatId: syntheticChatId,
         webUserId: id,
       });
+      // 0093: auto-add to the salon's default "Команда" group.
+      void addMasterToDefaultGroup(ctx.db, inv.tenantId, syntheticChatId);
 
       return { loginToken, tenantId: inv.tenantId };
     }),

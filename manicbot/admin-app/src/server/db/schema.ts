@@ -1330,19 +1330,29 @@ export const threads = sqliteTable("threads", {
    *  rendering without a JOIN to thread_messages. ≤200 chars. */
   lastMessagePreview: text("last_message_preview"),
   archived: integer("archived").notNull().default(0),
+  /** Migration 0093: marks the auto-seeded "Команда" group per tenant. Exactly
+   *  one row per (tenant_id) may have this flag set, enforced by a partial
+   *  UNIQUE index. New masters are auto-added to this group; the salon owner
+   *  may remove them via `messenger.removeStaffMember`. */
+  isDefaultGroup: integer("is_default_group").notNull().default(0),
 }, (t) => [
   index("idx_threads_tenant_last").on(t.tenantId, t.lastMessageAt),
   index("idx_threads_tenant_kind_archived").on(t.tenantId, t.kind, t.archived, t.lastMessageAt),
   uniqueIndex("idx_threads_dm_unique").on(t.tenantId, t.dmKey),
   uniqueIndex("idx_threads_client_conv_unique").on(t.tenantId, t.clientConversationId),
+  uniqueIndex("idx_threads_default_group_per_tenant").on(t.tenantId, t.isDefaultGroup),
 ]);
 
 export const threadMembers = sqliteTable("thread_members", {
   threadId: text("thread_id").notNull(),
-  /** web_user | external_client */
+  /** web_user | master | external_client.
+   *  - master: a salon master without a web_users row yet (Telegram-only or
+   *    pending email invite). Promoted to web_user by
+   *    `linkMasterPlaceholderToWebUser` once the master gains a web account. */
   memberKind: text("member_kind").notNull(),
-  /** web_users.id for member_kind=web_user; '<channelType>:<channelUserId>'
-   *  (e.g. 'tg:12345', 'ig:17841...') for member_kind=external_client. */
+  /** web_users.id for member_kind=web_user;
+   *  String(masters.chat_id) for member_kind=master;
+   *  '<channelType>:<channelUserId>' for member_kind=external_client. */
   memberRef: text("member_ref").notNull(),
   role: text("role").notNull().default("member"),
   joinedAt: integer("joined_at").notNull(),

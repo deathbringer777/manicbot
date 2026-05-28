@@ -19,50 +19,49 @@ rules:
       `publicProcedure` should not be used for state-changing tRPC mutations.
       Use `protectedProcedure` or a role-scoped builder (`tenantOwnerProcedure`,
       `masterProcedure`, `adminProcedure`). If the mutation is genuinely a
-      bootstrap public flow (registration / email verification), add the
-      procedure name to the Semgrep `paths.exclude-rule` block in
+      bootstrap public flow (registration / email verification), add a new
+      `pattern-not:` entry to the `patterns:` block of this rule in
       `.semgrep/manicbot-rules.yml` — that audit gate is the point.
     severity: ERROR
     languages: [typescript]
     paths:
       include:
         - "manicbot/admin-app/src/server/api/routers/**/*.ts"
-      exclude-rule:
-        # Bootstrap auth flow — must be public. Each is rate-limited.
-        - pattern-either:
-            - pattern: |
-                register: publicProcedure
-                  .input(...)
-                  .mutation(...)
-            - pattern: |
-                verifyEmail: publicProcedure
-                  .input(...)
-                  .mutation(...)
-            - pattern: |
-                resendVerificationCode: publicProcedure
-                  .input(...)
-                  .mutation(...)
-            - pattern: |
-                requestPasswordReset: publicProcedure
-                  .input(...)
-                  .mutation(...)
-            - pattern: |
-                resetPassword: publicProcedure
-                  .input(...)
-                  .mutation(...)
-            # Public web-widget submission endpoints
-            - pattern: |
-                createLead: publicProcedure
-                  .input(...)
-                  .mutation(...)
-            - pattern: |
-                emailSubscribe: publicProcedure
-                  .input(...)
-                  .mutation(...)
-    pattern: |
-      $NAME: publicProcedure
-        .input(...)
-        .mutation(...)
+    patterns:
+      - pattern: |
+          $NAME: publicProcedure
+            .input(...)
+            .mutation(...)
+      # Bootstrap auth flow — must be public. Each is rate-limited.
+      - pattern-not: |
+          register: publicProcedure
+            .input(...)
+            .mutation(...)
+      - pattern-not: |
+          verifyEmail: publicProcedure
+            .input(...)
+            .mutation(...)
+      - pattern-not: |
+          resendVerificationCode: publicProcedure
+            .input(...)
+            .mutation(...)
+      - pattern-not: |
+          requestPasswordReset: publicProcedure
+            .input(...)
+            .mutation(...)
+      - pattern-not: |
+          resetPassword: publicProcedure
+            .input(...)
+            .mutation(...)
+      # Public web-widget submission endpoints
+      - pattern-not: |
+          createLead: publicProcedure
+            .input(...)
+            .mutation(...)
+      - pattern-not: |
+          emailSubscribe: publicProcedure
+            .input(...)
+            .mutation(...)
 
   # ── #S-04 / #M2 regression guard ────────────────────────────────────────
   # Worker admin endpoints must not accept ADMIN_KEY from URL query params

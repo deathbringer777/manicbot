@@ -48,7 +48,7 @@ function WebUsersPanel() {
   });
 
   return (
-    <section className="glass-card rounded-2xl p-4">
+    <section className="glass-card rounded-2xl p-4 md:col-span-2">
       <div className="flex items-center gap-2 mb-4">
         <User className="w-4 h-4 text-sky-400" />
         <h2 className="text-sm font-bold text-slate-900 dark:text-white">Web Users</h2>
@@ -124,9 +124,11 @@ export function PlatformSection() {
   ];
 
   return (
-    <div className="space-y-4">
+    // 2-col tile grid: Modes+General and Appointments+Danger pair on md+.
+    // Save row / Role switcher / System Prompt / WebUsers stay full width.
+    <div className="grid gap-4 md:grid-cols-2 items-start">
       {/* Save button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end md:col-span-2">
         <button
           onClick={handleSave}
           disabled={updateMut.isPending}
@@ -141,7 +143,7 @@ export function PlatformSection() {
       </div>
 
       {/* Role switcher */}
-      <section className="glass-card rounded-2xl p-4 space-y-3">
+      <section className="glass-card rounded-2xl p-4 space-y-3 md:col-span-2">
         <RoleSwitcherInline placement="settings" />
       </section>
 
@@ -211,7 +213,7 @@ export function PlatformSection() {
       </section>
 
       {/* System Prompt */}
-      <section className="glass-card rounded-2xl p-4">
+      <section className="glass-card rounded-2xl p-4 md:col-span-2">
         <div className="flex items-center gap-2 mb-4">
           <Key className="w-4 h-4 text-amber-400" />
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">System Prompt</h2>

@@ -139,7 +139,7 @@ export function NotificationsSection() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       {/* ────────────────── Push toggle card ────────────────── */}
       <section className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden">
         <div className="p-5">

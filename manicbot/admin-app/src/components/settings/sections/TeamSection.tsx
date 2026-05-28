@@ -138,9 +138,9 @@ export function TeamSection() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="grid gap-4 md:grid-cols-2 items-start">
       {/* Team list */}
-      <section>
+      <section className="md:col-span-2">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{labels.masters}</h3>
         <div className="glass-card rounded-2xl p-4">
           {masters.isLoading ? (
@@ -173,7 +173,7 @@ export function TeamSection() {
 
       {/* Ownership transfer */}
       {isOwner && (
-        <section>
+        <section className="md:col-span-2">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">{labels.transferTitle}</h3>
           <div className="glass-card rounded-2xl p-4 space-y-3">
             <p className="text-xs text-slate-500 dark:text-slate-400">{labels.transferDesc}</p>

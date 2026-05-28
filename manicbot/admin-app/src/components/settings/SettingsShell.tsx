@@ -287,8 +287,10 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
         </div>
       </div>
 
-      {/* Section title + content */}
-      <div>
+      {/* Section title + content — capped + centered so forms don't stretch on wide screens.
+          max-w-5xl (1024px) leaves room for a 2-col tile grid inside sections without
+          forcing forms to fill the whole dashboard width. */}
+      <div className="mx-auto w-full max-w-5xl">
         {activeSectionData && (
           <div className="mb-4">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">

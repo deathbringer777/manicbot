@@ -19,7 +19,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { and, eq, desc, lt, sql, inArray, gt, isNull, ne } from "drizzle-orm";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
 import {
   threads,
   threadMembers,
@@ -770,6 +770,228 @@ export const messengerRouter = createTRPCRouter({
       );
 
       return { threadId };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STAFF GROUP — list members + owner-only remove
+  // ═══════════════════════════════════════════════════════════════
+  //  Powers the "Участники" panel of the default "Команда" group (and any
+  //  manually-created staff_group). `listStaffGroupMembers` resolves each
+  //  thread_members row against web_users + masters so the UI gets a single
+  //  shape with display name and avatar hints. `removeStaffMember` is the
+  //  owner-only mutation behind the ✕ button: it drops the row and posts a
+  //  system message in the thread so the change is auditable in-band.
+  //
+  //  Refuses to remove a member with role='owner' so the owner can't lock
+  //  themselves out of the team chat.
+  listStaffGroupMembers: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), threadId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const { thread } = await assertThreadMember(ctx, input.tenantId, input.threadId);
+      if (thread.kind !== "staff_group") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Members panel is only available for staff_group threads",
+        });
+      }
+
+      const members = await ctx.db
+        .select()
+        .from(threadMembers)
+        .where(eq(threadMembers.threadId, input.threadId));
+
+      const webUserIds = members
+        .filter((m) => m.memberKind === "web_user")
+        .map((m) => m.memberRef);
+      const masterRefs = members
+        .filter((m) => m.memberKind === "master")
+        .map((m) => Number(m.memberRef))
+        .filter((n) => Number.isFinite(n));
+
+      const webRows = webUserIds.length
+        ? await ctx.db
+            .select({
+              id: webUsers.id,
+              name: webUsers.name,
+              email: webUsers.email,
+              role: webUsers.role,
+            })
+            .from(webUsers)
+            .where(inArray(webUsers.id, webUserIds))
+        : [];
+      const webById = new Map(webRows.map((r) => [r.id, r]));
+
+      const masterRows = masterRefs.length
+        ? await ctx.db
+            .select({
+              chatId: masters.chatId,
+              name: masters.name,
+              webUserId: masters.webUserId,
+            })
+            .from(masters)
+            .where(
+              and(
+                eq(masters.tenantId, input.tenantId),
+                inArray(masters.chatId, masterRefs),
+              ),
+            )
+        : [];
+      const masterByChat = new Map(masterRows.map((r) => [String(r.chatId), r]));
+
+      return members.map((m) => {
+        if (m.memberKind === "web_user") {
+          const wu = webById.get(m.memberRef);
+          return {
+            threadId: m.threadId,
+            memberKind: m.memberKind,
+            memberRef: m.memberRef,
+            role: m.role,
+            name: wu?.name ?? wu?.email ?? m.memberRef,
+            webRole: wu?.role ?? null,
+            connectStatus: "connected" as const,
+          };
+        }
+        if (m.memberKind === "master") {
+          const mr = masterByChat.get(m.memberRef);
+          return {
+            threadId: m.threadId,
+            memberKind: m.memberKind,
+            memberRef: m.memberRef,
+            role: m.role,
+            name: mr?.name ?? m.memberRef,
+            webRole: null,
+            connectStatus: "telegram_only" as const,
+          };
+        }
+        // external_client — unlikely in a staff_group but keep the shape uniform.
+        return {
+          threadId: m.threadId,
+          memberKind: m.memberKind,
+          memberRef: m.memberRef,
+          role: m.role,
+          name: m.memberRef,
+          webRole: null,
+          connectStatus: "external" as const,
+        };
+      });
+    }),
+
+  removeStaffMember: tenantOwnerProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        memberKind: z.enum(["web_user", "master"]),
+        memberRef: z.string().min(1).max(200),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertMessengerTenantAccess(ctx, input.tenantId);
+
+      // Confirm the thread exists in THIS tenant. Defensive even though
+      // tenantOwnerProcedure pinned the role — the role gate doesn't bind
+      // the caller to a specific tenant.
+      const [thread] = await ctx.db
+        .select({ id: threads.id, tenantId: threads.tenantId, kind: threads.kind })
+        .from(threads)
+        .where(and(eq(threads.id, input.threadId), eq(threads.tenantId, input.tenantId)))
+        .limit(1);
+      if (!thread) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Thread not found" });
+      }
+      if (thread.kind !== "staff_group") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only staff_group threads support member removal",
+        });
+      }
+
+      // Refuse removing the owner — would lock the salon owner out of the
+      // team chat. UI should also hide the ✕ for owner rows; this is the
+      // backend guard.
+      const [target] = await ctx.db
+        .select({ role: threadMembers.role })
+        .from(threadMembers)
+        .where(
+          and(
+            eq(threadMembers.threadId, input.threadId),
+            eq(threadMembers.memberKind, input.memberKind),
+            eq(threadMembers.memberRef, input.memberRef),
+          ),
+        )
+        .limit(1);
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Member not found in thread" });
+      }
+      if (target.role === "owner") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot remove the owner from the team chat",
+        });
+      }
+
+      // Look up display name for the system-message body. Best-effort —
+      // falls back to the ref so the message is never blank.
+      let displayName: string | null = null;
+      if (input.memberKind === "web_user") {
+        const [wu] = await ctx.db
+          .select({ name: webUsers.name, email: webUsers.email })
+          .from(webUsers)
+          .where(eq(webUsers.id, input.memberRef))
+          .limit(1);
+        displayName = wu?.name ?? wu?.email ?? null;
+      } else {
+        const chatIdNum = Number(input.memberRef);
+        if (Number.isFinite(chatIdNum)) {
+          const [mr] = await ctx.db
+            .select({ name: masters.name })
+            .from(masters)
+            .where(
+              and(
+                eq(masters.tenantId, input.tenantId),
+                eq(masters.chatId, chatIdNum),
+              ),
+            )
+            .limit(1);
+          displayName = mr?.name ?? null;
+        }
+      }
+
+      await ctx.db
+        .delete(threadMembers)
+        .where(
+          and(
+            eq(threadMembers.threadId, input.threadId),
+            eq(threadMembers.memberKind, input.memberKind),
+            eq(threadMembers.memberRef, input.memberRef),
+          ),
+        );
+
+      const now = nowSec();
+      const body = `${displayName ?? input.memberRef} был исключён из команды владельцем`;
+      const messageId = ulid();
+      await ctx.db.insert(threadMessages).values({
+        id: messageId,
+        threadId: input.threadId,
+        tenantId: input.tenantId,
+        senderKind: "system",
+        senderRef: ctx.webUser!.id,
+        body,
+        attachmentsJson: null,
+        isInternalNote: 0,
+        externalMsgId: null,
+        replyToMessageId: null,
+        createdAt: now,
+        editedAt: null,
+        deletedAt: null,
+      });
+
+      await ctx.db
+        .update(threads)
+        .set({ lastMessageAt: now, lastMessagePreview: preview(body) })
+        .where(eq(threads.id, input.threadId));
+
+      return { ok: true, messageId };
     }),
 
   // ═══════════════════════════════════════════════════════════════

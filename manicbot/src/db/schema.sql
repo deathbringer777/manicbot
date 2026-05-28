@@ -1264,7 +1264,9 @@ CREATE TABLE IF NOT EXISTS threads (
   created_at               INTEGER NOT NULL,
   last_message_at          INTEGER,
   last_message_preview     TEXT,
-  archived                 INTEGER NOT NULL DEFAULT 0
+  archived                 INTEGER NOT NULL DEFAULT 0,
+  -- migration 0093: marks the auto-seeded "Команда" group per tenant.
+  is_default_group         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_threads_tenant_last
   ON threads(tenant_id, last_message_at);
@@ -1275,6 +1277,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_dm_unique
 CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_client_conv_unique
   ON threads(tenant_id, client_conversation_id)
   WHERE client_conversation_id IS NOT NULL;
+-- migration 0093: exactly one "Команда" group per tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_default_group_per_tenant
+  ON threads(tenant_id) WHERE is_default_group = 1;
 
 CREATE TABLE IF NOT EXISTS thread_members (
   thread_id              TEXT NOT NULL,

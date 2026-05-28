@@ -128,12 +128,15 @@ const ALLOWLIST = new Set([
   // the awaited bellResult block in sendMasterInvitation body; net +1) →
   // 1760 (migration 0090 added the `chatEnabled` zod field + `chatEnabled`
   // → `tenants` write + the `chatEnabled` projection in `getSalonProfile`;
-  // net +8 lines in updateSalonProfile body and the proc above).
+  // net +8 lines in updateSalonProfile body and the proc above) →
+  // 1773 (migration 0093 added the addMasterToDefaultGroup hooks in
+  // `addMaster` (+5) and `createMasterAccount` (+6), shifting the
+  // bot-collision query down by ~13 lines).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1760",
+  "src/server/api/routers/salon.ts:1773",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

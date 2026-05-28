@@ -199,6 +199,32 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
   const valid = name.trim().length > 0 && hasContact;
   const pending = create.isPending || update.isPending;
 
+  // Edit-mode dirty detection — drives the submit button label. We treat
+  // null/undefined `initial` values as `""` so a field that came back from
+  // the DB as null and is still empty doesn't read as a change.
+  // Memberships are only checked once `seeded` flips true (the membership
+  // query resolves async — before that, `pickedLists` is the empty default,
+  // not the real baseline).
+  const norm = (v: string | null | undefined) => (v ?? "").trim();
+  const initialFav =
+    initial?.favoriteMasterId != null ? String(initial.favoriteMasterId) : "";
+  const fieldsDirty =
+    name.trim() !== norm(initial?.name) ||
+    phone.trim() !== norm(initial?.phone) ||
+    email.trim() !== norm(initial?.email) ||
+    tg.trim() !== norm(initial?.tgUsername) ||
+    ig.trim() !== norm(initial?.igUsername) ||
+    tags.trim() !== norm(initial?.tags) ||
+    notes.trim() !== norm(initial?.notes) ||
+    dob.trim() !== norm(initial?.dob) ||
+    favoriteMaster !== initialFav;
+  const initialListIds = new Set(currentMembersQ.data?.segmentIds ?? []);
+  const listsDirty =
+    seeded &&
+    (pickedLists.size !== initialListIds.size ||
+      Array.from(pickedLists).some((id) => !initialListIds.has(id)));
+  const isDirty = isEdit && (fieldsDirty || listsDirty);
+
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
@@ -531,7 +557,9 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
               {pending
                 ? t("clients.form.saving", lang)
                 : isEdit
-                  ? t("clients.action.edit", lang)
+                  ? isDirty
+                    ? t("common.save", lang)
+                    : t("clients.action.edit", lang)
                   : t("clients.action.add", lang)}
             </button>
           </div>

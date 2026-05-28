@@ -197,10 +197,7 @@ export function HelpSection() {
   }
 
   return (
-    // Pair Help center (compact, links + tour replay) with Support tickets
-    // (variable height — list/create/detail views). items-start keeps cards
-    // top-aligned so the ticket thread can grow without dragging Help up.
-    <div className="grid gap-4 md:grid-cols-2 items-start">
+    <div className="space-y-4">
       {/* Help center + tour replay */}
       <section className="glass-card rounded-2xl p-4 space-y-3">
         <div className="flex items-center gap-2">

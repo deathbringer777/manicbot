@@ -102,10 +102,7 @@ export function PluginCard({ card }: { card: CatalogCard }) {
       data-lang={lang}
       className="group relative flex flex-col h-full min-h-[200px] rounded-2xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-4 sm:p-5 transition-all duration-200 ease-out hover:border-brand-500/50 dark:hover:border-brand-400/40 hover:shadow-[0_4px_24px_-8px] hover:shadow-brand-500/15 dark:hover:shadow-brand-400/10 hover:-translate-y-0.5"
     >
-      {/* Pin button — visible (not hover-only) when plugin is actionable.
-       *  In preview-as-master mode the button is disabled (owner doesn't
-       *  silently rewrite a master's saved layout via preview).
-       */}
+      {/* Pin button — visible (not hover-only) when plugin is actionable. */}
       {actionable && (
         <button
           type="button"
@@ -114,7 +111,7 @@ export function PluginCard({ card }: { card: CatalogCard }) {
           data-readonly={pinReadOnly ? "1" : "0"}
           disabled={pinReadOnly}
           aria-label={pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
-          title={pinReadOnly ? t("plugins.pin.previewLocked", lang) : pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
+          title={pinReadOnly ? t("plugins.pin.locked", lang) : pinned ? t("plugins.unpin", lang) : t("plugins.pin", lang)}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

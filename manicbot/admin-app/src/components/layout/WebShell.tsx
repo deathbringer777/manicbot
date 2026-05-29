@@ -20,7 +20,6 @@ import { DashboardOnboarding } from "~/components/onboarding/DashboardOnboarding
 import type { NavItem, NavGroup } from "~/lib/nav/useNavItems";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { useNavItems, tNav, getRoleInfo } from "~/lib/nav/useNavItems";
-import { MasterSwitcherInline } from "~/components/layout/Shell";
 import { NotificationBell } from "~/components/layout/NotificationBell";
 import { BrandTile } from "~/components/layout/BrandTile";
 
@@ -164,7 +163,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { role, previewRole, createdAt, emailVerified, isPersonalTenant, tenantName } = useRole();
+  const { role, createdAt, emailVerified, isPersonalTenant, tenantName } = useRole();
   const { lang, setLang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -207,7 +206,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
     }
   };
 
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const effectiveRole = role;
   const { groups: navGroups, flat: flatNav, settings: settingsItem, mobileNav } = useNavItems();
   const roleInfo = getRoleInfo(effectiveRole, lang, tNav);
   // searchParams.toString() gives us the canonical "?tab=…" form so the
@@ -296,9 +295,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             <PinnedNavSection collapsed={collapsed} />
           </nav>
 
-          {/* Bottom: Master switcher (owner only) + Settings */}
+          {/* Bottom: Settings */}
           <div className="border-t border-[#e5e7eb] dark:border-white/[0.06] p-2.5 space-y-1">
-            {!collapsed && <MasterSwitcherInline />}
             <NavLink
               item={settingsItem}
               active={pathname.startsWith("/settings")}

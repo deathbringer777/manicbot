@@ -148,28 +148,9 @@ const translations = {
   "nav.system":             { ru: "System",       ua: "System",         en: "System",     pl: "System" },
   "nav.settings":           { ru: "Settings",     ua: "Settings",       en: "Settings",   pl: "Settings" },
 
-  // ── Role switcher ──────────────────────────────────────────────────────────
-  "roleSwitch.title":       { ru: "Режим просмотра", ua: "Режим перегляду", en: "Preview mode", pl: "Tryb podglądu" },
-  "roleSwitch.godMode":     { ru: "Админ",        ua: "Адмін",          en: "Admin",      pl: "Admin" },
-  "roleSwitch.salon":       { ru: "Как салон",    ua: "Як салон",       en: "As Salon",   pl: "Jako salon" },
-  "roleSwitch.master":      { ru: "Как мастер",   ua: "Як майстер",     en: "As Master",  pl: "Jako mistrz" },
-  "roleSwitch.support":     { ru: "Как саппорт",  ua: "Як підтримка",   en: "As Support", pl: "Jako wsparcie" },
-  "roleSwitch.pickTenant":  { ru: "Выберите салон", ua: "Оберіть салон", en: "Pick a salon", pl: "Wybierz salon" },
-  "roleSwitch.preview":     { ru: "Превью:",      ua: "Перегляд:",      en: "Preview:",   pl: "Podgląd:" },
-  "roleSwitch.exit":        { ru: "Выйти из превью", ua: "Вийти з перегляду", en: "Exit preview", pl: "Wyjdź z podglądu" },
-  "roleSwitch.pickMaster":  { ru: "Выберите мастера", ua: "Оберіть майстра", en: "Pick a master", pl: "Wybierz mistrza" },
-
-  // ── Master switcher (sidebar) ───────────────────────────────────────────────
-  "masterSwitch.title":    { ru: "Просмотр мастера",    ua: "Перегляд майстра",       en: "View as master",  pl: "Podgląd mistrza" },
-  "masterSwitch.viewAs":   { ru: "Смотреть как мастер", ua: "Переглянути як майстер", en: "View as master",  pl: "Widok jako mistrz" },
-  "masterSwitch.exit":     { ru: "Выйти из просмотра",  ua: "Вийти з перегляду",      en: "Exit master view", pl: "Wyjdź z widoku" },
-  "masterSwitch.none":     { ru: "Мастеров нет",        ua: "Майстрів немає",          en: "No masters",      pl: "Brak mistrzów" },
-
   // ── Delegation ──────────────────────────────────────────────────────────────
-  "delegation.viewOnly":          { ru: "Только просмотр",       ua: "Тільки перегляд",        en: "View only",             pl: "Tylko podgląd" },
-  "delegation.managementEnabled": { ru: "Управление разрешено",  ua: "Управління дозволено",   en: "Management enabled",    pl: "Zarządzanie włączone" },
   "delegation.toggleLabel":       { ru: "Разрешить управление",  ua: "Дозволити управління",   en: "Allow owner to manage", pl: "Zezwól właścicielowi" },
-  "delegation.toggleDesc":        { ru: "Владелец сможет редактировать ваш профиль и отмечать неявки", ua: "Власник зможе редагувати ваш профіль та відмічати неявки", en: "Owner can edit your profile and mark no-shows", pl: "Właściciel może edytować profil i oznaczać nieobecności" },
+  "delegation.toggleDesc":        { ru: "Владелец сможет редактировать ваш профиль", ua: "Власник зможе редагувати ваш профіль", en: "Owner can edit your profile", pl: "Właściciel może edytować Twój profil" },
   "delegation.enabled":           { ru: "Управление включено",   ua: "Управління увімкнено",   en: "Management enabled",    pl: "Zarządzanie włączone" },
   "delegation.disabled":          { ru: "Только просмотр",       ua: "Тільки перегляд",        en: "View only",             pl: "Tylko podgląd" },
 
@@ -1339,12 +1320,10 @@ const translations = {
   "plugins.pinned.header":    { ru: "Закреплённое",           ua: "Закріплене",             en: "Pinned",               pl: "Przypięte" },
   "plugins.pinned.emptyHint": { ru: "Часто используемые плагины появятся здесь.", ua: "Часто використовувані плагіни з'являться тут.", en: "Frequently-used plugins will appear here.", pl: "Najczęściej używane wtyczki pojawią się tutaj." },
   "plugins.pinned.emptyCta":  { ru: "Открыть магазин →",       ua: "Відкрити магазин →",     en: "Open marketplace →",   pl: "Otwórz sklep →" },
-  "plugins.pinned.previewEmptyHint":     { ru: "У этого мастера пока нет закреплённых плагинов.", ua: "У цього майстра поки немає закріплених плагінів.",   en: "This master has no pinned plugins yet.",       pl: "Ten mistrz nie ma jeszcze przypiętych wtyczek." },
-  "plugins.pinned.previewSyntheticHint": { ru: "Мастер ещё не входил в систему — кастомизация появится после первого логина.", ua: "Майстер ще не входив у систему — кастомізація з'явиться після першого входу.", en: "This master has not signed in yet — their customisation will appear after first login.", pl: "Mistrz nie zalogował się jeszcze — personalizacja pojawi się po pierwszym logowaniu." },
   "plugins.pin":              { ru: "Закрепить",              ua: "Закріпити",              en: "Pin",                  pl: "Przypnij" },
   "plugins.unpin":            { ru: "Открепить",              ua: "Відкріпити",             en: "Unpin",                pl: "Odepnij" },
   "plugins.pin.limit":        { ru: "Максимум 20 закрепов",    ua: "Максимум 20 закріплень", en: "20-pin limit reached", pl: "Limit 20 przypięć" },
-  "plugins.pin.previewLocked":{ ru: "В режиме превью нельзя править закрепления мастера", ua: "У режимі прев'ю не можна редагувати закріплення майстра", en: "Can't edit master's pins in preview mode", pl: "W trybie podglądu nie można edytować przypięć mistrza" },
+  "plugins.pin.locked":       { ru: "Закрепление сейчас недоступно", ua: "Закріплення зараз недоступне", en: "Pinning unavailable", pl: "Przypinanie niedostępne" },
   "plugins.admin.installAll": { ru: "Установить все плагины", ua: "Встановити всі плагіни", en: "Install all plugins", pl: "Zainstaluj wszystkie" },
   "plugins.admin.allInstalled":{ ru: "Все плагины установлены", ua: "Усі плагіни встановлені", en: "All plugins installed", pl: "Wszystkie wtyczki zainstalowane" },
 

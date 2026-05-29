@@ -20,9 +20,9 @@ function isTourRole(r: string | null): r is TourWebRole {
 }
 
 export function DashboardOnboarding() {
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const { lang } = useLang();
-  const effectiveRole = role === "system_admin" && previewRole ? previewRole : role;
+  const effectiveRole = role;
   const runningRef = useRef(false);
 
   const runTour = useCallback(

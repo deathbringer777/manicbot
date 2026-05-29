@@ -164,7 +164,7 @@ export default function PluginDetailClient() {
                 data-pinned={pinned ? "1" : "0"}
                 data-readonly={pinReadOnly ? "1" : "0"}
                 disabled={pinReadOnly}
-                title={pinReadOnly ? t("plugins.pin.previewLocked", lang) : undefined}
+                title={pinReadOnly ? t("plugins.pin.locked", lang) : undefined}
                 onClick={() => { if (!pinReadOnly) togglePin(slug); }}
                 className={`px-3 py-1.5 text-xs rounded-xl border inline-flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   pinned

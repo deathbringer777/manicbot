@@ -46,7 +46,7 @@ export function PinnedNavSection({
 }) {
   const { lang } = useLang();
   const pathname = usePathname();
-  const { pinned, pin, unpin, readOnly, syntheticPreview } = usePinnedPlugins();
+  const { pinned, pin, unpin, readOnly } = usePinnedPlugins();
 
   const pluginLang: PluginLang = (PLUGIN_LANGS as readonly string[]).includes(lang)
     ? (lang as PluginLang)
@@ -86,25 +86,6 @@ export function PinnedNavSection({
     };
   }, [pathname, pinned, pluginLang]);
 
-  // Synthetic-master preview: the previewed master has no `web_users` row
-  // (never logged in) so there's no profile to scope pins to. We MUST
-  // render an explanatory empty state instead of falling back to the
-  // owner's pins — leaking those would defeat the whole point of preview
-  // mode.
-  if (syntheticPreview) {
-    if (collapsed) return null;
-    return (
-      <div data-testid="pinned-nav-synthetic-preview" className="mx-1 mb-1 rounded-xl border border-dashed border-slate-200 dark:border-white/10 px-3 py-2.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600 inline-flex items-center gap-1">
-          <Pin size={10} /> {t("plugins.pinned.header", lang)}
-        </p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-snug">
-          {t("plugins.pinned.previewSyntheticHint", lang)}
-        </p>
-      </div>
-    );
-  }
-
   // Empty state: no pins AND no transient → optionally show the dashed CTA card.
   if (pinnedItems.length === 0 && !transientItem) {
     if (!showEmpty || collapsed) return null;
@@ -114,17 +95,10 @@ export function PinnedNavSection({
           <Pin size={10} /> {t("plugins.pinned.header", lang)}
         </p>
         <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-snug">
-          {readOnly
-            ? t("plugins.pinned.previewEmptyHint", lang)
-            : t("plugins.pinned.emptyHint", lang)}
-          {!readOnly && (
-            <>
-              {" "}
-              <Link href="/plugins" className="text-brand-500 hover:underline">
-                {t("plugins.pinned.emptyCta", lang)}
-              </Link>
-            </>
-          )}
+          {t("plugins.pinned.emptyHint", lang)}{" "}
+          <Link href="/plugins" className="text-brand-500 hover:underline">
+            {t("plugins.pinned.emptyCta", lang)}
+          </Link>
         </p>
       </div>
     );

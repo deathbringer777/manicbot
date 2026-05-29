@@ -33,22 +33,6 @@ export interface RoleContextValue {
   // Billing state (effective, post lazy-flip). Null/false for platform staff.
   billingStatus: string | null;
   isTrialExpired: boolean;
-  // Creator-only preview
-  previewRole: AppRole;
-  previewTenantId: string | null;
-  setPreviewRole: (role: AppRole, tenantId?: string | null) => void;
-  // Master impersonation (tenant_owner viewing a master; also system_admin 3rd step)
-  previewMasterId: number | null;
-  /**
-   * `web_users.id` of the master currently being previewed (TEXT primary key).
-   * Null when:
-   *   - no master is being previewed (regular view), OR
-   *   - the previewed master is synthetic (`is_synthetic=1`, never logged in)
-   *     and therefore has no `web_users` row.
-   * Used to scope plugin pins / dashboard prefs to the master's own profile.
-   */
-  previewMasterWebUserId: string | null;
-  setPreviewMaster: (masterId: number | null, webUserId?: string | null) => void;
 }
 
 export const RoleContext = createContext<RoleContextValue>({
@@ -68,12 +52,6 @@ export const RoleContext = createContext<RoleContextValue>({
   permissions: [],
   billingStatus: null,
   isTrialExpired: false,
-  previewRole: null,
-  previewTenantId: null,
-  setPreviewRole: () => {},
-  previewMasterId: null,
-  previewMasterWebUserId: null,
-  setPreviewMaster: () => {},
 });
 
 export function useRole() {

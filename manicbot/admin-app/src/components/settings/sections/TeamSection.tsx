@@ -96,9 +96,9 @@ const TEAM_LABELS = {
 } as const;
 
 export function TeamSection() {
-  const { tenantId, previewTenantId, role, previewRole } = useRole();
+  const { tenantId, role } = useRole();
   const { lang } = useLang();
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  const effectiveTenantId = tenantId;
   const labels = TEAM_LABELS[lang];
 
   if (!effectiveTenantId) {
@@ -128,7 +128,7 @@ export function TeamSection() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState("");
 
-  const isOwner = (effectiveRole(role, previewRole)) === "tenant_owner";
+  const isOwner = role === "tenant_owner";
   const planOk = billing.data?.billingStatus !== "inactive" && billing.data?.billingStatus !== "expired";
   const hasPending = !!pending.data;
 
@@ -286,9 +286,4 @@ export function TeamSection() {
       )}
     </div>
   );
-}
-
-function effectiveRole(role: string | null, previewRole: string | null): string | null {
-  if (role === "system_admin" && previewRole) return previewRole;
-  return role;
 }

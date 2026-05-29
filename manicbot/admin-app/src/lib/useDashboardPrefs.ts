@@ -150,11 +150,8 @@ export function useDashboardPrefs() {
   const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId, profileKey));
 
   // Server-side pull on mount / tenant change. Server wins on conflict
-  // so a fresh device immediately sees the user's saved layout. DISABLED
-  // in preview-as-master: the server prefs row belongs to the caller
-  // (the owner) and hydrating it into the preview state would re-leak
-  // the owner's layout. The owner sees only the master's localStorage
-  // cache (which is empty for synthetic masters — that's the intent).
+  // so a fresh device immediately sees the user's saved layout. Gated on
+  // canWrite so the anonymous/loading state doesn't fetch.
   const serverQuery = api.webUsers.getMyUiPrefs.useQuery(
     { tenantId: tenantId ?? "" },
     {
@@ -173,14 +170,13 @@ export function useDashboardPrefs() {
     save(merged, tenantId, profileKey);
   }, [serverQuery.data, tenantId, profileKey, profile.canWrite]);
 
-  // Re-load when tenant OR profile switches (same browser, multiple
-  // accounts, OR owner toggling «view as master» preview).
+  // Re-load when tenant OR profile switches (same browser, multiple accounts).
   useEffect(() => {
-    if (tenantId && !profile.isPreview && profile.effectiveWebUserId != null) {
+    if (tenantId && profile.effectiveWebUserId != null) {
       migrateLegacyTenantKey(tenantId, profileKey);
     }
     setPrefsState(load(tenantId, profileKey));
-  }, [tenantId, profileKey, profile.isPreview, profile.effectiveWebUserId]);
+  }, [tenantId, profileKey, profile.effectiveWebUserId]);
 
   const setMut = api.webUsers.setMyUiPrefs.useMutation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,11 +184,7 @@ export function useDashboardPrefs() {
   const persist = useCallback((next: DashboardPrefs) => {
     save(next, tenantId, profileKey);
     if (!tenantId) return;
-    // In preview-as-master mode the caller is the OWNER. Any server
-    // write would land on the OWNER's prefs row — re-introducing the
-    // exact leak this PR is fixing. Local state still updates so the
-    // preview reflects the change immediately, but it never leaves
-    // the device.
+    // Skip the server write for the anonymous/loading state.
     if (!profile.canWrite) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {

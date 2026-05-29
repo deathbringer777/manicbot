@@ -6,9 +6,9 @@ import { t } from "~/lib/i18n";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
 
 export function ChannelsSection() {
-  const { tenantId, previewTenantId, role, previewRole } = useRole();
+  const { tenantId } = useRole();
   const { lang } = useLang();
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  const effectiveTenantId = tenantId;
 
   if (!effectiveTenantId) {
     return (

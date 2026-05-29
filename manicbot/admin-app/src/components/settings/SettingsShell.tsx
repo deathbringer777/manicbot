@@ -166,9 +166,9 @@ interface SettingsShellProps {
 }
 
 export function SettingsShell({ activeSection, onSectionChange, children }: SettingsShellProps) {
-  const { role, previewRole, isPersonalTenant } = useRole();
+  const { role, isPersonalTenant } = useRole();
   const { lang } = useLang();
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const effectiveRole = role;
   const sections = getSections(effectiveRole, lang, isPersonalTenant === true);
   const activeSectionData = sections.find((s) => s.id === activeSection);
 

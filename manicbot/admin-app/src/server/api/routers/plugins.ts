@@ -28,7 +28,7 @@ import {
   protectedProcedure,
   managerProcedure,
 } from "~/server/api/trpc";
-import { masters, pluginEvents, pluginInstallations, pluginPins, tenants } from "~/server/db/schema";
+import { pluginEvents, pluginInstallations, pluginPins, tenants } from "~/server/db/schema";
 import { listManifests, getPlugin } from "@plugins/index";
 import type {
   PluginLang,
@@ -646,30 +646,15 @@ export const pluginsRouter = createTRPCRouter({
     }),
 
   // ─── Plugin pins (per web_user + tenant — isolated per salon) ──────────
-  //
-  // `effectiveWebUserId` (optional) is the «view as master» preview hook:
-  // a tenant owner can read another web_user's pins as long as that user is
-  // an active master in the same tenant. Writes (`togglePin`) with a
-  // foreign `effectiveWebUserId` are always rejected — owners don't get to
-  // silently modify a master's saved layout via preview.
   listPinned: protectedProcedure
-    .input(
-      z
-        .object({
-          /** Read pins on behalf of this master (preview-as-master). */
-          effectiveWebUserId: z.string().min(1).optional(),
-        })
-        .optional(),
-    )
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx }) => {
       const uid = ctx.webUser?.id;
       if (!uid) return [] as string[];
       const tid = ctx.webUser?.tenantId ?? "";
-      const targetUid = await resolveEffectiveWebUserId(ctx, tid, uid, input?.effectiveWebUserId);
       const rows: Array<{ slug: string }> = await ctx.db
         .select({ slug: pluginPins.pluginSlug })
         .from(pluginPins)
-        .where(and(eq(pluginPins.webUserId, targetUid), eq(pluginPins.tenantId, tid)))
+        .where(and(eq(pluginPins.webUserId, uid), eq(pluginPins.tenantId, tid)))
         .orderBy(asc(pluginPins.sortOrder), desc(pluginPins.pinnedAt));
       return rows.map((r) => r.slug);
     }),
@@ -678,23 +663,11 @@ export const pluginsRouter = createTRPCRouter({
     .input(
       z.object({
         slug: z.string().regex(/^[a-z][a-z0-9-]{2,60}$/),
-        /**
-         * Echo of the preview state for client-side cache symmetry. The
-         * server REFUSES the mutation unless this matches the caller — the
-         * owner never modifies a master's pins through preview.
-         */
-        effectiveWebUserId: z.string().min(1).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const uid = ctx.webUser?.id;
       if (!uid) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (input.effectiveWebUserId != null && input.effectiveWebUserId !== uid) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "cannot_modify_other_users_pins",
-        });
-      }
       const tid = ctx.webUser?.tenantId ?? "";
       const known = listManifests().some((m) => m.slug === input.slug);
       if (!known) throw new TRPCError({ code: "NOT_FOUND", message: "Unknown plugin" });
@@ -734,49 +707,6 @@ export const pluginsRouter = createTRPCRouter({
       return { pinned: true };
     }),
 });
-
-/**
- * Validate that `requestedUid` (from `effectiveWebUserId` input) is a real
- * master in the caller's tenant. Returns the uid to query against. Defaults
- * to the caller's own uid when `requestedUid` is undefined.
- *
- * Guard rules:
- *   - Undefined → return caller's uid (regular view, no change).
- *   - Equal to caller → return caller's uid (no-op preview = own profile).
- *   - Different + caller is `tenant_owner` / `tenant_manager` / `system_admin`
- *     AND target is an active master in the same tenant → return target uid.
- *   - Anything else → FORBIDDEN.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function resolveEffectiveWebUserId(
-  ctx: any,
-  tenantId: string,
-  callerUid: string,
-  requestedUid: string | undefined,
-): Promise<string> {
-  if (requestedUid == null || requestedUid === callerUid) return callerUid;
-  const callerRole = ctx.webUser?.webRole;
-  const isStaff =
-    callerRole === "tenant_owner" ||
-    callerRole === "tenant_manager" ||
-    callerRole === "system_admin";
-  if (!isStaff || !tenantId) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "cannot_view_other_users_pins" });
-  }
-  const masterRows: Array<{ id: number }> = await ctx.db
-    .select({ id: masters.chatId })
-    .from(masters)
-    .where(and(
-      eq(masters.tenantId, tenantId),
-      eq(masters.webUserId, requestedUid),
-      eq(masters.active, 1),
-    ))
-    .limit(1);
-  if (!masterRows.length) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "cannot_view_other_users_pins" });
-  }
-  return requestedUid;
-}
 
 // ─── internal ─────────────────────────────────────────────────────────────
 

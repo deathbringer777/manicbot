@@ -11,9 +11,9 @@ import { AutoSuggestFavoriteSettings } from "~/components/salon/AutoSuggestFavor
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 export function MySalonSection() {
-  const { tenantId, previewTenantId, role, previewRole } = useRole();
+  const { tenantId } = useRole();
   const { lang } = useLang();
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  const effectiveTenantId = tenantId;
 
   if (!effectiveTenantId) {
     return (

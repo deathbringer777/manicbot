@@ -61,12 +61,6 @@ function renderWith(tenantId: string | null = "t_test", lang: "ru" | "en" = "ru"
     permissions: [],
     billingStatus: "active",
     isTrialExpired: false,
-    previewRole: null,
-    previewTenantId: null,
-    setPreviewRole: () => {},
-    previewMasterId: null,
-    previewMasterWebUserId: null,
-    setPreviewMaster: () => {},
   };
   return render(
     <LangContext.Provider value={{ lang, setLang: () => {} }}>

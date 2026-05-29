@@ -16,7 +16,7 @@ import { renderWithLang, setDarkMode } from "./helpers/renderWithLang";
 
 // Mock RoleContext so the section thinks user is tenant_owner.
 vi.mock("~/components/RoleContext", () => ({
-  useRole: () => ({ role: "tenant_owner", previewRole: null, tenantId: "t_x", userId: "u_x", hasPassword: true, emailVerified: true, billingStatus: "active", isTrialExpired: false }),
+  useRole: () => ({ role: "tenant_owner", tenantId: "t_x", userId: "u_x", hasPassword: true, emailVerified: true, billingStatus: "active", isTrialExpired: false }),
 }));
 
 // Mock tRPC api for support tickets.

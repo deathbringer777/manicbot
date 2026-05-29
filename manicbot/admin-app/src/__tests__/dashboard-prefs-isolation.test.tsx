@@ -41,12 +41,6 @@ function makeWrapper(tenantId: string | null, webUserId: string | null = "owner-
     permissions: [],
     billingStatus: "active",
     isTrialExpired: false,
-    previewRole: null,
-    previewTenantId: null,
-    setPreviewRole: () => {},
-    previewMasterId: null,
-    previewMasterWebUserId: null,
-    setPreviewMaster: () => {},
   };
   // useDashboardPrefs now calls api.webUsers.getMyUiPrefs.useQuery so we need
   // a real tRPC + react-query provider. The link target is unreachable

@@ -36,11 +36,9 @@ function fmtDate(ts?: number | null) {
 export default function ProvidersClient() {
   const { lang } = useLang();
   const utils = api.useUtils();
-  const { role, previewRole } = useRole();
-  // The page is sysadmin-only. A sysadmin previewing a tenant role
-  // (previewRole !== null) deliberately steps into the tenant POV — they
-  // should see the same placeholder a tenant would.
-  const isAdmin = role === "system_admin" && !previewRole;
+  const { role } = useRole();
+  // The page is sysadmin-only.
+  const isAdmin = role === "system_admin";
 
   // All hooks must run unconditionally (Rules of Hooks).
   const listQ = api.marketing.providersList.useQuery(undefined, { enabled: isAdmin });

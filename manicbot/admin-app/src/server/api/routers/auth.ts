@@ -18,8 +18,8 @@ type RoleResult = {
   role: AppRole;
   /**
    * Internal `web_users.id` of the authenticated user (TEXT primary key).
-   * Drives per-profile scoping (plugin pins, dashboard prefs) and the
-   * preview-as-master permission guard. `null` only when unauthenticated.
+   * Drives per-profile scoping (plugin pins, dashboard prefs). `null` only
+   * when unauthenticated.
    */
   webUserId: string | null;
   tenantId: string | null;

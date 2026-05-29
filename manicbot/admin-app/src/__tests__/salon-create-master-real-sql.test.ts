@@ -182,7 +182,6 @@ describe("salon.createMasterAccount — real Drizzle SQL", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("~/env");
   });
 
   it("writes all four tables in one atomic call when the schema is in sync", async () => {

@@ -160,7 +160,6 @@ describe("master.peekMyOriginalPassword", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("~/env");
   });
 
   it("returns the original password for a salon-created, verified, vaulted master", async () => {

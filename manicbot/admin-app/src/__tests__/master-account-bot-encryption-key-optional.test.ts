@@ -46,7 +46,6 @@ describe("salon.createMasterAccount — BOT_ENCRYPTION_KEY optional (graceful de
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("~/env");
   });
 
   it("creates the master account with password_encrypted populated when BOT_ENCRYPTION_KEY is set", async () => {

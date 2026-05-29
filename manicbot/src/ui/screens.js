@@ -6,7 +6,7 @@ import { getLang } from '../services/chat.js';
 import { clearState } from '../services/state.js';
 import { getRole, isPlatformAdmin } from '../services/users.js';
 import { getApts } from '../services/appointments.js';
-import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl } from '../services/services.js';
+import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl, getConfig } from '../services/services.js';
 import { mainKb, langKb, catListKb, catPhotoKb, aboutPhotoKb } from './keyboards.js';
 import { showAdminPanel, showMasterPanel } from './admin.js';
 import { showPlatformAdminPanel } from './sysadmin.js';
@@ -29,6 +29,14 @@ export async function showWelcome(ctx, cid, name) {
   const hasRealName = name && name !== '\ud83d\udc4b' && String(name).trim().length > 0;
   const welcomeKey = hasRealName ? 'welcome' : 'welcome_anon';
   const nameForFill = hasRealName ? escHtml(name) : '';
+  // On the public web chat, surface the salon's Instagram in the main menu \u2014
+  // but only when a real per-tenant URL is set. loadInstagramUrl() falls back
+  // to a generic instagram.com, so read the RAW config value instead and hang
+  // it on ctx for mainKb (which is sync). Web-only: never touches Telegram.
+  if (ctx?.channel?.type === 'web' && ctx.salonInstagramUrl === undefined) {
+    const rawIg = await getConfig(ctx, 'instagram_url').catch(() => null);
+    ctx.salonInstagramUrl = rawIg && String(rawIg).trim() ? String(rawIg).trim() : null;
+  }
   await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
   await send(ctx, cid, fill(t(lg, welcomeKey), { s: salonName, n: nameForFill }), mainKb(lg, role, ctx));
 }

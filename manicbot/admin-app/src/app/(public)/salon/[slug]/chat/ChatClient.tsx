@@ -35,6 +35,24 @@ const STORAGE_PREFIX = "mb.chat.";
 const HISTORY_CAP = 200;
 const POLL_INTERVAL_MS = 3000;
 
+/** Whitespace + all zero-width / BOM code points the Worker may emit. */
+const BLANK_RE = /[\s​-‏  ﻿]/g;
+
+/**
+ * True if a bot message is worth rendering. The Worker emits a zero-width-space
+ * message with `remove_keyboard` to clear the Telegram reply keyboard; on web
+ * that must NOT show up as an empty grey bubble. A message is renderable when it
+ * has real text, OR a photo, OR at least one button — otherwise it's a no-op
+ * layout artifact and we drop it. (User messages are always rendered.)
+ */
+export function isRenderableMessage(m: ChatMessage): boolean {
+  if (m.role === "user") return true;
+  const hasText = (m.text ?? "").replace(BLANK_RE, "").length > 0;
+  const hasPhoto = !!m.photo;
+  const hasButtons = Array.isArray(m.buttons) && m.buttons.some((row) => row.length > 0);
+  return hasText || hasPhoto || hasButtons;
+}
+
 interface PersistedState {
   sessionId: string;
   chatId: number;
@@ -127,15 +145,12 @@ export function ChatClient({
         if (cancelled) return;
         setSessionId(data.sessionId);
         setSalon(data.salon);
-        // Seed with a welcome prompt so the user sees /start immediately
-        const welcome: ChatMessage = {
-          role: "user",
-          id: "seed-start",
-          ts: Math.floor(Date.now() / 1000),
-          text: "/start",
-        };
-        setMessages([welcome]);
-        await sendRaw({ text: "/start" }, data.sessionId, [welcome]);
+        // Auto-greet: fire /start to the bot but do NOT render it as a user
+        // bubble — a public web visitor never typed a slash command, so showing
+        // "/start" in the transcript is confusing. The bot's welcome + menu
+        // arrive as the first visible messages. The loading spinner covers the
+        // brief gap until they land.
+        await sendRaw({ text: "/start" }, data.sessionId);
       } catch (e) {
         if (cancelled) return;
         setStatus("error");
@@ -194,16 +209,20 @@ export function ChatClient({
   }, [messages, sessionId, slug]);
 
   function appendBotMessages(incoming: Omit<ChatMessageFromBot, "role">[]) {
-    const botMessages: ChatMessageFromBot[] = incoming.map((m) => ({
-      role: "bot",
-      id: m.id,
-      ts: m.ts,
-      text: m.text,
-      parseMode: m.parseMode,
-      buttons: m.buttons,
-      photo: m.photo,
-      editMessageId: m.editMessageId,
-    }));
+    const botMessages: ChatMessageFromBot[] = incoming
+      .map((m) => ({
+        role: "bot" as const,
+        id: m.id,
+        ts: m.ts,
+        text: m.text,
+        parseMode: m.parseMode,
+        buttons: m.buttons,
+        photo: m.photo,
+        editMessageId: m.editMessageId,
+      }))
+      // Drop empty/zero-width "keyboard-clear" artifacts — but keep edits, which
+      // may blank text while morphing an existing photo/buttons bubble in place.
+      .filter((m) => isRenderableMessage(m) || !!m.editMessageId);
     for (const m of botMessages) {
       if (m.ts > lastTsRef.current) lastTsRef.current = m.ts;
     }

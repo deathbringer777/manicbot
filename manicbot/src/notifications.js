@@ -11,6 +11,7 @@ import { getAllPendingApts, updateApt } from './services/appointments.js';
 import { canUse } from './billing/features.js';
 import { syncAppointmentCalendar } from './services/google-calendar-oauth.js';
 import { notifyWebUser } from './services/userNotify.js';
+import { postBookingRequest } from './services/messengerRequests.js';
 import { dbAll } from './utils/db.js';
 
 export async function notifyAptStaff(ctx, apt, user) {
@@ -80,6 +81,50 @@ export async function notifyAptStaff(ctx, apt, user) {
   await dispatchAppointmentInApp(ctx, apt, user, 'appointment.created', 'Новая запись').catch((e) =>
     log.error('notifications', e instanceof Error ? e : new Error(String(e?.message)), { action: 'notifyAptStaff_inapp' }),
   );
+
+  // Post an actionable request card into the staff "Заявки" inbox (all
+  // channels). Pending → claim/confirm from the dashboard.
+  await postAptRequestCard(ctx, apt, user, { autoConfirmed: false });
+}
+
+/**
+ * Mirror an appointment into the staff "Заявки" inbox thread as an actionable
+ * request card — the dashboard counterpart to the Telegram fan-out above.
+ * Additive and best-effort: any failure is logged and swallowed so it never
+ * blocks booking creation or the Telegram/bell notifications.
+ *
+ * @param {object} ctx
+ * @param {object} apt
+ * @param {object} user
+ * @param {{autoConfirmed: boolean}} opts
+ */
+async function postAptRequestCard(ctx, apt, user, { autoConfirmed }) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  try {
+    const adminId = await getAdminId(ctx).catch(() => null);
+    const cardLang = (adminId ? await getLang(ctx, adminId) : null) || 'ru';
+    let masterName = null;
+    if (apt.masterId) {
+      const masters = await listMasters(ctx).catch(() => []);
+      const assigned = masters.find((m) => Number(m.chatId) === Number(apt.masterId));
+      masterName = assigned?.name || null;
+    }
+    await postBookingRequest(ctx, apt, {
+      autoConfirmed: !!autoConfirmed,
+      lang: cardLang,
+      svcName: svcName(ctx, cardLang, apt.svcId),
+      when: fmtDT(cardLang, apt.date, apt.time),
+      clientName: user?.name || apt.userName || null,
+      clientPhone: user?.phone || apt.userPhone || null,
+      channel: ctx.channel?.type ?? null,
+      masterId: apt.masterId ?? null,
+      masterName,
+    });
+  } catch (e) {
+    log.error('notifications',
+      e instanceof Error ? e : new Error(String(e?.message)),
+      { action: 'postAptRequestCard', aptId: apt?.id });
+  }
 }
 
 /**
@@ -213,6 +258,10 @@ export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
   await dispatchAppointmentInApp(ctx, apt, user, 'appointment.confirmed', 'Запись подтверждена').catch((e) =>
     log.error('notifications', e instanceof Error ? e : new Error(String(e?.message)), { action: 'notifyAptStaffAutoConfirmed_inapp' }),
   );
+
+  // Auto-confirmed bookings still appear in the "Заявки" inbox — as a
+  // confirmed FYI card (no action needed), so the salon has a full log.
+  await postAptRequestCard(ctx, apt, user, { autoConfirmed: true });
 }
 
 export async function sendAptConfirmedToClient(ctx, apt) {

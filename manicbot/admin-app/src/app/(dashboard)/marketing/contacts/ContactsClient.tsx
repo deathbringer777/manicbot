@@ -30,12 +30,13 @@ import { useState, useMemo, useEffect } from "react";
 import { api } from "~/trpc/react";
 import { MarketingShell } from "../MarketingShell";
 import {
-  Loader2, Mail, Phone, Search, Ban, Plus, Users, ListChecks, X,
+  Loader2, Mail, Phone, Search, Ban, Plus, Users, ListChecks,
   ExternalLink, Trash2, Sparkles,
 } from "lucide-react";
 import { useMarketingScope } from "../useMarketingScope";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { CreateListModal } from "~/components/marketing/CreateListModal";
 import Link from "next/link";
 
 const FIELD_BASE =
@@ -46,6 +47,19 @@ function fmtDate(ts?: number | null) {
   return new Date(ts * 1000).toLocaleString("ru-RU", {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
+}
+
+// Friendly RU labels for the raw `source` slugs written by marketingSync /
+// booking flows — the raw `salon_clients_manual` etc. looked techy in the UI.
+const SOURCE_LABELS: Record<string, string> = {
+  salon_clients_manual: "Клиент салона",
+  salon_clients_import: "Импорт CSV",
+  booking_manual: "Ручная запись",
+  public_booking: "Онлайн-запись",
+};
+function sourceLabel(source?: string | null): string {
+  if (!source) return "—";
+  return SOURCE_LABELS[source] ?? source;
 }
 
 export default function ContactsClient() {
@@ -156,7 +170,7 @@ export default function ContactsClient() {
                     <td className="px-3 py-2 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                       {c.phone ? <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3 text-slate-500" />{c.phone}</span> : "—"}
                     </td>
-                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{c.source ?? "—"}</td>
+                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{sourceLabel(c.source)}</td>
                     <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{c.lifecycleStage ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-500">{fmtDate(c.lastSeenAt)}</td>
                     <td className="px-3 py-2">
@@ -319,116 +333,3 @@ function ListsSection({
   );
 }
 
-function CreateListModal({
-  tenantId,
-  onClose,
-}: {
-  tenantId: string;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-
-  const utils = api.useUtils();
-  const create = api.marketingTenant.segmentCreate.useMutation({
-    onSuccess: () => {
-      void utils.marketingTenant.segmentsList.invalidate({ tenantId });
-      onClose();
-    },
-    onError: (e) => setErr(e.message),
-  });
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    if (!name.trim()) {
-      setErr("Укажите название списка.");
-      return;
-    }
-    create.mutate({
-      tenantId,
-      name: name.trim(),
-      description: description.trim() || undefined,
-      kind: "manual",
-      filterJson: "{}",
-    });
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-5"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "92vh" }}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Новый список
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 dark:bg-white/5 dark:text-white/60"
-            aria-label="Закрыть"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <form onSubmit={submit} className="space-y-3 text-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-white/70">
-              Название *
-            </label>
-            <input
-              autoFocus
-              type="text"
-              maxLength={120}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Например, VIP"
-              className={`${FIELD_BASE} px-3 py-2`}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-white/70">
-              Описание (необязательно)
-            </label>
-            <textarea
-              rows={3}
-              maxLength={500}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Кого включать в этот список — для себя и команды."
-              className={`${FIELD_BASE} px-3 py-2 resize-none`}
-            />
-          </div>
-          {err && (
-            <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-              {err}
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-transparent dark:text-slate-300 dark:hover:bg-white/[0.05]"
-            >
-              Отмена
-            </button>
-            <button
-              type="submit"
-              disabled={create.isPending || !name.trim()}
-              className="rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
-            >
-              {create.isPending ? "…" : "Создать"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}

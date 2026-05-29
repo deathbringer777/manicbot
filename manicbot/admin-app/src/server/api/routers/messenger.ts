@@ -27,6 +27,7 @@ import {
   webUsers,
   masters,
   masterInvitations,
+  appointments,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
 import { sanitizeText } from "~/server/security/sanitize";
@@ -48,7 +49,7 @@ const MAX_ATTACHMENT_URL_LEN = 2000;
 
 // ─── Validation ────────────────────────────────────────────────────
 
-const THREAD_KIND = z.enum(["staff_dm", "staff_group", "client_conv", "system"]);
+const THREAD_KIND = z.enum(["staff_dm", "staff_group", "client_conv", "system", "requests"]);
 
 const MESSAGE_BODY_MAX = 4000;
 const PREVIEW_MAX = 200;
@@ -134,7 +135,16 @@ export const messengerRouter = createTRPCRouter({
         eq(threads.tenantId, input.tenantId),
         eq(threads.archived, input.archived ? 1 : 0),
       ];
-      if (input.kind) conditions.push(eq(threads.kind, input.kind));
+      if (input.kind) {
+        conditions.push(eq(threads.kind, input.kind));
+      } else {
+        // Default view hides raw client conversations — the inbox is the
+        // "Заявки" requests board + staff chats. Web client_conv threads are
+        // no longer created (the web mirror is disabled), but legacy rows still
+        // exist, so exclude client_conv unless explicitly requested via the
+        // "Клиенты" filter pill.
+        conditions.push(ne(threads.kind, "client_conv"));
+      }
       if (input.cursor !== undefined) {
         conditions.push(lt(threads.lastMessageAt, input.cursor));
       }
@@ -290,6 +300,45 @@ export const messengerRouter = createTRPCRouter({
 
       const nextCursor =
         messages.length === input.limit ? messages[messages.length - 1]?.id : undefined;
+
+      // For booking-request cards, overlay the LIVE appointment status so the
+      // card buttons reflect reality (a request claimed/confirmed elsewhere
+      // shows as done, not still-claimable). The extra query only runs when the
+      // page actually contains request cards — tenant-scoped.
+      const requestAptIds = messages
+        .filter((m) => m.refKind === "booking_request" && m.refId)
+        .map((m) => m.refId as string);
+      const liveStatusById = new Map<
+        string,
+        { status: string; masterId: number | null; cancelled: number }
+      >();
+      if (requestAptIds.length > 0) {
+        const aptRows = await ctx.db
+          .select({
+            id: appointments.id,
+            status: appointments.status,
+            masterId: appointments.masterId,
+            cancelled: appointments.cancelled,
+          })
+          .from(appointments)
+          .where(
+            and(
+              eq(appointments.tenantId, input.tenantId),
+              inArray(appointments.id, requestAptIds),
+            ),
+          );
+        for (const r of aptRows) {
+          liveStatusById.set(r.id, {
+            status: r.status,
+            masterId: r.masterId ?? null,
+            cancelled: r.cancelled ?? 0,
+          });
+        }
+      }
+      const messagesWithLive = messages.map((m) => ({
+        ...m,
+        liveAppointment: m.refId ? liveStatusById.get(m.refId) ?? null : null,
+      }));
 
       // Member list with display names — used by the UI to render avatars,
       // tooltips, and "X is typing" (Phase 4). Resolve web_user names via

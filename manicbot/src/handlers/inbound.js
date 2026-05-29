@@ -66,7 +66,12 @@ export async function handleInbound(ctx, inbound) {
     // events (button presses) — only real user messages should appear in the
     // unified messenger inbox. Errors are non-fatal: a messenger hiccup must
     // not 500 the webhook.
-    if (!inbound.callbackData) {
+    //
+    // Web is a bot-only surface: clients chat with the automated assistant, so
+    // mirroring that chatter (/start, /lang, greetings) just floods the staff
+    // inbox. The inbox is for real human DMs (Telegram/WhatsApp/Instagram) +
+    // booking requests — so the web channel is excluded from the mirror.
+    if (!inbound.callbackData && inbound.channel !== 'web') {
       try {
         const result = await upsertClientConvThreadForInbound(ctx, {
           tenantId: inbound.tenantId,

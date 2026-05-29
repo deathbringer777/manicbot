@@ -1308,12 +1308,22 @@ CREATE TABLE IF NOT EXISTS thread_messages (
   reply_to_message_id    TEXT,
   created_at             INTEGER NOT NULL,
   edited_at              INTEGER,
-  deleted_at             INTEGER
+  deleted_at             INTEGER,
+  -- migration 0095: booking-request cards reference a domain object + snapshot.
+  ref_kind               TEXT,
+  ref_id                 TEXT,
+  meta_json              TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_thread_messages_thread
   ON thread_messages(thread_id, id);
 CREATE INDEX IF NOT EXISTS idx_thread_messages_tenant_created
   ON thread_messages(tenant_id, created_at);
+-- migration 0095: look up the card(s) for a given appointment.
+CREATE INDEX IF NOT EXISTS idx_thread_messages_ref
+  ON thread_messages(tenant_id, ref_kind, ref_id);
+-- migration 0095: at most one "Заявки" requests thread per tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_requests_per_tenant
+  ON threads(tenant_id) WHERE kind = 'requests';
 
 -- ─── Referral Program (migration 0069) ──────────────────────────────────
 

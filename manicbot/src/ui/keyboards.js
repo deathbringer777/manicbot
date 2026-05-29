@@ -17,9 +17,17 @@ export function mainKb(lg, role = 'client', ctx = null) {
     ] } };
   }
 
-  // Support button: always shown for clients; salon staff (master/admin) gated by plan
+  // Public web chat is an anonymous, bot-only client surface. Trim affordances
+  // that only make sense for an identified user / staff: "Moje wizyty" (CB.MY —
+  // a fresh web session has no booking history) and "Wsparcie" (CB.SUPPORT —
+  // clients reach the salon through its own channels). Web-gated on
+  // ctx.channel.type === 'web' so Telegram / WhatsApp / Instagram are unchanged.
+  const isWeb = ctx?.channel?.type === 'web';
+
+  // Support button: always shown for clients; salon staff (master/admin) gated
+  // by plan. Never shown on the public web menu.
   const isSalonStaffKb = role === 'master' || role === 'tenant_owner';
-  const showSupport = !ctx || !isSalonStaffKb || canUse(ctx, 'support_tickets');
+  const showSupport = !isWeb && (!ctx || !isSalonStaffKb || canUse(ctx, 'support_tickets'));
   const lastRow = [
     { text: t(lg, 'm_cont'), callback_data: CB.CONTACTS },
     { text: t(lg, 'm_lang'), callback_data: CB.LANG },
@@ -30,11 +38,18 @@ export function mainKb(lg, role = 'client', ctx = null) {
     [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
     [{ text: t(lg, 'm_cat'), callback_data: CB.CATALOG },
      { text: t(lg, 'm_prices'), callback_data: CB.PRICES }],
-    [{ text: t(lg, 'm_my'), callback_data: CB.MY }],
-    [{ text: t(lg, 'm_rev'), callback_data: CB.REVIEWS },
-     { text: t(lg, 'm_about'), callback_data: CB.ABOUT }],
-    lastRow,
   ];
+  // "Moje wizyty" — hidden on the public web menu only.
+  if (!isWeb) rows.push([{ text: t(lg, 'm_my'), callback_data: CB.MY }]);
+  rows.push([{ text: t(lg, 'm_rev'), callback_data: CB.REVIEWS },
+     { text: t(lg, 'm_about'), callback_data: CB.ABOUT }]);
+  // Instagram deep-link — web only, and only when the salon has a real
+  // per-tenant Instagram URL (resolved by the caller onto ctx.salonInstagramUrl
+  // from the raw tenant config, NOT the generic loadInstagramUrl fallback).
+  if (isWeb && ctx?.salonInstagramUrl) {
+    rows.push([{ text: t(lg, 'm_instagram'), url: ctx.salonInstagramUrl }]);
+  }
+  rows.push(lastRow);
   if (role === 'system_admin') {
     rows.push([{ text: t(lg, 'adm_management'), callback_data: CB.ADM_MAIN }]);
     rows.push([{ text: t(lg, 'sysadm_title'), callback_data: CB.SYSADM_MAIN }]);

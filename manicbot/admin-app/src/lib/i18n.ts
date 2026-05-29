@@ -2103,6 +2103,7 @@ const translations = {
   "messenger.threadList.empty":    { ru: "Пока пусто", ua: "Поки пусто", en: "Nothing here yet", pl: "Na razie pusto" },
   "messenger.threadList.emptyHint":{ ru: "Нажмите «+» чтобы начать чат", ua: "Натисніть «+» щоб розпочати чат", en: "Press «+» to start a chat", pl: "Kliknij «+» aby rozpocząć czat" },
   "messenger.filter.all":          { ru: "Все", ua: "Всі", en: "All", pl: "Wszystkie" },
+  "messenger.filter.requests":     { ru: "Заявки", ua: "Заявки", en: "Requests", pl: "Zgłoszenia" },
   "messenger.filter.groups":       { ru: "Группы", ua: "Групи", en: "Groups", pl: "Grupy" },
   "messenger.filter.clients":      { ru: "Клиенты", ua: "Клієнти", en: "Clients", pl: "Klienci" },
   "messenger.filter.system":       { ru: "Система", ua: "Система", en: "System", pl: "System" },

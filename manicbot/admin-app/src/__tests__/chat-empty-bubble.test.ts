@@ -10,7 +10,16 @@ import { isRenderableMessage } from "~/app/(public)/salon/[slug]/chat/ChatClient
 import type { ChatMessage } from "~/components/chat/chatTypes";
 
 function msg(over: Partial<ChatMessage>): ChatMessage {
-  return { id: "m", role: "bot", text: "", ts: 1, ...over };
+  return {
+    id: "m",
+    role: "bot",
+    text: "",
+    ts: 1,
+    buttons: null,
+    photo: null,
+    editMessageId: null,
+    ...over,
+  } as ChatMessage;
 }
 
 describe("isRenderableMessage", () => {

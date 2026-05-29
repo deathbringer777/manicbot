@@ -22,11 +22,12 @@ import {
 } from "~/server/api/masterPairing/tokenLogic";
 import { decryptMasterPassword } from "~/server/security/masterPasswordVault";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import type { TenantAccessCtx } from "~/server/api/tenantAccess";
 import { env } from "~/env";
 import { log } from "~/server/utils/logger";
 
 /** Assert caller is master on a personal (independent) tenant — allows service/config management */
-async function assertPersonalMaster(ctx: any, tenantId: string) {
+async function assertPersonalMaster(ctx: TenantAccessCtx, tenantId: string) {
   await assertMaster(ctx, tenantId);
   if (ctx.webUser?.webRole === "system_admin") return;
   const [t] = await ctx.db.select({ isPersonal: tenants.isPersonal }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
@@ -35,7 +36,7 @@ async function assertPersonalMaster(ctx: any, tenantId: string) {
   }
 }
 
-async function assertMaster(ctx: any, tenantId: string) {
+async function assertMaster(ctx: TenantAccessCtx, tenantId: string) {
   if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
   const r = ctx.webUser.webRole;
   if (r === "system_admin") return;
@@ -59,9 +60,13 @@ async function assertMaster(ctx: any, tenantId: string) {
  * here without web_user_id set, the owner needs to rebind via the dashboard
  * — false-negative is preferable to false-positive in a security guard.
  */
-async function assertCallerIsMaster(ctx: any, tenantId: string, masterId: number) {
+async function assertCallerIsMaster(ctx: TenantAccessCtx, tenantId: string, masterId: number) {
   await assertMaster(ctx, tenantId);
-  const role = ctx.webUser?.webRole;
+  // assertMaster guarantees ctx.webUser is set, but bind it locally so the
+  // compiler can narrow `id` below (TenantAccessCtx.webUser is nullable).
+  const webUser = ctx.webUser;
+  if (!webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const role = webUser.webRole;
   if (role === "system_admin" || role === "tenant_owner") return;
   if (role !== "master") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Master access required" });
@@ -73,7 +78,7 @@ async function assertCallerIsMaster(ctx: any, tenantId: string, masterId: number
     .from(masters)
     .where(and(
       eq(masters.tenantId, tenantId),
-      eq(masters.webUserId, ctx.webUser.id),
+      eq(masters.webUserId, webUser.id),
       eq(masters.active, 1),
     ))
     .limit(1);

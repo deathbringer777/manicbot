@@ -526,14 +526,36 @@ export async function tryAdminKeyRoutes(request, env, url) {
       // adapters know to talk to graph.instagram.com instead of
       // graph.facebook.com. Old `page_id` is preserved for diagnostics.
       const newCfg = { ...cfg, api: 'instagram_direct', ig_user_id: String(meData.id), ig_username: meData.username || null };
-      await dbRun(ec,
-        `UPDATE channel_configs
-            SET token_encrypted = ?,
-                config = ?,
-                updated_at = ?
-          WHERE id = ?`,
-        encrypted, JSON.stringify(newCfg), Math.floor(Date.now() / 1000), row.id,
-      );
+
+      // #6 — backfill the denormalized `ig_business_id` column on FIRST
+      // install. On a fresh IG connect this column is NULL (and config may
+      // carry no IG id either), so `expectedIg` resolved to '' and the
+      // bind-check above silently passed for ANY token. Persisting the
+      // verified IG id here means every SUBSEQUENT install hits the
+      // `expectedIg && mismatch → 403` branch — a foreign IGAA token can no
+      // longer overwrite an established tenant's channel. We only write when
+      // the column is currently empty so a legitimate id is never clobbered.
+      const now = Math.floor(Date.now() / 1000);
+      if (!expectedIg) {
+        await dbRun(ec,
+          `UPDATE channel_configs
+              SET token_encrypted = ?,
+                  config = ?,
+                  ig_business_id = ?,
+                  updated_at = ?
+            WHERE id = ?`,
+          encrypted, JSON.stringify(newCfg), String(meData.id), now, row.id,
+        );
+      } else {
+        await dbRun(ec,
+          `UPDATE channel_configs
+              SET token_encrypted = ?,
+                  config = ?,
+                  updated_at = ?
+            WHERE id = ?`,
+          encrypted, JSON.stringify(newCfg), now, row.id,
+        );
+      }
 
       void logEvent(ec, 'admin.ig_set_direct_token', { level: 'info', tenantId, message: 'IG-direct token installed' });
       void audit(ec, 'admin.ig_set_direct_token', { tenantId, detail: { igUserId: meData.id, username: meData.username } });

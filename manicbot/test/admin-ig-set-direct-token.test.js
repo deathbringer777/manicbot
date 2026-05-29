@@ -202,4 +202,80 @@ describe('POST /admin/ig-set-direct-token', () => {
     const res = await call(env, { tenantId: 't_1c305v2g5011', token: 'IGAA_ok' });
     expect(res?.status).toBe(200);
   });
+
+  // ── #6 — backfill the denormalized ig_business_id column on first install ──
+  //
+  // First install: ig_business_id column is NULL (and no id anywhere in
+  // config). The /me response carries the IG id; we must BACKFILL the column
+  // so a SECOND install with a mismatched token hits the existing
+  // `expectedIg && mismatch → 403` branch. Pre-fix, the column was never
+  // written, so any IGAA token (even one belonging to a different IG user)
+  // could overwrite the tenant's token on every subsequent call.
+  it('first install backfills ig_business_id when the column + config are empty', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(
+      JSON.stringify({ id: IG_BUSINESS_ID, username: 'manicbot_com' }),
+      { status: 200 },
+    ));
+    const env = makeEnv({
+      row: {
+        id: 7,
+        page_id: '1008301152373103',
+        ig_business_id: null,            // never denormalized
+        config: JSON.stringify({ page_id: '1008301152373103' }), // no IG id anywhere
+      },
+    });
+    const res = await call(env, { tenantId: 't_first', token: 'IGAA_first_install' });
+    expect(res?.status).toBe(200);
+
+    const upd = env._updates.find(u => u.sql.includes('UPDATE channel_configs'));
+    expect(upd).toBeTruthy();
+    // The UPDATE must persist the returned IG id into the ig_business_id column.
+    expect(upd.sql).toMatch(/ig_business_id\s*=\s*\?/);
+    expect(upd.params).toContain(IG_BUSINESS_ID);
+  });
+
+  it('does NOT rewrite ig_business_id when the column is already set (happy path keeps param order)', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(
+      JSON.stringify({ id: IG_BUSINESS_ID, username: 'manicbot_com' }),
+      { status: 200 },
+    ));
+    const env = makeEnv({
+      row: {
+        id: 7,
+        page_id: '1008301152373103',
+        ig_business_id: IG_BUSINESS_ID,  // already denormalized
+        config: JSON.stringify({ page_id: '1008301152373103' }),
+      },
+    });
+    const res = await call(env, { tenantId: 't_set', token: 'IGAA_match' });
+    expect(res?.status).toBe(200);
+    const upd = env._updates.find(u => u.sql.includes('UPDATE channel_configs'));
+    // No ig_business_id in the SET clause — the column was already correct.
+    expect(upd.sql).not.toMatch(/ig_business_id\s*=\s*\?/);
+  });
+
+  it('second install with a MISMATCHED token is rejected 403 once ig_business_id is backfilled', async () => {
+    // Simulates the post-backfill state: ig_business_id column now holds the
+    // first installer's IG id. A different IGAA token (different IG user) must
+    // be refused — this is the security property the backfill unlocks.
+    fetchSpy.mockResolvedValueOnce(new Response(
+      JSON.stringify({ id: '88888888888', username: 'attacker' }),
+      { status: 200 },
+    ));
+    const env = makeEnv({
+      row: {
+        id: 7,
+        page_id: '1008301152373103',
+        ig_business_id: IG_BUSINESS_ID,  // backfilled by the first install
+        config: JSON.stringify({ page_id: '1008301152373103', ig_user_id: IG_BUSINESS_ID }),
+      },
+    });
+    const res = await call(env, { tenantId: 't_first', token: 'IGAA_attacker' });
+    expect(res?.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toMatch(/88888888888/);
+    expect(body.error).toMatch(/25881183448226493/);
+    // Nothing written on the rejected path.
+    expect(env._updates.filter(u => u.sql.includes('UPDATE channel_configs'))).toHaveLength(0);
+  });
 });

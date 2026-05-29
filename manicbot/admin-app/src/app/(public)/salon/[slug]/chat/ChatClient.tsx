@@ -36,7 +36,7 @@ const HISTORY_CAP = 200;
 const POLL_INTERVAL_MS = 3000;
 
 /** Whitespace + all zero-width / BOM code points the Worker may emit. */
-const BLANK_RE = /[\s​-‏  ﻿]/g;
+const BLANK_RE = /[\s\u200b-\u200f\u2060\ufeff]/g;
 
 /**
  * True if a bot message is worth rendering. The Worker emits a zero-width-space

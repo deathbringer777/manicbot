@@ -69,13 +69,32 @@ The generated key is written to **.dev.vars** (file is in .gitignore, not commit
 After the key in Cloudflare matches the one in `.dev.vars` (or the one in the URL):
 
 ```
-https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=KEY_FROM_DEV_VARS
+https://manicbot.com/admin/migrate?key=KEY_FROM_DEV_VARS
 ```
 
 Response: `{"ok":true,"copied":N,"message":"..."}` or `{"ok":true,"skipped":true}` if migration was already done.
 
 After migration, update the bot webhook:
-https://manicbot.vdovin-kyrylo.workers.dev/setup?key=YOUR_ADMIN_KEY — the response will contain the required URL.
+`https://manicbot.com/setup?key=YOUR_ADMIN_KEY` — the response will contain the required URL.
+
+---
+
+## Running D1 migrations today
+
+D1 SQL migrations live in `manicbot/migrations/` and are numbered sequentially.
+CI applies them automatically before every deploy. To run manually:
+
+```bash
+# Apply all pending migrations to production D1
+wrangler d1 migrations apply manicbot-db --remote
+
+# Apply to local D1 (for wrangler dev)
+wrangler d1 migrations apply manicbot-db --local
+```
+
+CI runs `wrangler d1 migrations apply manicbot-db --remote` as part of the
+GitHub Actions "CI / Deploy" pipeline before `wrangler deploy`, so migrations
+are always applied before the new Worker code goes live.
 
 ---
 

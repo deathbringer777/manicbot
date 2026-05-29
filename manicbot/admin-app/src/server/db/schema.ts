@@ -1385,7 +1385,7 @@ export const threadMessages = sqliteTable("thread_messages", {
   createdAt: integer("created_at").notNull(),
   editedAt: integer("edited_at"),
   deletedAt: integer("deleted_at"),
-  /** migration 0094: ref_kind='booking_request', ref_id=appointments.id +
+  /** migration 0095: ref_kind='booking_request', ref_id=appointments.id +
    *  meta_json snapshot, so a message can render as an actionable request card. */
   refKind: text("ref_kind"),
   refId: text("ref_id"),

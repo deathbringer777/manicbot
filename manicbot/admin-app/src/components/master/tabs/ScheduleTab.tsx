@@ -6,9 +6,7 @@
  * Before: a MonthCalendar grid + AptRow list with a hand-rolled
  * calendar/list toggle. The owner-side SalonDashboard had moved to a
  * 4-mode view stack (day/week/calendar/list) with drag-to-reschedule
- * and rich detail panels — masters and salon owners viewing "as
- * master" via the sidebar `previewMasterId` were stuck on the legacy
- * grid.
+ * and rich detail panels — masters were stuck on the legacy grid.
  *
  * Now: the same SalonDayView / SalonWeekView / MonthCalendar (month
  * mode) / SalonAgendaView stack used in SalonDashboard, scoped to a
@@ -55,8 +53,8 @@ interface ScheduleTabProps {
   masterId: number;
   lang: Lang;
   schedule: ScheduleData;
-  /** Whether the caller is allowed to write (false when isDelegating without
-   *  allowDelegation — matches `canMutate` in MasterDashboard). */
+  /** Whether the caller is allowed to write. Always true for a master on
+   *  their own dashboard. */
   canMutate: boolean;
   markNoShowMut: MarkNoShowMutation;
   /** Display name for the single column header. */
@@ -65,10 +63,6 @@ interface ScheduleTabProps {
    *  non-working-hours tint. Optional; null/undefined => column treated as
    *  fully open. */
   masterWorkHours?: unknown;
-  /** Owner is viewing the dashboard "as master" via the sidebar chip. Carried
-   *  for future surface decisions (e.g. delegation banner); the current
-   *  behavior is identical for both modes. */
-  isDelegating: boolean;
 }
 
 type Pending = Record<string, { date: string; time: string; masterId: number }>;

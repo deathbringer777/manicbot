@@ -44,8 +44,6 @@ const emailCopy: Record<Lang, {
     expires: string;
     ignore: string;
   };
-  emailChange: { subject: string; heading: string; body: string; cta: string; ignore: string; expires: string };
-  emailChangeCode: { subject: string; heading: string; body: string; expires: string; ignore: string; copy: string };
   loginAlert: { subject: string; heading: string; body: string; ip: string; time: string; warning: string };
   roleRequestAdmin: { subject: string; heading: string; body: string; from: string; to: string; reason: string; cta: string };
   roleRequestDecision: {
@@ -153,22 +151,6 @@ const emailCopy: Record<Lang, {
       cta: "Подтвердить подписку",
       expires: "Ссылка действует 7 дней.",
       ignore: "Если вы не подписывались — просто проигнорируйте это письмо. Без подтверждения мы не будем писать.",
-    },
-    emailChange: {
-      subject: "Подтвердите новый email — ManicBot",
-      heading: "Смена email",
-      body: "Вы запросили смену email. Нажмите кнопку ниже, чтобы подтвердить новый адрес.",
-      cta: "Подтвердить новый email",
-      ignore: "Если вы не запрашивали смену, проигнорируйте это письмо.",
-      expires: "Ссылка действует 1 час.",
-    },
-    emailChangeCode: {
-      subject: "Код подтверждения нового email — ManicBot",
-      heading: "Смена email",
-      body: "Введите этот код в ManicBot, чтобы подтвердить новый email:",
-      expires: "Код действителен 1 час.",
-      ignore: "Если вы не запрашивали смену, проигнорируйте это письмо.",
-      copy: "Нажмите на код, чтобы выделить",
     },
     loginAlert: {
       subject: "Вход с нового устройства — ManicBot",
@@ -293,22 +275,6 @@ const emailCopy: Record<Lang, {
       expires: "Посилання дійсне 7 днів.",
       ignore: "Якщо ви не підписувалися — просто проігноруйте цей лист. Без підтвердження ми не будемо писати.",
     },
-    emailChange: {
-      subject: "Підтвердіть новий email — ManicBot",
-      heading: "Зміна email",
-      body: "Ви запросили зміну email. Натисніть кнопку нижче, щоб підтвердити нову адресу.",
-      cta: "Підтвердити новий email",
-      ignore: "Якщо ви не запитували зміну, проігноруйте цей лист.",
-      expires: "Посилання дійсне 1 годину.",
-    },
-    emailChangeCode: {
-      subject: "Код підтвердження нового email — ManicBot",
-      heading: "Зміна email",
-      body: "Введіть цей код у ManicBot, щоб підтвердити новий email:",
-      expires: "Код дійсний 1 годину.",
-      ignore: "Якщо ви не запитували зміну, проігноруйте цей лист.",
-      copy: "Натисніть на код, щоб виділити",
-    },
     loginAlert: {
       subject: "Вхід з нового пристрою — ManicBot",
       heading: "Новий вхід до акаунту",
@@ -432,22 +398,6 @@ const emailCopy: Record<Lang, {
       expires: "This link expires in 7 days.",
       ignore: "If you didn't subscribe, ignore this email. We won't send anything without your confirmation.",
     },
-    emailChange: {
-      subject: "Confirm your new email — ManicBot",
-      heading: "Email change",
-      body: "You requested an email change. Click the button below to confirm your new address.",
-      cta: "Confirm new email",
-      ignore: "If you didn't request this, ignore this email.",
-      expires: "This link expires in 1 hour.",
-    },
-    emailChangeCode: {
-      subject: "Email change code — ManicBot",
-      heading: "Email change",
-      body: "Enter this code in ManicBot to confirm your new email:",
-      expires: "This code expires in 1 hour.",
-      ignore: "If you didn't request this, ignore this email.",
-      copy: "Click the code to select it",
-    },
     loginAlert: {
       subject: "New login detected — ManicBot",
       heading: "New login to your account",
@@ -570,22 +520,6 @@ const emailCopy: Record<Lang, {
       cta: "Potwierdź subskrypcję",
       expires: "Link ważny 7 dni.",
       ignore: "Jeśli to nie Ty się zapisałeś — po prostu zignoruj tę wiadomość. Bez potwierdzenia nie wyślemy nic.",
-    },
-    emailChange: {
-      subject: "Potwierdź nowy email — ManicBot",
-      heading: "Zmiana emaila",
-      body: "Poprosiłeś o zmianę emaila. Kliknij przycisk poniżej, aby potwierdzić nowy adres.",
-      cta: "Potwierdź nowy email",
-      ignore: "Jeśli nie prosiłeś o zmianę, zignoruj tę wiadomość.",
-      expires: "Link ważny 1 godzinę.",
-    },
-    emailChangeCode: {
-      subject: "Kod potwierdzenia nowego emaila — ManicBot",
-      heading: "Zmiana emaila",
-      body: "Wpisz ten kod w ManicBot, aby potwierdzić nowy email:",
-      expires: "Kod ważny 1 godzinę.",
-      ignore: "Jeśli nie prosiłeś o zmianę, zignoruj tę wiadomość.",
-      copy: "Kliknij kod, aby go zaznaczyć",
     },
     loginAlert: {
       subject: "Nowe logowanie — ManicBot",
@@ -815,44 +749,11 @@ export function subscriptionConfirmEmailHtml(confirmUrl: string, lang: Lang): st
   );
 }
 
-export function emailChangeEmailHtml(confirmUrl: string, newEmail: string, lang: Lang): string {
-  const c = getEmailCopy(lang).emailChange;
-  // Blocker 4 — newEmail is user-controlled; sanitize before HTML interp.
-  const safeEmail = sanitizeEmailDisplayName(newEmail, 320); // RFC 5321 max
-  return baseLayout(
-    c.heading,
-    paragraph(c.body) +
-    paragraph(`<strong>${safeEmail}</strong>`, "#e2e8f0") +
-    ctaButton(confirmUrl, c.cta) +
-    muted(c.expires) +
-    muted(c.ignore),
-    getEmailCopy(lang).footer,
-  );
-}
-
-/**
- * #N1 — code-based email-change confirmation. Replaces the URL variant so the
- * confirmation token never appears in Referer headers, MTA logs, or browser
- * history.
- */
-export function emailChangeCodeEmailHtml(code: string, newEmail: string, lang: Lang): string {
-  const c = getEmailCopy(lang).emailChangeCode;
-  const safeEmail = sanitizeEmailDisplayName(newEmail, 320);
-  // `code` is server-generated (6-digit numeric); no sanitization needed.
-  const codeBlock = `<div style="margin:24px auto;text-align:center;">
-    <div style="display:inline-block;padding:16px 32px;background-color:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;font-family:monospace;font-size:32px;font-weight:700;color:#ffffff;letter-spacing:10px;user-select:all;-webkit-user-select:all;cursor:text;">${code}</div>
-    <div style="margin-top:10px;font-size:12px;color:#64748b;">${c.copy}</div>
-  </div>`;
-  return baseLayout(
-    c.heading,
-    paragraph(c.body) +
-    paragraph(`<strong>${safeEmail}</strong>`, "#e2e8f0") +
-    codeBlock +
-    muted(c.expires) +
-    muted(c.ignore),
-    getEmailCopy(lang).footer,
-  );
-}
+// Email-change confirmation emails are unified onto `actionOtpEmailHtml`
+// (action "change_email") — code-only, sent to the current address. The former
+// `emailChangeEmailHtml` (URL/token variant) and `emailChangeCodeEmailHtml`
+// (parallel code template) were removed to avoid duplication and the token-leak
+// path; see emailService.ts.
 
 /**
  * #N3 — login alert email no longer embeds the raw client IP. Original
@@ -1129,8 +1030,11 @@ export function masterInviteEmailHtml(
   lang: Lang,
 ): string {
   const c = getEmailCopy(lang).masterInvite;
+  // #4 — salonName is tenant-controlled; sanitize before HTML interpolation
+  // to block stored XSS in the recipient's mail client.
+  const safeSalonName = sanitizeEmailDisplayName(options.salonName);
   const details = `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
-    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.salon}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${options.salonName}</td></tr>
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.salon}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${safeSalonName}</td></tr>
     <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.role}</td><td style="padding:8px 12px;font-size:13px;color:#a78bfa;font-weight:600;">${options.roleLabel}</td></tr>
   </table>`;
   return baseLayout(
@@ -1328,10 +1232,15 @@ export function ownershipTransferRequestEmailHtml(opts: {
   lang: Lang;
 }): string {
   const c = getOwnershipCopy(opts.lang).request;
+  // #4 — tenantName / toName / toEmail are all user-controlled and reach the
+  // rendered HTML. Sanitize before interpolation to block stored XSS.
+  const safeTenantName = sanitizeEmailDisplayName(opts.tenantName);
+  const safeToName = sanitizeEmailDisplayName(opts.toName);
+  const safeToEmail = sanitizeEmailDisplayName(opts.toEmail, 320); // RFC 5321 max
   return baseLayout(
     c.heading,
-    paragraph(`${c.body1}: <strong>${opts.tenantName}</strong>`, "#e2e8f0") +
-    paragraph(`${opts.toName} (<strong>${opts.toEmail}</strong>)`, "#d1d5db") +
+    paragraph(`${c.body1}: <strong>${safeTenantName}</strong>`, "#e2e8f0") +
+    paragraph(`${safeToName} (<strong>${safeToEmail}</strong>)`, "#d1d5db") +
     paragraph(c.body2) +
     ctaButton(opts.confirmUrl, c.cta) +
     muted(c.expires) +
@@ -1346,10 +1255,13 @@ export function ownershipTransferCompletedOldOwnerEmailHtml(opts: {
   lang: Lang;
 }): string {
   const c = getOwnershipCopy(opts.lang).oldOwner;
+  // #4 — tenantName / newOwnerName are user-controlled; sanitize before HTML.
+  const safeTenantName = sanitizeEmailDisplayName(opts.tenantName);
+  const safeNewOwnerName = sanitizeEmailDisplayName(opts.newOwnerName);
   return baseLayout(
     c.heading,
-    paragraph(`${c.body} <strong>${opts.tenantName}</strong>`, "#e2e8f0") +
-    paragraph(`→ ${opts.newOwnerName}`, "#d1d5db") +
+    paragraph(`${c.body} <strong>${safeTenantName}</strong>`, "#e2e8f0") +
+    paragraph(`→ ${safeNewOwnerName}`, "#d1d5db") +
     muted(c.loginNote),
     getEmailCopy(opts.lang).footer,
   );
@@ -1361,10 +1273,13 @@ export function ownershipTransferCompletedNewOwnerEmailHtml(opts: {
   lang: Lang;
 }): string {
   const c = getOwnershipCopy(opts.lang).newOwner;
+  // #4 — tenantName / oldOwnerName are user-controlled; sanitize before HTML.
+  const safeTenantName = sanitizeEmailDisplayName(opts.tenantName);
+  const safeOldOwnerName = sanitizeEmailDisplayName(opts.oldOwnerName);
   return baseLayout(
     c.heading,
     paragraph(`${c.body}`) +
-    paragraph(`<strong>${opts.tenantName}</strong> ← ${opts.oldOwnerName}`, "#e2e8f0") +
+    paragraph(`<strong>${safeTenantName}</strong> ← ${safeOldOwnerName}`, "#e2e8f0") +
     muted(c.loginNote),
     getEmailCopy(opts.lang).footer,
   );

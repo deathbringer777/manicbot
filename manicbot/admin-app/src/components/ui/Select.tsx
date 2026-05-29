@@ -16,6 +16,9 @@
  *
  * - Click trigger to toggle.
  * - Escape / outside click closes.
+ * - ArrowDown / ArrowUp moves the keyboard cursor through options.
+ * - Enter selects the focused option.
+ * - Home / End jump to first / last option.
  * - Optional `sublabel` shown on the right of each row (used for
  *   "60 min · 100 zł" style metadata).
  * - `placeholder` shows when value is empty.
@@ -61,8 +64,31 @@ export function Select({
   className,
 }: Props) {
   const [open, setOpen] = useState(false);
+  // Keyboard-cursor index — -1 means no keyboard focus yet.
+  const [focusIdx, setFocusIdx] = useState<number>(-1);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
+  // Sync focusIdx to the current value whenever the menu opens.
+  useEffect(() => {
+    if (!open) { setFocusIdx(-1); return; }
+    const idx = options.findIndex((o) => o.value === value);
+    setFocusIdx(idx >= 0 ? idx : 0);
+  }, [open, value, options]);
+
+  // Scroll focused option into view.
+  useEffect(() => {
+    if (!open || focusIdx < 0) return;
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.children[focusIdx] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: "nearest" });
+  }, [open, focusIdx]);
+
+  // Outside-click and document-level Escape so the menu closes when the
+  // user presses Escape while focus is anywhere in the document (mirrors
+  // the original contract tested by Select.test.tsx). The button's own
+  // onKeyDown also handles Escape for the focused-trigger case.
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
@@ -82,6 +108,59 @@ export function Select({
     };
   }, [open]);
 
+  function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    if (disabled) return;
+    if (!open) {
+      // Open on common navigation keys while closed.
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    switch (e.key) {
+      case "ArrowDown": {
+        e.preventDefault();
+        setFocusIdx((i) => Math.min(i + 1, options.length - 1));
+        break;
+      }
+      case "ArrowUp": {
+        e.preventDefault();
+        setFocusIdx((i) => Math.max(i - 1, 0));
+        break;
+      }
+      case "Home": {
+        e.preventDefault();
+        setFocusIdx(0);
+        break;
+      }
+      case "End": {
+        e.preventDefault();
+        setFocusIdx(options.length - 1);
+        break;
+      }
+      case "Enter":
+      case " ": {
+        e.preventDefault();
+        if (focusIdx >= 0 && focusIdx < options.length) {
+          onChange(options[focusIdx]!.value);
+          setOpen(false);
+        }
+        break;
+      }
+      case "Escape": {
+        e.preventDefault();
+        setOpen(false);
+        break;
+      }
+      case "Tab": {
+        // Close on tab-away so focus doesn't get stranded.
+        setOpen(false);
+        break;
+      }
+    }
+  }
+
   const current = options.find((o) => o.value === value);
   const displayLabel = current?.label ?? placeholder ?? "";
   const hasValue = !!current;
@@ -92,11 +171,15 @@ export function Select({
         type="button"
         disabled={!!disabled}
         onClick={() => !disabled && setOpen((v) => !v)}
+        onKeyDown={onKeyDown}
         data-testid={`${testIdPrefix}-trigger`}
         data-open={open ? "1" : "0"}
         data-value={value || ""}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-activedescendant={
+          open && focusIdx >= 0 ? `${testIdPrefix}-opt-${focusIdx}` : undefined
+        }
         className={`${TRIGGER_BASE} text-sm ${disabled ? TRIGGER_DISABLED : TRIGGER_ENABLED}`}
       >
         <span className={`flex-1 truncate ${hasValue ? "" : "text-slate-400 dark:text-white/30"}`}>
@@ -115,18 +198,20 @@ export function Select({
           data-testid={`${testIdPrefix}-menu`}
           className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-72 overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl shadow-black/20 dark:shadow-black/60 animate-[select-fade-in_120ms_ease-out]"
         >
-          <ul className="py-1">
+          <ul ref={listRef} className="py-1">
             {options.length === 0 && (
               <li className="px-3 py-2 text-xs text-slate-400 dark:text-white/40 text-center">
                 {placeholder ?? "—"}
               </li>
             )}
-            {options.map((o) => {
+            {options.map((o, idx) => {
               const isActive = o.value === value;
+              const isFocused = idx === focusIdx;
               return (
                 <li key={o.value}>
                   <button
                     type="button"
+                    id={`${testIdPrefix}-opt-${idx}`}
                     role="option"
                     aria-selected={isActive}
                     data-testid={`${testIdPrefix}-option`}
@@ -134,9 +219,11 @@ export function Select({
                     data-active={isActive ? "1" : "0"}
                     onClick={() => { onChange(o.value); setOpen(false); }}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                      isActive
-                        ? "bg-brand-500/10 text-brand-700 dark:text-brand-300"
-                        : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04]"
+                      isFocused
+                        ? "bg-brand-500/10 text-brand-700 dark:text-brand-300 outline-none"
+                        : isActive
+                          ? "bg-brand-500/10 text-brand-700 dark:text-brand-300"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04]"
                     }`}
                   >
                     <span className="flex-1 truncate">{o.label}</span>

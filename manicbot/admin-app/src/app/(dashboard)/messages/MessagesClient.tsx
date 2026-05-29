@@ -11,18 +11,17 @@ import { ThreadView } from "./_components/ThreadView";
 import { NewThreadModal } from "./_components/NewThreadModal";
 import { PlatformAdminPane } from "./_components/PlatformAdminPane";
 import { PlatformOwnerView } from "./_components/PlatformOwnerView";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 /**
- * Top-level orchestrator for `/messages`. Three modes:
+ * Top-level orchestrator for `/messages`. Two modes:
  *
- *   1. system_admin without tenant preview → Platform messenger surface
- *      (cross-tenant DM list with all owners + broadcast composer).
- *   2. tenant_owner / tenant_manager / master → Tenant messenger as before,
- *      with a pinned «ManicBot» entry at the top of the thread list that
- *      opens the owner-side platform thread.
- *   3. system_admin previewing a tenant → identical to #2 (tenant messenger
- *      for that tenant — no platform surface, since the sysadmin already
- *      has the dedicated /messages without preview).
+ *   1. system_admin → Platform messenger surface (cross-tenant DM list with
+ *      all owners + broadcast composer).
+ *   2. tenant_owner / tenant_manager / master → Tenant messenger, with a
+ *      pinned «ManicBot» entry at the top of the thread list that opens the
+ *      owner-side platform thread.
  *
  * URL state:
  *   - `?platform=1`   — owner deep-link from notification bell.
@@ -33,6 +32,7 @@ export default function MessagesClient() {
   const searchParams = useSearchParams();
   const initialPlatformOwner = searchParams.get("platform") === "1";
   const initialPlatformThread = searchParams.get("platformThread");
+  const { lang } = useLang();
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [platformSelected, setPlatformSelected] = useState(initialPlatformOwner);
@@ -59,7 +59,7 @@ export default function MessagesClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mode 1 — sysadmin without preview gets the full platform surface.
+  // Mode 1 — sysadmin gets the full platform surface.
   if (isSystemAdminNoPreview) {
     return <PlatformAdminPane initialThreadId={initialPlatformThread} />;
   }
@@ -67,7 +67,7 @@ export default function MessagesClient() {
   if (!tenantId) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center text-xs text-slate-500">
-        Нет привязанного салона — мессенджер недоступен
+        {t("messenger.noSalon", lang)}
       </div>
     );
   }
@@ -112,7 +112,7 @@ export default function MessagesClient() {
                 )}
               </div>
               <div className="truncate text-xs text-slate-500">
-                Объявления и поддержка от платформы
+                {t("messenger.platformSubtitle", lang)}
               </div>
             </div>
           </button>
@@ -140,7 +140,7 @@ export default function MessagesClient() {
                 className="absolute left-2 top-2 z-10 flex h-7 items-center gap-1 rounded-md bg-white/80 px-2 text-xs text-slate-600 backdrop-blur md:hidden dark:bg-slate-900/80 dark:text-slate-300"
               >
                 <ArrowLeft className="h-3 w-3" />
-                Назад
+                {t("messenger.back", lang)}
               </button>
               <PlatformOwnerView />
             </div>
@@ -153,7 +153,7 @@ export default function MessagesClient() {
                 data-testid="messages-mobile-back"
               >
                 <ArrowLeft className="h-3 w-3" />
-                Назад
+                {t("messenger.back", lang)}
               </button>
               <ThreadView tenantId={tenantId} threadId={selectedThreadId} />
             </div>
@@ -163,10 +163,10 @@ export default function MessagesClient() {
                 <MessageSquare className="h-6 w-6 text-slate-400" />
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Выберите чат или создайте новый
+                {t("messenger.selectChat", lang)}
               </p>
               <p className="mt-1 text-[11px] text-slate-400">
-                Сообщения между сотрудниками и клиентами в одном месте
+                {t("messenger.selectChatHint", lang)}
               </p>
             </div>
           )}

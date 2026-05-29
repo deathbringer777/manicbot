@@ -128,9 +128,11 @@ const LABELS: Record<Lang, {
 function CheckoutModal({
   clientSecret,
   onClose,
+  lang,
 }: {
   clientSecret: string;
   onClose: () => void;
+  lang: Lang;
 }) {
   // Close on Escape key
   useEffect(() => {
@@ -145,13 +147,19 @@ function CheckoutModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("billing.checkout.title", lang)}
     >
       <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
-          <span className="text-sm font-semibold text-slate-900 dark:text-white">Оформление подписки</span>
+          <span className="text-sm font-semibold text-slate-900 dark:text-white">
+            {t("billing.checkout.title", lang)}
+          </span>
           <button
             onClick={onClose}
+            aria-label={t("common.close", lang)}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="h-4 w-4" />
@@ -176,11 +184,11 @@ function CheckoutModal({
 
 export function BillingSection({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const l = LABELS[lang];
 
-  // ── God Mode: system_admin not previewing a tenant ──────────────────────────
-  if (role === "system_admin" && !previewRole) {
+  // ── God Mode: system_admin (no per-tenant impersonation) ─────────────────────
+  if (role === "system_admin") {
     return (
       <div className="space-y-4">
         <div className="glass-card rounded-2xl p-6 text-center space-y-3">
@@ -263,7 +271,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
     <div className="space-y-4">
       {/* Checkout modal */}
       {clientSecret && (
-        <CheckoutModal clientSecret={clientSecret} onClose={handleCloseCheckout} />
+        <CheckoutModal clientSecret={clientSecret} onClose={handleCloseCheckout} lang={lang} />
       )}
 
       {/* Payment success banner */}

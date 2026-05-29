@@ -21,8 +21,9 @@ vi.mock("~/env", () => ({
     AUTH_SECRET: "test-secret",
   },
 }));
+const sendSupportReplyEmailMock = vi.fn().mockResolvedValue({ ok: true });
 vi.mock("~/server/email/emailService", () => ({
-  sendSupportReplyEmail: vi.fn().mockResolvedValue(undefined),
+  sendSupportReplyEmail: (...args: unknown[]) => sendSupportReplyEmailMock(...args),
 }));
 
 const notifyWebUserMock = vi.fn().mockResolvedValue({ ok: true, id: "n_1" });
@@ -89,7 +90,8 @@ describe("support.replyToTicket → notifyWebUser fan-out", () => {
     });
     const caller = createCaller(makeSupportCtx(db, "support") as never);
     const r = await caller.replyToTicket({ ticketId: "pt_abc", text: "Привет, разобрались" });
-    expect(r).toEqual({ ok: true });
+    // #3 — return shape now also carries `emailSent` (await + surface result).
+    expect(r).toEqual({ ok: true, emailSent: true });
     await flushAsync();
 
     expect(notifyWebUserMock).toHaveBeenCalledTimes(1);
@@ -136,6 +138,73 @@ describe("support.replyToTicket → notifyWebUser fan-out", () => {
     await caller.replyToTicket({ ticketId: "pt_bad", text: "hi" });
     await flushAsync();
     expect(notifyWebUserMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("#3 — support.replyToTicket AWAITS the email + surfaces emailSent", () => {
+  beforeEach(() => {
+    notifyWebUserMock.mockClear();
+    notifyManyMock.mockClear();
+    sendSupportReplyEmailMock.mockClear();
+    sendSupportReplyEmailMock.mockResolvedValue({ ok: true });
+  });
+
+  it("awaits the send and reports emailSent: true on success", async () => {
+    const db = buildDb({
+      ticketRow: { clientName: "owner@test.com", tenantId: "t_demo" },
+      webUserRow: { id: "w_owner_5", lang: "en" },
+    });
+    const caller = createCaller(makeSupportCtx(db, "support") as never);
+    const r = (await caller.replyToTicket({ ticketId: "pt_e", text: "fixed" })) as {
+      ok: boolean;
+      emailSent: boolean;
+    };
+    // No flush needed — if the send is awaited it has already resolved.
+    expect(sendSupportReplyEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendSupportReplyEmailMock.mock.calls[0]![0]).toBe("owner@test.com");
+    expect(r.ok).toBe(true);
+    expect(r.emailSent).toBe(true);
+  });
+
+  it("does not resolve until the send settles (await semantics)", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((res) => (release = res));
+    let settled = false;
+    sendSupportReplyEmailMock.mockImplementation(async () => {
+      await gate;
+      settled = true;
+      return { ok: true };
+    });
+    const db = buildDb({
+      ticketRow: { clientName: "owner@test.com", tenantId: "t_demo" },
+      webUserRow: { id: "w_owner_5", lang: "en" },
+    });
+    const caller = createCaller(makeSupportCtx(db, "support") as never);
+    const p = caller.replyToTicket({ ticketId: "pt_gate", text: "wait" });
+    let resolvedEarly = false;
+    void p.then(() => (resolvedEarly = true));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolvedEarly).toBe(false);
+    expect(settled).toBe(false);
+    release();
+    await p;
+    expect(settled).toBe(true);
+  });
+
+  it("reports emailSent: false when the transport fails (reply still ok)", async () => {
+    sendSupportReplyEmailMock.mockResolvedValue({ ok: false, error: "resend_500" });
+    const db = buildDb({
+      ticketRow: { clientName: "owner@test.com", tenantId: "t_demo" },
+      webUserRow: { id: "w_owner_5", lang: "en" },
+    });
+    const caller = createCaller(makeSupportCtx(db, "support") as never);
+    const r = (await caller.replyToTicket({ ticketId: "pt_fail", text: "x" })) as {
+      ok: boolean;
+      emailSent: boolean;
+    };
+    expect(r.ok).toBe(true);
+    expect(r.emailSent).toBe(false);
   });
 });
 

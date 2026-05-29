@@ -11,6 +11,8 @@ import {
   Plus,
 } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system" | "requests";
 type FilterKind = ThreadKind | "all";
@@ -45,6 +47,7 @@ interface Props {
 export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }: Props) {
   const [filter, setFilter] = useState<FilterKind>("all");
   const [search, setSearch] = useState("");
+  const { lang } = useLang();
 
   const threadsQ = api.messenger.listThreads.useQuery(
     {
@@ -60,12 +63,12 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
     },
   );
 
-  const items = (threadsQ.data?.items ?? []).filter((t) => {
+  const items = (threadsQ.data?.items ?? []).filter((th) => {
     if (!search.trim()) return true;
     const needle = search.trim().toLowerCase();
     return (
-      (t.title?.toLowerCase().includes(needle) ?? false) ||
-      (t.lastMessagePreview?.toLowerCase().includes(needle) ?? false)
+      (th.title?.toLowerCase().includes(needle) ?? false) ||
+      (th.lastMessagePreview?.toLowerCase().includes(needle) ?? false)
     );
   });
 
@@ -74,14 +77,16 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
       {/* Header */}
       <div className="border-b border-slate-200 dark:border-slate-800 p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Сообщения</h2>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            {t("messenger.threadList.title", lang)}
+          </h2>
           <button
             type="button"
             onClick={onNewThread}
             data-testid="new-thread-button"
             className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500/10 text-brand-500 hover:bg-brand-500/20"
-            title="Новый чат"
-            aria-label="Новый чат"
+            title={t("messenger.threadList.newChat", lang)}
+            aria-label={t("messenger.threadList.newChat", lang)}
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -94,7 +99,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск…"
+            placeholder={t("messenger.threadList.search", lang)}
             className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-7 pr-2 text-xs text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </div>
@@ -114,16 +119,16 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
                 }`}
               >
                 {k === "all"
-                  ? "Все"
+                  ? t("messenger.filter.all", lang)
                   : k === "requests"
-                    ? "Заявки"
+                    ? t("messenger.filter.requests", lang)
                     : k === "staff_dm"
                       ? "DM"
                       : k === "staff_group"
-                        ? "Группы"
+                        ? t("messenger.filter.groups", lang)
                         : k === "client_conv"
-                          ? "Клиенты"
-                          : "Система"}
+                          ? t("messenger.filter.clients", lang)
+                          : t("messenger.filter.system", lang)}
               </button>
             ),
           )}
@@ -140,22 +145,22 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
           </div>
         ) : items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-            <p className="text-xs text-slate-500">Пока пусто</p>
+            <p className="text-xs text-slate-500">{t("messenger.threadList.empty", lang)}</p>
             <p className="mt-1 text-[10px] text-slate-400">
-              Нажмите «+» чтобы начать чат
+              {t("messenger.threadList.emptyHint", lang)}
             </p>
           </div>
         ) : (
-          items.map((t) => {
-            const meta = KIND_META[t.kind as ThreadKind] ?? KIND_META.system;
+          items.map((th) => {
+            const meta = KIND_META[th.kind as ThreadKind] ?? KIND_META.system;
             const Icon = meta.icon;
-            const isActive = selectedThreadId === t.id;
+            const isActive = selectedThreadId === th.id;
             return (
               <button
-                key={t.id}
+                key={th.id}
                 type="button"
-                onClick={() => onSelect(t.id)}
-                data-testid={`thread-row-${t.id}`}
+                onClick={() => onSelect(th.id)}
+                data-testid={`thread-row-${th.id}`}
                 className={`flex w-full items-start gap-2 border-l-2 px-3 py-2 text-left transition-colors ${
                   isActive
                     ? "border-l-brand-500 bg-brand-500/5"
@@ -170,22 +175,24 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
-                      {t.title ?? (t.kind === "staff_dm" ? "Прямое сообщение" : "Чат")}
+                      {th.title ?? (th.kind === "staff_dm"
+                        ? t("messenger.thread.dm", lang)
+                        : t("messenger.thread.chat", lang))}
                     </p>
                     <span className="shrink-0 text-[10px] text-slate-400">
-                      {fmtTime(t.lastMessageAt)}
+                      {fmtTime(th.lastMessageAt)}
                     </span>
                   </div>
                   <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">
-                    {t.lastMessagePreview ?? "—"}
+                    {th.lastMessagePreview ?? "—"}
                   </p>
                 </div>
-                {t.unreadCount > 0 && (
+                {th.unreadCount > 0 && (
                   <span
                     className="ml-1 mt-0.5 shrink-0 rounded-full bg-brand-500 px-1.5 py-0.5 text-[9px] font-bold text-white"
-                    data-testid={`unread-badge-${t.id}`}
+                    data-testid={`unread-badge-${th.id}`}
                   >
-                    {t.unreadCount >= 99 ? "99+" : t.unreadCount}
+                    {th.unreadCount >= 99 ? "99+" : th.unreadCount}
                   </span>
                 )}
               </button>

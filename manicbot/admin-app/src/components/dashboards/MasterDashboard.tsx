@@ -34,20 +34,17 @@ function getPeriodDates(period: Period): { from: string; to: string } {
 
 // The legacy local AptRow + ScheduleTab (MonthCalendar + AptRow list) were
 // replaced on 2026-05-17 by the modernized SalonDayView/Week/Calendar/Agenda
-// stack — see components/master/tabs/ScheduleTab.tsx. Owners viewing "as
-// master" via the sidebar previewMasterId chip and real masters on their
-// own logins now both land on the same view stack used by SalonDashboard.
+// stack — see components/master/tabs/ScheduleTab.tsx. A master sees the same
+// view stack used by SalonDashboard, scoped to their own single column.
 
 export function MasterDashboard({
   tenantId,
   masterId,
-  isDelegating = false,
   isPersonal = false,
   forceTab,
 }: {
   tenantId: string;
   masterId: number;
-  isDelegating?: boolean;
   isPersonal?: boolean;
   forceTab?: Tab;
 }) {
@@ -99,7 +96,7 @@ export function MasterDashboard({
     { tenantId, masterId },
     // Schedule tab needs the master's name + workHours for the single-column
     // SalonDayView header + the non-working-hours tint.
-    { enabled: tab === "profile" || tab === "schedule" || isDelegating }
+    { enabled: tab === "profile" || tab === "schedule" }
   );
   const masterReviews = api.reviews.getForSalon.useQuery(
     { tenantId, masterId: String(masterId) },
@@ -177,10 +174,12 @@ export function MasterDashboard({
     onSuccess: () => { today.refetch(); schedule.refetch(); },
   });
 
-  // Derived from profile (fetched eagerly when isDelegating)
+  // `allowDelegation` still powers the master-owned toggle that lets the salon
+  // owner EDIT this master's invited profile (see salon.ts edit gate). It is no
+  // longer tied to any preview/impersonation flow.
   const allowDelegation = Boolean((profile.data as any)?.allowDelegation);
-  // When delegating: only pass onNoShow if master granted management permission
-  const canMutate = !isDelegating || allowDelegation;
+  // A master logged into their own dashboard always manages their own data.
+  const canMutate = true;
 
   const tabLabels: Record<Tab, string> = {
     today: t("master.today", lang),
@@ -207,27 +206,6 @@ export function MasterDashboard({
           <span>{t("master.testAccountBanner", lang)}</span>
         </div>
       )}
-      {/* Delegation banner — shown when owner or admin is viewing as this master */}
-      {isDelegating && (
-        <div className={`mb-4 flex items-center gap-3 rounded-2xl px-4 py-3 ${
-          allowDelegation
-            ? "bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300"
-            : "bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-300"
-        }`}>
-          <Eye className="h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm leading-tight">
-              {(profile.data as any)?.name ?? "Master"}
-            </p>
-            <p className="text-[11px] opacity-70 mt-0.5">
-              {allowDelegation
-                ? t("delegation.managementEnabled", lang)
-                : t("delegation.viewOnly", lang)}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Tab bar — hidden in WebShell (sidebar handles navigation) */}
       {!inWeb && <div data-tour="master-tabs" className="flex overflow-x-auto scrollbar-none gap-1 mb-6 pb-1">
         {visibleTabs.map(tb => (
@@ -269,7 +247,6 @@ export function MasterDashboard({
             t("master.fallback.name", lang)
           }
           masterWorkHours={(profile.data as any)?.workHours}
-          isDelegating={isDelegating}
         />
       )}
 
@@ -755,7 +732,7 @@ export function MasterDashboard({
               Booksy-style: pick start/end and bookings are blocked, the
               public salon page shows "В отпуске до DD.MM". Leaving both
               fields empty + clicking Clear removes the vacation. */}
-          {isPersonal && !isDelegating && profile.data && (
+          {isPersonal && profile.data && (
             <div className="glass-card rounded-2xl p-4 space-y-3">
               <div>
                 <p className="text-sm font-medium text-slate-900 dark:text-white">
@@ -832,7 +809,7 @@ export function MasterDashboard({
           )}
 
           {/* Delegation toggle — only for salon-employed masters (not personal, not when owner is viewing) */}
-          {!isPersonal && !isDelegating && profile.data && (
+          {!isPersonal && profile.data && (
             <div className="glass-card rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex-1">
@@ -866,7 +843,7 @@ export function MasterDashboard({
 
           {/* Calendar visibility — master-owned setting (migration 0049). */}
           {/* Salon owner always sees regardless. Personal-tenant masters skip this (no peers). */}
-          {!isPersonal && !isDelegating && profile.data && (
+          {!isPersonal && profile.data && (
             <div className="glass-card rounded-2xl p-4 space-y-3" data-testid="master-calendar-visibility">
               <div>
                 <p className="text-sm font-medium text-slate-900 dark:text-white">

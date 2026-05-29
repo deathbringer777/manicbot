@@ -182,6 +182,18 @@ export const messengerRouter = createTRPCRouter({
       // Unread badge: count `thread_messages` newer than the caller's
       // `last_read_message_id` for each thread (cap at 99 — UI doesn't care
       // about exact counts past that).
+      //
+      // Old: one COUNT per thread in a for-loop — N+1 under load.
+      // Fix: fetch caller's last_read for all threads in one query (SELECT),
+      // then issue a SINGLE grouped COUNT query across all threads (fix #3 P1).
+      // The grouped query uses a CASE to only count messages after each thread's
+      // cursor; since D1/SQLite doesn't support lateral joins, we encode the
+      // per-thread cursor as a JSON-encoded lookup in a scalar subquery using
+      // the json_extract() function available in D1.
+      //
+      // Implementation: encode the lastRead map as a JSON object, then use
+      // CASE WHEN id > json_extract(map, '$.' || thread_id) to filter each row.
+      // This keeps the total query count constant at 2 (callerMembers + batch COUNT).
       const unreadByThread = new Map<string, number>();
       if (rows.length && !isAdmin) {
         const callerMembers = await ctx.db
@@ -200,21 +212,51 @@ export const messengerRouter = createTRPCRouter({
               ),
             ),
           );
-        for (const m of callerMembers) {
-          const cnt = await ctx.db
-            .select({ n: sql<number>`count(*)` })
+
+        if (callerMembers.length) {
+          // Build the lastRead map: threadId → lastReadMessageId (or null = unread all)
+          const lastReadMap = new Map<string, string | null>();
+          for (const m of callerMembers) {
+            lastReadMap.set(m.threadId, m.lastRead);
+          }
+
+          // Encode lastRead cursor as a JSON object so a single SQL query can
+          // look it up per-row without a lateral join.
+          // e.g. {"th_1":"msg_10","th_2":null,"th_3":"msg_5"}
+          const lastReadJson = JSON.stringify(
+            Object.fromEntries(lastReadMap.entries()),
+          );
+
+          // Single batched COUNT across all threads.
+          // Counts non-own messages where id > lastRead (or all if lastRead is null).
+          const batchResult = await ctx.db
+            .select({
+              threadId: sql<string>`${threadMessages.threadId}`,
+              unreadCount: sql<number>`
+                COUNT(
+                  CASE WHEN
+                    NOT (${threadMessages.senderKind} = 'web_user'
+                         AND ${threadMessages.senderRef} = ${webUserId})
+                    AND (
+                      json_extract(${lastReadJson}, '$.' || ${threadMessages.threadId}) IS NULL
+                      OR ${threadMessages.id} > json_extract(${lastReadJson}, '$.' || ${threadMessages.threadId})
+                    )
+                  THEN 1 ELSE NULL END
+                )
+              `.as("unreadCount"),
+            })
             .from(threadMessages)
             .where(
-              and(
-                eq(threadMessages.threadId, m.threadId),
-                m.lastRead
-                  ? sql`${threadMessages.id} > ${m.lastRead}`
-                  : sql`1=1`,
-                // Caller's own messages don't count as unread
-                sql`NOT (${threadMessages.senderKind} = 'web_user' AND ${threadMessages.senderRef} = ${webUserId})`,
+              inArray(
+                threadMessages.threadId,
+                callerMembers.map((m) => m.threadId),
               ),
-            );
-          unreadByThread.set(m.threadId, Math.min(99, cnt[0]?.n ?? 0));
+            )
+            .groupBy(threadMessages.threadId);
+
+          for (const r of batchResult) {
+            unreadByThread.set(r.threadId, Math.min(99, r.unreadCount ?? 0));
+          }
         }
       }
 

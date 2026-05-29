@@ -4,9 +4,16 @@
  *
  * The rate-limit key is `cronskip:{tenantId}:{reason}` with 1h TTL. A second
  * call within the window MUST NOT prepend another event to the ring buffer.
+ *
+ * Fix #5: tenant events now land in per-tenant keys `adminlog:tenant:{tenantId}`
+ * instead of the global `adminlog:recent` to prevent RMW collisions under cron
+ * fan-out. Tests updated to read from the correct per-tenant key.
  */
 import { describe, it, expect } from 'vitest';
 import { emitCronSkipRateLimited } from '../src/utils/events.js';
+
+/** Per-tenant KV key used by logEvent when tenantId is set (fix #5). */
+function tenantKey(tenantId) { return `adminlog:tenant:${tenantId}`; }
 
 function makeKv() {
   const store = new Map();
@@ -23,7 +30,8 @@ describe('emitCronSkipRateLimited (P0-1)', () => {
     const kv = makeKv();
     const ctx = { globalKv: kv };
     await emitCronSkipRateLimited(ctx, 't_1', 'no_bots');
-    const raw = kv.store.get('adminlog:recent');
+    // Tenant events land in the per-tenant key (fix #5).
+    const raw = kv.store.get(tenantKey('t_1'));
     expect(raw).toBeTruthy();
     const events = JSON.parse(raw);
     expect(events).toHaveLength(1);
@@ -37,7 +45,7 @@ describe('emitCronSkipRateLimited (P0-1)', () => {
     const ctx = { globalKv: kv };
     await emitCronSkipRateLimited(ctx, 't_1', 'no_bots');
     await emitCronSkipRateLimited(ctx, 't_1', 'no_bots');
-    const events = JSON.parse(kv.store.get('adminlog:recent'));
+    const events = JSON.parse(kv.store.get(tenantKey('t_1')));
     expect(events).toHaveLength(1);
   });
 
@@ -46,7 +54,8 @@ describe('emitCronSkipRateLimited (P0-1)', () => {
     const ctx = { globalKv: kv };
     await emitCronSkipRateLimited(ctx, 't_1', 'no_bots');
     await emitCronSkipRateLimited(ctx, 't_1', 'bot_unresolved');
-    const events = JSON.parse(kv.store.get('adminlog:recent'));
+    // Both events land in the same per-tenant key for t_1.
+    const events = JSON.parse(kv.store.get(tenantKey('t_1')));
     expect(events).toHaveLength(2);
     const reasons = events.map(e => e.data?.reason).sort();
     expect(reasons).toEqual(['bot_unresolved', 'no_bots']);
@@ -57,10 +66,13 @@ describe('emitCronSkipRateLimited (P0-1)', () => {
     const ctx = { globalKv: kv };
     await emitCronSkipRateLimited(ctx, 't_1', 'no_bots');
     await emitCronSkipRateLimited(ctx, 't_2', 'no_bots');
-    const events = JSON.parse(kv.store.get('adminlog:recent'));
-    expect(events).toHaveLength(2);
-    const ids = events.map(e => e.tenantId).sort();
-    expect(ids).toEqual(['t_1', 't_2']);
+    // Each tenant's events are isolated in their own key (the RMW fix).
+    const t1Events = JSON.parse(kv.store.get(tenantKey('t_1')));
+    const t2Events = JSON.parse(kv.store.get(tenantKey('t_2')));
+    expect(t1Events).toHaveLength(1);
+    expect(t1Events[0].tenantId).toBe('t_1');
+    expect(t2Events).toHaveLength(1);
+    expect(t2Events[0].tenantId).toBe('t_2');
   });
 
   it('sets the rate-limit marker under cronskip:{tid}:{reason}', async () => {
@@ -79,7 +91,8 @@ describe('emitCronSkipRateLimited (P0-1)', () => {
     const ctx = { globalKv: kv };
     await emitCronSkipRateLimited(ctx, null, 'no_bots');
     await emitCronSkipRateLimited(ctx, 't_1', null);
-    expect(kv.store.get('adminlog:recent')).toBeUndefined();
+    // No event written anywhere — neither per-tenant nor global.
+    expect(kv.store.size).toBe(0);
   });
 
   it('emits again once the marker is cleared (simulating TTL expiry)', async () => {
@@ -89,7 +102,7 @@ describe('emitCronSkipRateLimited (P0-1)', () => {
     // Simulate TTL expiry — delete the marker.
     kv.store.delete('cronskip:t_1:no_bots');
     await emitCronSkipRateLimited(ctx, 't_1', 'no_bots');
-    const events = JSON.parse(kv.store.get('adminlog:recent'));
+    const events = JSON.parse(kv.store.get(tenantKey('t_1')));
     expect(events).toHaveLength(2);
   });
 });

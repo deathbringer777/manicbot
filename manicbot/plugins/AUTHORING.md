@@ -119,23 +119,78 @@ const PLUGIN_ROUTER_LOADERS = {
 
 ## 5. (Optional) Add lifecycle hooks
 
-Set `lifecycle.onInstall: true` (or others) in manifest, create
-`my-plugin/lifecycle.ts`:
+The following lifecycle hooks are available; all are optional. Declare each one
+you implement as `true` in the manifest `lifecycle` object, then export the
+corresponding async function from `my-plugin/lifecycle.ts`.
+
+| Hook flag          | Function signature                                | When called                                              |
+|--------------------|---------------------------------------------------|----------------------------------------------------------|
+| `onInstall`        | `onInstall(ctx: PluginLifecycleCtx)`              | When a tenant enables the plugin for the first time.     |
+| `onUninstall`      | `onUninstall(ctx: PluginLifecycleCtx)`            | When a tenant removes the plugin.                        |
+| `onEnable`         | `onEnable(ctx: PluginLifecycleCtx)`               | Each time the plugin is toggled enabled (after install). |
+| `onDisable`        | `onDisable(ctx: PluginLifecycleCtx)`              | Each time the plugin is toggled disabled.                |
+| `healthCheck`      | `healthCheck(ctx: PluginLifecycleCtx): Promise<{ ok: boolean; detail?: string }>` | Periodic health probe (used by dashboard status card). |
+
+All hooks must be **idempotent** — they may be called more than once without
+corrupting state. Throwing inside any hook auto-writes `event=error` to
+`plugin_events` and surfaces the error in the dashboard.
+
+Example lifecycle file covering all hooks:
 
 ```ts
 import type { PluginLifecycleCtx } from "../types";
 
 export async function onInstall(ctx: PluginLifecycleCtx) {
   // Seed tenant_config rows, register cron jobs, etc.
-  // Throwing here auto-writes event=error to plugin_events and fails install.
 }
 
 export async function onUninstall(ctx: PluginLifecycleCtx) {
   // Clean up per-install state.
 }
+
+export async function onEnable(ctx: PluginLifecycleCtx) {
+  // Re-activate any paused jobs or subscriptions.
+}
+
+export async function onDisable(ctx: PluginLifecycleCtx) {
+  // Pause jobs; do NOT delete data.
+}
+
+export async function healthCheck(ctx: PluginLifecycleCtx) {
+  // Return { ok: true } or { ok: false, detail: "reason" }
+  return { ok: true };
+}
 ```
 
-Register the loader in `PLUGIN_LIFECYCLE_LOADERS`.
+Manifest flags:
+
+```ts
+lifecycle: {
+  onInstall: true,
+  onUninstall: true,
+  onEnable: true,
+  onDisable: true,
+  healthCheck: true,
+},
+```
+
+> **Note on capabilities:** `healthCheck` is declared in `capabilities` (not
+> `lifecycle`) in `PluginManifest` — set `capabilities.healthCheck: true` in the
+> manifest when implementing a health check.
+
+Register the lifecycle loader in `PLUGIN_LIFECYCLE_LOADERS` inside
+`manicbot/plugins/registry.ts`:
+
+```ts
+const PLUGIN_LIFECYCLE_LOADERS = {
+  "my-plugin": () => import("./my-plugin/lifecycle"),
+};
+```
+
+> **Current state:** `PLUGIN_ROUTER_LOADERS`, `PLUGIN_LIFECYCLE_LOADERS`, and
+> `PLUGIN_HEALTH_LOADERS` are all empty objects in `registry.ts` — no built-in
+> plugin has runtime code yet. Add your plugin's loader as the first entry when
+> you introduce the first live plugin.
 
 ## 6. (Optional) Add a settings panel
 

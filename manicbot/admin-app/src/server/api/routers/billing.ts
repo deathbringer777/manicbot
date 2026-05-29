@@ -358,6 +358,33 @@ export const billingRouter = createTRPCRouter({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
       }
 
+      // #S2-1 — cooldown re-check + idempotency. This MUST happen before we
+      // touch Stripe. Previously only `requestCancellation` (the read step)
+      // computed eligibility, so a client that re-POSTed acceptRetentionOffer
+      // (double-click, network retry, or a hostile replay) re-applied the
+      // coupon — and `applyCouponToSubscription` RESETS the coupon's repeating
+      // window on Stripe every call, yielding an unbounded stacking discount.
+      // Re-running the same cooldown query the read step uses makes the
+      // mutation self-gating and idempotent: the first accept writes a
+      // retention_offer_accepted=1 row, and any subsequent accept inside the
+      // window finds it and is refused with FORBIDDEN before the coupon apply.
+      const nowSec = Math.floor(Date.now() / 1000);
+      const cooldownFloor = nowSec - RETENTION_OFFER_COOLDOWN_SEC;
+      const [recentAccepted] = await ctx.db
+        .select({ id: subscriptionCancellations.id })
+        .from(subscriptionCancellations)
+        .where(
+          and(
+            eq(subscriptionCancellations.tenantId, input.tenantId),
+            eq(subscriptionCancellations.retentionOfferAccepted, 1),
+            gte(subscriptionCancellations.createdAt, cooldownFloor),
+          ),
+        )
+        .limit(1);
+      if (recentAccepted) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "offer_not_eligible" });
+      }
+
       const offer = RETENTION_OFFERS[input.offerType];
       await ensureCoupon(stripeKey, offer.code, offer.percentOff, {
         duration: offer.duration,
@@ -365,7 +392,6 @@ export const billingRouter = createTRPCRouter({
       });
       await applyCouponToSubscription(stripeKey, tenant.stripeSubscriptionId, offer.code);
 
-      const nowSec = Math.floor(Date.now() / 1000);
       const intervalAtCancel = input.offerType === "annual_25_1y" ? "year" : "month";
 
       await ctx.db.insert(subscriptionCancellations).values({

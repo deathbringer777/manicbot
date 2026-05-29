@@ -8,10 +8,10 @@
  * canonical event slug; the bottom table is paginated raw events with
  * filters for event name, tenantId, userId, free-text in properties.
  *
- * Gate: `role === "system_admin"` AND no `previewRole` — same defensive
- * pattern as /system/customers. The (dashboard) layout already
- * intercepts non-sysadmin URLs, but the in-page check is the second
- * line of defence in case the layout invariant ever drifts.
+ * Gate: `role === "system_admin"` — same defensive pattern as
+ * /system/customers. The (dashboard) layout already intercepts
+ * non-sysadmin URLs, but the in-page check is the second line of
+ * defence in case the layout invariant ever drifts.
  */
 
 import { useState } from "react";
@@ -23,14 +23,14 @@ import { Shell } from "~/components/layout/Shell";
 const PAGE_SIZE = 50;
 
 export default function SystemEventsClient() {
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const [eventFilter, setEventFilter] = useState<string>("");
   const [tenantFilter, setTenantFilter] = useState<string>("");
   const [userFilter, setUserFilter] = useState<string>("");
   const [propSearch, setPropSearch] = useState<string>("");
   const [page, setPage] = useState(1);
 
-  const guardOk = role === "system_admin" && !previewRole;
+  const guardOk = role === "system_admin";
 
   const statsQuery = api.analyticsEvents.stats.useQuery(undefined, { enabled: guardOk });
   const distinctQuery = api.analyticsEvents.distinctEvents.useQuery(undefined, { enabled: guardOk });

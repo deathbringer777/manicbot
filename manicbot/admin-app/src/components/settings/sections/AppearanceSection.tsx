@@ -39,8 +39,8 @@ function tabLabel(navKey: string, lang: Lang): string {
 
 export function AppearanceSection() {
   const { lang } = useLang();
-  const { role, previewRole } = useRole();
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const { role } = useRole();
+  const effectiveRole = role;
   const { prefs, toggleTab, setShowTodayApts, setDefaultTab, setBottomNav, resetBottomNav } = useDashboardPrefs();
   const { flat: flatNav, settings: settingsNavItem } = useNavItems();
 

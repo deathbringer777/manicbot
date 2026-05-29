@@ -5,7 +5,6 @@ import { Power, Bot, Clock, Key, Save, CheckCircle, User } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { RoleSwitcherInline } from "~/components/layout/Shell";
 
 type SettingsForm = {
   botUsername: string;
@@ -139,11 +138,6 @@ export function PlatformSection() {
           )}
         </button>
       </div>
-
-      {/* Role switcher */}
-      <section className="glass-card rounded-2xl p-4 space-y-3">
-        <RoleSwitcherInline placement="settings" />
-      </section>
 
       {/* Switches */}
       <section className="glass-card rounded-2xl p-4">

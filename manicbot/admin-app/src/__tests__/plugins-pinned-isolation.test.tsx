@@ -29,8 +29,6 @@ vi.mock("~/components/RoleContext", () => ({
     tenantId: mockTenantId,
     role: "tenant_owner",
     webUserId: mockWebUserId,
-    previewMasterId: null,
-    previewMasterWebUserId: null,
   }),
 }));
 

@@ -35,10 +35,19 @@ export function canUse(ctx, feature) {
   // Completely blocked statuses
   if (status === 'inactive' || status === 'canceled') return false;
 
-  // Grace period — only core booking works; no AI, support, calendar, channels
-  // If grace period expired (graceEndsAt passed), treat as inactive
-  if (status === 'grace_period') {
-    if (ctx.tenant.graceEndsAt && nowSec() > ctx.tenant.graceEndsAt) return false;
+  // Payment-trouble statuses — booking-only, no premium features.
+  //
+  // #S2-4 — grace_period, past_due and unpaid all mean "the card has not
+  // cleared". Previously past_due/unpaid fell through to the active/trialing
+  // branch below and granted FULL plan access, so a tenant's entitlement
+  // depended purely on WHICH webhook landed: invoice.payment_failed sets
+  // grace_period (booking-only) while a bare customer.subscription.updated
+  // maps the Stripe status to past_due (was full access). Treat them
+  // identically. graceEndsAt only gates grace_period — past_due/unpaid have
+  // no local expiry clock (Stripe drives their lifecycle), so they stay
+  // booking-only until a paid invoice or cancellation moves them.
+  if (status === 'grace_period' || status === 'past_due' || status === 'unpaid') {
+    if (status === 'grace_period' && ctx.tenant.graceEndsAt && nowSec() > ctx.tenant.graceEndsAt) return false;
     return feature === 'booking';
   }
 

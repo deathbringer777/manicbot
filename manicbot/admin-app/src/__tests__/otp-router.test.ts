@@ -94,21 +94,27 @@ describe("otp.request — input validation (zod boundary)", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("accepts each of the four whitelisted actions", async () => {
-    // Reads zod enum directly from the router source — pins the four-element set.
+  it("accepts each of the six whitelisted actions", async () => {
+    // Reads zod enum directly from the router source — pins the allowed set.
     const src = readFileSync(
       path.resolve(__dirname, "../server/api/routers/otp.ts"),
       "utf8",
     );
+    // Master-management actions (PR 1).
     expect(src).toMatch(/"archive_master"/);
     expect(src).toMatch(/"unarchive_master"/);
     expect(src).toMatch(/"reset_master_password"/);
     expect(src).toMatch(/"peek_master_password"/);
-    // Pin the cap so the four entries are documented as the only allowed set.
+    // Self-service step-up actions issued through this router (code → current
+    // account address) before the password / role change is applied.
+    expect(src).toMatch(/"change_password"/);
+    expect(src).toMatch(/"change_role"/);
+    // Email change is deliberately NOT routed through this generic issuer — it
+    // is issued by webUsers.requestEmailChange after address validation.
     const list = src.match(/ACTION_WHITELIST\s*=\s*\[[\s\S]*?\]\s*as const/);
     expect(list).toBeTruthy();
     const actions = (list?.[0]?.match(/"[a-z_]+"/g) ?? []).length;
-    expect(actions).toBe(4);
+    expect(actions).toBe(6);
   });
 });
 

@@ -635,7 +635,7 @@ export function SalonDayView({
           ref={scrollerRef}
           onScroll={handleGridScroll}
           className="glass-card rounded-2xl overflow-auto"
-          style={{ maxHeight: "calc(100vh - 280px)" }}
+          style={{ maxHeight: "clamp(400px, calc(100dvh - 280px), 90dvh)" }}
         >
           {/* minWidth uses 100px per column (mobile-safe). On sm+ screens,
               sm:min-w-[180px] on each column expands them via flex. */}

@@ -129,6 +129,7 @@ export const supportRouter = createTRPCRouter({
       // user_notifications row so the salon-owner's header bell lights up.
       // Email + in-app are independent: a failure in either path must
       // never break the support reply flow.
+      let emailSent = false;
       try {
         const ticketRows = await ctx.db
           .select({
@@ -153,9 +154,21 @@ export const supportRouter = createTRPCRouter({
             if (userRows[0]?.id) recipientWebUserId = userRows[0].id;
           } catch { /* best-effort */ }
 
-          void sendSupportReplyEmail(recipientEmail, input.ticketId, input.text, lang).catch((e) =>
-            log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e))),
-          );
+          // #3 — was `void`: a fire-and-forget fetch is torn down on
+          // Cloudflare Pages once the response returns, so the support-reply
+          // email frequently never sent. Await it and surface `emailSent`.
+          // The in-app Bell below remains the guaranteed delivery path.
+          try {
+            const sendResult = await sendSupportReplyEmail(
+              recipientEmail,
+              input.ticketId,
+              input.text,
+              lang,
+            );
+            emailSent = sendResult?.ok === true;
+          } catch (e) {
+            log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e)));
+          }
 
           if (recipientWebUserId) {
             // Idempotency: sourceId includes the message timestamp so each
@@ -185,7 +198,7 @@ export const supportRouter = createTRPCRouter({
         log.error("support.replyToTicket.email", e instanceof Error ? e : new Error(String(e)));
       }
 
-      return { ok: true };
+      return { ok: true, emailSent };
     }),
 
   claimTicket: protectedProcedure

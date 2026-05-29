@@ -23,10 +23,11 @@ Or manually:
 cd manicbot
 npx wrangler secret put STRIPE_SECRET_KEY      # Secret key from Stripe (sk_live_... or rk_live_...)
 npx wrangler secret put STRIPE_WEBHOOK_SECRET  # Signing secret from Stripe after webhook creation
-npx wrangler secret put APP_BASE_URL           # Worker URL, e.g. https://manicbot.YOUR_SUBDOMAIN.workers.dev
+# NOTE: APP_BASE_URL is a [vars] entry in wrangler.toml (already set to https://manicbot.com).
+# Do NOT set it as a secret — update wrangler.toml if you need to change it.
 ```
 
-Optional (if using plan-based subscriptions):
+Monthly pricing (required for subscriptions):
 
 ```bash
 npx wrangler secret put STRIPE_PRICE_START_MONTHLY   # price_xxx from Stripe
@@ -34,16 +35,29 @@ npx wrangler secret put STRIPE_PRICE_PRO_MONTHLY
 npx wrangler secret put STRIPE_PRICE_MAX_MONTHLY
 ```
 
+Annual pricing (optional — only if offering annual plans):
+
+```bash
+npx wrangler secret put STRIPE_PRICE_START_ANNUAL
+npx wrangler secret put STRIPE_PRICE_PRO_ANNUAL
+npx wrangler secret put STRIPE_PRICE_MAX_ANNUAL
+```
+
 ## 2. Webhook in Stripe Dashboard
 
 1. Open [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks).
 2. **Add endpoint**.
-3. **Endpoint URL:** `https://manicbot.YOUR_SUBDOMAIN.workers.dev/stripe/webhook`
-4. **Events to send:** select:
+3. **Endpoint URL:** `https://manicbot.com/stripe/webhook`
+4. **Events to send:** select all nine events the handler implements:
    - `checkout.session.completed`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.payment_failed`
+   - `invoice.paid`
+   - `invoice.payment_succeeded`
+   - `customer.subscription.trial_will_end`
+   - `invoice.upcoming`
+   - `charge.dispute.created`
 5. Save. Copy the **Signing secret** (whsec_...) and store it in the worker secret:
    ```bash
    npx wrangler secret put STRIPE_WEBHOOK_SECRET
@@ -51,21 +65,25 @@ npx wrangler secret put STRIPE_PRICE_MAX_MONTHLY
 
 ## 3. Products and prices (for subscriptions)
 
-In [Stripe Dashboard → Products](https://dashboard.stripe.com/products) create products and prices (recurring, monthly). Copy the **Price ID** (price_...) and set secrets:
+In [Stripe Dashboard → Products](https://dashboard.stripe.com/products) create products and prices (recurring, monthly and/or annual). Copy the **Price ID** (price_...) and set secrets as shown in step 1.
+
+Monthly plans required:
 
 - `STRIPE_PRICE_START_MONTHLY`
 - `STRIPE_PRICE_PRO_MONTHLY`
 - `STRIPE_PRICE_MAX_MONTHLY`
 
+Annual plans (optional):
+
+- `STRIPE_PRICE_START_ANNUAL`
+- `STRIPE_PRICE_PRO_ANNUAL`
+- `STRIPE_PRICE_MAX_ANNUAL`
+
 ## 4. APP_BASE_URL
 
-Must match the worker URL so that payment links and the success page work correctly. Example:
-
-```
-https://manicbot.vdovin-kyrylo.workers.dev
-```
-
-Set via secret or in `wrangler.toml` under `[vars]`.
+`APP_BASE_URL` is a `[vars]` entry in `wrangler.toml` already set to `https://manicbot.com`.
+It is used for payment redirect links and the Stripe success page.
+Update `wrangler.toml` directly if the value needs to change — do not set it via `wrangler secret put`.
 
 ## 5. Verification
 

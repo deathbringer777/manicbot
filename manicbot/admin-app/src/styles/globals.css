@@ -227,3 +227,10 @@ body.driver-tour-active .overflow-hidden {
 @media (prefers-reduced-motion: reduce) {
   .apt-view-transition { animation: none; }
 }
+
+/* iOS safe-area — mobile bottom nav must clear the home indicator on
+   notched devices. `env(safe-area-inset-bottom)` resolves to 0 on
+   devices without a notch, so this utility is a no-op there. */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

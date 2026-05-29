@@ -252,19 +252,25 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
         // utility uses rgba(248,250,252,0.85) which fights with bg-white
         // and renders the dialog as a translucent grey panel. Modals must
         // read as opaque tiles, not floating glass.
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-booking-modal-title"
         className="w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "92vh" }}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          <h2
+            id="manual-booking-modal-title"
+            className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+          >
             {t("appointments.manual.title", lang)}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700 dark:bg-white/5 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
-            aria-label="Close"
+            aria-label={t("common.close", lang)}
           >
             ✕
           </button>

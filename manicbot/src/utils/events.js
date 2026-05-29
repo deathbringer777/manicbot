@@ -13,7 +13,11 @@
 
 const MAX_EVENTS = 500;
 const TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+// Global key for system-level events (no tenantId). Kept for backward-compat reads.
 const KEY = 'adminlog:recent';
+// Per-tenant key prefix. Tenant events land here instead of the global key to
+// avoid RMW last-writer-wins collisions under cron fan-out (fix #5).
+const TENANT_KEY_PREFIX = 'adminlog:tenant:';
 
 // P0-1 — per-(tenantId, reason) rate-limit window for cron.tenant.skipped
 // so a single tenant with a deleted bot row doesn't flood the activity feed
@@ -70,10 +74,15 @@ export async function logEvent(ctx, type, data = {}) {
       else console.log(line);
     } catch { /* ignore */ }
 
+    // Use a per-tenant key when tenantId is present to avoid RMW collisions
+    // under concurrent cron fan-out (fix #5). System-level events (no tenantId)
+    // still land in the global KEY for backward-compatible admin reads.
+    const targetKey = tenantId ? `${TENANT_KEY_PREFIX}${tenantId}` : KEY;
+
     // Read current list
     let list = [];
     try {
-      const raw = await kv.get(KEY);
+      const raw = await kv.get(targetKey);
       if (raw) list = JSON.parse(raw);
     } catch { /* ignore corrupt data */ }
 
@@ -81,7 +90,7 @@ export async function logEvent(ctx, type, data = {}) {
     list = [event, ...list].slice(0, MAX_EVENTS);
 
     // Write back with TTL
-    await kv.put(KEY, JSON.stringify(list), { expirationTtl: TTL_SECONDS });
+    await kv.put(targetKey, JSON.stringify(list), { expirationTtl: TTL_SECONDS });
   } catch {
     // Never throw from event logging
   }

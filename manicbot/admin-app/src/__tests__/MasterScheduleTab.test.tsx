@@ -7,10 +7,8 @@
  * The owner-side SalonDashboard had moved on to SalonDayView /
  * SalonWeekView / SalonBigCalendar / SalonAgendaView with a
  * CalendarViewSwitcher dropdown, drag-to-reschedule, and rich detail
- * panels. Salon owners who used the sidebar "view as master" chip
- * (which swaps SalonDashboard for MasterDashboard under the hood, see
- * layout.tsx:156) got dropped into the old experience. Real masters on
- * their own logins saw the same legacy view.
+ * panels. Masters were stuck on the old experience. This rewrite puts a
+ * master's own schedule on the same modern view stack.
  *
  * This test pins the modernization contract:
  *   - The four-mode CalendarViewSwitcher dropdown is mounted (data-testid
@@ -129,7 +127,6 @@ const baseProps = {
   markNoShowMut: { mutate: vi.fn() },
   masterName: "Olga",
   masterWorkHours: null,
-  isDelegating: false,
 };
 
 describe("MasterDashboard / ScheduleTab (modernized)", () => {

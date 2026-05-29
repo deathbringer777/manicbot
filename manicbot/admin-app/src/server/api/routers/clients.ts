@@ -47,6 +47,10 @@ import {
   type SyncSource,
 } from "~/server/clients/marketingSync";
 import {
+  addContactsToSegment,
+  removeContactsFromSegment,
+} from "~/server/marketing/segments";
+import {
   parseClientsCsv,
   clientsToFormat,
   CLIENT_CSV_TEMPLATE,
@@ -175,6 +179,9 @@ export const clientsRouter = createTRPCRouter({
       search: z.string().max(120).optional(),
       filters: filterSchema.optional(),
       sort: sortSchema,
+      // Shared "Lists": when set, restrict to clients whose linked marketing
+      // contact is a member of this manual segment (marketing_segments).
+      listId: z.string().optional(),
       limit: z.number().int().min(1).max(MAX_PAGE_SIZE).optional(),
       offset: z.number().int().min(0).optional(),
     }))
@@ -220,6 +227,28 @@ export const clientsRouter = createTRPCRouter({
         conditions.push(or(...tagOr)!);
       }
 
+      // Shared "Lists" filter — only clients whose linked marketing contact
+      // is a member of this manual segment. Verify the segment belongs to the
+      // tenant first (FORBIDDEN on a crafted foreign id), then correlate on
+      // users.marketing_contact_id. Clients with no linked contact are
+      // naturally excluded (the correlated id is NULL).
+      if (input.listId) {
+        const seg = await ctx.db
+          .select({ tenantId: marketingSegments.tenantId })
+          .from(marketingSegments)
+          .where(eq(marketingSegments.id, input.listId))
+          .limit(1);
+        if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+        if (seg[0].tenantId !== input.tenantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "List belongs to a different tenant" });
+        }
+        conditions.push(sql`EXISTS (
+          SELECT 1 FROM marketing_segment_members msm
+          WHERE msm.segment_id = ${input.listId}
+            AND msm.contact_id = ${users.marketingContactId}
+        )`);
+      }
+
       const whereClause = and(...conditions);
 
       // Sort selector. NULLS-last on lastVisitAt DESC is automatic in SQLite
@@ -235,6 +264,7 @@ export const clientsRouter = createTRPCRouter({
         ctx.db
           .select()
           .from(users)
+          // tenant-scoped: whereClause always leads with eq(users.tenantId, input.tenantId)
           .where(whereClause)
           .orderBy(orderBy, desc(users.chatId))
           .limit(limit)
@@ -242,6 +272,7 @@ export const clientsRouter = createTRPCRouter({
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(users)
+          // tenant-scoped: whereClause always leads with eq(users.tenantId, input.tenantId)
           .where(whereClause),
       ]);
 
@@ -249,6 +280,137 @@ export const clientsRouter = createTRPCRouter({
       const nextOffset = offset + rows.length < total ? offset + rows.length : null;
 
       return { rows: rows as ClientRow[], nextOffset, total };
+    }),
+
+  /**
+   * Add salon clients to a shared manual list (marketing_segments kind='manual').
+   *
+   * Lists are the SAME entity used by the Marketing module — this is the
+   * Clients-tab entry point. Each client is bridged to the shared contact
+   * directory: we resolve `users.marketing_contact_id`, lazily creating the
+   * contact via `syncMarketingContact` when missing (and writing the id back).
+   * A client with no usable channel (email/phone/tg/ig) can't be represented
+   * as a contact, so it's skipped — surfaced via the `skipped` count.
+   * Membership insert + dedup + denormalized recount are delegated to the
+   * shared `addContactsToSegment` helper.
+   */
+  addToList: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatIds: z.array(z.number().int()).min(1).max(500),
+      listId: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Verify the list belongs to the caller's tenant before any write.
+      const seg = await ctx.db
+        .select({ tenantId: marketingSegments.tenantId })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.id, input.listId))
+        .limit(1);
+      if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (seg[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "List belongs to a different tenant" });
+      }
+
+      const chatIds = Array.from(new Set(input.chatIds));
+      const rows = await ctx.db
+        .select({
+          chatId: users.chatId,
+          name: users.name,
+          phone: users.phone,
+          email: users.email,
+          tgUsername: users.tgUsername,
+          igUsername: users.igUsername,
+          tags: users.tags,
+          marketingContactId: users.marketingContactId,
+        })
+        .from(users)
+        .where(and(
+          eq(users.tenantId, input.tenantId),
+          inArray(users.chatId, chatIds),
+          isNull(users.deletedAt),
+        ));
+
+      const now = nowSec();
+      const contactIds: number[] = [];
+      let synced = 0;
+      for (const r of rows) {
+        let contactId = r.marketingContactId;
+        if (contactId == null) {
+          // Lazily mirror the client into the shared marketing directory.
+          const newId = await syncMarketingContact(
+            ctx.db,
+            input.tenantId,
+            {
+              chatId: r.chatId,
+              name: r.name,
+              phone: r.phone,
+              email: r.email,
+              tgUsername: r.tgUsername,
+              igUsername: r.igUsername,
+              tags: r.tags,
+            },
+            "salon_clients_manual",
+            now,
+          );
+          if (newId == null) continue; // no usable channel — cannot be listed
+          await ctx.db
+            .update(users)
+            .set({ marketingContactId: newId, updatedAt: now })
+            .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, r.chatId)));
+          contactId = newId;
+          synced++;
+        }
+        contactIds.push(contactId);
+      }
+
+      const added = contactIds.length
+        ? (await addContactsToSegment(ctx.db, input.tenantId, input.listId, contactIds, now)).added
+        : 0;
+
+      return { added, synced, skipped: chatIds.length - added };
+    }),
+
+  /**
+   * Remove salon clients from a shared manual list. Resolves each client's
+   * `marketing_contact_id` (unlinked clients can't be members, so they're
+   * dropped) and delegates the delete + recount to the shared helper.
+   */
+  removeFromList: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatIds: z.array(z.number().int()).min(1).max(500),
+      listId: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const seg = await ctx.db
+        .select({ tenantId: marketingSegments.tenantId })
+        .from(marketingSegments)
+        .where(eq(marketingSegments.id, input.listId))
+        .limit(1);
+      if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      if (seg[0].tenantId !== input.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "List belongs to a different tenant" });
+      }
+
+      const chatIds = Array.from(new Set(input.chatIds));
+      const rows = await ctx.db
+        .select({ marketingContactId: users.marketingContactId })
+        .from(users)
+        .where(and(
+          eq(users.tenantId, input.tenantId),
+          inArray(users.chatId, chatIds),
+        ));
+      const contactIds = rows
+        .map((r) => r.marketingContactId)
+        .filter((id): id is number => id != null);
+
+      if (contactIds.length === 0) return { ok: true };
+      return removeContactsFromSegment(ctx.db, input.tenantId, input.listId, contactIds, nowSec());
     }),
 
   /**
@@ -655,10 +817,61 @@ export const clientsRouter = createTRPCRouter({
       let updated = 0;
       const now = nowSec();
 
+      // ── Batch pre-lookup (fix #4 P1) ──────────────────────────────────────
+      // Old: findClientByPriority called per row → up to 4 SELECTs × N rows.
+      // Fix: collect all unique emails/phones/tg/ig across the whole batch,
+      //      issue 4 IN-queries once, build an in-memory lookup map, then
+      //      match each row in O(1). Total SELECTs: 4 regardless of batch size.
+      const allEmails = [...new Set(parsed.rows.map((r) => r.email).filter(Boolean) as string[])];
+      const allPhones = [...new Set(parsed.rows.map((r) => r.phone).filter(Boolean) as string[])];
+      const allTg = [...new Set(parsed.rows.map((r) => r.tgUsername).filter(Boolean) as string[])];
+      const allIg = [...new Set(parsed.rows.map((r) => r.igUsername).filter(Boolean) as string[])];
+      const notDeleted = isNull(users.deletedAt);
+
+      // Four IN-queries — one per priority channel. We always issue all four so
+      // the SELECT count is deterministic (tests rely on this).
+      const [byEmail, byPhone, byTg, byIg] = await Promise.all([
+        allEmails.length
+          ? ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, inArray(users.email, allEmails)))
+          : ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, isNull(users.email), sql`1=0`)),
+        allPhones.length
+          ? ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, inArray(users.phone, allPhones)))
+          : ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, isNull(users.phone), sql`1=0`)),
+        allTg.length
+          ? ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, inArray(users.tgUsername, allTg)))
+          : ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, isNull(users.tgUsername), sql`1=0`)),
+        allIg.length
+          ? ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, inArray(users.igUsername, allIg)))
+          : ctx.db.select().from(users).where(and(eq(users.tenantId, input.tenantId), notDeleted, isNull(users.igUsername), sql`1=0`)),
+      ]);
+
+      // Build priority-ordered lookup maps: email → user, phone → user, etc.
+      const emailMap = new Map<string, ClientRow>(
+        (byEmail as ClientRow[]).filter((r) => r.email).map((r) => [r.email!, r]),
+      );
+      const phoneMap = new Map<string, ClientRow>(
+        (byPhone as ClientRow[]).filter((r) => r.phone).map((r) => [r.phone!, r]),
+      );
+      const tgMap = new Map<string, ClientRow>(
+        (byTg as ClientRow[]).filter((r) => r.tgUsername).map((r) => [r.tgUsername!, r]),
+      );
+      const igMap = new Map<string, ClientRow>(
+        (byIg as ClientRow[]).filter((r) => r.igUsername).map((r) => [r.igUsername!, r]),
+      );
+
+      /** Resolve existing client using priority: email > phone > tg > ig (O(1) per row). */
+      function findExistingInMaps(row: ParsedClientRow): ClientRow | null {
+        if (row.email) { const r = emailMap.get(row.email); if (r) return r; }
+        if (row.phone) { const r = phoneMap.get(row.phone); if (r) return r; }
+        if (row.tgUsername) { const r = tgMap.get(row.tgUsername); if (r) return r; }
+        if (row.igUsername) { const r = igMap.get(row.igUsername); if (r) return r; }
+        return null;
+      }
+
       for (let i = 0; i < parsed.rows.length; i++) {
         const row = parsed.rows[i]!;
         try {
-          const existing = await findClientByPriority(ctx.db, input.tenantId, row);
+          const existing = findExistingInMaps(row);
           if (existing) {
             const updates = mergeRowIntoUser(existing as ClientRow, row, now);
             if (Object.keys(updates).length > 1) {

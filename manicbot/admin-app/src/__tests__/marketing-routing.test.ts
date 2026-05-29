@@ -128,65 +128,48 @@ describe("role × pathname routing for /marketing", () => {
 
 /**
  * useMarketingScope picks which router to call (`api.marketing.*` for God
- * Mode global, `api.marketingTenant.*` for tenant-scoped) based on role +
- * preview state. Same pure-function pattern.
+ * Mode global, `api.marketingTenant.*` for tenant-scoped) based on role.
+ * Same pure-function pattern.
  */
 type MarketingScope = { mode: "admin" | "tenant"; tenantId: string | null };
 
 function pickScope(
   role: string | null,
   tenantId: string | null,
-  previewRole: string | null,
-  previewTenantId: string | null,
 ): MarketingScope {
-  if (role === "system_admin" && !previewRole) {
+  if (role === "system_admin") {
     return { mode: "admin", tenantId: null };
   }
-  const effective =
-    role === "system_admin" && previewTenantId ? previewTenantId : tenantId;
-  return { mode: "tenant", tenantId: effective ?? null };
+  return { mode: "tenant", tenantId: tenantId ?? null };
 }
 
 describe("useMarketingScope: router selection", () => {
   it("system_admin no preview → admin mode, no tenantId", () => {
-    expect(pickScope("system_admin", null, null, null)).toEqual({
+    expect(pickScope("system_admin", null)).toEqual({
       mode: "admin",
       tenantId: null,
     });
   });
 
   it("tenant_owner → tenant mode with own tenantId", () => {
-    expect(pickScope("tenant_owner", "t_a", null, null)).toEqual({
+    expect(pickScope("tenant_owner", "t_a")).toEqual({
       mode: "tenant",
       tenantId: "t_a",
     });
   });
 
   it("tenant_manager → tenant mode with own tenantId", () => {
-    expect(pickScope("tenant_manager", "t_b", null, null)).toEqual({
+    expect(pickScope("tenant_manager", "t_b")).toEqual({
       mode: "tenant",
       tenantId: "t_b",
     });
   });
 
   it("master → tenant mode (personal tenant gates inside router)", () => {
-    expect(pickScope("master", "t_personal", null, null)).toEqual({
+    expect(pickScope("master", "t_personal")).toEqual({
       mode: "tenant",
       tenantId: "t_personal",
     });
   });
 
-  it("sysadmin previewing tenant_owner → tenant mode with previewTenantId", () => {
-    expect(
-      pickScope("system_admin", null, "tenant_owner", "t_preview"),
-    ).toEqual({ mode: "tenant", tenantId: "t_preview" });
-  });
-
-  it("sysadmin previewing without tenantId selected → tenant mode but null tenantId", () => {
-    // Component-level guard via `enabled: !!tenantId` keeps queries from firing.
-    expect(pickScope("system_admin", null, "tenant_owner", null)).toEqual({
-      mode: "tenant",
-      tenantId: null,
-    });
-  });
 });

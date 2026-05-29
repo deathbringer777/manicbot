@@ -7,9 +7,9 @@ import { NotificationBell } from "./NotificationBell";
 import { BrandTile } from "./BrandTile";
 import {
   Home, Users, Settings, CreditCard, Activity,
-  Building2, CalendarDays, Zap, UserCog, ChevronDown,
-  X, Scissors, HeadphonesIcon, Globe, MessageSquare,
-  Lock, Unlock, Radio, ArrowLeftRight, Megaphone,
+  Building2, CalendarDays, UserCog,
+  Globe, MessageSquare,
+  Radio, ArrowLeftRight, Megaphone,
   Maximize2, Minimize2, Sun, Moon,
   type LucideIcon,
 } from "lucide-react";
@@ -18,9 +18,7 @@ import { useLang } from "~/components/LangContext";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { t, LANGS } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
-import { api } from "~/trpc/react";
 import { useInWebShell } from "~/components/layout/WebShell";
-import type { AppRole } from "~/server/api/routers/auth";
 
 export interface NavItem {
   href: string;
@@ -53,342 +51,6 @@ function buildGodModeNavItems(lang: string): NavItem[] {
 
 function getAdminInfo() {
   return { name: "God Mode", username: "creator" };
-}
-
-// ─── Role Switcher (inline in header) ────────────────────────────
-const ROLE_OPTIONS: { role: AppRole; icon: React.ElementType; color: string; bg: string }[] = [
-  { role: "system_admin",  icon: Zap,            color: "text-blue-400",    bg: "bg-blue-500/20" },
-  { role: "tenant_owner",  icon: Building2,       color: "text-purple-400",  bg: "bg-purple-500/20" },
-  { role: "master",        icon: Scissors,        color: "text-emerald-400", bg: "bg-emerald-500/20" },
-  { role: "support",       icon: HeadphonesIcon,  color: "text-amber-400",   bg: "bg-amber-500/20" },
-];
-
-export function RoleSwitcherInline({ placement = "toolbar" }: { placement?: "toolbar" | "settings" }) {
-  const { role, previewRole, setPreviewRole, setPreviewMaster } = useRole();
-  const { lang } = useLang();
-  const [open, setOpen] = useState(false);
-  const [pendingRole, setPendingRole] = useState<AppRole>(null);
-  const [selectedTenantId, setSelectedTenantId] = useState("");
-  const [step, setStep] = useState<"role" | "tenant" | "master">("role");
-  const [selectedMasterId, setSelectedMasterId] = useState<number | null>(null);
-  const tenants = api.tenants.getAll.useQuery(undefined, {
-    enabled: role === "system_admin" && open && (pendingRole === "tenant_owner" || pendingRole === "master"),
-  });
-  const mastersForPick = api.master.getMastersForOwner.useQuery(
-    { tenantId: selectedTenantId },
-    { enabled: role === "system_admin" && step === "master" && !!selectedTenantId },
-  );
-
-  if (role !== "system_admin") return null;
-
-  const inSettings = placement === "settings";
-  const activePreview = previewRole && previewRole !== "system_admin";
-  const currentDisplay = activePreview ? previewRole : "system_admin";
-  const opt = ROLE_OPTIONS.find(o => o.role === currentDisplay);
-  const Icon = opt?.icon ?? Zap;
-
-  const roleLabel: Record<string, string> = {
-    system_admin: t("roleSwitch.godMode", lang),
-    tenant_owner: t("roleSwitch.salon", lang),
-    master: t("roleSwitch.master", lang),
-    support: t("roleSwitch.support", lang),
-    technical_support: t("roleSwitch.support", lang),
-  };
-
-  function handleSelectRole(r: AppRole) {
-    setStep("role");
-    if (r === "system_admin") { setPreviewRole(null); setPreviewMaster(null); setOpen(false); return; }
-    if (r === "support" || r === "technical_support") { setPreviewRole(r); setOpen(false); return; }
-    setPendingRole(r); setSelectedTenantId(""); setStep("tenant");
-  }
-
-  function confirmTenantPreview() {
-    if (!selectedTenantId || !pendingRole) return;
-    if (pendingRole === "master") {
-      setStep("master");
-      setSelectedMasterId(null);
-      return;
-    }
-    setPreviewRole(pendingRole, selectedTenantId);
-    setPendingRole(null); setOpen(false); setStep("role");
-  }
-
-  function confirmMasterPreview() {
-    if (!selectedMasterId) return;
-    setPreviewRole("master", selectedTenantId);
-    setPreviewMaster(selectedMasterId);
-    setPendingRole(null); setOpen(false); setStep("role"); setSelectedMasterId(null);
-  }
-
-  function resetPicker() {
-    setPendingRole(null); setStep("role"); setSelectedTenantId(""); setSelectedMasterId(null);
-  }
-
-  const dropdownContent = (
-    <>
-      <p className="px-2 pb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-        {t("roleSwitch.title", lang)}
-      </p>
-      {step === "master" ? (
-        <div className="space-y-2 p-2">
-          <p className="text-xs text-slate-400">{t("roleSwitch.pickMaster", lang)}</p>
-          {mastersForPick.isLoading ? (
-            <div className="h-8 animate-pulse rounded-xl bg-slate-800" />
-          ) : !mastersForPick.data?.length ? (
-            <p className="text-xs text-slate-500 px-1">{t("masterSwitch.none", lang)}</p>
-          ) : (
-            <div className="space-y-0.5 max-h-40 overflow-y-auto">
-              {mastersForPick.data.map((m: any) => (
-                <button
-                  key={m.chatId}
-                  onClick={() => setSelectedMasterId(m.chatId)}
-                  className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
-                    selectedMasterId === m.chatId ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-[10px] font-bold text-emerald-400 shrink-0">
-                    {(m.name ?? "M").charAt(0).toUpperCase()}
-                  </div>
-                  <span className="flex-1 text-xs font-medium truncate">{m.name ?? `#${m.chatId}`}</span>
-                  {m.allowDelegation ? (
-                    <Unlock className="h-3 w-3 text-emerald-400 shrink-0" />
-                  ) : (
-                    <Lock className="h-3 w-3 text-slate-600 shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStep("tenant")}
-              className="flex-1 rounded-xl bg-slate-800 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:text-white"
-            >
-              {t("common.back", lang)}
-            </button>
-            <button
-              onClick={confirmMasterPreview}
-              disabled={!selectedMasterId}
-              className="flex-1 rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs text-brand-400 transition-colors disabled:opacity-30"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      ) : step === "tenant" ? (
-        <div className="space-y-2 p-2">
-          <p className="text-xs text-slate-400">{t("roleSwitch.pickTenant", lang)}</p>
-          {tenants.isLoading ? (
-            <div className="h-8 animate-pulse rounded-xl bg-slate-800" />
-          ) : (
-            <select
-              value={selectedTenantId}
-              onChange={e => setSelectedTenantId(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="">—</option>
-              {tenants.data?.map((tn: any) => (
-                <option key={tn.id} value={tn.id}>{tn.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={resetPicker}
-              className="flex-1 rounded-xl bg-slate-800 px-3 py-1.5 text-xs text-slate-400 transition-colors hover:text-white"
-            >
-              {t("common.back", lang)}
-            </button>
-            <button
-              onClick={confirmTenantPreview}
-              disabled={!selectedTenantId}
-              className="flex-1 rounded-xl border border-brand-500/30 bg-brand-500/20 px-3 py-1.5 text-xs text-brand-400 transition-colors disabled:opacity-30"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      ) : (
-        ROLE_OPTIONS.map(({ role: r, icon: RIcon, color, bg }) => (
-          <button
-            key={r}
-            onClick={() => handleSelectRole(r)}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-              currentDisplay === r ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${bg}`}>
-              <RIcon className={`h-3.5 w-3.5 ${color}`} />
-            </div>
-            <span className="flex-1 text-xs font-medium">{roleLabel[r ?? ""] ?? r}</span>
-            {currentDisplay === r && <div className="h-1.5 w-1.5 rounded-full bg-brand-400" />}
-          </button>
-        ))
-      )}
-    </>
-  );
-
-  return (
-    <div className={`relative ${inSettings ? "w-full overflow-visible" : ""}`}>
-      <button
-        type="button"
-        onClick={() => { setOpen(o => !o); resetPicker(); }}
-        className={`flex items-center gap-1.5 rounded-xl text-xs font-medium transition-all ${
-          inSettings ? "w-full justify-between px-3 py-3" : "px-2.5 py-1.5"
-        } ${
-          activePreview
-            ? "bg-amber-100 border border-amber-300 text-amber-800 dark:bg-amber-500/20 dark:border-amber-500/30 dark:text-amber-300"
-            : "bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
-        }`}
-      >
-        <span className="flex items-center gap-1.5 min-w-0">
-          <Icon className={`h-3.5 w-3.5 shrink-0 ${opt?.color ?? "text-blue-400"}`} />
-          <span className={inSettings ? "truncate" : "max-w-[80px] truncate"}>{roleLabel[currentDisplay ?? "system_admin"]}</span>
-        </span>
-        <ChevronDown className={`h-3 w-3 text-slate-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {/* Preview exit — toolbar: under control; settings: inline */}
-      {activePreview && !open && !inSettings && (
-        <button
-          type="button"
-          onClick={() => setPreviewRole(null)}
-          className="absolute -bottom-7 left-0 right-0 flex items-center justify-center gap-1 text-[10px] text-amber-400 hover:text-amber-300"
-        >
-          <X className="h-3 w-3" /> {t("roleSwitch.exit", lang)}
-        </button>
-      )}
-      {activePreview && !open && inSettings && (
-        <button
-          type="button"
-          onClick={() => setPreviewRole(null)}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/15"
-        >
-          <X className="h-3.5 w-3.5" /> {t("roleSwitch.exit", lang)}
-        </button>
-      )}
-
-      {/* Dropdown */}
-      {open && (
-        inSettings ? (
-          <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.85)]">
-            {dropdownContent}
-          </div>
-        ) : (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-            <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl shadow-black/60 backdrop-blur-xl">
-              {dropdownContent}
-            </div>
-          </>
-        )
-      )}
-    </div>
-  );
-}
-
-// ─── Master Switcher (sidebar — shown when effective role is tenant_owner) ────
-export function MasterSwitcherInline() {
-  const { role, previewRole, previewTenantId, previewMasterId, setPreviewMaster, tenantId } = useRole();
-  const { lang } = useLang();
-  const [open, setOpen] = useState(false);
-
-  // Mirror dashboard routing's effective role logic
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
-
-  // Only render when acting as tenant_owner
-  if (effectiveRole !== "tenant_owner" || !effectiveTenantId) return null;
-
-  const mastersQuery = api.master.getMastersForOwner.useQuery(
-    { tenantId: effectiveTenantId },
-    { enabled: open },
-  );
-
-  const isViewingMaster = previewMasterId !== null;
-  const activeMasterName = isViewingMaster
-    ? (mastersQuery.data?.find((m: any) => m.chatId === previewMasterId)?.name ?? `#${previewMasterId}`)
-    : null;
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className={`flex w-full items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
-          isViewingMaster
-            ? "border border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-300"
-            : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-slate-200"
-        }`}
-      >
-        <Scissors className="h-3.5 w-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
-        <span className="flex-1 text-left truncate">
-          {isViewingMaster ? activeMasterName : t("masterSwitch.viewAs", lang)}
-        </span>
-        {isViewingMaster && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={e => { e.stopPropagation(); setPreviewMaster(null); setOpen(false); }}
-            onKeyDown={e => { if (e.key === "Enter") { e.stopPropagation(); setPreviewMaster(null); setOpen(false); } }}
-            className="shrink-0 flex h-5 w-5 items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-600 hover:text-slate-900 cursor-pointer dark:bg-white/10 dark:hover:bg-white/20 dark:text-slate-400 dark:hover:text-white"
-          >
-            <X className="h-3 w-3" />
-          </span>
-        )}
-        <ChevronDown className={`h-3 w-3 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95 dark:shadow-black/60">
-            <p className="px-2 pb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500">
-              {t("masterSwitch.title", lang)}
-            </p>
-            {mastersQuery.isLoading ? (
-              <div className="h-8 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800 mx-1" />
-            ) : !mastersQuery.data?.length ? (
-              <p className="px-3 py-2 text-xs text-slate-500 dark:text-slate-500">{t("masterSwitch.none", lang)}</p>
-            ) : (
-              mastersQuery.data.map((m: any) => (
-                <button
-                  key={m.chatId}
-                  onClick={() => { setPreviewMaster(m.chatId, m.webUserId ?? null); setOpen(false); }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-                    previewMasterId === m.chatId
-                      ? "bg-slate-100 text-slate-900 dark:bg-white/10 dark:text-white"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white"
-                  }`}
-                >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-[11px] font-bold text-emerald-700 shrink-0 dark:bg-emerald-500/20 dark:text-emerald-400">
-                    {(m.name ?? "M").charAt(0).toUpperCase()}
-                  </div>
-                  <span className="flex-1 text-xs font-medium truncate">{m.name ?? `#${m.chatId}`}</span>
-                  {m.allowDelegation ? (
-                    <Unlock className="h-3 w-3 text-emerald-500 shrink-0 dark:text-emerald-400" />
-                  ) : (
-                    <Lock className="h-3 w-3 text-slate-400 shrink-0 dark:text-slate-600" />
-                  )}
-                  {previewMasterId === m.chatId && (
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 dark:bg-emerald-400" />
-                  )}
-                </button>
-              ))
-            )}
-            {isViewingMaster && (
-              <button
-                onClick={() => { setPreviewMaster(null); setOpen(false); }}
-                className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:hover:bg-emerald-500/15"
-              >
-                <X className="h-3.5 w-3.5" /> {t("masterSwitch.exit", lang)}
-              </button>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
 }
 
 // ─── Language: icon popover (toolbar) or open grid (settings) ─────
@@ -570,15 +232,14 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
   const pathname = usePathname();
   const [admin, setAdmin] = useState({ name: "God Mode", username: "creator" });
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const { lang } = useLang();
   const { prefs: dashboardPrefs } = useDashboardPrefs();
   const activeNavItems = navItems ?? buildGodModeNavItems(lang);
   const displayTitle = title ?? "ManicBot";
-  /** Creator in plain God Mode: language + preview mode live on /settings, not in the chrome (avoids clash with Settings tab). */
-  const godPlainChrome = role === "system_admin" && !previewRole;
+  /** Creator in plain God Mode: language lives on /settings, not in the chrome (avoids clash with Settings tab). */
+  const godPlainChrome = role === "system_admin";
   const showLangInChrome = !godPlainChrome;
-  const showRoleSwitcherInChrome = role === "system_admin" && !!previewRole;
 
   useEffect(() => { setAdmin(getAdminInfo()); }, []);
 
@@ -633,7 +294,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
         <nav className="flex-1 space-y-0.5 overflow-y-auto">
           {activeNavItems.map((item) => {
             const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            const isSettingsHub = item.href === "/settings" && role === "system_admin" && !previewRole;
+            const isSettingsHub = item.href === "/settings" && role === "system_admin";
             return (
               <Link
                 key={item.href}
@@ -658,8 +319,6 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
 
         {/* Bottom section */}
         <div className="mt-3 border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
-          {showRoleSwitcherInChrome && <RoleSwitcherInline />}
-          <MasterSwitcherInline />
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
               {admin.name.charAt(0).toUpperCase()}
@@ -682,8 +341,6 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
         <header className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/5 bg-white/95 dark:bg-slate-950/80 backdrop-blur-lg sticky top-0 z-40">
           <BrandTile className="h-7 w-7 rounded-lg" glyphClassName="text-sm" />
           <h1 className="text-sm font-bold text-slate-900 dark:text-white flex-1 truncate">{displayTitle}</h1>
-          {showRoleSwitcherInChrome && <RoleSwitcherInline />}
-          <MasterSwitcherInline />
           {showLangInChrome && <LangPickerInline />}
         </header>
 
@@ -713,7 +370,7 @@ export function Shell({ children, navItems, title, subtitle }: ShellProps) {
           <div className="flex items-center justify-around px-1 py-1 safe-area-pb">
             {mobileNavItems.map((item) => {
               const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-              const isSettingsHub = item.href === "/settings" && role === "system_admin" && !previewRole;
+              const isSettingsHub = item.href === "/settings" && role === "system_admin";
               return (
                 <Link
                   key={item.href}

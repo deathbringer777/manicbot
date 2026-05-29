@@ -27,6 +27,17 @@ const ACTION_WHITELIST = [
   "unarchive_master",
   "reset_master_password",
   "peek_master_password",
+  // Self-service step-up actions issued through THIS router. The code is emailed
+  // to the actor's OWN (current) account address — otp.request below always
+  // sends to ctx.webUser.email — so a session-hijacker still cannot complete
+  // the change without access to the registered mailbox.
+  //
+  // Note: email change is NOT here. Its OTP is issued by webUsers.requestEmailChange
+  // (which validates the target address first, then emails the code to the
+  // current address). Routing it through this generic issuer would let a client
+  // mint a change_email code while bypassing that validation, so it is excluded.
+  "change_password",
+  "change_role",
 ] as const;
 
 type WhitelistedAction = (typeof ACTION_WHITELIST)[number];
@@ -97,23 +108,40 @@ export const otpRouter = createTRPCRouter({
         .limit(1);
       const lang = ((userRows[0]?.lang as Lang | null) ?? "en") as Lang;
 
-      // Fire-and-forget email — failure to send is logged but does not block
-      // the user from re-requesting (rate-limited above). The code is already
-      // written to D1, so a retry on the request side would issue a fresh code.
-      void sendActionOtpEmail(webUser.email, code, input.actionLabel, lang).catch(
-        (e) =>
-          log.error(
-            "otp.send",
-            e instanceof Error ? e : new Error(String(e)),
-            { action: input.action },
-          ),
-      );
+      // #1 — AWAIT the send. On Cloudflare Pages an un-awaited (`void`) fetch
+      // is torn down the moment the handler returns its Response, so the OTP
+      // email was frequently never delivered and the whole archive / reset /
+      // peek-master-password flow stalled with no signal. We await the send
+      // and surface `emailSent` so the UI can warn + offer a retry (the code
+      // is already in D1; re-requesting issues a fresh one, rate-limited above).
+      let emailSent = false;
+      try {
+        const sendResult = await sendActionOtpEmail(
+          webUser.email,
+          code,
+          input.actionLabel,
+          lang,
+        );
+        emailSent = sendResult.ok;
+        if (!sendResult.ok) {
+          log.error("otp.send", new Error(`transport_failed: ${sendResult.error}`), {
+            action: input.action,
+          });
+        }
+      } catch (e) {
+        log.error(
+          "otp.send",
+          e instanceof Error ? e : new Error(String(e)),
+          { action: input.action },
+        );
+      }
 
       // `sentTo` lets the UI display the authoritative recipient address.
       // Some surfaces (master detail modal) render mixed identities — the
       // master's synthetic salon.manicbot.local email lives in props, but
       // the OTP went to the CALLER (the salon owner). Without this field
-      // the UI had to guess and showed the wrong address.
-      return { otpId, sentTo: webUser.email };
+      // the UI had to guess and showed the wrong address. `emailSent` lets
+      // the UI surface a delivery failure instead of silently swallowing it.
+      return { otpId, sentTo: webUser.email, emailSent };
     }),
 });

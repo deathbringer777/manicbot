@@ -131,12 +131,15 @@ const ALLOWLIST = new Set([
   // net +8 lines in updateSalonProfile body and the proc above) →
   // 1773 (migration 0093 added the addMasterToDefaultGroup hooks in
   // `addMaster` (+5) and `createMasterAccount` (+6), shifting the
-  // bot-collision query down by ~13 lines).
+  // bot-collision query down by ~13 lines) → 1785 (Phase-3 security sweep
+  // awaited the master-invite emails in `addMaster` (+7) and
+  // `createMasterAccount` (+5) and surfaced `inviteEmailSent`, shifting the
+  // bot-collision query down by 12 lines).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1773",
+  "src/server/api/routers/salon.ts:1785",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

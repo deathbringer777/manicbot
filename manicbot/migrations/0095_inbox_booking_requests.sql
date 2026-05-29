@@ -1,4 +1,4 @@
--- Migration 0094: booking-request cards in the staff inbox
+-- Migration 0095: booking-request cards in the staff inbox
 --
 -- The staff "Messages" inbox becomes a booking-requests board: every new
 -- appointment (from any channel) posts a request card into a per-tenant

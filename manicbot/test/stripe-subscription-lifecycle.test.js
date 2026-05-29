@@ -521,6 +521,281 @@ describe('invoice.payment_failed', () => {
   });
 });
 
+// ─── invoice.paid / invoice.payment_succeeded — dunning recovery (S2 Fix 2) ──
+
+describe('invoice.paid — restores active from grace/past_due/unpaid', () => {
+  let ctx;
+  beforeEach(async () => {
+    ctx = makeCtx();
+    await seedStripeCustomer(ctx, CUSTOMER_ID, TENANT_ID);
+  });
+
+  // The core regression: a tenant sitting in grace_period after a failed
+  // charge must be restored to `active` the moment Stripe reports the invoice
+  // paid — WITHOUT depending on a separate customer.subscription.updated event
+  // (which Stripe does not guarantee fires, and which can be dropped/retried
+  // out of order). invoice.paid is the authoritative recovery signal.
+  for (const evtType of ['invoice.paid', 'invoice.payment_succeeded']) {
+    it(`${evtType} flips grace_period → active and clears graceEndsAt (no subscription.updated)`, async () => {
+      await seedTenant(ctx, {
+        billingStatus: 'grace_period',
+        subscriptionStatus: 'past_due',
+        stripeCustomerId: CUSTOMER_ID,
+        stripeSubscriptionId: SUB_ID,
+        graceEndsAt: nowSec() + 3 * 86400,
+      });
+
+      const r = await fire(ctx, {
+        id: `evt_${evtType.replace(/\./g, '_')}_recover`,
+        type: evtType,
+        data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID, paid: true } },
+      });
+      expect(r).toMatchObject({ ok: true, status: 200 });
+
+      const tenant = await getTenant(ctx, TENANT_ID);
+      expect(tenant.billingStatus).toBe('active');
+      expect(tenant.subscriptionStatus).toBe('active');
+      expect(tenant.graceEndsAt).toBeNull();
+    });
+  }
+
+  it('invoice.paid restores active from past_due', async () => {
+    await seedTenant(ctx, {
+      billingStatus: 'past_due',
+      subscriptionStatus: 'past_due',
+      stripeCustomerId: CUSTOMER_ID,
+    });
+    await fire(ctx, {
+      id: 'evt_paid_from_past_due',
+      type: 'invoice.paid',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('active');
+  });
+
+  it('invoice.paid restores active from unpaid', async () => {
+    await seedTenant(ctx, {
+      billingStatus: 'unpaid',
+      subscriptionStatus: 'unpaid',
+      stripeCustomerId: CUSTOMER_ID,
+    });
+    await fire(ctx, {
+      id: 'evt_paid_from_unpaid',
+      type: 'invoice.paid',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('active');
+  });
+
+  it('invoice.paid does NOT touch billingStatus for an already-active tenant (no spurious writes)', async () => {
+    await seedTenant(ctx, {
+      billingStatus: 'active',
+      subscriptionStatus: 'active',
+      stripeCustomerId: CUSTOMER_ID,
+      currentPeriodEnd: nowSec() + 30 * 86400,
+    });
+    await fire(ctx, {
+      id: 'evt_paid_already_active',
+      type: 'invoice.paid',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('active');
+    expect(tenant.subscriptionStatus).toBe('active');
+  });
+
+  it('invoice.paid does NOT resurrect a canceled/inactive tenant', async () => {
+    // A late/duplicate invoice.paid arriving after cancellation must not
+    // silently re-activate a tenant that intentionally churned.
+    await seedTenant(ctx, {
+      billingStatus: 'inactive',
+      subscriptionStatus: 'canceled',
+      stripeCustomerId: CUSTOMER_ID,
+    });
+    await fire(ctx, {
+      id: 'evt_paid_after_cancel',
+      type: 'invoice.paid',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('inactive');
+  });
+});
+
+// ─── resolveTenantIdByCustomer — tenants.stripe_customer_id fallback (S2 Fix 3) ─
+
+describe('customer-keyed events resolve via tenants.stripe_customer_id fallback', () => {
+  // admin-app checkout writes tenants.stripe_customer_id directly and does NOT
+  // populate the stripe_customers table (only the Worker's
+  // checkout.session.completed handler does that). A customer-keyed event
+  // (invoice.payment_failed / invoice.paid / subscription.updated) that arrives
+  // BEFORE any checkout.session.completed used to silently no-op. The fallback
+  // resolves the tenant by stripe_customer_id and self-heals stripe_customers.
+  it('invoice.payment_failed applies grace_period when only tenants.stripe_customer_id is set', async () => {
+    const ctx = makeCtx();
+    await seedTenant(ctx, {
+      billingStatus: 'active',
+      stripeCustomerId: CUSTOMER_ID, // set by admin-app checkout
+      // NOTE: no seedStripeCustomer — the stripe_customers row does not exist
+    });
+
+    const r = await fire(ctx, {
+      id: 'evt_fail_fallback',
+      type: 'invoice.payment_failed',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+    expect(r).toMatchObject({ ok: true, status: 200 });
+
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('grace_period');
+    expect(tenant.subscriptionStatus).toBe('past_due');
+  });
+
+  it('self-heals the stripe_customers row after resolving via fallback', async () => {
+    const ctx = makeCtx();
+    await seedTenant(ctx, {
+      billingStatus: 'active',
+      stripeCustomerId: CUSTOMER_ID,
+    });
+
+    await fire(ctx, {
+      id: 'evt_fail_selfheal',
+      type: 'invoice.payment_failed',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+
+    // The stripe_customers row should now exist (self-heal upsert)
+    const row = await ctx.db
+      .prepare('SELECT tenant_id FROM stripe_customers WHERE customer_id = ?')
+      .bind(CUSTOMER_ID)
+      .first();
+    expect(row?.tenant_id).toBe(TENANT_ID);
+  });
+
+  it('invoice.paid recovers grace → active via the tenants.stripe_customer_id fallback', async () => {
+    const ctx = makeCtx();
+    await seedTenant(ctx, {
+      billingStatus: 'grace_period',
+      subscriptionStatus: 'past_due',
+      stripeCustomerId: CUSTOMER_ID,
+      graceEndsAt: nowSec() + 2 * 86400,
+    });
+
+    await fire(ctx, {
+      id: 'evt_paid_fallback',
+      type: 'invoice.paid',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('active');
+    expect(tenant.graceEndsAt).toBeNull();
+  });
+
+  it('still no-ops when the customer matches no tenant at all', async () => {
+    const ctx = makeCtx();
+    await seedTenant(ctx, { billingStatus: 'active', stripeCustomerId: 'cus_someone_else' });
+    const r = await fire(ctx, {
+      id: 'evt_fail_unknown_cust',
+      type: 'invoice.payment_failed',
+      data: { object: { subscription: SUB_ID, customer: 'cus_nobody' } },
+    });
+    expect(r).toMatchObject({ ok: true, status: 200 });
+    const tenant = await getTenant(ctx, TENANT_ID);
+    expect(tenant.billingStatus).toBe('active'); // unchanged
+  });
+});
+
+// ─── Concurrent re-delivery dedup (S2 Fix 5) ─────────────────────────────────
+
+describe('concurrent identical events — handler body runs exactly once', () => {
+  it('two racing isolates that both pass the SELECT → exactly one processes, loser gets 503', async () => {
+    // Simulate the true concurrent re-delivery race: both isolates run their
+    // dedup SELECT and see NO row (so neither short-circuits), then both reach
+    // INSERT OR IGNORE. D1 serialises the inserts: one gets changes=1, the
+    // other changes=0. The loser MUST return 503 so the handler body runs
+    // exactly once. We force the SELECT to always miss by stubbing dbGet at
+    // the statement level for the stripe_events probe.
+    const ctx = makeCtx();
+    await seedTenant(ctx, {
+      billingStatus: 'trialing',
+      plan: 'start',
+      stripeCustomerId: CUSTOMER_ID,
+    });
+    await seedStripeCustomer(ctx, CUSTOMER_ID, TENANT_ID);
+
+    // Wrap prepare so the stripe_events processed_at SELECT always returns null
+    // (both racers think the event is brand-new) while INSERT still enforces
+    // the primary-key uniqueness via the real store.
+    const realPrepare = ctx.db.prepare.bind(ctx.db);
+    ctx.db.prepare = (sql) => {
+      const stmt = realPrepare(sql);
+      if (/SELECT\s+processed_at\s+FROM\s+stripe_events/i.test(sql)) {
+        const realFirst = stmt.first.bind(stmt);
+        stmt.first = async () => { await realFirst(); return null; };
+      }
+      return stmt;
+    };
+
+    const event = {
+      id: 'evt_concurrent_dedup',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: SUB_ID,
+          status: 'active',
+          current_period_end: nowSec() + 30 * 86400,
+          cancel_at_period_end: false,
+          customer: CUSTOMER_ID,
+          metadata: { plan: 'pro' },
+          items: { data: [{ price: { id: 'price_pro', metadata: { plan: 'pro' } } }] },
+        },
+      },
+    };
+    const payload = JSON.stringify(event);
+    const [s1, s2] = await Promise.all([
+      signPayload(payload, SECRET),
+      signPayload(payload, SECRET),
+    ]);
+
+    const [r1, r2] = await Promise.all([
+      handleStripeWebhook(ctx, payload, s1.signature, SECRET),
+      handleStripeWebhook(ctx, payload, s2.signature, SECRET),
+    ]);
+
+    // Exactly one full processing; the loser is a 503 retry signal.
+    const processedCount = [r1, r2].filter((r) => r.status === 200 && !r.skipped).length;
+    expect(processedCount).toBe(1);
+    const loser = [r1, r2].find((r) => !(r.status === 200 && !r.skipped));
+    expect(loser.status).toBe(503);
+    expect(loser.ok).toBe(false);
+  });
+
+  it('a second event whose INSERT OR IGNORE changes 0 rows (and not yet processed) returns 503', async () => {
+    const ctx = makeCtx();
+    await seedTenant(ctx, { billingStatus: 'active', stripeCustomerId: CUSTOMER_ID });
+    await seedStripeCustomer(ctx, CUSTOMER_ID, TENANT_ID);
+
+    // Pre-insert the dedup row WITHOUT processed_at — simulates a concurrent
+    // isolate that claimed the event id but has not finished. The arriving
+    // duplicate must be told to retry (503), not processed and not 200-skipped.
+    await ctx.db
+      .prepare('INSERT OR IGNORE INTO stripe_events (event_id, type, received_at) VALUES (?, ?, ?)')
+      .bind('evt_inflight', 'invoice.payment_failed', nowSec())
+      .run();
+
+    const r = await fire(ctx, {
+      id: 'evt_inflight',
+      type: 'invoice.payment_failed',
+      data: { object: { subscription: SUB_ID, customer: CUSTOMER_ID } },
+    });
+    expect(r.status).toBe(503);
+    expect(r.ok).toBe(false);
+  });
+});
+
 // ─── Idempotency ─────────────────────────────────────────────────────────────
 
 describe('Idempotency — duplicate events', () => {

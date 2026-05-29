@@ -162,12 +162,141 @@ const ROLE_CHANGE_L: Record<Lang, {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────
+// Sensitive-action OTP. A 6-digit code emailed to the CURRENT account address
+// (via the otp.request router) gates the password and role cards below: fill
+// the form → "Send code" → enter the code → confirm (the gated mutation is
+// called with `otpCode`). The code is always sent to ctx.webUser.email
+// server-side, so a hijacked session alone — without the registered mailbox —
+// cannot complete the change.
+//
+// The email card uses the same step-up principle but its own issuer
+// (requestEmailChange validates the new address, then emails one code), so it
+// does NOT go through this otp.request flow — see handleChangeEmail below.
+// ─────────────────────────────────────────────────────────────────────────
+
+type OtpAction = "change_password" | "change_role";
+
+const OTP_L: Record<Lang, {
+  sendCode: string;
+  resend: string;
+  enterCode: string;
+  sentTo: string;
+  sending: string;
+  labels: Record<OtpAction, string>;
+}> = {
+  ru: {
+    sendCode: "Отправить код",
+    resend: "Отправить код повторно",
+    enterCode: "Код подтверждения из письма",
+    sentTo: "Код отправлен на",
+    sending: "Отправка…",
+    labels: { change_password: "Смена пароля", change_role: "Смена роли" },
+  },
+  ua: {
+    sendCode: "Надіслати код",
+    resend: "Надіслати код повторно",
+    enterCode: "Код підтвердження з листа",
+    sentTo: "Код надіслано на",
+    sending: "Надсилання…",
+    labels: { change_password: "Зміна пароля", change_role: "Зміна ролі" },
+  },
+  en: {
+    sendCode: "Send code",
+    resend: "Resend code",
+    enterCode: "Confirmation code from the email",
+    sentTo: "Code sent to",
+    sending: "Sending…",
+    labels: { change_password: "Change password", change_role: "Change role" },
+  },
+  pl: {
+    sendCode: "Wyślij kod",
+    resend: "Wyślij kod ponownie",
+    enterCode: "Kod potwierdzający z e-maila",
+    sentTo: "Kod wysłano na",
+    sending: "Wysyłanie…",
+    labels: { change_password: "Zmiana hasła", change_role: "Zmiana roli" },
+  },
+};
+
+const OTP_ERR_L: Record<Lang, Record<string, string>> = {
+  ru: { otp_required: "Сначала запросите код", otp_invalid: "Неверный код", otp_expired: "Код истёк — запросите новый", otp_exhausted: "Слишком много попыток — запросите новый код", otp_consumed: "Код уже использован — запросите новый" },
+  ua: { otp_required: "Спершу запросіть код", otp_invalid: "Невірний код", otp_expired: "Код прострочено — запросіть новий", otp_exhausted: "Забагато спроб — запросіть новий код", otp_consumed: "Код уже використано — запросіть новий" },
+  en: { otp_required: "Request a code first", otp_invalid: "Invalid code", otp_expired: "Code expired — request a new one", otp_exhausted: "Too many attempts — request a new code", otp_consumed: "Code already used — request a new one" },
+  pl: { otp_required: "Najpierw poproś o kod", otp_invalid: "Nieprawidłowy kod", otp_expired: "Kod wygasł — poproś o nowy", otp_exhausted: "Zbyt wiele prób — poproś o nowy kod", otp_consumed: "Kod już użyty — poproś o nowy" },
+};
+
+/** Map a stable server OTP error message to localized text; pass others through. */
+function mapOtpError(msg: string | undefined, lang: Lang): string {
+  if (!msg) return "";
+  return OTP_ERR_L[lang]?.[msg] ?? msg;
+}
+
+const DANGER_L: Record<Lang, { title: string; subtitle: string }> = {
+  ru: { title: "Опасная зона", subtitle: "Изменения требуют кода подтверждения с email" },
+  ua: { title: "Небезпечна зона", subtitle: "Зміни потребують коду підтвердження з email" },
+  en: { title: "Danger zone", subtitle: "These changes require an email confirmation code" },
+  pl: { title: "Strefa niebezpieczna", subtitle: "Te zmiany wymagają kodu potwierdzającego z e-maila" },
+};
+
+/** Independent send-code / enter-code state for one sensitive action. */
+function useOtpFlow() {
+  const [otpCode, setOtpCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
+
+  const requestMut = (api as any).otp.request.useMutation({
+    onSuccess: (data: { sentTo?: string }) => {
+      setCodeSent(true);
+      setSentTo(data?.sentTo ?? null);
+      setOtpError(null);
+    },
+    onError: (err: { message?: string }) => {
+      setOtpError(err.message ?? "Failed to send code");
+    },
+  }) as { mutate: (a: { action: string; payload: unknown; actionLabel: string }) => void; isPending: boolean };
+
+  const requestCode = (action: OtpAction, payload: unknown, actionLabel: string) => {
+    setOtpError(null);
+    requestMut.mutate({ action, payload, actionLabel });
+  };
+  const reset = () => { setOtpCode(""); setCodeSent(false); setSentTo(null); setOtpError(null); };
+
+  return { otpCode, setOtpCode, codeSent, sentTo, otpError, requestCode, reset, sending: requestMut.isPending };
+}
+
+/** 6-digit code input — shared styling across the danger-zone cards. */
+function OtpCodeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]{6}"
+      autoComplete="one-time-code"
+      maxLength={6}
+      value={value}
+      onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+      placeholder="000000"
+      className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white tracking-[0.5em] text-center font-mono"
+    />
+  );
+}
+
 export function AccountSection() {
-  const { role, previewRole, emailVerified, hasPassword } = useRole();
+  const { role, emailVerified, hasPassword } = useRole();
   const { lang } = useLang();
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const effectiveRole = role;
   const vl = VERIFY_L[lang];
+  const ol = OTP_L[lang];
+  const dl = DANGER_L[lang];
   const utils = api.useUtils();
+
+  // OTP flows for the password and role cards (code → current email). The email
+  // card uses its own requestEmailChange/confirmEmailChange pair instead — that
+  // mutation is the issuer (it validates the address before sending the code).
+  const pwOtp = useOtpFlow();
+  const roleOtp = useOtpFlow();
 
   // Verification code
   const mounted = useMountedRef();
@@ -230,16 +359,28 @@ export function AccountSection() {
       if (mounted.current) {
         setPwError(null);
         setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        pwOtp.reset();
       }
       setTimeout(() => {
         void signOut({ callbackUrl: "/login?reason=password_changed" });
       }, 700);
     },
     onError: (err: { message?: string }) => {
-      if (mounted.current) setPwError(err.message ?? t("settings.passwordError", lang));
+      if (mounted.current) setPwError(mapOtpError(err.message, lang) || t("settings.passwordError", lang));
     },
-  }) as { mutate: (args: { currentPassword: string; newPassword: string }) => void; isPending: boolean };
+  }) as { mutate: (args: { currentPassword: string; newPassword: string; otpCode: string }) => void; isPending: boolean };
 
+  // Phase 1 — validate the form locally, then email a code to the current address.
+  const handleSendPwCode = () => {
+    setPwError(null);
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      setPwError(t("settings.passwordMismatch", lang));
+      return;
+    }
+    pwOtp.requestCode("change_password", {}, ol.labels.change_password);
+  };
+
+  // Phase 2 — confirm with the 6-digit code.
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
     setPwError(null);
@@ -247,7 +388,12 @@ export function AccountSection() {
       setPwError(t("settings.passwordMismatch", lang));
       return;
     }
-    changePasswordMut.mutate({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
+    if (pwOtp.otpCode.length !== 6) return;
+    changePasswordMut.mutate({
+      currentPassword: pwForm.currentPassword,
+      newPassword: pwForm.newPassword,
+      otpCode: pwOtp.otpCode,
+    });
   };
 
   // Change email — two-step flow (#N1): request → code-confirm
@@ -278,16 +424,22 @@ export function AccountSection() {
       }, 1500);
     },
     onError: (err: { message?: string }) => {
-      setEmailError(err.message ?? t("settings.emailChangeError", lang));
+      setEmailError(mapOtpError(err.message, lang) || t("settings.emailChangeError", lang));
     },
-  }) as { mutate: (args: { code: string }) => void; isPending: boolean };
+  }) as { mutate: (args: { newEmail: string; otpCode: string }) => void; isPending: boolean };
 
+  // Step 1 — server validates the new address, then emails a single OTP to the
+  // CURRENT account address (requestEmailChange is the issuer; no separate
+  // otp.request call, so only one code exists).
   const handleChangeEmail = (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
+    if (!emailForm.newEmail.trim()) return;
     changeEmailMut.mutate({ newEmail: emailForm.newEmail });
   };
 
+  // Step 2 — confirm with that one code; newEmail is re-sent so the server can
+  // verify the OTP's payload binding.
   const handleConfirmEmail = (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
@@ -295,7 +447,7 @@ export function AccountSection() {
       setEmailError(t("settings.invalidCode", lang));
       return;
     }
-    confirmEmailMut.mutate({ code: emailChangeCode });
+    confirmEmailMut.mutate({ newEmail: emailForm.newEmail, otpCode: emailChangeCode });
   };
 
   // Role change request
@@ -318,20 +470,31 @@ export function AccountSection() {
       setRcSuccess(true);
       setRcError(null);
       setRcReason("");
+      roleOtp.reset();
       (myRequestQuery as any).refetch?.();
     },
     onError: (err: { message?: string }) => {
-      setRcError(err.message ?? "Failed to submit request");
+      setRcError(mapOtpError(err.message, lang) || "Failed to submit request");
     },
-  }) as { mutate: (args: { requestedRole: string; reason?: string }) => void; isPending: boolean };
+  }) as { mutate: (args: { requestedRole: string; reason?: string; otpCode: string }) => void; isPending: boolean };
 
+  // Phase 1 — email a code to the current address (bound to the requested role).
+  const handleSendRoleCode = () => {
+    setRcError(null);
+    setRcSuccess(false);
+    roleOtp.requestCode("change_role", { requestedRole: targetRole }, ol.labels.change_role);
+  };
+
+  // Phase 2 — confirm with the 6-digit code.
   const handleRoleChangeRequest = (e: React.FormEvent) => {
     e.preventDefault();
     setRcError(null);
     setRcSuccess(false);
+    if (roleOtp.otpCode.length !== 6) return;
     requestRoleChangeMut.mutate({
       requestedRole: targetRole,
       ...(rcReason.trim() ? { reason: rcReason.trim() } : {}),
+      otpCode: roleOtp.otpCode,
     });
   };
 
@@ -439,6 +602,18 @@ export function AccountSection() {
         </section>
       )}
 
+      {/* ── Danger zone ────────────────────────────────────────────────────
+          Sensitive account controls (email / password / role). Framed in red
+          and gated by a one-time code emailed to the current account address. */}
+      <section className="rounded-2xl border-2 border-red-500/50 bg-red-500/[0.04] p-3 sm:p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-red-500" />
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-red-600 dark:text-red-400">{dl.title}</h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{dl.subtitle}</p>
+          </div>
+        </div>
+
       {/* Change email — collapsed by default. Two-step (#N1) flow lives inside. */}
       <CollapsibleSection
         icon={Mail}
@@ -476,22 +651,13 @@ export function AccountSection() {
               <CheckCircle className="w-3.5 h-3.5" />
               {t("settings.emailChangeSent", lang)}
             </p>
+            {/* One code — emailed to the CURRENT account address (proves it's
+                you), bound server-side to the requested new address. */}
             <div>
               <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                {t("settings.codeFromEmail", lang)}
+                {ol.enterCode}{sessionEmail ? ` · ${ol.sentTo} ${sessionEmail}` : ""}
               </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={emailChangeCode}
-                onChange={(e) => setEmailChangeCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
-                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white tracking-[0.5em] text-center font-mono"
-                required
-              />
+              <OtpCodeInput value={emailChangeCode} onChange={setEmailChangeCode} />
             </div>
             {emailError && <p className="text-xs text-red-400">{emailError}</p>}
             {emailChangeSuccess && (
@@ -587,14 +753,42 @@ export function AccountSection() {
               />
             </div>
             {pwError && <p className="text-xs text-red-400">{pwError}</p>}
-            <button
-              type="submit"
-              disabled={changePasswordMut.isPending}
-              className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-70 mt-1"
-            >
-              <Save className="w-4 h-4" />
-              {changePasswordMut.isPending ? t("settings.saving", lang) : t("settings.changePasswordBtn", lang)}
-            </button>
+            {!pwOtp.codeSent ? (
+              <button
+                type="button"
+                onClick={handleSendPwCode}
+                disabled={pwOtp.sending}
+                className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-70 mt-1"
+              >
+                {pwOtp.sending ? <Loader2 className="h-4 w-4 animate-spin" /> : ol.sendCode}
+              </button>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                    {ol.enterCode}{pwOtp.sentTo ? ` · ${ol.sentTo} ${pwOtp.sentTo}` : ""}
+                  </label>
+                  <OtpCodeInput value={pwOtp.otpCode} onChange={pwOtp.setOtpCode} />
+                </div>
+                {pwOtp.otpError && <p className="text-xs text-red-400">{mapOtpError(pwOtp.otpError, lang)}</p>}
+                <button
+                  type="submit"
+                  disabled={changePasswordMut.isPending || pwOtp.otpCode.length !== 6}
+                  className="w-full flex items-center justify-center gap-1.5 bg-brand-600 active:bg-brand-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-brand-500/20 disabled:opacity-70 mt-1"
+                >
+                  <Save className="w-4 h-4" />
+                  {changePasswordMut.isPending ? t("settings.saving", lang) : t("settings.changePasswordBtn", lang)}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendPwCode}
+                  disabled={pwOtp.sending}
+                  className="w-full text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {pwOtp.sending ? ol.sending : ol.resend}
+                </button>
+              </>
+            )}
           </form>
         </CollapsibleSection>
       )}
@@ -682,18 +876,47 @@ export function AccountSection() {
                   {rcl.pending}
                 </p>
               )}
-              <button
-                type="submit"
-                disabled={requestRoleChangeMut.isPending}
-                className="w-full flex items-center justify-center gap-1.5 bg-violet-600 active:bg-violet-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-70 mt-1"
-              >
-                <ArrowLeftRight className="w-4 h-4" />
-                {requestRoleChangeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : rcl.submit}
-              </button>
+              {!roleOtp.codeSent ? (
+                <button
+                  type="button"
+                  onClick={handleSendRoleCode}
+                  disabled={roleOtp.sending}
+                  className="w-full flex items-center justify-center gap-1.5 bg-violet-600 active:bg-violet-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-70 mt-1"
+                >
+                  {roleOtp.sending ? <Loader2 className="h-4 w-4 animate-spin" /> : ol.sendCode}
+                </button>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                      {ol.enterCode}{roleOtp.sentTo ? ` · ${ol.sentTo} ${roleOtp.sentTo}` : ""}
+                    </label>
+                    <OtpCodeInput value={roleOtp.otpCode} onChange={roleOtp.setOtpCode} />
+                  </div>
+                  {roleOtp.otpError && <p className="text-xs text-red-400">{mapOtpError(roleOtp.otpError, lang)}</p>}
+                  <button
+                    type="submit"
+                    disabled={requestRoleChangeMut.isPending || roleOtp.otpCode.length !== 6}
+                    className="w-full flex items-center justify-center gap-1.5 bg-violet-600 active:bg-violet-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-violet-500/20 disabled:opacity-70 mt-1"
+                  >
+                    <ArrowLeftRight className="w-4 h-4" />
+                    {requestRoleChangeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : rcl.submit}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendRoleCode}
+                    disabled={roleOtp.sending}
+                    className="w-full text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                  >
+                    {roleOtp.sending ? ol.sending : ol.resend}
+                  </button>
+                </>
+              )}
             </form>
           )}
         </CollapsibleSection>
       )}
+      </section>
     </div>
   );
 }

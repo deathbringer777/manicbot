@@ -3,6 +3,8 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { Send, StickyNote, AlertTriangle, Loader2, X } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import { ChatAttachButton } from "~/components/chat/ChatAttachButton";
 import {
   uploadChatAttachment,
@@ -13,24 +15,16 @@ import {
 
 const MAX_ATTACHMENTS = 4;
 
-function describeRelayError(code: string): string {
+function describeRelayError(code: string, lang: Parameters<typeof t>[1]): string {
   switch (code) {
-    case "outside_message_window":
-      return "Окно 24 ч закрыто — нужен шаблон";
-    case "channel_token_unavailable":
-      return "Токен канала недоступен";
-    case "channel_send_failed":
-      return "Канал отклонил отправку";
-    case "thread_not_found_or_not_client_conv":
-      return "Тред не привязан к каналу";
-    case "channel_not_supported":
-      return "Канал не поддерживает ответ";
-    case "relay_not_configured":
-      return "Relay не настроен на сервере";
-    case "relay_network_error":
-      return "Сеть не дотянулась до Worker";
-    default:
-      return code;
+    case "outside_message_window":              return t("messenger.relay.outsideWindow", lang);
+    case "channel_token_unavailable":           return t("messenger.relay.tokenUnavailable", lang);
+    case "channel_send_failed":                 return t("messenger.relay.channelFailed", lang);
+    case "thread_not_found_or_not_client_conv": return t("messenger.relay.notClientConv", lang);
+    case "channel_not_supported":               return t("messenger.relay.notSupported", lang);
+    case "relay_not_configured":                return "Relay not configured on server";
+    case "relay_network_error":                 return t("messenger.relay.networkError", lang);
+    default: return code;
   }
 }
 
@@ -52,6 +46,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
   const [isDragging, setIsDragging] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const utils = api.useUtils();
+  const { lang } = useLang();
 
   const sendMutation = api.messenger.sendMessage.useMutation({
     onSuccess: async (result) => {
@@ -77,7 +72,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
 
   async function uploadOne(file: File) {
     if (attachments.length >= MAX_ATTACHMENTS) {
-      setAttachmentError(`Максимум ${MAX_ATTACHMENTS} вложений`);
+      setAttachmentError(`Max ${MAX_ATTACHMENTS} attachments`);
       return;
     }
     const validation = validateChatAttachmentFile(file);
@@ -167,7 +162,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
   if (isSystem) {
     return (
       <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 px-3 py-2 text-center text-[11px] text-slate-500">
-        Системные сообщения — только для чтения
+        {t("messenger.composer.systemReadonly", lang)}
       </div>
     );
   }
@@ -194,11 +189,13 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
             }`}
           >
             <StickyNote className="h-3 w-3" />
-            {isInternalNote ? "Внутренняя заметка" : "Обычное сообщение"}
+            {isInternalNote
+              ? t("messenger.composer.internalNote", lang)
+              : t("messenger.composer.normalMessage", lang)}
           </button>
           {isInternalNote && (
             <span className="text-[10px] text-amber-600 dark:text-amber-400">
-              Клиент не увидит
+              {t("messenger.composer.clientHidden", lang)}
             </span>
           )}
         </div>
@@ -218,7 +215,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
                 type="button"
                 onClick={() => removeAttachment(idx)}
                 className="absolute right-0.5 top-0.5 rounded-full bg-slate-900/70 p-0.5 text-white hover:bg-slate-900"
-                aria-label="Убрать вложение"
+                aria-label={t("messenger.composer.removeAttachment", lang)}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -234,7 +231,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
       {attachments.length === 0 && pasteUploading && (
         <p className="px-3 pt-2 text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Загружаю изображение…
+          {t("messenger.composer.uploading", lang)}
         </p>
       )}
       {attachmentError && (
@@ -253,10 +250,10 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
           rows={1}
           placeholder={
             isInternalNote
-              ? "Заметка только для команды…"
+              ? t("messenger.composer.placeholderNote", lang)
               : isClientConv
-                ? "Ответить клиенту…"
-                : "Написать сообщение…"
+                ? t("messenger.composer.placeholderClient", lang)
+                : t("messenger.composer.placeholderDefault", lang)
           }
           data-testid="message-composer-input"
           disabled={disabled || sendMutation.isPending}
@@ -282,7 +279,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
           disabled={(!body.trim() && attachments.length === 0) || sendMutation.isPending || disabled}
           data-testid="message-composer-send"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:opacity-40"
-          aria-label="Отправить"
+          aria-label={t("messenger.composer.send", lang)}
         >
           <Send className="h-4 w-4" />
         </button>
@@ -298,7 +295,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
           data-testid="relay-error"
         >
           <AlertTriangle className="h-3 w-3 shrink-0" />
-          Сообщение сохранено, но не отправлено клиенту: {describeRelayError(relayError)}
+          {t("messenger.composer.relaySaved", lang)} {describeRelayError(relayError, lang)}
         </p>
       )}
     </div>

@@ -12,6 +12,8 @@ import {
   MailWarning,
 } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 type Mode = "pick" | "dm" | "group";
 
@@ -27,13 +29,14 @@ interface Props {
  * Surfaces the path back to the Team tab so the owner can invite somebody.
  */
 function EmptyStaffHint({ onClose }: { onClose: () => void }) {
+  const { lang } = useLang();
   return (
     <div className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-center dark:border-slate-700">
       <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-        В команде пока никого нет
+        {t("messenger.newThread.noTeam", lang)}
       </p>
       <p className="mt-1 text-[11px] text-slate-500">
-        Пригласите мастеров — после подключения они станут доступны для прямых сообщений.
+        {t("messenger.newThread.noTeamHint", lang)}
       </p>
       <Link
         href="/settings?section=team"
@@ -41,7 +44,7 @@ function EmptyStaffHint({ onClose }: { onClose: () => void }) {
         className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-brand-600"
       >
         <UserPlus className="h-3 w-3" />
-        Перейти в «Команда»
+        {t("messenger.newThread.goToTeam", lang)}
       </Link>
     </div>
   );
@@ -51,6 +54,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<Mode>("pick");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [groupTitle, setGroupTitle] = useState("");
+  const { lang } = useLang();
 
   const staffQ = api.messenger.listStaff.useQuery({ tenantId }, { enabled: !!tenantId });
   const allCandidates = useMemo(() => staffQ.data?.candidates ?? [], [staffQ.data]);
@@ -104,22 +108,28 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
       data-testid="new-thread-modal"
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-thread-modal-title"
         className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <h3
+            id="new-thread-modal-title"
+            className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+          >
             {mode === "pick"
-              ? "Новый чат"
+              ? t("messenger.newThread.title", lang)
               : mode === "dm"
-                ? "Прямое сообщение"
-                : "Групповой чат"}
+                ? t("messenger.newThread.dm", lang)
+                : t("messenger.newThread.group", lang)}
           </h3>
           <button
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-            aria-label="Закрыть"
+            aria-label={t("messenger.newThread.close", lang)}
           >
             <X className="h-4 w-4" />
           </button>
@@ -138,9 +148,11 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Прямое сообщение
+                  {t("messenger.newThread.dm", lang)}
                 </p>
-                <p className="text-[11px] text-slate-500">1:1 с другим сотрудником</p>
+                <p className="text-[11px] text-slate-500">
+                  {t("messenger.newThread.dmHint", lang)}
+                </p>
               </div>
             </button>
 
@@ -155,9 +167,11 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Групповой чат
+                  {t("messenger.newThread.group", lang)}
                 </p>
-                <p className="text-[11px] text-slate-500">Несколько сотрудников + название</p>
+                <p className="text-[11px] text-slate-500">
+                  {t("messenger.newThread.groupHint", lang)}
+                </p>
               </div>
             </button>
           </div>
@@ -165,7 +179,9 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
 
         {mode === "dm" && (
           <div className="p-4">
-            <p className="mb-2 text-xs text-slate-500">Выберите сотрудника</p>
+            <p className="mb-2 text-xs text-slate-500">
+              {t("messenger.newThread.pickStaff", lang)}
+            </p>
             <div className="max-h-80 space-y-1 overflow-y-auto">
               {staffQ.isLoading ? (
                 <div className="space-y-1">
@@ -201,7 +217,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                   {placeholders.length > 0 && (
                     <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
                       <p className="mb-1 px-2 text-[10px] uppercase tracking-wider text-slate-400">
-                        Без веб-аккаунта
+                        {t("messenger.newThread.noWebAccount", lang)}
                       </p>
                       {placeholders.map((u) => (
                         <button
@@ -210,7 +226,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                           onClick={() => openDmWithCandidate(u)}
                           disabled={isBusy}
                           data-testid={`dm-target-${u.id}`}
-                          title="Сообщения сохранятся; мастер увидит их когда подключит веб-аккаунт"
+                          title={t("messenger.newThread.placeholderHint", lang)}
                           className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50 disabled:opacity-50 dark:hover:bg-slate-800"
                         >
                           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
@@ -222,7 +238,9 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                             </p>
                             <div className="flex items-center gap-1">
                               <TelegramIcon className="h-2.5 w-2.5 text-slate-400" />
-                              <p className="truncate text-[10px] text-slate-500">Только Telegram</p>
+                              <p className="truncate text-[10px] text-slate-500">
+                                {t("messenger.newThread.telegramOnly", lang)}
+                              </p>
                             </div>
                           </div>
                         </button>
@@ -237,11 +255,11 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                       <div className="flex-1">
                         <p className="text-[11px] font-medium text-amber-800 dark:text-amber-200">
                           {pendingInviteCount === 1
-                            ? "1 приглашение ещё не принято"
-                            : `${pendingInviteCount} приглашений ещё не приняты`}
+                            ? `1 ${t("messenger.newThread.pendingHint", lang)}`
+                            : `${pendingInviteCount} ${t("messenger.newThread.pendingHint", lang)}`}
                         </p>
                         <p className="mt-0.5 text-[10px] text-amber-700/80 dark:text-amber-300/70">
-                          Мастер появится здесь сразу после подключения.
+                          {t("messenger.newThread.pendingHint", lang)}
                         </p>
                       </div>
                     </div>
@@ -257,7 +275,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
               onClick={() => setMode("pick")}
               className="mt-3 text-[11px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             >
-              ← Назад
+              {t("messenger.newThread.back", lang)}
             </button>
           </div>
         )}
@@ -268,13 +286,15 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
               type="text"
               value={groupTitle}
               onChange={(e) => setGroupTitle(e.target.value)}
-              placeholder="Название группы"
+              placeholder={t("messenger.newThread.groupName", lang)}
               maxLength={120}
               data-testid="group-title-input"
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
 
-            <p className="mb-2 mt-3 text-xs text-slate-500">Участники</p>
+            <p className="mb-2 mt-3 text-xs text-slate-500">
+              {t("messenger.newThread.members", lang)}
+            </p>
             <div className="max-h-60 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
               {groupCandidates.length ? (
                 groupCandidates.map((u) => {
@@ -310,9 +330,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
 
             {placeholders.length > 0 && (
               <p className="mt-2 text-[10px] text-slate-500">
-                {placeholders.length === 1
-                  ? "1 мастер с Telegram-привязкой пока не доступен для группы — подключите веб-аккаунт."
-                  : `${placeholders.length} мастеров с Telegram-привязкой пока не доступны для группы — подключите веб-аккаунт.`}
+                {t("messenger.newThread.placeholderHint", lang)}
               </p>
             )}
 
@@ -326,7 +344,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                 onClick={() => setMode("pick")}
                 className="text-[11px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
-                ← Назад
+                {t("messenger.newThread.back", lang)}
               </button>
               <button
                 type="button"
@@ -341,7 +359,7 @@ export function NewThreadModal({ tenantId, onClose, onCreated }: Props) {
                 data-testid="group-create-button"
                 className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-40"
               >
-                Создать
+                {t("messenger.newThread.create", lang)}
               </button>
             </div>
           </div>

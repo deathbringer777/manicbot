@@ -31,6 +31,7 @@ import {
 import { listProviders } from "~/server/marketing/providers";
 import { runCampaignSend } from "~/server/marketing/sender";
 import { resolveAudience } from "~/server/marketing/audience";
+import { addContactsToSegment, removeContactsFromSegment } from "~/server/marketing/segments";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
 const CAMPAIGN_STATUS = z.enum(["draft", "scheduled", "sending", "sent", "paused", "failed"]);
@@ -330,57 +331,10 @@ export const marketingTenantRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      // Restrict to contact ids that genuinely belong to this tenant —
-      // silently drops anything else (avoids leaking which ids exist in
-      // the platform-wide id space).
-      const allowed = await ctx.db
-        .select({ id: marketingContacts.id })
-        .from(marketingContacts)
-        .where(and(
-          eq(marketingContacts.tenantId, input.tenantId),
-          // drizzle's `inArray` is the right tool here, but we keep an
-          // explicit array reduction so the upper bound on contactIds
-          // (500) cannot blow up SQLite's parameter limit (variable
-          // bind count is well within 500).
-        ));
-      const allowedIds = new Set(allowed.map((r) => r.id));
-      const ok = input.contactIds.filter((id) => allowedIds.has(id));
-
-      const t = now();
-      let added = 0;
-      for (const id of ok) {
-        // INSERT OR IGNORE pattern via drizzle .onConflictDoNothing — but
-        // drizzle for D1 doesn't expose that universally; fall back to a
-        // pre-check. Membership table has (segment_id, contact_id) as PK
-        // so the duplicate insert would error otherwise.
-        const exists = await ctx.db
-          .select({ s: marketingSegmentMembers.segmentId })
-          .from(marketingSegmentMembers)
-          .where(and(
-            eq(marketingSegmentMembers.segmentId, input.segmentId),
-            eq(marketingSegmentMembers.contactId, id),
-          ))
-          .limit(1);
-        if (exists[0]) continue;
-        await ctx.db.insert(marketingSegmentMembers).values({
-          segmentId: input.segmentId,
-          contactId: id,
-          addedAt: t,
-        });
-        added++;
-      }
-
-      // Recompute denormalized count so the list-card displays the live size
-      // without an extra round-trip.
-      const cnt = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(marketingSegmentMembers)
-        .where(eq(marketingSegmentMembers.segmentId, input.segmentId));
-      await ctx.db.update(marketingSegments)
-        .set({ contactCount: Number(cnt[0]?.count ?? 0), updatedAt: t })
-        .where(eq(marketingSegments.id, input.segmentId));
-
-      return { added, skipped: input.contactIds.length - added };
+      // Membership insert + dedup + denormalized recount live in the shared
+      // helper (also used by the Salon Clients tab). Contact-tenant guard is
+      // enforced there; the segment-tenant guard above already ran.
+      return addContactsToSegment(ctx.db, input.tenantId, input.segmentId, input.contactIds);
     }),
 
   segmentRemoveContacts: protectedProcedure
@@ -402,24 +356,7 @@ export const marketingTenantRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      for (const id of input.contactIds) {
-        await ctx.db.delete(marketingSegmentMembers)
-          .where(and(
-            eq(marketingSegmentMembers.segmentId, input.segmentId),
-            eq(marketingSegmentMembers.contactId, id),
-          ));
-      }
-
-      const t = now();
-      const cnt = await ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(marketingSegmentMembers)
-        .where(eq(marketingSegmentMembers.segmentId, input.segmentId));
-      await ctx.db.update(marketingSegments)
-        .set({ contactCount: Number(cnt[0]?.count ?? 0), updatedAt: t })
-        .where(eq(marketingSegments.id, input.segmentId));
-
-      return { ok: true };
+      return removeContactsFromSegment(ctx.db, input.tenantId, input.segmentId, input.contactIds);
     }),
 
   // ═══════════════════════════════════════════════════════════════

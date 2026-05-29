@@ -7,8 +7,13 @@
  * @tg / @ig), tag chips, visit counter, "blocked" badge. Whole row is
  * clickable; opens `ClientDetailModal`. Edit / delete / block actions live
  * inside the detail modal — no inline dropdowns to keep the row clean.
+ *
+ * Selectable mode (Lists): when `selectable`, a checkbox gutter is rendered
+ * to the left of the card; ticking it drives the bulk "add to list" bar in
+ * the parent. The row's main click still opens the detail modal. The default
+ * (non-selectable) render is unchanged — a single clickable card.
  */
-import { Phone, Mail, Send, Instagram, Ban, Star } from "lucide-react";
+import { Phone, Mail, Send, Instagram, Ban, Star, Check } from "lucide-react";
 import { resolveAvatarEmoji } from "~/lib/clientAvatar";
 
 export interface ClientRowData {
@@ -30,6 +35,10 @@ export interface ClientRowData {
 interface Props {
   c: ClientRowData;
   onClick: () => void;
+  /** When true, render a selection checkbox gutter for bulk list actions. */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 function formatLastVisit(unix: number | null, lang: string): string {
@@ -45,7 +54,7 @@ function formatLastVisit(unix: number | null, lang: string): string {
   }).format(d);
 }
 
-export function ClientRow({ c, onClick }: Props) {
+export function ClientRow({ c, onClick, selectable = false, selected = false, onToggleSelect }: Props) {
   const channelIcons = [
     c.phone && <Phone key="ph" className="h-3 w-3 text-slate-400" aria-label="phone" />,
     c.email && <Mail key="em" className="h-3 w-3 text-slate-400" aria-label="email" />,
@@ -70,7 +79,7 @@ export function ClientRow({ c, onClick }: Props) {
     ?? (c.tgUsername ? `@${c.tgUsername}` : null)
     ?? (c.igUsername ? `@${c.igUsername}` : null);
 
-  return (
+  const card = (
     <button
       type="button"
       onClick={onClick}
@@ -158,5 +167,28 @@ export function ClientRow({ c, onClick }: Props) {
         <div className="hidden sm:block">{formatLastVisit(c.lastVisitAt, "ru")}</div>
       </div>
     </button>
+  );
+
+  if (!selectable) return card;
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        aria-label="select-client"
+        data-testid={`client-select-${c.chatId}`}
+        onClick={onToggleSelect}
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition ${
+          selected
+            ? "border-brand-500 bg-brand-500 text-white"
+            : "border-slate-300 bg-white hover:border-brand-400 dark:border-white/20 dark:bg-white/[0.04]"
+        }`}
+      >
+        {selected && <Check className="h-3 w-3" strokeWidth={3} />}
+      </button>
+      <div className="min-w-0 flex-1">{card}</div>
+    </div>
   );
 }

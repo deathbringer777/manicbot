@@ -19,6 +19,8 @@ import { LangContext } from "~/components/LangContext";
 import { ClientsTab } from "~/components/salon/tabs/ClientsTab";
 
 let listInvocations: any[] = [];
+let addToListInvocations: any[] = [];
+let removeFromListInvocations: any[] = [];
 const fakeListData = {
   rows: [
     { chatId: 1, name: "Karina", phone: "+48500152948", email: null, tgUsername: null, igUsername: null, tags: null, lifetimeVisits: 3, lastVisitAt: 1700000000, isBlockedGlobal: 0 },
@@ -27,6 +29,10 @@ const fakeListData = {
   total: 2,
   nextOffset: null,
 };
+const fakeLists = [
+  { id: "seg_vip", name: "VIP", kind: "manual", contactCount: 3 },
+  { id: "seg_filter", name: "Active 30d", kind: "filter", contactCount: 0 },
+];
 
 vi.mock("~/trpc/react", () => ({
   api: {
@@ -35,6 +41,9 @@ vi.mock("~/trpc/react", () => ({
         list: { invalidate: vi.fn() },
         get: { invalidate: vi.fn() },
       },
+      marketingTenant: {
+        segmentsList: { invalidate: vi.fn() },
+      },
     }),
     clients: {
       list: {
@@ -42,6 +51,18 @@ vi.mock("~/trpc/react", () => ({
           listInvocations.push(input);
           return { data: fakeListData, isLoading: false, isError: false };
         },
+      },
+      addToList: {
+        useMutation: (opts: any) => ({
+          mutate: (input: any) => { addToListInvocations.push(input); opts?.onSuccess?.({ added: input.chatIds.length, skipped: 0, synced: 0 }); },
+          isPending: false,
+        }),
+      },
+      removeFromList: {
+        useMutation: (opts: any) => ({
+          mutate: (input: any) => { removeFromListInvocations.push(input); opts?.onSuccess?.({ ok: true }); },
+          isPending: false,
+        }),
       },
       exportCsv: {
         useQuery: () => ({ data: null }),
@@ -56,6 +77,14 @@ vi.mock("~/trpc/react", () => ({
       delete: { useMutation: () => ({ mutate: vi.fn() }) },
       setGlobalBlock: { useMutation: () => ({ mutate: vi.fn() }) },
     },
+    marketingTenant: {
+      segmentsList: {
+        useQuery: () => ({ data: fakeLists, isLoading: false }),
+      },
+      segmentCreate: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+    },
   },
 }));
 
@@ -69,6 +98,8 @@ function renderTab() {
 
 beforeEach(() => {
   listInvocations = [];
+  addToListInvocations = [];
+  removeFromListInvocations = [];
   vi.useFakeTimers();
 });
 afterEach(() => {
@@ -132,5 +163,54 @@ describe("ClientsTab", () => {
   it("does not render the Load more button when nextOffset is null", () => {
     renderTab();
     expect(screen.queryByTestId("clients-load-more")).toBeNull();
+  });
+
+  it("renders the Lists rail with the All chip and only manual lists", () => {
+    renderTab();
+    expect(screen.getByTestId("clients-list-rail")).toBeTruthy();
+    expect(screen.getByTestId("clients-list-chip-all")).toBeTruthy();
+    expect(screen.getByTestId("clients-list-chip-seg_vip")).toBeTruthy();
+    // 'filter'-kind segments are NOT manual lists — excluded from the rail.
+    expect(screen.queryByTestId("clients-list-chip-seg_filter")).toBeNull();
+    expect(screen.getByTestId("clients-list-new")).toBeTruthy();
+  });
+
+  it("selecting a list chip passes listId into the clients.list query", () => {
+    renderTab();
+    listInvocations = [];
+    fireEvent.click(screen.getByTestId("clients-list-chip-seg_vip"));
+    expect(listInvocations.at(-1)?.listId).toBe("seg_vip");
+  });
+
+  it("ticking clients reveals the bulk bar and 'add to list' targets the chosen list", () => {
+    renderTab();
+    // No bar until something is selected.
+    expect(screen.queryByTestId("clients-bulk-bar")).toBeNull();
+    fireEvent.click(screen.getByTestId("client-select-1"));
+    expect(screen.getByTestId("clients-bulk-bar")).toBeTruthy();
+    // Open the add menu and pick VIP.
+    fireEvent.click(screen.getByTestId("clients-bulk-add"));
+    fireEvent.click(screen.getByTestId("clients-bulk-add-seg_vip"));
+    expect(addToListInvocations.at(-1)).toMatchObject({
+      tenantId: "t_demo",
+      chatIds: [1],
+      listId: "seg_vip",
+    });
+  });
+
+  it("the remove-from-list action only appears when a list is active", () => {
+    renderTab();
+    // No active list → tick a client → no remove button.
+    fireEvent.click(screen.getByTestId("client-select-1"));
+    expect(screen.queryByTestId("clients-bulk-remove")).toBeNull();
+    // Activate a list, re-tick (selection clears on list change), then it shows.
+    fireEvent.click(screen.getByTestId("clients-list-chip-seg_vip"));
+    fireEvent.click(screen.getByTestId("client-select-2"));
+    expect(screen.getByTestId("clients-bulk-remove")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("clients-bulk-remove"));
+    expect(removeFromListInvocations.at(-1)).toMatchObject({
+      chatIds: [2],
+      listId: "seg_vip",
+    });
   });
 });

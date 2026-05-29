@@ -48,7 +48,7 @@ const MAX_ATTACHMENT_URL_LEN = 2000;
 
 // ─── Validation ────────────────────────────────────────────────────
 
-const THREAD_KIND = z.enum(["staff_dm", "staff_group", "client_conv", "system"]);
+const THREAD_KIND = z.enum(["staff_dm", "staff_group", "client_conv", "system", "requests"]);
 
 const MESSAGE_BODY_MAX = 4000;
 const PREVIEW_MAX = 200;

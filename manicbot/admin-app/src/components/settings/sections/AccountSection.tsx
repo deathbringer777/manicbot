@@ -164,14 +164,18 @@ const ROLE_CHANGE_L: Record<Lang, {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Sensitive-action OTP. A 6-digit code emailed to the CURRENT account address
-// (via the otp.request router) gates the email / password / role cards below.
-// Each card runs an independent flow: fill the form → "Send code" → enter the
-// code → confirm (the gated mutation is called with `otpCode`). The code is
-// always sent to ctx.webUser.email server-side, so a hijacked session alone —
-// without the registered mailbox — cannot complete the change.
+// (via the otp.request router) gates the password and role cards below: fill
+// the form → "Send code" → enter the code → confirm (the gated mutation is
+// called with `otpCode`). The code is always sent to ctx.webUser.email
+// server-side, so a hijacked session alone — without the registered mailbox —
+// cannot complete the change.
+//
+// The email card uses the same step-up principle but its own issuer
+// (requestEmailChange validates the new address, then emails one code), so it
+// does NOT go through this otp.request flow — see handleChangeEmail below.
 // ─────────────────────────────────────────────────────────────────────────
 
-type OtpAction = "change_password" | "change_email" | "change_role";
+type OtpAction = "change_password" | "change_role";
 
 const OTP_L: Record<Lang, {
   sendCode: string;

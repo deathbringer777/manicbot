@@ -297,7 +297,9 @@ export function defaultBotPayload(botId, tenantId, botToken, webhookSecret, botU
 
 export async function listTenantIds(ctx) {
   if (!ctx?.db) return [];
-  const rows = await dbAll(ctx, 'SELECT id FROM tenants');
+  // Filter to active tenants only — inactive ones must not receive cron queue
+  // messages (wastes queue quota and triggers unnecessary Worker invocations).
+  const rows = await dbAll(ctx, 'SELECT id FROM tenants WHERE active = 1');
   return rows.map(r => r.id);
 }
 

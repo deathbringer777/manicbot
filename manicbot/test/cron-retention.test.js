@@ -84,8 +84,9 @@ function makeArchive({ shouldFail = false } = {}) {
   };
 }
 
-function readEvents(kv) {
-  return JSON.parse(kv.store.get('adminlog:recent') ?? '[]');
+function readEvents(kv, tenantId = 't_1') {
+  // Tenant events land in per-tenant key since fix #5 (RMW collision fix).
+  return JSON.parse(kv.store.get(`adminlog:tenant:${tenantId}`) ?? '[]');
 }
 
 describe('phaseRetention — dry-run', () => {

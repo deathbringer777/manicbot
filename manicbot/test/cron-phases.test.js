@@ -154,7 +154,8 @@ describe('phaseRetention (P1-10)', () => {
     const kv = makeKv();
     const ctx = { db, tenantId: 't_1', globalKv: kv };
     await phaseRetention(ctx, 't_1', Date.now());
-    const raw = kv.store.get('adminlog:recent');
+    // Tenant events land in per-tenant key (fix #5 RMW fix).
+    const raw = kv.store.get('adminlog:tenant:t_1');
     expect(raw).toBeTruthy();
     const events = JSON.parse(raw);
     const prunedEvents = events.filter(e => e.type === 'cron.retention.pruned');
@@ -184,7 +185,8 @@ describe('phaseRetention (P1-10)', () => {
     };
     const ctx = { db, tenantId: 't_1', globalKv: kv };
     await phaseRetention(ctx, 't_1', Date.now());
-    const events = JSON.parse(kv.store.get('adminlog:recent') ?? '[]');
+    // Tenant events land in per-tenant key (fix #5 RMW fix).
+    const events = JSON.parse(kv.store.get('adminlog:tenant:t_1') ?? '[]');
     expect(events.some(e => e.type === 'cron.phase.error')).toBe(true);
     // 5 successful prunes + 1 failure event = 6 total events
     expect(events.filter(e => e.type === 'cron.retention.pruned').length).toBe(5);

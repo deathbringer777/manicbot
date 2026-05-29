@@ -27,6 +27,13 @@ const ACTION_WHITELIST = [
   "unarchive_master",
   "reset_master_password",
   "peek_master_password",
+  // Self-service sensitive-account changes. The code is emailed to the actor's
+  // OWN (current) account address — see otp.request below, which always sends
+  // to ctx.webUser.email — so a session-hijacker still cannot complete the
+  // change without access to the registered mailbox.
+  "change_password",
+  "change_email",
+  "change_role",
 ] as const;
 
 type WhitelistedAction = (typeof ACTION_WHITELIST)[number];

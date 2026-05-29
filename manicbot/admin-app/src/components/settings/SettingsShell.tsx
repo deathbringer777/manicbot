@@ -123,9 +123,15 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   notifications: Bell,
 };
 
-function getSections(role: string | null, lang: Lang, isPersonalTenant: boolean): SettingsSection[] {
-  const ids: string[] = [];
-
+/**
+ * Ordered section ids for a role. For non-technical roles (tenant_owner,
+ * tenant_manager, master) the FIRST id is the landing tab and `account` is
+ * demoted to second-to-last (immediately before `help`): its sensitive
+ * controls (email / password / role) now live in a rarely-opened "danger
+ * zone", so the salon/profile is the natural home instead. Technical roles
+ * (support, technical_support, system_admin) keep `account` first.
+ */
+export function getSettingsSectionIds(role: string | null, isPersonalTenant: boolean): string[] {
   // Eligibility for the Referrals section mirrors assertReferralEligible
   // in the referrals tRPC router: self-registered customer accounts only.
   // Salon-invited masters (master + !isPersonalTenant) are explicitly not
@@ -136,22 +142,36 @@ function getSections(role: string | null, lang: Lang, isPersonalTenant: boolean)
     (role === "master" && isPersonalTenant);
 
   if (role === "tenant_owner" || role === "tenant_manager") {
-    ids.push("account", "salon", "public", "team", "channels", "billing", "notifications", "appearance");
+    const ids = ["salon", "public", "team", "channels", "billing", "notifications", "appearance"];
     if (showReferrals) ids.push("referrals");
-    ids.push("help");
-  } else if (role === "master") {
-    ids.push("account", "profile", "notifications", "appearance");
-    if (showReferrals) ids.push("referrals");
-    ids.push("help");
-  } else if (role === "support" || role === "technical_support") {
-    ids.push("account", "notifications", "appearance", "help");
-  } else if (role === "system_admin") {
-    ids.push("account", "notifications", "appearance", "help", "platform");
-  } else {
-    ids.push("account", "notifications", "appearance", "help");
+    ids.push("account", "help");
+    return ids;
   }
+  if (role === "master") {
+    const ids = ["profile", "notifications", "appearance"];
+    if (showReferrals) ids.push("referrals");
+    ids.push("account", "help");
+    return ids;
+  }
+  if (role === "support" || role === "technical_support") {
+    return ["account", "notifications", "appearance", "help"];
+  }
+  if (role === "system_admin") {
+    return ["account", "notifications", "appearance", "help", "platform"];
+  }
+  return ["account", "notifications", "appearance", "help"];
+}
 
-  return ids.map((id) => ({
+/**
+ * The landing / default settings section for a role — the first ordered id.
+ * `salon` for owner/manager, `profile` for master, `account` for everyone else.
+ */
+export function getDefaultSettingsSection(role: string | null, isPersonalTenant = false): string {
+  return getSettingsSectionIds(role, isPersonalTenant)[0] ?? "account";
+}
+
+function getSections(role: string | null, lang: Lang, isPersonalTenant: boolean): SettingsSection[] {
+  return getSettingsSectionIds(role, isPersonalTenant).map((id) => ({
     id,
     icon: SECTION_ICONS[id] ?? Settings,
     label: SECTION_LABELS[id]?.[lang]?.label ?? id,

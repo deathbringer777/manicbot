@@ -15,6 +15,8 @@
  * `web-user-credentials.test.ts` and friends.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 vi.mock("~/server/db", () => ({ getDb: () => null }));
 vi.mock("~/env", () => ({
@@ -149,8 +151,74 @@ describe("webUsers.changePassword — protectedProcedure gate", () => {
       caller.changePassword({
         currentPassword: "x",
         newPassword: "valid-long-password",
+        otpCode: "123456",
       } as never),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("webUsers.changePassword — email-OTP gate (sensitive action)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("requires an otpCode (input boundary)", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t_demo") as never);
+    await expect(
+      caller.changePassword({
+        currentPassword: "current-pw",
+        newPassword: "a-valid-long-password",
+        // otpCode intentionally omitted
+      } as never),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects when no matching OTP was issued (otp_required)", async () => {
+    // Empty DB → the global_otp_codes lookup finds nothing → PRECONDITION_FAILED.
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t_demo") as never);
+    await expect(
+      caller.changePassword({
+        currentPassword: "current-pw",
+        newPassword: "a-valid-long-password",
+        otpCode: "123456",
+      } as never),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+  });
+
+  it("source pin: gated via requireOtpConfirmation(action: change_password)", () => {
+    const src = readFileSync(
+      path.resolve(__dirname, "../server/api/routers/webUsers.ts"),
+      "utf8",
+    );
+    expect(src).toMatch(
+      /requireOtpConfirmation\(\{[\s\S]*?action:\s*"change_password"/,
+    );
+  });
+});
+
+describe("webUsers email change — current-email OTP confirmation", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // The code is issued client-side via the otp.request router (action
+  // "change_email", emailed to the CURRENT account address). confirmEmailChange
+  // verifies it alongside the existing new-email code — proving control of both
+  // the current and the new mailbox before the address is switched.
+  it("confirmEmailChange requires the current-email otpCode (input boundary)", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t_demo") as never);
+    await expect(
+      caller.confirmEmailChange({ code: "123456" } as never),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("source pin: confirmEmailChange verifies the current-email OTP", () => {
+    const src = readFileSync(
+      path.resolve(__dirname, "../server/api/routers/webUsers.ts"),
+      "utf8",
+    );
+    expect(src).toMatch(
+      /requireOtpConfirmation\(\{[\s\S]*?action:\s*"change_email"/,
+    );
   });
 });
 

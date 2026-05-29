@@ -7,6 +7,7 @@ import {
   sendRoleChangeAdminNotification,
   sendRoleChangeDecisionEmail,
 } from "~/server/email/emailService";
+import { requireOtpConfirmation } from "~/server/auth/otp";
 import type { Lang } from "~/lib/i18n";
 
 /* ── Rate limiting ────────────────────────────────────────────────────────── */
@@ -49,6 +50,9 @@ export const roleChangeRequestsRouter = createTRPCRouter({
     .input(z.object({
       requestedRole: z.enum(["tenant_owner", "master"]),
       reason: z.string().max(500).optional(),
+      // Sensitive-action OTP — 6-digit code emailed to the current account
+      // address (issued client-side via otp.request, action change_role).
+      otpCode: z.string().length(6),
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) {
@@ -59,6 +63,17 @@ export const roleChangeRequestsRouter = createTRPCRouter({
       if (!checkRateLimit(ip)) {
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." });
       }
+
+      // Confirm with the one-time code emailed to the current account address,
+      // bound to the requested role. A hijacked session alone cannot submit a
+      // role/ownership change without access to the registered mailbox.
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "change_role",
+        payload: { requestedRole: input.requestedRole },
+        code: input.otpCode,
+      });
 
       // Fetch current user
       const [user] = await ctx.db.select().from(webUsers).where(eq(webUsers.id, ctx.webUser.id)).limit(1);

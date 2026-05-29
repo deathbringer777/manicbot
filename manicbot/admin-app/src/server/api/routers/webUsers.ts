@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { assertTenantMember } from "~/server/api/tenantAccess";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { generateToken, hashToken, timingSafeEqualHex } from "~/server/auth/tokens";
+import { requireOtpConfirmation } from "~/server/auth/otp";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
@@ -880,7 +881,13 @@ export const webUsersRouter = createTRPCRouter({
    * CONFLICT to the caller.
    */
   confirmEmailChange: protectedProcedure
-    .input(z.object({ code: z.string().length(6) }))
+    .input(z.object({
+      code: z.string().length(6),
+      // Current-email OTP (action "change_email", issued client-side via
+      // otp.request and bound to the same target newEmail). Confirms control
+      // of the EXISTING mailbox in addition to the new-address `code` above.
+      otpCode: z.string().length(6),
+    }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Web session required" });
@@ -919,6 +926,19 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
       }
 
+      // Also confirm with the one-time code emailed to the CURRENT account
+      // address, bound to the same normalized target address. The new-address
+      // code (above) proves control of the new mailbox; this proves control of
+      // the current one. Checked after the new-address code so a wrong code
+      // there does not burn this OTP.
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "change_email",
+        payload: { newEmail: user.newEmail },
+        code: input.otpCode,
+      });
+
       // Single id-scoped UPDATE. The DB-level UNIQUE INDEX
       // `idx_web_user_email` (see schema.sql line 429) catches the race where
       // the target email was claimed between requestEmailChange and confirm.
@@ -953,6 +973,9 @@ export const webUsersRouter = createTRPCRouter({
       z.object({
         currentPassword: z.string().min(1),
         newPassword: z.string().min(12, "Минимум 12 символов"),
+        // Sensitive-action OTP — 6-digit code emailed to the current account
+        // address (issued client-side via otp.request, action change_password).
+        otpCode: z.string().length(6),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -963,6 +986,17 @@ export const webUsersRouter = createTRPCRouter({
           message: "Web session required to change password",
         });
       }
+
+      // Confirm with the one-time code emailed to the current account address.
+      // Verified before any password work so a hijacked session alone — without
+      // access to the registered mailbox — cannot rotate the password.
+      await requireOtpConfirmation({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "change_password",
+        payload: {},
+        code: input.otpCode,
+      });
 
       const rows = await ctx.db
         .select()

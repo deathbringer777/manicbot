@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { assertTenantMember } from "~/server/api/tenantAccess";
 import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { generateToken, hashToken, timingSafeEqualHex } from "~/server/auth/tokens";
-import { requireOtpConfirmation } from "~/server/auth/otp";
+import { requireOtpConfirmation, requestActionOtp } from "~/server/auth/otp";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
@@ -16,7 +16,7 @@ import {
   sendVerificationCodeEmail,
   sendPasswordResetCodeEmail,
   sendWelcomeEmail,
-  sendEmailChangeCodeVerification,
+  sendActionOtpEmail,
 } from "~/server/email/emailService";
 
 import { checkRateLimit } from "~/server/auth/rateLimit";
@@ -44,6 +44,18 @@ const RL_RESET_MAX = 5;
  */
 const RL_RESET_PER_EMAIL_MAX = 3;
 const RL_EMAIL_CHANGE_MAX = 3; // max email change requests per IP per window
+
+/**
+ * Localized action label shown in the body of the email-change OTP message
+ * (the shared sendActionOtpEmail template renders it). Kept tiny + local — the
+ * email-change flow is the only server-side issuer of this code.
+ */
+const CHANGE_EMAIL_OTP_LABEL: Record<Lang, string> = {
+  ru: "Смена email",
+  ua: "Зміна email",
+  en: "Email change",
+  pl: "Zmiana adresu e-mail",
+};
 const RL_LOGIN_IP_MAX = 20; // max login attempts per IP across all accounts
 const RL_LOGIN_IP_WINDOW = 15 * 60 * 1000; // 15 minutes
 /**
@@ -789,10 +801,16 @@ export const webUsersRouter = createTRPCRouter({
   }),
 
   /**
-   * #N1 — Request email change. Mints a 6-digit code (CSPRNG), stores its
-   * SHA-256 hash with a 1h TTL, and sends the code to the NEW address. The
-   * caller must have an active session (protected) so the row is identified
-   * by `ctx.webUser.id` rather than by the token, narrowing the TOCTOU window.
+   * Request an email change. Issues a single 6-digit OTP via the shared
+   * global_otp_codes framework (action "change_email", bound to the target
+   * address) and emails it to the user's CURRENT account address — the same
+   * step-up mechanism used for password and role changes, so there is no
+   * second bespoke email-code system.
+   *
+   * The new address is NOT persisted here: the code's payload hash binds it,
+   * and the client re-sends `newEmail` at confirm time where the binding is
+   * verified. A hijacked session alone cannot complete the change without
+   * access to the registered mailbox.
    */
   requestEmailChange: protectedProcedure
     .input(z.object({ newEmail: z.string().email() }))
@@ -826,41 +844,29 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
       }
 
-      const code = generateVerificationCode();
-      const codeHash = await hashToken(code);
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAt = now + 3600; // 1 hour
-
       const [me] = await ctx.db
         .select({ lang: webUsers.lang })
         .from(webUsers)
         .where(eq(webUsers.id, ctx.webUser.id))
         .limit(1);
+      const lang = (me?.lang ?? "en") as Lang;
 
-      await ctx.db
-        .update(webUsers)
-        .set({
-          newEmail,
-          // P1-9 — rolling-window write.
-          emailChangeToken: codeHash,
-          emailChangeTokenHash: codeHash,
-          emailChangeTokenExpiresAt: expiresAt,
-          updatedAt: now,
-        })
-        .where(eq(webUsers.id, ctx.webUser.id));
+      // Issue the OTP bound to the target address; send the code to the CURRENT
+      // account email so identity is proven before the address is switched.
+      const { code } = await requestActionOtp({
+        db: ctx.db,
+        webUserId: ctx.webUser.id,
+        action: "change_email",
+        payload: { newEmail },
+      });
 
-      const sent = await sendEmailChangeCodeVerification(newEmail, code, newEmail, (me?.lang ?? "en") as Lang);
+      const sent = await sendActionOtpEmail(
+        ctx.webUser.email,
+        code,
+        CHANGE_EMAIL_OTP_LABEL[lang] ?? CHANGE_EMAIL_OTP_LABEL.en,
+        lang,
+      );
       if (!sent.ok) {
-        await ctx.db
-          .update(webUsers)
-          .set({
-            newEmail: null,
-            emailChangeToken: null,
-            emailChangeTokenHash: null,
-            emailChangeTokenExpiresAt: null,
-            updatedAt: now,
-          })
-          .where(eq(webUsers.id, ctx.webUser.id));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: `Could not send verification email: ${sent.error}`,
@@ -871,21 +877,19 @@ export const webUsersRouter = createTRPCRouter({
     }),
 
   /**
-   * #N1 — Confirm email change with the 6-digit code from the new address.
-   * The mutation is now `protectedProcedure` (requires an active session) so
-   * the row is identified by `ctx.webUser.id` rather than by token lookup —
-   * this closes the TOCTOU window where the legacy flow re-checked email
-   * uniqueness in a separate query, then UPDATEd; concurrent confirms could
-   * both pass the check. With direct id-based UPDATE, the only race is on
-   * the `email` UNIQUE constraint at the DB level, which we surface as
-   * CONFLICT to the caller.
+   * Confirm an email change. Verifies the single 6-digit OTP (emailed to the
+   * CURRENT address, action "change_email") via the shared framework, then
+   * swaps the address. The OTP payload binds the code to `newEmail`, so the
+   * caller MUST re-send the exact address the code was issued for — a wrong or
+   * substituted address has no matching code. `protectedProcedure` identifies
+   * the row by `ctx.webUser.id`; the DB-level UNIQUE index on `email` catches
+   * the race where the target was claimed between request and confirm.
    */
   confirmEmailChange: protectedProcedure
     .input(z.object({
-      code: z.string().length(6),
-      // Current-email OTP (action "change_email", issued client-side via
-      // otp.request and bound to the same target newEmail). Confirms control
-      // of the EXISTING mailbox in addition to the new-address `code` above.
+      // Re-sent so the OTP's payload binding can be verified server-side; a
+      // mismatch against the issued code surfaces as PRECONDITION_FAILED.
+      newEmail: z.string().email(),
       otpCode: z.string().length(6),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -899,64 +903,44 @@ export const webUsersRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many attempts. Try again later." });
       }
 
-      const rows = await ctx.db
-        .select()
+      const newEmail = input.newEmail.toLowerCase().trim();
+      if (newEmail === ctx.webUser.email) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "New email is the same as current" });
+      }
+
+      const existing = await ctx.db
+        .select({ id: webUsers.id })
         .from(webUsers)
-        .where(eq(webUsers.id, ctx.webUser.id))
+        .where(eq(webUsers.email, newEmail))
         .limit(1);
-      if (!rows.length) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
-      }
-      const user = rows[0]!;
-      const now = Math.floor(Date.now() / 1000);
-
-      // P1-9 — prefer the hash-named column; fall back to legacy.
-      const storedHash = user.emailChangeTokenHash ?? user.emailChangeToken;
-      if (
-        !storedHash ||
-        !user.emailChangeTokenExpiresAt ||
-        now > user.emailChangeTokenExpiresAt ||
-        !user.newEmail
-      ) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "Email already in use" });
       }
 
-      const inputHash = await hashToken(input.code);
-      if (!timingSafeEqualHex(inputHash, storedHash)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired code" });
-      }
-
-      // Also confirm with the one-time code emailed to the CURRENT account
-      // address, bound to the same normalized target address. The new-address
-      // code (above) proves control of the new mailbox; this proves control of
-      // the current one. Checked after the new-address code so a wrong code
-      // there does not burn this OTP.
+      // Verify the current-address OTP, bound to this exact target address.
+      // Throws PRECONDITION_FAILED (otp_required / otp_invalid / otp_expired /
+      // otp_exhausted) on any mismatch — single-use, timing-safe, attempt-capped.
       await requireOtpConfirmation({
         db: ctx.db,
         webUserId: ctx.webUser.id,
         action: "change_email",
-        payload: { newEmail: user.newEmail },
+        payload: { newEmail },
         code: input.otpCode,
       });
 
-      // Single id-scoped UPDATE. The DB-level UNIQUE INDEX
-      // `idx_web_user_email` (see schema.sql line 429) catches the race where
-      // the target email was claimed between requestEmailChange and confirm.
+      const now = Math.floor(Date.now() / 1000);
+      // Single id-scoped UPDATE. The DB-level UNIQUE INDEX `idx_web_user_email`
+      // catches the race where the target email was claimed after the OTP issue.
       try {
         await ctx.db
           .update(webUsers)
           .set({
-            email: user.newEmail,
-            newEmail: null,
-            // P1-9 — clear BOTH columns on consume.
-            emailChangeToken: null,
-            emailChangeTokenHash: null,
-            emailChangeTokenExpiresAt: null,
+            email: newEmail,
             // #S8: bump password_changed_at so existing JWTs are rejected on next session check.
             passwordChangedAt: now,
             updatedAt: now,
           })
-          .where(eq(webUsers.id, user.id));
+          .where(eq(webUsers.id, ctx.webUser.id));
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         if (/UNIQUE|already exists|constraint/i.test(msg)) {

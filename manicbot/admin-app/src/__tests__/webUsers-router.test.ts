@@ -196,29 +196,60 @@ describe("webUsers.changePassword — email-OTP gate (sensitive action)", () => 
   });
 });
 
-describe("webUsers email change — current-email OTP confirmation", () => {
+describe("webUsers email change — single OTP to the current address", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  // The code is issued client-side via the otp.request router (action
-  // "change_email", emailed to the CURRENT account address). confirmEmailChange
-  // verifies it alongside the existing new-email code — proving control of both
-  // the current and the new mailbox before the address is switched.
-  it("confirmEmailChange requires the current-email otpCode (input boundary)", async () => {
+  // Unified with password/role: ONE 6-digit code, issued via the shared
+  // global_otp_codes framework and emailed to the CURRENT account address.
+  // No separate new-address code, no bespoke emailChangeToken mechanism — the
+  // payload binds the code to the requested newEmail so it can't be reused for
+  // a different target.
+  it("confirmEmailChange requires both newEmail and otpCode (input boundary)", async () => {
     const { db } = createDbMock();
     const caller = callerFactory(makeTenantOwnerCtx(db, "t_demo") as never);
     await expect(
-      caller.confirmEmailChange({ code: "123456" } as never),
+      caller.confirmEmailChange({ newEmail: "new@example.com" } as never),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("source pin: confirmEmailChange verifies the current-email OTP", () => {
+  it("confirmEmailChange passes auth + input and enters the handler (OTP enforced downstream)", async () => {
+    // confirmEmailChange runs the IP rate-limit before the OTP check, and the
+    // shared db-mock doesn't implement Drizzle's `.run()` (see otp-router.test
+    // for the same idiom) — so we can't reach the OTP path through the mock.
+    // We assert the call cleared the protected gate + zod boundary and entered
+    // the handler. The actual "no OTP → PRECONDITION_FAILED" behavior of the
+    // shared requireOtpConfirmation helper is proven by the changePassword test
+    // above (no pre-OTP rate-limit), and the source-pin below proves
+    // confirmEmailChange routes through that same helper for action change_email.
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t_demo") as never);
+    try {
+      await caller.confirmEmailChange({ newEmail: "new@example.com", otpCode: "123456" } as never);
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      expect(code).not.toBe("UNAUTHORIZED");
+      expect(code).not.toBe("BAD_REQUEST");
+    }
+  });
+
+  it("source pin: requestEmailChange issues a change_email OTP to the current email (no legacy sender)", () => {
     const src = readFileSync(
       path.resolve(__dirname, "../server/api/routers/webUsers.ts"),
       "utf8",
     );
-    expect(src).toMatch(
-      /requireOtpConfirmation\(\{[\s\S]*?action:\s*"change_email"/,
+    expect(src).toMatch(/requestActionOtp\(\{[\s\S]*?action:\s*"change_email"/);
+    expect(src).toMatch(/sendActionOtpEmail\(/);
+    // The parallel bespoke email-code mechanism is gone — no duplication.
+    expect(src).not.toMatch(/sendEmailChangeCodeVerification/);
+  });
+
+  it("source pin: confirmEmailChange verifies via requireOtpConfirmation(change_email), not emailChangeToken", () => {
+    const src = readFileSync(
+      path.resolve(__dirname, "../server/api/routers/webUsers.ts"),
+      "utf8",
     );
+    expect(src).toMatch(/requireOtpConfirmation\(\{[\s\S]*?action:\s*"change_email"/);
+    expect(src).not.toMatch(/emailChangeTokenHash/);
   });
 });
 

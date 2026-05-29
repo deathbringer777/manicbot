@@ -1,49 +1,53 @@
 /**
- * #N1 — email-change confirmation migrated from URL-token to 6-digit code.
+ * Email-change confirmation — code-based, no URL token.
  *
- * Pre-fix: `sendEmailChangeVerification` shipped `?token=…` URL; the
- * `confirmEmailChange` mutation looked up the row by token and had a TOCTOU
- * window between the email-uniqueness check and the UPDATE.
+ * History: the original flow shipped a `?token=…` URL (leaked via Referer / MTA
+ * logs / browser history) with a TOCTOU window in `confirmEmailChange`. It was
+ * first migrated to a bespoke 6-digit code email, and is now UNIFIED onto the
+ * shared action-OTP path (`actionOtpEmailHtml` / `sendActionOtpEmail`, action
+ * "change_email") — one mechanism for password / email / role step-up, no
+ * duplicate email-change sender.
  *
- * This test pins the new flow:
- *   1. `emailChangeCodeEmailHtml(code, newEmail)` puts the code in the body, no URL
- *   2. `sendEmailChangeCodeVerification` Resend integration uses the code template
- *   3. The confirmation mutation requires an active session (protected) so the
- *      row is identified by ctx.webUser.id, not by token lookup
+ * This test pins the security-relevant invariants that must survive the
+ * unification:
+ *   1. the email body carries the 6-digit code, NOT a confirmation URL/token
+ *   2. the Resend integration sends code-only HTML to the addressed recipient
+ *      (the mutation addresses the CURRENT account email — proven there)
+ *   3. confirmEmailChange identifies the row by ctx.webUser.id (no token lookup)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { emailChangeCodeEmailHtml, getEmailCopy } from "~/server/email/templates";
-import { sendEmailChangeCodeVerification } from "~/server/email/emailService";
+import { actionOtpEmailHtml, getActionOtpSubject } from "~/server/email/templates";
+import { sendActionOtpEmail } from "~/server/email/emailService";
 
-describe("emailChangeCodeEmailHtml (#N1)", () => {
-  it("includes the code AND the new email", () => {
-    const html = emailChangeCodeEmailHtml("314159", "new@example.com", "en");
+describe("actionOtpEmailHtml — email-change confirmation (code, no URL)", () => {
+  it("includes the 6-digit code", () => {
+    const html = actionOtpEmailHtml({ code: "314159", actionLabel: "Email change" }, "en");
     expect(html).toContain("314159");
-    expect(html).toContain("new@example.com");
   });
 
-  it("does NOT include a confirmation URL", () => {
-    const html = emailChangeCodeEmailHtml("314159", "new@example.com", "en");
+  it("does NOT include a confirmation URL or token", () => {
+    const html = actionOtpEmailHtml({ code: "314159", actionLabel: "Email change" }, "en");
     expect(html).not.toMatch(/[?&]token=/i);
-    expect(html).not.toContain("/confirm-email-change?");
+    expect(html).not.toContain("/confirm-email-change");
+    expect(html).not.toContain("/verify-email");
   });
 
   it("renders for all 4 supported languages without throwing", () => {
     for (const lang of ["ru", "ua", "en", "pl"] as const) {
-      expect(() => emailChangeCodeEmailHtml("999999", "x@y.z", lang)).not.toThrow();
+      expect(() => actionOtpEmailHtml({ code: "999999", actionLabel: "Zmiana e-mail" }, lang)).not.toThrow();
     }
   });
 });
 
-describe("emailChangeCode subjects", () => {
+describe("action-OTP subject", () => {
   it("subject mentions ManicBot in all languages", () => {
     for (const lang of ["ru", "ua", "en", "pl"] as const) {
-      expect(getEmailCopy(lang).emailChangeCode.subject).toContain("ManicBot");
+      expect(getActionOtpSubject(lang)).toContain("ManicBot");
     }
   });
 });
 
-describe("sendEmailChangeCodeVerification", () => {
+describe("sendActionOtpEmail — email-change issuance", () => {
   const originalKey = process.env.RESEND_API_KEY;
   const originalFrom = process.env.RESEND_FROM;
 
@@ -58,26 +62,27 @@ describe("sendEmailChangeCodeVerification", () => {
     vi.unstubAllGlobals();
   });
 
-  it("calls Resend with code in body, no URL, addresses NEW email", async () => {
+  it("calls Resend with the code in the body, no URL, addressed to the recipient", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "msg_e1" }) }));
-    const result = await sendEmailChangeCodeVerification("new@example.com", "555000", "new@example.com", "en");
+    // The mutation passes ctx.webUser.email (the CURRENT account address) as `to`.
+    const result = await sendActionOtpEmail("current@example.com", "555000", "Email change", "en");
     expect(result).toEqual({ ok: true });
     const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1]!.body as string);
-    expect(body.to).toEqual(["new@example.com"]);
+    expect(body.to).toEqual(["current@example.com"]);
     expect(body.html).toContain("555000");
-    expect(body.html).toContain("new@example.com");
     expect(body.html).not.toMatch(/[?&]token=/i);
+    expect(body.html).not.toContain("/confirm-email-change");
   });
 });
 
 // ── Pure logic: TOCTOU close-out reasoning ────────────────────────────────
 //
-// The new flow uses the caller's session id for the UPDATE, so two parallel
-// `confirmEmailChange` calls for the same user collapse into one (the second
-// one finds the token already cleared). The remaining race is the cross-user
-// case: two users both try to change their email to the same target. The
+// confirmEmailChange uses the caller's session id (ctx.webUser.id) for the
+// UPDATE, so two parallel confirms for the same user collapse into one (the
+// second presents an already-consumed OTP). The remaining race is cross-user:
+// two users both try to change their email to the same target. The
 // `idx_web_user_email` UNIQUE INDEX on `web_users.email` (schema.sql line 429)
-// will throw on the second UPDATE, which the mutation catches and surfaces as
+// throws on the second UPDATE, which the mutation catches and surfaces as
 // CONFLICT to the caller.
 
 describe("email-change TOCTOU narrative", () => {

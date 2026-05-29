@@ -187,7 +187,7 @@ const OTP_L: Record<Lang, {
     enterCode: "Код подтверждения из письма",
     sentTo: "Код отправлен на",
     sending: "Отправка…",
-    labels: { change_password: "Смена пароля", change_email: "Смена email", change_role: "Смена роли" },
+    labels: { change_password: "Смена пароля", change_role: "Смена роли" },
   },
   ua: {
     sendCode: "Надіслати код",
@@ -195,7 +195,7 @@ const OTP_L: Record<Lang, {
     enterCode: "Код підтвердження з листа",
     sentTo: "Код надіслано на",
     sending: "Надсилання…",
-    labels: { change_password: "Зміна пароля", change_email: "Зміна email", change_role: "Зміна ролі" },
+    labels: { change_password: "Зміна пароля", change_role: "Зміна ролі" },
   },
   en: {
     sendCode: "Send code",
@@ -203,7 +203,7 @@ const OTP_L: Record<Lang, {
     enterCode: "Confirmation code from the email",
     sentTo: "Code sent to",
     sending: "Sending…",
-    labels: { change_password: "Change password", change_email: "Change email", change_role: "Change role" },
+    labels: { change_password: "Change password", change_role: "Change role" },
   },
   pl: {
     sendCode: "Wyślij kod",
@@ -211,7 +211,7 @@ const OTP_L: Record<Lang, {
     enterCode: "Kod potwierdzający z e-maila",
     sentTo: "Kod wysłano na",
     sending: "Wysyłanie…",
-    labels: { change_password: "Zmiana hasła", change_email: "Zmiana e-maila", change_role: "Zmiana roli" },
+    labels: { change_password: "Zmiana hasła", change_role: "Zmiana roli" },
   },
 };
 
@@ -288,9 +288,10 @@ export function AccountSection() {
   const dl = DANGER_L[lang];
   const utils = api.useUtils();
 
-  // Independent OTP flows for each danger-zone action (code → current email).
+  // OTP flows for the password and role cards (code → current email). The email
+  // card uses its own requestEmailChange/confirmEmailChange pair instead — that
+  // mutation is the issuer (it validates the address before sending the code).
   const pwOtp = useOtpFlow();
-  const emailOtp = useOtpFlow();
   const roleOtp = useOtpFlow();
 
   // Verification code
@@ -421,28 +422,28 @@ export function AccountSection() {
     onError: (err: { message?: string }) => {
       setEmailError(mapOtpError(err.message, lang) || t("settings.emailChangeError", lang));
     },
-  }) as { mutate: (args: { code: string; otpCode: string }) => void; isPending: boolean };
+  }) as { mutate: (args: { newEmail: string; otpCode: string }) => void; isPending: boolean };
 
+  // Step 1 — server validates the new address, then emails a single OTP to the
+  // CURRENT account address (requestEmailChange is the issuer; no separate
+  // otp.request call, so only one code exists).
   const handleChangeEmail = (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
-    const normalized = emailForm.newEmail.trim().toLowerCase();
-    if (!normalized) return;
-    // Two codes: the new-address code (proves control of the new mailbox) and
-    // the current-address OTP (proves control of this account). Bind the OTP to
-    // the SAME normalized address the server stores, so the payload hash matches.
+    if (!emailForm.newEmail.trim()) return;
     changeEmailMut.mutate({ newEmail: emailForm.newEmail });
-    emailOtp.requestCode("change_email", { newEmail: normalized }, ol.labels.change_email);
   };
 
+  // Step 2 — confirm with that one code; newEmail is re-sent so the server can
+  // verify the OTP's payload binding.
   const handleConfirmEmail = (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
-    if (!/^\d{6}$/.test(emailChangeCode) || emailOtp.otpCode.length !== 6) {
+    if (!/^\d{6}$/.test(emailChangeCode)) {
       setEmailError(t("settings.invalidCode", lang));
       return;
     }
-    confirmEmailMut.mutate({ code: emailChangeCode, otpCode: emailOtp.otpCode });
+    confirmEmailMut.mutate({ newEmail: emailForm.newEmail, otpCode: emailChangeCode });
   };
 
   // Role change request
@@ -646,32 +647,14 @@ export function AccountSection() {
               <CheckCircle className="w-3.5 h-3.5" />
               {t("settings.emailChangeSent", lang)}
             </p>
-            {/* Code 1 — sent to the NEW address (proves control of it). */}
+            {/* One code — emailed to the CURRENT account address (proves it's
+                you), bound server-side to the requested new address. */}
             <div>
               <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                {t("settings.codeFromEmail", lang)}{emailForm.newEmail ? ` · ${emailForm.newEmail}` : ""}
+                {ol.enterCode}{sessionEmail ? ` · ${ol.sentTo} ${sessionEmail}` : ""}
               </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={emailChangeCode}
-                onChange={(e) => setEmailChangeCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
-                className="w-full bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700/50 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500/60 text-slate-900 dark:text-white tracking-[0.5em] text-center font-mono"
-                required
-              />
+              <OtpCodeInput value={emailChangeCode} onChange={setEmailChangeCode} />
             </div>
-            {/* Code 2 — sent to the CURRENT account address (proves it's you). */}
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                {ol.enterCode}{emailOtp.sentTo ? ` · ${ol.sentTo} ${emailOtp.sentTo}` : ""}
-              </label>
-              <OtpCodeInput value={emailOtp.otpCode} onChange={emailOtp.setOtpCode} />
-            </div>
-            {emailOtp.otpError && <p className="text-xs text-red-400">{mapOtpError(emailOtp.otpError, lang)}</p>}
             {emailError && <p className="text-xs text-red-400">{emailError}</p>}
             {emailChangeSuccess && (
               <p className="text-xs text-emerald-400 flex items-center gap-1">
@@ -681,7 +664,7 @@ export function AccountSection() {
             )}
             <button
               type="submit"
-              disabled={confirmEmailMut.isPending || emailChangeCode.length !== 6 || emailOtp.otpCode.length !== 6}
+              disabled={confirmEmailMut.isPending || emailChangeCode.length !== 6}
               className="w-full flex items-center justify-center gap-1.5 bg-cyan-600 active:bg-cyan-500 text-white px-4 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-70 mt-1"
             >
               {confirmEmailMut.isPending ? t("settings.saving", lang) : t("settings.confirmEmailBtn", lang)}
@@ -692,7 +675,6 @@ export function AccountSection() {
                 setEmailRequested(false);
                 setEmailChangeCode("");
                 setEmailError(null);
-                emailOtp.reset();
               }}
               className="w-full text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >

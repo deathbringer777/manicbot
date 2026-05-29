@@ -329,7 +329,7 @@ export function SalonWeekView({
       <div
         ref={scrollerRef}
         className="glass-card rounded-2xl overflow-auto"
-        style={{ maxHeight: "calc(100vh - 280px)" }}
+        style={{ maxHeight: "clamp(400px, calc(100dvh - 280px), 90dvh)" }}
       >
         <div
           className="flex"

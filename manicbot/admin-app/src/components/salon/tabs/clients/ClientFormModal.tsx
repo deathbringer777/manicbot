@@ -279,19 +279,25 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
       <div
         // Solid card — no `glass-card` (its rgba(248,250,252,0.85) overrides
         // bg-white and renders as translucent grey).
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="client-form-modal-title"
         className="w-full max-w-xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-5"
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "92vh" }}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          <h2
+            id="client-form-modal-title"
+            className="text-lg font-semibold text-slate-900 dark:text-slate-100"
+          >
             {isEdit ? t("clients.form.title.edit", lang) : t("clients.form.title.create", lang)}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 dark:bg-white/5 dark:text-white/60"
-            aria-label="Close"
+            aria-label={t("common.close", lang)}
           >
             <X className="h-4 w-4" />
           </button>

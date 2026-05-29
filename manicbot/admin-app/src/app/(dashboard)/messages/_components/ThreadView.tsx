@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Archive, StickyNote, Users } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import { MessageComposer } from "./MessageComposer";
 import { GroupMembersModal } from "./GroupMembersModal";
 
@@ -40,6 +42,7 @@ function parseAttachments(raw: unknown): Array<{ url: string; kind: string }> {
 export function ThreadView({ tenantId, threadId }: Props) {
   const utils = api.useUtils();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { lang } = useLang();
   // Members drawer is opt-in — staff_group only — and is owner-only
   // edits-wise (the drawer itself respects the role via useRole inside it).
   const [membersOpen, setMembersOpen] = useState(false);
@@ -91,7 +94,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
   if (!detailQ.data) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-500">
-        Не удалось загрузить
+        {t("messenger.loadError", lang)}
       </div>
     );
   }
@@ -107,8 +110,20 @@ export function ThreadView({ tenantId, threadId }: Props) {
           .map((m) => m.displayName)
           .join(", ") || "DM"
       : thread.kind === "client_conv"
-        ? "Клиент"
-        : "Чат");
+        ? t("messenger.threadTitle.client", lang)
+        : t("messenger.threadTitle.chat", lang));
+
+  const kindLabel =
+    thread.kind === "staff_dm"
+      ? t("messenger.threadKind.dm", lang)
+      : thread.kind === "staff_group"
+        ? t("messenger.threadKind.group", lang).replace(
+            "{n}",
+            String(members.filter((m) => m.memberKind === "web_user").length),
+          )
+        : thread.kind === "client_conv"
+          ? t("messenger.threadKind.client", lang)
+          : t("messenger.threadKind.system", lang);
 
   return (
     <div className="flex h-full flex-col">
@@ -119,13 +134,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
             {title}
           </p>
           <p className="text-[10px] uppercase tracking-wide text-slate-500">
-            {thread.kind === "staff_dm"
-              ? "Прямое сообщение"
-              : thread.kind === "staff_group"
-                ? `Группа · ${members.filter((m) => m.memberKind === "web_user").length}`
-                : thread.kind === "client_conv"
-                  ? "Клиентская беседа"
-                  : "Системные"}
+            {kindLabel}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -135,10 +144,11 @@ export function ThreadView({ tenantId, threadId }: Props) {
               onClick={() => setMembersOpen(true)}
               data-testid="open-group-members"
               className="flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-              title="Участники"
+              title={t("messenger.members", lang)}
+              aria-label={t("messenger.members", lang)}
             >
               <Users className="h-3 w-3" />
-              Участники
+              {t("messenger.members", lang)}
             </button>
           )}
           <button
@@ -149,10 +159,17 @@ export function ThreadView({ tenantId, threadId }: Props) {
             data-testid="archive-thread-button"
             disabled={archiveMutation.isPending}
             className="flex h-7 items-center gap-1 rounded-md px-2 text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-            title={thread.archived === 0 ? "Архивировать" : "Разархивировать"}
+            title={thread.archived === 0
+              ? t("messenger.archiveTitle", lang)
+              : t("messenger.unarchiveTitle", lang)}
+            aria-label={thread.archived === 0
+              ? t("messenger.archiveTitle", lang)
+              : t("messenger.unarchiveTitle", lang)}
           >
             <Archive className="h-3 w-3" />
-            {thread.archived === 0 ? "В архив" : "Из архива"}
+            {thread.archived === 0
+              ? t("messenger.archive", lang)
+              : t("messenger.unarchive", lang)}
           </button>
         </div>
       </div>
@@ -168,7 +185,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
       <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto bg-slate-50 px-3 py-3 dark:bg-slate-950">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center text-xs text-slate-500">
-            Пока нет сообщений
+            {t("messenger.noMessages", lang)}
           </div>
         ) : (
           messages.map((m) => {
@@ -178,10 +195,10 @@ export function ThreadView({ tenantId, threadId }: Props) {
             const isNote = m.isInternalNote === 1;
             const senderName =
               m.senderKind === "web_user"
-                ? memberMap.get(m.senderRef) ?? "Сотрудник"
+                ? memberMap.get(m.senderRef) ?? t("messenger.senderStaff", lang)
                 : m.senderKind === "external_client"
-                  ? "Клиент"
-                  : "Система";
+                  ? t("messenger.senderClient", lang)
+                  : t("messenger.senderSystem", lang);
             const atts = parseAttachments((m as { attachmentsJson?: unknown }).attachmentsJson);
             // Body is "(вложение)" placeholder when the user sent an
             // attachment without text — hide it in the bubble so the image
@@ -216,7 +233,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
                       {isNote && (
                         <span className="ml-1 inline-flex items-center gap-0.5">
                           <StickyNote className="h-2.5 w-2.5" />
-                          заметка
+                          {t("messenger.note", lang)}
                         </span>
                       )}
                     </p>
@@ -224,7 +241,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
                   {isOwn && isNote && (
                     <p className="mb-0.5 inline-flex items-center gap-0.5 text-[10px] font-semibold opacity-80">
                       <StickyNote className="h-2.5 w-2.5" />
-                      заметка
+                      {t("messenger.note", lang)}
                     </p>
                   )}
                   {atts.length > 0 && (

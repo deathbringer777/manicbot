@@ -19,6 +19,8 @@ import { useState } from "react";
 import { X, Loader2, UserMinus } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 interface Props {
   tenantId: string;
@@ -28,6 +30,7 @@ interface Props {
 
 export function GroupMembersModal({ tenantId, threadId, onClose }: Props) {
   const { role } = useRole();
+  const { lang } = useLang();
   const isOwner = role === "tenant_owner" || role === "system_admin";
   const utils = api.useUtils();
 
@@ -61,19 +64,25 @@ export function GroupMembersModal({ tenantId, threadId, onClose }: Props) {
       data-testid="group-members-modal"
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-members-modal-title"
         className="w-full max-w-sm overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5"
         onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "85vh" }}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            Участники
+          <h2
+            id="group-members-modal-title"
+            className="text-base font-semibold text-slate-900 dark:text-slate-100"
+          >
+            {t("messenger.members.title", lang)}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 dark:bg-white/5 dark:text-white/60"
-            aria-label="Close"
+            aria-label={t("common.close", lang)}
           >
             <X className="h-4 w-4" />
           </button>
@@ -86,7 +95,9 @@ export function GroupMembersModal({ tenantId, threadId, onClose }: Props) {
         )}
 
         {membersQ.data && membersQ.data.length === 0 && (
-          <p className="py-6 text-center text-xs text-slate-500">Никого ещё нет.</p>
+          <p className="py-6 text-center text-xs text-slate-500">
+            {t("messenger.members.empty", lang)}
+          </p>
         )}
 
         {membersQ.data && (
@@ -98,6 +109,16 @@ export function GroupMembersModal({ tenantId, threadId, onClose }: Props) {
                 m.role !== "owner" &&
                 (m.memberKind === "web_user" || m.memberKind === "master");
               const isPending = pendingRef === m.memberRef && removeMutation.isPending;
+
+              const roleLabel =
+                m.role === "owner"
+                  ? t("messenger.role.owner", lang)
+                  : m.connectStatus === "telegram_only"
+                    ? t("messenger.role.telegram", lang)
+                    : m.connectStatus === "external"
+                      ? t("messenger.role.external", lang)
+                      : t("messenger.role.member", lang);
+
               return (
                 <li
                   key={key}
@@ -109,13 +130,7 @@ export function GroupMembersModal({ tenantId, threadId, onClose }: Props) {
                       {m.name}
                     </p>
                     <p className="text-[10px] uppercase tracking-wide text-slate-500">
-                      {m.role === "owner"
-                        ? "Владелец"
-                        : m.connectStatus === "telegram_only"
-                          ? "Telegram"
-                          : m.connectStatus === "external"
-                            ? "Внешний"
-                            : "Участник"}
+                      {roleLabel}
                     </p>
                   </div>
                   {canRemove && (
@@ -130,14 +145,15 @@ export function GroupMembersModal({ tenantId, threadId, onClose }: Props) {
                       disabled={isPending}
                       className="inline-flex shrink-0 items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-500/20 disabled:opacity-50 dark:text-rose-400"
                       data-testid={`group-member-remove-${m.memberRef}`}
-                      title="Удалить из группы"
+                      title={t("messenger.removeFromGroup", lang)}
+                      aria-label={t("messenger.removeFromGroup", lang)}
                     >
                       {isPending ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <UserMinus className="h-3 w-3" />
                       )}
-                      <span>Удалить</span>
+                      <span>{t("messenger.remove", lang)}</span>
                     </button>
                   )}
                 </li>

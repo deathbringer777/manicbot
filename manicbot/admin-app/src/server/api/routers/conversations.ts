@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, adminProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { conversations, tenants, users } from "~/server/db/schema";
-import { eq, and, desc, lt, like, sql } from "drizzle-orm";
+import { eq, and, desc, lt, like, sql, inArray } from "drizzle-orm";
 
 export const conversationsRouter = createTRPCRouter({
   /**
@@ -50,21 +50,39 @@ export const conversationsRouter = createTRPCRouter({
         .orderBy(desc(conversations.lastMessageAt))
         .limit(input.limit);
 
-      // Resolve user names for conversations that have internalUserId
+      // Batch-resolve user names for conversations that have internalUserId.
+      // Old: one SELECT per unique (tenantId, chatId) pair — N+1 under load.
+      // Fix: collect all chatIds per tenant and issue a single IN-query per tenant
+      // (or one cross-tenant IN-query for the admin view which already spans
+      // multiple tenants). Since conversations in admin view are already scoped
+      // to one tenant via filter or paginated small sets, a single IN-query is safe.
       const userIds = rows
         .filter((r) => r.internalUserId)
-        .map((r) => ({ tenantId: r.tenantId, chatId: r.internalUserId! }));
+        .map((r) => ({ tenantId: r.tenantId, chatId: Number(r.internalUserId!) }));
       const userMap = new Map<string, string>();
       if (userIds.length) {
-        const uniqueKeys = [...new Set(userIds.map((u) => `${u.tenantId}:${u.chatId}`))];
-        for (const key of uniqueKeys) {
-          const [tid, cid] = key.split(":");
-          const u = await ctx.db
-            .select({ name: users.name, tgUsername: users.tgUsername })
+        // Deduplicate by (tenantId, chatId) key.
+        const uniqueMap = new Map<string, { tenantId: string; chatId: number }>();
+        for (const u of userIds) {
+          uniqueMap.set(`${u.tenantId}:${u.chatId}`, u);
+        }
+        // Group by tenantId to produce one IN-query per tenant (typically 1).
+        const byTenant = new Map<string, number[]>();
+        for (const { tenantId: tid, chatId } of uniqueMap.values()) {
+          if (!byTenant.has(tid)) byTenant.set(tid, []);
+          byTenant.get(tid)!.push(chatId);
+        }
+        for (const [tid, chatIds] of byTenant.entries()) {
+          const matched = await ctx.db
+            .select({ chatId: users.chatId, name: users.name, tgUsername: users.tgUsername })
             .from(users)
-            .where(and(eq(users.tenantId, tid!), eq(users.chatId, Number(cid))))
-            .limit(1);
-          if (u[0]) userMap.set(key, u[0].name || (u[0].tgUsername ? `@${u[0].tgUsername}` : ""));
+            .where(and(eq(users.tenantId, tid), inArray(users.chatId, chatIds)));
+          for (const u of matched) {
+            userMap.set(
+              `${tid}:${u.chatId}`,
+              u.name || (u.tgUsername ? `@${u.tgUsername}` : ""),
+            );
+          }
         }
       }
 
@@ -104,27 +122,25 @@ export const conversationsRouter = createTRPCRouter({
         .orderBy(desc(conversations.lastMessageAt))
         .limit(input.limit);
 
-      // Resolve user names
-      const userIds = rows
+      // Batch-resolve user names — single IN-query replacing the old N+1 for-loop.
+      const withUserId = rows
         .filter((r) => r.internalUserId)
-        .map((r) => ({ tenantId: r.tenantId, chatId: r.internalUserId! }));
-      const userMap = new Map<string, string>();
-      if (userIds.length) {
-        const uniqueKeys = [...new Set(userIds.map((u) => `${u.tenantId}:${u.chatId}`))];
-        for (const key of uniqueKeys) {
-          const [tid, cid] = key.split(":");
-          const u = await ctx.db
-            .select({ name: users.name, tgUsername: users.tgUsername })
-            .from(users)
-            .where(and(eq(users.tenantId, tid!), eq(users.chatId, Number(cid))))
-            .limit(1);
-          if (u[0]) userMap.set(key, u[0].name || (u[0].tgUsername ? `@${u[0].tgUsername}` : ""));
+        .map((r) => Number(r.internalUserId!));
+      const uniqueChatIds = [...new Set(withUserId)];
+      const userMap = new Map<number, string>();
+      if (uniqueChatIds.length) {
+        const matched = await ctx.db
+          .select({ chatId: users.chatId, name: users.name, tgUsername: users.tgUsername })
+          .from(users)
+          .where(and(eq(users.tenantId, input.tenantId), inArray(users.chatId, uniqueChatIds)));
+        for (const u of matched) {
+          userMap.set(u.chatId, u.name || (u.tgUsername ? `@${u.tgUsername}` : ""));
         }
       }
 
       const items = rows.map((r) => ({
         ...r,
-        displayName: userMap.get(`${r.tenantId}:${r.internalUserId}`) || null,
+        displayName: r.internalUserId ? (userMap.get(Number(r.internalUserId)) ?? null) : null,
         tenantName: null as string | null,
       }));
 

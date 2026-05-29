@@ -5,6 +5,22 @@
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
+// #S2-6 — pin the Stripe API version on EVERY admin-app request, in lockstep
+// with the Worker (`manicbot/src/billing/stripe.js` STRIPE_API_VERSION). An
+// unpinned key floats on whatever default version the dashboard advertises, so
+// a server-side version bump could silently relocate fields we read at the
+// response root (e.g. `current_period_end` moved into `items[]` in 2025-04-01).
+// Bump this with intent, in both files together — never implicitly.
+const STRIPE_API_VERSION = "2024-06-20";
+
+/** Auth + pinned-version headers shared by every Stripe call. */
+function stripeAuthHeaders(secretKey: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${secretKey}`,
+    "Stripe-Version": STRIPE_API_VERSION,
+  };
+}
+
 function encodeForm(data: Record<string, string>): string {
   return Object.entries(data)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
@@ -15,7 +31,7 @@ async function stripePost<T>(secretKey: string, path: string, data: Record<strin
   const res = await fetch(`${STRIPE_API}${path}`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${secretKey}`,
+      ...stripeAuthHeaders(secretKey),
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: encodeForm(data),
@@ -32,7 +48,7 @@ async function stripeGet<T>(secretKey: string, path: string, params?: Record<str
   let url = `${STRIPE_API}${path}`;
   if (params) url += "?" + encodeForm(params);
   const res = await fetch(url, {
-    headers: { "Authorization": `Bearer ${secretKey}` },
+    headers: stripeAuthHeaders(secretKey),
     signal: AbortSignal.timeout(15_000),
   });
   const json = await res.json() as T & { error?: { message?: string } };
@@ -215,7 +231,7 @@ export async function retrieveSubscription(
   subscriptionId: string,
 ): Promise<StripeSubscription | null> {
   const res = await fetch(`${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
-    headers: { Authorization: `Bearer ${secretKey}` },
+    headers: stripeAuthHeaders(secretKey),
     signal: AbortSignal.timeout(15_000),
   });
   if (res.status === 404) return null;
@@ -241,7 +257,7 @@ export async function ensureCoupon(
   durationOpts: { duration: "once" | "repeating" | "forever"; months?: number },
 ): Promise<{ id: string; percent_off: number; duration: string; duration_in_months?: number | null }> {
   const getUrl = `${STRIPE_API}/coupons/${encodeURIComponent(code)}`;
-  const headers = { Authorization: `Bearer ${secretKey}` };
+  const headers = stripeAuthHeaders(secretKey);
 
   const getRes = await fetch(getUrl, { headers, signal: AbortSignal.timeout(15_000) });
   if (getRes.ok) return await getRes.json();

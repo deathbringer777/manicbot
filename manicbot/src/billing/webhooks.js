@@ -86,10 +86,43 @@ export async function verifyStripeSignature(payload, signature, secret) {
   return timingSafeEqualLowerHex(expectedHex, v1);
 }
 
+/**
+ * Resolve the tenant id behind a Stripe customer id.
+ *
+ * #S2-3 — two write paths populate the customer→tenant mapping and they do
+ * NOT overlap:
+ *   - the Worker `checkout.session.completed` handler writes `stripe_customers`
+ *   - the admin-app checkout writes `tenants.stripe_customer_id` directly and
+ *     never touches `stripe_customers`.
+ * A customer-keyed event (invoice.paid / invoice.payment_failed /
+ * subscription.updated) that arrives BEFORE any checkout.session.completed
+ * therefore used to silently no-op for admin-app-provisioned tenants.
+ *
+ * We first try `stripe_customers` (fast, indexed) and fall back to
+ * `tenants.stripe_customer_id`. On a fallback hit we self-heal the
+ * `stripe_customers` row so subsequent lookups take the fast path and the two
+ * mappings converge.
+ */
 async function resolveTenantIdByCustomer(ctx, customerId) {
   if (!customerId || !ctx?.db) return null;
   const row = await dbGet(ctx, 'SELECT tenant_id FROM stripe_customers WHERE customer_id = ?', customerId);
-  return row?.tenant_id || null;
+  if (row?.tenant_id) return row.tenant_id;
+
+  // Fallback: admin-app checkout stamps tenants.stripe_customer_id directly.
+  const tRow = await dbGet(ctx, 'SELECT id FROM tenants WHERE stripe_customer_id = ? LIMIT 1', customerId);
+  if (!tRow?.id) return null;
+
+  // Self-heal: backfill stripe_customers so the next lookup is the fast path.
+  // INSERT OR IGNORE — a concurrent isolate that already healed it is a no-op.
+  try {
+    await dbRun(ctx,
+      'INSERT OR IGNORE INTO stripe_customers (customer_id, tenant_id) VALUES (?, ?)',
+      customerId, tRow.id,
+    );
+  } catch (e) {
+    log.warn('stripe-webhook', { message: 'stripe_customers self-heal failed', error: e?.message });
+  }
+  return tRow.id;
 }
 
 /**
@@ -182,12 +215,23 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       }
       // First time we see this event — record receipt. INSERT OR IGNORE so
       // a concurrent retry that just lost the SELECT race becomes a no-op
-      // here; one of the two handlers will eventually win the processed_at
-      // UPDATE and the other one's downstream writes are idempotent.
-      await dbRun(ctx,
+      // here.
+      //
+      // #S2-5 — the INSERT is the authoritative claim, not the SELECT. Under
+      // concurrent re-delivery BOTH isolates can pass the SELECT (each sees no
+      // row) and then race the INSERT. Exactly one wins (changes=1); the other
+      // gets changes=0. The loser MUST back off with a 503 — otherwise the
+      // handler body (e.g. the plan_upgrade email) runs twice. The 503 makes
+      // Stripe retry, by which point the winner has set processed_at and the
+      // retry short-circuits at the SELECT above.
+      const insertRes = await dbRun(ctx,
         'INSERT OR IGNORE INTO stripe_events (event_id, type, received_at) VALUES (?, ?, ?)',
         eventId, type, nowSec(),
       );
+      if (insertRes?.meta?.changes === 0) {
+        log.warn('stripe-webhook', { message: 'lost INSERT race for event id — asking Stripe to retry', eventId });
+        return { ok: false, status: 503 };
+      }
     } catch (e) {
       // Idempotency layer should never block a webhook — if D1 is briefly
       // unavailable, fall through to processing. Worst case Stripe retries
@@ -320,10 +364,29 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
     const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
     if (customerId) {
       const tenantId = await resolveTenantIdByCustomer(ctx, customerId);
-      if (tenantId && ctx.resendApiKey && ctx.resendFrom) {
-        // fire-and-forget: don't block 200 response on email delivery
-        sendInvoiceEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
-          .catch(e => log.error('webhook.invoiceEmail', e));
+      if (tenantId) {
+        // #S2-2 — dunning recovery. A paid invoice is the authoritative signal
+        // that the card cleared. Restore active state directly instead of
+        // waiting for a separate customer.subscription.updated, which Stripe
+        // does not guarantee fires (and which can arrive out of order or be
+        // dropped). Only lift tenants that are actually in a payment-trouble
+        // state — never resurrect a deliberately canceled/inactive tenant.
+        // Idempotent: re-firing on an already-active tenant is a no-op write.
+        const cur = await dbGet(ctx, 'SELECT billing_status FROM tenants WHERE id = ?', tenantId);
+        const recoverable = cur && ['grace_period', 'past_due', 'unpaid'].includes(cur.billing_status);
+        if (recoverable) {
+          await updateTenantBilling(ctx, tenantId, {
+            billingStatus: 'active',
+            subscriptionStatus: 'active',
+            graceEndsAt: null,
+            updatedAt: nowSec(),
+          });
+        }
+        if (ctx.resendApiKey && ctx.resendFrom) {
+          // fire-and-forget: don't block 200 response on email delivery
+          sendInvoiceEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
+            .catch(e => log.error('webhook.invoiceEmail', e));
+        }
       }
     }
   }

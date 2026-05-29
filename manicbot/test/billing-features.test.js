@@ -32,6 +32,28 @@ describe('canUse — feature gating', () => {
     expect(canUse(ctx, 'calendar')).toBe(false);
   });
 
+  // S2 Fix 4 — past_due / unpaid must behave like grace_period (booking-only).
+  // Previously these statuses fell through to the "trialing or active" branch
+  // and granted FULL plan access, so entitlement depended purely on which
+  // webhook arrived first (subscription.updated → past_due vs payment_failed →
+  // grace_period). Both must deny premium features.
+  it('past_due only allows booking (dunning — no premium access)', () => {
+    const ctx = makeCtx({ billingStatus: 'past_due', plan: 'pro' });
+    expect(canUse(ctx, 'booking')).toBe(true);
+    expect(canUse(ctx, 'ai')).toBe(false);
+    expect(canUse(ctx, 'calendar')).toBe(false);
+    expect(canUse(ctx, 'support_tickets')).toBe(false);
+    expect(canUse(ctx, 'whatsapp')).toBe(false);
+  });
+
+  it('unpaid only allows booking (dunning — no premium access)', () => {
+    const ctx = makeCtx({ billingStatus: 'unpaid', plan: 'max' });
+    expect(canUse(ctx, 'booking')).toBe(true);
+    expect(canUse(ctx, 'ai')).toBe(false);
+    expect(canUse(ctx, 'calendar')).toBe(false);
+    expect(canUse(ctx, 'white_label')).toBe(false);
+  });
+
   it('trialing with pro plan allows AI', () => {
     const ctx = makeCtx({ billingStatus: 'trialing', plan: 'pro' });
     expect(canUse(ctx, 'ai')).toBe(true);

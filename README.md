@@ -13,7 +13,7 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **Roles** — system_admin / technical_support / support / tenant_owner / master / client
 - **Multi-tenancy** — D1 (primary tenant/bot registry) + KV for state; prefix `t:{tenantId}:`*; legacy mode `b:{botId}:*` with a single `BOT_TOKEN`
 - **Unified inbox** — WhatsApp / Instagram (Meta webhooks) merged with Telegram in one conversation view via shared `handlers/inbound.js` → same `onMsg` / `onCb`
-- **Billing** — Stripe Checkout and Portal, three plans (Start / Pro / Studio)
+- **Billing** — Stripe Checkout and Portal, three plans (Start / Pro / Max)
 - **Support** — client↔master tickets and platform tickets client↔support agent
 - **Notifications** — cron every 15 min, appointment reminders
 - **Calendar** — ICS file for each appointment; admin dashboard offers Calendar / Agenda / List view modes for appointments (`SalonBigCalendar` month grid + `SalonAgendaView` text-list with Today/Tomorrow/weekday grouping)
@@ -22,7 +22,7 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **4-language interface** — RU, UA, EN, PL
 - **Management panels** — HTML admin panel for tenants, sysadmin panel for the platform
 - **CSV export** — clients and appointments
-- **Test accounts** — reproducible 8-account roster (3 salons + 3 masters with annual plans + 1 salon + 1 master with expired trials). See [TEST_ACCOUNTS.md](TEST_ACCOUNTS.md).
+- **Test accounts** — reproducible 8-account roster (3 salons + 3 masters with annual plans + 1 salon + 1 master with expired trials). See [SEED_TEST_DATA.md](manicbot/SEED_TEST_DATA.md); run `npm run seed:test-accounts` to populate.
 
 ---
 
@@ -154,7 +154,7 @@ manicbot/
 
 ## Worker Routes
 
-Implementation is split across `src/http/*.js` (see [CLAUDE.md](CLAUDE.md) — modules table).
+Implementation is split across `src/http/*.js` (see `CLAUDE.md` — modules table; file is gitignored/local).
 
 ```
 POST /stripe/webhook       → Stripe
@@ -225,31 +225,62 @@ cd manicbot/admin-app && npm run typecheck && npm test
 ## Environment Variables
 
 
-| Variable                                                          | Description                                                                      |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `MANICBOT`                                                        | KV namespace binding                                                             |
-| `BOT_TOKEN`                                                       | Telegram Bot Token (legacy/fallback)                                             |
-| `WEBHOOK_SECRET`                                                  | Telegram webhook secret                                                          |
-| `ADMIN_KEY`                                                       | Key for /sysadmin and service endpoints                                          |
-| `ADMIN_CHAT_ID`                                                   | Telegram chat_id of the platform creator                                         |
-| `WORKERS_AI_API_TOKEN`                                            | Token for Workers AI REST API                                                    |
-| `CLOUDFLARE_ACCOUNT_ID`                                           | Cloudflare account (Workers AI)                                                  |
-| `STRIPE_SECRET_KEY`                                               | Stripe API key                                                                   |
-| `STRIPE_WEBHOOK_SECRET`                                           | Secret for Stripe webhook verification                                           |
-| `STRIPE_PRICE_START_MONTHLY`                                      | Stripe Price ID for Start plan                                                   |
-| `STRIPE_PRICE_PRO_MONTHLY`                                        | Stripe Price ID for Pro plan                                                     |
-| `STRIPE_PRICE_STUDIO_MONTHLY`                                     | Stripe Price ID for Studio plan                                                  |
-| `APP_BASE_URL`                                                    | Public worker URL (`https://manicbot.com`)                                       |
-| `BOT_ENCRYPTION_KEY`                                              | Recommended (startup warning if missing): encrypts bot tokens in D1/KV           |
-| `REQUIRE_WEBHOOK_BOT_ID`                                          | Optional: `"1"` — reject legacy `POST /webhook` without `botId` when D1 is bound |
-| `META_APP_SECRET`, `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG` | For Meta webhooks (see `wrangler` / dashboard)                                   |
+| Variable                                                          | Where set    | Description                                                                        |
+| ----------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------- |
+| `MANICBOT`                                                        | wrangler.toml binding | KV namespace binding                                                      |
+| `BOT_TOKEN`                                                       | secret       | Telegram Bot Token (legacy/fallback)                                               |
+| `WEBHOOK_SECRET`                                                  | secret       | Telegram webhook secret                                                            |
+| `ADMIN_KEY`                                                       | secret       | Key for /sysadmin and service endpoints                                            |
+| `ADMIN_CHAT_ID`                                                   | secret       | Telegram chat_id of the platform creator                                           |
+| `WORKERS_AI_API_TOKEN`                                            | secret       | Token for Workers AI REST API                                                      |
+| `CLOUDFLARE_ACCOUNT_ID`                                           | secret       | Cloudflare account ID (Workers AI)                                                 |
+| `STRIPE_SECRET_KEY`                                               | secret       | Stripe API key                                                                     |
+| `STRIPE_WEBHOOK_SECRET`                                           | secret       | Secret for Stripe webhook verification                                             |
+| `STRIPE_PRICE_START_MONTHLY`                                      | secret       | Stripe Price ID for Start plan (monthly)                                           |
+| `STRIPE_PRICE_PRO_MONTHLY`                                        | secret       | Stripe Price ID for Pro plan (monthly)                                             |
+| `STRIPE_PRICE_MAX_MONTHLY`                                        | secret       | Stripe Price ID for Max plan (monthly)                                             |
+| `STRIPE_PRICE_START_ANNUAL`                                       | secret       | Stripe Price ID for Start plan (annual)                                            |
+| `STRIPE_PRICE_PRO_ANNUAL`                                         | secret       | Stripe Price ID for Pro plan (annual)                                              |
+| `STRIPE_PRICE_MAX_ANNUAL`                                         | secret       | Stripe Price ID for Max plan (annual)                                              |
+| `APP_BASE_URL`                                                    | `[vars]`     | Public worker URL (`https://manicbot.com`) — already set in wrangler.toml          |
+| `LANDING_URL`                                                     | `[vars]`     | Cloudflare Pages URL for landing proxy — already set in wrangler.toml              |
+| `ADMIN_APP_URL`                                                   | `[vars]`     | Cloudflare Pages URL for admin-app proxy — already set in wrangler.toml            |
+| `META_APP_ID`                                                     | `[vars]`     | Facebook Login for Business app ID — already set in wrangler.toml                  |
+| `META_INSTAGRAM_APP_ID`                                           | `[vars]`     | Instagram Login product app ID — already set in wrangler.toml                      |
+| `MARKETING_ASSETS_PUBLIC_URL`                                     | `[vars]`     | R2 public URL for marketing image assets — already set in wrangler.toml            |
+| `MARKETING_AUTOPILOT_ENABLED`                                     | `[vars]`     | `"1"` to enable marketing cron autopilot — already set in wrangler.toml            |
+| `RETENTION_DRY_RUN`                                               | `[vars]`     | `"1"` for dry-run retention cron (no mutations) — already set in wrangler.toml     |
+| `BOT_ENCRYPTION_KEY`                                              | secret       | Encrypts bot tokens in D1/KV; required at startup (set `ALLOW_PLAINTEXT_TOKENS=1` to bypass locally) |
+| `BOT_ENCRYPTION_KEY_OLD`                                          | secret       | Previous encryption key — set only during key rotation, unset after                |
+| `GOOGLE_OAUTH_CLIENT_ID`                                          | secret       | Google OAuth client ID for Calendar integration                                    |
+| `GOOGLE_OAUTH_CLIENT_SECRET`                                      | secret       | Google OAuth client secret for Calendar integration                                |
+| `GOOGLE_OAUTH_REDIRECT_URI`                                       | secret       | Google OAuth redirect URI (defaults to `{APP_BASE_URL}/google/callback`)           |
+| `GOOGLE_TOKEN_ENCRYPTION_KEY`                                     | secret       | Dedicated AES key for Google refresh tokens (falls back to `BOT_ENCRYPTION_KEY`)  |
+| `ANTHROPIC_API_KEY`                                               | secret       | Anthropic API key for marketing caption generation                                 |
+| `NOTIFY_TOKEN`                                                     | secret       | Low-privilege Bearer token for `POST /admin/notify` (min 32 chars)                |
+| `NOTIFY_BOT_TOKEN`                                                | secret       | Telegram bot token for internal admin notifications (falls back to `BOT_TOKEN`)    |
+| `NOTIFY_CHAT_ID`                                                  | secret       | Telegram chat_id for admin notifications (falls back to `ADMIN_CHAT_ID`)          |
+| `INTERNAL_API_TOKEN`                                              | secret       | Shared HMAC secret between Worker and admin-app for internal endpoints             |
+| `UPLOAD_TOKEN_SECRET`                                             | secret       | HMAC-SHA256 secret for signing short-lived upload tokens                          |
+| `WS_TOKEN_SECRET`                                                 | secret       | HMAC secret for signing WebSocket upgrade tokens (`/ws/messenger/{tenantId}`)     |
+| `RESEND_API_KEY`                                                  | secret       | Resend transactional email API key                                                 |
+| `RESEND_FROM`                                                     | secret       | Resend sender address, e.g. `ManicBot <noreply@manicbot.com>`                      |
+| `MARKETING_IG_PAGE_ID`                                            | secret       | Facebook Page ID for marketing autopilot IG posting                               |
+| `MARKETING_IG_ACCESS_TOKEN`                                       | secret       | Page access token for marketing autopilot IG posting                              |
+| `META_APP_SECRET`                                                 | secret       | Meta app secret for `X-Hub-Signature-256` verification on webhooks                |
+| `META_INSTAGRAM_APP_SECRET`                                       | secret       | Instagram Login app secret (separate from `META_APP_SECRET` post Mar-2026)        |
+| `META_VERIFY_TOKEN_WA`                                            | secret       | Verify token for WhatsApp webhook handshake                                       |
+| `META_VERIFY_TOKEN_IG`                                            | secret       | Verify token for Instagram webhook handshake                                      |
+| `REQUIRE_WEBHOOK_BOT_ID`                                          | secret/var   | Optional: `"1"` — reject legacy `POST /webhook` without `botId` when D1 is bound  |
+| `ALLOW_PLAINTEXT_TOKENS`                                          | secret/var   | Dev only: `"1"` — bypass `BOT_ENCRYPTION_KEY` requirement; never set in production |
+| `WEBHOOK_DEDUP_BACKEND`                                           | secret/var   | Dedup backend: `"kv"` (default), `"d1"`, or `"none"`                               |
 
 
 ---
 
 ## Documentation
 
-- `[CLAUDE.md](CLAUDE.md)` — architecture reference for development (Worker, Mini App, roles, deploy)
+- `CLAUDE.md` — architecture reference for development (Worker, Mini App, roles, deploy); gitignored/local
 - `[BOT_GUIDE.md](manicbot/BOT_GUIDE.md)` — bot user guide
 - `[CLOUDFLARE_SETUP.md](manicbot/CLOUDFLARE_SETUP.md)` — Cloudflare setup
 - `[STRIPE_SETUP.md](manicbot/STRIPE_SETUP.md)` — billing setup

@@ -18,7 +18,7 @@ The `billing_status` field in the D1 `tenants` table:
 
 | Status         | Description                                    | Feature Access                |
 |----------------|------------------------------------------------|-------------------------------|
-| `trialing`     | Trial period (7 days after registration)       | Full access per plan          |
+| `trialing`     | Trial period (14 days after registration)      | Full access per plan          |
 | `active`       | Active subscription                            | Full access per plan          |
 | `grace_period` | Payment failed, waiting (7 days)               | Booking only (`booking`)      |
 | `past_due`     | Stripe: overdue payment                        | Per plan (until grace)        |
@@ -33,7 +33,7 @@ Possible feature values: `booking`, `ai`, `calendar`, `tickets`, `white_label`.
 ## Lifecycle
 
 ```
-Registration → trialing (7 days)
+Registration → trialing (14 days)
                 │
                 ├─ subscription paid (Stripe Checkout)
                 │         ↓
@@ -59,14 +59,17 @@ Registration → trialing (7 days)
 
 ## Stripe Environment Variables
 
-| Secret                        | Description                                     |
-|-------------------------------|-------------------------------------------------|
-| `STRIPE_SECRET_KEY`           | `sk_live_...` or `sk_test_...`                  |
-| `STRIPE_WEBHOOK_SECRET`       | `whsec_...` (from Stripe Dashboard)             |
-| `STRIPE_PRICE_START_MONTHLY`  | `price_...` for Start plan                      |
-| `STRIPE_PRICE_PRO_MONTHLY`    | `price_...` for Pro plan                        |
-| `STRIPE_PRICE_MAX_MONTHLY`    | `price_...` for MAX plan                        |
-| `APP_BASE_URL`                | `https://manicbot.com` (redirect after payment) |
+| Secret                        | Description                                                                  |
+|-------------------------------|------------------------------------------------------------------------------|
+| `STRIPE_SECRET_KEY`           | `sk_live_...` or `sk_test_...`                                               |
+| `STRIPE_WEBHOOK_SECRET`       | `whsec_...` (from Stripe Dashboard)                                          |
+| `STRIPE_PRICE_START_MONTHLY`  | `price_...` for Start plan (monthly)                                         |
+| `STRIPE_PRICE_PRO_MONTHLY`    | `price_...` for Pro plan (monthly)                                           |
+| `STRIPE_PRICE_MAX_MONTHLY`    | `price_...` for MAX plan (monthly)                                           |
+| `STRIPE_PRICE_START_ANNUAL`   | `price_...` for Start plan (annual) — optional                               |
+| `STRIPE_PRICE_PRO_ANNUAL`     | `price_...` for Pro plan (annual) — optional                                 |
+| `STRIPE_PRICE_MAX_ANNUAL`     | `price_...` for MAX plan (annual) — optional                                 |
+| `APP_BASE_URL`                | `[vars]` — already in `wrangler.toml` as `https://manicbot.com`; not a secret |
 
 Quick setup: `cd manicbot && ./scripts/setup-stripe-secrets.sh`
 
@@ -74,13 +77,22 @@ Quick setup: `cd manicbot && ./scripts/setup-stripe-secrets.sh`
 
 ## Stripe Events → Actions
 
-| Stripe Event                         | Action in ManicBot                                            |
-|--------------------------------------|---------------------------------------------------------------|
-| `checkout.session.completed`         | `billing_status=active`, customer_id → D1 `stripe_customers` |
-| `customer.subscription.updated`      | Sync plan, status, `current_period_end`                       |
-| `customer.subscription.deleted`      | `billing_status=inactive`                                     |
-| `invoice.payment_failed`             | `billing_status=grace_period`, `grace_ends_at=now+7days`      |
-| `invoice.payment_succeeded`          | `billing_status=active` (if was grace_period)                 |
+| Stripe Event                               | Action in ManicBot                                                |
+|--------------------------------------------|-------------------------------------------------------------------|
+| `checkout.session.completed`               | `billing_status=active`, customer_id → D1 `stripe_customers`     |
+| `customer.subscription.updated`            | Sync plan, status, `current_period_end`                           |
+| `customer.subscription.deleted`            | `billing_status=inactive`                                         |
+| `invoice.payment_failed`                   | `billing_status=grace_period`, `grace_ends_at=now+7days`          |
+| `invoice.paid`                             | Plugin addon billing; referral commission recording               |
+| `invoice.payment_succeeded`                | Plugin addon billing; referral commission recording (same handler as `invoice.paid`) |
+| `customer.subscription.trial_will_end`     | Fire notification to tenant; deduplicated per subscription        |
+| `invoice.upcoming`                         | Fire payment-due notification to tenant                           |
+| `charge.dispute.created`                   | Log dispute event to `billing_events`                             |
+
+> **Note on grace recovery:** restoring `billing_status` from `grace_period` → `active` on successful
+> payment is handled by `customer.subscription.updated` (which Stripe fires when a past-due subscription
+> becomes active again). The `invoice.payment_succeeded`/`invoice.paid` handler does NOT perform the
+> recovery flip directly.
 
 Handler: `src/billing/webhooks.js` → `handleStripeWebhook()`.
 Billing record in D1: `src/billing/storage.js` → `updateTenantBilling()`.

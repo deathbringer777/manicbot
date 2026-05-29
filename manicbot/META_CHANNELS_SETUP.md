@@ -1,6 +1,6 @@
 # Instagram and WhatsApp (Meta) — Salon Setup Guide
 
-**Instagram Direct** and **WhatsApp** channels are available on **Pro** and **Studio** plans. Setup is done in the **Telegram Mini App** (Channels tab) and in **Meta for Developers**.
+**Instagram Direct** and **WhatsApp** channels are available on **Pro** and **Max** plans. Setup is done in the **Telegram Mini App** (Channels tab) and in **Meta for Developers**.
 
 ## What you need
 

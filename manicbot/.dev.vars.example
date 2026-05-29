@@ -19,6 +19,10 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_START_MONTHLY=price_...
 STRIPE_PRICE_PRO_MONTHLY=price_...
 STRIPE_PRICE_MAX_MONTHLY=price_...
+# Annual pricing (optional — leave unset if not offering annual plans)
+# STRIPE_PRICE_START_ANNUAL=price_...
+# STRIPE_PRICE_PRO_ANNUAL=price_...
+# STRIPE_PRICE_MAX_ANNUAL=price_...
 
 # Cloudflare Workers AI (для LLM-чата)
 CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
@@ -29,6 +33,8 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # Шифрование токенов IG/WA в D1/KV (ОБЯЗАТЕЛЬНО для Meta-каналов в production)
 # Должен быть установлен ДО провижн Meta-канала
 # BOT_ENCRYPTION_KEY=32_или_более_случайных_символов
+# Previous encryption key — set only during key rotation; unset after rotate completes
+# BOT_ENCRYPTION_KEY_OLD=previous_key_value
 
 # Meta (WhatsApp / Instagram) webhooks
 # META_APP_SECRET=your_meta_app_secret
@@ -47,9 +53,59 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # Instagram: IGSID через запятую — игнорировать (например аккаунт самого бота)
 # INSTAGRAM_IGNORE_SENDER_IDS=1784360123456789
 
+# ─── NOTIFICATIONS / INTERNAL ────────────────────────────────────────────────
+
+# Low-privilege notify-only Bearer token for POST /admin/notify (min 32 chars)
+# NOTIFY_TOKEN=your_notify_only_token_min_32_chars
+
+# Telegram bot token for internal admin notifications (defaults to BOT_TOKEN)
+# NOTIFY_BOT_TOKEN=123456:ABCdef...
+
+# Telegram chat_id for admin notifications (defaults to ADMIN_CHAT_ID)
+# NOTIFY_CHAT_ID=123456789
+
+# Shared Bearer secret between Worker and admin-app for internal endpoints
+# (e.g. /admin/confirm-subscription). Must match admin-app INTERNAL_API_TOKEN.
+# INTERNAL_API_TOKEN=your_internal_api_token
+
+# HMAC-SHA256 secret for upload token signing. Must match admin-app UPLOAD_TOKEN_SECRET.
+# UPLOAD_TOKEN_SECRET=your_upload_token_secret
+
+# HMAC secret for WebSocket upgrade tokens (/ws/messenger/{tenantId}).
+# Must match admin-app WS_TOKEN_SECRET.
+# WS_TOKEN_SECRET=your_ws_token_secret
+
+# ─── EMAIL ────────────────────────────────────────────────────────────────────
+
+# Resend transactional email
+# RESEND_API_KEY=re_...
+# RESEND_FROM=ManicBot <noreply@manicbot.com>
+
+# ─── ANTHROPIC ────────────────────────────────────────────────────────────────
+
+# Anthropic Claude API key — used by marketing caption generator
+# ANTHROPIC_API_KEY=sk-ant-...
+
+# ─── MARKETING ────────────────────────────────────────────────────────────────
+
+# Facebook Page ID + token for IG marketing autopilot posting
+# MARKETING_IG_PAGE_ID=your_page_id
+# MARKETING_IG_ACCESS_TOKEN=your_page_access_token
+
+# ─── ADVANCED / DEVOPS ────────────────────────────────────────────────────────
+
+# Webhook deduplication backend: "kv" (default), "d1", or "none"
+# WEBHOOK_DEDUP_BACKEND=kv
+
+# Dev-only bypass for BOT_ENCRYPTION_KEY requirement — NEVER set in production
+# ALLOW_PLAINTEXT_TOKENS=1
+
 # Google OAuth (для интеграции Google Calendar)
-# GOOGLE_CLIENT_ID=...
-# GOOGLE_CLIENT_SECRET=...
+# Code reads GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET (not GOOGLE_CLIENT_ID/SECRET)
+# GOOGLE_OAUTH_CLIENT_ID=...
+# GOOGLE_OAUTH_CLIENT_SECRET=...
+# GOOGLE_OAUTH_REDIRECT_URI=https://manicbot.com/google/callback
+# GOOGLE_TOKEN_ENCRYPTION_KEY=32_or_more_random_chars  # dedicated key; falls back to BOT_ENCRYPTION_KEY
 
 # Отклонять legacy POST /webhook (без botId) — только D1 мультиарендный режим
 # REQUIRE_WEBHOOK_BOT_ID=1

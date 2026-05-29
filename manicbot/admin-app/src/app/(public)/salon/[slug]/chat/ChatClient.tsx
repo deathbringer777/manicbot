@@ -8,6 +8,7 @@ import { Composer } from "~/components/chat/Composer";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import type {
+  ChatButton,
   ChatMessage,
   ChatMessageFromBot,
   ChatSalon,
@@ -45,7 +46,12 @@ const BLANK_RE = /[\s\u200b-\u200f\u2060\ufeff]/g;
  * has real text, OR a photo, OR at least one button — otherwise it's a no-op
  * layout artifact and we drop it. (User messages are always rendered.)
  */
-export function isRenderableMessage(m: ChatMessage): boolean {
+export function isRenderableMessage(m: {
+  role: "user" | "bot";
+  text?: string | null;
+  photo?: string | null;
+  buttons?: ChatButton[][] | null;
+}): boolean {
   if (m.role === "user") return true;
   const hasText = (m.text ?? "").replace(BLANK_RE, "").length > 0;
   const hasPhoto = !!m.photo;

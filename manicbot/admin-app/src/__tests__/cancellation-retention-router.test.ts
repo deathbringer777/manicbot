@@ -273,7 +273,8 @@ describe("acceptRetentionOffer — happy path + edges", () => {
   });
 
   it("mints idempotent coupon then applies it to subscription (monthly path)", async () => {
-    const { db, insertCalls } = createDbMock([[tenantRow()]]);
+    // select #1 → tenant row; select #2 → cooldown probe (empty = eligible)
+    const { db, insertCalls } = createDbMock([[tenantRow()], []]);
     vi.mocked(ensureCoupon).mockResolvedValueOnce({
       id: "RETENTION_MONTHLY_50_3M",
       percent_off: 50,
@@ -320,7 +321,8 @@ describe("acceptRetentionOffer — happy path + edges", () => {
   });
 
   it("annual coupon uses duration=once, not repeating", async () => {
-    const { db } = createDbMock([[tenantRow()]]);
+    // select #1 → tenant row; select #2 → cooldown probe (empty = eligible)
+    const { db } = createDbMock([[tenantRow()], []]);
     vi.mocked(ensureCoupon).mockResolvedValueOnce({
       id: "RETENTION_ANNUAL_25_1Y",
       percent_off: 25,
@@ -342,8 +344,21 @@ describe("acceptRetentionOffer — happy path + edges", () => {
     );
   });
 
-  it("calling acceptRetentionOffer twice in a row results in two ensureCoupon calls (both idempotent)", async () => {
-    const { db } = createDbMock([[tenantRow()], [tenantRow()]]);
+  // S2 Fix 1 — acceptRetentionOffer must be cooldown-aware and idempotent.
+  // Previously ONLY requestCancellation (the read step) computed `inCooldown`;
+  // acceptRetentionOffer applied the coupon unconditionally, so a client that
+  // re-POSTed (double-click, retry, or a malicious replay) re-applied the −50%
+  // coupon and Stripe RESET its repeating window each time — an unbounded
+  // stacking discount. The mutation now re-runs the cooldown query itself and
+  // rejects with FORBIDDEN `offer_not_eligible` when a prior accepted offer
+  // exists inside the cooldown window.
+  it("rejects the 2nd accept inside the cooldown window with FORBIDDEN offer_not_eligible and does NOT re-apply the coupon", async () => {
+    // 1st call: tenant row + empty cooldown probe (eligible → applies coupon).
+    // 2nd call: tenant row + cooldown probe returns a prior accepted row.
+    const { db } = createDbMock([
+      [tenantRow()], [],            // call 1 selects
+      [tenantRow()], [{ id: 99 }],  // call 2 selects (cooldown hit)
+    ]);
     vi.mocked(ensureCoupon).mockResolvedValue({
       id: "RETENTION_MONTHLY_50_3M",
       percent_off: 50,
@@ -353,13 +368,38 @@ describe("acceptRetentionOffer — happy path + edges", () => {
     vi.mocked(applyCouponToSubscription).mockResolvedValue({ id: SUB_ID });
 
     const caller = ownerCaller(db);
+    // First accept succeeds and applies the coupon once.
     await caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" });
-    await caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" });
+    expect(ensureCoupon).toHaveBeenCalledTimes(1);
+    expect(applyCouponToSubscription).toHaveBeenCalledTimes(1);
 
-    // ensureCoupon is the contract — the Stripe-side GET-first-then-POST logic
-    // is what makes the second call cheap. Caller hits it twice; Stripe sees
-    // one POST + one GET (proven in test/stripe-coupon-idempotency.test.js).
-    expect(ensureCoupon).toHaveBeenCalledTimes(2);
+    // Second accept inside the cooldown window must be refused — no double-apply.
+    await expect(
+      caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "offer_not_eligible" });
+
+    // Crucially, the coupon was NOT applied a second time.
+    expect(applyCouponToSubscription).toHaveBeenCalledTimes(1);
+    expect(ensureCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects accept when tenant already has an accepted offer in cooldown (first call already blocked)", async () => {
+    // tenant row + cooldown probe immediately returns a prior accepted row.
+    const { db } = createDbMock([[tenantRow()], [{ id: 7 }]]);
+    vi.mocked(ensureCoupon).mockResolvedValue({
+      id: "RETENTION_MONTHLY_50_3M",
+      percent_off: 50,
+      duration: "repeating",
+      duration_in_months: 3,
+    });
+
+    const caller = ownerCaller(db);
+    await expect(
+      caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "offer_not_eligible" });
+
+    expect(ensureCoupon).not.toHaveBeenCalled();
+    expect(applyCouponToSubscription).not.toHaveBeenCalled();
   });
 });
 

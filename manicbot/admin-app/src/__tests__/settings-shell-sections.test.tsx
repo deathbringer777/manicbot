@@ -66,10 +66,12 @@ function sectionIds() {
 describe("SettingsShell — section contract by role", () => {
   afterEach(cleanup);
 
-  it("tenant_owner sees the 10 headline sections in order (notifications between billing and appearance)", () => {
+  // Non-technical roles land on salon/profile; "account" is demoted to
+  // second-to-last (just before "help") because its sensitive controls now
+  // live in a rarely-opened "danger zone". See getSettingsSectionIds.
+  it("tenant_owner sees the 10 headline sections, salon first and account second-to-last", () => {
     mount("tenant_owner");
     expect(sectionIds()).toEqual([
-      "account",
       "salon",
       "public",
       "team",
@@ -78,6 +80,7 @@ describe("SettingsShell — section contract by role", () => {
       "notifications",
       "appearance",
       "referrals",
+      "account",
       "help",
     ]);
   });
@@ -85,7 +88,6 @@ describe("SettingsShell — section contract by role", () => {
   it("tenant_manager inherits the tenant_owner section set", () => {
     mount("tenant_manager");
     expect(sectionIds()).toEqual([
-      "account",
       "salon",
       "public",
       "team",
@@ -94,13 +96,14 @@ describe("SettingsShell — section contract by role", () => {
       "notifications",
       "appearance",
       "referrals",
+      "account",
       "help",
     ]);
   });
 
-  it("master sees a 5-section subset including profile + notifications", () => {
+  it("master sees a 5-section subset, profile first and account second-to-last", () => {
     mount("master");
-    expect(sectionIds()).toEqual(["account", "profile", "notifications", "appearance", "help"]);
+    expect(sectionIds()).toEqual(["profile", "notifications", "appearance", "account", "help"]);
   });
 
   it("support sees account / notifications / appearance / help", () => {

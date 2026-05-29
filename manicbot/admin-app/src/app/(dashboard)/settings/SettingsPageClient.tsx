@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
-import { SettingsShell } from "~/components/settings/SettingsShell";
+import { SettingsShell, getDefaultSettingsSection } from "~/components/settings/SettingsShell";
 import { AccountSection } from "~/components/settings/sections/AccountSection";
 import { AppearanceSection } from "~/components/settings/sections/AppearanceSection";
 import { HelpSection } from "~/components/settings/sections/HelpSection";
@@ -27,10 +27,24 @@ export default function SettingsPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const initialSection = searchParams.get("section") ?? "account";
-  const [activeSection, setActiveSection] = useState(initialSection);
+  const paramSection = searchParams.get("section");
+  const [activeSection, setActiveSection] = useState(paramSection ?? "account");
+  const [userNavigated, setUserNavigated] = useState(false);
+
+  // Role-aware landing tab. `role` from useRole() hydrates after first paint,
+  // so the default can't be chosen in the useState initializer. Once the role
+  // is known — and only if the URL didn't pin a ?section= and the user hasn't
+  // navigated yet — flip the still-default "account" to the role's landing tab
+  // (salon for owner/manager, profile for master). Technical roles already
+  // land on "account", so this is a no-op for them.
+  useEffect(() => {
+    if (paramSection || userNavigated || !effectiveRole) return;
+    const landing = getDefaultSettingsSection(effectiveRole);
+    setActiveSection((cur) => (cur === "account" ? landing : cur));
+  }, [effectiveRole, paramSection, userNavigated]);
 
   const handleSectionChange = (id: string) => {
+    setUserNavigated(true);
     setActiveSection(id);
     const url = new URL(window.location.href);
     url.searchParams.set("section", id);

@@ -27,6 +27,17 @@ const ACTION_WHITELIST = [
   "unarchive_master",
   "reset_master_password",
   "peek_master_password",
+  // Self-service step-up actions issued through THIS router. The code is emailed
+  // to the actor's OWN (current) account address — otp.request below always
+  // sends to ctx.webUser.email — so a session-hijacker still cannot complete
+  // the change without access to the registered mailbox.
+  //
+  // Note: email change is NOT here. Its OTP is issued by webUsers.requestEmailChange
+  // (which validates the target address first, then emails the code to the
+  // current address). Routing it through this generic issuer would let a client
+  // mint a change_email code while bypassing that validation, so it is excluded.
+  "change_password",
+  "change_role",
 ] as const;
 
 type WhitelistedAction = (typeof ACTION_WHITELIST)[number];

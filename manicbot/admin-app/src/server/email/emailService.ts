@@ -15,8 +15,6 @@ import {
   welcomeEmailHtml,
   subscriptionWelcomeEmailHtml,
   subscriptionConfirmEmailHtml,
-  emailChangeEmailHtml,
-  emailChangeCodeEmailHtml,
   loginAlertEmailHtml,
   roleRequestAdminEmailHtml,
   roleRequestDecisionEmailHtml,
@@ -191,43 +189,12 @@ export async function sendNewsletterConfirmEmail(
   });
 }
 
-/**
- * #N1 — DEPRECATED. URL-token email-change verification. Kept temporarily for
- * straggling callers; will be removed once all in-flight tokens expire (1h).
- * New code MUST use `sendEmailChangeCodeVerification` (6-digit code, no URL).
- */
-export async function sendEmailChangeVerification(
-  to: string,
-  token: string,
-  newEmail: string,
-  lang: Lang = "en",
-): Promise<SendEmailResult> {
-  const url = `${baseUrl()}/confirm-email-change?token=${encodeURIComponent(token)}`;
-  const copy = getEmailCopy(lang);
-  return sendResendEmail({
-    to,
-    subject: copy.emailChange.subject,
-    html: emailChangeEmailHtml(url, newEmail, lang),
-  });
-}
-
-/**
- * Email-change verification via 6-digit code. Body contains the code; user
- * types it into the settings dialog. Eliminates URL leakage path.
- */
-export async function sendEmailChangeCodeVerification(
-  to: string,
-  code: string,
-  newEmail: string,
-  lang: Lang = "en",
-): Promise<SendEmailResult> {
-  const copy = getEmailCopy(lang);
-  return sendResendEmail({
-    to,
-    subject: copy.emailChangeCode.subject,
-    html: emailChangeCodeEmailHtml(code, newEmail, lang),
-  });
-}
+// Email-change verification is unified onto the shared action-OTP path
+// (`sendActionOtpEmail`, action "change_email"): one 6-digit code emailed to
+// the user's CURRENT account address, code-only (no URL → no token leakage via
+// Referer / MTA logs / history). The former bespoke senders —
+// `sendEmailChangeVerification` (URL token) and `sendEmailChangeCodeVerification`
+// (parallel code email) — were removed to avoid a second mechanism.
 
 /** Login from a new IP address alert. */
 export async function sendLoginAlert(

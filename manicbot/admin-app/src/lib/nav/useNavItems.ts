@@ -31,10 +31,9 @@ function resolveItem(def: NavItemDef, lang: string): NavItem {
 
 /**
  * Returns the navigation structure for the current role, filtered by:
- * - role (including preview role for system_admin)
+ * - role
  * - isPersonalTenant (for master services tab)
  * - hiddenTabs (from useDashboardPrefs)
- * - previewMasterId (owner delegating → show master nav)
  *
  * `mobileNav` is the ordered list rendered in the mobile bottom-bar /
  * iPad-portrait bottom-bar. When `bottomNavLayout === "default"` it
@@ -47,7 +46,7 @@ function resolveItem(def: NavItemDef, lang: string): NavItem {
  * the result is hard-capped at `BOTTOM_NAV_LIMIT`.
  */
 export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: NavItem; mobileNav: NavItem[] } {
-  const { role, isPersonalTenant, previewRole, previewMasterId } = useRole();
+  const { role, isPersonalTenant } = useRole();
   const { lang } = useLang();
   const { prefs: dashPrefs } = useDashboardPrefs();
   // Load installed plugins (cached; no refetch storms). Skips when unauthenticated.
@@ -58,15 +57,8 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
   });
 
   return useMemo(() => {
-    // Determine effective role for navigation
-    let effectiveRole = role;
-    if (role === "system_admin" && previewRole && previewRole !== "system_admin") {
-      effectiveRole = previewRole;
-    }
-    // Owner delegating to a master → show master nav
-    if (effectiveRole === "tenant_owner" && previewMasterId !== null) {
-      effectiveRole = "master";
-    }
+    // Determine effective role for navigation (no impersonation — own role).
+    const effectiveRole = role;
 
     // Filter items by role + personal tenant requirement
     const filtered = NAV_ITEMS.filter(item => {
@@ -206,8 +198,6 @@ export function useNavItems(): { groups: NavGroup[]; flat: NavItem[]; settings: 
     return { groups, flat, settings, mobileNav };
   }, [
     role,
-    previewRole,
-    previewMasterId,
     isPersonalTenant,
     lang,
     dashPrefs.hiddenTabs,

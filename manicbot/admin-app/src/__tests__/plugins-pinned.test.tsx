@@ -17,14 +17,10 @@ beforeAll(() => { vi.stubGlobal("localStorage", _mockLocalStorage); });
 // ── Mock useRole so tenantId is configurable per test ───────────────────────
 let mockTenantId: string | null = "tenant_default";
 let mockWebUserId: string | null = "owner-uid";
-let mockPreviewMasterId: number | null = null;
-let mockPreviewMasterWebUserId: string | null = null;
 vi.mock("~/components/RoleContext", () => ({
   useRole: () => ({
     tenantId: mockTenantId,
     webUserId: mockWebUserId,
-    previewMasterId: mockPreviewMasterId,
-    previewMasterWebUserId: mockPreviewMasterWebUserId,
   }),
 }));
 
@@ -80,8 +76,6 @@ beforeEach(() => {
   mockMutationError = null;
   mockTenantId = "tenant_default";
   mockWebUserId = "owner-uid";
-  mockPreviewMasterId = null;
-  mockPreviewMasterWebUserId = null;
 });
 
 afterEach(() => cleanup());

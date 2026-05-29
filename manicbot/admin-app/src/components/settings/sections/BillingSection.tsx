@@ -176,11 +176,11 @@ function CheckoutModal({
 
 export function BillingSection({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const l = LABELS[lang];
 
-  // ── God Mode: system_admin not previewing a tenant ──────────────────────────
-  if (role === "system_admin" && !previewRole) {
+  // ── God Mode: system_admin (no per-tenant impersonation) ─────────────────────
+  if (role === "system_admin") {
     return (
       <div className="space-y-4">
         <div className="glass-card rounded-2xl p-6 text-center space-y-3">

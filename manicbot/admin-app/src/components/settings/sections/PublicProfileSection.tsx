@@ -6,9 +6,9 @@ import { t } from "~/lib/i18n";
 import { PublicProfileEditor } from "~/components/salon/PublicProfileEditor";
 
 export function PublicProfileSection() {
-  const { tenantId, previewTenantId, role, previewRole } = useRole();
+  const { tenantId } = useRole();
   const { lang } = useLang();
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  const effectiveTenantId = tenantId;
 
   if (!effectiveTenantId) {
     return (

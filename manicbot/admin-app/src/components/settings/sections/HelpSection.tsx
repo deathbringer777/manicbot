@@ -40,9 +40,9 @@ const STATUS_TONES: Record<string, PillTone> = {
 type View = "list" | "detail" | "create";
 
 export function HelpSection() {
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const { lang } = useLang();
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const effectiveRole = role;
   const showTourReplay =
     effectiveRole === "tenant_owner" ||
     effectiveRole === "master" ||

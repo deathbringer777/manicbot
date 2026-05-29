@@ -41,12 +41,6 @@ function makeWrapper(tenantId: string | null) {
     permissions: [],
     billingStatus: "active",
     isTrialExpired: false,
-    previewRole: null,
-    previewTenantId: null,
-    setPreviewRole: () => {},
-    previewMasterId: null,
-    previewMasterWebUserId: null,
-    setPreviewMaster: () => {},
   };
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(RoleContext.Provider, { value }, children);

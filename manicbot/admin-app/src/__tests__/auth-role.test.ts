@@ -30,38 +30,6 @@ describe("AppRole type contract", () => {
   });
 });
 
-describe("Role routing logic", () => {
-  // Mirrors the routing logic in TelegramGate
-  function getEffectiveRole(role: AppRole, previewRole: AppRole): AppRole {
-    return role === "system_admin" && previewRole ? previewRole : role;
-  }
-
-  it("system_admin with no preview → system_admin", () => {
-    expect(getEffectiveRole("system_admin", null)).toBe("system_admin");
-  });
-
-  it("system_admin previewing as tenant_owner → tenant_owner", () => {
-    expect(getEffectiveRole("system_admin", "tenant_owner")).toBe("tenant_owner");
-  });
-
-  it("system_admin previewing as master → master", () => {
-    expect(getEffectiveRole("system_admin", "master")).toBe("master");
-  });
-
-  it("system_admin previewing as support → support", () => {
-    expect(getEffectiveRole("system_admin", "support")).toBe("support");
-  });
-
-  it("non-admin cannot set preview (preview role ignored)", () => {
-    // tenant_owner with previewRole set — should stay tenant_owner
-    expect(getEffectiveRole("tenant_owner", "master")).toBe("tenant_owner");
-  });
-
-  it("null role stays null regardless of previewRole", () => {
-    expect(getEffectiveRole(null, "system_admin")).toBeNull();
-  });
-});
-
 describe("assignable platform staff roles", () => {
   it("support and technical_support match", () => {
     expect(isAssignablePlatformStaffRole("technical_support")).toBe(true);

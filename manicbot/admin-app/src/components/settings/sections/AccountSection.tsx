@@ -163,9 +163,9 @@ const ROLE_CHANGE_L: Record<Lang, {
 };
 
 export function AccountSection() {
-  const { role, previewRole, emailVerified, hasPassword } = useRole();
+  const { role, emailVerified, hasPassword } = useRole();
   const { lang } = useLang();
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
+  const effectiveRole = role;
   const vl = VERIFY_L[lang];
   const utils = api.useUtils();
 

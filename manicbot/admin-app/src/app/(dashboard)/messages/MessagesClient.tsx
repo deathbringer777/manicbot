@@ -13,16 +13,13 @@ import { PlatformAdminPane } from "./_components/PlatformAdminPane";
 import { PlatformOwnerView } from "./_components/PlatformOwnerView";
 
 /**
- * Top-level orchestrator for `/messages`. Three modes:
+ * Top-level orchestrator for `/messages`. Two modes:
  *
- *   1. system_admin without tenant preview → Platform messenger surface
- *      (cross-tenant DM list with all owners + broadcast composer).
- *   2. tenant_owner / tenant_manager / master → Tenant messenger as before,
- *      with a pinned «ManicBot» entry at the top of the thread list that
- *      opens the owner-side platform thread.
- *   3. system_admin previewing a tenant → identical to #2 (tenant messenger
- *      for that tenant — no platform surface, since the sysadmin already
- *      has the dedicated /messages without preview).
+ *   1. system_admin → Platform messenger surface (cross-tenant DM list with
+ *      all owners + broadcast composer).
+ *   2. tenant_owner / tenant_manager / master → Tenant messenger, with a
+ *      pinned «ManicBot» entry at the top of the thread list that opens the
+ *      owner-side platform thread.
  *
  * URL state:
  *   - `?platform=1`   — owner deep-link from notification bell.
@@ -59,7 +56,7 @@ export default function MessagesClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mode 1 — sysadmin without preview gets the full platform surface.
+  // Mode 1 — sysadmin gets the full platform surface.
   if (isSystemAdminNoPreview) {
     return <PlatformAdminPane initialThreadId={initialPlatformThread} />;
   }

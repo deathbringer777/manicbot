@@ -36,12 +36,6 @@ const BASE: RoleContextValue = {
   permissions: [],
   billingStatus: null,
   isTrialExpired: false,
-  previewRole: null,
-  previewTenantId: null,
-  setPreviewRole: () => {},
-  previewMasterId: null,
-  previewMasterWebUserId: null,
-  setPreviewMaster: () => {},
 };
 
 function renderWith(overrides: Partial<RoleContextValue>) {

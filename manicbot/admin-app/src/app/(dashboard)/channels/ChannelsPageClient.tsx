@@ -9,8 +9,8 @@ import { t } from "~/lib/i18n";
 
 export default function ChannelsPageClient() {
   const { lang } = useLang();
-  const { role, previewRole, tenantId, previewTenantId } = useRole();
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  const { tenantId } = useRole();
+  const effectiveTenantId = tenantId;
 
   return (
     <Shell>

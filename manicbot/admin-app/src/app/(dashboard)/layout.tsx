@@ -17,7 +17,6 @@ import { EmailVerificationPopup } from "~/components/EmailVerificationPopup";
 import { SetPasswordBanner } from "~/components/SetPasswordBanner";
 import { BillingGate } from "~/components/BillingGate";
 import { shouldShowBillingGate } from "~/lib/billing/trialState";
-import type { AppRole } from "~/server/api/routers/auth";
 
 // Lazy-loaded god-mode tab pages that live under broken (dashboard) routes on CF Pages.
 // @cloudflare/next-on-pages routes new (dashboard)/* paths to (public) layout → 404.
@@ -41,12 +40,6 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [previewRole, setPreviewRoleState] = useState<AppRole>(null);
-  const [previewTenantId, setPreviewTenantId] = useState<string | null>(null);
-  const [previewMasterId, setPreviewMasterIdState] = useState<number | null>(null);
-  // Resolved at click time by MasterSwitcherInline (which already has the masters
-  // list loaded). Null for synthetic masters with no web_users row.
-  const [previewMasterWebUserId, setPreviewMasterWebUserIdState] = useState<string | null>(null);
 
   // Auth: query role from next-auth session (email/password)
   const roleQuery = api.auth.getMyRole.useQuery(undefined, { retry: false });
@@ -57,22 +50,6 @@ export default function DashboardLayout({
       router.replace("/login");
     }
   }, [roleQuery.isLoading, roleQuery.data?.role, router]);
-
-  function setPreviewRole(r: AppRole, tenantId?: string | null) {
-    setPreviewRoleState(r);
-    setPreviewTenantId(tenantId ?? null);
-    setPreviewMasterIdState(null);
-    setPreviewMasterWebUserIdState(null);
-    // When God activates a preview, redirect to /dashboard so content matches nav
-    if (r && r !== "system_admin") {
-      router.replace("/dashboard");
-    }
-  }
-
-  function setPreviewMaster(masterId: number | null, webUserId?: string | null) {
-    setPreviewMasterIdState(masterId);
-    setPreviewMasterWebUserIdState(masterId === null ? null : (webUserId ?? null));
-  }
 
   // Loading
   if (roleQuery.isLoading || !roleQuery.data?.role) {
@@ -87,8 +64,9 @@ export default function DashboardLayout({
   }
 
   const { role, webUserId, tenantId, tenantName, tenantLogo, masterId, masterAvatarUrl, masterAvatarEmoji, isPersonalTenant, createdAt, emailVerified, hasPassword, permissions, billingStatus, isTrialExpired } = roleQuery.data;
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  // No impersonation: effective role/tenant are always the caller's own.
+  const effectiveRole = role;
+  const effectiveTenantId = tenantId;
 
   const ctxValue = {
     role,
@@ -106,12 +84,6 @@ export default function DashboardLayout({
     permissions: permissions ?? [],
     billingStatus: billingStatus ?? null,
     isTrialExpired: isTrialExpired ?? false,
-    previewRole,
-    previewTenantId,
-    setPreviewRole,
-    previewMasterId,
-    previewMasterWebUserId,
-    setPreviewMaster,
   };
 
   // Non-admin roles get their dedicated dashboard inside WebShell.
@@ -170,9 +142,7 @@ export default function DashboardLayout({
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
-                : previewMasterId !== null
-                  ? <MasterDashboard tenantId={effectiveTenantId} masterId={previewMasterId} isDelegating={true} />
-                  : <SalonDashboard tenantId={effectiveTenantId} />
+                : <SalonDashboard tenantId={effectiveTenantId} />
           ))}
         </WebShell>
         <CommandPalette />

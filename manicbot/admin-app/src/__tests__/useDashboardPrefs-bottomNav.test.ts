@@ -105,8 +105,6 @@ vi.mock("~/components/RoleContext", () => ({
   useRole: () => ({
     tenantId: TENANT,
     webUserId: TEST_PROFILE_UID,
-    previewMasterId: null,
-    previewMasterWebUserId: null,
   }),
 }));
 

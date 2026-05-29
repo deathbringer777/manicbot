@@ -233,7 +233,7 @@ function MultiCheckFilter<V extends string>({
 // ─── Main component ──────────────────────────────────────────────────
 
 export default function SystemCustomersClient() {
-  const { role, previewRole } = useRole();
+  const { role } = useRole();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -251,10 +251,8 @@ export default function SystemCustomersClient() {
     [pathname, router, searchParams],
   );
 
-  // Defensive gate — sysadmin only, AND no active tenant-role preview.
-  // A sysadmin who has activated a tenant_owner preview must see the
-  // placeholder so that previewed-tenant data never bleeds across.
-  if (role !== "system_admin" || previewRole) {
+  // Defensive gate — sysadmin only.
+  if (role !== "system_admin") {
     return (
       <Shell title="Клиенты платформы" subtitle="Платформа">
         <div

@@ -7,10 +7,7 @@
  * is preserved for any legacy listeners.
  *
  * Pins are scoped by BOTH tenant AND profile (`web_users.id`) — different
- * web-users on the same browser don't share pinned state, and a tenant
- * owner switching to «view as master» preview sees that master's pins
- * (not their own). Synthetic masters (no `web_users` row) surface an
- * empty list with the pin button disabled.
+ * web-users on the same browser don't share pinned state.
  */
 
 import { useCallback, useEffect } from "react";
@@ -87,10 +84,8 @@ export function usePinnedPlugins(): {
   pin: (slug: string) => void;
   unpin: (slug: string) => void;
   toggle: (slug: string) => void;
-  /** True when writes are blocked (owner viewing a master via preview). */
+  /** True when writes are blocked (unauthenticated). */
   readOnly: boolean;
-  /** True when previewing a synthetic master (no web_users row). */
-  syntheticPreview: boolean;
   error: string | null;
 } {
   const { tenantId } = useRole();
@@ -100,63 +95,50 @@ export function usePinnedPlugins(): {
   // One-time migration on profile change. Keeps the legacy tenant-only
   // cache valid for the user who originally wrote it.
   useEffect(() => {
-    if (tenantId && !profile.isPreview && profile.effectiveWebUserId != null) {
+    if (tenantId && profile.effectiveWebUserId != null) {
       migrateLegacyTenantKey(tenantId, profile.effectiveProfileKey);
     }
-  }, [tenantId, profile.isPreview, profile.effectiveWebUserId, profile.effectiveProfileKey]);
+  }, [tenantId, profile.effectiveWebUserId, profile.effectiveProfileKey]);
 
-  // Query input: undefined when viewing own profile (preserves cache
-  // shape and zero-input shape for the regular case); explicit
-  // `{effectiveWebUserId}` for preview-of-real-master.
-  const queryInput =
-    profile.isPreview && profile.effectiveWebUserId != null
-      ? { effectiveWebUserId: profile.effectiveWebUserId }
-      : undefined;
-
-  const q = api.plugins.listPinned.useQuery(queryInput, {
+  const q = api.plugins.listPinned.useQuery(undefined, {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
-    // Synthetic master preview: no destination row → don't bother the
-    // server; return [] so the sidebar renders the empty-state.
-    enabled: !profile.isPreviewSynthetic,
     initialData: () => {
       if (typeof window === "undefined") return undefined;
-      if (profile.isPreviewSynthetic) return [];
       return readPinned(tenantId, profile.effectiveProfileKey);
     },
   });
 
-  // Mirror server truth → localStorage for next-paint seed. Skipped for
-  // synthetic preview (no fetch, nothing canonical to mirror).
+  // Mirror server truth → localStorage for next-paint seed.
   useEffect(() => {
-    if (q.data && !profile.isPreviewSynthetic) {
+    if (q.data) {
       writePinned(q.data, tenantId, profile.effectiveProfileKey);
     }
-  }, [q.data, tenantId, profile.effectiveProfileKey, profile.isPreviewSynthetic]);
+  }, [q.data, tenantId, profile.effectiveProfileKey]);
 
   const toggleMut = api.plugins.togglePin.useMutation({
     onMutate: async ({ slug }) => {
-      await utils.plugins.listPinned.cancel(queryInput);
-      const prev = utils.plugins.listPinned.getData(queryInput) ?? [];
+      await utils.plugins.listPinned.cancel(undefined);
+      const prev = utils.plugins.listPinned.getData(undefined) ?? [];
       const next = prev.includes(slug)
         ? prev.filter((s) => s !== slug)
         : [slug, ...prev].slice(0, 20);
-      utils.plugins.listPinned.setData(queryInput, next);
+      utils.plugins.listPinned.setData(undefined, next);
       writePinned(next, tenantId, profile.effectiveProfileKey);
       return { prev };
     },
     onError: (_err, _v, ctx) => {
       if (ctx?.prev) {
-        utils.plugins.listPinned.setData(queryInput, ctx.prev);
+        utils.plugins.listPinned.setData(undefined, ctx.prev);
         writePinned(ctx.prev, tenantId, profile.effectiveProfileKey);
       }
     },
     onSettled: () => {
-      void utils.plugins.listPinned.invalidate(queryInput);
+      void utils.plugins.listPinned.invalidate(undefined);
     },
   });
 
-  const pinned = profile.isPreviewSynthetic ? [] : (q.data ?? []);
+  const pinned = q.data ?? [];
   const readOnly = !profile.canWrite;
 
   const toggle = useCallback(
@@ -189,7 +171,6 @@ export function usePinnedPlugins(): {
     unpin,
     toggle,
     readOnly,
-    syntheticPreview: profile.isPreviewSynthetic,
     error: toggleMut.error?.message ?? null,
   };
 }

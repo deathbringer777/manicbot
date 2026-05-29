@@ -20,9 +20,9 @@ import { MasterProfileSection } from "~/components/settings/sections/MasterProfi
 import { NotificationsSection } from "~/components/settings/sections/NotificationsSection";
 
 export default function SettingsPageClient() {
-  const { role, previewRole, tenantId, previewTenantId } = useRole();
-  const effectiveRole = (role === "system_admin" && previewRole) ? previewRole : role;
-  const effectiveTenantId = (role === "system_admin" && previewRole) ? previewTenantId : tenantId;
+  const { role, tenantId } = useRole();
+  const effectiveRole = role;
+  const effectiveTenantId = tenantId;
 
   const searchParams = useSearchParams();
   const router = useRouter();

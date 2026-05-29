@@ -141,12 +141,6 @@ function withRole(value: Partial<RoleContextValue>) {
     permissions: [],
     billingStatus: null,
     isTrialExpired: false,
-    previewRole: null,
-    previewTenantId: null,
-    setPreviewRole: () => {},
-    previewMasterId: null,
-    previewMasterWebUserId: null,
-    setPreviewMaster: () => {},
     ...value,
   };
   return (
@@ -242,14 +236,6 @@ describe("SystemCustomersClient — role gating", () => {
     });
   }
 
-  it("renders the placeholder for sysadmin under a tenant-role preview", () => {
-    // Even though raw role is system_admin, the active preview means the
-    // sidebar is showing a tenant_owner-shaped UI. The page must NOT leak
-    // cross-tenant data under that preview.
-    render(withRole({ role: "system_admin", previewRole: "tenant_owner" as AppRole, previewTenantId: "t1" }));
-    expect(screen.getByTestId("customers-page-forbidden")).toBeTruthy();
-    expect(screen.queryByText("Клиенты ManicBot")).toBeNull();
-  });
 });
 
 describe("SystemCustomersClient — tabs", () => {

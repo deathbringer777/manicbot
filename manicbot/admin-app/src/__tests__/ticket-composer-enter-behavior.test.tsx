@@ -29,7 +29,6 @@ const helpReplyMutate = vi.fn();
 vi.mock("~/components/RoleContext", () => ({
   useRole: () => ({
     role: "tenant_owner",
-    previewRole: null,
     tenantId: "t_x",
     userId: "u_x",
     hasPassword: true,
@@ -82,19 +81,13 @@ vi.mock("~/trpc/react", () => {
         },
       }),
       // SupportDashboard wraps content in <Shell>, which calls
-      // useDashboardPrefs → api.webUsers.getMyUiPrefs.useQuery + setMyUiPrefs,
-      // and the MasterSwitcherInline → api.master.getMastersForOwner.
+      // useDashboardPrefs → api.webUsers.getMyUiPrefs.useQuery + setMyUiPrefs.
       webUsers: {
         getMyUiPrefs: {
           useQuery: () => ({ data: null, isLoading: false }),
         },
         setMyUiPrefs: {
           useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
-        },
-      },
-      master: {
-        getMastersForOwner: {
-          useQuery: () => ({ data: [], isLoading: false }),
         },
       },
       tenants: {

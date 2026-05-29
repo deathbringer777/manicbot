@@ -42,12 +42,6 @@ function roleValue(role: AppRole): RoleContextValue {
     permissions: [],
     billingStatus: "active",
     isTrialExpired: false,
-    previewRole: null,
-    previewTenantId: null,
-    setPreviewRole: () => {},
-    previewMasterId: null,
-    previewMasterWebUserId: null,
-    setPreviewMaster: () => {},
   };
 }
 

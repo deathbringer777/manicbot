@@ -33,13 +33,6 @@ describe("i18n t()", () => {
     expect(codes).toContain("pl");
   });
 
-  it("roleSwitch keys exist", () => {
-    expect(t("roleSwitch.godMode", "ru")).toBe("Админ");
-    expect(t("roleSwitch.salon", "ru")).toBe("Как салон");
-    expect(t("roleSwitch.master", "ru")).toBe("Как мастер");
-    expect(t("roleSwitch.support", "ru")).toBe("Как саппорт");
-  });
-
   it("settings keys exist", () => {
     expect(t("settings.title", "en")).toBe("Settings");
     expect(t("settings.language", "en")).toBe("Interface language");

@@ -280,6 +280,76 @@ describe("salon.createMasterAccount — real Drizzle SQL", () => {
     expect(wu[0]!.emailVerified).toBe(0);
   });
 
+  it("#3 — AWAITS sendMasterInviteEmail and surfaces inviteEmailSent when a real email is supplied", async () => {
+    vi.resetModules();
+    vi.doMock("~/env", () => ({
+      env: {
+        WORKER_PUBLIC_URL: "https://worker.test",
+        ADMIN_KEY: "test-admin-key",
+        ADMIN_CHAT_ID: "12345",
+        TELEGRAM_BOT_TOKEN: "0:TEST",
+        AUTH_SECRET: "test-secret",
+        BOT_ENCRYPTION_KEY: VALID_KEK,
+      },
+    }));
+    const db = await bootstrap();
+    const { createCallerFactory } = await import("~/server/api/trpc");
+    const { salonRouter } = await import("~/server/api/routers/salon");
+    const emailService = await import("~/server/email/emailService");
+    const sendSpy = emailService.sendMasterInviteEmail as ReturnType<typeof vi.fn>;
+    sendSpy.mockClear();
+    sendSpy.mockResolvedValueOnce({ ok: true });
+
+    const caller = createCallerFactory(salonRouter)(ownerCtx(db) as never);
+    const out = (await caller.createMasterAccount({
+      tenantId: TENANT,
+      name: "Inga",
+      email: "inga.real@example.com",
+    })) as { login: string; inviteEmailSent: boolean };
+
+    // The invite email was sent to the REAL address (not the synthetic login).
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0]![0]).toBe("inga.real@example.com");
+    expect(out.inviteEmailSent).toBe(true);
+  });
+
+  it("#3 — inviteEmailSent: false when the invite transport fails (account still created)", async () => {
+    vi.resetModules();
+    vi.doMock("~/env", () => ({
+      env: {
+        WORKER_PUBLIC_URL: "https://worker.test",
+        ADMIN_KEY: "test-admin-key",
+        ADMIN_CHAT_ID: "12345",
+        TELEGRAM_BOT_TOKEN: "0:TEST",
+        AUTH_SECRET: "test-secret",
+        BOT_ENCRYPTION_KEY: VALID_KEK,
+      },
+    }));
+    const db = await bootstrap();
+    const { createCallerFactory } = await import("~/server/api/trpc");
+    const { salonRouter } = await import("~/server/api/routers/salon");
+    const emailService = await import("~/server/email/emailService");
+    const sendSpy = emailService.sendMasterInviteEmail as ReturnType<typeof vi.fn>;
+    sendSpy.mockClear();
+    sendSpy.mockResolvedValueOnce({ ok: false, error: "resend_500" });
+
+    const caller = createCallerFactory(salonRouter)(ownerCtx(db) as never);
+    const out = (await caller.createMasterAccount({
+      tenantId: TENANT,
+      name: "Vera",
+      email: "vera.real@example.com",
+    })) as { webUserId: string; inviteEmailSent: boolean };
+
+    expect(out.inviteEmailSent).toBe(false);
+    // Account row exists regardless of email outcome.
+    const wu = await db
+      .select({ id: schema.webUsers.id })
+      .from(schema.webUsers)
+      .where(eq(schema.webUsers.id, out.webUserId))
+      .limit(1);
+    expect(wu).toHaveLength(1);
+  });
+
   it("rejects duplicate email with CONFLICT (no orphan rows on retry)", async () => {
     vi.resetModules();
     vi.doMock("~/env", () => ({

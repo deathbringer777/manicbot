@@ -366,6 +366,66 @@ describe("salon.resetMasterPassword — routes new password to OWNER, not master
     expect(sendSpy).not.toHaveBeenCalled();
   });
 
+  it("#2 — AWAITS the send and surfaces emailSent: true on success", async () => {
+    applyMocks();
+    const { db } = await bootstrap();
+
+    const { createCallerFactory } = await import("~/server/api/trpc");
+    const { salonRouter } = await import("~/server/api/routers/salon");
+
+    const caller = createCallerFactory(salonRouter)(ownerCtx(db) as never);
+    const out = (await caller.resetMasterPassword({
+      tenantId: TENANT,
+      masterChatId: MASTER_CHAT_ID,
+      otpCode: "000000",
+    })) as { ok: boolean; emailSentTo: string; emailSent: boolean };
+
+    // The default emailService mock resolves { ok: true }.
+    expect(out.ok).toBe(true);
+    expect(out.emailSent).toBe(true);
+  });
+
+  it("#2 — surfaces emailSent: false + transportError when the send fails (rotation kept)", async () => {
+    applyMocks();
+    const { db, client } = await bootstrap();
+
+    const { createCallerFactory } = await import("~/server/api/trpc");
+    const { salonRouter } = await import("~/server/api/routers/salon");
+    const emailService = await import("~/server/email/emailService");
+    const sendSpy =
+      emailService.sendMasterPasswordResetCredentialsToOwnerEmail as ReturnType<
+        typeof vi.fn
+      >;
+    // Force a transport failure on this run.
+    sendSpy.mockResolvedValueOnce({ ok: false, error: "resend_500" });
+
+    const caller = createCallerFactory(salonRouter)(ownerCtx(db) as never);
+    const out = (await caller.resetMasterPassword({
+      tenantId: TENANT,
+      masterChatId: MASTER_CHAT_ID,
+      otpCode: "000000",
+    })) as {
+      ok: boolean;
+      emailSentTo: string;
+      emailSent: boolean;
+      transportError?: string | null;
+    };
+
+    // Mutation still resolves ok=true — the password WAS rotated; only the
+    // delivery failed. The UI must be told so the owner can re-issue.
+    expect(out.ok).toBe(true);
+    expect(out.emailSent).toBe(false);
+    expect(out.transportError).toBe("resend_500");
+
+    // The rotation must have happened regardless of the email outcome.
+    const row = await client.execute({
+      sql: "SELECT password_hash, password_changed_at FROM web_users WHERE id = ?",
+      args: [MASTER_WEB_USER],
+    });
+    expect(row.rows[0]!.password_hash).not.toBe("stale$hash");
+    expect(row.rows[0]!.password_changed_at).toBe(NOW);
+  });
+
   it("audit log note reflects owner-routed delivery (not master)", async () => {
     applyMocks();
     const { db } = await bootstrap();

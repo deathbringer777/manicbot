@@ -1129,8 +1129,11 @@ export function masterInviteEmailHtml(
   lang: Lang,
 ): string {
   const c = getEmailCopy(lang).masterInvite;
+  // #4 — salonName is tenant-controlled; sanitize before HTML interpolation
+  // to block stored XSS in the recipient's mail client.
+  const safeSalonName = sanitizeEmailDisplayName(options.salonName);
   const details = `<table style="margin:16px 0;width:100%;border-collapse:collapse;">
-    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.salon}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${options.salonName}</td></tr>
+    <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.06);">${c.salon}</td><td style="padding:8px 12px;font-size:13px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,0.06);">${safeSalonName}</td></tr>
     <tr><td style="padding:8px 12px;font-size:13px;color:#94a3b8;">${c.role}</td><td style="padding:8px 12px;font-size:13px;color:#a78bfa;font-weight:600;">${options.roleLabel}</td></tr>
   </table>`;
   return baseLayout(
@@ -1328,10 +1331,15 @@ export function ownershipTransferRequestEmailHtml(opts: {
   lang: Lang;
 }): string {
   const c = getOwnershipCopy(opts.lang).request;
+  // #4 — tenantName / toName / toEmail are all user-controlled and reach the
+  // rendered HTML. Sanitize before interpolation to block stored XSS.
+  const safeTenantName = sanitizeEmailDisplayName(opts.tenantName);
+  const safeToName = sanitizeEmailDisplayName(opts.toName);
+  const safeToEmail = sanitizeEmailDisplayName(opts.toEmail, 320); // RFC 5321 max
   return baseLayout(
     c.heading,
-    paragraph(`${c.body1}: <strong>${opts.tenantName}</strong>`, "#e2e8f0") +
-    paragraph(`${opts.toName} (<strong>${opts.toEmail}</strong>)`, "#d1d5db") +
+    paragraph(`${c.body1}: <strong>${safeTenantName}</strong>`, "#e2e8f0") +
+    paragraph(`${safeToName} (<strong>${safeToEmail}</strong>)`, "#d1d5db") +
     paragraph(c.body2) +
     ctaButton(opts.confirmUrl, c.cta) +
     muted(c.expires) +
@@ -1346,10 +1354,13 @@ export function ownershipTransferCompletedOldOwnerEmailHtml(opts: {
   lang: Lang;
 }): string {
   const c = getOwnershipCopy(opts.lang).oldOwner;
+  // #4 — tenantName / newOwnerName are user-controlled; sanitize before HTML.
+  const safeTenantName = sanitizeEmailDisplayName(opts.tenantName);
+  const safeNewOwnerName = sanitizeEmailDisplayName(opts.newOwnerName);
   return baseLayout(
     c.heading,
-    paragraph(`${c.body} <strong>${opts.tenantName}</strong>`, "#e2e8f0") +
-    paragraph(`→ ${opts.newOwnerName}`, "#d1d5db") +
+    paragraph(`${c.body} <strong>${safeTenantName}</strong>`, "#e2e8f0") +
+    paragraph(`→ ${safeNewOwnerName}`, "#d1d5db") +
     muted(c.loginNote),
     getEmailCopy(opts.lang).footer,
   );
@@ -1361,10 +1372,13 @@ export function ownershipTransferCompletedNewOwnerEmailHtml(opts: {
   lang: Lang;
 }): string {
   const c = getOwnershipCopy(opts.lang).newOwner;
+  // #4 — tenantName / oldOwnerName are user-controlled; sanitize before HTML.
+  const safeTenantName = sanitizeEmailDisplayName(opts.tenantName);
+  const safeOldOwnerName = sanitizeEmailDisplayName(opts.oldOwnerName);
   return baseLayout(
     c.heading,
     paragraph(`${c.body}`) +
-    paragraph(`<strong>${opts.tenantName}</strong> ← ${opts.oldOwnerName}`, "#e2e8f0") +
+    paragraph(`<strong>${safeTenantName}</strong> ← ${safeOldOwnerName}`, "#e2e8f0") +
     muted(c.loginNote),
     getEmailCopy(opts.lang).footer,
   );

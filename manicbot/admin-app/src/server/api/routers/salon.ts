@@ -1256,6 +1256,7 @@ export const salonRouter = createTRPCRouter({
       // synthetic-chatId derivation. Telegram-only masters (no web_users
       // row) receive their invitation through the bot DM — no email is
       // sent and that's by design.
+      let inviteEmailSent = false;
       try {
         const tenantRow = await ctx.db
           .select({ name: tenants.name })
@@ -1271,19 +1272,26 @@ export const salonRouter = createTRPCRouter({
           const synth =
             10_000_000_000 + (parseInt(wu.email.replace(/[^a-f0-9]/gi, "").slice(0, 8) || "0", 16) % 1_000_000_000);
           // We don't have a reliable synth → email mapping for arbitrary
-          // chat ids; we only fire-and-forget when an email exists for
-          // this tenant. Pick the first master web_users row whose
-          // derived id matches the chatId, otherwise skip.
+          // chat ids; we only send when an email exists for this tenant.
+          // Pick the first master web_users row whose derived id matches the
+          // chatId, otherwise skip.
           if (wu.email && synth === input.chatId) {
-            void sendMasterInviteEmail(wu.email, salonName, "Master", (wu.lang as any) ?? "en")
-              .catch((e) => log.error("salon.addMaster.email", e instanceof Error ? e : new Error(String(e))));
+            // #3 — was `void`: a fire-and-forget fetch is torn down on
+            // Cloudflare Pages once the response returns. Await + surface.
+            const sendResult = await sendMasterInviteEmail(
+              wu.email,
+              salonName,
+              "Master",
+              (wu.lang as Lang | null) ?? "en",
+            );
+            inviteEmailSent = sendResult?.ok === true;
             break;
           }
         }
       } catch (e) {
         log.error("salon.addMaster.email", e instanceof Error ? e : new Error(String(e)));
       }
-      return { success: true };
+      return { success: true, inviteEmailSent };
     }),
 
   removeMaster: tenantOwnerProcedure
@@ -1685,6 +1693,7 @@ export const salonRouter = createTRPCRouter({
       // mail. We do NOT include the auto-generated password in the email
       // body — it goes back to the caller and the owner shares it through
       // a trusted channel.
+      let inviteEmailSent = false;
       if (input.email && input.email.trim()) {
         try {
           const tenantRow = await ctx.db
@@ -1693,14 +1702,17 @@ export const salonRouter = createTRPCRouter({
             .where(eq(tenants.id, input.tenantId))
             .limit(1);
           const salonName = tenantRow[0]?.name ?? "ManicBot";
-          void sendMasterInviteEmail(input.email.trim(), salonName, "Master", "en").catch(
-            (e) => log.error("salon.createMasterAccount.email", e instanceof Error ? e : new Error(String(e))),
-          );
+          // #3 — was `void`: a fire-and-forget fetch is torn down on Cloudflare
+          // Pages once the response returns, so the invite email frequently
+          // never sent. Await it and surface `inviteEmailSent` so the UI can
+          // warn. The owner also receives the login+password in this response.
+          const sendResult = await sendMasterInviteEmail(input.email.trim(), salonName, "Master", "en");
+          inviteEmailSent = sendResult?.ok === true;
         } catch (e) {
           log.error("salon.createMasterAccount.email", e instanceof Error ? e : new Error(String(e)));
         }
       }
-      return { login, password, masterId: syntheticChatId, webUserId: id };
+      return { login, password, masterId: syntheticChatId, webUserId: id, inviteEmailSent };
     }),
 
   // ── Bot Connection ─────────────────────────────────────────────
@@ -3016,34 +3028,55 @@ export const salonRouter = createTRPCRouter({
       const masterName = m.name ?? "Master";
       const masterLogin = userRow[0].email;
 
+      // #2 — AWAIT the credential email. On Cloudflare Pages a `void` send is
+      // torn down when the handler returns, so the new password would never
+      // reach the owner and the master would be locked out (the rotation
+      // already invalidated the old password). We await + surface emailSent /
+      // transportError so the UI can warn and offer a re-send. The rotation is
+      // intentionally NOT rolled back — re-issuing the email is the recovery.
+      let emailSent = false;
+      let transportError: string | null = null;
       if (ownerEmail) {
-        void sendMasterPasswordResetCredentialsToOwnerEmail(
-          ownerEmail,
-          masterName,
-          masterLogin,
-          newPassword,
-          salonName,
-          ownerLang,
-        ).catch((e: unknown) =>
+        try {
+          const sendResult = await sendMasterPasswordResetCredentialsToOwnerEmail(
+            ownerEmail,
+            masterName,
+            masterLogin,
+            newPassword,
+            salonName,
+            ownerLang,
+          );
+          emailSent = sendResult.ok;
+          if (!sendResult.ok) {
+            transportError = sendResult.error;
+            log.error(
+              "salon.resetMasterPassword.email",
+              new Error(`transport_failed: ${sendResult.error}`),
+            );
+          }
+        } catch (e: unknown) {
+          transportError = e instanceof Error ? e.message : String(e);
           log.error(
             "salon.resetMasterPassword.email",
             e instanceof Error ? e : new Error(String(e)),
-          ),
-        );
+          );
+        }
+      } else {
+        transportError = "no_owner_email";
       }
 
       await writeAudit(ctx.db, {
         actor: ctx.webUser.email ?? null,
         action: "tenant.master.password.reset",
         tenantId: input.tenantId,
-        detail: `masterChatId=${input.masterChatId} (credentials emailed to owner; master receives them out-of-band)`,
+        detail: `masterChatId=${input.masterChatId} (credentials emailed to owner; master receives them out-of-band; emailSent=${emailSent})`,
         ip: ctxIp(ctx),
       });
 
       // Mask the OWNER's email in the response (the recipient of the email).
       const at = ownerEmail.indexOf("@");
       const masked = at > 1 ? `${ownerEmail[0]}***${ownerEmail.slice(at - 1)}` : ownerEmail;
-      return { ok: true, emailSentTo: masked };
+      return { ok: true, emailSentTo: masked, emailSent, transportError };
     }),
 
   /**

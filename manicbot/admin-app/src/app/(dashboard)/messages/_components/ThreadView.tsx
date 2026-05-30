@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Archive, StickyNote, Users, Clock, Check, CheckCheck, AlertCircle } from "lucide-react";
+import { Archive, StickyNote, Users, Clock, Check, CheckCheck, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -66,6 +66,21 @@ export function ThreadView({ tenantId, threadId }: Props) {
 
   // Retry a failed staff→client send (re-relays through the Worker).
   const retryMutation = api.messenger.retryMessage.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.getThread.invalidate({ tenantId, threadId });
+    },
+  });
+
+  // Inline edit + soft delete of own messages.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const editMutation = api.messenger.editMessage.useMutation({
+    onSuccess: async () => {
+      setEditingId(null);
+      await utils.messenger.getThread.invalidate({ tenantId, threadId });
+    },
+  });
+  const deleteMutation = api.messenger.deleteMessage.useMutation({
     onSuccess: async () => {
       await utils.messenger.getThread.invalidate({ tenantId, threadId });
     },
@@ -264,7 +279,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
                             : "bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
                   }`}
                 >
-                  {!isOwn && (
+                  {!isOwn && !m.deletedAt && (
                     <p
                       className={`mb-0.5 text-[10px] font-semibold ${
                         isNote ? "text-amber-700 dark:text-amber-400" : "text-slate-500"
@@ -279,34 +294,68 @@ export function ThreadView({ tenantId, threadId }: Props) {
                       )}
                     </p>
                   )}
-                  {isOwn && isNote && (
+                  {isOwn && isNote && !m.deletedAt && (
                     <p className="mb-0.5 inline-flex items-center gap-0.5 text-[10px] font-semibold opacity-80">
                       <StickyNote className="h-2.5 w-2.5" />
                       {t("messenger.note", lang)}
                     </p>
                   )}
-                  {atts.length > 0 && (
-                    <div className={`flex flex-wrap gap-1.5 ${showBody ? "mb-1.5" : ""}`}>
-                      {atts.map((a, idx) => (
-                        <a
-                          key={`${a.url}-${idx}`}
-                          href={a.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block overflow-hidden rounded-lg border border-white/10"
+                  {m.deletedAt ? (
+                    <p className="text-sm italic opacity-70">{t("messenger.msg.deleted", lang)}</p>
+                  ) : editingId === m.id ? (
+                    <div className="flex flex-col gap-1">
+                      <textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        rows={2}
+                        maxLength={4000}
+                        className="w-full resize-none rounded-lg border border-white/30 bg-white/15 px-2 py-1 text-sm text-inherit placeholder:text-current/50 focus:outline-none"
+                        // eslint-disable-next-line jsx-a11y/no-autofocus
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-2 text-[10px]">
+                        <button type="button" onClick={() => setEditingId(null)} className="opacity-80 hover:opacity-100">
+                          {t("messenger.broadcast.cancel", lang)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = editText.trim();
+                            if (v) editMutation.mutate({ tenantId, threadId, messageId: m.id, body: v });
+                          }}
+                          disabled={editMutation.isPending}
+                          className="font-semibold hover:underline disabled:opacity-60"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={a.url}
-                            alt="attachment"
-                            className="max-h-56 max-w-[240px] w-auto object-cover"
-                          />
-                        </a>
-                      ))}
+                          {t("messenger.msg.save", lang)}
+                        </button>
+                      </div>
                     </div>
-                  )}
-                  {showBody && (
-                    <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                  ) : (
+                    <>
+                      {atts.length > 0 && (
+                        <div className={`flex flex-wrap gap-1.5 ${showBody ? "mb-1.5" : ""}`}>
+                          {atts.map((a, idx) => (
+                            <a
+                              key={`${a.url}-${idx}`}
+                              href={a.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block overflow-hidden rounded-lg border border-white/10"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={a.url}
+                                alt="attachment"
+                                className="max-h-56 max-w-[240px] w-auto object-cover"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {showBody && (
+                        <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                      )}
+                    </>
                   )}
                   <p
                     className={`mt-0.5 flex items-center justify-end gap-1 text-[9px] ${
@@ -314,6 +363,43 @@ export function ThreadView({ tenantId, threadId }: Props) {
                     }`}
                   >
                     <span>{fmtFull(m.createdAt)}</span>
+                    {m.editedAt && !m.deletedAt && (
+                      <span className="opacity-70">({t("messenger.msg.edited", lang)})</span>
+                    )}
+                    {isOwn && !m.deletedAt && editingId !== m.id && (
+                      <>
+                        {!m.externalMsgId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(m.id);
+                              setEditText(m.body);
+                            }}
+                            title={t("messenger.msg.edit", lang)}
+                            aria-label={t("messenger.msg.edit", lang)}
+                            className="opacity-60 hover:opacity-100"
+                          >
+                            <Pencil className="h-2.5 w-2.5 shrink-0" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              typeof window !== "undefined" &&
+                              window.confirm(t("messenger.msg.deleteConfirm", lang))
+                            ) {
+                              deleteMutation.mutate({ tenantId, threadId, messageId: m.id });
+                            }
+                          }}
+                          title={t("messenger.msg.delete", lang)}
+                          aria-label={t("messenger.msg.delete", lang)}
+                          className="opacity-60 hover:opacity-100"
+                        >
+                          <Trash2 className="h-2.5 w-2.5 shrink-0" />
+                        </button>
+                      </>
+                    )}
                     {isOwn && m.deliveryState === "pending" && (
                       <Clock className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.sending", lang)} />
                     )}

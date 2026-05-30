@@ -60,6 +60,8 @@ const THREAD_KIND = z.enum(["staff_dm", "staff_group", "client_conv", "system"])
 const MESSAGE_BODY_MAX = 4000;
 const PREVIEW_MAX = 200;
 const TITLE_MAX = 120;
+/** Window during which a sender may edit/withdraw their own message (24h). */
+const EDIT_WINDOW_SEC = 86400;
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -322,7 +324,10 @@ export const messengerRouter = createTRPCRouter({
 
       return {
         thread,
-        messages: messages.reverse(), // chronological in render
+        // Soft-deleted rows keep their place (tombstone) but never leak content.
+        messages: messages
+          .map((m) => (m.deletedAt ? { ...m, body: "", attachmentsJson: null } : m))
+          .reverse(), // chronological in render
         nextCursor,
         viewerWebUserId: ctx.webUser!.id,
         members: members.map((m) => ({
@@ -594,6 +599,107 @@ export const messengerRouter = createTRPCRouter({
           .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
       }
       return { ok: true, relay };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  EDIT / DELETE — author-only, soft delete
+  // ═══════════════════════════════════════════════════════════════
+  //  Only the web_user author may edit/delete their own message. Edit is
+  //  blocked for already-relayed messages (TG/WA/IG can't reliably edit and
+  //  the client already has the original) and past a 24h window. Delete is a
+  //  soft delete (deleted_at) — getThread masks the body but keeps a tombstone
+  //  so the timeline has no holes.
+  editMessage: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        messageId: z.string().min(1),
+        body: z.string().min(1).max(MESSAGE_BODY_MAX),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      const webUserId = ctx.webUser!.id;
+      const [msg] = await ctx.db
+        .select()
+        .from(threadMessages)
+        .where(
+          and(
+            eq(threadMessages.id, input.messageId),
+            eq(threadMessages.tenantId, input.tenantId),
+            eq(threadMessages.threadId, input.threadId),
+          ),
+        )
+        .limit(1);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      if (msg.senderKind !== "web_user" || msg.senderRef !== webUserId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the author can edit" });
+      }
+      if (msg.deletedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Message is deleted" });
+      }
+      if (msg.externalMsgId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_edit_relayed" });
+      }
+      const now = nowSec();
+      if (now - msg.createdAt > EDIT_WINDOW_SEC) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "edit_window_expired" });
+      }
+      const body = sanitizeText(input.body).trim();
+      if (!body) throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
+
+      await ctx.db
+        .update(threadMessages)
+        .set({ body, editedAt: now })
+        .where(
+          and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)),
+        );
+      // Refresh the inbox preview if this was the thread's last message.
+      await ctx.db
+        .update(threads)
+        .set({ lastMessagePreview: preview(body) })
+        .where(and(eq(threads.id, input.threadId), eq(threads.lastMessageAt, msg.createdAt)));
+      return { ok: true, editedAt: now };
+    }),
+
+  deleteMessage: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        messageId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      const webUserId = ctx.webUser!.id;
+      const [msg] = await ctx.db
+        .select()
+        .from(threadMessages)
+        .where(
+          and(
+            eq(threadMessages.id, input.messageId),
+            eq(threadMessages.tenantId, input.tenantId),
+            eq(threadMessages.threadId, input.threadId),
+          ),
+        )
+        .limit(1);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      if (msg.senderKind !== "web_user" || msg.senderRef !== webUserId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the author can delete" });
+      }
+      if (msg.deletedAt) return { ok: true, alreadyDeleted: true };
+
+      await ctx.db
+        .update(threadMessages)
+        .set({ deletedAt: nowSec() })
+        .where(
+          and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)),
+        );
+      // Relayed messages: the external channel already delivered the original,
+      // so we only hide our mirror — surface a warning for the UI caption.
+      return { ok: true, relayedWarning: !!msg.externalMsgId };
     }),
 
   // ═══════════════════════════════════════════════════════════════

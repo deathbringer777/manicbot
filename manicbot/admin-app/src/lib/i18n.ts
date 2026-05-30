@@ -2225,6 +2225,14 @@ const translations = {
   "messenger.status.failed":       { ru: "Не доставлено", ua: "Не доставлено", en: "Not delivered", pl: "Niedostarczone" },
   "messenger.status.retry":        { ru: "Повторить", ua: "Повторити", en: "Retry", pl: "Ponów" },
   "messenger.seen":                { ru: "Прочитано", ua: "Прочитано", en: "Seen", pl: "Przeczytano" },
+  // Edit / delete (migration 0067 columns, wired in Phase 3)
+  "messenger.msg.edit":            { ru: "Изменить", ua: "Змінити", en: "Edit", pl: "Edytuj" },
+  "messenger.msg.delete":          { ru: "Удалить", ua: "Видалити", en: "Delete", pl: "Usuń" },
+  "messenger.msg.save":            { ru: "Сохранить", ua: "Зберегти", en: "Save", pl: "Zapisz" },
+  "messenger.msg.edited":          { ru: "изменено", ua: "змінено", en: "edited", pl: "edytowano" },
+  "messenger.msg.deleted":         { ru: "сообщение удалено", ua: "повідомлення видалено", en: "message deleted", pl: "wiadomość usunięta" },
+  "messenger.msg.deleteConfirm":   { ru: "Удалить сообщение?", ua: "Видалити повідомлення?", en: "Delete this message?", pl: "Usunąć wiadomość?" },
+  "messenger.msg.relayedWarning":  { ru: "Клиент уже получил это сообщение", ua: "Клієнт уже отримав це повідомлення", en: "The client already received this message", pl: "Klient już otrzymał tę wiadomość" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

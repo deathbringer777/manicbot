@@ -1308,12 +1308,20 @@ CREATE TABLE IF NOT EXISTS thread_messages (
   reply_to_message_id    TEXT,
   created_at             INTEGER NOT NULL,
   edited_at              INTEGER,
-  deleted_at             INTEGER
+  deleted_at             INTEGER,
+  -- Outbound delivery lifecycle (migration 0095). NULL = untracked (history,
+  -- staff DMs/groups, system, inbound). client_conv outbound web_user rows:
+  -- pending → sent → delivered, or pending → failed. Mirrors plugin_reminder_fires.
+  delivery_state         TEXT,
+  delivery_error         TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_thread_messages_thread
   ON thread_messages(thread_id, id);
 CREATE INDEX IF NOT EXISTS idx_thread_messages_tenant_created
   ON thread_messages(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_thread_messages_delivery
+  ON thread_messages(tenant_id, delivery_state)
+  WHERE delivery_state IS NOT NULL;
 
 -- ─── Referral Program (migration 0069) ──────────────────────────────────
 

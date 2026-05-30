@@ -2218,6 +2218,12 @@ const translations = {
   "messenger.broadcast.statusActive": { ru: "Активные", ua: "Активні", en: "Active", pl: "Aktywne" },
   "messenger.broadcast.statusGrace": { ru: "В отсрочке", ua: "У відстрочці", en: "In grace", pl: "W okresie karencji" },
   "messenger.broadcast.statusExpired": { ru: "Истёкшие", ua: "Прострочені", en: "Expired", pl: "Wygasłe" },
+  // Delivery status (migration 0095)
+  "messenger.status.sending":      { ru: "Отправляется", ua: "Надсилається", en: "Sending", pl: "Wysyłanie" },
+  "messenger.status.sent":         { ru: "Отправлено", ua: "Надіслано", en: "Sent", pl: "Wysłano" },
+  "messenger.status.delivered":    { ru: "Доставлено", ua: "Доставлено", en: "Delivered", pl: "Dostarczono" },
+  "messenger.status.failed":       { ru: "Не доставлено", ua: "Не доставлено", en: "Not delivered", pl: "Niedostarczone" },
+  "messenger.status.retry":        { ru: "Повторить", ua: "Повторити", en: "Retry", pl: "Ponów" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

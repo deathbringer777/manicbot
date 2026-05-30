@@ -1385,6 +1385,11 @@ export const threadMessages = sqliteTable("thread_messages", {
   createdAt: integer("created_at").notNull(),
   editedAt: integer("edited_at"),
   deletedAt: integer("deleted_at"),
+  /** Outbound delivery lifecycle (migration 0095). NULL = untracked. For
+   *  client_conv outbound: 'pending' | 'sent' | 'delivered' | 'failed'. */
+  deliveryState: text("delivery_state"),
+  /** Channel error code when delivery_state = 'failed' (e.g. outside_message_window). */
+  deliveryError: text("delivery_error"),
 }, (t) => [
   index("idx_thread_messages_thread").on(t.threadId, t.id),
   index("idx_thread_messages_tenant_created").on(t.tenantId, t.createdAt),

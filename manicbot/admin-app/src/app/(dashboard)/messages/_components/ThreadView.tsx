@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Archive, StickyNote, Users } from "lucide-react";
+import { Archive, StickyNote, Users, Clock, Check, CheckCheck, AlertCircle } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -63,6 +63,13 @@ export function ThreadView({ tenantId, threadId }: Props) {
   });
 
   const markReadMutation = api.messenger.markRead.useMutation();
+
+  // Retry a failed staff→client send (re-relays through the Worker).
+  const retryMutation = api.messenger.retryMessage.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.getThread.invalidate({ tenantId, threadId });
+    },
+  });
 
   // Auto-mark read on the latest message we see
   useEffect(() => {
@@ -268,11 +275,32 @@ export function ThreadView({ tenantId, threadId }: Props) {
                     <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
                   )}
                   <p
-                    className={`mt-0.5 text-right text-[9px] ${
+                    className={`mt-0.5 flex items-center justify-end gap-1 text-[9px] ${
                       isOwn ? "text-white/70" : "text-slate-400"
                     }`}
                   >
-                    {fmtFull(m.createdAt)}
+                    <span>{fmtFull(m.createdAt)}</span>
+                    {isOwn && m.deliveryState === "pending" && (
+                      <Clock className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.sending", lang)} />
+                    )}
+                    {isOwn && m.deliveryState === "sent" && (
+                      <Check className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.sent", lang)} />
+                    )}
+                    {isOwn && m.deliveryState === "delivered" && (
+                      <CheckCheck className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.delivered", lang)} />
+                    )}
+                    {isOwn && m.deliveryState === "failed" && (
+                      <button
+                        type="button"
+                        onClick={() => retryMutation.mutate({ tenantId, threadId, messageId: m.id })}
+                        disabled={retryMutation.isPending}
+                        title={m.deliveryError ?? t("messenger.status.failed", lang)}
+                        className="inline-flex items-center gap-0.5 rounded bg-rose-500/90 px-1 py-0.5 font-medium text-white hover:bg-rose-500 disabled:opacity-60"
+                      >
+                        <AlertCircle className="h-2.5 w-2.5 shrink-0" />
+                        {t("messenger.status.retry", lang)}
+                      </button>
+                    )}
                   </p>
                 </div>
               </div>

@@ -366,6 +366,10 @@ export const messengerRouter = createTRPCRouter({
       const isInternalNote =
         thread.kind === "client_conv" && input.isInternalNote ? 1 : 0;
 
+      // Only staff→client (non-note) messages have a delivery lifecycle. Start
+      // 'pending'; the relay result below advances it to 'sent' or 'failed'.
+      const isClientConvOutbound = thread.kind === "client_conv" && !isInternalNote;
+
       const body = sanitizeText(input.body).trim();
       if (!body) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
@@ -396,6 +400,8 @@ export const messengerRouter = createTRPCRouter({
         createdAt: now,
         editedAt: null,
         deletedAt: null,
+        deliveryState: isClientConvOutbound ? "pending" : null,
+        deliveryError: null,
       });
 
       await ctx.db
@@ -488,19 +494,33 @@ export const messengerRouter = createTRPCRouter({
       // Internal notes never relay (they're staff-only by design). Phase 3
       // will also publish to MESSENGER_HUB DO for WebSocket fan-out.
       let relay: { ok: true; externalMsgId: string | null } | { ok: false; error: string } | null = null;
-      if (thread.kind === "client_conv" && !isInternalNote) {
+      if (isClientConvOutbound) {
         relay = await relayToWorker({
           tenantId: input.tenantId,
           threadId: input.threadId,
           body,
           replyToMessageId: input.replyToMessageId,
         });
-        if (relay.ok && relay.externalMsgId) {
-          // Stamp the channel-side message id onto our row so dedup +
-          // delivery confirmation work later.
+        // Persist the delivery outcome so it survives reload (no silent
+        // failures) and drives the status icon + retry affordance. The relay
+        // also returns the channel-side id for dedup/delivered-correlation.
+        if (relay.ok) {
           await ctx.db
             .update(threadMessages)
-            .set({ externalMsgId: relay.externalMsgId })
+            .set({
+              deliveryState: "sent",
+              ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
+            })
+            .where(
+              and(
+                eq(threadMessages.id, id),
+                eq(threadMessages.tenantId, input.tenantId),
+              ),
+            );
+        } else {
+          await ctx.db
+            .update(threadMessages)
+            .set({ deliveryState: "failed", deliveryError: relay.error })
             .where(
               and(
                 eq(threadMessages.id, id),
@@ -511,6 +531,69 @@ export const messengerRouter = createTRPCRouter({
       }
 
       return { id, createdAt: now, relay };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  RETRY — re-relay a failed client_conv message
+  // ═══════════════════════════════════════════════════════════════
+  retryMessage: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        messageId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { thread } = await assertThreadMember(ctx, input.tenantId, input.threadId);
+      if (thread.kind !== "client_conv") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only client conversations relay" });
+      }
+      const [msg] = await ctx.db
+        .select()
+        .from(threadMessages)
+        .where(
+          and(
+            eq(threadMessages.id, input.messageId),
+            eq(threadMessages.tenantId, input.tenantId),
+            eq(threadMessages.threadId, input.threadId),
+          ),
+        )
+        .limit(1);
+      if (!msg) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      }
+      if (msg.deliveryState !== "failed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only failed messages can be retried" });
+      }
+
+      // Flip to pending so the UI shows the in-flight state, then re-relay.
+      await ctx.db
+        .update(threadMessages)
+        .set({ deliveryState: "pending", deliveryError: null })
+        .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
+
+      const relay = await relayToWorker({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        body: msg.body,
+        replyToMessageId: msg.replyToMessageId ?? undefined,
+      });
+      if (relay.ok) {
+        await ctx.db
+          .update(threadMessages)
+          .set({
+            deliveryState: "sent",
+            ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
+          })
+          .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
+      } else {
+        await ctx.db
+          .update(threadMessages)
+          .set({ deliveryState: "failed", deliveryError: relay.error })
+          .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
+      }
+      return { ok: true, relay };
     }),
 
   // ═══════════════════════════════════════════════════════════════

@@ -27,10 +27,8 @@
 
 import { timingSafeEqual } from '../utils/security.js';
 import { log } from '../utils/logger.js';
-import {
-  appendOutboundStaffMessage,
-  lookupClientConvTarget,
-} from '../services/messengerThreads.js';
+import { lookupClientConvTarget } from '../services/messengerThreads.js';
+import { classifyChannelSendResult } from '../channels/send-classify.js';
 import { getChannelConfig } from '../channels/resolver.js';
 import { TelegramAdapter } from '../channels/telegram.js';
 import { WhatsAppAdapter } from '../channels/whatsapp.js';
@@ -118,7 +116,7 @@ export async function tryMessengerOutboundRoute(request, env, url) {
   } catch {
     return bad(400, 'invalid_json');
   }
-  const { tenantId, threadId, body: messageBody, replyToMessageId } = body ?? {};
+  const { tenantId, threadId, body: messageBody } = body ?? {};
 
   if (typeof tenantId !== 'string' || !tenantId) return bad(400, 'tenantId_required');
   if (typeof threadId !== 'string' || !threadId) return bad(400, 'threadId_required');
@@ -131,6 +129,16 @@ export async function tryMessengerOutboundRoute(request, env, url) {
   const target = await lookupClientConvTarget(ctx, tenantId, threadId);
   if (!target) {
     return bad(404, 'thread_not_found_or_not_client_conv');
+  }
+
+  // Web channel is delivery-less from the Worker — the client sees replies on
+  // the next chat-widget poll. Treat as immediately sent (no external id) so
+  // the admin-app marks the row 'sent' rather than 'channel_not_supported'.
+  if (target.channelType === 'web') {
+    await publishToMessengerHub(env, tenantId, {
+      type: 'message.new', threadId, kind: 'client_conv', direction: 'outbound',
+    }).catch(() => undefined);
+    return Response.json({ ok: true, external_msg_id: null, delivery_state: 'sent', channelType: 'web' });
   }
 
   // Resolve channel config (skip for telegram — uses bot token)
@@ -170,45 +178,31 @@ export async function tryMessengerOutboundRoute(request, env, url) {
     log.error('messengerOutbound.send',
       e instanceof Error ? e : new Error(String(e?.message)),
       { tenantId, threadId, channelType: target.channelType });
-    return bad(502, 'channel_send_failed', { detail: e?.message });
-  }
-  if (sendResult && sendResult.ok === false) {
-    return bad(502, sendResult.error || 'channel_send_failed');
+    // Thrown fetch = transient; admin-app marks the row failed + offers retry.
+    return bad(502, 'channel_send_failed', { detail: e?.message, transient: true });
   }
 
-  const externalMsgId =
-    sendResult?.external_msg_id ??
-    sendResult?.message_id ??
-    sendResult?.messages?.[0]?.id ??
-    sendResult?.result?.message_id ??
-    null;
+  // Single source of truth for the delivery outcome + the WA/IG external_msg_id
+  // `.data`-hop fix. No second "receipt" row: the admin-app's sendMessage owns
+  // the thread_messages row and stamps delivery_state + external_msg_id on it.
+  const outcome = classifyChannelSendResult(sendResult);
+  if (outcome.deliveryState === 'failed') {
+    return bad(502, outcome.errorCode || 'channel_send_failed', { transient: outcome.transient });
+  }
 
-  // Stamp into thread_messages — append a relay row so the timeline shows
-  // staff replies came from the channel adapter. (admin-app's sendMessage
-  // also writes a sender_kind='web_user' row; the relay row is a delivery
-  // receipt with sender_kind='system'.)
-  const appended = await appendOutboundStaffMessage(ctx, {
-    tenantId,
-    threadId,
-    body: messageBody.trim(),
-    externalMsgId: externalMsgId ? String(externalMsgId) : '',
-    replyToMessageId: replyToMessageId ?? null,
-  });
-
-  // Phase 3 — broadcast the outbound delivery to other open /messages tabs
-  // (e.g. another owner browser session, or the same user on a phone).
+  // Realtime fan-out so other open /messages tabs refetch (the delivery
+  // confirmation lands on the original row via the admin-app update).
   await publishToMessengerHub(env, tenantId, {
     type: 'message.new',
     threadId,
-    messageId: appended?.messageId ?? null,
     kind: 'client_conv',
     direction: 'outbound',
   }).catch(() => undefined);
 
   return Response.json({
     ok: true,
-    messageId: appended?.messageId ?? null,
-    external_msg_id: externalMsgId,
+    external_msg_id: outcome.externalMsgId,
+    delivery_state: 'sent',
     channelType: target.channelType,
   });
 }

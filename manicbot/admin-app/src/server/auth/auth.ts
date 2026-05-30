@@ -12,6 +12,7 @@ import { hashToken, timingSafeEqualHex } from "./tokens";
 import { isResendConfigured } from "~/server/email/resend";
 import { sendLoginAlert } from "~/server/email/emailService";
 import { checkRateLimit } from "./rateLimit";
+import { resolveActiveMembership } from "./memberships";
 import { log } from "~/server/utils/logger";
 
 export { authPublicBaseUrl };
@@ -346,11 +347,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (user.id) {
             const db = getDb();
             const rows = await db
-              .select({ pca: webUsers.passwordChangedAt })
+              .select({ pca: webUsers.passwordChangedAt, activeTenantId: webUsers.activeTenantId })
               .from(webUsers)
               .where(eq(webUsers.id, user.id))
               .limit(1);
             t.passwordChangedAt = rows[0]?.pca ?? 0;
+            // Resolve the active salon so a switch survives a fresh login.
+            const active = await resolveActiveMembership(db, {
+              webUserId: user.id,
+              homeTenantId: user.tenantId ?? null,
+              homeRole: user.webRole ?? "tenant_owner",
+              activeTenantId: rows[0]?.activeTenantId ?? null,
+            });
+            t.tenantId = active.tenantId;
+            t.webRole = active.role;
           } else {
             t.passwordChangedAt = 0;
           }
@@ -365,6 +375,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const rows = await db
             .select({
               tenantId: webUsers.tenantId,
+              activeTenantId: webUsers.activeTenantId,
               emailVerified: webUsers.emailVerified,
               role: webUsers.role,
               passwordChangedAt: webUsers.passwordChangedAt,
@@ -374,9 +385,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .where(eq(webUsers.id, t.sub))
             .limit(1);
           if (rows[0]) {
-            if (rows[0].tenantId) t.tenantId = rows[0].tenantId;
             t.emailVerified = !!rows[0].emailVerified;
-            t.webRole = rows[0].role;
+            // Resolve the ACTIVE salon — may be a different tenant where this
+            // user holds a master role. Falls back to home and self-heals a
+            // stale pointer. No extra query for single-tenant users.
+            const active = await resolveActiveMembership(db, {
+              webUserId: t.sub,
+              homeTenantId: rows[0].tenantId ?? null,
+              homeRole: rows[0].role,
+              activeTenantId: rows[0].activeTenantId ?? null,
+            });
+            t.tenantId = active.tenantId;
+            t.webRole = active.role;
             // #S8: if password was changed AFTER this JWT was issued,
             // or admin bumped sessionsInvalidatedAt past the token's iat,
             // the session callback will return null and force re-login.

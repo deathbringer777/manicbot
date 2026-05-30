@@ -50,6 +50,7 @@ const BOOTSTRAP_SQL = [
      email TEXT NOT NULL,
      password_hash TEXT NOT NULL DEFAULT '',
      tenant_id TEXT,
+     active_tenant_id TEXT,
      role TEXT NOT NULL DEFAULT 'tenant_owner',
      name TEXT,
      lang TEXT DEFAULT 'en',
@@ -182,7 +183,6 @@ describe("salon.createMasterAccount — real Drizzle SQL", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("~/env");
   });
 
   it("writes all four tables in one atomic call when the schema is in sync", async () => {

@@ -82,8 +82,9 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               if (wamids.length) {
                 let anyFresh = false;
                 for (const wamid of wamids) {
+                  // Forward DB so the dual/D1 dedup backend can claim atomically (KV has no CAS).
                   const fresh = await claimWAMessage(
-                    { MANICBOT: env.MANICBOT }, String(phoneNumberId), String(wamid),
+                    { MANICBOT: env.MANICBOT, DB: env.DB }, String(phoneNumberId), String(wamid),
                   );
                   if (fresh) anyFresh = true;
                 }
@@ -228,7 +229,8 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               // to 24h on 5xx — without dedup every retry replays the message.
               const mid = m?.message?.mid || m?.read?.mid || m?.delivery?.mids?.[0];
               if (mid) {
-                const fresh = await claimMetaMessage({ MANICBOT: env.MANICBOT }, String(pageId), String(mid));
+                // Forward DB so the dual/D1 dedup backend can claim atomically (KV has no CAS).
+                const fresh = await claimMetaMessage({ MANICBOT: env.MANICBOT, DB: env.DB }, String(pageId), String(mid));
                 if (!fresh) continue;
               }
               // Read/delivery receipts → advance our outbound message's state,

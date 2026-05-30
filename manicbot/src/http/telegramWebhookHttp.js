@@ -57,7 +57,8 @@ export async function tryTelegramWebhook(request, ctx, url) {
   // failure doesn't burn the dedup slot for a future retry.
   if (upd?.update_id != null) {
     const botKey = ctx.botId || 'legacy';
-    const fresh = await claimTelegramUpdate({ MANICBOT: ctx.kv }, botKey, upd.update_id);
+    // Forward DB so the dual/D1 dedup backend can claim atomically (KV has no CAS).
+    const fresh = await claimTelegramUpdate({ MANICBOT: ctx.kv, DB: ctx.db }, botKey, upd.update_id);
     if (!fresh) return new Response('OK'); // dup, ack and skip
   }
 

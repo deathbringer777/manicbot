@@ -8,6 +8,7 @@ import { t } from "~/lib/i18n";
 import { MessageComposer, ATTACHMENT_ONLY_BODY } from "./MessageComposer";
 import { GroupMembersModal } from "./GroupMembersModal";
 import { useMessengerSocketCtx } from "./socketContext";
+import { RequestCard } from "./RequestCard";
 
 interface Props {
   tenantId: string;
@@ -271,6 +272,16 @@ export function ThreadView({ tenantId, threadId }: Props) {
           </div>
         ) : (
           messages.map((m) => {
+            // Booking-request cards render as an actionable card, not a bubble.
+            if ((m as { refKind?: string | null }).refKind === "booking_request") {
+              return (
+                <RequestCard
+                  key={m.id}
+                  tenantId={tenantId}
+                  message={m as Parameters<typeof RequestCard>[0]["message"]}
+                />
+              );
+            }
             const isOwn = m.senderKind === "web_user" && m.senderRef === viewerWebUserId;
             const isExternal = m.senderKind === "external_client";
             const isSystem = m.senderKind === "system";

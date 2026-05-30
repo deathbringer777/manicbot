@@ -516,6 +516,13 @@ export const webUsers = sqliteTable("web_users", {
   passwordHash: text("password_hash").notNull().default(""),
   /** Tenant this web user belongs to (required for tenant_owner / master) */
   tenantId: text("tenant_id"),
+  /**
+   * 0097: currently-selected salon for a multi-tenant user (an owner who also
+   * holds a master role elsewhere). NULL = use the home `tenantId`. Flows into
+   * the session via auth.ts `resolveActiveMembership`; membership is proven
+   * authoritatively via `masters.web_user_id`.
+   */
+  activeTenantId: text("active_tenant_id"),
   /** Role: tenant_owner | system_admin | support | technical_support | master */
   role: text("role").notNull().default("tenant_owner"),
   name: text("name"),
@@ -1385,14 +1392,20 @@ export const threadMessages = sqliteTable("thread_messages", {
   createdAt: integer("created_at").notNull(),
   editedAt: integer("edited_at"),
   deletedAt: integer("deleted_at"),
-  /** Outbound delivery lifecycle (migration 0095). NULL = untracked. For
+  /** Outbound delivery lifecycle (migration 0098). NULL = untracked. For
    *  client_conv outbound: 'pending' | 'sent' | 'delivered' | 'failed'. */
   deliveryState: text("delivery_state"),
   /** Channel error code when delivery_state = 'failed' (e.g. outside_message_window). */
   deliveryError: text("delivery_error"),
+  /** migration 0095: ref_kind='booking_request', ref_id=appointments.id +
+   *  meta_json snapshot, so a message can render as an actionable request card. */
+  refKind: text("ref_kind"),
+  refId: text("ref_id"),
+  metaJson: text("meta_json"),
 }, (t) => [
   index("idx_thread_messages_thread").on(t.threadId, t.id),
   index("idx_thread_messages_tenant_created").on(t.tenantId, t.createdAt),
+  index("idx_thread_messages_ref").on(t.tenantId, t.refKind, t.refId),
 ]);
 
 // ─── Referral Program (migration 0069) ─────────────────────────────────
@@ -1734,4 +1747,15 @@ export const webhookDedup = sqliteTable("webhook_dedup", {
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_webhook_dedup_expires").on(t.expiresAt),
+]);
+
+// ─── Upload token single-use nonce (Migration 0096) ─────────────────────────
+// Atomic single-use store for /upload/asset token jtis (src/services/upload.js
+// claimUploadNonce). No router reads it; cleanup cron in worker.scheduled does
+// the DELETE pass.
+export const uploadTokenUsed = sqliteTable("upload_token_used", {
+  jti: text("jti").primaryKey(),
+  expiresAt: integer("expires_at").notNull(),
+}, (t) => [
+  index("idx_upload_token_used_expires").on(t.expiresAt),
 ]);

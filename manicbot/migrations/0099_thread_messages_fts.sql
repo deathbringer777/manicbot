@@ -1,4 +1,5 @@
--- 0096_thread_messages_fts.sql — 2026-05-30
+-- 0099_thread_messages_fts.sql — 2026-05-30
+-- (renumbered from 0096 on merge — main shipped 0095-0097 in parallel)
 --
 -- Full-text search over messenger message bodies. Before this, the inbox could
 -- only filter by thread title/preview — never by message text. Adds an FTS5

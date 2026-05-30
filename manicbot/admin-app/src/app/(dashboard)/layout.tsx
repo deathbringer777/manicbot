@@ -17,6 +17,7 @@ import { EmailVerificationPopup } from "~/components/EmailVerificationPopup";
 import { SetPasswordBanner } from "~/components/SetPasswordBanner";
 import { BillingGate } from "~/components/BillingGate";
 import { shouldShowBillingGate } from "~/lib/billing/trialState";
+import { isFullPageRoute } from "~/lib/routing/fullPageRoutes";
 
 // Lazy-loaded god-mode tab pages that live under broken (dashboard) routes on CF Pages.
 // @cloudflare/next-on-pages routes new (dashboard)/* paths to (public) layout → 404.
@@ -86,21 +87,16 @@ export default function DashboardLayout({
     isTrialExpired: isTrialExpired ?? false,
   };
 
-  // Non-admin roles get their dedicated dashboard inside WebShell.
-  // /settings is always rendered as {children} so SettingsPageClient mounts for all roles.
+  // Non-admin roles get their dedicated dashboard inside WebShell. Some paths
+  // must instead render their OWN page.tsx (inside WebShell) for every role —
+  // the single source of truth is fullPageRoutes.ts. Add new full-page routes
+  // THERE, not here. Notably /invitations: the salon-accept page must render
+  // for an invited owner (the bell/email link lands here); omitting it made the
+  // notification "do nothing" by swapping in the home dashboard.
+  const isFullPage = isFullPageRoute(pathname);
+  // /settings keeps its own boolean: the email-verification gate below lets it
+  // through even when the user is unverified.
   const isSettingsPage = pathname === "/settings";
-  const isPluginsPage = pathname === "/plugins" || pathname.startsWith("/plugins/") || pathname.startsWith("/plugin/");
-  // /marketing is its own module (MarketingShell with sub-nav). Whitelisting it lets
-  // /marketing/page.tsx render for tenant_owner / tenant_manager instead of being
-  // intercepted by SalonDashboard.
-  const isMarketingPage = pathname === "/marketing" || pathname.startsWith("/marketing/");
-  // /messages is the new internal messenger (migration 0067). Same whitelist
-  // treatment as /marketing so the role dashboard swap doesn't intercept it.
-  const isMessagesPage = pathname === "/messages" || pathname.startsWith("/messages/");
-  // /notifications is the full-history view of the platform bell feed
-  // (PR1 of the notification-center upgrade). Whitelist so every role can
-  // open the page directly from the bell footer link.
-  const isNotificationsPage = pathname === "/notifications" || pathname.startsWith("/notifications/");
 
   // Gate: block dashboard content if email is not verified (except /settings)
   function wrapWithEmailGate(content: React.ReactNode) {
@@ -138,7 +134,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
+            isFullPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
@@ -157,7 +153,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
+            isFullPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="tenant_owner" />
@@ -175,7 +171,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(wrapWithBillingGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
+            isFullPage
               ? children
               : !effectiveTenantId
                 ? <NoTenantOnboarding role="master" />
@@ -193,7 +189,7 @@ export default function DashboardLayout({
       <RoleContext.Provider value={ctxValue}>
         <WebShell>
           {wrapWithEmailGate(
-            isSettingsPage || isPluginsPage || isMarketingPage || isMessagesPage || isNotificationsPage
+            isFullPage
               ? children
               : <SupportDashboard />,
           )}

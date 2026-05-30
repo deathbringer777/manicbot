@@ -6,6 +6,7 @@ import {
   User as DmIcon,
   Bell as SystemIcon,
   MessageCircle as ClientIcon,
+  ClipboardList as RequestIcon,
   Search,
   Plus,
 } from "lucide-react";
@@ -14,7 +15,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { useMessengerSocketCtx } from "./socketContext";
 
-type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system";
+type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system" | "requests";
 type FilterKind = ThreadKind | "all";
 
 const KIND_META: Record<ThreadKind, { icon: typeof DmIcon; tint: string }> = {
@@ -22,6 +23,7 @@ const KIND_META: Record<ThreadKind, { icon: typeof DmIcon; tint: string }> = {
   staff_group: { icon: GroupIcon, tint: "bg-purple-500/15 text-purple-500" },
   client_conv: { icon: ClientIcon, tint: "bg-emerald-500/15 text-emerald-500" },
   system: { icon: SystemIcon, tint: "bg-amber-500/15 text-amber-500" },
+  requests: { icon: RequestIcon, tint: "bg-amber-500/15 text-amber-600" },
 };
 
 function fmtTime(ts: number | null): string {
@@ -134,7 +136,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
 
         {/* Filter pills */}
         <div className="mt-2 flex flex-wrap gap-1">
-          {(["all", "staff_dm", "staff_group", "client_conv", "system"] as FilterKind[]).map(
+          {(["all", "requests", "staff_dm", "staff_group", "client_conv", "system"] as FilterKind[]).map(
             (k) => (
               <button
                 key={k}
@@ -149,13 +151,15 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               >
                 {k === "all"
                   ? t("messenger.filter.all", lang)
-                  : k === "staff_dm"
-                    ? "DM"
-                    : k === "staff_group"
-                      ? t("messenger.filter.groups", lang)
-                      : k === "client_conv"
-                        ? t("messenger.filter.clients", lang)
-                        : t("messenger.filter.system", lang)}
+                  : k === "requests"
+                    ? t("messenger.filter.requests", lang)
+                    : k === "staff_dm"
+                      ? "DM"
+                      : k === "staff_group"
+                        ? t("messenger.filter.groups", lang)
+                        : k === "client_conv"
+                          ? t("messenger.filter.clients", lang)
+                          : t("messenger.filter.system", lang)}
               </button>
             ),
           )}

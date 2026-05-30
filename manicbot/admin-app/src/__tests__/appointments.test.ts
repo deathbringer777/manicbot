@@ -156,7 +156,7 @@ describe("appointmentsRouter", () => {
       ]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      const result = await caller.updateStatus({ id: "apt_1", status: "confirmed" });
+      const result = await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "confirmed" });
 
       expect(result.success).toBe(true);
       expect(dbMock.updateCalls[0]?.values).toMatchObject({
@@ -170,7 +170,7 @@ describe("appointmentsRouter", () => {
       ]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "confirmed" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "confirmed" });
 
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("/admin/appointment-action"),
@@ -187,7 +187,7 @@ describe("appointmentsRouter", () => {
       ]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "confirmed" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "confirmed" });
 
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -200,7 +200,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "cancelled", comment: "no-show" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "cancelled", comment: "no-show" });
 
       const vals = dbMock.updateCalls[0]?.values!;
       expect(vals.status).toBe("cancelled");
@@ -214,7 +214,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "cancelled" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "cancelled" });
 
       expect(fetchMock).toHaveBeenCalled();
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
@@ -228,7 +228,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "rejected", comment: "not available" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "rejected", comment: "not available" });
 
       expect(dbMock.updateCalls[0]?.values.rejectComment).toBe("not available");
     });
@@ -237,7 +237,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "rejected" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "rejected" });
 
       expect(dbMock.updateCalls[0]?.values.rejectComment).toBe("");
     });
@@ -246,7 +246,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "rejected" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "rejected" });
 
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.action).toBe("reject");
@@ -259,7 +259,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "done" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "done" });
 
       const vals = dbMock.updateCalls[0]?.values!;
       expect(vals.status).toBe("done");
@@ -271,7 +271,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.updateStatus({ id: "apt_1", status: "done" });
+      await caller.updateStatus({ tenantId: "t_demo", id: "apt_1", status: "done" });
 
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -283,7 +283,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[]]); // empty → no aptRow
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      const result = await caller.markNoShow({ id: "apt_x", noShowBy: "client" });
+      const result = await caller.markNoShow({ tenantId: "t_demo", id: "apt_x", noShowBy: "client" });
 
       expect(result).toEqual({ success: false });
       expect(dbMock.updateCalls).toHaveLength(0);
@@ -294,6 +294,7 @@ describe("appointmentsRouter", () => {
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       const result = await caller.markNoShow({
+        tenantId: "t_demo",
         id: "apt_1",
         noShowBy: "master",
         comment: "never came",
@@ -312,7 +313,7 @@ describe("appointmentsRouter", () => {
       const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
-      await caller.markNoShow({ id: "apt_1", noShowBy: "client" });
+      await caller.markNoShow({ tenantId: "t_demo", id: "apt_1", noShowBy: "client" });
 
       expect(dbMock.updateCalls[0]?.values.cancelReason).toBeNull();
     });

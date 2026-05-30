@@ -508,6 +508,11 @@ CREATE TABLE IF NOT EXISTS web_users (
   email TEXT NOT NULL,
   password_hash TEXT NOT NULL DEFAULT '',
   tenant_id TEXT,
+  -- 0097: currently-selected salon for a multi-tenant user (an owner who also
+  -- holds a master role in another salon). NULL = use the home tenant_id.
+  -- Resolved into the session in auth.ts via resolveActiveMembership; the
+  -- membership is proven authoritatively against masters.web_user_id.
+  active_tenant_id TEXT,
   role TEXT NOT NULL DEFAULT 'tenant_owner',
   name TEXT,
   lang TEXT DEFAULT 'en',
@@ -1309,11 +1314,15 @@ CREATE TABLE IF NOT EXISTS thread_messages (
   created_at             INTEGER NOT NULL,
   edited_at              INTEGER,
   deleted_at             INTEGER,
-  -- Outbound delivery lifecycle (migration 0095). NULL = untracked (history,
+  -- Outbound delivery lifecycle (migration 0098). NULL = untracked (history,
   -- staff DMs/groups, system, inbound). client_conv outbound web_user rows:
   -- pending → sent → delivered, or pending → failed. Mirrors plugin_reminder_fires.
   delivery_state         TEXT,
-  delivery_error         TEXT
+  delivery_error         TEXT,
+  -- migration 0095: booking-request cards reference a domain object + snapshot.
+  ref_kind               TEXT,
+  ref_id                 TEXT,
+  meta_json              TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_thread_messages_thread
   ON thread_messages(thread_id, id);
@@ -1323,7 +1332,7 @@ CREATE INDEX IF NOT EXISTS idx_thread_messages_delivery
   ON thread_messages(tenant_id, delivery_state)
   WHERE delivery_state IS NOT NULL;
 
--- FTS5 index over message bodies (migration 0096). Synced via the
+-- FTS5 index over message bodies (migration 0099). Synced via the
 -- thread_messages_fts_ai/au/ad triggers; the AU trigger doubles as the
 -- soft-delete de-index. Access control is enforced at query time
 -- (tenant + caller thread membership) in messenger.searchMessages.
@@ -1351,6 +1360,12 @@ CREATE TRIGGER IF NOT EXISTS thread_messages_fts_ad
 AFTER DELETE ON thread_messages BEGIN
   DELETE FROM thread_messages_fts WHERE message_id = OLD.id;
 END;
+-- migration 0095: look up the card(s) for a given appointment.
+CREATE INDEX IF NOT EXISTS idx_thread_messages_ref
+  ON thread_messages(tenant_id, ref_kind, ref_id);
+-- migration 0095: at most one "Заявки" requests thread per tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_requests_per_tenant
+  ON threads(tenant_id) WHERE kind = 'requests';
 
 -- ─── Referral Program (migration 0069) ──────────────────────────────────
 
@@ -1748,3 +1763,15 @@ CREATE TABLE IF NOT EXISTS webhook_dedup (
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_dedup_expires
   ON webhook_dedup(expires_at);
+
+-- ─── UPLOAD TOKEN SINGLE-USE NONCE (Migration 0096) ─────────────────────────
+-- Atomic single-use store for /upload/asset token jtis. `INSERT INTO
+-- upload_token_used ... ON CONFLICT(jti) DO NOTHING` redeems each upload token
+-- at most once (claimUploadNonce in src/services/upload.js). Pruned by
+-- `pruneExpiredUploadNonces()` from worker.scheduled.
+CREATE TABLE IF NOT EXISTS upload_token_used (
+  jti         TEXT PRIMARY KEY,
+  expires_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_upload_token_used_expires
+  ON upload_token_used(expires_at);

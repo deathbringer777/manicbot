@@ -1,7 +1,7 @@
-import { createTRPCRouter, adminProcedure, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, adminProcedure, managerProcedure, publicProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
 import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
-import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { slotsBusy } from "~/server/api/slotsBusy";
@@ -104,6 +104,8 @@ export const appointmentsRouter = createTRPCRouter({
   updateStatus: adminProcedure
     .input(
       z.object({
+        // God Mode acts ON an explicit tenant — never inferred from session.
+        tenantId: z.string(),
         id: z.string(),
         status: z.enum(["confirmed", "rejected", "cancelled", "done", "no_show"]),
         comment: z.string().optional(),
@@ -121,7 +123,7 @@ export const appointmentsRouter = createTRPCRouter({
           const existing = await ctx.db
             .select({ masterId: appointments.masterId })
             .from(appointments)
-            .where(eq(appointments.id, input.id))
+            .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
             .limit(1);
           if (existing[0] && !existing[0].masterId) {
             updates.masterId = adminId;
@@ -135,15 +137,20 @@ export const appointmentsRouter = createTRPCRouter({
         updates.cancelledBy = "admin";
         updates.cancelledAt = Math.floor(Date.now() / 1000);
       }
-      // Get tenantId before update (needed for Worker notification)
+      // Defense-in-depth: confirm the appointment belongs to the asserted
+      // tenant, then scope the write by (id, tenantId) so a stale tab or
+      // wrong-row click can never mutate another salon's appointment.
       const aptRow = await ctx.db
         .select({ tenantId: appointments.tenantId })
         .from(appointments)
-        .where(eq(appointments.id, input.id))
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
         .limit(1);
-      const tenantId = aptRow[0]?.tenantId;
+      if (!aptRow[0]) return { success: false };
+      const tenantId = input.tenantId;
 
-      await ctx.db.update(appointments).set(updates).where(eq(appointments.id, input.id));
+      await ctx.db.update(appointments)
+        .set(updates)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
 
       // Fire-and-forget: notify Worker to send Telegram message + sync calendar
       // Worker expects bare verb ("confirm" / "reject" / "cancel"), not past tense
@@ -160,19 +167,120 @@ export const appointmentsRouter = createTRPCRouter({
       return { success: true, updatedAt: Date.now() };
     }),
 
+  /**
+   * Claim-first confirmation of a booking request from the "Заявки" inbox.
+   *
+   * Allowed for tenant members (managerProcedure: master / tenant_owner /
+   * tenant_manager / system_admin). A salon MASTER claims a request and is
+   * assigned to it; an OWNER/manager may confirm without claiming to self.
+   *
+   * The claim is ATOMIC — the conditional UPDATE only matches while the
+   * request is still unassigned + pending, so if two masters race, exactly one
+   * gets a non-empty RETURNING and wins; the loser gets
+   * { ok:false, reason:'already_taken' }. A master may also confirm a request
+   * already assigned to themselves, but never one assigned to another master.
+   */
+  claimAndConfirm: managerProcedure
+    .input(z.object({ tenantId: z.string(), id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Resolve the caller's master chatId (salon masters claim to self). The
+      // lookup is bound to web_user_id = caller — matching the createManual
+      // IDOR rule so a master can only ever act as their own row.
+      let callerChatId: number | null = null;
+      if (ctx.webUser?.webRole === "master") {
+        const [m] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(
+            and(
+              eq(masters.tenantId, input.tenantId),
+              eq(masters.active, 1),
+              eq(masters.webUserId, ctx.webUser.id),
+            ),
+          )
+          .limit(1);
+        if (!m) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "not_a_master_in_tenant" });
+        }
+        callerChatId = m.chatId;
+      } else {
+        // owner / manager / system_admin — must own this tenant.
+        await assertTenantOwner(ctx, input.tenantId);
+      }
+
+      let claimed: { id: string }[] = [];
+      if (callerChatId != null) {
+        // 1. Claim an unassigned pending request (first-come-first-served).
+        claimed = await ctx.db
+          .update(appointments)
+          .set({ status: "confirmed", masterId: callerChatId, confirmedBy: callerChatId })
+          .where(
+            and(
+              eq(appointments.tenantId, input.tenantId),
+              eq(appointments.id, input.id),
+              isNull(appointments.masterId),
+              eq(appointments.status, "pending"),
+              eq(appointments.cancelled, 0),
+            ),
+          )
+          .returning({ id: appointments.id });
+        // 2. Or confirm a request already assigned to THIS master.
+        if (!claimed.length) {
+          claimed = await ctx.db
+            .update(appointments)
+            .set({ status: "confirmed", confirmedBy: callerChatId })
+            .where(
+              and(
+                eq(appointments.tenantId, input.tenantId),
+                eq(appointments.id, input.id),
+                eq(appointments.masterId, callerChatId),
+                eq(appointments.status, "pending"),
+                eq(appointments.cancelled, 0),
+              ),
+            )
+            .returning({ id: appointments.id });
+        }
+      } else {
+        // Owner/manager confirm — no self-assignment.
+        claimed = await ctx.db
+          .update(appointments)
+          .set({ status: "confirmed" })
+          .where(
+            and(
+              eq(appointments.tenantId, input.tenantId),
+              eq(appointments.id, input.id),
+              eq(appointments.status, "pending"),
+              eq(appointments.cancelled, 0),
+            ),
+          )
+          .returning({ id: appointments.id });
+      }
+
+      if (!claimed.length) {
+        return { ok: false as const, reason: "already_taken" as const };
+      }
+
+      // Worker side-effects: client confirmation message + calendar sync.
+      notifyWorker("confirm", input.id, input.tenantId, callerChatId ?? null).catch(() => {});
+      return { ok: true as const };
+    }),
+
   markNoShow: adminProcedure
     .input(
       z.object({
+        // God Mode acts ON an explicit tenant — never inferred from session.
+        tenantId: z.string(),
         id: z.string(),
         noShowBy: z.enum(["client", "master"]),
         comment: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const scope = and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId));
       const aptRow = await ctx.db
         .select({ tenantId: appointments.tenantId })
         .from(appointments)
-        .where(eq(appointments.id, input.id))
+        .where(scope)
         .limit(1);
       if (!aptRow[0]) return { success: false };
 
@@ -181,7 +289,7 @@ export const appointmentsRouter = createTRPCRouter({
         noShowBy: input.noShowBy,
         status: "no_show",
         cancelReason: input.comment ?? null,
-      }).where(eq(appointments.id, input.id));
+      }).where(scope);
 
       return { success: true, updatedAt: Date.now() };
     }),

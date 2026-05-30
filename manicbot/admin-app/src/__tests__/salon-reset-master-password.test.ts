@@ -220,7 +220,6 @@ describe("salon.resetMasterPassword — routes new password to OWNER, not master
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("~/env");
     vi.clearAllMocks();
   });
 

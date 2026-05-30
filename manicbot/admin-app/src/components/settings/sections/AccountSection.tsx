@@ -12,6 +12,7 @@ import { friendlyRoleName } from "~/lib/roleLabels";
 import type { Lang } from "~/lib/i18n";
 import { CollapsibleSection } from "~/components/settings/CollapsibleSection";
 import { SettingsHeaderStrip } from "~/components/settings/SettingsHeaderStrip";
+import { OwnershipTransferCard } from "~/components/settings/sections/OwnershipTransferCard";
 
 /**
  * Returns true while the component is mounted. Use to guard setState calls
@@ -916,6 +917,9 @@ export function AccountSection() {
           )}
         </CollapsibleSection>
       )}
+
+      {/* Ownership transfer — owner-only; renders null for everyone else. */}
+      <OwnershipTransferCard />
       </section>
     </div>
   );

@@ -1,4 +1,5 @@
--- 0095_thread_messages_delivery_state.sql — 2026-05-30
+-- 0098_thread_messages_delivery_state.sql — 2026-05-30
+-- (renumbered from 0095 on merge — main shipped 0095-0097 in parallel)
 --
 -- Persisted outbound delivery state for staff → client messages.
 --

@@ -1,29 +1,31 @@
 /**
- * Pins the /notifications route into the (dashboard) layout whitelist —
- * if it's missing from any role block, the role's dashboard intercepts
- * the URL and the notifications page silently never renders.
+ * Pins /notifications into the (dashboard) full-page-route whitelist — if it is
+ * not a full-page route, the role dashboard intercepts the URL and the
+ * notifications page silently never renders.
  *
- * Mirrors the existing whitelist pattern around `isMarketingPage` /
- * `isMessagesPage`.
+ * The per-route booleans were consolidated into `isFullPageRoute()` in
+ * `lib/routing/fullPageRoutes`; this pins the route + the layout's delegation.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { isFullPageRoute } from "~/lib/routing/fullPageRoutes";
 
 const FILE = resolve(__dirname, "../app/(dashboard)/layout.tsx");
 
 describe("(dashboard)/layout.tsx — /notifications whitelist", () => {
   const src = readFileSync(FILE, "utf8");
 
-  it("declares isNotificationsPage from pathname", () => {
-    expect(src).toMatch(/const isNotificationsPage = pathname === "\/notifications"/);
+  it("treats /notifications (and sub-paths) as a full-page route", () => {
+    expect(isFullPageRoute("/notifications")).toBe(true);
+    expect(isFullPageRoute("/notifications/x")).toBe(true);
   });
 
-  it("includes isNotificationsPage in the whitelist for every role block", () => {
-    // Mirror the 4 existing isMessagesPage usages — one per role block
-    // (tenant_owner / tenant_manager / master / support+technical_support).
-    const occurrences = src.match(/isNotificationsPage/g) ?? [];
-    // 1 declaration + 4 usages in the role blocks = 5 minimum.
-    expect(occurrences.length).toBeGreaterThanOrEqual(5);
+  it("delegates the role-dashboard-swap decision to isFullPageRoute", () => {
+    expect(src).toMatch(
+      /import\s*\{\s*isFullPageRoute\s*\}\s*from\s*"~\/lib\/routing\/fullPageRoutes"/,
+    );
+    const occurrences = src.match(/isFullPage\b/g) ?? [];
+    expect(occurrences.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -242,9 +242,13 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
             const fresh = await encryptToken(plain, encKey, CHANNEL_TOKEN_LABEL);
             if (fresh && row.id) {
               const { dbRun } = await import('../utils/db.js');
+              // Compare-and-swap on the original ciphertext: if a concurrent
+              // resolve already re-wrapped this row during the rotation window,
+              // our `token_encrypted = rawTok` predicate matches 0 rows and we
+              // no-op instead of redundantly re-writing an equivalent blob.
               await dbRun(ctx,
-                'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ?',
-                fresh, Math.floor(Date.now() / 1000), row.id,
+                'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ? AND token_encrypted = ?',
+                fresh, Math.floor(Date.now() / 1000), row.id, rawTok,
               );
             }
           } catch (e) {

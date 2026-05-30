@@ -94,6 +94,43 @@ describe('getChannelConfig — auto re-encrypt on old-key decrypt', () => {
     const sql = dbRun.mock.calls[0][1];
     expect(sql).toContain('UPDATE channel_configs');
     expect(sql).toContain('token_encrypted');
+    // A9: compare-and-swap — the rewrap is guarded on the ciphertext we actually
+    // read, bound as the last parameter, so a concurrent racer no-ops.
+    expect(sql).toContain('AND token_encrypted = ?');
+    const bind = dbRun.mock.calls[0].slice(2);
+    expect(bind[bind.length - 1]).toBe('v1$OLD:recovered-token');
+  });
+
+  it('re-encrypt is a compare-and-swap on the original ciphertext — no double-write under a rotation race (A9)', async () => {
+    // Stateful store simulating WHERE id = ? AND token_encrypted = ?.
+    const store = new Map([[42, 'v1$OLD:recovered-token']]);
+    let effectiveWrites = 0;
+    dbRun.mockImplementation(async (_ctx, sql, ...params) => {
+      if (sql.includes('UPDATE channel_configs') && sql.includes('AND token_encrypted')) {
+        const [fresh, , id, original] = params;
+        if (store.get(id) === original) {
+          store.set(id, fresh);
+          effectiveWrites++;
+          return { success: true, meta: { changes: 1 } };
+        }
+        return { success: true, meta: { changes: 0 } }; // racer lost the CAS
+      }
+      return { success: true };
+    });
+    decryptTokenWithFallback.mockResolvedValue({ plain: 'recovered-token', usedOldKey: true });
+    const row = { id: 42, token_encrypted: 'v1$OLD:recovered-token', config: '{}' };
+
+    await Promise.all([
+      getChannelConfig(makeCtx({ row: { ...row } }), 't_1', 'instagram', NEW_KEY, OLD_KEY),
+      getChannelConfig(makeCtx({ row: { ...row } }), 't_1', 'instagram', NEW_KEY, OLD_KEY),
+    ]);
+
+    // Both racers decrypt the old blob and attempt a rewrap, but the CAS guard
+    // lets exactly one write take effect.
+    expect(effectiveWrites).toBe(1);
+
+    dbRun.mockReset();
+    dbRun.mockResolvedValue({ success: true });
   });
 
   it('skips re-encrypt when primary key worked via fallback', async () => {

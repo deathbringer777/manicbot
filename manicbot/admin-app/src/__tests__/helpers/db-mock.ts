@@ -63,6 +63,9 @@ export function createDbMock(selectResults: unknown[] = []) {
           return chain;
         }),
       })),
+      // Raw query (db.run(sql.raw(...), binds)) — returns the next queued
+      // result array wrapped as a D1Result. Used by FTS searchMessages.
+      run: vi.fn(async () => ({ results: selectResults.shift() ?? [] })),
     },
     updateCalls,
     deleteCalls,

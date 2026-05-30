@@ -2233,6 +2233,10 @@ const translations = {
   "messenger.msg.deleted":         { ru: "сообщение удалено", ua: "повідомлення видалено", en: "message deleted", pl: "wiadomość usunięta" },
   "messenger.msg.deleteConfirm":   { ru: "Удалить сообщение?", ua: "Видалити повідомлення?", en: "Delete this message?", pl: "Usunąć wiadomość?" },
   "messenger.msg.relayedWarning":  { ru: "Клиент уже получил это сообщение", ua: "Клієнт уже отримав це повідомлення", en: "The client already received this message", pl: "Klient już otrzymał tę wiadomość" },
+  // Message search (FTS5, Phase 3)
+  "messenger.search.inMessages":   { ru: "Найдено в сообщениях", ua: "Знайдено в повідомленнях", en: "Found in messages", pl: "Znaleziono w wiadomościach" },
+  "messenger.search.searching":    { ru: "Ищу…", ua: "Шукаю…", en: "Searching…", pl: "Szukam…" },
+  "messenger.search.noResults":    { ru: "Ничего не найдено", ua: "Нічого не знайдено", en: "Nothing found", pl: "Nic nie znaleziono" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

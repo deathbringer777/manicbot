@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Users as GroupIcon,
   User as DmIcon,
@@ -69,6 +69,26 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
       (th.lastMessagePreview?.toLowerCase().includes(needle) ?? false)
     );
   });
+
+  // Full-text search over message BODIES (server FTS) — augments the instant
+  // title/preview filter above. Debounced so we don't fire per keystroke.
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+  const searching = debounced.length >= 2;
+  const searchQ = api.messenger.searchMessages.useQuery(
+    { tenantId, query: debounced, limit: 20 },
+    { enabled: !!tenantId && searching },
+  );
+  const threadTitleById = new Map(
+    (threadsQ.data?.items ?? []).map((th) => [
+      th.id,
+      th.title ??
+        (th.kind === "staff_dm" ? t("messenger.thread.dm", lang) : t("messenger.thread.chat", lang)),
+    ]),
+  );
 
   return (
     <div className="flex h-full flex-col border-r border-slate-200 dark:border-slate-800">
@@ -140,7 +160,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && !searching ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             <p className="text-xs text-slate-500">{t("messenger.threadList.empty", lang)}</p>
             <p className="mt-1 text-[10px] text-slate-400">
@@ -195,6 +215,42 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               </button>
             );
           })
+        )}
+
+        {/* Full-text message search results (server FTS, membership-scoped) */}
+        {searching && (
+          <div className="border-t border-slate-200 dark:border-slate-800">
+            <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              {t("messenger.search.inMessages", lang)}
+            </p>
+            {searchQ.isLoading ? (
+              <p className="px-3 py-2 text-[11px] text-slate-400">
+                {t("messenger.search.searching", lang)}
+              </p>
+            ) : (searchQ.data?.items ?? []).length === 0 ? (
+              <p className="px-3 py-2 text-[11px] text-slate-400">
+                {t("messenger.search.noResults", lang)}
+              </p>
+            ) : (
+              (searchQ.data?.items ?? []).map((hit) => (
+                <button
+                  key={hit.id}
+                  type="button"
+                  onClick={() => onSelect(hit.threadId)}
+                  data-testid={`search-hit-${hit.id}`}
+                  className="flex w-full flex-col items-start gap-0.5 border-l-2 border-l-transparent px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                >
+                  <span className="line-clamp-2 text-[11px] text-slate-700 dark:text-slate-300">
+                    {hit.body}
+                  </span>
+                  <span className="text-[9px] text-slate-400">
+                    {threadTitleById.get(hit.threadId) ?? t("messenger.thread.chat", lang)} ·{" "}
+                    {fmtTime(hit.createdAt)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
         )}
       </div>
     </div>

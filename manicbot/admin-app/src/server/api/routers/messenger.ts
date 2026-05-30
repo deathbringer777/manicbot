@@ -42,6 +42,7 @@ import {
   assertThreadMember,
 } from "~/server/api/messenger/access";
 import { filterActiveRecipients, MUTE_FOREVER } from "~/server/api/messenger/mute";
+import { sanitizeFtsQuery, buildMessageSearchSql } from "~/server/api/messenger/ftsQuery";
 import { mintWsToken } from "~/lib/wsToken";
 import { signUploadToken } from "~/server/lib/uploadToken";
 import { env } from "~/env";
@@ -336,6 +337,68 @@ export const messengerRouter = createTRPCRouter({
             m.memberKind === "web_user" ? nameMap.get(m.memberRef) ?? m.memberRef : m.memberRef,
         })),
       };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SEARCH — full-text over message bodies (FTS5, migration 0096)
+  // ═══════════════════════════════════════════════════════════════
+  //  Tenant-scoped AND constrained to the caller's thread membership — a naive
+  //  FTS match would leak messages from threads the caller isn't in.
+  //  system_admin searches tenant-wide (support escalation, like getThread's
+  //  bypass). Soft-deleted messages never surface (their FTS row is dropped).
+  searchMessages: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        query: z.string().min(2).max(100),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      await assertMessengerTenantAccess(ctx, input.tenantId);
+      const match = sanitizeFtsQuery(input.query);
+      if (!match) return { items: [] };
+
+      const isAdmin = ctx.webUser!.webRole === "system_admin";
+      let threadIds: string[] | null = null;
+      if (!isAdmin) {
+        const memberRows = await ctx.db
+          .select({ threadId: threadMembers.threadId })
+          .from(threadMembers)
+          .where(
+            and(
+              eq(threadMembers.memberKind, "web_user"),
+              eq(threadMembers.memberRef, ctx.webUser!.id),
+            ),
+          );
+        threadIds = memberRows.map((r) => r.threadId);
+        // No threads → no results. Critically, this prevents running an
+        // unconstrained FTS query that would leak other threads' messages.
+        if (threadIds.length === 0) return { items: [] };
+      }
+
+      const { sql: searchSql, binds } = buildMessageSearchSql({
+        tenantId: input.tenantId,
+        threadIds,
+        match,
+        limit: input.limit,
+      });
+      // Raw parameterized exec — same proven shape as platformCustomers'
+      // subscriber query: db.run(sql.raw(text), binds) → { results }.
+      const rawDb = ctx.db as unknown as {
+        run: (q: unknown, b: unknown[]) => Promise<{ results?: unknown[]; rows?: unknown[] }>;
+      };
+      const res = await rawDb.run(sql.raw(searchSql), binds);
+      const rows = (res?.results ?? res?.rows ?? []) as Array<{
+        id: string;
+        threadId: string;
+        senderKind: string;
+        senderRef: string;
+        body: string;
+        createdAt: number;
+        isInternalNote: number;
+      }>;
+      return { items: rows };
     }),
 
   // ═══════════════════════════════════════════════════════════════

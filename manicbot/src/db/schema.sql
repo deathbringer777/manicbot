@@ -1323,6 +1323,35 @@ CREATE INDEX IF NOT EXISTS idx_thread_messages_delivery
   ON thread_messages(tenant_id, delivery_state)
   WHERE delivery_state IS NOT NULL;
 
+-- FTS5 index over message bodies (migration 0096). Synced via the
+-- thread_messages_fts_ai/au/ad triggers; the AU trigger doubles as the
+-- soft-delete de-index. Access control is enforced at query time
+-- (tenant + caller thread membership) in messenger.searchMessages.
+CREATE VIRTUAL TABLE IF NOT EXISTS thread_messages_fts USING fts5(
+  message_id UNINDEXED,
+  thread_id  UNINDEXED,
+  tenant_id  UNINDEXED,
+  body,
+  tokenize='unicode61 remove_diacritics 1'
+);
+CREATE TRIGGER IF NOT EXISTS thread_messages_fts_ai
+AFTER INSERT ON thread_messages
+WHEN NEW.deleted_at IS NULL BEGIN
+  INSERT INTO thread_messages_fts(message_id, thread_id, tenant_id, body)
+  VALUES (NEW.id, NEW.thread_id, NEW.tenant_id, lower(NEW.body));
+END;
+CREATE TRIGGER IF NOT EXISTS thread_messages_fts_au
+AFTER UPDATE ON thread_messages BEGIN
+  DELETE FROM thread_messages_fts WHERE message_id = OLD.id;
+  INSERT INTO thread_messages_fts(message_id, thread_id, tenant_id, body)
+  SELECT NEW.id, NEW.thread_id, NEW.tenant_id, lower(NEW.body)
+  WHERE NEW.deleted_at IS NULL;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_messages_fts_ad
+AFTER DELETE ON thread_messages BEGIN
+  DELETE FROM thread_messages_fts WHERE message_id = OLD.id;
+END;
+
 -- ─── Referral Program (migration 0069) ──────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS referral_codes (

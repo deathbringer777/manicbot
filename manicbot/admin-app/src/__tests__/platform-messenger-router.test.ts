@@ -33,7 +33,10 @@ vi.mock("~/server/services/notifyWebUser", () => ({
 }));
 
 import { createCallerFactory } from "~/server/api/trpc";
-import { platformMessengerRouter } from "~/server/api/routers/platformMessenger";
+import {
+  platformMessengerRouter,
+  isFakeRecipientEmail,
+} from "~/server/api/routers/platformMessenger";
 import {
   createDbMock,
   makeAdminCtx,
@@ -208,7 +211,9 @@ describe("platformMessengerRouter tenant isolation", () => {
 describe("platformMessengerRouter sysadmin operations", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("listThreads allows system_admin and returns rows", async () => {
+  it("listThreads allows system_admin and returns rows (single joined query)", async () => {
+    // listThreads now joins web_users (+ tenants) in ONE query and returns flat
+    // rows already carrying recipient name/email/isTest — no second round-trip.
     const { db } = createDbMock([
       [
         {
@@ -222,6 +227,10 @@ describe("platformMessengerRouter sysadmin operations", () => {
           platformLastReadAt: null,
           archived: 0,
           createdAt: 100,
+          recipientEmail: "a@x.com",
+          recipientName: "Owner A",
+          userTenantId: "t_a",
+          tenantIsTest: 0,
         },
         {
           id: "pt_b",
@@ -234,18 +243,18 @@ describe("platformMessengerRouter sysadmin operations", () => {
           platformLastReadAt: 150,
           archived: 0,
           createdAt: 90,
+          recipientEmail: "b@x.com",
+          recipientName: "Owner B",
+          userTenantId: "t_b",
+          tenantIsTest: 0,
         },
-      ],
-      // Recipient enrichment SELECT (web_users JOIN)
-      [
-        { id: "w_owner_a", email: "a@x.com", name: "Owner A", tenantId: "t_a" },
-        { id: "w_owner_b", email: "b@x.com", name: "Owner B", tenantId: "t_b" },
       ],
     ]);
     const caller = createCaller(makeAdminCtx(db) as never);
     const out = await caller.listThreads({});
     expect(out.items).toHaveLength(2);
     expect(out.items[0]?.recipientName).toBe("Owner A");
+    expect(out.items[0]?.recipientEmail).toBe("a@x.com");
   });
 
   it("sendDirectMessage to non-existent recipient throws NOT_FOUND", async () => {
@@ -263,9 +272,9 @@ describe("platformMessengerRouter sysadmin operations", () => {
     const { db } = createDbMock([
       // recipients query
       [
-        { id: "w_owner_a", email: "a@x.com", name: "A", tenantId: "t_a", plan: "pro" },
-        { id: "w_owner_b", email: "b@x.com", name: "B", tenantId: "t_b", plan: "start" },
-        { id: "w_owner_c", email: "c@x.com", name: "C", tenantId: "t_c", plan: "max" },
+        { id: "w_owner_a", email: "a@x.com", name: "A", tenantId: "t_a", plan: "pro", role: "tenant_owner" },
+        { id: "w_owner_b", email: "b@x.com", name: "B", tenantId: "t_b", plan: "start", role: "tenant_owner" },
+        { id: "w_owner_c", email: "c@x.com", name: "C", tenantId: "t_c", plan: "max", role: "tenant_manager" },
       ],
     ]);
     const caller = createCaller(makeAdminCtx(db) as never);
@@ -280,8 +289,8 @@ describe("platformMessengerRouter sysadmin operations", () => {
       [{ id: "t_a" }, { id: "t_b" }],
       // 2. webUsers filtered by those tenants
       [
-        { id: "w_a", email: "a@x.com", name: "A", tenantId: "t_a", plan: "pro" },
-        { id: "w_b", email: "b@x.com", name: "B", tenantId: "t_b", plan: "max" },
+        { id: "w_a", email: "a@x.com", name: "A", tenantId: "t_a", plan: "pro", role: "tenant_owner" },
+        { id: "w_b", email: "b@x.com", name: "B", tenantId: "t_b", plan: "max", role: "tenant_owner" },
       ],
     ]);
     const caller = createCaller(makeAdminCtx(db) as never);
@@ -380,5 +389,139 @@ describe("platformMessengerRouter.listBroadcasts", () => {
     expect(out.items).toHaveLength(2);
     expect(out.items[0]?.id).toBe("b_2");
     expect(out.items[0]?.recipientsCount).toBe(47);
+  });
+});
+
+// ─── Test / synthetic / master exclusion ────────────────────────────────
+//
+// Regression: a `scope: "all"` broadcast used to fan out to every verified
+// salon-side account — including synthetic *.salon.manicbot.local staff
+// mailboxes and *.test.manicbot.local test-tenant accounts — flooding the
+// sysadmin inbox with one thread per fake account. Broadcasts now target
+// real owners/managers only, and both the broadcast audience and the inbox
+// list exclude fake addresses. The SQL WHERE does the real filtering; a
+// defensive JS filter mirrors it so the behaviour is observable here (the
+// mock DB ignores WHERE clauses and returns queued rows verbatim).
+
+describe("isFakeRecipientEmail", () => {
+  it("flags synthetic salon + test-tenant mailboxes", () => {
+    expect(isFakeRecipientEmail("anna.95np@salon.manicbot.local")).toBe(true);
+    expect(isFakeRecipientEmail("master-pro@test.manicbot.local")).toBe(true);
+    expect(isFakeRecipientEmail("ANNA@SALON.MANICBOT.LOCAL")).toBe(true);
+  });
+
+  it("treats real addresses as legitimate", () => {
+    expect(isFakeRecipientEmail("owner@gmail.com")).toBe(false);
+    expect(isFakeRecipientEmail("a@x.com")).toBe(false);
+    // Not a fake unless it actually ends in the internal domain.
+    expect(isFakeRecipientEmail("manicbot.local@gmail.com")).toBe(false);
+    expect(isFakeRecipientEmail(null)).toBe(false);
+    expect(isFakeRecipientEmail("")).toBe(false);
+  });
+});
+
+describe("platformMessengerRouter audience excludes fake + master recipients", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("previewAudience drops synthetic, test, and master rows — keeps real owner/manager", async () => {
+    const { db } = createDbMock([
+      [
+        { id: "w_real_owner", email: "owner@gmail.com", name: "Real", tenantId: "t_real", plan: "pro", role: "tenant_owner" },
+        { id: "w_real_mgr", email: "mgr@gmail.com", name: "Mgr", tenantId: "t_real", plan: "pro", role: "tenant_manager" },
+        { id: "w_syn", email: "anna.95np@salon.manicbot.local", name: "Synthetic", tenantId: "t_real", plan: "pro", role: "master" },
+        { id: "w_test", email: "master-pro@test.manicbot.local", name: "Test", tenantId: "t_test", plan: "max", role: "tenant_owner" },
+        { id: "w_master_real", email: "stylist@gmail.com", name: "Real Master", tenantId: "t_real", plan: "pro", role: "master" },
+      ],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.previewAudience({ audience: { scope: "all" } });
+    // Only the real owner + real manager survive: synthetic + test emails and
+    // every master role are excluded.
+    expect(out.count).toBe(2);
+    const ids = out.sample.map((s) => s.id);
+    expect(ids).toContain("w_real_owner");
+    expect(ids).toContain("w_real_mgr");
+    expect(ids).not.toContain("w_syn");
+    expect(ids).not.toContain("w_test");
+    expect(ids).not.toContain("w_master_real");
+  });
+
+  it("broadcast to an all-fake audience throws BAD_REQUEST (zero real recipients)", async () => {
+    const { db, insertCalls } = createDbMock([
+      [
+        { id: "w_syn", email: "x.ab12@salon.manicbot.local", name: "Syn", tenantId: "t_real", plan: "pro", role: "master" },
+        { id: "w_test", email: "salon-max@test.manicbot.local", name: "Test", tenantId: "t_test", plan: "max", role: "tenant_owner" },
+      ],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await expect(
+      caller.broadcast({ body: "announce", audience: { scope: "all" } }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    // No audit row, no messages: nothing was written for a fake-only audience.
+    expect(insertCalls.length).toBe(0);
+  });
+});
+
+describe("platformMessengerRouter.listThreads excludes fake recipients", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("omits synthetic / test-tenant threads, keeps real-email threads", async () => {
+    const { db } = createDbMock([
+      [
+        {
+          id: "pt_real",
+          recipientWebUserId: "w_real",
+          recipientTenantId: "t_real",
+          lastMessageAt: 300,
+          lastMessagePreview: "hi",
+          lastSenderKind: "platform",
+          recipientLastReadAt: null,
+          platformLastReadAt: 300,
+          archived: 0,
+          createdAt: 100,
+          recipientEmail: "owner@gmail.com",
+          recipientName: "Real Owner",
+          userTenantId: "t_real",
+          tenantIsTest: 0,
+        },
+        {
+          id: "pt_syn",
+          recipientWebUserId: "w_syn",
+          recipientTenantId: "t_real",
+          lastMessageAt: 250,
+          lastMessagePreview: "тест",
+          lastSenderKind: "platform",
+          recipientLastReadAt: null,
+          platformLastReadAt: 250,
+          archived: 0,
+          createdAt: 90,
+          recipientEmail: "ffdfdf.hz6z@salon.manicbot.local",
+          recipientName: "ffdfdf",
+          userTenantId: "t_real",
+          tenantIsTest: 0,
+        },
+        {
+          id: "pt_test",
+          recipientWebUserId: "w_test",
+          recipientTenantId: "t_test",
+          lastMessageAt: 200,
+          lastMessagePreview: "тест",
+          lastSenderKind: "platform",
+          recipientLastReadAt: null,
+          platformLastReadAt: 200,
+          archived: 0,
+          createdAt: 80,
+          recipientEmail: "master-pro@test.manicbot.local",
+          recipientName: "Test Майстер Pro",
+          userTenantId: "t_test",
+          tenantIsTest: 1,
+        },
+      ],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.listThreads({});
+    expect(out.items).toHaveLength(1);
+    expect(out.items[0]?.id).toBe("pt_real");
+    expect(out.items[0]?.recipientEmail).toBe("owner@gmail.com");
   });
 });

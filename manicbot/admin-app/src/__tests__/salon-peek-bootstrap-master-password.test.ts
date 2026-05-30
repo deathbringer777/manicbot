@@ -190,7 +190,6 @@ describe("salon.peekMasterPassword — bootstrap-on-empty-vault", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    vi.doUnmock("~/env");
   });
 
   it("with vault populated, returns the original password and does NOT mutate (no bootstrap)", async () => {

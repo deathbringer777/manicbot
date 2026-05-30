@@ -24,6 +24,7 @@
 import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL } from '../config.js';
 import { log } from '../utils/logger.js';
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
+import { extractAttachmentKeys } from '../services/attachmentKeys.js';
 import { svcName, fill, t, p2 } from '../utils/helpers.js';
 import { warsawNow, fmtDT } from '../utils/date.js';
 import { send } from '../telegram.js';
@@ -72,6 +73,7 @@ export const PHASE_WINDOWS = Object.freeze({
   promos: 24 * 60 * 60,       // 24 h
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
+  attachmentGc: 24 * 60 * 60, // 24 h — orphaned messenger attachment sweep
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
@@ -370,6 +372,68 @@ async function tryClaimPhase(ctx, phase, nowSec, windowSec) {
     log.warn('handlers.cron', { action: 'phase_claim_failed', phase, error: e?.message });
     return false; // fail closed — better to skip a tick than double-fire
   }
+}
+
+/**
+ * Sweep orphaned messenger attachments: R2 objects referenced ONLY by
+ * soft-deleted messages (past a 7d grace). Destructive on R2, so it is
+ * DRY-RUN by default — set ATTACHMENT_GC_DELETE='1' to actually delete.
+ *
+ * Keys are content-addressed (shared across messages with the same image), so
+ * each candidate is ref-counted against LIVE messages before deletion. The
+ * LIKE ref-count only ever OVER-counts (errs toward keeping) — it never
+ * falsely orphans a still-referenced key.
+ */
+export async function phaseAttachmentGc(ctx, tenantId, nowMs) {
+  if (!ctx?.db || !tenantId) return;
+  const nowSec = Math.floor((nowMs ?? Date.now()) / 1000);
+  const GRACE_SEC = 7 * 24 * 60 * 60;
+  const cutoff = nowSec - GRACE_SEC;
+  const deleteEnabled = String(ctx?.ATTACHMENT_GC_DELETE ?? '') === '1';
+
+  const rows = await dbAll(
+    ctx,
+    `SELECT id, attachments_json FROM thread_messages WHERE tenant_id = ? AND deleted_at IS NOT NULL AND deleted_at < ? AND attachments_json IS NOT NULL LIMIT 100`,
+    tenantId, cutoff,
+  ).catch(() => []);
+  if (!rows.length) return;
+
+  const candidates = new Set();
+  for (const r of rows) {
+    for (const k of extractAttachmentKeys(r.attachments_json)) candidates.add(k);
+  }
+  if (!candidates.size) return;
+
+  let deleted = 0;
+  let kept = 0;
+  for (const key of candidates) {
+    const cnt = await dbGet(
+      ctx,
+      `SELECT COUNT(*) AS c FROM thread_messages WHERE tenant_id = ? AND deleted_at IS NULL AND attachments_json LIKE ?`,
+      tenantId, `%${key}%`,
+    ).catch(() => ({ c: 1 })); // on error, assume still referenced (safe)
+    if (Number(cnt?.c ?? 1) > 0) { kept++; continue; }
+    if (deleteEnabled && typeof ctx.ASSETS?.delete === 'function') {
+      try {
+        await ctx.ASSETS.delete(key);
+        deleted++;
+      } catch (e) {
+        log.warn('handlers.cron', { action: 'attachment_gc_delete_failed', key, error: e?.message });
+      }
+    } else {
+      deleted++; // dry-run: count as would-delete
+    }
+  }
+
+  void logEvent(ctx, deleteEnabled ? 'cron.attachment_gc' : 'cron.attachment_gc.dryrun', {
+    level: 'info',
+    tenantId,
+    message: deleteEnabled
+      ? `Attachment GC: deleted ${deleted} orphan object(s), kept ${kept} referenced`
+      : `[dry-run] Attachment GC: ${deleted} orphan object(s) would be deleted, ${kept} still referenced`,
+    deleted,
+    kept,
+  });
 }
 
 /**
@@ -1060,6 +1124,7 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'promos', () => phasePromos(ctx, now));
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
+    await runPhase(ctx, 'attachmentGc', () => phaseAttachmentGc(ctx, ctx.tenantId, now));
     // PR-A: marketing campaign dispatch. Picks up status='scheduled' rows
     // whose scheduled_at <= now, plus rebooks any campaign stuck in
     // status='sending' for >30min (crashed mid-fan-out).

@@ -17,6 +17,7 @@
 
 import {
   verifyUploadToken,
+  claimUploadNonce,
   buildAssetKey,
   ALLOWED_MIME,
   MAX_UPLOAD_BYTES,
@@ -135,6 +136,12 @@ export async function tryUpload(request, env, url) {
     const claim = await verifyUploadToken(token, env.UPLOAD_TOKEN_SECRET);
     if (!claim) return jsonError('Invalid or expired token', 401);
     if (claim.kind !== kindParam) return jsonError('Kind mismatch', 400);
+
+    // A5 — single-use: a valid token redeems at most once. A leaked or replayed
+    // token (valid HMAC, still inside its 5-min TTL) is rejected here, before
+    // any file work, so a replay can't even force a multipart parse.
+    const firstUse = await claimUploadNonce(env, claim.jti, claim.exp);
+    if (!firstUse) return jsonError('Token already used', 409);
 
     let form;
     try {

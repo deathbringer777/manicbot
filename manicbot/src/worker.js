@@ -10,6 +10,7 @@ import { handleCron } from './handlers/cron.js';
 import { phaseInstagramAutopilot } from './marketing/autopilot.js';
 import { maybeRunD1Backup } from './services/d1Backup.js';
 import { pruneExpiredDedupRows } from './utils/dedup.js';
+import { pruneExpiredUploadNonces } from './services/upload.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
@@ -678,6 +679,21 @@ export default {
           },
           (e) => {
             log.error('worker.dedupCleanup', e instanceof Error ? e : new Error(String(e?.message || e)));
+          },
+        ),
+      );
+
+      // Upload-token single-use nonce cleanup (migration 0096). Same fire-and-
+      // forget pattern as the dedup prune above; prunes rows past their TTL.
+      _scheduledCtx.waitUntil(
+        pruneExpiredUploadNonces(env).then(
+          (r) => {
+            if (r?.deleted > 0) {
+              log.info('worker.uploadNonceCleanup', { deleted: r.deleted });
+            }
+          },
+          (e) => {
+            log.error('worker.uploadNonceCleanup', e instanceof Error ? e : new Error(String(e?.message || e)));
           },
         ),
       );

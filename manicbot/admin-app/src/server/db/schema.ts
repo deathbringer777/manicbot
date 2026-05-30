@@ -1736,3 +1736,14 @@ export const webhookDedup = sqliteTable("webhook_dedup", {
 }, (t) => [
   index("idx_webhook_dedup_expires").on(t.expiresAt),
 ]);
+
+// ─── Upload token single-use nonce (Migration 0096) ─────────────────────────
+// Atomic single-use store for /upload/asset token jtis (src/services/upload.js
+// claimUploadNonce). No router reads it; cleanup cron in worker.scheduled does
+// the DELETE pass.
+export const uploadTokenUsed = sqliteTable("upload_token_used", {
+  jti: text("jti").primaryKey(),
+  expiresAt: integer("expires_at").notNull(),
+}, (t) => [
+  index("idx_upload_token_used_expires").on(t.expiresAt),
+]);

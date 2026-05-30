@@ -108,6 +108,20 @@ describe('POST /admin/ig-recover — gates', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('409 during key rotation (BOT_ENCRYPTION_KEY_OLD set) — recovery path disabled (A11)', async () => {
+    // Mid-rotation a stale blob may still decrypt via the old key, so "dead
+    // token" is not a reliable gate; force routine changes through the
+    // ADMIN_KEY-gated /admin/ig-token instead of this self-gated path.
+    mocks.decryptTokenWithFallback.mockResolvedValue({ plain: null, usedOldKey: false });
+    fetchSpy.mockResolvedValue(new Response('{}', { status: 400 })); // must not be reached
+    const env = makeEnv({ row: { id: 1, page_id: PAGE_ID, token_encrypted: 'v1$dead' } });
+    env.BOT_ENCRYPTION_KEY_OLD = 'o'.repeat(32);
+    const res = await call(env, { tenantId: 't_1', userToken: 'EAA' });
+    expect(res?.status).toBe(409);
+    // Refused before any decrypt or Graph call.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('400 when Graph rejects the User Token', async () => {
     mocks.decryptTokenWithFallback.mockResolvedValueOnce({ plain: null, usedOldKey: false });
     fetchSpy.mockResolvedValueOnce(new Response(

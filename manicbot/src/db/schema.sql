@@ -1721,3 +1721,15 @@ CREATE TABLE IF NOT EXISTS webhook_dedup (
 );
 CREATE INDEX IF NOT EXISTS idx_webhook_dedup_expires
   ON webhook_dedup(expires_at);
+
+-- ─── UPLOAD TOKEN SINGLE-USE NONCE (Migration 0096) ─────────────────────────
+-- Atomic single-use store for /upload/asset token jtis. `INSERT INTO
+-- upload_token_used ... ON CONFLICT(jti) DO NOTHING` redeems each upload token
+-- at most once (claimUploadNonce in src/services/upload.js). Pruned by
+-- `pruneExpiredUploadNonces()` from worker.scheduled.
+CREATE TABLE IF NOT EXISTS upload_token_used (
+  jti         TEXT PRIMARY KEY,
+  expires_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_upload_token_used_expires
+  ON upload_token_used(expires_at);

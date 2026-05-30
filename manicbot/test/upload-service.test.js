@@ -8,6 +8,7 @@ import {
   ALLOWED_MIME,
   MAX_UPLOAD_BYTES,
 } from '../src/services/upload.js';
+import * as uploadSvc from '../src/services/upload.js';
 
 const SECRET = 'a-very-very-long-test-secret-1234567890';
 
@@ -21,6 +22,17 @@ describe('signUploadToken / verifyUploadToken', () => {
     expect(claim.tid).toBe('t_demo');
     expect(claim.kind).toBe('logo');
     expect(claim.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
+
+  it('embeds a unique jti that verify returns (A5 single-use nonce)', async () => {
+    const a = await signUploadToken({ tid: 't_demo', kind: 'logo', secret: SECRET });
+    const b = await signUploadToken({ tid: 't_demo', kind: 'logo', secret: SECRET });
+    const ca = await verifyUploadToken(a, SECRET);
+    const cb = await verifyUploadToken(b, SECRET);
+    expect(typeof ca.jti).toBe('string');
+    expect(ca.jti.length).toBeGreaterThan(0);
+    // Two tokens for the same tenant/kind must carry distinct nonces.
+    expect(ca.jti).not.toBe(cb.jti);
   });
 
   it('rejects a token signed with a different secret', async () => {
@@ -111,5 +123,68 @@ describe('upload constants', () => {
 
   it('MAX_UPLOAD_BYTES is 2 MB', () => {
     expect(MAX_UPLOAD_BYTES).toBe(2 * 1024 * 1024);
+  });
+});
+
+// ─── A5: single-use enforcement ──────────────────────────────────────────────
+// A valid HMAC token within its 5-min TTL must redeem at most once. The nonce
+// (jti) is atomically claimed in upload_token_used (migration 0096); a replay
+// finds the row already present and is rejected.
+describe('claimUploadNonce + pruneExpiredUploadNonces (A5)', () => {
+  function makeFakeNonceD1() {
+    const rows = new Map();
+    return {
+      rows,
+      prepare(sql) {
+        return {
+          _p: [],
+          bind(...p) { this._p = p; return this; },
+          async run() {
+            if (/INSERT\s+INTO\s+upload_token_used/i.test(sql)) {
+              const jti = this._p[0];
+              if (rows.has(jti)) return { meta: { changes: 0 } };
+              rows.set(jti, this._p[1]); // expires_at
+              return { meta: { changes: 1 } };
+            }
+            if (/DELETE\s+FROM\s+upload_token_used/i.test(sql)) {
+              const cutoff = this._p[0];
+              let changes = 0;
+              for (const [k, v] of [...rows]) { if (v < cutoff) { rows.delete(k); changes++; } }
+              return { meta: { changes } };
+            }
+            return { meta: { changes: 0 } };
+          },
+        };
+      },
+    };
+  }
+  const future = Math.floor(Date.now() / 1000) + 300;
+
+  it('first claim wins; replay of the same jti is rejected', async () => {
+    const env = { DB: makeFakeNonceD1() };
+    expect(await uploadSvc.claimUploadNonce(env, 'jti-1', future)).toBe(true);
+    expect(await uploadSvc.claimUploadNonce(env, 'jti-1', future)).toBe(false);
+  });
+
+  it('distinct jtis are independent', async () => {
+    const env = { DB: makeFakeNonceD1() };
+    expect(await uploadSvc.claimUploadNonce(env, 'a', future)).toBe(true);
+    expect(await uploadSvc.claimUploadNonce(env, 'b', future)).toBe(true);
+  });
+
+  it('fail-open when DB binding is missing (degraded env, never blocks a real upload)', async () => {
+    expect(await uploadSvc.claimUploadNonce({}, 'x', future)).toBe(true);
+  });
+
+  it('prune deletes only expired nonces', async () => {
+    const db = makeFakeNonceD1();
+    const env = { DB: db };
+    const past = Math.floor(Date.now() / 1000) - 10;
+    await uploadSvc.claimUploadNonce(env, 'expired', past);
+    await uploadSvc.claimUploadNonce(env, 'live', future);
+    const { deleted } = await uploadSvc.pruneExpiredUploadNonces(env);
+    expect(deleted).toBe(1);
+    expect(db.rows.has('expired')).toBe(false);
+    expect(db.rows.has('live')).toBe(true);
   });
 });

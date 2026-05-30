@@ -104,6 +104,8 @@ export const appointmentsRouter = createTRPCRouter({
   updateStatus: adminProcedure
     .input(
       z.object({
+        // God Mode acts ON an explicit tenant — never inferred from session.
+        tenantId: z.string(),
         id: z.string(),
         status: z.enum(["confirmed", "rejected", "cancelled", "done", "no_show"]),
         comment: z.string().optional(),
@@ -121,7 +123,7 @@ export const appointmentsRouter = createTRPCRouter({
           const existing = await ctx.db
             .select({ masterId: appointments.masterId })
             .from(appointments)
-            .where(eq(appointments.id, input.id))
+            .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
             .limit(1);
           if (existing[0] && !existing[0].masterId) {
             updates.masterId = adminId;
@@ -135,15 +137,20 @@ export const appointmentsRouter = createTRPCRouter({
         updates.cancelledBy = "admin";
         updates.cancelledAt = Math.floor(Date.now() / 1000);
       }
-      // Get tenantId before update (needed for Worker notification)
+      // Defense-in-depth: confirm the appointment belongs to the asserted
+      // tenant, then scope the write by (id, tenantId) so a stale tab or
+      // wrong-row click can never mutate another salon's appointment.
       const aptRow = await ctx.db
         .select({ tenantId: appointments.tenantId })
         .from(appointments)
-        .where(eq(appointments.id, input.id))
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
         .limit(1);
-      const tenantId = aptRow[0]?.tenantId;
+      if (!aptRow[0]) return { success: false };
+      const tenantId = input.tenantId;
 
-      await ctx.db.update(appointments).set(updates).where(eq(appointments.id, input.id));
+      await ctx.db.update(appointments)
+        .set(updates)
+        .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
 
       // Fire-and-forget: notify Worker to send Telegram message + sync calendar
       // Worker expects bare verb ("confirm" / "reject" / "cancel"), not past tense
@@ -261,16 +268,19 @@ export const appointmentsRouter = createTRPCRouter({
   markNoShow: adminProcedure
     .input(
       z.object({
+        // God Mode acts ON an explicit tenant — never inferred from session.
+        tenantId: z.string(),
         id: z.string(),
         noShowBy: z.enum(["client", "master"]),
         comment: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const scope = and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId));
       const aptRow = await ctx.db
         .select({ tenantId: appointments.tenantId })
         .from(appointments)
-        .where(eq(appointments.id, input.id))
+        .where(scope)
         .limit(1);
       if (!aptRow[0]) return { success: false };
 
@@ -279,7 +289,7 @@ export const appointmentsRouter = createTRPCRouter({
         noShowBy: input.noShowBy,
         status: "no_show",
         cancelReason: input.comment ?? null,
-      }).where(eq(appointments.id, input.id));
+      }).where(scope);
 
       return { success: true, updatedAt: Date.now() };
     }),

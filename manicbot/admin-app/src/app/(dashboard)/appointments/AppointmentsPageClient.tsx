@@ -233,10 +233,25 @@ export default function AppointmentsPageClient() {
       void utils.appointments.getAll.invalidate();
     },
   });
-  const onAction = (id: number | string, status: "confirmed" | "cancelled" | "rejected") =>
-    updateStatus.mutate({ id: String(id), status });
-  const onNoShow = (id: number | string, _by: "client" | "master") =>
-    updateStatus.mutate({ id: String(id), status: "no_show" });
+  // Resolve the row's tenant from the loaded feeds so the God Mode mutation
+  // carries an explicit tenantId (the server scopes the write by it).
+  const tenantIdForApt = (id: number | string): string | undefined => {
+    const sid = String(id);
+    for (const r of [...dayRows, ...weekRows, ...calRows, ...listRows]) {
+      if (String(r.id) === sid && typeof r.tenantId === "string") return r.tenantId;
+    }
+    return undefined;
+  };
+  const onAction = (id: number | string, status: "confirmed" | "cancelled" | "rejected") => {
+    const tenantId = tenantIdForApt(id);
+    if (!tenantId) return;
+    updateStatus.mutate({ id: String(id), status, tenantId });
+  };
+  const onNoShow = (id: number | string, _by: "client" | "master") => {
+    const tenantId = tenantIdForApt(id);
+    if (!tenantId) return;
+    updateStatus.mutate({ id: String(id), status: "no_show", tenantId });
+  };
 
   // ── CSV export ──
   const exportQuery = api.export.appointments.useQuery({ format: "csv" }, { enabled: false });

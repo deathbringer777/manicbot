@@ -121,6 +121,37 @@ describe('tryUpload — POST /upload/asset', () => {
     expect(env.ASSETS.store.has(body.key)).toBe(true);
   });
 
+  it('rejects a replayed token — single-use nonce (A5)', async () => {
+    // Fake D1 enforcing the upload_token_used unique constraint.
+    const rows = new Map();
+    env.DB = {
+      prepare(sql) {
+        return {
+          _p: [],
+          bind(...p) { this._p = p; return this; },
+          async run() {
+            if (/INSERT\s+INTO\s+upload_token_used/i.test(sql)) {
+              const jti = this._p[0];
+              if (rows.has(jti)) return { meta: { changes: 0 } };
+              rows.set(jti, this._p[1]);
+              return { meta: { changes: 1 } };
+            }
+            return { meta: { changes: 0 } };
+          },
+        };
+      },
+    };
+    const token = await signUploadToken({ tid: 't_demo', kind: 'logo', secret: SECRET });
+    const png = () => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], 'logo.png', { type: 'image/png' });
+    const req1 = await buildUploadRequest(token, 'logo', png());
+    const req2 = await buildUploadRequest(token, 'logo', png());
+    const res1 = await tryUpload(req1, env, new URL(req1.url));
+    const res2 = await tryUpload(req2, env, new URL(req2.url));
+    expect(res1.status).toBe(200);
+    // Same token, second redemption → rejected.
+    expect(res2.status).toBe(409);
+  });
+
   it('handles OPTIONS preflight', async () => {
     const req = new Request('https://manicbot.com/upload/asset', { method: 'OPTIONS' });
     const res = await tryUpload(req, env, new URL(req.url));

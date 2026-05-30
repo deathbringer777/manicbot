@@ -5,7 +5,7 @@
  * token format must stay in lockstep between both files.
  *
  * Token format:  base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, secret))
- * Payload:       { tid, kind, exp, uid? }   (exp = unix seconds; uid = web_users.id of the requester)
+ * Payload:       { tid, kind, exp, jti, uid? }   (exp = unix seconds; jti = single-use nonce; uid = web_users.id)
  *
  * Must be called from a trusted server context (tRPC mutation) after
  * verifying the caller owns the tenant. Uses Web Crypto — edge-runtime safe.
@@ -13,9 +13,9 @@
  * Security model: the tRPC procedure verifies the caller (tenant ownership /
  * thread membership / ticket access) before minting. The token itself IS the
  * auth credential when redeemed at the Worker — single-use is enforced by the
- * 5-minute TTL. The `uid` field binds the token to the minting web user so
- * the Worker can log it in the audit trail; defense-in-depth, not the primary
- * guard.
+ * per-mint `jti` nonce, atomically claimed at the Worker (migration 0096),
+ * plus the 5-minute TTL. The `uid` field binds the token to the minting web
+ * user for the audit trail; defense-in-depth, not the primary guard.
  */
 
 export type UploadKind = "logo" | "cover" | "photo" | "portfolio" | "service_photo" | "client_avatar" | "master_avatar" | "chat_attachment" | "blog_cover" | "blog_photo" | "cancellation_feedback";
@@ -79,10 +79,12 @@ export async function signUploadToken({
   if (!secret || secret.length < 16) {
     throw new Error("UPLOAD_TOKEN_SECRET missing or too short (>= 16 chars)");
   }
-  const payload: { tid: string; kind: UploadKind; exp: number; uid?: string } = {
+  const payload: { tid: string; kind: UploadKind; exp: number; jti: string; uid?: string } = {
     tid,
     kind,
     exp: Math.floor(Date.now() / 1000) + ttlSec,
+    // Single-use nonce — the Worker atomically claims it on redemption.
+    jti: crypto.randomUUID(),
   };
   if (uid) payload.uid = uid;
   const payloadB64 = b64urlEncodeString(JSON.stringify(payload));

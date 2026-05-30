@@ -113,6 +113,9 @@ function makeExecCtx() {
 const env = {
   META_APP_SECRET: 'x'.repeat(32),
   MANICBOT: { get: async () => null, put: async () => {} },
+  // A4: the atomic D1 dedup backend requires the DB binding to be forwarded by
+  // the webhook caller. A sentinel is enough here — claimWAMessage is spied.
+  DB: { __fakeD1: true },
 };
 
 describe('WhatsApp webhook — inbound dedup by wamid', () => {
@@ -178,6 +181,21 @@ describe('WhatsApp webhook — inbound dedup by wamid', () => {
 
     expect(claimSpy).toHaveBeenCalledTimes(2);
     expect(handleInboundSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards the DB binding to claimWAMessage so the atomic D1 path engages (A4)', async () => {
+    claimSpy.mockResolvedValue(true);
+    const url = new URL('https://manicbot.com/webhook/wa');
+    const execCtx = makeExecCtx();
+    const res = await tryMetaWebhooks(makeReq(buildWAEntry([WAMID_A])), env, url, execCtx);
+    expect(res?.status).toBe(200);
+    await Promise.all(execCtx._tasks);
+    // Before the fix the caller passed only { MANICBOT } → no atomic dedup.
+    expect(claimSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ MANICBOT: expect.anything(), DB: expect.anything() }),
+      String(PHONE_NUMBER_ID),
+      WAMID_A,
+    );
   });
 
   it('does not gate status-only changes (delivered/read receipts have no messages array)', async () => {

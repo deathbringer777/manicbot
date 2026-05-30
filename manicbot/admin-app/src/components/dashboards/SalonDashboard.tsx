@@ -2180,7 +2180,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.todayApts", lang)}</h3>
-                    <button onClick={() => setTab("appointments")}
+                    <button onClick={() => { setTab("appointments"); if (inWeb) router.push("/dashboard?tab=appointments"); }}
                       className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
                       {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
                     </button>

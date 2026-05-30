@@ -9,6 +9,7 @@ import {
 import { WhatsAppAdapter } from '../channels/whatsapp.js';
 import { InstagramAdapter, parseInstagramIgnoreSenderIds } from '../channels/instagram.js';
 import { handleInbound } from '../handlers/inbound.js';
+import { markOutboundDeliveryState } from '../services/messengerThreads.js';
 import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
@@ -93,6 +94,20 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               if (!resolved) {
                 log.warn('http.metaWebhooks', { message: 'unresolved WA phone_number_id' });
                 continue;
+              }
+              // Delivery receipts (statuses[]) carry the wamid of OUR outbound
+              // message — advance its persisted delivery_state. Correlation works
+              // now that the external_msg_id .data-hop bug is fixed (Phase 1).
+              for (const st of change.value?.statuses ?? []) {
+                if (!st?.id) continue;
+                if (st.status === 'delivered' || st.status === 'read') {
+                  await markOutboundDeliveryState(ec, resolved.tenantId, String(st.id), 'delivered');
+                } else if (st.status === 'failed') {
+                  await markOutboundDeliveryState(
+                    ec, resolved.tenantId, String(st.id), 'failed',
+                    st?.errors?.[0]?.title ?? 'channel_failed',
+                  );
+                }
               }
               const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'whatsapp', env.BOT_ENCRYPTION_KEY || null);
               if (!channelConfig) continue;
@@ -215,6 +230,15 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               if (mid) {
                 const fresh = await claimMetaMessage({ MANICBOT: env.MANICBOT }, String(pageId), String(mid));
                 if (!fresh) continue;
+              }
+              // Read/delivery receipts → advance our outbound message's state,
+              // then skip (they're not inbound messages).
+              if (m?.read?.mid || m?.delivery?.mids?.length) {
+                const dmids = m?.delivery?.mids ?? (m?.read?.mid ? [m.read.mid] : []);
+                for (const dmid of dmids) {
+                  await markOutboundDeliveryState(ec, resolved.tenantId, String(dmid), 'delivered');
+                }
+                continue;
               }
               const inbound = adapter.normalizeMessaging(m, entry);
               if (inbound) await handleInbound(ctx, inbound);

@@ -123,6 +123,24 @@ describe("SalonGalleryUploader — with photos", () => {
     const rightButtons = screen.getAllByRole("button", { name: "Переместить вправо" });
     expect((rightButtons[rightButtons.length - 1]! as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("drag-and-drop reorders: dropping item 0 onto item 2 moves it after", () => {
+    const { onChange } = renderUploader({ photos: ["a.webp", "b.webp", "c.webp"] });
+    const tiles = screen.getAllByTestId("gallery-photo");
+    // Minimal DataTransfer stub: the component sets/reads "text/plain" and
+    // assigns effectAllowed/dropEffect.
+    const dt = {
+      store: {} as Record<string, string>,
+      setData(k: string, v: string) { this.store[k] = v; },
+      getData(k: string) { return this.store[k] ?? ""; },
+      effectAllowed: "",
+      dropEffect: "",
+    };
+    fireEvent.dragStart(tiles[0]!, { dataTransfer: dt });
+    fireEvent.dragOver(tiles[2]!, { dataTransfer: dt });
+    fireEvent.drop(tiles[2]!, { dataTransfer: dt });
+    expect(onChange).toHaveBeenCalledWith(["b.webp", "c.webp", "a.webp"]);
+  });
 });
 
 describe("SalonGalleryUploader — URL escape hatch", () => {

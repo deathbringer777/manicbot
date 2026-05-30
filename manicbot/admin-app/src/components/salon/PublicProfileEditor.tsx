@@ -1,84 +1,39 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
-  Pencil, X, Save, Loader2, Globe, ExternalLink, MapPin,
-  ToggleLeft, ToggleRight, AlertCircle,
+  Loader2, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight, AlertCircle, Pencil,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { Btn } from "~/components/salon/SalonShared";
-import { SalonGalleryUploader } from "~/components/salon/SalonGalleryUploader";
 
-function parseGoogleMapsUrl(input: string): { lat: number; lng: number } | null {
-  const validate = (lat: number, lng: number) =>
-    isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
-      ? { lat, lng } : null;
-  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-  if (atMatch) return validate(parseFloat(atMatch[1]!), parseFloat(atMatch[2]!));
-  try {
-    const url = new URL(input);
-    for (const key of ["q", "ll", "query"]) {
-      const v = url.searchParams.get(key);
-      const m = v?.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
-      if (m) return validate(parseFloat(m[1]!), parseFloat(m[2]!));
-    }
-  } catch { /* not a URL */ }
-  const bare = input.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
-  if (bare) return validate(parseFloat(bare[1]!), parseFloat(bare[2]!));
-  return null;
-}
-
+/**
+ * Public profile = a thin **preview + publish** surface.
+ *
+ * Field editing (slug, description, city, map, photos, branding, hours) now
+ * lives in the «Мой салон» tab as collapsible chips. This view shows the public
+ * URL, the publish toggle (with the same NOT_READY_TO_PUBLISH readiness guard),
+ * a read-only preview of the catalog card, and a link back to «Мой салон».
+ */
 export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const utils = api.useUtils();
   const profile = api.salon.getSalonProfile.useQuery({ tenantId });
   const servicesList = api.salon.getServices.useQuery({ tenantId });
   const [publishError, setPublishError] = useState<string[] | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [slug, setSlug] = useState("");
-  const [description, setDescription] = useState("");
-  const [city, setCity] = useState("");
-  const [mapsUrl, setMapsUrl] = useState("");
-  const [parsedCoords, setParsedCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [isPublic, setIsPublic] = useState(false);
-  const [slugError, setSlugError] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
 
   const data = profile.data as any;
-
-  useEffect(() => {
-    if (data && !editing) {
-      setSlug(data.slug ?? "");
-      setDescription(data.description ?? "");
-      setCity(data.city ?? "");
-      if (data.mapsUrl) {
-        setMapsUrl(data.mapsUrl);
-        setParsedCoords(parseGoogleMapsUrl(data.mapsUrl));
-      } else if (data.lat != null && data.lng != null) {
-        setMapsUrl(`${data.lat}, ${data.lng}`);
-        setParsedCoords({ lat: data.lat, lng: data.lng });
-      } else {
-        setMapsUrl("");
-        setParsedCoords(null);
-      }
-      setIsPublic(!!data.publicActive);
-      setPhotos(Array.isArray(data.photos) ? data.photos : []);
-    }
-  }, [data, editing]);
 
   const update = api.salon.updateSalonProfile.useMutation({
     onSuccess: () => {
       utils.salon.getSalonProfile.invalidate();
-      setEditing(false);
       setPublishError(null);
     },
     onError: (err) => {
       const msg = err.message ?? "";
       if (msg.startsWith("NOT_READY_TO_PUBLISH:")) {
         setPublishError(msg.replace("NOT_READY_TO_PUBLISH:", "").split(","));
-        setIsPublic(false);
       }
     },
   });
@@ -88,6 +43,7 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
   if (!data?.name || !String(data.name).trim()) readinessMissing.push("name");
   if (servicesList.data && servicesList.data.length === 0) readinessMissing.push("services");
   const isReadyToPublish = readinessMissing.length === 0;
+  const isPublic = !!data?.publicActive;
 
   const MISSING_LABELS: Record<string, string> = {
     slug: t("salon.publicProfile.slugReq", lang),
@@ -95,59 +51,27 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
     services: t("salon.publicProfile.servicesReq", lang),
   };
 
-  const slugCheck = api.salon.checkSlugAvailable.useQuery(
-    { slug, tenantId },
-    { enabled: editing && slug.length > 0 && !slugError, staleTime: 5000 },
-  );
-
-  function validateSlug(v: string) {
-    if (v && !/^[a-z0-9-]+$/.test(v)) {
-      setSlugError(t("salon.publicProfile.slugError", lang));
-      return false;
-    }
-    setSlugError("");
-    return true;
-  }
-
-  function handleSave() {
-    if (!validateSlug(slug)) return;
-    if (isPublic) {
-      const missing: string[] = [];
-      if (!slug) missing.push("slug");
-      if (!data?.name || !String(data.name).trim()) missing.push("name");
-      if (servicesList.data && servicesList.data.length === 0) missing.push("services");
-      if (missing.length) {
-        setPublishError(missing);
-        setIsPublic(false);
-        return;
-      }
-    }
-    setPublishError(null);
-    update.mutate({
-      tenantId,
-      slug: slug || undefined,
-      description: description || undefined,
-      city: city || undefined,
-      lat: parsedCoords?.lat,
-      lng: parsedCoords?.lng,
-      mapsUrl: mapsUrl.startsWith("http") ? mapsUrl : undefined,
-      publicActive: isPublic ? 1 : 0,
-      photos,
-    });
-  }
-
+  const slug = data?.slug as string | null;
   const publicUrl = slug ? `/salon/${slug}` : null;
+  const photos: string[] = Array.isArray(data?.photos) ? data.photos : [];
 
   if (profile.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
-  if (profile.isError) return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>;
+  if (profile.isError) {
+    return (
+      <div className="glass-card rounded-2xl p-6 text-center">
+        <p className="text-red-400">{t("common.errorLoading", lang)}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
+      {/* Status + publish toggle */}
       <div className={`rounded-xl p-4 flex items-center gap-3 ${isPublic ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"}`}>
         {isPublic
           ? <ToggleRight className="h-6 w-6 text-emerald-400 shrink-0" />
           : <ToggleLeft className="h-6 w-6 text-slate-500 shrink-0" />}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <p className={`text-sm font-semibold ${isPublic ? "text-emerald-300" : "text-slate-500 dark:text-slate-400"}`}>
             {isPublic ? t("salon.publicProfile.visibleInCatalog", lang) : t("salon.publicProfile.hiddenFromCatalog", lang)}
           </p>
@@ -160,21 +84,21 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
             </a>
           )}
         </div>
-        {!editing && (
-          <button onClick={() => {
+        <button
+          onClick={() => {
             const newVal = isPublic ? 0 : 1;
             if (newVal === 1 && !isReadyToPublish) {
               setPublishError(readinessMissing);
               return;
             }
             setPublishError(null);
-            setIsPublic(!!newVal);
             update.mutate({ tenantId, publicActive: newVal });
           }}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${isPublic ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"}`}>
-            {isPublic ? t("salon.publicProfile.hide", lang) : t("salon.publicProfile.publish", lang)}
-          </button>
-        )}
+          disabled={update.isPending}
+          className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${isPublic ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"}`}
+        >
+          {isPublic ? t("salon.publicProfile.hide", lang) : t("salon.publicProfile.publish", lang)}
+        </button>
       </div>
 
       {publishError && publishError.length > 0 && (
@@ -190,155 +114,77 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   <li key={k}>{MISSING_LABELS[k] ?? k}</li>
                 ))}
               </ul>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
-                >
-                  {t("salon.publicProfile.editProfile", lang)}
-                </button>
-                <button
-                  onClick={() => setPublishError(null)}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-700/70 transition hover:text-red-700 dark:text-red-300/70 dark:hover:text-red-300"
-                >
-                  {t("common.close", lang)}
-                </button>
-              </div>
+              <a
+                href="/settings?section=salon"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {t("salon.publicProfile.openMySalon", lang)}
+              </a>
             </div>
           </div>
         </div>
       )}
 
-      {!editing ? (
-        <div className="glass-card rounded-2xl p-4">
-          <div className="space-y-3">
-            {(() => {
-              const rows = [
-                { label: "URL (slug)", value: data?.slug, icon: Globe },
-                { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
-                { label: t("common.description", lang), value: data?.description, icon: null },
-                { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
-              ];
-              const filled = rows.filter((r) => r.value);
-              if (filled.length === 0) {
-                return (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 py-2">
-                    {t("salon.publicProfile.setSlugFirst", lang)}
-                  </p>
-                );
-              }
-              return filled.map(({ label, value, icon: Icon }) => (
-                <div key={label} className="flex items-start gap-3">
-                  {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-500">{label}</p>
-                    <p className="text-sm text-slate-900 dark:text-white break-words">{value}</p>
-                  </div>
-                </div>
-              ));
-            })()}
-            {(data?.logo || data?.coverPhoto) && (
-              <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
-                {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
-                {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
-              </div>
-            )}
-            {photos.length > 0 && (
-              <div>
-                <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>
-                <div className="flex flex-wrap gap-2">
-                  {photos.map((url, i) => (
-                    <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
-                  ))}
+      {/* Read-only preview of the catalog card */}
+      <div className="glass-card rounded-2xl p-4">
+        <div className="space-y-3">
+          {(() => {
+            const rows = [
+              { label: "URL (slug)", value: data?.slug, icon: Globe },
+              { label: t("salon.publicProfile.city", lang), value: data?.city, icon: MapPin },
+              { label: t("common.description", lang), value: data?.description, icon: null },
+              { label: t("salon.publicProfile.coords", lang), value: (data?.lat && data?.lng) ? `${data.lat}, ${data.lng}` : null, icon: null },
+            ];
+            const filled = rows.filter((r) => r.value);
+            if (filled.length === 0) {
+              return (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-2">
+                  {t("salon.publicProfile.setSlugFirst", lang)}
+                </p>
+              );
+            }
+            return filled.map(({ label, value, icon: Icon }) => (
+              <div key={label} className="flex items-start gap-3">
+                {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="text-sm text-slate-900 dark:text-white break-words">{value}</p>
                 </div>
               </div>
-            )}
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/5 flex justify-end">
-            <Btn onClick={() => setEditing(true)}>
-              <Pencil className="h-3.5 w-3.5" />
-              {t("common.edit", lang)}
-            </Btn>
-          </div>
-        </div>
-      ) : (
-        <div className="glass-card rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-900 dark:text-white">{t("salon.publicProfile.showInCatalog", lang)}</p>
-              <p className="text-xs text-slate-500">{t("salon.publicProfile.findInSearch", lang)}</p>
+            ));
+          })()}
+          {(data?.logo || data?.coverPhoto) && (
+            <div className="flex gap-3 border-t border-slate-200 dark:border-white/5 pt-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {data.logo && <img src={data.logo} alt="logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {data.coverPhoto && <img src={data.coverPhoto} alt="cover" className="h-12 flex-1 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />}
             </div>
-            <button onClick={() => setIsPublic((v) => !v)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${isPublic ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-700"}`}>
-              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
-          </div>
-
-          <div className="border-t border-slate-200 dark:border-white/5 pt-3 space-y-3">
+          )}
+          {photos.length > 0 && (
             <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">URL slug</label>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600 dark:text-slate-500 shrink-0">manicbot.com/salon/</span>
-                <input value={slug} onChange={(e) => { setSlug(e.target.value.toLowerCase()); validateSlug(e.target.value.toLowerCase()); }}
-                  placeholder="moj-salon-warszawa"
-                  className="flex-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-                {slug && !slugError && (
-                  <span className={`shrink-0 text-xs font-medium ${slugCheck.data?.available === false ? "text-red-400" : slugCheck.data?.available ? "text-emerald-400" : "text-slate-500"}`}>
-                    {slugCheck.isLoading ? "..." : slugCheck.data?.available === false ? `❌ ${t("salon.publicProfile.taken", lang)}` : slugCheck.data?.available ? "✅" : ""}
-                  </span>
-                )}
+              <p className="text-xs text-slate-500 mb-2">{t("salon.publicProfile.gallerySimple", lang)} ({photos.length})</p>
+              <div className="flex flex-wrap gap-2">
+                {photos.map((url, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
+                ))}
               </div>
-              {slugError && <p className="text-xs text-red-400 mt-1">{slugError}</p>}
             </div>
-
-            <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.city", lang)}</label>
-              <input value={city} onChange={(e) => setCity(e.target.value)}
-                placeholder="Warszawa"
-                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-            </div>
-
-            <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("common.description", lang)}</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                rows={3} placeholder={t("salon.publicProfile.descriptionPlaceholder", lang)}
-                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500 resize-none" />
-            </div>
-
-            <div>
-              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{t("salon.publicProfile.mapsLabel", lang)}</label>
-              <input value={mapsUrl} onChange={(e) => { setMapsUrl(e.target.value); setParsedCoords(parseGoogleMapsUrl(e.target.value)); }}
-                placeholder={t("salon.publicProfile.mapsPlaceholder", lang)}
-                className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500" />
-              {mapsUrl && parsedCoords && (
-                <p className="text-xs text-emerald-500 mt-1">{t("salon.publicProfile.coords", lang)}: {parsedCoords.lat}, {parsedCoords.lng}</p>
-              )}
-              {mapsUrl && !parsedCoords && (
-                <p className="text-xs text-amber-400 mt-1">{t("salon.publicProfile.coordsBad", lang)}</p>
-              )}
-            </div>
-
-            <div className="border-t border-slate-200 dark:border-white/5 pt-3">
-              <SalonGalleryUploader
-                tenantId={tenantId}
-                photos={photos}
-                onChange={setPhotos}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
-            <Btn variant="ghost" onClick={() => setEditing(false)} className="sm:flex-1 justify-center py-2.5">
-              <X className="h-3.5 w-3.5" />
-              {t("common.cancel", lang)}
-            </Btn>
-            <Btn onClick={handleSave} disabled={update.isPending || !!slugError || slugCheck.data?.available === false} className="sm:flex-[2] justify-center py-2.5">
-              {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {t("salon.publicProfile.savePublic", lang)}
-            </Btn>
-          </div>
+          )}
         </div>
-      )}
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/5 flex items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("salon.publicProfile.editedInMySalon", lang)}</p>
+          <a
+            href="/settings?section=salon"
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-1.5 text-xs font-medium text-white border border-brand-600 hover:bg-brand-600 shadow-sm"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            {t("salon.publicProfile.openMySalon", lang)}
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

@@ -19,13 +19,16 @@ export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
 export type DayHours = { open: string; close: string } | null;
 export type WorkHoursState = Record<WeekdayKey, DayHours>;
 
+// Default for a brand-new salon: Mon–Sat 09:00–18:00, Sunday off. Owners can
+// override any day. (Was Sat 10:00–16:00 — aligned to the simpler "9–18 except
+// Sunday" expectation surfaced by the salon-settings redesign.)
 export const DEFAULT_WORK_HOURS: WorkHoursState = {
   mon: { open: "09:00", close: "18:00" },
   tue: { open: "09:00", close: "18:00" },
   wed: { open: "09:00", close: "18:00" },
   thu: { open: "09:00", close: "18:00" },
   fri: { open: "09:00", close: "18:00" },
-  sat: { open: "10:00", close: "16:00" },
+  sat: { open: "09:00", close: "18:00" },
   sun: null,
 };
 

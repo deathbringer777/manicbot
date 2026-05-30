@@ -57,13 +57,13 @@ import { useRole } from "~/components/RoleContext";
 import type { PermissionKey } from "~/server/api/permissions";
 import { NAIL_EMOJIS } from "~/lib/appointments";
 import {
-  WEEKDAY_KEYS,
   DEFAULT_WORK_HOURS,
   hydrateWorkHours,
   serializeWorkHours,
   decodePerDayWorkHours,
   type WorkHoursState,
 } from "~/lib/workHours";
+import { WorkHoursEditor } from "~/components/salon/WorkHoursEditor";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
 import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
@@ -1287,48 +1287,7 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.publicProfile.scheduleSection", lang)}</h4>
               </div>
               <p className="text-[11px] text-slate-500">{t("salon.publicProfile.scheduleHint", lang)}</p>
-              <div className="space-y-2">
-                {WEEKDAY_KEYS.map((day) => {
-                  const value = workHours[day];
-                  const isOff = value === null;
-                  return (
-                    <div key={day} data-testid={`workhours-row-${day}`} className="flex items-center gap-2">
-                      <span className="w-24 shrink-0 text-xs text-slate-700 dark:text-slate-300">{t(`salon.publicProfile.day.${day}`, lang)}</span>
-                      <Switch
-                        size="sm"
-                        checked={!isOff}
-                        onChange={(next) => setWorkHours((prev) => ({
-                          ...prev,
-                          [day]: next ? { open: "09:00", close: "18:00" } : null,
-                        }))}
-                        aria-label={t("salon.publicProfile.workingDay", lang)}
-                        data-testid={`workhours-toggle-${day}`}
-                      />
-                      {isOff ? (
-                        <span className="flex-1 text-xs text-slate-500 italic">{t("salon.publicProfile.dayOff", lang)}</span>
-                      ) : (
-                        <>
-                          <input
-                            type="time"
-                            aria-label={`${t(`salon.publicProfile.day.${day}`, lang)} ${t("salon.publicProfile.opens", lang)}`}
-                            value={value.open}
-                            onChange={(e) => setWorkHours((prev) => ({ ...prev, [day]: { ...value, open: e.target.value } }))}
-                            className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
-                          />
-                          <span className="text-xs text-slate-500">—</span>
-                          <input
-                            type="time"
-                            aria-label={`${t(`salon.publicProfile.day.${day}`, lang)} ${t("salon.publicProfile.closes", lang)}`}
-                            value={value.close}
-                            onChange={(e) => setWorkHours((prev) => ({ ...prev, [day]: { ...value, close: e.target.value } }))}
-                            className="flex-1 min-w-0 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5 text-xs text-slate-900 dark:text-white ring-1 ring-slate-200 dark:ring-slate-700 focus:outline-none focus:ring-brand-500"
-                          />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <WorkHoursEditor value={workHours} onChange={setWorkHours} disabled={update.isPending} />
             </div>
 
             {/* Photos */}

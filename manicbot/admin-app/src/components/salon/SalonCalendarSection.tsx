@@ -9,7 +9,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { SectionHeader, Btn } from "./SalonShared";
 
-export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
+export function SalonCalendarSection({ tenantId, bare = false }: { tenantId: string; bare?: boolean }) {
   const { lang } = useLang();
   const integrations = api.googleCalendar.list.useQuery({ tenantId });
   const connectInfo = api.googleCalendar.getConnectInfo.useQuery({ tenantId });
@@ -28,20 +28,18 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
   const salonScopeLabel = t("gcal.scopeSalon", lang);
   const masterScopeLabel = t("gcal.scopeMaster", lang);
 
-  return (
-    <div className="space-y-4 mt-6">
-      <SectionHeader
-        title="Google Calendar"
-        action={connectInfo.data?.botLink ? (
-          <Btn
-            onClick={() => window.open(connectInfo.data?.botLink ?? "", "_blank", "noopener,noreferrer")}
-            className="shrink-0"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            {connectButtonLabel}
-          </Btn>
-        ) : undefined}
-      />
+  const connectButton = connectInfo.data?.botLink ? (
+    <Btn
+      onClick={() => window.open(connectInfo.data?.botLink ?? "", "_blank", "noopener,noreferrer")}
+      className="shrink-0"
+    >
+      <ExternalLink className="h-3.5 w-3.5" />
+      {connectButtonLabel}
+    </Btn>
+  ) : null;
+
+  const body = (
+    <>
       <div className="glass-card rounded-2xl p-4 space-y-2">
         <p className="text-xs text-slate-400">{connectHint}</p>
         {connectInfo.data?.botUsername ? (
@@ -141,6 +139,24 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
           </div>
         </div>
       ))}
+    </>
+  );
+
+  // `bare` drops the outer SectionHeader (the CollapsibleSection supplies the
+  // title); the connect CTA moves to the top of the body so it stays reachable.
+  if (bare) {
+    return (
+      <div className="space-y-3">
+        {connectButton && <div className="flex justify-end">{connectButton}</div>}
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 mt-6">
+      <SectionHeader title="Google Calendar" action={connectButton ?? undefined} />
+      {body}
     </div>
   );
 }

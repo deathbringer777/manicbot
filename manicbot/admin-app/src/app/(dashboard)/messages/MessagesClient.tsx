@@ -12,6 +12,7 @@ import { NewThreadModal } from "./_components/NewThreadModal";
 import { PlatformAdminPane } from "./_components/PlatformAdminPane";
 import { PlatformOwnerView } from "./_components/PlatformOwnerView";
 import { GodClientInbox } from "./_components/GodClientInbox";
+import { MessengerSocketProvider } from "./_components/socketContext";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
@@ -40,7 +41,7 @@ export default function MessagesClient() {
   const [modalOpen, setModalOpen] = useState(false);
   const [godTab, setGodTab] = useState<"platform" | "clients">("platform");
 
-  useMessengerSocket(tenantId);
+  const socket = useMessengerSocket(tenantId);
 
   // Owner-side: poll unread count for the pinned ManicBot entry. Enabled
   // for all non-sysadmin web_users so the pin can show a dot.
@@ -111,7 +112,7 @@ export default function MessagesClient() {
 
   // Mode 2/3 — tenant messenger with a pinned ManicBot entry.
   return (
-    <>
+    <MessengerSocketProvider value={socket}>
       <div
         className="grid h-[calc(100vh-8rem)] grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[320px_minmax(0,1fr)] dark:border-slate-800 dark:bg-slate-900"
         data-testid="messages-shell"
@@ -221,6 +222,6 @@ export default function MessagesClient() {
           }}
         />
       )}
-    </>
+    </MessengerSocketProvider>
   );
 }

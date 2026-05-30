@@ -7,6 +7,7 @@ import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { MessageComposer, ATTACHMENT_ONLY_BODY } from "./MessageComposer";
 import { GroupMembersModal } from "./GroupMembersModal";
+import { useMessengerSocketCtx } from "./socketContext";
 
 interface Props {
   tenantId: string;
@@ -43,6 +44,8 @@ export function ThreadView({ tenantId, threadId }: Props) {
   const utils = api.useUtils();
   const scrollRef = useRef<HTMLDivElement>(null);
   const { lang } = useLang();
+  const socket = useMessengerSocketCtx();
+  const lastTypingRef = useRef(0);
   // Members drawer is opt-in — staff_group only — and is owner-only
   // edits-wise (the drawer itself respects the role via useRole inside it).
   const [membersOpen, setMembersOpen] = useState(false);
@@ -50,7 +53,8 @@ export function ThreadView({ tenantId, threadId }: Props) {
   const detailQ = api.messenger.getThread.useQuery(
     { tenantId, threadId, limit: 50 },
     {
-      refetchInterval: 5000,
+      // Poll slowly while the realtime socket is healthy; fast when it's down.
+      refetchInterval: socket.status === "open" ? 15000 : 5000,
       refetchOnWindowFocus: true,
       enabled: !!tenantId && !!threadId,
     },
@@ -157,6 +161,28 @@ export function ThreadView({ tenantId, threadId }: Props) {
         typeof m.lastReadMessageId === "string" &&
         m.lastReadMessageId >= lastMsg!.id,
     );
+
+  // Typing: who (other than me) is typing in THIS thread, not expired.
+  const typers = socket.typing.filter(
+    (e) => e.threadId === threadId && e.memberRef !== viewerWebUserId && e.expiresAt > Date.now(),
+  );
+  const typingLabel =
+    typers.length === 0
+      ? null
+      : typers.length === 1
+        ? t("messenger.typing.one", lang).replace(
+            "{name}",
+            typers[0]!.displayName ?? memberMap.get(typers[0]!.memberRef) ?? "…",
+          )
+        : t("messenger.typing.many", lang);
+
+  // Throttled typing emit (≤1 per 3s) — fired by the composer on input.
+  const handleTyping = () => {
+    const now = Date.now();
+    if (now - lastTypingRef.current < 3000) return;
+    lastTypingRef.current = now;
+    socket.sendTyping(threadId, viewerWebUserId, memberMap.get(viewerWebUserId) ?? null);
+  };
 
   const title =
     thread.title ??
@@ -434,11 +460,17 @@ export function ThreadView({ tenantId, threadId }: Props) {
         )}
       </div>
 
+      {typingLabel && (
+        <div className="px-4 pb-1 text-[11px] italic text-slate-400" aria-live="polite">
+          {typingLabel}
+        </div>
+      )}
       <MessageComposer
         tenantId={tenantId}
         threadId={threadId}
         threadKind={thread.kind}
         disabled={thread.archived === 1}
+        onTyping={handleTyping}
       />
     </div>
   );

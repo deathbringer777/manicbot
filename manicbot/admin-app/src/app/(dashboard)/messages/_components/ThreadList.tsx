@@ -12,6 +12,7 @@ import {
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { useMessengerSocketCtx } from "./socketContext";
 
 type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system";
 type FilterKind = ThreadKind | "all";
@@ -46,6 +47,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
   const [filter, setFilter] = useState<FilterKind>("all");
   const [search, setSearch] = useState("");
   const { lang } = useLang();
+  const { status: wsStatus } = useMessengerSocketCtx();
 
   const threadsQ = api.messenger.listThreads.useQuery(
     {
@@ -55,7 +57,8 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
       limit: 50,
     },
     {
-      refetchInterval: 5000,
+      // Slow poll when realtime is healthy; fast when the socket is down.
+      refetchInterval: wsStatus === "open" ? 15000 : 5000,
       refetchOnWindowFocus: true,
       enabled: !!tenantId,
     },
@@ -95,8 +98,15 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
       {/* Header */}
       <div className="border-b border-slate-200 dark:border-slate-800 p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100">
             {t("messenger.threadList.title", lang)}
+            {(wsStatus === "connecting" || wsStatus === "error") && (
+              <span
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+                title={t("messenger.conn.reconnecting", lang)}
+                aria-label={t("messenger.conn.reconnecting", lang)}
+              />
+            )}
           </h2>
           <button
             type="button"

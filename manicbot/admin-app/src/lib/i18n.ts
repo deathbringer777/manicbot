@@ -2237,6 +2237,10 @@ const translations = {
   "messenger.search.inMessages":   { ru: "Найдено в сообщениях", ua: "Знайдено в повідомленнях", en: "Found in messages", pl: "Znaleziono w wiadomościach" },
   "messenger.search.searching":    { ru: "Ищу…", ua: "Шукаю…", en: "Searching…", pl: "Szukam…" },
   "messenger.search.noResults":    { ru: "Ничего не найдено", ua: "Нічого не знайдено", en: "Nothing found", pl: "Nic nie znaleziono" },
+  // Typing indicator + connection status (Phase 3c)
+  "messenger.typing.one":          { ru: "{name} печатает…", ua: "{name} пише…", en: "{name} is typing…", pl: "{name} pisze…" },
+  "messenger.typing.many":         { ru: "Несколько человек печатают…", ua: "Кілька людей пишуть…", en: "Several people are typing…", pl: "Kilka osób pisze…" },
+  "messenger.conn.reconnecting":   { ru: "Связь прервана — переподключаюсь…", ua: "Зв'язок перервано — перепідключаюсь…", en: "Connection lost — reconnecting…", pl: "Połączenie przerwane — łączę ponownie…" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

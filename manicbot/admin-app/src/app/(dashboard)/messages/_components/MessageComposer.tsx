@@ -41,9 +41,11 @@ interface Props {
   threadKind: string;
   disabled?: boolean;
   onSent?: () => void;
+  /** Fired on each keystroke to emit a typing hint (parent throttles it). */
+  onTyping?: () => void;
 }
 
-export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSent }: Props) {
+export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSent, onTyping }: Props) {
   const [body, setBody] = useState("");
   const [isInternalNote, setIsInternalNote] = useState(false);
   const [relayError, setRelayError] = useState<string | null>(null);
@@ -251,7 +253,10 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
         <textarea
           ref={taRef}
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value);
+            onTyping?.();
+          }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           rows={1}

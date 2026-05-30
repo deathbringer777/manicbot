@@ -109,6 +109,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               <button
                 key={k}
                 type="button"
+                aria-pressed={filter === k}
                 onClick={() => setFilter(k)}
                 className={`rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors ${
                   filter === k

@@ -22,7 +22,7 @@ const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
 
 const GOD_MODE_FILES = [
   "app/(dashboard)/errors/ErrorsPageClient.tsx",
-  "app/(dashboard)/conversations/_components/ConversationsClient.tsx",
+  "app/(dashboard)/messages/_components/GodClientInbox.tsx",
   "app/(dashboard)/marketing-autopilot/MarketingAutopilotClient.tsx",
 ];
 

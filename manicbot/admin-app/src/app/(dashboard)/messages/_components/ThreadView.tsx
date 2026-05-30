@@ -5,7 +5,7 @@ import { Archive, StickyNote, Users } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { MessageComposer } from "./MessageComposer";
+import { MessageComposer, ATTACHMENT_ONLY_BODY } from "./MessageComposer";
 import { GroupMembersModal } from "./GroupMembersModal";
 
 interface Props {
@@ -203,7 +203,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
             // Body is "(вложение)" placeholder when the user sent an
             // attachment without text — hide it in the bubble so the image
             // stands alone.
-            const showBody = m.body && m.body !== "(вложение)";
+            const showBody = m.body && m.body !== ATTACHMENT_ONLY_BODY;
             return (
               <div
                 key={m.id}

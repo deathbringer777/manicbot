@@ -4,23 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Megaphone, MessageSquare, Send, Users } from "lucide-react";
 import { api } from "~/trpc/react";
 import { BroadcastComposer } from "./BroadcastComposer";
+import { useLang } from "~/components/LangContext";
+import { formatRelativeTime, t } from "~/lib/i18n";
 
 function fmtFull(ts: number): string {
   const d = new Date(ts * 1000);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${d.toLocaleDateString()} ${hh}:${mm}`;
-}
-
-function fmtRelative(ts: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = Math.max(0, now - ts);
-  if (diff < 60) return "сейчас";
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч`;
-  const days = Math.floor(diff / 86400);
-  if (days < 7) return `${days} д`;
-  return new Date(ts * 1000).toLocaleDateString();
 }
 
 /**
@@ -39,6 +30,7 @@ export function PlatformAdminPane({
   );
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const { lang } = useLang();
 
   const utils = api.useUtils();
   const listQ = api.platformMessenger.listThreads.useQuery(
@@ -49,7 +41,7 @@ export function PlatformAdminPane({
   return (
     <>
       <div
-        className="grid h-[calc(100vh-8rem)] grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[320px_minmax(0,1fr)] dark:border-slate-800 dark:bg-slate-900"
+        className="grid h-full grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[320px_minmax(0,1fr)] dark:border-slate-800 dark:bg-slate-900"
         data-testid="platform-admin-shell"
       >
         <div className={selectedThreadId ? "hidden md:flex md:flex-col" : "flex flex-col"}>
@@ -60,7 +52,7 @@ export function PlatformAdminPane({
                   <Megaphone className="h-4 w-4" />
                 </div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Платформа
+                  {t("messenger.platform.title", lang)}
                 </div>
               </div>
               <button
@@ -70,11 +62,13 @@ export function PlatformAdminPane({
                 data-testid="platform-broadcast-open"
               >
                 <Send className="h-3 w-3" />
-                Рассылка
+                {t("messenger.platform.broadcast", lang)}
               </button>
             </div>
             <div className="flex gap-1 text-[11px]">
               <button
+                type="button"
+                aria-pressed={!unreadOnly}
                 onClick={() => setUnreadOnly(false)}
                 className={`flex-1 rounded-md px-2 py-1 ${
                   !unreadOnly
@@ -82,9 +76,11 @@ export function PlatformAdminPane({
                     : "text-slate-500"
                 }`}
               >
-                Все
+                {t("messenger.filter.all", lang)}
               </button>
               <button
+                type="button"
+                aria-pressed={unreadOnly}
                 onClick={() => setUnreadOnly(true)}
                 className={`flex-1 rounded-md px-2 py-1 ${
                   unreadOnly
@@ -92,20 +88,22 @@ export function PlatformAdminPane({
                     : "text-slate-500"
                 }`}
               >
-                Непрочитанные
+                {t("messenger.platform.unread", lang)}
               </button>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto" data-testid="platform-thread-list">
             {listQ.isLoading && (
-              <div className="p-6 text-center text-xs text-slate-500">Загрузка...</div>
+              <div className="p-6 text-center text-xs text-slate-500">
+                {t("messenger.platform.loading", lang)}
+              </div>
             )}
             {listQ.data && listQ.data.items.length === 0 && (
               <div className="p-6 text-center text-xs text-slate-500">
-                Пока ни с кем не разговаривали.
+                {t("messenger.platform.emptyList", lang)}
                 <br />
-                Нажмите «Рассылка» чтобы начать.
+                {t("messenger.platform.emptyListHint", lang)}
               </div>
             )}
             {listQ.data?.items.map((thread) => {
@@ -129,18 +127,18 @@ export function PlatformAdminPane({
                       </div>
                       {thread.lastMessageAt && (
                         <div className="shrink-0 text-[10px] text-slate-400">
-                          {fmtRelative(thread.lastMessageAt)}
+                          {formatRelativeTime(thread.lastMessageAt, lang)}
                         </div>
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <div className="truncate text-xs text-slate-500">
                         {thread.lastSenderKind === "owner" && "↩ "}
-                        {thread.lastMessagePreview ?? "пусто"}
+                        {thread.lastMessagePreview ?? t("messenger.platform.previewEmpty", lang)}
                       </div>
                       {thread.unread > 0 && (
                         <div className="shrink-0 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                          новое
+                          {t("messenger.platform.new", lang)}
                         </div>
                       )}
                     </div>
@@ -165,7 +163,7 @@ export function PlatformAdminPane({
                 className="absolute left-2 top-2 z-10 flex h-7 items-center gap-1 rounded-md bg-white/80 px-2 text-xs text-slate-600 backdrop-blur md:hidden dark:bg-slate-900/80 dark:text-slate-300"
               >
                 <ArrowLeft className="h-3 w-3" />
-                Назад
+                {t("messenger.back", lang)}
               </button>
               <PlatformAdminThreadView
                 threadId={selectedThreadId}
@@ -180,10 +178,10 @@ export function PlatformAdminPane({
                 <MessageSquare className="h-6 w-6 text-slate-400" />
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Выберите салон слева
+                {t("messenger.platform.selectSalon", lang)}
               </p>
               <p className="mt-1 text-[11px] text-slate-400">
-                Или отправьте broadcast всем владельцам
+                {t("messenger.platform.selectSalonHint", lang)}
               </p>
             </div>
           )}
@@ -214,6 +212,7 @@ function PlatformAdminThreadView({
   onAfterSend: () => void;
 }) {
   const utils = api.useUtils();
+  const { lang } = useLang();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [body, setBody] = useState("");
 
@@ -279,7 +278,7 @@ function PlatformAdminThreadView({
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center text-xs text-slate-500">
-            Пусто. Напишите первым.
+            {t("messenger.platform.threadEmpty", lang)}
           </div>
         ) : (
           messages.map((m) => {
@@ -310,7 +309,7 @@ function PlatformAdminThreadView({
                         isPlatform ? "text-fuchsia-200" : "text-slate-400"
                       }`}
                     >
-                      из рассылки
+                      {t("messenger.platform.fromBroadcast", lang)}
                     </div>
                   )}
                 </div>
@@ -331,7 +330,7 @@ function PlatformAdminThreadView({
                 onSend();
               }
             }}
-            placeholder="Ответить владельцу..."
+            placeholder={t("messenger.platform.replyPlaceholder", lang)}
             rows={2}
             className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-fuchsia-400 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             maxLength={4000}
@@ -342,7 +341,7 @@ function PlatformAdminThreadView({
             disabled={!body.trim() || !recipient || sendMutation.isPending}
             className="rounded-xl bg-fuchsia-500 px-4 py-2 text-sm font-medium text-white hover:bg-fuchsia-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {sendMutation.isPending ? "..." : "Отправить"}
+            {sendMutation.isPending ? "…" : t("messenger.composer.send", lang)}
           </button>
         </div>
         {sendMutation.error && (

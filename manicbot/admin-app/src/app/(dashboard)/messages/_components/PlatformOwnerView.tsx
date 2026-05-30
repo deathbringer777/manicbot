@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 function fmtFull(ts: number): string {
   const d = new Date(ts * 1000);
@@ -21,6 +23,7 @@ function fmtFull(ts: number): string {
  */
 export function PlatformOwnerView() {
   const utils = api.useUtils();
+  const { lang } = useLang();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [body, setBody] = useState("");
 
@@ -73,7 +76,7 @@ export function PlatformOwnerView() {
             ManicBot
           </div>
           <div className="truncate text-[11px] text-slate-500">
-            Объявления и поддержка от платформы
+            {t("messenger.platformSubtitle", lang)}
           </div>
         </div>
       </div>
@@ -85,8 +88,7 @@ export function PlatformOwnerView() {
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center px-8 text-center text-xs text-slate-500">
-            Платформа пока ничего не присылала. Если есть вопросы — пишите
-            прямо тут, мы получим уведомление и ответим.
+            {t("messenger.platformOwner.empty", lang)}
           </div>
         ) : (
           messages.map((m) => {
@@ -129,7 +131,7 @@ export function PlatformOwnerView() {
                 onSend();
               }
             }}
-            placeholder="Написать в ManicBot..."
+            placeholder={t("messenger.platformOwner.placeholder", lang)}
             rows={2}
             className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-fuchsia-400 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             data-testid="platform-owner-composer"
@@ -142,7 +144,7 @@ export function PlatformOwnerView() {
             className="rounded-xl bg-fuchsia-500 px-4 py-2 text-sm font-medium text-white hover:bg-fuchsia-600 disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="platform-owner-send"
           >
-            {sendMutation.isPending ? "..." : "Отправить"}
+            {sendMutation.isPending ? "…" : t("messenger.composer.send", lang)}
           </button>
         </div>
         {sendMutation.error && (

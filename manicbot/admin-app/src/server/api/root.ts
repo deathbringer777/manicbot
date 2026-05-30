@@ -14,7 +14,6 @@ import { salonRouter } from "~/server/api/routers/salon";
 import { masterRouter } from "~/server/api/routers/masterRouter";
 import { supportRouter } from "~/server/api/routers/support";
 import { channelRouter } from "~/server/api/routers/channels";
-import { conversationsRouter } from "~/server/api/routers/conversations";
 import { googleCalendarRouter } from "~/server/api/routers/googleCalendar";
 import { publicSalonRouter } from "~/server/api/routers/publicSalon";
 import { eventsRouter } from "~/server/api/routers/events";
@@ -56,7 +55,6 @@ export const appRouter = createTRPCRouter({
   master: masterRouter,
   support: supportRouter,
   channels: channelRouter,
-  conversations: conversationsRouter,
   googleCalendar: googleCalendarRouter,
   system: systemRouter,
   platformConfig: platformConfigRouter,

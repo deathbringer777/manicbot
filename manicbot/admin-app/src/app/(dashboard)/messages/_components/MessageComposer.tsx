@@ -15,6 +15,13 @@ import {
 
 const MAX_ATTACHMENTS = 4;
 
+/**
+ * Sentinel body stored for attachment-only messages (no text). Shared with
+ * ThreadView (which hides it on display) so writer and reader never drift.
+ * NOTE: stored value — changing it orphans the display-hide for historical rows.
+ */
+export const ATTACHMENT_ONLY_BODY = "(вложение)";
+
 function describeRelayError(code: string, lang: Parameters<typeof t>[1]): string {
   switch (code) {
     case "outside_message_window":              return t("messenger.relay.outsideWindow", lang);
@@ -102,7 +109,7 @@ export function MessageComposer({ tenantId, threadId, threadKind, disabled, onSe
     sendMutation.mutate({
       tenantId,
       threadId,
-      body: trimmed || "(вложение)",
+      body: trimmed || ATTACHMENT_ONLY_BODY,
       isInternalNote: threadKind === "client_conv" ? isInternalNote : false,
       attachments:
         attachments.length > 0

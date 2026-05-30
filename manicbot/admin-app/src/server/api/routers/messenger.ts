@@ -18,8 +18,13 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq, desc, lt, sql, inArray, gt, isNull, ne } from "drizzle-orm";
-import { createTRPCRouter, protectedProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
+import { and, eq, desc, lt, sql, inArray, gt, isNull, ne, like } from "drizzle-orm";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  tenantOwnerProcedure,
+  systemAdminProcedure,
+} from "~/server/api/trpc";
 import {
   threads,
   threadMembers,
@@ -27,6 +32,7 @@ import {
   webUsers,
   masters,
   masterInvitations,
+  tenants,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
 import { sanitizeText } from "~/server/security/sanitize";
@@ -35,6 +41,7 @@ import {
   assertMessengerTenantAccess,
   assertThreadMember,
 } from "~/server/api/messenger/access";
+import { filterActiveRecipients, MUTE_FOREVER } from "~/server/api/messenger/mute";
 import { mintWsToken } from "~/lib/wsToken";
 import { signUploadToken } from "~/server/lib/uploadToken";
 import { env } from "~/env";
@@ -417,7 +424,10 @@ export const messengerRouter = createTRPCRouter({
       // member is the sender themselves.
       try {
         const otherWebUserMembers = await ctx.db
-          .select({ memberRef: threadMembers.memberRef })
+          .select({
+            memberRef: threadMembers.memberRef,
+            mutedUntil: threadMembers.mutedUntil,
+          })
           .from(threadMembers)
           .where(
             and(
@@ -426,7 +436,9 @@ export const messengerRouter = createTRPCRouter({
               ne(threadMembers.memberRef, webUserId),
             ),
           );
-        const recipientIds = otherWebUserMembers.map((m) => m.memberRef);
+        // Mute is notification-only: drop members whose mute is still active so
+        // they don't get a bell row (they still see the message + unread badge).
+        const recipientIds = filterActiveRecipients(otherWebUserMembers, now);
         if (recipientIds.length > 0) {
           const senderRow = await ctx.db
             .select({ email: webUsers.email })
@@ -524,6 +536,55 @@ export const messengerRouter = createTRPCRouter({
             eq(threadMembers.threadId, input.threadId),
             eq(threadMembers.memberKind, "web_user"),
             eq(threadMembers.memberRef, webUserId),
+          ),
+        );
+      return { ok: true };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  MUTE — per-member, notification-only
+  // ═══════════════════════════════════════════════════════════════
+  //  Muting sets `thread_members.muted_until` on the CALLER's own row. A
+  //  muted member still sees unread badges + new messages; they just don't
+  //  get a notification-bell row (see the fan-out filter in sendMessage).
+  //  Mute never gates read receipts or message delivery.
+  muteThread: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        // Unix seconds. Omitted → mute indefinitely (MUTE_FOREVER sentinel).
+        until: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      const mutedUntil = input.until ?? MUTE_FOREVER;
+      await ctx.db
+        .update(threadMembers)
+        .set({ mutedUntil })
+        .where(
+          and(
+            eq(threadMembers.threadId, input.threadId),
+            eq(threadMembers.memberKind, "web_user"),
+            eq(threadMembers.memberRef, ctx.webUser!.id),
+          ),
+        );
+      return { ok: true, mutedUntil };
+    }),
+
+  unmuteThread: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), threadId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      await ctx.db
+        .update(threadMembers)
+        .set({ mutedUntil: null })
+        .where(
+          and(
+            eq(threadMembers.threadId, input.threadId),
+            eq(threadMembers.memberKind, "web_user"),
+            eq(threadMembers.memberRef, ctx.webUser!.id),
           ),
         );
       return { ok: true };
@@ -1054,6 +1115,63 @@ export const messengerRouter = createTRPCRouter({
         .set({ archived: input.archived ? 1 : 0 })
         .where(eq(threads.id, input.threadId));
       return { ok: true };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  GOD MODE — cross-tenant client inbox (consolidated /conversations)
+  // ═══════════════════════════════════════════════════════════════
+  //  Replaces the retired user-facing `/conversations` surface. Lists
+  //  `client_conv` threads ACROSS all tenants for support/ops. system_admin
+  //  only. The detail read still goes through `getThread`, which pins
+  //  `threads.tenant_id` to the supplied tenantId — so the cross-tenant id
+  //  returned here can't be used to escalate into a different tenant's thread.
+  listClientConvAdmin: systemAdminProcedure
+    .input(
+      z.object({
+        tenantId: z.string().optional(),
+        archived: z.boolean().default(false),
+        search: z.string().optional(),
+        cursor: z.number().int().optional(), // last_message_at cursor
+        limit: z.number().int().min(1).max(100).default(40),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(threads.kind, "client_conv"),
+        eq(threads.archived, input.archived ? 1 : 0),
+      ];
+      if (input.tenantId) conditions.push(eq(threads.tenantId, input.tenantId));
+      if (input.cursor !== undefined) {
+        conditions.push(lt(threads.lastMessageAt, input.cursor));
+      }
+      if (input.search?.trim()) {
+        const pat = `%${input.search.trim().replace(/[%_]/g, "\\$&")}%`;
+        conditions.push(like(threads.lastMessagePreview, pat));
+      }
+
+      const rows = await ctx.db
+        .select({
+          id: threads.id,
+          tenantId: threads.tenantId,
+          title: threads.title,
+          lastMessageAt: threads.lastMessageAt,
+          lastMessagePreview: threads.lastMessagePreview,
+          archived: threads.archived,
+          tenantName: tenants.name,
+        })
+        .from(threads)
+        .leftJoin(tenants, eq(threads.tenantId, tenants.id))
+        .where(and(...conditions))
+        .orderBy(desc(threads.lastMessageAt))
+        .limit(input.limit);
+
+      return {
+        items: rows,
+        nextCursor:
+          rows.length === input.limit
+            ? rows[rows.length - 1]?.lastMessageAt ?? undefined
+            : undefined,
+      };
     }),
 
   // ═══════════════════════════════════════════════════════════════

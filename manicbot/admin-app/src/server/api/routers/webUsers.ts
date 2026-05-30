@@ -1326,6 +1326,17 @@ export const webUsersRouter = createTRPCRouter({
         .set({ status: "accepted", acceptedAt: now, acceptedMasterId: syntheticChatId })
         .where(eq(masterInvitations.id, inv.id));
 
+      // Make the just-joined salon the caller's ACTIVE tenant so accepting
+      // actually lands them in it (multi-tenant switcher; migration 0097).
+      // The next session refresh resolves (tenantId, role) = (inv.tenantId,
+      // master) via resolveActiveMembership; the accept page calls
+      // useSession().update() to trigger that refresh. Without this the rows
+      // existed but an owner stayed on their own salon — the end-to-end gap.
+      await ctx.db
+        .update(webUsers)
+        .set({ activeTenantId: inv.tenantId })
+        .where(eq(webUsers.id, caller.id));
+
       await writeAudit(ctx.db, {
         actor: caller.email,
         action: "tenant.master.invite.accept_existing",

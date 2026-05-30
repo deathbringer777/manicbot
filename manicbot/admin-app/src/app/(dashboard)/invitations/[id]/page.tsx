@@ -21,6 +21,7 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Loader2, CheckCircle2, AlertTriangle, Briefcase, Users } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { api } from "~/trpc/react";
@@ -35,11 +36,18 @@ export default function InvitationAcceptPage({ params }: PageProps) {
   const { lang } = useLang();
   const [error, setError] = useState<string | null>(null);
 
+  const { update } = useSession();
+  const utils = api.useUtils();
   const ctxQuery = api.salon.getInvitationContext.useQuery({ invitationId: id });
 
   const accept = api.webUsers.acceptInvitationExistingUser.useMutation({
-    onSuccess: (data) => {
-      router.replace(`/dashboard?tab=overview&tenant=${encodeURIComponent(data.tenantId)}`);
+    onSuccess: async () => {
+      // Accept set web_users.active_tenant_id to this salon. Refresh the
+      // session so the JWT re-resolves (tenantId, role) → invited salon as
+      // master, then land on the dashboard (now MasterDashboard for it).
+      await update();
+      await utils.auth.getMyRole.invalidate();
+      router.replace("/dashboard");
     },
     onError: (e) => setError(e.message),
   });

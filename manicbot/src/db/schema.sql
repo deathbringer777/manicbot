@@ -508,6 +508,11 @@ CREATE TABLE IF NOT EXISTS web_users (
   email TEXT NOT NULL,
   password_hash TEXT NOT NULL DEFAULT '',
   tenant_id TEXT,
+  -- 0097: currently-selected salon for a multi-tenant user (an owner who also
+  -- holds a master role in another salon). NULL = use the home tenant_id.
+  -- Resolved into the session in auth.ts via resolveActiveMembership; the
+  -- membership is proven authoritatively against masters.web_user_id.
+  active_tenant_id TEXT,
   role TEXT NOT NULL DEFAULT 'tenant_owner',
   name TEXT,
   lang TEXT DEFAULT 'en',

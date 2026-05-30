@@ -1,9 +1,12 @@
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
 import { webUsers, masters, tenants } from "~/server/db/schema";
 import { eq, and } from "drizzle-orm";
 import { listPermissions, type PermissionKey } from "~/server/api/permissions";
 import { evaluateTrialState } from "~/lib/billing/trialState";
 import { backfillPendingInviteNotifications } from "~/server/auth/backfillPendingInvites";
+import { listMembershipsForWebUser } from "~/server/auth/memberships";
 
 export type AppRole =
   | "system_admin"
@@ -263,4 +266,60 @@ export const authRouter = createTRPCRouter({
       isTrialExpired,
     };
   }),
+
+  // ------------------------------------------------------------------
+  // listMyTenants — every salon the caller can act in: their home tenant
+  // (web_users.tenant_id) plus any salon where they hold an authoritative
+  // master role (masters.web_user_id). Drives the header salon switcher,
+  // which hides itself when the list has 0–1 entries.
+  //
+  // Home is read straight from web_users (NOT ctx.webUser, whose tenantId is
+  // the *active* salon and would be wrong after a switch).
+  // ------------------------------------------------------------------
+  listMyTenants: protectedProcedure.query(async ({ ctx }) => {
+    const u = ctx.webUser!;
+    const [home] = await ctx.db
+      .select({ tenantId: webUsers.tenantId, role: webUsers.role })
+      .from(webUsers)
+      .where(eq(webUsers.id, u.id))
+      .limit(1);
+    return listMembershipsForWebUser(ctx.db, {
+      webUserId: u.id,
+      homeTenantId: home?.tenantId ?? null,
+      homeRole: home?.role ?? "tenant_owner",
+    });
+  }),
+
+  // ------------------------------------------------------------------
+  // switchTenant — set the caller's active salon. Validates membership
+  // (home OR an authoritative master role) BEFORE writing the pointer, so a
+  // user can never switch into a salon they don't belong to. Switching back to
+  // home stores NULL so the resolver short-circuits. The session picks up the
+  // new (tenantId, role) on its next refresh — the client calls
+  // useSession().update() + invalidates queries.
+  // ------------------------------------------------------------------
+  switchTenant: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      const u = ctx.webUser!;
+      const [home] = await ctx.db
+        .select({ tenantId: webUsers.tenantId, role: webUsers.role })
+        .from(webUsers)
+        .where(eq(webUsers.id, u.id))
+        .limit(1);
+      const memberships = await listMembershipsForWebUser(ctx.db, {
+        webUserId: u.id,
+        homeTenantId: home?.tenantId ?? null,
+        homeRole: home?.role ?? "tenant_owner",
+      });
+      const target = memberships.find((m) => m.tenantId === input.tenantId);
+      if (!target) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "not_a_member" });
+      }
+      await ctx.db
+        .update(webUsers)
+        .set({ activeTenantId: target.isHome ? null : input.tenantId })
+        .where(eq(webUsers.id, u.id));
+      return { ok: true, tenantId: input.tenantId, role: target.role };
+    }),
 });

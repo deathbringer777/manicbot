@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AppRole } from "~/server/api/routers/auth";
+import { isFullPageRoute } from "~/lib/routing/fullPageRoutes";
 
 /**
  * Tests for dashboard layout role-based routing logic.
@@ -212,27 +213,31 @@ describe("RoleContext shape", () => {
   });
 });
 
-// ─── Phase 2 cleanup: pin the real /plugins whitelist in (dashboard)/layout.tsx ───
-// Replaces the deleted plugins-page-routing-per-role.test.ts mirror-logic file.
-// If the whitelist branch is ever weakened or accidentally moved out of the
-// "children" path, this pin breaks.
+// ─── Pin: /plugins renders for every role via the full-page-route whitelist ───
+// The per-route booleans (isPluginsPage / isMessagesPage / …) were consolidated
+// into one source of truth: isFullPageRoute() in lib/routing/fullPageRoutes.
+// These pins assert (a) /plugins is a full-page route and (b) the layout
+// delegates its "render children vs swap in the role dashboard" decision to
+// isFullPageRoute — so plugins still render for every role instead of being
+// intercepted by the role dashboard.
 
-describe("/plugins whitelist pinned in (dashboard)/layout.tsx", () => {
+describe("/plugins whitelist pinned via isFullPageRoute", () => {
   const layoutPath = resolve(__dirname, "../app/(dashboard)/layout.tsx");
   const layoutSrc = readFileSync(layoutPath, "utf8");
 
-  it("declares isPluginsPage covering /plugins, /plugins/*, and /plugin/*", () => {
-    expect(layoutSrc).toMatch(
-      /const\s+isPluginsPage\s*=\s*pathname\s*===\s*"\/plugins"\s*\|\|\s*pathname\.startsWith\("\/plugins\/"\)\s*\|\|\s*pathname\.startsWith\("\/plugin\/"\)/,
-    );
+  it("treats /plugins, /plugins/*, and /plugin/* as full-page routes", () => {
+    expect(isFullPageRoute("/plugins")).toBe(true);
+    expect(isFullPageRoute("/plugins/abc")).toBe(true);
+    expect(isFullPageRoute("/plugin/abc")).toBe(true);
   });
 
-  it("includes isPluginsPage in the whitelist gates for every role dashboard swap", () => {
-    // The mirror blocks for tenant_owner / tenant_manager / master /
-    // (support|technical_support) must all reference isPluginsPage so the
-    // page-router children render instead of the role dashboard.
-    const occurrences = layoutSrc.match(/isPluginsPage/g) ?? [];
-    // Declaration + at least one whitelist gate per role block (>=4 in practice).
+  it("delegates the role-dashboard-swap decision to isFullPageRoute", () => {
+    expect(layoutSrc).toMatch(
+      /import\s*\{\s*isFullPageRoute\s*\}\s*from\s*"~\/lib\/routing\/fullPageRoutes"/,
+    );
+    // One `const isFullPage = …` + a gate per role block (tenant_owner /
+    // tenant_manager / master / support) → several references in practice.
+    const occurrences = layoutSrc.match(/isFullPage\b/g) ?? [];
     expect(occurrences.length).toBeGreaterThanOrEqual(2);
   });
 });

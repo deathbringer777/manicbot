@@ -26,7 +26,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, notLike, or, sql } from "drizzle-orm";
 
 import {
   createTRPCRouter,
@@ -64,6 +64,30 @@ function makePreview(body: string): string {
   return oneLine.length > PREVIEW_MAX ? oneLine.slice(0, PREVIEW_MAX) : oneLine;
 }
 
+/**
+ * Roles that may receive a platform broadcast. Owners and managers run the
+ * salon business; individual masters (staff) are intentionally excluded —
+ * platform announcements are for account owners, not every employee.
+ */
+const BROADCAST_ROLES: readonly string[] = ["tenant_owner", "tenant_manager"];
+
+/**
+ * Internal mailbox domain for non-real accounts. Salon-created staff without a
+ * real inbox get `<name>.<rand>@salon.manicbot.local` (auto-verified at
+ * creation, so `emailVerified = 1` does NOT filter them), and seeded test
+ * tenants use `@test.manicbot.local`. Neither is a real person — platform
+ * broadcasts must never target them and the sysadmin inbox hides their threads.
+ * Anchored at the `@`/label boundary so a real address that merely contains the
+ * string (e.g. `manicbot.local@gmail.com`) is not mistaken for an internal one.
+ */
+const FAKE_RECIPIENT_EMAIL_RE = /@(?:[a-z0-9-]+\.)*manicbot\.local$/i;
+
+export function isFakeRecipientEmail(
+  email: string | null | undefined,
+): boolean {
+  return !!email && FAKE_RECIPIENT_EMAIL_RE.test(email);
+}
+
 // ─── Validation ─────────────────────────────────────────────────────────
 
 const PLAN = z.enum(["start", "pro", "max"]);
@@ -88,23 +112,30 @@ interface AudienceRecipient {
   name: string | null;
   tenantId: string | null;
   plan: string | null;
+  role: string;
 }
 
 /**
  * Resolve the set of recipients matching an audience filter.
  *
  * Recipients are `web_users` rows joined against `tenants` (so plan /
- * billing_status filters work). We always exclude system_admin / support /
- * technical_support roles — the platform messenger is for talking to salon
- * users, not platform staff.
+ * billing_status filters work). Only real salon owners/managers qualify:
+ * masters (staff) are excluded, and so are synthetic/test mailboxes
+ * (`*.manicbot.local`) and test tenants (`isTest = 1`). See BROADCAST_ROLES
+ * and isFakeRecipientEmail.
  */
 async function resolveAudience(
   db: any,
   audience: AudienceFilter,
 ): Promise<AudienceRecipient[]> {
   const conds = [
-    inArray(webUsers.role, ["tenant_owner", "tenant_manager", "master"]),
+    inArray(webUsers.role, [...BROADCAST_ROLES]),
     eq(webUsers.emailVerified, 1),
+    // Synthetic salon mailboxes (*.salon.manicbot.local) are auto-verified, so
+    // emailVerified=1 does not catch them; test-tenant accounts
+    // (*.test.manicbot.local, isTest=1) are verified too. Drop both here.
+    notLike(webUsers.email, "%manicbot.local"),
+    or(isNull(tenants.isTest), eq(tenants.isTest, 0)),
   ];
 
   if (audience.scope === "by_plan") {
@@ -128,19 +159,28 @@ async function resolveAudience(
     conds.push(inArray(webUsers.tenantId, ids));
   }
 
-  const rows = await db
+  const rows = (await db
     .select({
       id: webUsers.id,
       email: webUsers.email,
       name: webUsers.name,
       tenantId: webUsers.tenantId,
       plan: tenants.plan,
+      role: webUsers.role,
     })
     .from(webUsers)
     .leftJoin(tenants, eq(webUsers.tenantId, tenants.id))
-    .where(and(...conds));
+    .where(and(...conds))) as AudienceRecipient[];
 
-  return rows.slice(0, BROADCAST_MAX_RECIPIENTS) as AudienceRecipient[];
+  // Defensive mirror of the SQL filter above. The unit-test DB mock ignores
+  // WHERE clauses, so re-applying the role + fake-email exclusion in JS keeps
+  // production and tests in agreement (and guards against a future query edit
+  // silently dropping a condition).
+  const real = rows.filter(
+    (r) => BROADCAST_ROLES.includes(r.role) && !isFakeRecipientEmail(r.email),
+  );
+
+  return real.slice(0, BROADCAST_MAX_RECIPIENTS);
 }
 
 /**
@@ -315,14 +355,41 @@ export const platformMessengerRouter = createTRPCRouter({
         .default({ archived: false }),
     )
     .query(async ({ ctx, input }) => {
-      const conds = [eq(platformThreads.archived, input.archived ? 1 : 0)];
+      const conds = [
+        eq(platformThreads.archived, input.archived ? 1 : 0),
+        // Hide synthetic/test recipients from the inbox. Non-destructive: the
+        // threads stay in D1, they're just filtered out of the sysadmin view.
+        // Filtering in the SQL WHERE (not post-fetch) keeps `limit`/`cursor`
+        // paging correct.
+        notLike(webUsers.email, "%manicbot.local"),
+        or(isNull(tenants.isTest), eq(tenants.isTest, 0)),
+      ];
       if (input.cursor !== undefined) {
         conds.push(lt(platformThreads.lastMessageAt, input.cursor));
       }
 
+      // Join recipient details in one round-trip (was a second SELECT). The
+      // inner join also drops any orphan thread whose web_user no longer exists.
       const rows = await ctx.db
-        .select()
+        .select({
+          id: platformThreads.id,
+          recipientWebUserId: platformThreads.recipientWebUserId,
+          threadTenantId: platformThreads.recipientTenantId,
+          lastMessageAt: platformThreads.lastMessageAt,
+          lastMessagePreview: platformThreads.lastMessagePreview,
+          lastSenderKind: platformThreads.lastSenderKind,
+          recipientLastReadAt: platformThreads.recipientLastReadAt,
+          platformLastReadAt: platformThreads.platformLastReadAt,
+          archived: platformThreads.archived,
+          createdAt: platformThreads.createdAt,
+          recipientEmail: webUsers.email,
+          recipientName: webUsers.name,
+          userTenantId: webUsers.tenantId,
+          tenantIsTest: tenants.isTest,
+        })
         .from(platformThreads)
+        .innerJoin(webUsers, eq(platformThreads.recipientWebUserId, webUsers.id))
+        .leftJoin(tenants, eq(webUsers.tenantId, tenants.id))
         .where(and(...conds))
         .orderBy(desc(platformThreads.lastMessageAt), desc(platformThreads.createdAt))
         .limit(input.limit);
@@ -331,45 +398,45 @@ export const platformMessengerRouter = createTRPCRouter({
         return { items: [], nextCursor: undefined as number | undefined };
       }
 
-      // Enrich with recipient name / email — one round-trip.
-      const recipientIds = rows.map((r: typeof rows[number]) => r.recipientWebUserId);
-      const users = await ctx.db
-        .select({
-          id: webUsers.id,
-          email: webUsers.email,
-          name: webUsers.name,
-          tenantId: webUsers.tenantId,
-        })
-        .from(webUsers)
-        .where(inArray(webUsers.id, recipientIds));
-      const byId = new Map<string, { email: string; name: string | null; tenantId: string | null }>();
-      for (const u of users) {
-        byId.set(u.id, { email: u.email, name: u.name, tenantId: u.tenantId });
-      }
+      const items = rows
+        // Defensive mirror of the SQL exclusion above (the test DB mock ignores
+        // WHERE clauses) — see resolveAudience for the same pattern.
+        .filter(
+          (r: typeof rows[number]) =>
+            !isFakeRecipientEmail(r.recipientEmail) && !r.tenantIsTest,
+        )
+        .map((r: typeof rows[number]) => {
+          const lastTs = r.lastMessageAt ?? 0;
+          const unread =
+            r.lastSenderKind === "owner" &&
+            (r.platformLastReadAt == null || lastTs > r.platformLastReadAt)
+              ? 1
+              : 0;
+          return {
+            id: r.id,
+            recipientWebUserId: r.recipientWebUserId,
+            recipientTenantId: r.userTenantId ?? r.threadTenantId ?? null,
+            lastMessageAt: r.lastMessageAt,
+            lastMessagePreview: r.lastMessagePreview,
+            lastSenderKind: r.lastSenderKind,
+            recipientLastReadAt: r.recipientLastReadAt,
+            platformLastReadAt: r.platformLastReadAt,
+            archived: r.archived,
+            createdAt: r.createdAt,
+            recipientName: r.recipientName ?? null,
+            recipientEmail: r.recipientEmail ?? null,
+            unread,
+          };
+        });
 
-      const items = rows.map((r: typeof rows[number]) => {
-        const u = byId.get(r.recipientWebUserId);
-        const lastTs = r.lastMessageAt ?? 0;
-        const unread =
-          r.lastSenderKind === "owner" &&
-          (r.platformLastReadAt == null || lastTs > r.platformLastReadAt)
-            ? 1
-            : 0;
-        return {
-          ...r,
-          recipientName: u?.name ?? null,
-          recipientEmail: u?.email ?? null,
-          recipientTenantId: u?.tenantId ?? r.recipientTenantId ?? null,
-          unread,
-        };
-      });
-
-      const filtered = input.unreadOnly ? items.filter((i: typeof items[number]) => i.unread) : items;
+      const visible = input.unreadOnly
+        ? items.filter((i: typeof items[number]) => i.unread)
+        : items;
 
       const nextCursor =
         rows.length === input.limit ? rows[rows.length - 1]?.lastMessageAt ?? undefined : undefined;
 
-      return { items: filtered, nextCursor };
+      return { items: visible, nextCursor };
     }),
 
   /**

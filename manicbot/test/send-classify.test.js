@@ -8,6 +8,8 @@ import {
   classifyChannelSendResult,
   extractExternalMsgId,
   isTransientFailure,
+  isAutoRetryable,
+  planRetryAction,
 } from '../src/channels/send-classify.js';
 
 describe('extractExternalMsgId', () => {
@@ -63,4 +65,33 @@ describe('isTransientFailure', () => {
     expect(isTransientFailure(null)).toBe(true);
     expect(isTransientFailure({ ok: false, error: 'relay_network_error' })).toBe(true);
   });
+});
+
+describe('isAutoRetryable (safe-to-auto-retry subset — no double-send risk)', () => {
+  it('429 / 5xx → auto-retryable (server rejected → definitively NOT delivered)', () => {
+    expect(isAutoRetryable({ ok: false, status: 429 })).toBe(true);
+    expect(isAutoRetryable({ ok: false, status: 503 })).toBe(true);
+  });
+  it('thrown fetch / no result → NOT auto-retryable (ambiguous; might have delivered)', () => {
+    expect(isAutoRetryable(null)).toBe(false);
+    expect(isAutoRetryable({ ok: false, error: 'relay_network_error' })).toBe(false);
+  });
+  it('dead token / other 4xx → NOT auto-retryable', () => {
+    expect(isAutoRetryable({ ok: false, status: 401, tokenDead: true })).toBe(false);
+    expect(isAutoRetryable({ ok: false, status: 400 })).toBe(false);
+  });
+  it('classifyChannelSendResult surfaces autoRetry on the failed result', () => {
+    expect(classifyChannelSendResult({ ok: false, status: 429 }).autoRetry).toBe(true);
+    expect(classifyChannelSendResult({ ok: false, status: 400 }).autoRetry).toBe(false);
+  });
+});
+
+describe('planRetryAction (retry-queue consumer decision)', () => {
+  it('ok → sent', () => expect(planRetryAction({ ok: true }, 1, 5)).toBe('sent'));
+  it('autoRetry + budget remaining → retry', () =>
+    expect(planRetryAction({ ok: false, autoRetry: true }, 2, 5)).toBe('retry'));
+  it('autoRetry + budget exhausted → failed', () =>
+    expect(planRetryAction({ ok: false, autoRetry: true }, 5, 5)).toBe('failed'));
+  it('not auto-retryable → failed (no double-send)', () =>
+    expect(planRetryAction({ ok: false, autoRetry: false }, 1, 5)).toBe('failed'));
 });

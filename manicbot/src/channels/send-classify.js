@@ -60,6 +60,41 @@ export function isTransientFailure(sendResult) {
 }
 
 /**
+ * Whether a FAILED send is SAFE to auto-retry from the background queue.
+ *
+ * STRICTER than `isTransientFailure`: only DEFINITIVE server rejections (429 /
+ * 5xx — the channel said no, so the message did NOT deliver) qualify. A thrown
+ * fetch / no-result is transient but AMBIGUOUS (the message might have actually
+ * delivered before the socket died) — auto-retrying it would risk a duplicate
+ * message to the client, so we never do. Those stay `failed` for manual retry,
+ * where a human decides.
+ * @returns {boolean}
+ */
+export function isAutoRetryable(sendResult) {
+  if (!sendResult) return false; // ambiguous (fetch threw) → manual retry only
+  if (sendResult.tokenDead) return false;
+  const status = Number(sendResult.status) || 0;
+  return status === 429 || status >= 500;
+}
+
+/**
+ * Decide what the outbound-retry queue consumer does with a (re)send result.
+ *   - 'sent'   → success; stamp delivered + ack.
+ *   - 'retry'  → safely-retryable AND budget remains; redeliver.
+ *   - 'failed' → permanent, ambiguous, or budget exhausted; mark failed + ack.
+ *
+ * @param {{ ok?: boolean, autoRetry?: boolean }} result - from performOutboundSend
+ * @param {number} attempts - current delivery attempt (1-based)
+ * @param {number} maxAttempts
+ * @returns {'sent'|'retry'|'failed'}
+ */
+export function planRetryAction(result, attempts, maxAttempts) {
+  if (result?.ok) return 'sent';
+  if (result?.autoRetry && attempts < maxAttempts) return 'retry';
+  return 'failed';
+}
+
+/**
  * Map an adapter send result to a delivery outcome.
  * @returns {{ deliveryState: 'sent'|'failed', externalMsgId: string|null, errorCode: string|null, transient: boolean }}
  */
@@ -71,6 +106,7 @@ export function classifyChannelSendResult(sendResult) {
       externalMsgId: extractExternalMsgId(sendResult),
       errorCode: null,
       transient: false,
+      autoRetry: false,
     };
   }
   return {
@@ -78,5 +114,6 @@ export function classifyChannelSendResult(sendResult) {
     externalMsgId: null,
     errorCode: sendResult?.error ? String(sendResult.error) : 'channel_send_failed',
     transient: isTransientFailure(sendResult),
+    autoRetry: isAutoRetryable(sendResult),
   };
 }

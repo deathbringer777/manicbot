@@ -89,7 +89,11 @@ async function relayToWorker(args: {
   threadId: string;
   body: string;
   replyToMessageId?: string;
-}): Promise<{ ok: true; externalMsgId: string | null } | { ok: false; error: string }> {
+  messageId?: string;
+}): Promise<
+  | { ok: true; externalMsgId: string | null }
+  | { ok: false; error: string; queued?: boolean }
+> {
   const workerUrl = env.WORKER_PUBLIC_URL;
   const adminKey = env.ADMIN_KEY;
   if (!workerUrl || !adminKey) {
@@ -105,12 +109,17 @@ async function relayToWorker(args: {
       body: JSON.stringify(args),
     });
     const data = await resp.json().catch(() => null) as
-      | { ok: boolean; external_msg_id?: string | null; error?: string }
+      | { ok: boolean; external_msg_id?: string | null; error?: string; queued?: boolean }
       | null;
     if (!resp.ok || !data?.ok) {
+      const queued = data?.queued === true;
       const error = data?.error ?? `relay_${resp.status}`;
-      log.warn("messenger.relay", { message: "Worker relay failed", error, status: resp.status });
-      return { ok: false, error };
+      // queued (HTTP 202) = the Worker took ownership of a background auto-retry
+      // (definitive 429/5xx). Not a hard failure — the row stays 'pending'.
+      if (!queued) {
+        log.warn("messenger.relay", { message: "Worker relay failed", error, status: resp.status });
+      }
+      return { ok: false, error, queued };
     }
     return { ok: true, externalMsgId: data.external_msg_id ?? null };
   } catch (e) {
@@ -561,17 +570,21 @@ export const messengerRouter = createTRPCRouter({
       // Phase 2 — relay to Worker → channel adapter for client_conv threads.
       // Internal notes never relay (they're staff-only by design). Phase 3
       // will also publish to MESSENGER_HUB DO for WebSocket fan-out.
-      let relay: { ok: true; externalMsgId: string | null } | { ok: false; error: string } | null = null;
+      let relay:
+        | { ok: true; externalMsgId: string | null }
+        | { ok: false; error: string; queued?: boolean }
+        | null = null;
       if (isClientConvOutbound) {
         relay = await relayToWorker({
           tenantId: input.tenantId,
           threadId: input.threadId,
           body,
           replyToMessageId: input.replyToMessageId,
+          messageId: id,
         });
-        // Persist the delivery outcome so it survives reload (no silent
-        // failures) and drives the status icon + retry affordance. The relay
-        // also returns the channel-side id for dedup/delivered-correlation.
+        // Persist the delivery outcome so it survives reload + drives the status
+        // icon. 'queued' = the Worker is auto-retrying a transient 429/5xx → keep
+        // 'pending' (the retry queue resolves it to sent/failed).
         if (relay.ok) {
           await ctx.db
             .update(threadMessages)
@@ -579,26 +592,20 @@ export const messengerRouter = createTRPCRouter({
               deliveryState: "sent",
               ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
             })
-            .where(
-              and(
-                eq(threadMessages.id, id),
-                eq(threadMessages.tenantId, input.tenantId),
-              ),
-            );
-        } else {
+            .where(and(eq(threadMessages.id, id), eq(threadMessages.tenantId, input.tenantId)));
+        } else if (!relay.queued) {
           await ctx.db
             .update(threadMessages)
             .set({ deliveryState: "failed", deliveryError: relay.error })
-            .where(
-              and(
-                eq(threadMessages.id, id),
-                eq(threadMessages.tenantId, input.tenantId),
-              ),
-            );
+            .where(and(eq(threadMessages.id, id), eq(threadMessages.tenantId, input.tenantId)));
         }
+        // queued → leave the row 'pending'.
       }
 
-      return { id, createdAt: now, relay };
+      // Don't surface a scary error chip for a queued auto-retry — the 'pending'
+      // clock is the truthful signal.
+      const clientRelay = relay && relay.ok === false && relay.queued ? null : relay;
+      return { id, createdAt: now, relay: clientRelay };
     }),
 
   // ═══════════════════════════════════════════════════════════════
@@ -646,6 +653,7 @@ export const messengerRouter = createTRPCRouter({
         threadId: input.threadId,
         body: msg.body,
         replyToMessageId: msg.replyToMessageId ?? undefined,
+        messageId: input.messageId,
       });
       if (relay.ok) {
         await ctx.db
@@ -655,12 +663,13 @@ export const messengerRouter = createTRPCRouter({
             ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
           })
           .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
-      } else {
+      } else if (!relay.queued) {
         await ctx.db
           .update(threadMessages)
           .set({ deliveryState: "failed", deliveryError: relay.error })
           .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
       }
+      // queued → row stays 'pending' (already flipped above); the queue resolves it.
       return { ok: true, relay };
     }),
 

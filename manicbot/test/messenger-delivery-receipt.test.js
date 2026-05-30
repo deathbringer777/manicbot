@@ -5,7 +5,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createMockD1 } from './helpers/mock-db.js';
-import { markOutboundDeliveryState } from '../src/services/messengerThreads.js';
+import {
+  markOutboundDeliveryState,
+  setOutboundDeliveryByMessageId,
+} from '../src/services/messengerThreads.js';
 
 function ctxWithRows(rows) {
   const db = createMockD1();
@@ -73,5 +76,53 @@ describe('markOutboundDeliveryState', () => {
     const ctx = ctxWithRows([row()]);
     expect(await markOutboundDeliveryState(ctx, 't_a', '', 'delivered')).toBe(false);
     expect(await markOutboundDeliveryState(ctx, 't_a', 'wamid.X', 'sent')).toBe(false);
+  });
+});
+
+describe('setOutboundDeliveryByMessageId (retry-queue resolution by row id)', () => {
+  it("marks 'sent' + stamps external_msg_id", async () => {
+    const ctx = ctxWithRows([row({ id: 'm1', delivery_state: 'pending', external_msg_id: null })]);
+    expect(
+      await setOutboundDeliveryByMessageId(ctx, {
+        tenantId: 't_a', messageId: 'm1', state: 'sent', externalMsgId: 'wamid.Q',
+      }),
+    ).toBe(true);
+    const r = await ctx.db
+      .prepare(`SELECT delivery_state, external_msg_id FROM thread_messages WHERE id = ?`)
+      .bind('m1')
+      .first();
+    expect(r.delivery_state).toBe('sent');
+    expect(r.external_msg_id).toBe('wamid.Q');
+  });
+
+  it("marks 'failed' with the error", async () => {
+    const ctx = ctxWithRows([row({ id: 'm1', delivery_state: 'pending' })]);
+    await setOutboundDeliveryByMessageId(ctx, {
+      tenantId: 't_a', messageId: 'm1', state: 'failed', error: 'retry_exhausted',
+    });
+    const r = await ctx.db
+      .prepare(`SELECT delivery_state, delivery_error FROM thread_messages WHERE id = ?`)
+      .bind('m1')
+      .first();
+    expect(r.delivery_state).toBe('failed');
+    expect(r.delivery_error).toBe('retry_exhausted');
+  });
+
+  it('is tenant-scoped — wrong tenant leaves the row untouched', async () => {
+    const ctx = ctxWithRows([row({ id: 'm1', tenant_id: 't_b', delivery_state: 'pending' })]);
+    await setOutboundDeliveryByMessageId(ctx, {
+      tenantId: 't_a', messageId: 'm1', state: 'sent', externalMsgId: 'x',
+    });
+    const r = await ctx.db
+      .prepare(`SELECT delivery_state FROM thread_messages WHERE id = ?`)
+      .bind('m1')
+      .first();
+    expect(r.delivery_state).toBe('pending');
+  });
+
+  it('rejects bad args + unknown state', async () => {
+    const ctx = ctxWithRows([]);
+    expect(await setOutboundDeliveryByMessageId(ctx, { tenantId: 't_a', messageId: '', state: 'sent' })).toBe(false);
+    expect(await setOutboundDeliveryByMessageId(ctx, { tenantId: 't_a', messageId: 'm1', state: 'pending' })).toBe(false);
   });
 });

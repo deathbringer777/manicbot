@@ -323,6 +323,34 @@ export async function markOutboundDeliveryState(ctx, tenantId, externalMsgId, st
 }
 
 /**
+ * Set the delivery outcome of a specific outbound row by its id. Used by the
+ * outbound-retry queue consumer to resolve a 'pending' row to 'sent' (stamping
+ * the channel-side id) or 'failed' after the retry budget is exhausted.
+ *
+ * @param {object} ctx
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {string} params.messageId - thread_messages.id (admin-app's row)
+ * @param {'sent'|'failed'} params.state
+ * @param {string|null} [params.externalMsgId]
+ * @param {string|null} [params.error]
+ * @returns {Promise<boolean>}
+ */
+export async function setOutboundDeliveryByMessageId(ctx, params) {
+  if (!ctx?.db || !params?.tenantId || !params?.messageId) return false;
+  if (params.state !== 'sent' && params.state !== 'failed') return false;
+  // Single-line SQL + all `col = ?` SET clauses (mock parser compatible).
+  const res = params.state === 'sent'
+    ? await dbRunSafe(ctx,
+        `UPDATE thread_messages SET delivery_state = ?, external_msg_id = ?, delivery_error = ? WHERE id = ? AND tenant_id = ?`,
+        'sent', params.externalMsgId ?? null, null, params.messageId, params.tenantId)
+    : await dbRunSafe(ctx,
+        `UPDATE thread_messages SET delivery_state = ?, delivery_error = ? WHERE id = ? AND tenant_id = ?`,
+        'failed', params.error ?? null, params.messageId, params.tenantId);
+  return res?.ok !== false;
+}
+
+/**
  * Look up a client_conv thread by id; returns the channel_type +
  * channel_user_id so the outbound relay can pick the right adapter +
  * target. Returns null if the thread doesn't exist OR isn't a client_conv.

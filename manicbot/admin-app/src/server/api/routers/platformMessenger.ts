@@ -6,17 +6,22 @@
  * messenger — see migration header for the architectural reasoning.
  *
  * Surface split:
- *   • Owner-side procedures use `protectedProcedure` and scope EVERY query
- *     by `ctx.webUser.id`. An owner can never read or write another owner's
+ *   • Owner-side procedures use `protectedProcedure` and scope EVERY read
+ *     by `ctx.webUser.id`. An owner can never read another owner's
  *     platform_threads row even by guessing its id.
  *   • Sysadmin-side procedures use `systemAdminProcedure` and accept the
  *     target `recipientWebUserId` as explicit input.
  *
+ * Read-only channel: ManicBot is a one-way broadcast channel (like a Telegram
+ * channel). Owners cannot reply — `sendMyReply` is intentionally disabled and
+ * rejects with FORBIDDEN at the API boundary (not just hidden in the UI).
+ * Support for owners lives elsewhere (Settings → Help → "Write to support").
+ *
  * Notification fan-out:
  *   • Every `sendDirectMessage` / `broadcast` writes a `platform.message`
  *     row into `user_notifications` for the recipient so the bell lights up.
- *   • Every `sendMyReply` (owner → platform) writes a `platform.reply` row
- *     into `user_notifications` for EVERY system_admin so on-call sees it.
+ *   • `platform.reply` (owner → platform) is legacy: kept in kindMeta to
+ *     render historical notifications, but no new ones are produced.
  */
 
 import { z } from "zod";
@@ -198,18 +203,6 @@ async function ensureThread(
   }
 }
 
-/**
- * Look up every system_admin web_user id — used to fan out owner-reply
- * notifications. Cheap query (system_admins are rare).
- */
-async function listSystemAdminIds(db: any): Promise<string[]> {
-  const rows = await db
-    .select({ id: webUsers.id })
-    .from(webUsers)
-    .where(eq(webUsers.role, "system_admin"));
-  return rows.map((r: { id: string }) => r.id);
-}
-
 // ─── Router ─────────────────────────────────────────────────────────────
 
 export const platformMessengerRouter = createTRPCRouter({
@@ -285,66 +278,20 @@ export const platformMessengerRouter = createTRPCRouter({
   }),
 
   /**
-   * Owner sends a reply (or initiates the conversation if no thread yet).
-   * Fan-out: writes `platform.reply` notification for every system_admin.
+   * Owner reply — DISABLED. ManicBot is a one-way, read-only channel (like a
+   * Telegram channel): the platform broadcasts, owners only read. We reject at
+   * the API boundary so the capability is truly gone, not merely hidden in the
+   * UI — a curious owner cannot call this directly to post. Kept (rather than
+   * deleted) as an explicit, reversible switch and to return a clear error to
+   * any stale client bundle. Owner support lives in Settings → Help →
+   * "Write to support" (+ support@manicbot.com), not in this channel.
    */
-  sendMyReply: protectedProcedure
-    .input(z.object({ body: z.string().min(1).max(MESSAGE_BODY_MAX) }))
-    .mutation(async ({ ctx, input }) => {
-      const webUserId = ctx.webUser!.id;
-      const body = sanitizeText(input.body).trim();
-      if (!body) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
-      }
-
-      const { id: threadId } = await ensureThread(
-        ctx.db,
-        webUserId,
-        ctx.webUser!.tenantId ?? null,
-      );
-
-      const messageId = ulid();
-      const now = nowSec();
-      const preview = makePreview(body);
-
-      await ctx.db.insert(platformThreadMessages).values({
-        id: messageId,
-        threadId,
-        senderKind: "owner",
-        senderWebUserId: webUserId,
-        body,
-        attachmentsJson: null,
-        broadcastId: null,
-        createdAt: now,
-      });
-
-      await ctx.db
-        .update(platformThreads)
-        .set({
-          lastMessageAt: now,
-          lastMessagePreview: preview,
-          lastSenderKind: "owner",
-          // Owner's own message auto-counts as read by owner.
-          recipientLastReadAt: now,
-        })
-        .where(eq(platformThreads.id, threadId));
-
-      // Fan-out to every system_admin's bell. Best-effort — notify failures
-      // never break the actual send.
-      const adminIds = await listSystemAdminIds(ctx.db);
-      if (adminIds.length) {
-        await notifyManyWebUsers(ctx.db, adminIds, {
-          kind: "platform.reply",
-          title: ctx.webUser!.email ?? "Salon owner replied",
-          body: preview,
-          link: `/messages?platformThread=${threadId}`,
-          sourceSlug: "platform_messenger",
-          sourceId: `${threadId}:${messageId}`,
-        });
-      }
-
-      return { id: messageId, threadId, createdAt: now };
-    }),
+  sendMyReply: protectedProcedure.mutation(() => {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "ManicBot channel is read-only — replies are disabled.",
+    });
+  }),
 
   // ═══════════════════════════════════════════════════════════════════
   //  SYSADMIN SIDE

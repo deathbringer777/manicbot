@@ -20,7 +20,9 @@
  *   - appointment.done       (post-visit dispatcher)
  *   - master.invite          (salon.sendMasterInvitation + auth backfill)
  *   - platform.message       (platformMessenger sendDirectMessage / broadcast)
- *   - platform.reply         (platformMessenger sendMyReply — fans to all sysadmins)
+ *   - platform.reply         (legacy — owner replies are disabled now that the
+ *                             ManicBot channel is read-only; kept to render
+ *                             historical notifications, no new ones produced)
  *   - billing.alert          (billing status flip — see Worker writer)
  *   - marketing.campaign.sent(future — campaign delivery report)
  */

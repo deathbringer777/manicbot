@@ -2,15 +2,16 @@
  * Tests for the platform messenger router (migration 0076).
  *
  * Critical invariants:
- *   - Owner can ONLY read/write their OWN platform_threads row. No probing
- *     other owners' threads by id.
+ *   - Owner can ONLY read their OWN platform_threads row. No probing other
+ *     owners' threads by id.
  *   - system_admin can read/write any platform_threads row, but the surface
- *     procedures used by owners (getMyThread / sendMyReply / markMyThreadRead)
- *     still scope by ctx.webUser.id — even if sysadmin calls them, they
- *     touch only their own (effectively empty) thread.
+ *     procedures used by owners (getMyThread / markMyThreadRead) still scope
+ *     by ctx.webUser.id — even if sysadmin calls them, they touch only their
+ *     own (effectively empty) thread.
  *   - broadcast and listThreads + sendDirectMessage are sysadmin-only.
- *   - sendMyReply auto-creates the thread on first owner reply (sysadmin
- *     could have written first, OR owner could initiate).
+ *   - sendMyReply is DISABLED: the ManicBot channel is read-only (one-way,
+ *     like a broadcast channel). Owner replies are rejected with FORBIDDEN.
+ *     Support lives elsewhere (Settings → Help → "Write to support").
  *
  * Mock pattern mirrors messenger-router.test.ts: createDbMock seeds a FIFO
  * queue of select results matching the order the procedure issues them.
@@ -55,10 +56,10 @@ describe("platformMessengerRouter auth gating", () => {
     await expect(caller.getMyThread()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("rejects unauthenticated callers on sendMyReply", async () => {
+  it("rejects unauthenticated callers on sendMyReply (auth gate runs before the read-only guard)", async () => {
     const { db } = createDbMock();
     const caller = createCaller(makeUnauthCtx(db) as never);
-    await expect(caller.sendMyReply({ body: "hi" })).rejects.toMatchObject({
+    await expect(caller.sendMyReply()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
   });
@@ -191,12 +192,14 @@ describe("platformMessengerRouter tenant isolation", () => {
     expect(out.unreadCount).toBe(0);
   });
 
-  it("sendMyReply rejects empty body after sanitization", async () => {
-    const { db } = createDbMock();
+  it("sendMyReply is disabled — read-only channel rejects authenticated owners with FORBIDDEN", async () => {
+    const { db, insertCalls } = createDbMock();
     const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
-    await expect(caller.sendMyReply({ body: "   " })).rejects.toMatchObject({
-      code: "BAD_REQUEST",
+    await expect(caller.sendMyReply()).rejects.toMatchObject({
+      code: "FORBIDDEN",
     });
+    // No write side effects: the channel never accepts owner messages.
+    expect(insertCalls.length).toBe(0);
   });
 });
 

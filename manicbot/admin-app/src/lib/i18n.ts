@@ -2092,7 +2092,8 @@ const translations = {
 
   // ── Messenger / MessagesClient shell (P0-UX + P1-UX) ─────────────────────
   "messenger.noSalon":             { ru: "Нет привязанного салона — мессенджер недоступен", ua: "Немає прив'язаного салону — месенджер недоступний", en: "No salon linked — messenger unavailable", pl: "Brak salonu — komunikator niedostępny" },
-  "messenger.platformSubtitle":    { ru: "Объявления и поддержка от платформы", ua: "Оголошення та підтримка від платформи", en: "Announcements and support from the platform", pl: "Ogłoszenia i wsparcie od platformy" },
+  "messenger.platformSubtitle":    { ru: "Новости и объявления платформы", ua: "Новини та оголошення платформи", en: "Platform news and announcements", pl: "Aktualności i ogłoszenia platformy" },
+  "messenger.platformEmpty":       { ru: "Здесь будут появляться новости и объявления от платформы.", ua: "Тут з'являтимуться новини та оголошення від платформи.", en: "Platform news and announcements will appear here.", pl: "Tutaj będą pojawiać się aktualności i ogłoszenia od platformy." },
   "messenger.selectChat":          { ru: "Выберите чат или создайте новый", ua: "Оберіть чат або створіть новий", en: "Select a chat or start a new one", pl: "Wybierz czat lub utwórz nowy" },
   "messenger.selectChatHint":      { ru: "Сообщения между сотрудниками и клиентами в одном месте", ua: "Повідомлення між співробітниками та клієнтами в одному місці", en: "Messages between staff and clients in one place", pl: "Wiadomości między pracownikami a klientami w jednym miejscu" },
   "messenger.back":                { ru: "Назад", ua: "Назад", en: "Back", pl: "Wróć" },

@@ -2224,6 +2224,7 @@ const translations = {
   "messenger.status.delivered":    { ru: "Доставлено", ua: "Доставлено", en: "Delivered", pl: "Dostarczono" },
   "messenger.status.failed":       { ru: "Не доставлено", ua: "Не доставлено", en: "Not delivered", pl: "Niedostarczone" },
   "messenger.status.retry":        { ru: "Повторить", ua: "Повторити", en: "Retry", pl: "Ponów" },
+  "messenger.seen":                { ru: "Прочитано", ua: "Прочитано", en: "Seen", pl: "Przeczytano" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

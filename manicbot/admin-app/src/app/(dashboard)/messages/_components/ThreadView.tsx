@@ -91,23 +91,57 @@ export function ThreadView({ tenantId, threadId }: Props) {
   }, [detailQ.data?.messages?.length]);
 
   if (detailQ.isLoading) {
+    // Skeleton message bubbles — communicates "loading messages", not a bare spinner.
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-500 dark:border-slate-800" />
+      <div className="flex h-full flex-col gap-2 overflow-hidden p-4" aria-busy="true">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className={`flex ${i % 2 ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`h-9 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800 ${
+                i % 2 ? "w-40" : "w-52"
+              }`}
+            />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!detailQ.data) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
         {t("messenger.loadError", lang)}
+        <button
+          type="button"
+          onClick={() => void detailQ.refetch()}
+          className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          {t("messenger.status.retry", lang)}
+        </button>
       </div>
     );
   }
 
   const { thread, messages, members, viewerWebUserId } = detailQ.data;
   const memberMap = new Map(members.map((m) => [m.memberRef, m.displayName]));
+
+  // Read receipt: only for staff threads (external clients can't report reads,
+  // so a "seen" on a client_conv would be misleading). Shown when the LAST
+  // message is the viewer's own and another web_user member has read past it
+  // (ULID lexicographic compare — last_read_message_id >= message id).
+  const lastMsg = messages[messages.length - 1];
+  const lastIsOwn =
+    !!lastMsg && lastMsg.senderKind === "web_user" && lastMsg.senderRef === viewerWebUserId;
+  const seenByOther =
+    (thread.kind === "staff_dm" || thread.kind === "staff_group") &&
+    lastIsOwn &&
+    members.some(
+      (m) =>
+        m.memberKind === "web_user" &&
+        m.memberRef !== viewerWebUserId &&
+        typeof m.lastReadMessageId === "string" &&
+        m.lastReadMessageId >= lastMsg!.id,
+    );
 
   const title =
     thread.title ??
@@ -306,6 +340,11 @@ export function ThreadView({ tenantId, threadId }: Props) {
               </div>
             );
           })
+        )}
+        {seenByOther && (
+          <p className="px-2 pt-0.5 text-right text-[10px] text-slate-400">
+            ✓ {t("messenger.seen", lang)}
+          </p>
         )}
       </div>
 

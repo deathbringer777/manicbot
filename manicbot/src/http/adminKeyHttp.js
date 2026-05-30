@@ -705,6 +705,17 @@ export async function tryAdminKeyRoutes(request, env, url) {
     if (!env.BOT_ENCRYPTION_KEY || String(env.BOT_ENCRYPTION_KEY).length < 32) {
       return Response.json({ error: 'BOT_ENCRYPTION_KEY not configured' }, { status: 503 });
     }
+    // A11 — during an active key rotation (BOT_ENCRYPTION_KEY_OLD set) the
+    // self-gated recovery path is disabled. Mid-rotation a stale blob can still
+    // decrypt via the old key, so Gate 1's "token is dead" signal is unreliable,
+    // leaving Graph Page-control as the only authz — and a Page sub-admin is not
+    // necessarily the salon owner. Route rotation-window changes through the
+    // ADMIN_KEY-gated /admin/ig-token instead.
+    if (env.BOT_ENCRYPTION_KEY_OLD) {
+      return Response.json({
+        error: 'key rotation in progress (BOT_ENCRYPTION_KEY_OLD set) — recovery path disabled. Use POST /admin/ig-token with ADMIN_KEY.',
+      }, { status: 409 });
+    }
     try {
       const { tenantId, userToken } = await request.json().catch(() => ({}));
       if (!tenantId || !userToken) {

@@ -60,6 +60,9 @@ export function createDbMock(selectResults: unknown[] = []) {
             then: (resolve: any, reject?: any) =>
               Promise.resolve({ ok: true }).then(resolve, reject),
           };
+          // Returns the (thenable) chain so awaiting / db.batch() works. The
+          // row was already recorded in insertCalls above.
+          chain.onConflictDoNothing = vi.fn(() => chain);
           return chain;
         }),
       })),

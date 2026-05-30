@@ -757,6 +757,51 @@ export default {
    * with backoff; after 3 retries the message goes to the DLQ.
    */
   async queue(batch, env, _ctx) {
+    // Messenger outbound auto-retry — separate queue, separate logic.
+    if (batch.queue === 'manicbot-outbound-retry') {
+      const { performOutboundSend } = await import('./http/messengerOutboundHttp.js');
+      const { setOutboundDeliveryByMessageId } = await import('./services/messengerThreads.js');
+      const { planRetryAction } = await import('./channels/send-classify.js');
+      const ec = envCtx(env);
+      const MAX_ATTEMPTS = 5;
+      for (const msg of batch.messages) {
+        const { tenantId, threadId, messageId, body } = msg.body || {};
+        if (!tenantId || !threadId || !messageId || !body) { msg.ack(); continue; }
+        try {
+          const result = await performOutboundSend(env, { tenantId, threadId, body });
+          const action = planRetryAction(result, msg.attempts ?? 1, MAX_ATTEMPTS);
+          if (action === 'sent') {
+            await setOutboundDeliveryByMessageId(ec, {
+              tenantId, messageId, state: 'sent', externalMsgId: result.externalMsgId ?? null,
+            });
+            msg.ack();
+          } else if (action === 'retry') {
+            msg.retry({ delaySeconds: Math.min(300, 30 * (msg.attempts ?? 1)) });
+          } else {
+            // permanent, ambiguous, or retry budget exhausted → give up.
+            await setOutboundDeliveryByMessageId(ec, {
+              tenantId, messageId, state: 'failed', error: result.errorCode ?? 'channel_send_failed',
+            });
+            msg.ack();
+          }
+        } catch (e) {
+          log.error('queue.outboundRetry', e instanceof Error ? e : new Error(String(e?.message)),
+            { tenantId, threadId, messageId });
+          if ((msg.attempts ?? 1) < MAX_ATTEMPTS) {
+            msg.retry();
+          } else {
+            try {
+              await setOutboundDeliveryByMessageId(ec, {
+                tenantId, messageId, state: 'failed', error: 'retry_exhausted',
+              });
+            } catch { /* best-effort */ }
+            msg.ack();
+          }
+        }
+      }
+      return;
+    }
+
     const ec = envCtx(env);
     for (const msg of batch.messages) {
       const { tenantId, scheduledAt } = msg.body || {};

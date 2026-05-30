@@ -38,7 +38,7 @@ function buildGodModeNavItems(lang: string): NavItem[] {
     { href: "/users", icon: Users, label: tNav("Users", lang) },
     { href: "/tenants", icon: Building2, label: tNav("Tenants", lang) },
     { href: "/appointments", icon: CalendarDays, label: tNav("Appointments", lang) },
-    { href: "/conversations", icon: MessageSquare, label: tNav("Inbox", lang) },
+    { href: "/messages", icon: MessageSquare, label: tNav("Inbox", lang) },
     { href: "/agents", icon: UserCog, label: tNav("Agents", lang) },
     { href: "/?tab=role-requests", icon: ArrowLeftRight, label: tNav("Role Requests", lang) },
     { href: "/channels", icon: Radio, label: tNav("Channels", lang) },

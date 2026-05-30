@@ -1392,6 +1392,11 @@ export const threadMessages = sqliteTable("thread_messages", {
   createdAt: integer("created_at").notNull(),
   editedAt: integer("edited_at"),
   deletedAt: integer("deleted_at"),
+  /** Outbound delivery lifecycle (migration 0098). NULL = untracked. For
+   *  client_conv outbound: 'pending' | 'sent' | 'delivered' | 'failed'. */
+  deliveryState: text("delivery_state"),
+  /** Channel error code when delivery_state = 'failed' (e.g. outside_message_window). */
+  deliveryError: text("delivery_error"),
   /** migration 0095: ref_kind='booking_request', ref_id=appointments.id +
    *  meta_json snapshot, so a message can render as an actionable request card. */
   refKind: text("ref_kind"),

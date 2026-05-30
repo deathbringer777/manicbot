@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Megaphone, Users, X } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t, type TranslationKey } from "~/lib/i18n";
 
 type Scope = "all" | "by_plan" | "by_billing_status";
 type Plan = "start" | "pro" | "max";
@@ -25,11 +27,11 @@ const PLAN_LABELS: Record<Plan, string> = {
   max: "Max",
 };
 
-const STATUS_LABELS: Record<Status, string> = {
-  trialing: "Триал",
-  active: "Активные",
-  grace: "В отсрочке",
-  expired: "Истёкшие",
+const STATUS_LABEL_KEYS: Record<Status, TranslationKey> = {
+  trialing: "messenger.broadcast.statusTrialing",
+  active: "messenger.broadcast.statusActive",
+  grace: "messenger.broadcast.statusGrace",
+  expired: "messenger.broadcast.statusExpired",
 };
 
 /**
@@ -45,6 +47,7 @@ const STATUS_LABELS: Record<Status, string> = {
  * sending.
  */
 export function BroadcastComposer({ onClose, onSent }: Props) {
+  const { lang } = useLang();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState<AudienceState>({
@@ -87,10 +90,10 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
             </div>
             <div>
               <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Рассылка от ManicBot
+                {t("messenger.broadcast.title", lang)}
               </div>
               <div className="text-[11px] text-slate-500">
-                Сообщение придёт в чат «ManicBot» + в колокольчик уведомлений
+                {t("messenger.broadcast.subtitle", lang)}
               </div>
             </div>
           </div>
@@ -98,7 +101,7 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
             type="button"
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-            aria-label="Закрыть"
+            aria-label={t("messenger.newThread.close", lang)}
           >
             <X className="h-4 w-4" />
           </button>
@@ -107,28 +110,28 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
         <div className="space-y-4 px-5 py-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
-              Заголовок (необязательно)
+              {t("messenger.broadcast.titleLabel", lang)}
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               maxLength={200}
-              placeholder="Новые тарифы / Плановые работы / ..."
+              placeholder={t("messenger.broadcast.titlePlaceholder", lang)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-fuchsia-400 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
-              Сообщение
+              {t("messenger.broadcast.messageLabel", lang)}
             </label>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={5}
               maxLength={4000}
-              placeholder="Что хотите сказать всем салонам?"
+              placeholder={t("messenger.broadcast.messagePlaceholder", lang)}
               className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-fuchsia-400 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
             <div className="mt-1 text-right text-[10px] text-slate-400">
@@ -138,7 +141,7 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">
-              Аудитория
+              {t("messenger.broadcast.audience", lang)}
             </label>
             <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -147,7 +150,7 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
                   checked={audience.scope === "all"}
                   onChange={() => setAudience({ ...audience, scope: "all" })}
                 />
-                <span>Все владельцы салонов</span>
+                <span>{t("messenger.broadcast.audienceAll", lang)}</span>
               </label>
 
               <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -156,7 +159,7 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
                   checked={audience.scope === "by_plan"}
                   onChange={() => setAudience({ ...audience, scope: "by_plan" })}
                 />
-                <span>По тарифу</span>
+                <span>{t("messenger.broadcast.audienceByPlan", lang)}</span>
               </label>
               {audience.scope === "by_plan" && (
                 <div className="ml-6 flex flex-wrap gap-2">
@@ -193,11 +196,11 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
                   checked={audience.scope === "by_billing_status"}
                   onChange={() => setAudience({ ...audience, scope: "by_billing_status" })}
                 />
-                <span>По биллингу</span>
+                <span>{t("messenger.broadcast.audienceByBilling", lang)}</span>
               </label>
               {audience.scope === "by_billing_status" && (
                 <div className="ml-6 flex flex-wrap gap-2">
-                  {(Object.keys(STATUS_LABELS) as Status[]).map((s) => {
+                  {(Object.keys(STATUS_LABEL_KEYS) as Status[]).map((s) => {
                     const checked = audience.statuses.includes(s);
                     return (
                       <button
@@ -217,7 +220,7 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
                             : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                         }`}
                       >
-                        {STATUS_LABELS[s]}
+                        {t(STATUS_LABEL_KEYS[s], lang)}
                       </button>
                     );
                   })}
@@ -230,23 +233,24 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
             <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
               <Users className="h-3.5 w-3.5" />
               {previewQ.isLoading ? (
-                <span>Считаю аудиторию...</span>
+                <span>{t("messenger.broadcast.counting", lang)}</span>
               ) : previewQ.data ? (
                 <span>
-                  Получателей: <strong>{previewQ.data.count}</strong>
+                  {t("messenger.broadcast.recipients", lang)}{" "}
+                  <strong>{previewQ.data.count}</strong>
                   {previewQ.data.sample.length > 0 && (
                     <>
-                      {" "}— например{": "}
+                      {" "}— {t("messenger.broadcast.forExample", lang)}{": "}
                       {previewQ.data.sample
                         .slice(0, 5)
                         .map((r) => r.name ?? r.email ?? r.id)
                         .join(", ")}
-                      {previewQ.data.count > 5 && "..."}
+                      {previewQ.data.count > 5 && "…"}
                     </>
                   )}
                 </span>
               ) : (
-                <span className="text-rose-500">не удалось посчитать</span>
+                <span className="text-rose-500">{t("messenger.broadcast.countFailed", lang)}</span>
               )}
             </div>
           </div>
@@ -264,7 +268,7 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
             onClick={onClose}
             className="rounded-xl px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Отмена
+            {t("messenger.broadcast.cancel", lang)}
           </button>
           <button
             type="button"
@@ -279,8 +283,8 @@ export function BroadcastComposer({ onClose, onSent }: Props) {
             data-testid="broadcast-send"
           >
             {broadcastMutation.isPending
-              ? "Отправляю..."
-              : `Отправить (${previewQ.data?.count ?? 0})`}
+              ? t("messenger.broadcast.sending", lang)
+              : `${t("messenger.composer.send", lang)} (${previewQ.data?.count ?? 0})`}
           </button>
         </div>
       </div>

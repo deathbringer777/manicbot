@@ -18,8 +18,13 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq, desc, lt, sql, inArray, gt, isNull, ne } from "drizzle-orm";
-import { createTRPCRouter, protectedProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
+import { and, eq, desc, lt, sql, inArray, gt, isNull, ne, like } from "drizzle-orm";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  tenantOwnerProcedure,
+  systemAdminProcedure,
+} from "~/server/api/trpc";
 import {
   threads,
   threadMembers,
@@ -27,6 +32,7 @@ import {
   webUsers,
   masters,
   masterInvitations,
+  tenants,
   appointments,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
@@ -36,6 +42,8 @@ import {
   assertMessengerTenantAccess,
   assertThreadMember,
 } from "~/server/api/messenger/access";
+import { filterActiveRecipients, MUTE_FOREVER } from "~/server/api/messenger/mute";
+import { sanitizeFtsQuery, buildMessageSearchSql } from "~/server/api/messenger/ftsQuery";
 import { mintWsToken } from "~/lib/wsToken";
 import { signUploadToken } from "~/server/lib/uploadToken";
 import { env } from "~/env";
@@ -54,6 +62,8 @@ const THREAD_KIND = z.enum(["staff_dm", "staff_group", "client_conv", "system", 
 const MESSAGE_BODY_MAX = 4000;
 const PREVIEW_MAX = 200;
 const TITLE_MAX = 120;
+/** Window during which a sender may edit/withdraw their own message (24h). */
+const EDIT_WINDOW_SEC = 86400;
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -80,7 +90,11 @@ async function relayToWorker(args: {
   threadId: string;
   body: string;
   replyToMessageId?: string;
-}): Promise<{ ok: true; externalMsgId: string | null } | { ok: false; error: string }> {
+  messageId?: string;
+}): Promise<
+  | { ok: true; externalMsgId: string | null }
+  | { ok: false; error: string; queued?: boolean }
+> {
   const workerUrl = env.WORKER_PUBLIC_URL;
   const adminKey = env.ADMIN_KEY;
   if (!workerUrl || !adminKey) {
@@ -96,12 +110,17 @@ async function relayToWorker(args: {
       body: JSON.stringify(args),
     });
     const data = await resp.json().catch(() => null) as
-      | { ok: boolean; external_msg_id?: string | null; error?: string }
+      | { ok: boolean; external_msg_id?: string | null; error?: string; queued?: boolean }
       | null;
     if (!resp.ok || !data?.ok) {
+      const queued = data?.queued === true;
       const error = data?.error ?? `relay_${resp.status}`;
-      log.warn("messenger.relay", { message: "Worker relay failed", error, status: resp.status });
-      return { ok: false, error };
+      // queued (HTTP 202) = the Worker took ownership of a background auto-retry
+      // (definitive 429/5xx). Not a hard failure — the row stays 'pending'.
+      if (!queued) {
+        log.warn("messenger.relay", { message: "Worker relay failed", error, status: resp.status });
+      }
+      return { ok: false, error, queued };
     }
     return { ok: true, externalMsgId: data.external_msg_id ?? null };
   } catch (e) {
@@ -364,7 +383,10 @@ export const messengerRouter = createTRPCRouter({
 
       return {
         thread,
-        messages: messages.reverse(), // chronological in render
+        // Soft-deleted rows keep their place (tombstone) but never leak content.
+        messages: messages
+          .map((m) => (m.deletedAt ? { ...m, body: "", attachmentsJson: null } : m))
+          .reverse(), // chronological in render
         nextCursor,
         viewerWebUserId: ctx.webUser!.id,
         members: members.map((m) => ({
@@ -373,6 +395,68 @@ export const messengerRouter = createTRPCRouter({
             m.memberKind === "web_user" ? nameMap.get(m.memberRef) ?? m.memberRef : m.memberRef,
         })),
       };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SEARCH — full-text over message bodies (FTS5, migration 0099)
+  // ═══════════════════════════════════════════════════════════════
+  //  Tenant-scoped AND constrained to the caller's thread membership — a naive
+  //  FTS match would leak messages from threads the caller isn't in.
+  //  system_admin searches tenant-wide (support escalation, like getThread's
+  //  bypass). Soft-deleted messages never surface (their FTS row is dropped).
+  searchMessages: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        query: z.string().min(2).max(100),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      await assertMessengerTenantAccess(ctx, input.tenantId);
+      const match = sanitizeFtsQuery(input.query);
+      if (!match) return { items: [] };
+
+      const isAdmin = ctx.webUser!.webRole === "system_admin";
+      let threadIds: string[] | null = null;
+      if (!isAdmin) {
+        const memberRows = await ctx.db
+          .select({ threadId: threadMembers.threadId })
+          .from(threadMembers)
+          .where(
+            and(
+              eq(threadMembers.memberKind, "web_user"),
+              eq(threadMembers.memberRef, ctx.webUser!.id),
+            ),
+          );
+        threadIds = memberRows.map((r) => r.threadId);
+        // No threads → no results. Critically, this prevents running an
+        // unconstrained FTS query that would leak other threads' messages.
+        if (threadIds.length === 0) return { items: [] };
+      }
+
+      const { sql: searchSql, binds } = buildMessageSearchSql({
+        tenantId: input.tenantId,
+        threadIds,
+        match,
+        limit: input.limit,
+      });
+      // Raw parameterized exec — same proven shape as platformCustomers'
+      // subscriber query: db.run(sql.raw(text), binds) → { results }.
+      const rawDb = ctx.db as unknown as {
+        run: (q: unknown, b: unknown[]) => Promise<{ results?: unknown[]; rows?: unknown[] }>;
+      };
+      const res = await rawDb.run(sql.raw(searchSql), binds);
+      const rows = (res?.results ?? res?.rows ?? []) as Array<{
+        id: string;
+        threadId: string;
+        senderKind: string;
+        senderRef: string;
+        body: string;
+        createdAt: number;
+        isInternalNote: number;
+      }>;
+      return { items: rows };
     }),
 
   // ═══════════════════════════════════════════════════════════════
@@ -408,6 +492,10 @@ export const messengerRouter = createTRPCRouter({
       const isInternalNote =
         thread.kind === "client_conv" && input.isInternalNote ? 1 : 0;
 
+      // Only staff→client (non-note) messages have a delivery lifecycle. Start
+      // 'pending'; the relay result below advances it to 'sent' or 'failed'.
+      const isClientConvOutbound = thread.kind === "client_conv" && !isInternalNote;
+
       const body = sanitizeText(input.body).trim();
       if (!body) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
@@ -438,6 +526,8 @@ export const messengerRouter = createTRPCRouter({
         createdAt: now,
         editedAt: null,
         deletedAt: null,
+        deliveryState: isClientConvOutbound ? "pending" : null,
+        deliveryError: null,
       });
 
       await ctx.db
@@ -466,7 +556,10 @@ export const messengerRouter = createTRPCRouter({
       // member is the sender themselves.
       try {
         const otherWebUserMembers = await ctx.db
-          .select({ memberRef: threadMembers.memberRef })
+          .select({
+            memberRef: threadMembers.memberRef,
+            mutedUntil: threadMembers.mutedUntil,
+          })
           .from(threadMembers)
           .where(
             and(
@@ -475,7 +568,9 @@ export const messengerRouter = createTRPCRouter({
               ne(threadMembers.memberRef, webUserId),
             ),
           );
-        const recipientIds = otherWebUserMembers.map((m) => m.memberRef);
+        // Mute is notification-only: drop members whose mute is still active so
+        // they don't get a bell row (they still see the message + unread badge).
+        const recipientIds = filterActiveRecipients(otherWebUserMembers, now);
         if (recipientIds.length > 0) {
           const senderRow = await ctx.db
             .select({ email: webUsers.email })
@@ -524,30 +619,208 @@ export const messengerRouter = createTRPCRouter({
       // Phase 2 — relay to Worker → channel adapter for client_conv threads.
       // Internal notes never relay (they're staff-only by design). Phase 3
       // will also publish to MESSENGER_HUB DO for WebSocket fan-out.
-      let relay: { ok: true; externalMsgId: string | null } | { ok: false; error: string } | null = null;
-      if (thread.kind === "client_conv" && !isInternalNote) {
+      let relay:
+        | { ok: true; externalMsgId: string | null }
+        | { ok: false; error: string; queued?: boolean }
+        | null = null;
+      if (isClientConvOutbound) {
         relay = await relayToWorker({
           tenantId: input.tenantId,
           threadId: input.threadId,
           body,
           replyToMessageId: input.replyToMessageId,
+          messageId: id,
         });
-        if (relay.ok && relay.externalMsgId) {
-          // Stamp the channel-side message id onto our row so dedup +
-          // delivery confirmation work later.
+        // Persist the delivery outcome so it survives reload + drives the status
+        // icon. 'queued' = the Worker is auto-retrying a transient 429/5xx → keep
+        // 'pending' (the retry queue resolves it to sent/failed).
+        if (relay.ok) {
           await ctx.db
             .update(threadMessages)
-            .set({ externalMsgId: relay.externalMsgId })
-            .where(
-              and(
-                eq(threadMessages.id, id),
-                eq(threadMessages.tenantId, input.tenantId),
-              ),
-            );
+            .set({
+              deliveryState: "sent",
+              ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
+            })
+            .where(and(eq(threadMessages.id, id), eq(threadMessages.tenantId, input.tenantId)));
+        } else if (!relay.queued) {
+          await ctx.db
+            .update(threadMessages)
+            .set({ deliveryState: "failed", deliveryError: relay.error })
+            .where(and(eq(threadMessages.id, id), eq(threadMessages.tenantId, input.tenantId)));
         }
+        // queued → leave the row 'pending'.
       }
 
-      return { id, createdAt: now, relay };
+      // Don't surface a scary error chip for a queued auto-retry — the 'pending'
+      // clock is the truthful signal.
+      const clientRelay = relay && relay.ok === false && relay.queued ? null : relay;
+      return { id, createdAt: now, relay: clientRelay };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  RETRY — re-relay a failed client_conv message
+  // ═══════════════════════════════════════════════════════════════
+  retryMessage: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        messageId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { thread } = await assertThreadMember(ctx, input.tenantId, input.threadId);
+      if (thread.kind !== "client_conv") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only client conversations relay" });
+      }
+      const [msg] = await ctx.db
+        .select()
+        .from(threadMessages)
+        .where(
+          and(
+            eq(threadMessages.id, input.messageId),
+            eq(threadMessages.tenantId, input.tenantId),
+            eq(threadMessages.threadId, input.threadId),
+          ),
+        )
+        .limit(1);
+      if (!msg) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      }
+      if (msg.deliveryState !== "failed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only failed messages can be retried" });
+      }
+
+      // Flip to pending so the UI shows the in-flight state, then re-relay.
+      await ctx.db
+        .update(threadMessages)
+        .set({ deliveryState: "pending", deliveryError: null })
+        .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
+
+      const relay = await relayToWorker({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        body: msg.body,
+        replyToMessageId: msg.replyToMessageId ?? undefined,
+        messageId: input.messageId,
+      });
+      if (relay.ok) {
+        await ctx.db
+          .update(threadMessages)
+          .set({
+            deliveryState: "sent",
+            ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
+          })
+          .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
+      } else if (!relay.queued) {
+        await ctx.db
+          .update(threadMessages)
+          .set({ deliveryState: "failed", deliveryError: relay.error })
+          .where(and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)));
+      }
+      // queued → row stays 'pending' (already flipped above); the queue resolves it.
+      return { ok: true, relay };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  EDIT / DELETE — author-only, soft delete
+  // ═══════════════════════════════════════════════════════════════
+  //  Only the web_user author may edit/delete their own message. Edit is
+  //  blocked for already-relayed messages (TG/WA/IG can't reliably edit and
+  //  the client already has the original) and past a 24h window. Delete is a
+  //  soft delete (deleted_at) — getThread masks the body but keeps a tombstone
+  //  so the timeline has no holes.
+  editMessage: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        messageId: z.string().min(1),
+        body: z.string().min(1).max(MESSAGE_BODY_MAX),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      const webUserId = ctx.webUser!.id;
+      const [msg] = await ctx.db
+        .select()
+        .from(threadMessages)
+        .where(
+          and(
+            eq(threadMessages.id, input.messageId),
+            eq(threadMessages.tenantId, input.tenantId),
+            eq(threadMessages.threadId, input.threadId),
+          ),
+        )
+        .limit(1);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      if (msg.senderKind !== "web_user" || msg.senderRef !== webUserId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the author can edit" });
+      }
+      if (msg.deletedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Message is deleted" });
+      }
+      if (msg.externalMsgId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_edit_relayed" });
+      }
+      const now = nowSec();
+      if (now - msg.createdAt > EDIT_WINDOW_SEC) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "edit_window_expired" });
+      }
+      const body = sanitizeText(input.body).trim();
+      if (!body) throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
+
+      await ctx.db
+        .update(threadMessages)
+        .set({ body, editedAt: now })
+        .where(
+          and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)),
+        );
+      // Refresh the inbox preview if this was the thread's last message.
+      await ctx.db
+        .update(threads)
+        .set({ lastMessagePreview: preview(body) })
+        .where(and(eq(threads.id, input.threadId), eq(threads.lastMessageAt, msg.createdAt)));
+      return { ok: true, editedAt: now };
+    }),
+
+  deleteMessage: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        messageId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      const webUserId = ctx.webUser!.id;
+      const [msg] = await ctx.db
+        .select()
+        .from(threadMessages)
+        .where(
+          and(
+            eq(threadMessages.id, input.messageId),
+            eq(threadMessages.tenantId, input.tenantId),
+            eq(threadMessages.threadId, input.threadId),
+          ),
+        )
+        .limit(1);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      if (msg.senderKind !== "web_user" || msg.senderRef !== webUserId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the author can delete" });
+      }
+      if (msg.deletedAt) return { ok: true, alreadyDeleted: true };
+
+      await ctx.db
+        .update(threadMessages)
+        .set({ deletedAt: nowSec() })
+        .where(
+          and(eq(threadMessages.id, input.messageId), eq(threadMessages.tenantId, input.tenantId)),
+        );
+      // Relayed messages: the external channel already delivered the original,
+      // so we only hide our mirror — surface a warning for the UI caption.
+      return { ok: true, relayedWarning: !!msg.externalMsgId };
     }),
 
   // ═══════════════════════════════════════════════════════════════
@@ -573,6 +846,55 @@ export const messengerRouter = createTRPCRouter({
             eq(threadMembers.threadId, input.threadId),
             eq(threadMembers.memberKind, "web_user"),
             eq(threadMembers.memberRef, webUserId),
+          ),
+        );
+      return { ok: true };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  MUTE — per-member, notification-only
+  // ═══════════════════════════════════════════════════════════════
+  //  Muting sets `thread_members.muted_until` on the CALLER's own row. A
+  //  muted member still sees unread badges + new messages; they just don't
+  //  get a notification-bell row (see the fan-out filter in sendMessage).
+  //  Mute never gates read receipts or message delivery.
+  muteThread: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        threadId: z.string().min(1),
+        // Unix seconds. Omitted → mute indefinitely (MUTE_FOREVER sentinel).
+        until: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      const mutedUntil = input.until ?? MUTE_FOREVER;
+      await ctx.db
+        .update(threadMembers)
+        .set({ mutedUntil })
+        .where(
+          and(
+            eq(threadMembers.threadId, input.threadId),
+            eq(threadMembers.memberKind, "web_user"),
+            eq(threadMembers.memberRef, ctx.webUser!.id),
+          ),
+        );
+      return { ok: true, mutedUntil };
+    }),
+
+  unmuteThread: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), threadId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertThreadMember(ctx, input.tenantId, input.threadId);
+      await ctx.db
+        .update(threadMembers)
+        .set({ mutedUntil: null })
+        .where(
+          and(
+            eq(threadMembers.threadId, input.threadId),
+            eq(threadMembers.memberKind, "web_user"),
+            eq(threadMembers.memberRef, ctx.webUser!.id),
           ),
         );
       return { ok: true };
@@ -1103,6 +1425,63 @@ export const messengerRouter = createTRPCRouter({
         .set({ archived: input.archived ? 1 : 0 })
         .where(eq(threads.id, input.threadId));
       return { ok: true };
+    }),
+
+  // ═══════════════════════════════════════════════════════════════
+  //  GOD MODE — cross-tenant client inbox (consolidated /conversations)
+  // ═══════════════════════════════════════════════════════════════
+  //  Replaces the retired user-facing `/conversations` surface. Lists
+  //  `client_conv` threads ACROSS all tenants for support/ops. system_admin
+  //  only. The detail read still goes through `getThread`, which pins
+  //  `threads.tenant_id` to the supplied tenantId — so the cross-tenant id
+  //  returned here can't be used to escalate into a different tenant's thread.
+  listClientConvAdmin: systemAdminProcedure
+    .input(
+      z.object({
+        tenantId: z.string().optional(),
+        archived: z.boolean().default(false),
+        search: z.string().optional(),
+        cursor: z.number().int().optional(), // last_message_at cursor
+        limit: z.number().int().min(1).max(100).default(40),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(threads.kind, "client_conv"),
+        eq(threads.archived, input.archived ? 1 : 0),
+      ];
+      if (input.tenantId) conditions.push(eq(threads.tenantId, input.tenantId));
+      if (input.cursor !== undefined) {
+        conditions.push(lt(threads.lastMessageAt, input.cursor));
+      }
+      if (input.search?.trim()) {
+        const pat = `%${input.search.trim().replace(/[%_]/g, "\\$&")}%`;
+        conditions.push(like(threads.lastMessagePreview, pat));
+      }
+
+      const rows = await ctx.db
+        .select({
+          id: threads.id,
+          tenantId: threads.tenantId,
+          title: threads.title,
+          lastMessageAt: threads.lastMessageAt,
+          lastMessagePreview: threads.lastMessagePreview,
+          archived: threads.archived,
+          tenantName: tenants.name,
+        })
+        .from(threads)
+        .leftJoin(tenants, eq(threads.tenantId, tenants.id))
+        .where(and(...conditions))
+        .orderBy(desc(threads.lastMessageAt))
+        .limit(input.limit);
+
+      return {
+        items: rows,
+        nextCursor:
+          rows.length === input.limit
+            ? rows[rows.length - 1]?.lastMessageAt ?? undefined
+            : undefined,
+      };
     }),
 
   // ═══════════════════════════════════════════════════════════════

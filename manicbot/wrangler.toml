@@ -93,6 +93,21 @@ max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = "manicbot-tenant-cron-dlq"
 
+# Messenger outbound auto-retry — re-sends staff→client messages that failed
+# with a DEFINITIVE server rejection (429/5xx). Ambiguous network failures are
+# NOT enqueued (double-send risk). The consumer gives up to 'failed' after the
+# retry budget; the DLQ is the crash backstop.
+[[queues.producers]]
+queue = "manicbot-outbound-retry"
+binding = "MESSENGER_OUTBOUND_RETRY"
+
+[[queues.consumers]]
+queue = "manicbot-outbound-retry"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "manicbot-outbound-retry-dlq"
+
 [[kv_namespaces]]
 binding = "MANICBOT"
 id = "62a7d16805e742918a82184e879537cc"

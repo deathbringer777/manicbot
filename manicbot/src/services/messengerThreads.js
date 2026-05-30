@@ -290,6 +290,67 @@ export async function stampExternalMsgId(ctx, params) {
 }
 
 /**
+ * Advance the persisted delivery_state of an OUTBOUND message, keyed by its
+ * channel-side external_msg_id (WhatsApp wamid / Instagram mid). Called from
+ * the Meta webhook handler on delivered/read/failed receipts.
+ *
+ * Terminal-guarded: only moves forward from 'pending'/'sent' (never downgrades
+ * a 'delivered', never resurrects a 'failed' or an untracked/NULL row).
+ * Idempotent — safe to call on Meta's webhook retries.
+ *
+ * @param {object} ctx - has `db`
+ * @param {string} tenantId
+ * @param {string} externalMsgId - wamid / IG mid
+ * @param {'delivered'|'failed'} state
+ * @param {string|null} [error] - channel error label when state='failed'
+ * @returns {Promise<boolean>}
+ */
+export async function markOutboundDeliveryState(ctx, tenantId, externalMsgId, state, error = null) {
+  if (!ctx?.db || !tenantId || !externalMsgId) return false;
+  if (state !== 'delivered' && state !== 'failed') return false;
+  // Single-line SQL + an OR'd two-state guard (rather than IN) — both keep the
+  // statement parseable by the D1 test mock while remaining valid D1 SQL. The
+  // guard only advances from pending/sent, so NULL/delivered/failed are inert.
+  const guard = `(delivery_state = 'pending' OR delivery_state = 'sent')`;
+  const res = state === 'failed'
+    ? await dbRunSafe(ctx,
+        `UPDATE thread_messages SET delivery_state = ?, delivery_error = ? WHERE tenant_id = ? AND external_msg_id = ? AND ${guard}`,
+        'failed', error, tenantId, String(externalMsgId))
+    : await dbRunSafe(ctx,
+        `UPDATE thread_messages SET delivery_state = ? WHERE tenant_id = ? AND external_msg_id = ? AND ${guard}`,
+        'delivered', tenantId, String(externalMsgId));
+  return res?.ok !== false;
+}
+
+/**
+ * Set the delivery outcome of a specific outbound row by its id. Used by the
+ * outbound-retry queue consumer to resolve a 'pending' row to 'sent' (stamping
+ * the channel-side id) or 'failed' after the retry budget is exhausted.
+ *
+ * @param {object} ctx
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {string} params.messageId - thread_messages.id (admin-app's row)
+ * @param {'sent'|'failed'} params.state
+ * @param {string|null} [params.externalMsgId]
+ * @param {string|null} [params.error]
+ * @returns {Promise<boolean>}
+ */
+export async function setOutboundDeliveryByMessageId(ctx, params) {
+  if (!ctx?.db || !params?.tenantId || !params?.messageId) return false;
+  if (params.state !== 'sent' && params.state !== 'failed') return false;
+  // Single-line SQL + all `col = ?` SET clauses (mock parser compatible).
+  const res = params.state === 'sent'
+    ? await dbRunSafe(ctx,
+        `UPDATE thread_messages SET delivery_state = ?, external_msg_id = ?, delivery_error = ? WHERE id = ? AND tenant_id = ?`,
+        'sent', params.externalMsgId ?? null, null, params.messageId, params.tenantId)
+    : await dbRunSafe(ctx,
+        `UPDATE thread_messages SET delivery_state = ?, delivery_error = ? WHERE id = ? AND tenant_id = ?`,
+        'failed', params.error ?? null, params.messageId, params.tenantId);
+  return res?.ok !== false;
+}
+
+/**
  * Look up a client_conv thread by id; returns the channel_type +
  * channel_user_id so the outbound relay can pick the right adapter +
  * target. Returns null if the thread doesn't exist OR isn't a client_conv.

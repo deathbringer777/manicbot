@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Users as GroupIcon,
   User as DmIcon,
@@ -13,6 +13,7 @@ import {
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
+import { useMessengerSocketCtx } from "./socketContext";
 
 type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system" | "requests";
 type FilterKind = ThreadKind | "all";
@@ -48,6 +49,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
   const [filter, setFilter] = useState<FilterKind>("all");
   const [search, setSearch] = useState("");
   const { lang } = useLang();
+  const { status: wsStatus } = useMessengerSocketCtx();
 
   const threadsQ = api.messenger.listThreads.useQuery(
     {
@@ -57,7 +59,8 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
       limit: 50,
     },
     {
-      refetchInterval: 5000,
+      // Slow poll when realtime is healthy; fast when the socket is down.
+      refetchInterval: wsStatus === "open" ? 15000 : 5000,
       refetchOnWindowFocus: true,
       enabled: !!tenantId,
     },
@@ -72,13 +75,40 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
     );
   });
 
+  // Full-text search over message BODIES (server FTS) — augments the instant
+  // title/preview filter above. Debounced so we don't fire per keystroke.
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+  const searching = debounced.length >= 2;
+  const searchQ = api.messenger.searchMessages.useQuery(
+    { tenantId, query: debounced, limit: 20 },
+    { enabled: !!tenantId && searching },
+  );
+  const threadTitleById = new Map(
+    (threadsQ.data?.items ?? []).map((th) => [
+      th.id,
+      th.title ??
+        (th.kind === "staff_dm" ? t("messenger.thread.dm", lang) : t("messenger.thread.chat", lang)),
+    ]),
+  );
+
   return (
     <div className="flex h-full flex-col border-r border-slate-200 dark:border-slate-800">
       {/* Header */}
       <div className="border-b border-slate-200 dark:border-slate-800 p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100">
             {t("messenger.threadList.title", lang)}
+            {(wsStatus === "connecting" || wsStatus === "error") && (
+              <span
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+                title={t("messenger.conn.reconnecting", lang)}
+                aria-label={t("messenger.conn.reconnecting", lang)}
+              />
+            )}
           </h2>
           <button
             type="button"
@@ -111,6 +141,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               <button
                 key={k}
                 type="button"
+                aria-pressed={filter === k}
                 onClick={() => setFilter(k)}
                 className={`rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors ${
                   filter === k
@@ -143,7 +174,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && !searching ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             <p className="text-xs text-slate-500">{t("messenger.threadList.empty", lang)}</p>
             <p className="mt-1 text-[10px] text-slate-400">
@@ -198,6 +229,42 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
               </button>
             );
           })
+        )}
+
+        {/* Full-text message search results (server FTS, membership-scoped) */}
+        {searching && (
+          <div className="border-t border-slate-200 dark:border-slate-800">
+            <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              {t("messenger.search.inMessages", lang)}
+            </p>
+            {searchQ.isLoading ? (
+              <p className="px-3 py-2 text-[11px] text-slate-400">
+                {t("messenger.search.searching", lang)}
+              </p>
+            ) : (searchQ.data?.items ?? []).length === 0 ? (
+              <p className="px-3 py-2 text-[11px] text-slate-400">
+                {t("messenger.search.noResults", lang)}
+              </p>
+            ) : (
+              (searchQ.data?.items ?? []).map((hit) => (
+                <button
+                  key={hit.id}
+                  type="button"
+                  onClick={() => onSelect(hit.threadId)}
+                  data-testid={`search-hit-${hit.id}`}
+                  className="flex w-full flex-col items-start gap-0.5 border-l-2 border-l-transparent px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                >
+                  <span className="line-clamp-2 text-[11px] text-slate-700 dark:text-slate-300">
+                    {hit.body}
+                  </span>
+                  <span className="text-[9px] text-slate-400">
+                    {threadTitleById.get(hit.threadId) ?? t("messenger.thread.chat", lang)} ·{" "}
+                    {fmtTime(hit.createdAt)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
         )}
       </div>
     </div>

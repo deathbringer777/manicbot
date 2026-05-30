@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Archive, StickyNote, Users } from "lucide-react";
+import { Archive, StickyNote, Users, Clock, Check, CheckCheck, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { MessageComposer } from "./MessageComposer";
+import { MessageComposer, ATTACHMENT_ONLY_BODY } from "./MessageComposer";
 import { GroupMembersModal } from "./GroupMembersModal";
+import { useMessengerSocketCtx } from "./socketContext";
 import { RequestCard } from "./RequestCard";
 
 interface Props {
@@ -44,6 +45,8 @@ export function ThreadView({ tenantId, threadId }: Props) {
   const utils = api.useUtils();
   const scrollRef = useRef<HTMLDivElement>(null);
   const { lang } = useLang();
+  const socket = useMessengerSocketCtx();
+  const lastTypingRef = useRef(0);
   // Members drawer is opt-in — staff_group only — and is owner-only
   // edits-wise (the drawer itself respects the role via useRole inside it).
   const [membersOpen, setMembersOpen] = useState(false);
@@ -51,7 +54,8 @@ export function ThreadView({ tenantId, threadId }: Props) {
   const detailQ = api.messenger.getThread.useQuery(
     { tenantId, threadId, limit: 50 },
     {
-      refetchInterval: 5000,
+      // Poll slowly while the realtime socket is healthy; fast when it's down.
+      refetchInterval: socket.status === "open" ? 15000 : 5000,
       refetchOnWindowFocus: true,
       enabled: !!tenantId && !!threadId,
     },
@@ -64,6 +68,28 @@ export function ThreadView({ tenantId, threadId }: Props) {
   });
 
   const markReadMutation = api.messenger.markRead.useMutation();
+
+  // Retry a failed staff→client send (re-relays through the Worker).
+  const retryMutation = api.messenger.retryMessage.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.getThread.invalidate({ tenantId, threadId });
+    },
+  });
+
+  // Inline edit + soft delete of own messages.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const editMutation = api.messenger.editMessage.useMutation({
+    onSuccess: async () => {
+      setEditingId(null);
+      await utils.messenger.getThread.invalidate({ tenantId, threadId });
+    },
+  });
+  const deleteMutation = api.messenger.deleteMessage.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.getThread.invalidate({ tenantId, threadId });
+    },
+  });
 
   // Auto-mark read on the latest message we see
   useEffect(() => {
@@ -85,23 +111,79 @@ export function ThreadView({ tenantId, threadId }: Props) {
   }, [detailQ.data?.messages?.length]);
 
   if (detailQ.isLoading) {
+    // Skeleton message bubbles — communicates "loading messages", not a bare spinner.
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-500 dark:border-slate-800" />
+      <div className="flex h-full flex-col gap-2 overflow-hidden p-4" aria-busy="true">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className={`flex ${i % 2 ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`h-9 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800 ${
+                i % 2 ? "w-40" : "w-52"
+              }`}
+            />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!detailQ.data) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
         {t("messenger.loadError", lang)}
+        <button
+          type="button"
+          onClick={() => void detailQ.refetch()}
+          className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          {t("messenger.status.retry", lang)}
+        </button>
       </div>
     );
   }
 
   const { thread, messages, members, viewerWebUserId } = detailQ.data;
   const memberMap = new Map(members.map((m) => [m.memberRef, m.displayName]));
+
+  // Read receipt: only for staff threads (external clients can't report reads,
+  // so a "seen" on a client_conv would be misleading). Shown when the LAST
+  // message is the viewer's own and another web_user member has read past it
+  // (ULID lexicographic compare — last_read_message_id >= message id).
+  const lastMsg = messages[messages.length - 1];
+  const lastIsOwn =
+    !!lastMsg && lastMsg.senderKind === "web_user" && lastMsg.senderRef === viewerWebUserId;
+  const seenByOther =
+    (thread.kind === "staff_dm" || thread.kind === "staff_group") &&
+    lastIsOwn &&
+    members.some(
+      (m) =>
+        m.memberKind === "web_user" &&
+        m.memberRef !== viewerWebUserId &&
+        typeof m.lastReadMessageId === "string" &&
+        m.lastReadMessageId >= lastMsg!.id,
+    );
+
+  // Typing: who (other than me) is typing in THIS thread, not expired.
+  const typers = socket.typing.filter(
+    (e) => e.threadId === threadId && e.memberRef !== viewerWebUserId && e.expiresAt > Date.now(),
+  );
+  const typingLabel =
+    typers.length === 0
+      ? null
+      : typers.length === 1
+        ? t("messenger.typing.one", lang).replace(
+            "{name}",
+            typers[0]!.displayName ?? memberMap.get(typers[0]!.memberRef) ?? "…",
+          )
+        : t("messenger.typing.many", lang);
+
+  // Throttled typing emit (≤1 per 3s) — fired by the composer on input.
+  const handleTyping = () => {
+    const now = Date.now();
+    if (now - lastTypingRef.current < 3000) return;
+    lastTypingRef.current = now;
+    socket.sendTyping(threadId, viewerWebUserId, memberMap.get(viewerWebUserId) ?? null);
+  };
 
   const title =
     thread.title ??
@@ -214,7 +296,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
             // Body is "(вложение)" placeholder when the user sent an
             // attachment without text — hide it in the bubble so the image
             // stands alone.
-            const showBody = m.body && m.body !== "(вложение)";
+            const showBody = m.body && m.body !== ATTACHMENT_ONLY_BODY;
             return (
               <div
                 key={m.id}
@@ -234,7 +316,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
                             : "bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
                   }`}
                 >
-                  {!isOwn && (
+                  {!isOwn && !m.deletedAt && (
                     <p
                       className={`mb-0.5 text-[10px] font-semibold ${
                         isNote ? "text-amber-700 dark:text-amber-400" : "text-slate-500"
@@ -249,54 +331,157 @@ export function ThreadView({ tenantId, threadId }: Props) {
                       )}
                     </p>
                   )}
-                  {isOwn && isNote && (
+                  {isOwn && isNote && !m.deletedAt && (
                     <p className="mb-0.5 inline-flex items-center gap-0.5 text-[10px] font-semibold opacity-80">
                       <StickyNote className="h-2.5 w-2.5" />
                       {t("messenger.note", lang)}
                     </p>
                   )}
-                  {atts.length > 0 && (
-                    <div className={`flex flex-wrap gap-1.5 ${showBody ? "mb-1.5" : ""}`}>
-                      {atts.map((a, idx) => (
-                        <a
-                          key={`${a.url}-${idx}`}
-                          href={a.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block overflow-hidden rounded-lg border border-white/10"
+                  {m.deletedAt ? (
+                    <p className="text-sm italic opacity-70">{t("messenger.msg.deleted", lang)}</p>
+                  ) : editingId === m.id ? (
+                    <div className="flex flex-col gap-1">
+                      <textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        rows={2}
+                        maxLength={4000}
+                        className="w-full resize-none rounded-lg border border-white/30 bg-white/15 px-2 py-1 text-sm text-inherit placeholder:text-current/50 focus:outline-none"
+                        // eslint-disable-next-line jsx-a11y/no-autofocus
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-2 text-[10px]">
+                        <button type="button" onClick={() => setEditingId(null)} className="opacity-80 hover:opacity-100">
+                          {t("messenger.broadcast.cancel", lang)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = editText.trim();
+                            if (v) editMutation.mutate({ tenantId, threadId, messageId: m.id, body: v });
+                          }}
+                          disabled={editMutation.isPending}
+                          className="font-semibold hover:underline disabled:opacity-60"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={a.url}
-                            alt="attachment"
-                            className="max-h-56 max-w-[240px] w-auto object-cover"
-                          />
-                        </a>
-                      ))}
+                          {t("messenger.msg.save", lang)}
+                        </button>
+                      </div>
                     </div>
-                  )}
-                  {showBody && (
-                    <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                  ) : (
+                    <>
+                      {atts.length > 0 && (
+                        <div className={`flex flex-wrap gap-1.5 ${showBody ? "mb-1.5" : ""}`}>
+                          {atts.map((a, idx) => (
+                            <a
+                              key={`${a.url}-${idx}`}
+                              href={a.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block overflow-hidden rounded-lg border border-white/10"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={a.url}
+                                alt="attachment"
+                                className="max-h-56 max-w-[240px] w-auto object-cover"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {showBody && (
+                        <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+                      )}
+                    </>
                   )}
                   <p
-                    className={`mt-0.5 text-right text-[9px] ${
+                    className={`mt-0.5 flex items-center justify-end gap-1 text-[9px] ${
                       isOwn ? "text-white/70" : "text-slate-400"
                     }`}
                   >
-                    {fmtFull(m.createdAt)}
+                    <span>{fmtFull(m.createdAt)}</span>
+                    {m.editedAt && !m.deletedAt && (
+                      <span className="opacity-70">({t("messenger.msg.edited", lang)})</span>
+                    )}
+                    {isOwn && !m.deletedAt && editingId !== m.id && (
+                      <>
+                        {!m.externalMsgId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(m.id);
+                              setEditText(m.body);
+                            }}
+                            title={t("messenger.msg.edit", lang)}
+                            aria-label={t("messenger.msg.edit", lang)}
+                            className="opacity-60 hover:opacity-100"
+                          >
+                            <Pencil className="h-2.5 w-2.5 shrink-0" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              typeof window !== "undefined" &&
+                              window.confirm(t("messenger.msg.deleteConfirm", lang))
+                            ) {
+                              deleteMutation.mutate({ tenantId, threadId, messageId: m.id });
+                            }
+                          }}
+                          title={t("messenger.msg.delete", lang)}
+                          aria-label={t("messenger.msg.delete", lang)}
+                          className="opacity-60 hover:opacity-100"
+                        >
+                          <Trash2 className="h-2.5 w-2.5 shrink-0" />
+                        </button>
+                      </>
+                    )}
+                    {isOwn && m.deliveryState === "pending" && (
+                      <Clock className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.sending", lang)} />
+                    )}
+                    {isOwn && m.deliveryState === "sent" && (
+                      <Check className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.sent", lang)} />
+                    )}
+                    {isOwn && m.deliveryState === "delivered" && (
+                      <CheckCheck className="h-2.5 w-2.5 shrink-0" aria-label={t("messenger.status.delivered", lang)} />
+                    )}
+                    {isOwn && m.deliveryState === "failed" && (
+                      <button
+                        type="button"
+                        onClick={() => retryMutation.mutate({ tenantId, threadId, messageId: m.id })}
+                        disabled={retryMutation.isPending}
+                        title={m.deliveryError ?? t("messenger.status.failed", lang)}
+                        className="inline-flex items-center gap-0.5 rounded bg-rose-500/90 px-1 py-0.5 font-medium text-white hover:bg-rose-500 disabled:opacity-60"
+                      >
+                        <AlertCircle className="h-2.5 w-2.5 shrink-0" />
+                        {t("messenger.status.retry", lang)}
+                      </button>
+                    )}
                   </p>
                 </div>
               </div>
             );
           })
         )}
+        {seenByOther && (
+          <p className="px-2 pt-0.5 text-right text-[10px] text-slate-400">
+            ✓ {t("messenger.seen", lang)}
+          </p>
+        )}
       </div>
 
+      {typingLabel && (
+        <div className="px-4 pb-1 text-[11px] italic text-slate-400" aria-live="polite">
+          {typingLabel}
+        </div>
+      )}
       <MessageComposer
         tenantId={tenantId}
         threadId={threadId}
         threadKind={thread.kind}
         disabled={thread.archived === 1}
+        onTyping={handleTyping}
       />
     </div>
   );

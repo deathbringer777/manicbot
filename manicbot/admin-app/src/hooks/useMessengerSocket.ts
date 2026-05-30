@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "~/trpc/react";
 
 type Frame = {
@@ -8,36 +8,83 @@ type Frame = {
   tenantId?: string;
   threadId?: string;
   messageId?: string;
+  memberRef?: string;
+  displayName?: string;
+  until?: number;
   [k: string]: unknown;
 };
 
+export type WsStatus = "idle" | "connecting" | "open" | "closed" | "error";
+
+export interface TypingEntry {
+  threadId: string;
+  memberRef: string;
+  displayName: string | null;
+  expiresAt: number;
+}
+
+export interface MessengerSocket {
+  status: WsStatus;
+  /** Emit an ephemeral typing hint for a thread (no-op when the socket is down). */
+  sendTyping: (threadId: string, memberRef: string, displayName: string | null) => void;
+  /** Live typing entries across threads; consumers filter by threadId + self. */
+  typing: TypingEntry[];
+}
+
+const TYPING_TTL_MS = 6000;
+
 /**
  * Connect to the per-tenant MessengerHub Durable Object via WebSocket and
- * invalidate the relevant tRPC queries on incoming frames.
+ * invalidate the relevant tRPC queries on incoming frames. Also relays
+ * ephemeral `typing` frames.
  *
- * Falls back to polling (already on each query) when:
- *   - WS_TOKEN_SECRET isn't configured (issueWsToken throws → swallowed)
- *   - Connection fails (reconnects with exponential backoff up to 30s)
- *   - Browser is offline (the socket stays closed; polling carries the UI)
+ * Falls back to polling (already on each query) when WS_TOKEN_SECRET isn't
+ * configured, the connection fails (exponential backoff up to 30s), or the
+ * browser is offline. Mounting this hook is additive — it never breaks polling.
  *
- * Mounting this hook is additive — it never breaks the polling story.
- *
- * @param tenantId - effective tenantId; null disables the socket entirely
+ * @param tenantId effective tenantId; null disables the socket entirely
  */
-export function useMessengerSocket(tenantId: string | null): {
-  status: "idle" | "connecting" | "open" | "closed" | "error";
-} {
+export function useMessengerSocket(tenantId: string | null): MessengerSocket {
   const utils = api.useUtils();
   const issueToken = api.messenger.issueWsToken.useMutation();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
   const attempts = useRef(0);
-  const statusRef = useRef<"idle" | "connecting" | "open" | "closed" | "error">("idle");
-  // Sticky flag: when the server returns PRECONDITION_FAILED (WS_TOKEN_SECRET
-  // is unset on the deploy), realtime is permanently unavailable for this
-  // session. Without this, exponential backoff would keep firing
-  // issueWsToken every 1→2→4→…→30s, spamming the console + tRPC inspector.
+  const [status, setStatus] = useState<WsStatus>("idle");
+  const [typing, setTyping] = useState<TypingEntry[]>([]);
+  // Sticky flag: PRECONDITION_FAILED (WS_TOKEN_SECRET unset) means realtime is
+  // permanently unavailable this session — stop reconnect spam.
   const realtimeDisabled = useRef(false);
+
+  const sendTyping = useCallback(
+    (threadId: string, memberRef: string, displayName: string | null) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "typing",
+            threadId,
+            memberRef,
+            displayName,
+            until: Date.now() + TYPING_TTL_MS,
+          }),
+        );
+      } catch {
+        /* socket closing — drop */
+      }
+    },
+    [],
+  );
+
+  // Prune expired typing entries while any are present (no idle timer).
+  useEffect(() => {
+    if (typing.length === 0) return;
+    const id = window.setInterval(() => {
+      setTyping((prev) => prev.filter((e) => e.expiresAt > Date.now()));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [typing.length]);
 
   useEffect(() => {
     if (!tenantId || typeof window === "undefined") return;
@@ -45,7 +92,7 @@ export function useMessengerSocket(tenantId: string | null): {
 
     async function connect() {
       if (cancelled || realtimeDisabled.current) return;
-      statusRef.current = "connecting";
+      setStatus("connecting");
       try {
         const { token } = await issueToken.mutateAsync({ tenantId: tenantId! });
         if (cancelled) return;
@@ -58,21 +105,19 @@ export function useMessengerSocket(tenantId: string | null): {
 
         ws.addEventListener("open", () => {
           attempts.current = 0;
-          statusRef.current = "open";
+          setStatus("open");
         });
 
         ws.addEventListener("message", (event) => {
           let frame: Frame | null = null;
           try {
-            frame = JSON.parse(String(event.data));
+            frame = JSON.parse(String(event.data)) as Frame;
           } catch {
             return;
           }
           if (!frame || typeof frame !== "object") return;
-          // Defense-in-depth: the DO is per-tenant, but verify regardless.
           if (frame.tenantId && frame.tenantId !== tenantId) return;
           if (frame.type === "message.new") {
-            // New message — refresh the affected thread and the inbox list.
             if (frame.threadId) {
               void utils.messenger.getThread.invalidate({
                 tenantId: tenantId!,
@@ -82,18 +127,30 @@ export function useMessengerSocket(tenantId: string | null): {
             void utils.messenger.listThreads.invalidate({ tenantId: tenantId! });
           } else if (frame.type === "thread.updated") {
             void utils.messenger.listThreads.invalidate({ tenantId: tenantId! });
+          } else if (frame.type === "typing" && frame.threadId && frame.memberRef) {
+            const entry: TypingEntry = {
+              threadId: String(frame.threadId),
+              memberRef: String(frame.memberRef),
+              displayName: typeof frame.displayName === "string" ? frame.displayName : null,
+              expiresAt: typeof frame.until === "number" ? frame.until : Date.now() + TYPING_TTL_MS,
+            };
+            setTyping((prev) => [
+              ...prev.filter(
+                (e) => !(e.threadId === entry.threadId && e.memberRef === entry.memberRef),
+              ),
+              entry,
+            ]);
           }
         });
 
         ws.addEventListener("close", () => {
-          statusRef.current = "closed";
+          setStatus("closed");
           if (cancelled) return;
           scheduleReconnect();
         });
 
         ws.addEventListener("error", () => {
-          statusRef.current = "error";
-          // close handler will schedule the reconnect
+          setStatus("error");
           try {
             ws.close();
           } catch {
@@ -101,9 +158,6 @@ export function useMessengerSocket(tenantId: string | null): {
           }
         });
       } catch (e) {
-        // tRPC PRECONDITION_FAILED → WS_TOKEN_SECRET unset → realtime is
-        // disabled by config, NOT a transient failure. Stop reconnecting so
-        // we don't burn a token-mint round-trip every backoff tick.
         const code =
           (e as { data?: { code?: string } } | null)?.data?.code ??
           (e as { shape?: { data?: { code?: string } } } | null)?.shape?.data?.code;
@@ -115,11 +169,10 @@ export function useMessengerSocket(tenantId: string | null): {
               "[messenger ws] realtime disabled (WS_TOKEN_SECRET unset); polling fallback active",
             );
           }
-          statusRef.current = "closed";
+          setStatus("closed");
           return;
         }
-        // Transient failure (network, server error, etc.) — back off and retry.
-        statusRef.current = "error";
+        setStatus("error");
         // eslint-disable-next-line no-console
         console.warn("[messenger ws] token mint failed; polling fallback", e);
         scheduleReconnect();
@@ -130,8 +183,6 @@ export function useMessengerSocket(tenantId: string | null): {
       if (cancelled) return;
       attempts.current += 1;
       const backoff = Math.min(30_000, 1000 * Math.pow(2, attempts.current - 1));
-      // On reconnect, also invalidate caches so the UI catches up on
-      // anything that happened during the gap.
       if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
       reconnectTimer.current = window.setTimeout(() => {
         void utils.messenger.listThreads.invalidate({ tenantId: tenantId! });
@@ -150,12 +201,11 @@ export function useMessengerSocket(tenantId: string | null): {
         /* ignore */
       }
       wsRef.current = null;
-      statusRef.current = "idle";
+      setStatus("idle");
     };
-    // We intentionally do NOT include `utils` / `issueToken` — those are
-    // stable references from tRPC's hook factory.
+    // `utils` / `issueToken` are stable tRPC hook refs — intentionally omitted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
-  return { status: statusRef.current };
+  return { status, sendTyping, typing };
 }

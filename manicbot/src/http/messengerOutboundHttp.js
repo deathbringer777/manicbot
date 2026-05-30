@@ -27,10 +27,8 @@
 
 import { timingSafeEqual } from '../utils/security.js';
 import { log } from '../utils/logger.js';
-import {
-  appendOutboundStaffMessage,
-  lookupClientConvTarget,
-} from '../services/messengerThreads.js';
+import { lookupClientConvTarget } from '../services/messengerThreads.js';
+import { classifyChannelSendResult } from '../channels/send-classify.js';
 import { getChannelConfig } from '../channels/resolver.js';
 import { TelegramAdapter } from '../channels/telegram.js';
 import { WhatsAppAdapter } from '../channels/whatsapp.js';
@@ -118,98 +116,120 @@ export async function tryMessengerOutboundRoute(request, env, url) {
   } catch {
     return bad(400, 'invalid_json');
   }
-  const { tenantId, threadId, body: messageBody, replyToMessageId } = body ?? {};
+  const { tenantId, threadId, body: messageBody, messageId } = body ?? {};
 
   if (typeof tenantId !== 'string' || !tenantId) return bad(400, 'tenantId_required');
   if (typeof threadId !== 'string' || !threadId) return bad(400, 'threadId_required');
   if (typeof messageBody !== 'string' || !messageBody.trim()) return bad(400, 'body_required');
   if (messageBody.length > 4000) return bad(400, 'body_too_long');
 
+  const result = await performOutboundSend(env, { tenantId, threadId, body: messageBody });
+
+  if (result.ok) {
+    return Response.json({
+      ok: true,
+      external_msg_id: result.externalMsgId ?? null,
+      delivery_state: 'sent',
+      channelType: result.channelType,
+    });
+  }
+
+  // Auto-retry ONLY definitive server rejections (429 / 5xx) — never ambiguous
+  // network failures (double-send risk). Enqueue when the queue binding + the
+  // row id are present; the admin-app then keeps the row 'pending'.
+  if (result.autoRetry && messageId && env.MESSENGER_OUTBOUND_RETRY) {
+    try {
+      await env.MESSENGER_OUTBOUND_RETRY.send({ tenantId, threadId, messageId, body: messageBody });
+      return Response.json(
+        { ok: false, error: result.errorCode, transient: true, queued: true },
+        { status: 202 },
+      );
+    } catch (e) {
+      log.warn('messengerOutbound.enqueue', { action: 'enqueue_failed', error: e?.message });
+      // fall through to a plain failure response
+    }
+  }
+
+  return bad(result.httpStatus ?? 502, result.errorCode ?? 'channel_send_failed', {
+    transient: result.transient,
+    ...(result.channelType ? { channelType: result.channelType } : {}),
+  });
+}
+
+/**
+ * Core outbound send: resolve the channel target → send → classify the outcome.
+ * Shared by the HTTP relay (first attempt) AND the queue consumer (retries) so
+ * the send logic never drifts between them.
+ *
+ * @returns {Promise<
+ *   | { ok: true, externalMsgId: string|null, channelType: string }
+ *   | { ok: false, httpStatus: number, errorCode: string, transient?: boolean, autoRetry?: boolean, channelType?: string, detail?: string }
+ * >}
+ */
+export async function performOutboundSend(env, { tenantId, threadId, body }) {
   const ctx = await buildOutboundCtx(env, tenantId);
 
-  // Lookup thread + conversation target
   const target = await lookupClientConvTarget(ctx, tenantId, threadId);
   if (!target) {
-    return bad(404, 'thread_not_found_or_not_client_conv');
+    return { ok: false, httpStatus: 404, errorCode: 'thread_not_found_or_not_client_conv', autoRetry: false };
   }
 
-  // Resolve channel config (skip for telegram — uses bot token)
+  // Web channel is delivery-less from the Worker — the client sees replies on
+  // the next chat-widget poll. Treat as immediately sent (no external id).
+  if (target.channelType === 'web') {
+    await publishToMessengerHub(env, tenantId, {
+      type: 'message.new', threadId, kind: 'client_conv', direction: 'outbound',
+    }).catch(() => undefined);
+    return { ok: true, externalMsgId: null, channelType: 'web' };
+  }
+
   let channelConfig = null;
   if (target.channelType === 'whatsapp' || target.channelType === 'instagram') {
-    channelConfig = await getChannelConfig(
-      ctx, tenantId, target.channelType, env.BOT_ENCRYPTION_KEY || null,
-    );
+    channelConfig = await getChannelConfig(ctx, tenantId, target.channelType, env.BOT_ENCRYPTION_KEY || null);
     if (!channelConfig?.token) {
-      return bad(503, 'channel_token_unavailable');
+      return { ok: false, httpStatus: 503, errorCode: 'channel_token_unavailable', transient: false, autoRetry: false };
     }
   }
 
-  // Build adapter
   const adapter = buildAdapter(target.channelType, channelConfig, ctx, env);
   if (!adapter) {
-    return bad(501, 'channel_not_supported', { channelType: target.channelType });
+    return { ok: false, httpStatus: 501, errorCode: 'channel_not_supported', channelType: target.channelType, autoRetry: false };
   }
 
-  // 24h window guard for WA / IG
   if (target.channelType === 'whatsapp' || target.channelType === 'instagram') {
-    const inWindow = await isWithinMessageWindow(
-      ctx, target.channelType, String(target.channelUserId),
-    );
+    const inWindow = await isWithinMessageWindow(ctx, target.channelType, String(target.channelUserId));
     if (!inWindow) {
-      return bad(422, 'outside_message_window', { channelType: target.channelType });
+      return { ok: false, httpStatus: 422, errorCode: 'outside_message_window', channelType: target.channelType, autoRetry: false };
     }
   }
 
-  // Send
   let sendResult;
   try {
-    sendResult = await adapter.send(String(target.channelUserId), {
-      text: messageBody.trim(),
-    });
+    sendResult = await adapter.send(String(target.channelUserId), { text: body.trim() });
   } catch (e) {
     log.error('messengerOutbound.send',
       e instanceof Error ? e : new Error(String(e?.message)),
       { tenantId, threadId, channelType: target.channelType });
-    return bad(502, 'channel_send_failed', { detail: e?.message });
-  }
-  if (sendResult && sendResult.ok === false) {
-    return bad(502, sendResult.error || 'channel_send_failed');
+    // Thrown fetch = AMBIGUOUS (might have delivered) → never auto-retry.
+    return { ok: false, httpStatus: 502, errorCode: 'channel_send_failed', detail: e?.message, transient: true, autoRetry: false };
   }
 
-  const externalMsgId =
-    sendResult?.external_msg_id ??
-    sendResult?.message_id ??
-    sendResult?.messages?.[0]?.id ??
-    sendResult?.result?.message_id ??
-    null;
+  const outcome = classifyChannelSendResult(sendResult);
+  if (outcome.deliveryState === 'failed') {
+    return {
+      ok: false,
+      httpStatus: 502,
+      errorCode: outcome.errorCode || 'channel_send_failed',
+      transient: outcome.transient,
+      autoRetry: outcome.autoRetry,
+      channelType: target.channelType,
+    };
+  }
 
-  // Stamp into thread_messages — append a relay row so the timeline shows
-  // staff replies came from the channel adapter. (admin-app's sendMessage
-  // also writes a sender_kind='web_user' row; the relay row is a delivery
-  // receipt with sender_kind='system'.)
-  const appended = await appendOutboundStaffMessage(ctx, {
-    tenantId,
-    threadId,
-    body: messageBody.trim(),
-    externalMsgId: externalMsgId ? String(externalMsgId) : '',
-    replyToMessageId: replyToMessageId ?? null,
-  });
-
-  // Phase 3 — broadcast the outbound delivery to other open /messages tabs
-  // (e.g. another owner browser session, or the same user on a phone).
   await publishToMessengerHub(env, tenantId, {
-    type: 'message.new',
-    threadId,
-    messageId: appended?.messageId ?? null,
-    kind: 'client_conv',
-    direction: 'outbound',
+    type: 'message.new', threadId, kind: 'client_conv', direction: 'outbound',
   }).catch(() => undefined);
 
-  return Response.json({
-    ok: true,
-    messageId: appended?.messageId ?? null,
-    external_msg_id: externalMsgId,
-    channelType: target.channelType,
-  });
+  return { ok: true, externalMsgId: outcome.externalMsgId, channelType: target.channelType };
 }
 

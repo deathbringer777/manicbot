@@ -60,9 +60,15 @@ export function createDbMock(selectResults: unknown[] = []) {
             then: (resolve: any, reject?: any) =>
               Promise.resolve({ ok: true }).then(resolve, reject),
           };
+          // Returns the (thenable) chain so awaiting / db.batch() works. The
+          // row was already recorded in insertCalls above.
+          chain.onConflictDoNothing = vi.fn(() => chain);
           return chain;
         }),
       })),
+      // Raw query (db.run(sql.raw(...), binds)) — returns the next queued
+      // result array wrapped as a D1Result. Used by FTS searchMessages.
+      run: vi.fn(async () => ({ results: selectResults.shift() ?? [] })),
     },
     updateCalls,
     deleteCalls,

@@ -11,6 +11,8 @@ import { ThreadView } from "./_components/ThreadView";
 import { NewThreadModal } from "./_components/NewThreadModal";
 import { PlatformAdminPane } from "./_components/PlatformAdminPane";
 import { PlatformOwnerView } from "./_components/PlatformOwnerView";
+import { GodClientInbox } from "./_components/GodClientInbox";
+import { MessengerSocketProvider } from "./_components/socketContext";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
@@ -37,8 +39,9 @@ export default function MessagesClient() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [platformSelected, setPlatformSelected] = useState(initialPlatformOwner);
   const [modalOpen, setModalOpen] = useState(false);
+  const [godTab, setGodTab] = useState<"platform" | "clients">("platform");
 
-  useMessengerSocket(tenantId);
+  const socket = useMessengerSocket(tenantId);
 
   // Owner-side: poll unread count for the pinned ManicBot entry. Enabled
   // for all non-sysadmin web_users so the pin can show a dot.
@@ -59,9 +62,44 @@ export default function MessagesClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mode 1 — sysadmin gets the full platform surface.
+  // Mode 1 — sysadmin: tabbed shell. "Platform" = owner DMs + broadcasts;
+  // "Client chats" = the consolidated cross-tenant client inbox (replaces the
+  // retired /conversations route).
   if (isSystemAdminNoPreview) {
-    return <PlatformAdminPane initialThreadId={initialPlatformThread} />;
+    const tabBtn = (key: "platform" | "clients", label: string) => (
+      <button
+        type="button"
+        role="tab"
+        aria-selected={godTab === key}
+        onClick={() => setGodTab(key)}
+        className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+          godTab === key
+            ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+            : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+        }`}
+      >
+        {label}
+      </button>
+    );
+    return (
+      <div className="flex h-[calc(100vh-8rem)] flex-col gap-2">
+        <div
+          role="tablist"
+          aria-label={t("messenger.threadList.title", lang)}
+          className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900"
+        >
+          {tabBtn("platform", t("messenger.tab.platform", lang))}
+          {tabBtn("clients", t("messenger.tab.clientChats", lang))}
+        </div>
+        <div className="min-h-0 flex-1">
+          {godTab === "platform" ? (
+            <PlatformAdminPane initialThreadId={initialPlatformThread} />
+          ) : (
+            <GodClientInbox />
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (!tenantId) {
@@ -74,7 +112,7 @@ export default function MessagesClient() {
 
   // Mode 2/3 — tenant messenger with a pinned ManicBot entry.
   return (
-    <>
+    <MessengerSocketProvider value={socket}>
       <div
         className="grid h-[calc(100vh-8rem)] grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[320px_minmax(0,1fr)] dark:border-slate-800 dark:bg-slate-900"
         data-testid="messages-shell"
@@ -184,6 +222,6 @@ export default function MessagesClient() {
           }}
         />
       )}
-    </>
+    </MessengerSocketProvider>
   );
 }

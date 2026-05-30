@@ -3,6 +3,10 @@
 # .dev.vars gitignored — НИКОГДА не коммить реальные секреты.
 # wrangler dev читает .dev.vars автоматически.
 # Для production: wrangler secret put <NAME>
+#
+# ─── CRON OPERATIONAL FLAGS (optional) ───────────────────────────────────────
+# ATTACHMENT_GC_DELETE=1   # enable the destructive R2 sweep of orphaned messenger
+#                          # attachments (default: dry-run — logs candidates only)
 
 # ─── ОБЯЗАТЕЛЬНЫЕ ────────────────────────────────────────────────────────────
 

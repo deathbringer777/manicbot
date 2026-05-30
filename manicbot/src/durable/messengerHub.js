@@ -87,17 +87,51 @@ export class MessengerHub {
 
   /**
    * Inbound WebSocket message handler — required for hibernatable sockets.
-   * Currently a no-op: clients only listen for broadcasts in Phase 3.
-   * Phase 4 will accept `typing.start` / `typing.stop` etc.
+   * Handles keep-alive pings and ephemeral `typing` frames.
+   *
+   * Typing frames are re-broadcast to all OTHER sockets and NEVER persisted.
+   * `memberRef`/`displayName` are client-asserted (low-severity spoof — the
+   * socket is already tenant-bound by the WS token, and a typing hint is
+   * ephemeral). The server clamps `until` so a lost stop-frame can't leave a
+   * stuck "typing…" indicator.
    *
    * @param {WebSocket} ws
    * @param {string|ArrayBuffer} message
    */
   async webSocketMessage(ws, message) {
-    // Echo "ping" → "pong" so clients can keep the connection warm.
     try {
       const text = typeof message === 'string' ? message : new TextDecoder().decode(message);
-      if (text === 'ping') ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+      if (text === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+        return;
+      }
+      let frame;
+      try {
+        frame = JSON.parse(text);
+      } catch {
+        return;
+      }
+      if (frame && frame.type === 'typing' && frame.threadId && frame.memberRef) {
+        const out = JSON.stringify({
+          type: 'typing',
+          threadId: String(frame.threadId),
+          memberRef: String(frame.memberRef),
+          displayName:
+            typeof frame.displayName === 'string' ? frame.displayName.slice(0, 80) : null,
+          until: Date.now() + 6000,
+        });
+        const sockets = typeof this.state.getWebSockets === 'function'
+          ? this.state.getWebSockets()
+          : [];
+        for (const s of sockets) {
+          if (s === ws) continue;
+          try {
+            s.send(out);
+          } catch {
+            /* drop broken sockets */
+          }
+        }
+      }
     } catch {
       /* swallow */
     }

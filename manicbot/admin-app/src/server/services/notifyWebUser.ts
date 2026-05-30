@@ -13,7 +13,7 @@
  *   - Returns the inserted id, or null when dedup short-circuited.
  *   - Never throws — DB failures bubble up as `{ ok:false, error }`.
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { userNotifications, webUsers } from "~/server/db/schema";
 import { getDb } from "~/server/db";
 import { log } from "~/server/utils/logger";
@@ -120,9 +120,20 @@ export async function notifyWebUser(
   }
 }
 
+/** Statements per D1 batch — one batch is one subrequest. */
+const NOTIFY_BATCH_SIZE = 100;
+
 /**
- * Fan-out helper: notify many users with the same payload. Each call is
- * independent — failures are isolated, never abort the loop.
+ * Fan-out helper: notify many users with the same payload.
+ *
+ * Two paths, same semantics (prefs gating + dedup):
+ *   - Sequential (default / non-D1 / single recipient) — one prefs read + one
+ *     insert per user. Used by tests (the mock has no `batch`) and small
+ *     fan-outs. Identical to the original behavior.
+ *   - Bulk (D1 `db.batch` available AND >1 recipient) — ONE prefs IN-query +
+ *     chunked batch inserts. Keeps a 10k-recipient platform broadcast under
+ *     Cloudflare's per-invocation subrequest limit (the old loop did 2N
+ *     subrequests and would fail well before 10k).
  */
 export async function notifyManyWebUsers(
   db: Db,
@@ -133,12 +144,78 @@ export async function notifyManyWebUsers(
   let deduped = 0;
   let failed = 0;
   let skippedByPrefs = 0;
-  for (const webUserId of webUserIds) {
-    const r = await notifyWebUser(db, { ...payload, webUserId });
-    if (!r.ok) failed++;
-    else if (r.skippedByPrefs) skippedByPrefs++;
-    else if (r.deduped) deduped++;
-    else ok++;
+
+  const ids = [...new Set(webUserIds)].filter(Boolean);
+  if (ids.length === 0) return { ok, deduped, failed, skippedByPrefs };
+
+  const batchCapable =
+    typeof (db as unknown as { batch?: unknown }).batch === "function";
+
+  if (!batchCapable || ids.length <= 1) {
+    for (const webUserId of ids) {
+      const r = await notifyWebUser(db, { ...payload, webUserId });
+      if (!r.ok) failed++;
+      else if (r.skippedByPrefs) skippedByPrefs++;
+      else if (r.deduped) deduped++;
+      else ok++;
+    }
+    return { ok, deduped, failed, skippedByPrefs };
+  }
+
+  // ── Bulk path ──────────────────────────────────────────────────────────
+  const title = String(payload.title).slice(0, TITLE_MAX);
+  const body = payload.body ? String(payload.body).slice(0, BODY_MAX) : null;
+  const link = payload.link ? String(payload.link).slice(0, LINK_MAX) : null;
+  const kind = payload.kind;
+
+  let prefsById = new Map<string, string | null>();
+  try {
+    const rows = await db
+      .select({ id: webUsers.id, raw: webUsers.notificationPrefs })
+      .from(webUsers)
+      .where(inArray(webUsers.id, ids));
+    prefsById = new Map(rows.map((r) => [r.id, r.raw]));
+  } catch {
+    // Prefs read failure → deliver to all (defaults are "deliver in-app").
+  }
+
+  const deliverIds = ids.filter((id) => {
+    if (kind === "support.test") return true;
+    const prefs = parsePrefs(prefsById.get(id) ?? null);
+    if (shouldDeliver(kind, prefs, "inapp")) return true;
+    skippedByPrefs++;
+    return false;
+  });
+
+  const now = Math.floor(Date.now() / 1000);
+  const stmts = deliverIds.map((webUserId) =>
+    db
+      .insert(userNotifications)
+      .values({
+        id: buildNotificationId(),
+        tenantId: payload.tenantId ?? null,
+        webUserId,
+        kind,
+        title,
+        body,
+        link,
+        sourceSlug: payload.sourceSlug ?? null,
+        sourceId: payload.sourceId ?? null,
+        readAt: null,
+        createdAt: now,
+      })
+      .onConflictDoNothing(),
+  );
+
+  const runBatch = (db as unknown as { batch: (b: unknown[]) => Promise<unknown> }).batch;
+  for (let i = 0; i < stmts.length; i += NOTIFY_BATCH_SIZE) {
+    const chunk = stmts.slice(i, i + NOTIFY_BATCH_SIZE);
+    try {
+      await runBatch.call(db, chunk);
+      ok += chunk.length; // approximate (dedup collapses silently in batch mode)
+    } catch {
+      failed += chunk.length;
+    }
   }
   return { ok, deduped, failed, skippedByPrefs };
 }

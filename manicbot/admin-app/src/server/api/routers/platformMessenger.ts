@@ -674,36 +674,103 @@ export const platformMessengerRouter = createTRPCRouter({
 
       let sent = 0;
       let failed = 0;
-      for (const recipient of recipients) {
-        try {
-          const { id: threadId } = await ensureThread(
-            ctx.db,
-            recipient.id,
-            recipient.tenantId ?? null,
-          );
-          const messageId = ulid();
-          await ctx.db.insert(platformThreadMessages).values({
-            id: messageId,
-            threadId,
-            senderKind: "platform",
-            senderWebUserId: ctx.webUser!.id,
-            body,
-            attachmentsJson: null,
-            broadcastId,
-            createdAt: now,
-          });
-          await ctx.db
-            .update(platformThreads)
-            .set({
-              lastMessageAt: now,
-              lastMessagePreview: preview,
-              lastSenderKind: "platform",
-              platformLastReadAt: now,
+      const msgValues = (threadId: string) => ({
+        id: ulid(),
+        threadId,
+        senderKind: "platform" as const,
+        senderWebUserId: ctx.webUser!.id,
+        body,
+        attachmentsJson: null,
+        broadcastId,
+        createdAt: now,
+      });
+      const threadSet = {
+        lastMessageAt: now,
+        lastMessagePreview: preview,
+        lastSenderKind: "platform" as const,
+        platformLastReadAt: now,
+      };
+      const batchCapable =
+        typeof (ctx.db as unknown as { batch?: unknown }).batch === "function";
+
+      if (batchCapable) {
+        // Bulk path — collapses ~3N subrequests into ~N/100 batches so a large
+        // broadcast stays under Cloudflare's per-invocation subrequest limit.
+        const runBatch = (ctx.db as unknown as { batch: (b: unknown[]) => Promise<unknown> }).batch;
+        const CHUNK = 100;
+        // 1) Idempotently ensure a thread per recipient (UNIQUE on recipient).
+        const creates = recipients.map((r) =>
+          ctx.db
+            .insert(platformThreads)
+            .values({
+              id: `pt_${ulid()}`,
+              recipientWebUserId: r.id,
+              recipientTenantId: r.tenantId ?? null,
+              lastMessageAt: null,
+              lastMessagePreview: null,
+              lastSenderKind: null,
+              recipientLastReadAt: null,
+              platformLastReadAt: null,
+              archived: 0,
+              createdAt: now,
             })
-            .where(eq(platformThreads.id, threadId));
+            .onConflictDoNothing(),
+        );
+        for (let i = 0; i < creates.length; i += CHUNK) {
+          await runBatch.call(ctx.db, creates.slice(i, i + CHUNK));
+        }
+        // 2) Resolve thread ids in IN-query pages.
+        const recIds = recipients.map((r) => r.id);
+        const threadByRecipient = new Map<string, string>();
+        for (let i = 0; i < recIds.length; i += 200) {
+          const part = await ctx.db
+            .select({
+              id: platformThreads.id,
+              recipientWebUserId: platformThreads.recipientWebUserId,
+            })
+            .from(platformThreads)
+            .where(inArray(platformThreads.recipientWebUserId, recIds.slice(i, i + 200)));
+          for (const row of part) threadByRecipient.set(row.recipientWebUserId, row.id);
+        }
+        // 3) Batch message inserts + thread updates.
+        const msgStmts: unknown[] = [];
+        const updStmts: unknown[] = [];
+        for (const r of recipients) {
+          const threadId = threadByRecipient.get(r.id);
+          if (!threadId) {
+            failed++;
+            continue;
+          }
+          msgStmts.push(ctx.db.insert(platformThreadMessages).values(msgValues(threadId)));
+          updStmts.push(
+            ctx.db.update(platformThreads).set(threadSet).where(eq(platformThreads.id, threadId)),
+          );
           sent++;
-        } catch {
-          failed++;
+        }
+        for (let i = 0; i < msgStmts.length; i += CHUNK) {
+          await runBatch.call(ctx.db, msgStmts.slice(i, i + CHUNK));
+        }
+        for (let i = 0; i < updStmts.length; i += CHUNK) {
+          await runBatch.call(ctx.db, updStmts.slice(i, i + CHUNK));
+        }
+      } else {
+        // Sequential fallback (mock / libsql) — original behavior.
+        for (const recipient of recipients) {
+          try {
+            const { id: threadId } = await ensureThread(
+              ctx.db,
+              recipient.id,
+              recipient.tenantId ?? null,
+            );
+            await ctx.db.insert(platformThreadMessages).values(msgValues(threadId));
+            await ctx.db
+              .update(platformThreads)
+              .set(threadSet)
+              .where(eq(platformThreads.id, threadId));
+            sent++;
+          } catch {
+            failed++;
+          }
         }
       }
 

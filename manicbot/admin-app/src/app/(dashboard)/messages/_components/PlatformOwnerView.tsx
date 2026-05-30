@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Megaphone } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 function fmtFull(ts: number): string {
   const d = new Date(ts * 1000);
@@ -12,29 +14,24 @@ function fmtFull(ts: number): string {
 }
 
 /**
- * Owner-side view of the ManicBot ↔ owner thread.
+ * Owner-side view of the ManicBot channel.
  *
- * Single-thread surface — there's only one platform thread per owner so we
- * skip the list. Composer at the bottom mirrors the tenant-messenger one
- * but uses `platformMessenger.sendMyReply`. Empty state shows when the
- * platform hasn't initiated yet — owner can still start a conversation.
+ * Read-only, one-way feed (like a Telegram channel): the platform broadcasts
+ * news and announcements, the owner only reads. There is no composer — replies
+ * are disabled (the server rejects `sendMyReply` with FORBIDDEN). Single-thread
+ * surface — one platform thread per owner, so we skip the list. We still mark
+ * the thread read so the unread badge clears. Owner support lives separately in
+ * Settings → Help → "Write to support".
  */
 export function PlatformOwnerView() {
   const utils = api.useUtils();
+  const { lang } = useLang();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [body, setBody] = useState("");
 
   const detailQ = api.platformMessenger.getMyThread.useQuery(
     { limit: 50 },
     { refetchInterval: 5000, refetchOnWindowFocus: true },
   );
-
-  const sendMutation = api.platformMessenger.sendMyReply.useMutation({
-    onSuccess: async () => {
-      setBody("");
-      await utils.platformMessenger.getMyThread.invalidate();
-    },
-  });
 
   const markReadMutation = api.platformMessenger.markMyThreadRead.useMutation();
 
@@ -56,12 +53,6 @@ export function PlatformOwnerView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread?.id, detailQ.data?.unreadCount]);
 
-  function onSend() {
-    const trimmed = body.trim();
-    if (!trimmed || sendMutation.isPending) return;
-    sendMutation.mutate({ body: trimmed });
-  }
-
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
@@ -73,7 +64,7 @@ export function PlatformOwnerView() {
             ManicBot
           </div>
           <div className="truncate text-[11px] text-slate-500">
-            Объявления и поддержка от платформы
+            {t("messenger.platformSubtitle", lang)}
           </div>
         </div>
       </div>
@@ -85,8 +76,7 @@ export function PlatformOwnerView() {
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center px-8 text-center text-xs text-slate-500">
-            Платформа пока ничего не присылала. Если есть вопросы — пишите
-            прямо тут, мы получим уведомление и ответим.
+            {t("messenger.platformEmpty", lang)}
           </div>
         ) : (
           messages.map((m) => {
@@ -115,38 +105,6 @@ export function PlatformOwnerView() {
               </div>
             );
           })
-        )}
-      </div>
-
-      <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                onSend();
-              }
-            }}
-            placeholder="Написать в ManicBot..."
-            rows={2}
-            className="flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-fuchsia-400 focus:outline-none focus:ring-1 focus:ring-fuchsia-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            data-testid="platform-owner-composer"
-            maxLength={4000}
-          />
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={!body.trim() || sendMutation.isPending}
-            className="rounded-xl bg-fuchsia-500 px-4 py-2 text-sm font-medium text-white hover:bg-fuchsia-600 disabled:cursor-not-allowed disabled:opacity-50"
-            data-testid="platform-owner-send"
-          >
-            {sendMutation.isPending ? "..." : "Отправить"}
-          </button>
-        </div>
-        {sendMutation.error && (
-          <div className="mt-1 text-xs text-rose-500">{sendMutation.error.message}</div>
         )}
       </div>
     </div>

@@ -516,6 +516,13 @@ export const webUsers = sqliteTable("web_users", {
   passwordHash: text("password_hash").notNull().default(""),
   /** Tenant this web user belongs to (required for tenant_owner / master) */
   tenantId: text("tenant_id"),
+  /**
+   * 0097: currently-selected salon for a multi-tenant user (an owner who also
+   * holds a master role elsewhere). NULL = use the home `tenantId`. Flows into
+   * the session via auth.ts `resolveActiveMembership`; membership is proven
+   * authoritatively via `masters.web_user_id`.
+   */
+  activeTenantId: text("active_tenant_id"),
   /** Role: tenant_owner | system_admin | support | technical_support | master */
   role: text("role").notNull().default("tenant_owner"),
   name: text("name"),

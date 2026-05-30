@@ -21,6 +21,7 @@ import type { NavItem, NavGroup } from "~/lib/nav/useNavItems";
 import { TOUR_REPLAY_EVENT } from "~/lib/onboarding/constants";
 import { useNavItems, tNav, getRoleInfo } from "~/lib/nav/useNavItems";
 import { NotificationBell } from "~/components/layout/NotificationBell";
+import { TenantSwitcher } from "~/components/layout/TenantSwitcher";
 import { BrandTile } from "~/components/layout/BrandTile";
 
 /** When true, inner <Shell> renders only children (no double sidebar). */
@@ -385,6 +386,9 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
             {/* Right: salon badge + theme toggle + user pill */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Multi-salon switcher — renders only when the user belongs to
+                  2+ salons (e.g. an owner who also accepted a master invite). */}
+              <TenantSwitcher />
               {/* Salon name badge for masters */}
               {role === "master" && tenantName && (
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium max-w-[180px]">

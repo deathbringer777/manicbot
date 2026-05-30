@@ -50,6 +50,7 @@ const BOOTSTRAP_SQL = [
      email TEXT NOT NULL,
      password_hash TEXT NOT NULL DEFAULT '',
      tenant_id TEXT,
+     active_tenant_id TEXT,
      role TEXT NOT NULL DEFAULT 'tenant_owner',
      name TEXT,
      lang TEXT DEFAULT 'en',

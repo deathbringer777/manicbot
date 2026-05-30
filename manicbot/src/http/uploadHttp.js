@@ -59,7 +59,7 @@ export function magicBytesMatchMime(bytes, declaredMime) {
   }
   if (declaredMime === 'image/webp') {
     if (bytes.length < 12) return false;
-    return (
+    const isRiffWebp =
       bytes[0] === 0x52 &&
       bytes[1] === 0x49 &&
       bytes[2] === 0x46 &&
@@ -67,8 +67,13 @@ export function magicBytesMatchMime(bytes, declaredMime) {
       bytes[8] === 0x57 &&
       bytes[9] === 0x45 &&
       bytes[10] === 0x42 &&
-      bytes[11] === 0x50
-    );
+      bytes[11] === 0x50;
+    if (!isRiffWebp) return false;
+    // RIFF chunk size (little-endian, bytes 4-7) counts everything after this
+    // field — i.e. fileSize - 8. Reject implausible sizes so a
+    // `RIFF<bogus-size>WEBP<payload>` polyglot can't slip past this gate.
+    const riffSize = ((bytes[4]) | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) >>> 0;
+    return riffSize >= 4 && riffSize <= bytes.length - 8;
   }
   return false;
 }

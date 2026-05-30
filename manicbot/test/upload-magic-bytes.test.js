@@ -48,8 +48,16 @@ function makeEnv(overrides = {}) {
 const PNG_MAGIC = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_MAGIC = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
 const WEBP_MAGIC = new Uint8Array([
-  0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+  0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, // RIFF, size = 0x24 = 36 (= 44 - 8)
+  0x57, 0x45, 0x42, 0x50,                         // WEBP
+  ...new Array(32).fill(0),                       // body so the RIFF size matches the buffer
+]);
+// WEBP header whose RIFF chunk-size field lies (claims ~4 GiB) — a polyglot
+// shape the bytes-0-3/8-11 check alone would wave through. (A12)
+const WEBP_BOGUS_SIZE = new Uint8Array([
+  0x52, 0x49, 0x46, 0x46, 0xff, 0xff, 0xff, 0xff,
   0x57, 0x45, 0x42, 0x50,
+  ...new Array(8).fill(0),
 ]);
 // HTML polyglot — starts with `<!doctype html>` instead of magic bytes.
 const HTML_POLYGLOT = new TextEncoder().encode('<!doctype html><script>alert(1)</script>');
@@ -65,6 +73,10 @@ describe('magicBytesMatchMime (P2-13)', () => {
 
   it('accepts a real WEBP header as image/webp', () => {
     expect(magicBytesMatchMime(WEBP_MAGIC, 'image/webp')).toBe(true);
+  });
+
+  it('rejects a WEBP whose RIFF chunk-size field lies (polyglot) — A12', () => {
+    expect(magicBytesMatchMime(WEBP_BOGUS_SIZE, 'image/webp')).toBe(false);
   });
 
   it('rejects HTML bytes declared as image/png', () => {

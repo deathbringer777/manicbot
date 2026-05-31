@@ -34,6 +34,9 @@ const PREF_INPUT = z.object({
     z.object({
       inapp: z.boolean(),
       push: z.boolean(),
+      // Optional so existing {inapp,push} callers stay valid; the email
+      // channel (migration 0100) is merged in when supplied.
+      email: z.boolean().optional(),
     }),
   ).optional(),
 });
@@ -189,7 +192,10 @@ export const notificationsRouter = createTRPCRouter({
       if (input.categories) {
         for (const [cat, value] of Object.entries(input.categories)) {
           if (value) {
-            next.categories[cat as NotificationCategory] = value;
+            // Merge (not replace) so a partial update — e.g. toggling only
+            // `inapp` — preserves the category's other channels (push/email).
+            const key = cat as NotificationCategory;
+            next.categories[key] = { ...next.categories[key], ...value };
           }
         }
       }

@@ -29,6 +29,18 @@ async function seedMaster(ctx, masterRow) {
   ).run();
 }
 
+async function seedWebUser(ctx, row) {
+  await ctx.db.prepare(`
+    INSERT INTO web_users (id, tenant_id, telegram_chat_id, role)
+    VALUES (?, ?, ?, ?)
+  `).bind(
+    row.id,
+    row.tenant_id,
+    row.telegram_chat_id ?? null,
+    row.role ?? 'tenant_owner',
+  ).run();
+}
+
 async function readNotifications(ctx, webUserId) {
   const rows = await ctx.db.prepare(
     `SELECT * FROM user_notifications WHERE web_user_id = ?`,
@@ -160,6 +172,56 @@ describe('notifyWebUser — Telegram channel resolution', () => {
     const res = await notifyWebUser(ctx, 'wu_1', {
       kind: 'reminder.fired', title: 'X', telegram: true,
     });
+    expect(res.telegramOk).toBe(false);
+    expect(telegramSendMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('notifyWebUser — owner Telegram fallback (migration 0082)', () => {
+  it('sends Telegram to a salon owner paired via web_users.telegram_chat_id (no master row)', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    ctx.bot = { sendMessage: () => {} };
+    await seedWebUser(ctx, { id: 'wu_owner', tenant_id: 't_a', telegram_chat_id: 777, role: 'tenant_owner' });
+    const res = await notifyWebUser(ctx, 'wu_owner', {
+      kind: 'platform.campaign', title: 'Announcement', telegram: true,
+    });
+    expect(res.telegramOk).toBe(true);
+    expect(telegramSendMock).toHaveBeenCalledWith(ctx, 777, expect.stringContaining('Announcement'));
+  });
+
+  it('prefers the non-synthetic master row over the owner pairing', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    ctx.bot = { sendMessage: () => {} };
+    await seedMaster(ctx, { tenant_id: 't_a', chat_id: 555, web_user_id: 'wu_dual', is_synthetic: 0 });
+    await seedWebUser(ctx, { id: 'wu_dual', tenant_id: 't_a', telegram_chat_id: 777 });
+    await notifyWebUser(ctx, 'wu_dual', { kind: 'platform.campaign', title: 'X', telegram: true });
+    expect(telegramSendMock).toHaveBeenCalledWith(ctx, 555, expect.anything());
+  });
+
+  it('falls back to owner pairing when the only master row is synthetic', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    ctx.bot = { sendMessage: () => {} };
+    await seedMaster(ctx, { tenant_id: 't_a', chat_id: 10_000_000_123, web_user_id: 'wu_owner', is_synthetic: 1 });
+    await seedWebUser(ctx, { id: 'wu_owner', tenant_id: 't_a', telegram_chat_id: 777 });
+    const res = await notifyWebUser(ctx, 'wu_owner', { kind: 'platform.campaign', title: 'X', telegram: true });
+    expect(res.telegramOk).toBe(true);
+    expect(telegramSendMock).toHaveBeenCalledWith(ctx, 777, expect.anything());
+  });
+
+  it('skips owner Telegram when web_users.telegram_chat_id is null', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    ctx.bot = { sendMessage: () => {} };
+    await seedWebUser(ctx, { id: 'wu_owner', tenant_id: 't_a', telegram_chat_id: null });
+    const res = await notifyWebUser(ctx, 'wu_owner', { kind: 'platform.campaign', title: 'X', telegram: true });
+    expect(res.telegramOk).toBe(false);
+    expect(telegramSendMock).not.toHaveBeenCalled();
+  });
+
+  it('does not cross tenants — an owner chat in another tenant is not used', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    ctx.bot = { sendMessage: () => {} };
+    await seedWebUser(ctx, { id: 'wu_owner', tenant_id: 't_b', telegram_chat_id: 777 });
+    const res = await notifyWebUser(ctx, 'wu_owner', { kind: 'platform.campaign', title: 'X', telegram: true });
     expect(res.telegramOk).toBe(false);
     expect(telegramSendMock).not.toHaveBeenCalled();
   });

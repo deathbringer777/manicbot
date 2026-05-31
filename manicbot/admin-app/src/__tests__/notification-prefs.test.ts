@@ -71,7 +71,7 @@ describe("shouldDeliver (admin-app, fixture-driven)", () => {
         ? parsePrefs(JSON.stringify(tc.prefsInput))
         : DEFAULT_PREFS;
       expect(
-        shouldDeliver(tc.kind, prefs, tc.channel as "inapp" | "push"),
+        shouldDeliver(tc.kind, prefs, tc.channel as "inapp" | "push" | "email"),
       ).toBe(tc.expect);
     });
   }

@@ -33,6 +33,13 @@ export interface CategoryPref {
   inapp: boolean;
   /** Send a browser push notification (requires push subscription). */
   push: boolean;
+  /**
+   * Send an email (migration 0100 / platform campaigns). Consumed by the
+   * Worker dispatch's email channel; only platform/billing categories
+   * default ON. Opt-out-able categories (platform announcements, monthly
+   * report) honour this; transactional billing email ignores it.
+   */
+  email: boolean;
 }
 
 export interface NotificationPrefs {
@@ -46,22 +53,27 @@ export interface NotificationPrefs {
  * users who haven't opted into push.
  */
 export const DEFAULT_PREFS: NotificationPrefs = {
+  // `email` (migration 0100 / platform campaigns) defaults ON only where the
+  // owner is actually emailed — platform (announcements + monthly report) and
+  // billing (renewal). All other categories default OFF: nothing else emails
+  // through this path, so OFF avoids surprise mail. Keep in lockstep with the
+  // Worker mirror.
   categories: {
-    appointment: { inapp: true, push: true },
-    support:     { inapp: true, push: true },
-    birthday:    { inapp: true, push: false },
-    platform:    { inapp: true, push: true },
-    master:      { inapp: true, push: true },
-    reminder:    { inapp: true, push: true },
-    messenger:   { inapp: true, push: true },
-    billing:     { inapp: true, push: true },
-    marketing:   { inapp: true, push: false },
+    appointment: { inapp: true, push: true,  email: false },
+    support:     { inapp: true, push: true,  email: false },
+    birthday:    { inapp: true, push: false, email: false },
+    platform:    { inapp: true, push: true,  email: true  },
+    master:      { inapp: true, push: true,  email: false },
+    reminder:    { inapp: true, push: true,  email: false },
+    messenger:   { inapp: true, push: true,  email: false },
+    billing:     { inapp: true, push: true,  email: true  },
+    marketing:   { inapp: true, push: false, email: false },
     // PR-B: urgent operator-action signals — push by default so a dead IG
     // token (last incident took 6 weeks to detect) lights up immediately.
-    channel:     { inapp: true, push: true },
+    channel:     { inapp: true, push: true,  email: false },
     // PR-B: new-client signal is informational; in-app yes, push no so
     // a busy salon owner doesn't get pinged on every walk-in registration.
-    client:      { inapp: true, push: false },
+    client:      { inapp: true, push: false, email: false },
   },
 };
 
@@ -107,6 +119,9 @@ export function parsePrefs(raw: string | null | undefined): NotificationPrefs {
         push: typeof (v as CategoryPref).push === "boolean"
           ? (v as CategoryPref).push
           : DEFAULT_PREFS.categories[cat].push,
+        email: typeof (v as CategoryPref).email === "boolean"
+          ? (v as CategoryPref).email
+          : DEFAULT_PREFS.categories[cat].email,
       };
     }
   }

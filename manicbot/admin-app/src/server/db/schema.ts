@@ -1609,6 +1609,71 @@ export const platformBroadcasts = sqliteTable("platform_broadcasts", {
   index("idx_platform_broadcasts_created").on(t.createdAt),
 ]);
 
+// ─── Platform campaigns (migration 0100) ──────────────────────────────────
+// Operator → tenant-owner scheduled / recurring / templated multi-channel
+// messaging, authored in the God-Mode "Рассылки" panel. The Worker cron reads
+// these rows to perform delivery + scheduling; the admin-app authors/configs,
+// previews audience, and shows history. PLATFORM-scoped (no tenant_id), like
+// platformBroadcasts. Only platformCampaignDeliveries carries tenant_id.
+export const platformCampaigns = sqliteTable("platform_campaigns", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  title: text("title"),
+  body: text("body"),
+  bodiesJson: text("bodies_json"),
+  audienceFilterJson: text("audience_filter_json"),
+  channelsJson: text("channels_json").notNull(),
+  scheduleKind: text("schedule_kind").notNull().default("now"),
+  scheduledAt: integer("scheduled_at"),
+  recurrenceJson: text("recurrence_json"),
+  templateId: text("template_id"),
+  status: text("status").notNull().default("draft"),
+  nextRunAt: integer("next_run_at"),
+  lastRunAt: integer("last_run_at"),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_platform_campaigns_status_next").on(t.status, t.nextRunAt),
+  index("idx_platform_campaigns_kind").on(t.kind),
+  // The singleton partial-UNIQUE (WHERE kind IN (...)) lives in migration 0100
+  // / schema.sql only — the SQLite builder cannot express a partial WHERE on
+  // uniqueIndex (same limitation as the newsletter confirm-token index).
+]);
+
+export const platformCampaignDeliveries = sqliteTable("platform_campaign_deliveries", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull().references(() => platformCampaigns.id, { onDelete: "cascade" }),
+  occurrenceKey: text("occurrence_key").notNull(),
+  recipientWebUserId: text("recipient_web_user_id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  channel: text("channel").notNull(),
+  status: text("status").notNull().default("pending"),
+  error: text("error"),
+  createdAt: integer("created_at").notNull(),
+  sentAt: integer("sent_at"),
+}, (t) => [
+  uniqueIndex("idx_pcd_claim").on(t.campaignId, t.occurrenceKey, t.recipientWebUserId, t.channel),
+  index("idx_pcd_campaign").on(t.campaignId),
+  index("idx_pcd_tenant").on(t.tenantId),
+  index("idx_pcd_status").on(t.status),
+]);
+
+export const platformMessageTemplates = sqliteTable("platform_message_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category"),
+  channelsJson: text("channels_json"),
+  bodiesJson: text("bodies_json"),
+  locale: text("locale").default("ru"),
+  isBuiltin: integer("is_builtin").notNull().default(0),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  index("idx_pmt_category").on(t.category),
+]);
+
 // 0083: self-hosted marketing blog CMS. Drives admin CRUD at /system/blog +
 // public /blog and /blog/[slug] pages. Multilingual content stored as JSON
 // blobs keyed by Lang to match the existing static `BlogArticle` shape so

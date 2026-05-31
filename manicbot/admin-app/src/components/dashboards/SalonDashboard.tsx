@@ -2104,9 +2104,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           defaultTime={dragPrefill?.time}
           onClose={() => { setManualBookingOpen(false); setDragPrefill(null); }}
           onCreated={() => {
-            apts.refetch();
-            todayApts.refetch();
-            void blocksQuery.refetch();
+            // Refresh whichever calendar view is active. Invalidating the
+            // shared getAppointments query key covers ALL variants (list /
+            // today / day / week / month); previously only `apts` (list mode,
+            // which is `enabled` only in list view) + `todayApts` were
+            // refetched, so a booking created from the week/day/month view
+            // succeeded but stayed invisible until a manual page reload.
+            void utils.salon.getAppointments.invalidate();
           }}
         />
       )}

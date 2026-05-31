@@ -39,8 +39,8 @@ const ESSENTIAL_STEPS: Step[] = [
 // surface, not channels — the legacy ?tab=channels target was a routing bug.
 const OPTIONAL_STEPS: Step[] = [
   { id: "fill_salon_info", labelKey: "onboarding.checklist.fill_salon_info", href: "/settings?section=salon" },
-  { id: "add_branding",    labelKey: "onboarding.checklist.add_branding",    href: "/settings?section=salon" },
-  { id: "activate_public", labelKey: "onboarding.checklist.activate_public", href: "/settings?section=public" },
+  { id: "add_branding",    labelKey: "onboarding.checklist.add_branding",    href: "/settings?section=salon&sub=appearance" },
+  { id: "activate_public", labelKey: "onboarding.checklist.activate_public", href: "/settings?section=salon&sub=publishing" },
   { id: "share_link",      labelKey: "onboarding.checklist.share_link",      href: "?tab=public_profile" },
 ];
 

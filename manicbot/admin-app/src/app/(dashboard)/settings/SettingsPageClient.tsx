@@ -13,7 +13,6 @@ import { BillingSection } from "~/components/settings/sections/BillingSection";
 import { ReferralsSection } from "~/components/settings/sections/ReferralsSection";
 import { PluginSettingsSection } from "~/components/settings/PluginSettingsSection";
 import { MySalonSection } from "~/components/settings/sections/MySalonSection";
-import { PublicProfileSection } from "~/components/settings/sections/PublicProfileSection";
 import { ReviewsSection } from "~/components/settings/sections/ReviewsSection";
 import { TeamSection } from "~/components/settings/sections/TeamSection";
 import { ChannelsSection } from "~/components/settings/sections/ChannelsSection";
@@ -29,7 +28,9 @@ export default function SettingsPageClient() {
   const router = useRouter();
 
   const paramSection = searchParams.get("section");
-  const [activeSection, setActiveSection] = useState(paramSection ?? "account");
+  const [activeSection, setActiveSection] = useState(
+    paramSection === "public" ? "salon" : (paramSection ?? "account"),
+  );
   const [userNavigated, setUserNavigated] = useState(false);
 
   // Role-aware landing tab. `role` from useRole() hydrates after first paint,
@@ -43,6 +44,18 @@ export default function SettingsPageClient() {
     const landing = getDefaultSettingsSection(effectiveRole);
     setActiveSection((cur) => (cur === "account" ? landing : cur));
   }, [effectiveRole, paramSection, userNavigated]);
+
+  // Back-compat: the standalone «Публичный профиль» tab was folded into
+  // «Мой салон». Redirect any stale ?section=public link to the salon's
+  // «Публикация» sub-tab and normalize the URL.
+  useEffect(() => {
+    if (paramSection !== "public") return;
+    setActiveSection("salon");
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", "salon");
+    url.searchParams.set("sub", "publishing");
+    router.replace(url.pathname + url.search, { scroll: false });
+  }, [paramSection, router]);
 
   const handleSectionChange = (id: string) => {
     setUserNavigated(true);
@@ -64,8 +77,6 @@ export default function SettingsPageClient() {
         return <AccountSection />;
       case "salon":
         return <MySalonSection />;
-      case "public":
-        return <PublicProfileSection />;
       case "reviews":
         return <ReviewsSection />;
       case "team":

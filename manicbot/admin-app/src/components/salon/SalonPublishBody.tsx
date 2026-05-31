@@ -2,28 +2,51 @@
 
 import { useState } from "react";
 import {
-  Loader2, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight, AlertCircle, Pencil,
+  Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight, AlertCircle, Pencil,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
+type SalonProfile = {
+  slug?: string | null;
+  name?: string | null;
+  description?: string | null;
+  city?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  photos?: string[] | null;
+  logo?: string | null;
+  coverPhoto?: string | null;
+  publicActive?: number | boolean | null;
+  [key: string]: unknown;
+};
+
 /**
- * Public profile = a thin **preview + publish** surface.
+ * Publish surface for the «Публикация» category of «Мой салон».
  *
- * Field editing (slug, description, city, map, photos, branding, hours) now
- * lives in the «Мой салон» tab as collapsible chips. This view shows the public
- * URL, the publish toggle (with the same NOT_READY_TO_PUBLISH readiness guard),
- * a read-only preview of the catalog card, and a link back to «Мой салон».
+ * Lifted from the former standalone «Публичный профиль» tab: the publish
+ * toggle (with the NOT_READY_TO_PUBLISH readiness guard), the public URL, and a
+ * read-only catalog-card preview. Now that it lives *inside* «Мой салон», the
+ * old "Открыть Мой салон" links are gone — a readiness error instead jumps to
+ * the relevant category tab via `onEditFields`. `profile` is passed in from the
+ * parent's existing `getSalonProfile` query to avoid a duplicate fetch.
  */
-export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
+export function SalonPublishBody({
+  tenantId,
+  profile,
+  onEditFields,
+}: {
+  tenantId: string;
+  profile: SalonProfile;
+  onEditFields?: (cat: "profile" | "publishing") => void;
+}) {
   const { lang } = useLang();
   const utils = api.useUtils();
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId });
   const servicesList = api.salon.getServices.useQuery({ tenantId });
   const [publishError, setPublishError] = useState<string[] | null>(null);
 
-  const data = profile.data as any;
+  const data = profile;
 
   const update = api.salon.updateSalonProfile.useMutation({
     onSuccess: () => {
@@ -51,18 +74,9 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
     services: t("salon.publicProfile.servicesReq", lang),
   };
 
-  const slug = data?.slug as string | null;
+  const slug = data?.slug ?? null;
   const publicUrl = slug ? `/salon/${slug}` : null;
   const photos: string[] = Array.isArray(data?.photos) ? data.photos : [];
-
-  if (profile.isLoading) return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
-  if (profile.isError) {
-    return (
-      <div className="glass-card rounded-2xl p-6 text-center">
-        <p className="text-red-400">{t("common.errorLoading", lang)}</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -114,13 +128,16 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                   <li key={k}>{MISSING_LABELS[k] ?? k}</li>
                 ))}
               </ul>
-              <a
-                href="/settings?section=salon"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                {t("salon.publicProfile.openMySalon", lang)}
-              </a>
+              {onEditFields && (
+                <button
+                  type="button"
+                  onClick={() => onEditFields("profile")}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-500/30 dark:text-red-200"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  {t("salon.chip.basicInfo", lang)}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -149,7 +166,7 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
                 {Icon ? <Icon className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : <div className="w-4 shrink-0" />}
                 <div className="min-w-0">
                   <p className="text-xs text-slate-500">{label}</p>
-                  <p className="text-sm text-slate-900 dark:text-white break-words">{value}</p>
+                  <p className="text-sm text-slate-900 dark:text-white break-words">{String(value)}</p>
                 </div>
               </div>
             ));
@@ -173,16 +190,6 @@ export function PublicProfileEditor({ tenantId }: { tenantId: string }) {
               </div>
             </div>
           )}
-        </div>
-        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/5 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">{t("salon.publicProfile.editedInMySalon", lang)}</p>
-          <a
-            href="/settings?section=salon"
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-1.5 text-xs font-medium text-white border border-brand-600 hover:bg-brand-600 shadow-sm"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            {t("salon.publicProfile.openMySalon", lang)}
-          </a>
         </div>
       </div>
     </div>

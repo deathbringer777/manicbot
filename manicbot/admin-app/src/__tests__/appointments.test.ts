@@ -70,7 +70,8 @@ describe("appointmentsRouter", () => {
 
       const result = await caller.getAll({});
 
-      expect(result.appointments).toEqual([apt]);
+      // Rows are enriched with resolved display names; the source fields survive.
+      expect(result.appointments).toMatchObject([{ id: "apt_1", status: "pending", cancelled: 0 }]);
       expect(result.total).toBe(1);
     });
 
@@ -504,6 +505,30 @@ describe("appointmentsRouter", () => {
       expect(slotsBusyMock).toHaveBeenCalledWith(
         expect.objectContaining({ durationMin: 60 }),
       );
+    });
+
+    it("moves an UNASSIGNED (no-master) booking without master_required and skips the conflict check", async () => {
+      // One shared calendar: master_id NULL must be draggable. Previously this
+      // threw master_required; now the row just moves and slotsBusy is skipped
+      // (no per-master schedule to collide with — overlaps are allowed).
+      const unassigned = { ...baseApt, masterId: null };
+      const dbMock = createDbMock([[unassigned]]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const res = await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-20",
+        newTime: "15:00",
+        // newMasterId omitted → stays unassigned
+      });
+
+      expect(res.ok).toBe(true);
+      expect(res.unchanged).toBe(false);
+      expect(slotsBusyMock).not.toHaveBeenCalled();
+      const vals = dbMock.updateCalls[0]?.values!;
+      expect(vals.time).toBe("15:00");
+      expect(vals.masterId).toBeNull();
     });
   });
 

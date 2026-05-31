@@ -57,7 +57,7 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{a.userName ?? `#${a.chatId}`}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{a.svcId}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{a.serviceName ?? a.svcId}</p>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">

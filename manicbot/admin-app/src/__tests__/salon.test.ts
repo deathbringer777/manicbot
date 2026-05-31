@@ -178,7 +178,10 @@ describe("salonRouter", () => {
 
       const result = await caller.getAppointments({ tenantId: TENANT });
 
-      expect(result).toEqual(rows);
+      // Rows are enriched with resolved display names (read-time resolution);
+      // the source rows survive and ordering/filtering is unchanged.
+      expect(result.map((r) => r.id)).toEqual(["apt_1", "apt_2"]);
+      expect(result[0]).toMatchObject({ id: "apt_1", userName: null });
     });
 
     it("returns empty array when DB has no matching rows", async () => {

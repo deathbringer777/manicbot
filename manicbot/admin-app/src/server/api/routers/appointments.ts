@@ -1,10 +1,11 @@
 import { createTRPCRouter, adminProcedure, managerProcedure, publicProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
 import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
-import { eq, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, isNull, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { slotsBusy } from "~/server/api/slotsBusy";
+import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appointmentNames";
 import { log } from "~/server/utils/logger";
 import { notifyWorker, type AppointmentAction } from "~/server/utils/notifyWorker";
 import { syncMarketingContact } from "~/server/clients/marketingSync";
@@ -35,9 +36,13 @@ export const appointmentsRouter = createTRPCRouter({
       if (input.dateFrom) conditions.push(gte(appointments.date, input.dateFrom));
       if (input.dateTo) conditions.push(lte(appointments.date, input.dateTo));
 
+      // Resolve client + service names at read time (see appointmentNames.ts).
+      const baseSelect = ctx.db
+        .select({ ...getTableColumns(appointments), ...appointmentNameColumns })
+        .from(appointments);
       const baseQuery = conditions.length > 0
-        ? ctx.db.select().from(appointments).where(and(...conditions))
-        : ctx.db.select().from(appointments);
+        ? baseSelect.where(and(...conditions))
+        : baseSelect;
 
       const [countResult, rows] = await Promise.all([
         ctx.db.select({ count: sql<number>`count(*)` }).from(appointments)
@@ -46,7 +51,7 @@ export const appointmentsRouter = createTRPCRouter({
       ]);
 
       return {
-        appointments: rows,
+        appointments: rows.map(foldAppointmentNames),
         total: countResult[0]?.count ?? 0,
       };
     }),
@@ -368,9 +373,20 @@ export const appointmentsRouter = createTRPCRouter({
       // check below. For existing clients we want the clearest error
       // message — refuse the booking up-front before spending queries
       // on slot-conflict and service-duration lookups.
+      // Snapshot of an existing client's name/phone — copied onto the
+      // appointment row so it stays self-describing for CSV export and any
+      // raw-row reader (read-time resolution handles the live UI, but the
+      // booking modal sends clientName=undefined for existing clients, which
+      // would otherwise leave user_name NULL on the row).
+      let existingClientName: string | null = null;
+      let existingClientPhone: string | null = null;
       if (input.clientChatId != null) {
         const [existingClient] = await ctx.db
-          .select({ isBlockedGlobal: users.isBlockedGlobal })
+          .select({
+            isBlockedGlobal: users.isBlockedGlobal,
+            name: users.name,
+            phone: users.phone,
+          })
           .from(users)
           .where(and(
             eq(users.tenantId, input.tenantId),
@@ -380,6 +396,8 @@ export const appointmentsRouter = createTRPCRouter({
         if (existingClient?.isBlockedGlobal === 1) {
           throw new TRPCError({ code: "FORBIDDEN", message: "client_blocked_global" });
         }
+        existingClientName = existingClient?.name ?? null;
+        existingClientPhone = existingClient?.phone ?? null;
         // Per-master block check only when a master is assigned. With
         // masterId omitted there is no per-master scope to enforce.
         if (input.masterId !== undefined) {
@@ -541,8 +559,8 @@ export const appointmentsRouter = createTRPCRouter({
           ts: startTs,
           status: "confirmed",
           masterId: input.masterId ?? null,
-          userName: input.clientName ?? null,
-          userPhone: input.clientPhone ?? null,
+          userName: input.clientName ?? existingClientName ?? null,
+          userPhone: input.clientPhone ?? existingClientPhone ?? null,
           confirmedBy: null,
           cancelled: 0,
           noShow: 0,
@@ -628,8 +646,11 @@ export const appointmentsRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "appointment_terminal" });
       }
 
+      // One shared calendar (no masters) is supported: an unassigned booking
+      // (master_id NULL) stays unassigned and skips the per-master conflict
+      // check below — there is no master schedule to collide with, and
+      // overlapping bookings on a shared calendar are allowed by design.
       const newMasterId = input.newMasterId ?? apt.masterId;
-      if (newMasterId == null) throw new TRPCError({ code: "BAD_REQUEST", message: "master_required" });
 
       // Role scoping: masters can only move bookings on their own calendar
       // and can't reassign to another master. The lookup is bound to
@@ -662,32 +683,38 @@ export const appointmentsRouter = createTRPCRouter({
         return { ok: true, appointmentId: apt.id, unchanged: true };
       }
 
-      // Resolve service duration for the conflict check.
-      const [svc] = await ctx.db
-        .select()
-        .from(services)
-        .where(and(
-          eq(services.tenantId, input.tenantId),
-          eq(services.svcId, apt.svcId),
-        ))
-        .limit(1);
-      const durationMin = svc?.duration ?? 60;
+      // Per-master conflict check — skipped for unassigned (no-master)
+      // bookings, mirroring createManual. With master_id NULL there is no
+      // per-master schedule to collide with, so an unassigned drag just
+      // moves the row to the new slot (overlaps allowed on a shared calendar).
+      if (newMasterId != null) {
+        // Resolve service duration for the conflict check.
+        const [svc] = await ctx.db
+          .select()
+          .from(services)
+          .where(and(
+            eq(services.tenantId, input.tenantId),
+            eq(services.svcId, apt.svcId),
+          ))
+          .limit(1);
+        const durationMin = svc?.duration ?? 60;
 
-      const busy = await slotsBusy({
-        db: ctx.db,
-        tenantId: input.tenantId,
-        masterId: newMasterId,
-        date: input.newDate,
-        startTime: input.newTime,
-        durationMin,
-        excludeAppointmentId: apt.id,
-      });
-      if (busy.busy) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "slot_conflict",
-          cause: busy.conflict,
+        const busy = await slotsBusy({
+          db: ctx.db,
+          tenantId: input.tenantId,
+          masterId: newMasterId,
+          date: input.newDate,
+          startTime: input.newTime,
+          durationMin,
+          excludeAppointmentId: apt.id,
         });
+        if (busy.busy) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "slot_conflict",
+            cause: busy.conflict,
+          });
+        }
       }
 
       const [h, m] = input.newTime.split(":").map(Number);

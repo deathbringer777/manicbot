@@ -39,6 +39,7 @@ import { otpRouter } from "~/server/api/routers/otp";
 import { referralsRouter } from "~/server/api/routers/referrals";
 import { messengerRouter } from "~/server/api/routers/messenger";
 import { platformMessengerRouter } from "~/server/api/routers/platformMessenger";
+import { platformBroadcastsRouter } from "~/server/api/routers/platformBroadcasts";
 import { pluginRemindersRouter } from "~/server/api/routers/pluginReminders";
 import { notificationsRouter } from "~/server/api/routers/notifications";
 import { pushSubscriptionsRouter } from "~/server/api/routers/pushSubscriptions";
@@ -91,6 +92,7 @@ export const appRouter = createTRPCRouter({
   referrals: referralsRouter,
   messenger: messengerRouter,
   platformMessenger: platformMessengerRouter,
+  platformBroadcasts: platformBroadcastsRouter,
   pluginReminders: pluginRemindersRouter,
   notifications: notificationsRouter,
   pushSubscriptions: pushSubscriptionsRouter,

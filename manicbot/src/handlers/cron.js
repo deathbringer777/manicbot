@@ -42,6 +42,7 @@ import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manage
 import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { runCampaignSend as runMarketingCampaign } from '../services/marketing/sender.js';
+import { phasePlatformCampaigns } from '../services/platformCampaigns.js';
 import { remindersCron } from '../../plugins/reminders/cron.js';
 
 /**
@@ -78,6 +79,11 @@ export const PHASE_WINDOWS = Object.freeze({
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
   pluginCron: 10 * 60,        // 10 min — same cadence as reminders
+  // Platform operator campaigns (migration 0100): tight window so scheduled /
+  // recurring sends and the monthly-report/subscription-reminder automations
+  // fire within ~one cron tick of becoming due. Idempotency is the delivery
+  // ledger, not this window.
+  platformCampaigns: 60,
 });
 
 /**
@@ -1129,6 +1135,10 @@ export async function handleCron(ctx) {
     // whose scheduled_at <= now, plus rebooks any campaign stuck in
     // status='sending' for >30min (crashed mid-fan-out).
     await runPhase(ctx, 'marketingDispatch', () => phaseMarketingDispatch(ctx, now));
+    // Platform operator campaigns (migration 0100): deliver due announcements /
+    // monthly reports / subscription reminders to THIS tenant's owner(s) across
+    // the selected channels. Idempotent via platform_campaign_deliveries.
+    await runPhase(ctx, 'platformCampaigns', () => phasePlatformCampaigns(ctx, now));
     // Referral reward 12-month expiry sweep. Idempotent — `runPhase` enforces
     // a 24h gap via `cron:phase:referral_expiry:last`, and individual reward
     // reversals carry an Idempotency-Key to Stripe.

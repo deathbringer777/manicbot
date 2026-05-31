@@ -17,14 +17,17 @@ import { usePathname } from "next/navigation";
 import { Shell } from "~/components/layout/Shell";
 import { useRole } from "~/components/RoleContext";
 import {
-  Megaphone, Mail, Users, Send,
+  Megaphone, Mail, Users, Send, CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 
 type SubNavItem = { href: string; icon: LucideIcon; label: string };
 
 const SUB_NAV: Array<SubNavItem> = [
-  { href: "/system/marketing",            icon: Megaphone, label: "Обзор" },
+  { href: "/system/marketing",            icon: Megaphone,     label: "Обзор" },
+  // Operator → tenant scheduled / recurring / templated multi-channel sends
+  // (migration 0100): monthly reports, subscription reminders, announcements.
+  { href: "/system/marketing/broadcasts", icon: CalendarClock, label: "Рассылки" },
   { href: "/system/marketing/campaigns",  icon: Mail,      label: "Кампании" },
   { href: "/system/marketing/leads",      icon: Users,     label: "Лиды" },
   // PR 2B: deliverability log. Pulls from `marketing_sends` after the

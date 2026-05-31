@@ -1628,6 +1628,74 @@ CREATE TABLE IF NOT EXISTS platform_broadcasts (
 CREATE INDEX IF NOT EXISTS idx_platform_broadcasts_created
   ON platform_broadcasts(created_at);
 
+-- 0100: platform campaigns — operator (system_admin) scheduled / recurring /
+-- templated multi-channel messaging to tenant owners. PLATFORM-scoped (no
+-- tenant_id) like platform_broadcasts; only platform_campaign_deliveries carries
+-- tenant_id. See migrations/0100_platform_campaigns.sql for the full rationale.
+CREATE TABLE IF NOT EXISTS platform_campaigns (
+  id                    TEXT PRIMARY KEY,
+  kind                  TEXT NOT NULL,
+  title                 TEXT,
+  body                  TEXT,
+  bodies_json           TEXT,
+  audience_filter_json  TEXT,
+  channels_json         TEXT NOT NULL,
+  schedule_kind         TEXT NOT NULL DEFAULT 'now',
+  scheduled_at          INTEGER,
+  recurrence_json       TEXT,
+  template_id           TEXT,
+  status                TEXT NOT NULL DEFAULT 'draft',
+  next_run_at           INTEGER,
+  last_run_at           INTEGER,
+  created_by            TEXT,
+  created_at            INTEGER NOT NULL,
+  updated_at            INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_platform_campaigns_status_next
+  ON platform_campaigns(status, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_platform_campaigns_kind
+  ON platform_campaigns(kind);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_campaigns_singleton_kind
+  ON platform_campaigns(kind)
+  WHERE kind IN ('monthly_report', 'subscription_reminder');
+
+CREATE TABLE IF NOT EXISTS platform_campaign_deliveries (
+  id                    TEXT PRIMARY KEY,
+  campaign_id           TEXT NOT NULL,
+  occurrence_key        TEXT NOT NULL,
+  recipient_web_user_id TEXT NOT NULL,
+  tenant_id             TEXT NOT NULL,
+  channel               TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'pending',
+  error                 TEXT,
+  created_at            INTEGER NOT NULL,
+  sent_at               INTEGER,
+  FOREIGN KEY (campaign_id) REFERENCES platform_campaigns(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pcd_claim
+  ON platform_campaign_deliveries(campaign_id, occurrence_key, recipient_web_user_id, channel);
+CREATE INDEX IF NOT EXISTS idx_pcd_campaign
+  ON platform_campaign_deliveries(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_pcd_tenant
+  ON platform_campaign_deliveries(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_pcd_status
+  ON platform_campaign_deliveries(status);
+
+CREATE TABLE IF NOT EXISTS platform_message_templates (
+  id                    TEXT PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  category              TEXT,
+  channels_json         TEXT,
+  bodies_json           TEXT,
+  locale                TEXT DEFAULT 'ru',
+  is_builtin            INTEGER NOT NULL DEFAULT 0,
+  created_by            TEXT,
+  created_at            INTEGER NOT NULL,
+  updated_at            INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pmt_category
+  ON platform_message_templates(category);
+
 -- 0083: blog_posts — self-hosted marketing blog CMS (system_admin only).
 -- See migrations/0083_blog_posts.sql for column rationale.
 CREATE TABLE IF NOT EXISTS blog_posts (

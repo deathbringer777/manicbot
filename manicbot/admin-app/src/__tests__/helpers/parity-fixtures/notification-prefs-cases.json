@@ -13,9 +13,11 @@
     "client"
   ],
   "defaultPrefs": {
-    "appointment": { "inapp": true, "push": true },
-    "marketing": { "inapp": true, "push": false },
-    "birthday": { "inapp": true, "push": false }
+    "appointment": { "inapp": true, "push": true, "email": false },
+    "marketing": { "inapp": true, "push": false, "email": false },
+    "birthday": { "inapp": true, "push": false, "email": false },
+    "platform": { "inapp": true, "push": true, "email": true },
+    "billing": { "inapp": true, "push": true, "email": true }
   },
   "categoryForKind": [
     { "kind": "appointment.created", "expect": "appointment" },
@@ -44,7 +46,7 @@
       "name": "fills in missing categories with defaults",
       "input": { "categories": { "appointment": { "inapp": false, "push": false } } },
       "checks": [
-        { "category": "appointment", "expect": { "inapp": false, "push": false } }
+        { "category": "appointment", "expect": { "inapp": false, "push": false, "email": false } }
       ]
     },
     {
@@ -53,8 +55,10 @@
       "checks": [
         { "category": "support", "channel": "inapp", "expect": false },
         { "category": "support", "channel": "push", "expect": true },
+        { "category": "support", "channel": "email", "expect": false },
         { "category": "appointment", "channel": "inapp", "expect": true },
-        { "category": "appointment", "channel": "push", "expect": false }
+        { "category": "appointment", "channel": "push", "expect": false },
+        { "category": "appointment", "channel": "email", "expect": false }
       ]
     }
   ],
@@ -106,6 +110,41 @@
       "prefsInput": { "categories": { "support": { "inapp": false, "push": false } } },
       "kind": "appointment.created",
       "channel": "inapp",
+      "expect": true
+    },
+    {
+      "name": "platform email delivers by default (migration 0100)",
+      "prefsInput": null,
+      "kind": "platform.message",
+      "channel": "email",
+      "expect": true
+    },
+    {
+      "name": "billing email delivers by default",
+      "prefsInput": null,
+      "kind": "billing.alert",
+      "channel": "email",
+      "expect": true
+    },
+    {
+      "name": "marketing email is off by default",
+      "prefsInput": null,
+      "kind": "marketing.campaign.sent",
+      "channel": "email",
+      "expect": false
+    },
+    {
+      "name": "platform email opt-out is respected",
+      "prefsInput": { "categories": { "platform": { "inapp": true, "push": true, "email": false } } },
+      "kind": "platform.message",
+      "channel": "email",
+      "expect": false
+    },
+    {
+      "name": "unknown kind always delivers (email)",
+      "prefsInput": null,
+      "kind": "totally.unknown",
+      "channel": "email",
       "expect": true
     }
   ]

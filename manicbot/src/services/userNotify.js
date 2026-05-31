@@ -4,9 +4,10 @@
  * Always writes an in-app row into `user_notifications` (consumed by the
  * header bell in admin-app/src/components/layout/NotificationBell.tsx)
  * unless the caller explicitly disables that channel. Optionally also
- * sends a Telegram DM when the target has a linked chat_id (resolved
- * via the `masters` table — web_users currently link to Telegram only
- * through the master path; salon-owner-only accounts get in-app only).
+ * sends a Telegram DM when the target has a linked chat_id. Resolution
+ * tries the `masters` table first (staff linked through the master path),
+ * then falls back to `web_users.telegram_chat_id` for salon owners who
+ * paired Telegram directly (migration 0082) and have no master row.
  *
  * Idempotent on the in-app side: when both `sourceSlug` and `sourceId`
  * are passed, the partial UNIQUE index `uq_user_notifications_source`
@@ -206,26 +207,48 @@ async function fanOutWebPush(ctx, webUserId, payload) {
 }
 
 /**
- * Look up the target's linked Telegram chat_id via the masters table.
+ * Look up the target's linked Telegram chat_id.
  *
- * Skips synthetic personal-master rows (`is_synthetic = 1` per migration
- * 0052) — those chat_ids are placeholders in the 10B+ range with no real
- * Telegram presence. A web_user that isn't linked to any non-synthetic
- * master row returns null (in-app only).
+ * 1. Master path: a non-synthetic `masters` row for this web_user. Synthetic
+ *    personal-master rows (`is_synthetic = 1` per migration 0052) are
+ *    placeholders in the 10B+ range with no real Telegram presence and are
+ *    skipped.
+ * 2. Owner path: salon owners pair Telegram directly on their `web_users`
+ *    row (migration 0082) and typically have NO master row. When the master
+ *    path yields nothing usable, fall back to `web_users.telegram_chat_id`
+ *    (tenant-scoped). Before this fallback, owner-only accounts silently got
+ *    in-app only — they never received platform Telegram messages.
+ *
+ * Returns a positive, below-synthetic-floor chat_id, or null (in-app only).
  */
 async function resolveTelegramChat(ctx, webUserId) {
   if (!ctx?.db || !ctx?.tenantId) return null;
-  const row = await dbGet(
+
+  // 1) Master path (existing behavior).
+  const masterRow = await dbGet(
     ctx,
     'SELECT chat_id, is_synthetic FROM masters WHERE tenant_id = ? AND web_user_id = ? LIMIT 1',
     ctx.tenantId,
     webUserId,
   );
-  if (!row) return null;
-  if (row.is_synthetic === 1) return null;
-  const cid = Number(row.chat_id);
-  if (!Number.isFinite(cid) || cid <= 0 || cid >= SYNTHETIC_CHAT_FLOOR) return null;
-  return cid;
+  if (masterRow && masterRow.is_synthetic !== 1) {
+    const cid = Number(masterRow.chat_id);
+    if (Number.isFinite(cid) && cid > 0 && cid < SYNTHETIC_CHAT_FLOOR) return cid;
+  }
+
+  // 2) Owner pairing fallback (migration 0082) — tenant-scoped.
+  const ownerRow = await dbGet(
+    ctx,
+    'SELECT telegram_chat_id FROM web_users WHERE id = ? AND tenant_id = ? LIMIT 1',
+    webUserId,
+    ctx.tenantId,
+  );
+  if (ownerRow) {
+    const cid = Number(ownerRow.telegram_chat_id);
+    if (Number.isFinite(cid) && cid > 0 && cid < SYNTHETIC_CHAT_FLOOR) return cid;
+  }
+
+  return null;
 }
 
 function formatDefaultTelegram(title, body) {

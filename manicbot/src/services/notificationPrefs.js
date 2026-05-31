@@ -24,21 +24,25 @@ export const NOTIFICATION_CATEGORIES = [
  * blob. Mirror of admin-app DEFAULT_PREFS.
  */
 export const DEFAULT_PREFS = {
+  // `email` (migration 0100 / platform campaigns) defaults ON only for the
+  // categories that actually email the owner — platform (announcements +
+  // monthly report) and billing (renewal). Everything else defaults OFF: no
+  // other category emails through this path, so OFF avoids surprise mail.
   categories: {
-    appointment: { inapp: true, push: true },
-    support:     { inapp: true, push: true },
-    birthday:    { inapp: true, push: false },
-    platform:    { inapp: true, push: true },
-    master:      { inapp: true, push: true },
-    reminder:    { inapp: true, push: true },
-    messenger:   { inapp: true, push: true },
-    billing:     { inapp: true, push: true },
-    marketing:   { inapp: true, push: false },
+    appointment: { inapp: true, push: true,  email: false },
+    support:     { inapp: true, push: true,  email: false },
+    birthday:    { inapp: true, push: false, email: false },
+    platform:    { inapp: true, push: true,  email: true  },
+    master:      { inapp: true, push: true,  email: false },
+    reminder:    { inapp: true, push: true,  email: false },
+    messenger:   { inapp: true, push: true,  email: false },
+    billing:     { inapp: true, push: true,  email: true  },
+    marketing:   { inapp: true, push: false, email: false },
     // PR-B: urgent operator-action signals — push by default so a dead IG
     // token (last incident took 6 weeks to detect) lights up immediately.
-    channel:     { inapp: true, push: true },
+    channel:     { inapp: true, push: true,  email: false },
     // PR-B: new-client signal is informational; push off by default.
-    client:      { inapp: true, push: false },
+    client:      { inapp: true, push: false, email: false },
   },
 };
 
@@ -66,6 +70,7 @@ export function parsePrefs(raw) {
       out.categories[cat] = {
         inapp: typeof v.inapp === 'boolean' ? v.inapp : DEFAULT_PREFS.categories[cat].inapp,
         push:  typeof v.push  === 'boolean' ? v.push  : DEFAULT_PREFS.categories[cat].push,
+        email: typeof v.email === 'boolean' ? v.email : DEFAULT_PREFS.categories[cat].email,
       };
     }
   }

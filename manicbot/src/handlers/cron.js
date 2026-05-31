@@ -388,24 +388,38 @@ export async function phaseAttachmentGc(ctx, tenantId, nowMs) {
   if (!ctx?.db || !tenantId) return;
   const nowSec = Math.floor((nowMs ?? Date.now()) / 1000);
   const GRACE_SEC = 7 * 24 * 60 * 60;
+  // How many would-delete keys to surface in the structured log (key + age +
+  // best-effort byte size). Bounded so a large sweep can't bloat logs or fan
+  // out unbounded R2 HEADs in the dry-run size estimate.
+  const SAMPLE_LIMIT = 10;
   const cutoff = nowSec - GRACE_SEC;
   const deleteEnabled = String(ctx?.ATTACHMENT_GC_DELETE ?? '') === '1';
 
   const rows = await dbAll(
     ctx,
-    `SELECT id, attachments_json FROM thread_messages WHERE tenant_id = ? AND deleted_at IS NOT NULL AND deleted_at < ? AND attachments_json IS NOT NULL LIMIT 100`,
+    `SELECT id, attachments_json, deleted_at FROM thread_messages WHERE tenant_id = ? AND deleted_at IS NOT NULL AND deleted_at < ? AND attachments_json IS NOT NULL LIMIT 100`,
     tenantId, cutoff,
   ).catch(() => []);
   if (!rows.length) return;
 
+  // Candidate keys + the oldest soft-delete epoch seen per key (for the age in
+  // the observability log). A key can recur across soft-deleted messages; the
+  // oldest delete is when it first became reclaim-eligible.
   const candidates = new Set();
+  const oldestDeletedAt = new Map();
   for (const r of rows) {
-    for (const k of extractAttachmentKeys(r.attachments_json)) candidates.add(k);
+    const da = Number(r.deleted_at) || nowSec;
+    for (const k of extractAttachmentKeys(r.attachments_json)) {
+      candidates.add(k);
+      const prev = oldestDeletedAt.get(k);
+      if (prev === undefined || da < prev) oldestDeletedAt.set(k, da);
+    }
   }
   if (!candidates.size) return;
 
   let deleted = 0;
   let kept = 0;
+  const orphans = []; // { key, ageSec } — keys with no live reference (would-delete in dry-run)
   for (const key of candidates) {
     const cnt = await dbGet(
       ctx,
@@ -413,6 +427,7 @@ export async function phaseAttachmentGc(ctx, tenantId, nowMs) {
       tenantId, `%${key}%`,
     ).catch(() => ({ c: 1 })); // on error, assume still referenced (safe)
     if (Number(cnt?.c ?? 1) > 0) { kept++; continue; }
+    orphans.push({ key, ageSec: nowSec - (oldestDeletedAt.get(key) ?? nowSec) });
     if (deleteEnabled && typeof ctx.ASSETS?.delete === 'function') {
       try {
         await ctx.ASSETS.delete(key);
@@ -425,6 +440,23 @@ export async function phaseAttachmentGc(ctx, tenantId, nowMs) {
     }
   }
 
+  // Structured sample for the runbook reader: first few orphan keys with age,
+  // plus a best-effort reclaimable-bytes estimate (bounded R2 HEADs, only when
+  // the binding exposes head()). Content-addressed keys are not PII.
+  const sample = orphans.slice(0, SAMPLE_LIMIT);
+  let sampledBytes = null;
+  if (typeof ctx.ASSETS?.head === 'function') {
+    sampledBytes = 0;
+    for (const { key } of sample) {
+      try {
+        const meta = await ctx.ASSETS.head(key);
+        if (meta && Number.isFinite(meta.size)) sampledBytes += meta.size;
+      } catch {
+        /* size is best-effort — ignore a failed HEAD */
+      }
+    }
+  }
+
   void logEvent(ctx, deleteEnabled ? 'cron.attachment_gc' : 'cron.attachment_gc.dryrun', {
     level: 'info',
     tenantId,
@@ -433,6 +465,12 @@ export async function phaseAttachmentGc(ctx, tenantId, nowMs) {
       : `[dry-run] Attachment GC: ${deleted} orphan object(s) would be deleted, ${kept} still referenced`,
     deleted,
     kept,
+    totalCandidates: candidates.size,
+    orphanCount: orphans.length,
+    sampleKeys: sample.map((o) => o.key),
+    samples: sample, // [{ key, ageSec }]
+    sampledBytes, // best-effort sum over <= SAMPLE_LIMIT keys; null if head() unavailable
+    sampledBytesPartial: sampledBytes !== null && orphans.length > sample.length,
   });
 }
 

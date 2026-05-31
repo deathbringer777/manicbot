@@ -498,6 +498,25 @@ const translations = {
   "salon.publicProfile.day.sat":         { ru: "Суббота", ua: "Субота", en: "Saturday", pl: "Sobota" },
   "salon.publicProfile.day.sun":         { ru: "Воскресенье", ua: "Неділя", en: "Sunday", pl: "Niedziela" },
 
+  // --- My Salon redesign: chip titles/descriptions + save feedback + status ---
+  "common.saved":                        { ru: "Сохранено", ua: "Збережено", en: "Saved", pl: "Zapisano" },
+  "common.saveError":                    { ru: "Не удалось сохранить", ua: "Не вдалося зберегти", en: "Couldn't save", pl: "Nie udało się zapisać" },
+  "salon.status.public":                 { ru: "Опубликован", ua: "Опубліковано", en: "Published", pl: "Opublikowano" },
+  "salon.status.hidden":                 { ru: "Черновик", ua: "Чернетка", en: "Draft", pl: "Szkic" },
+  "salon.chip.basicInfo":                { ru: "Основная информация", ua: "Основна інформація", en: "Basic info", pl: "Podstawowe informacje" },
+  "salon.chip.basicInfoDesc":            { ru: "Название, адрес, телефон", ua: "Назва, адреса, телефон", en: "Name, address, phone", pl: "Nazwa, adres, telefon" },
+  "salon.chip.hoursDesc":                { ru: "Режим работы по дням недели", ua: "Графік роботи по днях тижня", en: "Opening hours per weekday", pl: "Godziny otwarcia wg dni tygodnia" },
+  "salon.chip.hoursInvalid":             { ru: "Закрытие должно быть позже открытия", ua: "Закриття має бути пізніше відкриття", en: "Closing must be after opening", pl: "Zamknięcie musi być po otwarciu" },
+  "salon.chip.galleryDesc":              { ru: "Фото салона — как в объявлении", ua: "Фото салону — як в оголошенні", en: "Salon photos — like a listing", pl: "Zdjęcia salonu — jak w ogłoszeniu" },
+  "salon.chip.brandingDesc":             { ru: "Логотип, обложка, цвет бренда", ua: "Логотип, обкладинка, колір бренду", en: "Logo, cover, brand color", pl: "Logo, okładka, kolor marki" },
+  "salon.chip.storefront":               { ru: "Витрина и публикация", ua: "Вітрина та публікація", en: "Storefront & publishing", pl: "Wizytówka i publikacja" },
+  "salon.chip.storefrontDesc":           { ru: "Ссылка, описание, карта, Instagram", ua: "Посилання, опис, карта, Instagram", en: "Link, description, map, Instagram", pl: "Link, opis, mapa, Instagram" },
+  "salon.chip.autoConfirmDesc":          { ru: "Подтверждать записи автоматически", ua: "Підтверджувати записи автоматично", en: "Auto-confirm bookings", pl: "Automatyczne potwierdzanie wizyt" },
+  "salon.chip.favoriteDesc":             { ru: "Подсказывать любимого мастера", ua: "Підказувати улюбленого майстра", en: "Suggest the favorite master", pl: "Sugeruj ulubionego mistrza" },
+  "salon.chip.calendarDesc":             { ru: "Синхронизация с Google Calendar", ua: "Синхронізація з Google Calendar", en: "Sync with Google Calendar", pl: "Synchronizacja z Google Calendar" },
+  "salon.publicProfile.editedInMySalon": { ru: "Все поля салона редактируются во вкладке «Мой салон».", ua: "Усі поля салону редагуються у вкладці «Мій салон».", en: "All salon fields are edited in the “My salon” tab.", pl: "Wszystkie pola salonu edytujesz w zakładce „Mój salon”." },
+  "salon.publicProfile.openMySalon":     { ru: "Открыть «Мой салон»", ua: "Відкрити «Мій салон»", en: "Open “My salon”", pl: "Otwórz „Mój salon”" },
+
 
   "salon.branding.displayName":          { ru: "Отображаемое имя", ua: "Відображуване ім'я", en: "Display name", pl: "Nazwa wyświetlana" },
   "salon.branding.displayNameOptional":  { ru: "Отображаемое имя (опционально)", ua: "Відображуване ім'я (необов'язково)", en: "Display name (optional)", pl: "Nazwa wyświetlana (opcjonalnie)" },

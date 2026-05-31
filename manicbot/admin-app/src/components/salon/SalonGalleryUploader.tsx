@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import {
-  Loader2, Upload, X, ImagePlus, ArrowLeft, ArrowRight, Star, Link2, Plus,
+  Loader2, Upload, X, ImagePlus, ArrowLeft, ArrowRight, Star, Link2, Plus, GripVertical,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
@@ -37,6 +37,10 @@ export function SalonGalleryUploader({
   const [error, setError] = useState<string | null>(null);
   const [urlMode, setUrlMode] = useState(false);
   const [newUrl, setNewUrl] = useState("");
+  // Pointer drag-to-reorder (desktop). Touch/keyboard users fall back to the
+  // ◀/▶ buttons, which stay rendered.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
   const mint = api.salon.mintUploadToken.useMutation();
 
   const remaining = Math.max(0, maxPhotos - photos.length);
@@ -110,6 +114,16 @@ export function SalonGalleryUploader({
     onChange(next);
   }
 
+  // Insert-at reorder used by pointer drag-and-drop (moves `from` so it lands
+  // before `to`). Distinct from `move`'s neighbour-swap used by the buttons.
+  function reorder(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= photos.length || to >= photos.length) return;
+    const next = [...photos];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved!);
+    onChange(next);
+  }
+
   function remove(i: number) {
     onChange(photos.filter((_, j) => j !== i));
   }
@@ -165,17 +179,45 @@ export function SalonGalleryUploader({
             <div
               key={`${url}-${i}`}
               data-testid="gallery-photo"
-              className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
+              draggable
+              onDragStart={(e) => {
+                setDragIdx(i);
+                e.dataTransfer.effectAllowed = "move";
+                try { e.dataTransfer.setData("text/plain", String(i)); } catch { /* some browsers reject setData */ }
+              }}
+              onDragEnter={() => setOverIdx(i)}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const raw = e.dataTransfer.getData("text/plain");
+                const from = dragIdx ?? (raw ? Number(raw) : NaN);
+                if (Number.isFinite(from)) reorder(from as number, i);
+                setDragIdx(null);
+                setOverIdx(null);
+              }}
+              onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+              className={`group relative aspect-square cursor-grab overflow-hidden rounded-xl border bg-slate-100 transition active:cursor-grabbing dark:bg-slate-800 ${
+                dragIdx === i
+                  ? "opacity-40"
+                  : overIdx === i && dragIdx !== null
+                    ? "border-brand-400 ring-2 ring-brand-400"
+                    : "border-slate-200 dark:border-slate-700"
+              }`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}
                 alt=""
+                draggable={false}
                 className="h-full w-full object-cover"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
                 }}
               />
+              <span className="pointer-events-none absolute right-1.5 top-1.5 rounded-md bg-black/45 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <GripVertical className="h-3 w-3" />
+              </span>
               {i === 0 && (
                 <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow">
                   <Star className="h-2.5 w-2.5 fill-current" />

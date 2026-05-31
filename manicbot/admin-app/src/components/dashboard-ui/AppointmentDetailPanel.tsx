@@ -20,6 +20,7 @@ import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { STATUS_STYLES } from "~/components/dashboard-ui/AptCard";
+import { ClientDetailModal } from "~/components/salon/tabs/clients/ClientDetailModal";
 
 /**
  * Explicit shape for an appointment row passed into the detail panel.
@@ -117,6 +118,10 @@ export function AppointmentDetailPanel({
   const [svcId, setSvcId] = useState<string>(selected.svcId ?? "");
   const [err, setErr] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // "Профиль клиента" → opens the full ClientDetailModal (Profile / History /
+  // Blocks) over the calendar. Reuses the same self-contained modal the
+  // Clients tab uses; it fetches its own data from just (tenantId, chatId).
+  const [openClient, setOpenClient] = useState(false);
 
   // Reset edit state when a different appointment is selected.
   useEffect(() => {
@@ -366,6 +371,19 @@ export function AppointmentDetailPanel({
               <span>{selected.cancelReason}</span>
             </div>
           )}
+          {/* Open the full client card (Profile / History / Blocks) over the
+              calendar. Only when this appointment has a resolvable client. */}
+          {selected.chatId != null && (
+            <button
+              type="button"
+              onClick={() => setOpenClient(true)}
+              className="sm:col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:bg-white/[0.08]"
+              data-testid="panel-open-client"
+            >
+              <User className="h-3.5 w-3.5" />
+              {t("salon.day.panel.clientProfile", lang)}
+            </button>
+          )}
         </div>
       )}
 
@@ -541,6 +559,15 @@ export function AppointmentDetailPanel({
         onConfirm={doDelete}
         onCancel={() => setConfirmDelete(false)}
       />
+
+      {/* Full client card — its own z-[100] overlay stacks above this panel. */}
+      {openClient && selected.chatId != null && (
+        <ClientDetailModal
+          tenantId={tenantId}
+          chatId={selected.chatId}
+          onClose={() => setOpenClient(false)}
+        />
+      )}
     </div>
   );
 }

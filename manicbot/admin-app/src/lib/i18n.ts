@@ -564,6 +564,7 @@ const translations = {
   "salon.day.panel.slotConflict":        { ru: "Слот уже занят — выберите другое время или мастера.", ua: "Слот уже зайнятий — виберіть інший час або майстра.", en: "This slot is already busy — pick another time or master.", pl: "Termin jest już zajęty — wybierz inny czas lub mistrza." },
   "salon.day.panel.empty":               { ru: "Кликните на запись, чтобы открыть детали.", ua: "Натисніть на запис, щоб відкрити деталі.", en: "Click an appointment to see its details.", pl: "Kliknij wizytę, aby zobaczyć szczegóły." },
   "salon.day.panel.client":              { ru: "Клиент", ua: "Клієнт", en: "Client", pl: "Klient" },
+  "salon.day.panel.clientProfile":       { ru: "Профиль клиента", ua: "Профіль клієнта", en: "Client profile", pl: "Profil klienta" },
   "salon.day.panel.master":              { ru: "Мастер", ua: "Майстер", en: "Master", pl: "Mistrz" },
   "salon.day.panel.service":             { ru: "Услуга", ua: "Послуга", en: "Service", pl: "Usługa" },
   "salon.day.panel.date":                { ru: "Дата", ua: "Дата", en: "Date", pl: "Data" },

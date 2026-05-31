@@ -77,6 +77,17 @@ vi.mock("~/lib/appointments", () => ({
   APT_BORDER: {},
 }));
 
+// Stub the full client modal — its own data layer (clients.get etc.) is
+// covered by ClientDetailModal's own tests. Here we only assert the panel
+// mounts it with the right props when «Профиль клиента» is clicked.
+vi.mock("~/components/salon/tabs/clients/ClientDetailModal", () => ({
+  ClientDetailModal: ({ tenantId, chatId, onClose }: { tenantId: string; chatId: number; onClose: () => void }) => (
+    <div data-testid="client-detail-modal-stub" data-tenant={tenantId} data-chat={chatId}>
+      <button type="button" data-testid="client-modal-close" onClick={onClose}>x</button>
+    </div>
+  ),
+}));
+
 import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDetailPanel";
 
 // Past date so the "Mark Done" button is enabled by default. The server-
@@ -330,6 +341,37 @@ describe("AppointmentDetailPanel", () => {
         cancelledBy: "admin",
         comment: expect.any(String),
       });
+    });
+  });
+
+  describe("client profile button", () => {
+    it("renders «Профиль клиента» in read mode when the appointment has a chatId", () => {
+      renderPanel();
+      expect(screen.getByTestId("panel-open-client")).toBeTruthy();
+    });
+
+    it("hides the button when chatId is null (no resolvable client)", () => {
+      renderPanel({ chatId: null });
+      expect(screen.queryByTestId("panel-open-client")).toBeNull();
+    });
+
+    it("opens ClientDetailModal with the appointment's tenantId + chatId on click", () => {
+      renderPanel();
+      // Modal not mounted until the button is pressed.
+      expect(screen.queryByTestId("client-detail-modal-stub")).toBeNull();
+      fireEvent.click(screen.getByTestId("panel-open-client"));
+      const modal = screen.getByTestId("client-detail-modal-stub");
+      expect(modal.getAttribute("data-tenant")).toBe("t_demo");
+      expect(modal.getAttribute("data-chat")).toBe("12345");
+    });
+
+    it("closes the modal via its onClose without closing the panel", () => {
+      renderPanel();
+      fireEvent.click(screen.getByTestId("panel-open-client"));
+      fireEvent.click(screen.getByTestId("client-modal-close"));
+      expect(screen.queryByTestId("client-detail-modal-stub")).toBeNull();
+      // Panel is still open — the button is back.
+      expect(screen.getByTestId("panel-open-client")).toBeTruthy();
     });
   });
 });

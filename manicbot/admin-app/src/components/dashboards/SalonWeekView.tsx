@@ -21,6 +21,7 @@ import { useMemo, useEffect, useState, useRef } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
+import { AppointmentDetailPanel, type SelectedAppointment } from "~/components/dashboard-ui/AppointmentDetailPanel";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
@@ -71,6 +72,17 @@ interface Props {
   onDeleteBlock?: (id: string) => void;
   /** Drag-to-reschedule: fires when the user drops a block on a new slot. */
   onMoveAppointment?: (move: MoveCommit) => void;
+  /**
+   * Rich detail panel — when `tenantId` + `services` are provided, clicking a
+   * block opens `<AppointmentDetailPanel/>` (read/edit + status actions +
+   * «Профиль клиента») instead of the legacy `AptCard` drawer. Mirrors the
+   * SalonDayView contract; without them the view keeps the AptCard fallback
+   * (God-Mode AppointmentsPageClient passes neither). `onUpdated` lets the
+   * parent refetch after a save / status change / delete.
+   */
+  tenantId?: string;
+  services?: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
+  onUpdated?: () => void;
 }
 
 function pad(n: number): string {
@@ -127,6 +139,9 @@ export function SalonWeekView({
   onCreateAt,
   onDeleteBlock,
   onMoveAppointment,
+  tenantId,
+  services,
+  onUpdated,
 }: Props) {
   // Drag-to-reschedule — one hook instance owns the cross-column ghost
   // state. The Week view doesn't pin masters to columns, so commit will
@@ -583,8 +598,43 @@ export function SalonWeekView({
         </div>
       </div>
 
-      {/* Selected apt drawer */}
-      {selectedApt && (
+      {/* Selected apt drawer — rich AppointmentDetailPanel (status actions,
+          reschedule, «Профиль клиента») when the parent supplies tenantId +
+          services; otherwise the legacy AptCard fallback (God-Mode page). */}
+      {selectedApt && tenantId && services ? (
+        <AppointmentDetailPanel
+          tenantId={tenantId}
+          selected={
+            {
+              id: selectedApt.id,
+              tenantId,
+              date: selectedApt.date,
+              time: selectedApt.time,
+              duration: typeof selectedApt.duration === "number" ? selectedApt.duration : null,
+              status: selectedApt.status,
+              cancelled: selectedApt.cancelled ?? null,
+              noShow: selectedApt.noShow ?? null,
+              noShowBy: selectedApt.noShowBy ?? null,
+              cancelledBy: selectedApt.cancelledBy ?? null,
+              cancelReason: selectedApt.cancelReason ?? null,
+              masterId: selectedApt.masterId ?? null,
+              svcId: selectedApt.svcId ?? null,
+              userName: selectedApt.userName ?? null,
+              userPhone: selectedApt.userPhone ?? null,
+              userTg: selectedApt.userTg ?? null,
+              chatId: selectedApt.chatId ?? null,
+            } satisfies SelectedAppointment
+          }
+          masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
+          services={services}
+          lang={lang}
+          onClose={() => setSelectedApt(null)}
+          onChanged={() => {
+            onUpdated?.();
+            setSelectedApt(null);
+          }}
+        />
+      ) : selectedApt ? (
         <div className="glass-card rounded-2xl p-4 space-y-3" data-testid="week-view-selected">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -600,7 +650,7 @@ export function SalonWeekView({
           </div>
           <AptCard a={selectedApt} lang={lang} onAction={onAction} onNoShow={onNoShow} />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -13,7 +13,7 @@
  *     week contains today.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("~/lib/appointments", () => ({
   APT_BORDER: {
@@ -22,6 +22,17 @@ vi.mock("~/lib/appointments", () => ({
     cancelled: "border-l-red-500",
     no_show: "border-l-orange-500",
     done: "border-l-brand-500",
+  },
+  // AptCard / StatusActionMenu (rendered in the legacy drawer + re-exported
+  // by AppointmentDetailPanel) read STATUS_STYLES — must be present or the
+  // detail surfaces throw on click.
+  STATUS_STYLES: {
+    confirmed: "bg-emerald-500/15",
+    pending: "bg-amber-500/15",
+    cancelled: "bg-red-500/15",
+    rejected: "bg-red-500/15",
+    no_show: "bg-orange-500/15",
+    done: "bg-brand-500/15",
   },
   STATUS_LABELS: {
     confirmed: "Confirmed",
@@ -32,8 +43,31 @@ vi.mock("~/lib/appointments", () => ({
   },
 }));
 
+// AppointmentDetailPanel (rendered when tenantId + services are passed) uses
+// tRPC mutations + the client modal. Stub both so the Week-view drawer-routing
+// contract can be asserted without their data layers (each is covered by its
+// own test file).
+vi.mock("~/trpc/react", () => ({
+  api: {
+    appointments: { update: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
+    salon: {
+      confirmAppointment: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      markDone: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      markNoShow: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      cancelAppointment: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+  },
+}));
+vi.mock("~/components/salon/tabs/clients/ClientDetailModal", () => ({
+  ClientDetailModal: () => <div data-testid="client-detail-modal-stub" />,
+}));
+
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { renderWithLang } from "./helpers/renderWithLang";
+
+const services = [
+  { svcId: "manicure", names: '{"en":"Manicure"}', duration: 60, price: 120 },
+];
 
 // Sunday 2026-05-10 (the user's reference date) is in the week
 // Mon 2026-05-04 … Sun 2026-05-10.
@@ -250,5 +284,45 @@ describe("SalonWeekView", () => {
       "en",
     );
     expect(screen.queryByTestId("week-view-now-line")).toBeNull();
+  });
+
+  describe("appointment click → detail surface", () => {
+    it("opens the rich AppointmentDetailPanel when tenantId + services are provided", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          apts={[apt({ id: 7 })]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+          tenantId="t_demo"
+          services={services}
+        />,
+        "en",
+      );
+      fireEvent.click(screen.getByTestId("week-view-event"));
+      // The panel exposes the «Профиль клиента» button (chatId present) —
+      // that's our proof the rich panel rendered, not the AptCard drawer.
+      expect(screen.getByTestId("panel-open-client")).toBeTruthy();
+      expect(screen.queryByTestId("week-view-selected")).toBeNull();
+    });
+
+    it("falls back to the legacy AptCard drawer when tenantId/services are absent (God-Mode page)", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          apts={[apt({ id: 7 })]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+        />,
+        "en",
+      );
+      fireEvent.click(screen.getByTestId("week-view-event"));
+      expect(screen.getByTestId("week-view-selected")).toBeTruthy();
+      expect(screen.queryByTestId("panel-open-client")).toBeNull();
+    });
   });
 });

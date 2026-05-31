@@ -503,6 +503,12 @@ const translations = {
   "common.saveError":                    { ru: "Не удалось сохранить", ua: "Не вдалося зберегти", en: "Couldn't save", pl: "Nie udało się zapisać" },
   "salon.status.public":                 { ru: "Опубликован", ua: "Опубліковано", en: "Published", pl: "Opublikowano" },
   "salon.status.hidden":                 { ru: "Черновик", ua: "Чернетка", en: "Draft", pl: "Szkic" },
+  // «Мой салон» category tabs (top sub-navigation, mirrors the client-card tabs)
+  "salon.cat.profile":                   { ru: "Профиль", ua: "Профіль", en: "Profile", pl: "Profil" },
+  "salon.cat.appearance":                { ru: "Оформление", ua: "Оформлення", en: "Appearance", pl: "Wygląd" },
+  "salon.cat.publishing":                { ru: "Публикация", ua: "Публікація", en: "Publishing", pl: "Publikacja" },
+  "salon.cat.booking":                   { ru: "Бронирование", ua: "Бронювання", en: "Booking", pl: "Rezerwacje" },
+  "salon.cat.integrations":              { ru: "Интеграции", ua: "Інтеграції", en: "Integrations", pl: "Integracje" },
   "salon.chip.basicInfo":                { ru: "Основная информация", ua: "Основна інформація", en: "Basic info", pl: "Podstawowe informacje" },
   "salon.chip.basicInfoDesc":            { ru: "Название, адрес, телефон", ua: "Назва, адреса, телефон", en: "Name, address, phone", pl: "Nazwa, adres, telefon" },
   "salon.chip.hoursDesc":                { ru: "Режим работы по дням недели", ua: "Графік роботи по днях тижня", en: "Opening hours per weekday", pl: "Godziny otwarcia wg dni tygodnia" },

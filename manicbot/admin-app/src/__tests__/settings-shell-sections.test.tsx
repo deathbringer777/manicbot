@@ -2,8 +2,8 @@
 /**
  * Section-contract lock for `/settings`.
  *
- * The "8 sections for tenant_owner with top-tab nav" structure is the
- * headline ask of PR #92 — these tests fail if anyone silently drops one of
+ * The "9 sections for tenant_owner with top-tab nav" structure is the
+ * headline contract — these tests fail if anyone silently drops one of
  * the sections, swaps roles, or regresses the layout to a left-rail.
  *
  * The shell is rendered with each role; we assert (a) the exact section set
@@ -69,11 +69,13 @@ describe("SettingsShell — section contract by role", () => {
   // Non-technical roles land on salon/profile; "account" is demoted to
   // second-to-last (just before "help") because its sensitive controls now
   // live in a rarely-opened "danger zone". See getSettingsSectionIds.
-  it("tenant_owner sees the 11 headline sections, salon first and account second-to-last", () => {
+  // NOTE: the standalone "public" tab was folded into «Мой салон» (its publish
+  // toggle + preview now live under the salon's «Публикация» sub-tab). «Отзывы»
+  // (reviews) moved into Settings (PR #296). Owner/manager set = 10.
+  it("tenant_owner sees the 10 headline sections, salon first and account second-to-last", () => {
     mount("tenant_owner");
     expect(sectionIds()).toEqual([
       "salon",
-      "public",
       "reviews",
       "team",
       "channels",
@@ -90,7 +92,6 @@ describe("SettingsShell — section contract by role", () => {
     mount("tenant_manager");
     expect(sectionIds()).toEqual([
       "salon",
-      "public",
       "reviews",
       "team",
       "channels",

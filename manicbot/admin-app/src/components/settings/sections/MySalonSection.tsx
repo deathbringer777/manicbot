@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink,
+  type LucideIcon,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
@@ -15,21 +18,67 @@ import { SalonHoursBody } from "~/components/salon/SalonHoursBody";
 import { SalonGalleryBody } from "~/components/salon/SalonGalleryBody";
 import { SalonBrandingBody } from "~/components/salon/SalonBrandingBody";
 import { SalonStorefrontBody } from "~/components/salon/SalonStorefrontBody";
+import { SalonPublishBody } from "~/components/salon/SalonPublishBody";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
 import { AutoSuggestFavoriteSettings } from "~/components/salon/AutoSuggestFavoriteSettings";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 /**
- * «Мой салон» — the salon's single OLX-style listing editor. A read-only
- * header strip (name + publish status) sits above a stack of collapsible
- * chips, each an independent sub-editor that saves only its own fields via the
- * all-optional `salon.updateSalonProfile`. Mirrors the «Аккаунт» tab pattern
- * (CollapsibleSection chips) so the whole Settings area feels consistent.
+ * «Мой салон» — the salon's single listing editor. A read-only header strip
+ * (name + publish status) sits above a top tab strip of sub-categories
+ * (Профиль · Оформление · Публикация · Бронирование · Интеграции). The strip
+ * mirrors the client-card tabs (`ClientDetailTabs`); only the active category's
+ * cards render below, each an independent sub-editor saving its own fields via
+ * the all-optional `salon.updateSalonProfile`.
+ *
+ * The active category is mirrored to the `?sub=` query param so deep links
+ * (e.g. the onboarding "activate public profile" step → `?sub=publishing`) open
+ * straight on the right tab. The former standalone «Публичный профиль» tab is
+ * folded into the «Публикация» category here via `SalonPublishBody`.
  */
+
+const CATEGORY_IDS = ["profile", "appearance", "publishing", "booking", "integrations"] as const;
+type CategoryId = (typeof CATEGORY_IDS)[number];
+
+const CATEGORIES: { id: CategoryId; labelKey: Parameters<typeof t>[0]; icon: LucideIcon }[] = [
+  { id: "profile", labelKey: "salon.cat.profile", icon: Store },
+  { id: "appearance", labelKey: "salon.cat.appearance", icon: Palette },
+  { id: "publishing", labelKey: "salon.cat.publishing", icon: Globe },
+  { id: "booking", labelKey: "salon.cat.booking", icon: CheckCircle2 },
+  { id: "integrations", labelKey: "salon.cat.integrations", icon: CalendarDays },
+];
+
+function isCategoryId(v: string | null): v is CategoryId {
+  return v != null && (CATEGORY_IDS as readonly string[]).includes(v);
+}
+
 export function MySalonSection() {
   const { tenantId } = useRole();
   const { lang } = useLang();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const effectiveTenantId = tenantId;
+
+  const subParam = searchParams.get("sub");
+  const [activeCat, setActiveCat] = useState<CategoryId>(isCategoryId(subParam) ? subParam : "profile");
+
+  // Keep the active tab in sync if the `?sub=` param changes while mounted
+  // (e.g. an in-app link to a specific category fires without a remount).
+  useEffect(() => {
+    if (isCategoryId(subParam)) setActiveCat(subParam);
+  }, [subParam]);
+
+  const onTabChange = (id: CategoryId) => {
+    setActiveCat(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("sub", id);
+    router.replace(url.pathname + url.search, { scroll: false });
+  };
+
+  const profile = api.salon.getSalonProfile.useQuery(
+    { tenantId: effectiveTenantId ?? "" },
+    { enabled: !!effectiveTenantId },
+  );
 
   if (!effectiveTenantId) {
     return (
@@ -38,8 +87,6 @@ export function MySalonSection() {
       </div>
     );
   }
-
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId: effectiveTenantId });
 
   if (profile.isLoading) {
     return (
@@ -88,78 +135,135 @@ export function MySalonSection() {
         }
       />
 
-      <CollapsibleSection
-        icon={Store}
-        iconClass="text-brand-400"
-        title={t("salon.chip.basicInfo", lang)}
-        desc={t("salon.chip.basicInfoDesc", lang)}
-        defaultOpen
+      {/* Top sub-category tabs — mirrors the client-card tabs (ClientDetailTabs) */}
+      <div
+        role="tablist"
+        aria-label={t("salon.salonProfile", lang)}
+        className="flex gap-1 border-b border-slate-200 dark:border-white/10 overflow-x-auto scrollbar-hide"
       >
-        <SalonBasicInfoBody tenantId={effectiveTenantId} profile={data} />
-      </CollapsibleSection>
+        {CATEGORIES.map((cat) => {
+          const active = activeCat === cat.id;
+          const Icon = cat.icon;
+          return (
+            <button
+              key={cat.id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => onTabChange(cat.id)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border-b-2 -mb-px transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded-t ${
+                active
+                  ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-white/20"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {t(cat.labelKey, lang)}
+            </button>
+          );
+        })}
+      </div>
 
-      <CollapsibleSection
-        icon={Clock}
-        iconClass="text-sky-400"
-        title={t("salon.publicProfile.scheduleSection", lang)}
-        desc={t("salon.chip.hoursDesc", lang)}
-      >
-        <SalonHoursBody tenantId={effectiveTenantId} profile={data} />
-      </CollapsibleSection>
+      <div role="tabpanel" className="space-y-3 pt-1">
+        {activeCat === "profile" && (
+          <>
+            <CollapsibleSection
+              icon={Store}
+              iconClass="text-brand-400"
+              title={t("salon.chip.basicInfo", lang)}
+              desc={t("salon.chip.basicInfoDesc", lang)}
+              defaultOpen
+            >
+              <SalonBasicInfoBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
 
-      <CollapsibleSection
-        icon={Images}
-        iconClass="text-violet-400"
-        title={t("salon.publicProfile.gallery", lang)}
-        desc={t("salon.chip.galleryDesc", lang)}
-      >
-        <SalonGalleryBody tenantId={effectiveTenantId} profile={data} />
-      </CollapsibleSection>
+            <CollapsibleSection
+              icon={Clock}
+              iconClass="text-sky-400"
+              title={t("salon.publicProfile.scheduleSection", lang)}
+              desc={t("salon.chip.hoursDesc", lang)}
+              defaultOpen
+            >
+              <SalonHoursBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
+          </>
+        )}
 
-      <CollapsibleSection
-        icon={Palette}
-        iconClass="text-amber-400"
-        title={t("salon.publicProfile.brandingSection", lang)}
-        desc={t("salon.chip.brandingDesc", lang)}
-      >
-        <SalonBrandingBody tenantId={effectiveTenantId} profile={data} />
-      </CollapsibleSection>
+        {activeCat === "appearance" && (
+          <>
+            <CollapsibleSection
+              icon={Images}
+              iconClass="text-violet-400"
+              title={t("salon.publicProfile.gallery", lang)}
+              desc={t("salon.chip.galleryDesc", lang)}
+              defaultOpen
+            >
+              <SalonGalleryBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
 
-      <CollapsibleSection
-        icon={Globe}
-        iconClass="text-emerald-400"
-        title={t("salon.chip.storefront", lang)}
-        desc={t("salon.chip.storefrontDesc", lang)}
-      >
-        <SalonStorefrontBody tenantId={effectiveTenantId} profile={data} />
-      </CollapsibleSection>
+            <CollapsibleSection
+              icon={Palette}
+              iconClass="text-amber-400"
+              title={t("salon.publicProfile.brandingSection", lang)}
+              desc={t("salon.chip.brandingDesc", lang)}
+              defaultOpen
+            >
+              <SalonBrandingBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
+          </>
+        )}
 
-      <CollapsibleSection
-        icon={CheckCircle2}
-        iconClass="text-emerald-400"
-        title={t("salon.autoConfirm.title", lang)}
-        desc={t("salon.chip.autoConfirmDesc", lang)}
-      >
-        <AutoConfirmSettings tenantId={effectiveTenantId} bare />
-      </CollapsibleSection>
+        {activeCat === "publishing" && (
+          <>
+            <SalonPublishBody tenantId={effectiveTenantId} profile={data} onEditFields={onTabChange} />
 
-      <CollapsibleSection
-        icon={Star}
-        iconClass="text-amber-400"
-        title={t("salon.favoriteSuggest.title", lang)}
-        desc={t("salon.chip.favoriteDesc", lang)}
-      >
-        <AutoSuggestFavoriteSettings tenantId={effectiveTenantId} bare />
-      </CollapsibleSection>
+            <CollapsibleSection
+              icon={Globe}
+              iconClass="text-emerald-400"
+              title={t("salon.chip.storefront", lang)}
+              desc={t("salon.chip.storefrontDesc", lang)}
+              defaultOpen
+            >
+              <SalonStorefrontBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
+          </>
+        )}
 
-      <CollapsibleSection
-        icon={CalendarDays}
-        iconClass="text-brand-400"
-        title="Google Calendar"
-        desc={t("salon.chip.calendarDesc", lang)}
-      >
-        <SalonCalendarSection tenantId={effectiveTenantId} bare />
-      </CollapsibleSection>
+        {activeCat === "booking" && (
+          <>
+            <CollapsibleSection
+              icon={CheckCircle2}
+              iconClass="text-emerald-400"
+              title={t("salon.autoConfirm.title", lang)}
+              desc={t("salon.chip.autoConfirmDesc", lang)}
+              defaultOpen
+            >
+              <AutoConfirmSettings tenantId={effectiveTenantId} bare />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={Star}
+              iconClass="text-amber-400"
+              title={t("salon.favoriteSuggest.title", lang)}
+              desc={t("salon.chip.favoriteDesc", lang)}
+              defaultOpen
+            >
+              <AutoSuggestFavoriteSettings tenantId={effectiveTenantId} bare />
+            </CollapsibleSection>
+          </>
+        )}
+
+        {activeCat === "integrations" && (
+          <CollapsibleSection
+            icon={CalendarDays}
+            iconClass="text-brand-400"
+            title="Google Calendar"
+            desc={t("salon.chip.calendarDesc", lang)}
+            defaultOpen
+          >
+            <SalonCalendarSection tenantId={effectiveTenantId} bare />
+          </CollapsibleSection>
+        )}
+      </div>
     </div>
   );
 }

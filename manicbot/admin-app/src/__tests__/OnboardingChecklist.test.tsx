@@ -17,7 +17,7 @@
  *   * the optional tier hides its items behind a disclosure when collapsed;
  *   * 4 / 4 essentials → top label flips to «Готов принимать записи»;
  *   * the whole component disappears only when ALL 8 ids are done;
- *   * fixed click targets — `add_branding` → /settings?section=salon,
+ *   * fixed click targets — `add_branding` → /settings?section=salon&sub=appearance,
  *     `share_link` → ?tab=public_profile (the two routing bugs the rework
  *     was chartered to fix).
  */
@@ -213,7 +213,7 @@ describe("OnboardingChecklist — essentials-done (4/4) state", () => {
 });
 
 describe("OnboardingChecklist — fixed routing (closes B2 + B3)", () => {
-  it("«Логотип и обложка» (add_branding) link points at /settings?section=salon — NOT /settings?section=public", () => {
+  it("«Логотип и обложка» (add_branding) link points at /settings?section=salon&sub=appearance — NOT the removed /settings?section=public", () => {
     mockData = {
       completedSteps: ["connect_bot", "add_master"], // ensures optional tier auto-opens
       allCompletedAt: null,
@@ -222,7 +222,7 @@ describe("OnboardingChecklist — fixed routing (closes B2 + B3)", () => {
     renderChecklist();
     const row = document.querySelector('[data-step-id="add_branding"]') as HTMLElement;
     const link = row.querySelector("a") as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe("/settings?section=salon");
+    expect(link.getAttribute("href")).toBe("/settings?section=salon&sub=appearance");
   });
 
   it("«Поделитесь ссылкой» (share_link) link points at ?tab=public_profile — NOT ?tab=channels", () => {

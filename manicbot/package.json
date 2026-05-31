@@ -1,24 +1,25 @@
 {
-	"name": "manicbot",
-	"version": "0.0.0",
-	"private": true,
-	"scripts": {
-		"deploy": "echo 'Deploy via GitHub: git push origin main'",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
-		"test": "vitest run",
-		"test:ws": "vitest run --config vitest.workers.config.mjs",
-		"check-schema": "node scripts/check-schema-tables.mjs",
-		"migrate": "node scripts/run-migrate.js",
-		"ig-e2e:tenant": "node scripts/create-ig-e2e-tenant.mjs",
-		"seed:test-accounts": "node scripts/seed-test-accounts.mjs --apply",
-		"seed:test-accounts:dry": "node scripts/seed-test-accounts.mjs",
-		"seed:calendar-demo": "node scripts/seed-calendar-demo.mjs --apply",
-		"seed:calendar-demo:dry": "node scripts/seed-calendar-demo.mjs"
-	},
-	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.16.7",
-		"vitest": "^4.0.18",
-		"wrangler": "^4.92.0"
-	}
+  "name": "manicbot",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "echo 'Deploy via GitHub: git push origin main'",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "test": "vitest run",
+    "test:ws": "vitest run --config vitest.workers.config.mjs",
+    "check-schema": "node scripts/check-schema-tables.mjs",
+    "check-migrations": "node scripts/check-migrations.mjs",
+    "migrate": "node scripts/run-migrate.js",
+    "ig-e2e:tenant": "node scripts/create-ig-e2e-tenant.mjs",
+    "seed:test-accounts": "node scripts/seed-test-accounts.mjs --apply",
+    "seed:test-accounts:dry": "node scripts/seed-test-accounts.mjs",
+    "seed:calendar-demo": "node scripts/seed-calendar-demo.mjs --apply",
+    "seed:calendar-demo:dry": "node scripts/seed-calendar-demo.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.7",
+    "vitest": "^4.0.18",
+    "wrangler": "^4.92.0"
+  }
 }

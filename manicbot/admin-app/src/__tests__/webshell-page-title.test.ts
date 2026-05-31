@@ -47,7 +47,6 @@ describe("WebShell.getPageTitle — top-bar resolves to the active tab/page", ()
       ["?tab=clients", "Клиенты"],
       ["?tab=services", "Услуги"],
       ["?tab=masters", "Мастера"],
-      ["?tab=channels", "Каналы"],
       ["?tab=analytics", "Аналитика"],
       ["?tab=reviews", "Отзывы"],
       ["?tab=appointments", "Записи"],

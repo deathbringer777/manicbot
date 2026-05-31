@@ -52,8 +52,8 @@ import {
 const MESSAGE_BODY_MAX = 4000;
 const TITLE_MAX = 200;
 const PREVIEW_MAX = 200;
-const BROADCAST_MAX_RECIPIENTS = 10000;
-const PREVIEW_SAMPLE_SIZE = 10;
+export const BROADCAST_MAX_RECIPIENTS = 10000;
+export const PREVIEW_SAMPLE_SIZE = 10;
 
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
@@ -69,7 +69,7 @@ function makePreview(body: string): string {
  * salon business; individual masters (staff) are intentionally excluded —
  * platform announcements are for account owners, not every employee.
  */
-const BROADCAST_ROLES: readonly string[] = ["tenant_owner", "tenant_manager"];
+export const BROADCAST_ROLES: readonly string[] = ["tenant_owner", "tenant_manager"];
 
 /**
  * Internal mailbox domain for non-real accounts. Salon-created staff without a
@@ -90,10 +90,10 @@ export function isFakeRecipientEmail(
 
 // ─── Validation ─────────────────────────────────────────────────────────
 
-const PLAN = z.enum(["start", "pro", "max"]);
-const BILLING_STATUS = z.enum(["trialing", "active", "grace", "expired"]);
+export const PLAN = z.enum(["start", "pro", "max"]);
+export const BILLING_STATUS = z.enum(["trialing", "active", "grace", "expired"]);
 
-const AUDIENCE_FILTER = z.discriminatedUnion("scope", [
+export const AUDIENCE_FILTER = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("all") }),
   z.object({ scope: z.literal("by_plan"), plans: z.array(PLAN).min(1) }),
   z.object({
@@ -102,7 +102,7 @@ const AUDIENCE_FILTER = z.discriminatedUnion("scope", [
   }),
 ]);
 
-type AudienceFilter = z.infer<typeof AUDIENCE_FILTER>;
+export type AudienceFilter = z.infer<typeof AUDIENCE_FILTER>;
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -124,7 +124,7 @@ interface AudienceRecipient {
  * (`*.manicbot.local`) and test tenants (`isTest = 1`). See BROADCAST_ROLES
  * and isFakeRecipientEmail.
  */
-async function resolveAudience(
+export async function resolveAudience(
   db: any,
   audience: AudienceFilter,
 ): Promise<AudienceRecipient[]> {

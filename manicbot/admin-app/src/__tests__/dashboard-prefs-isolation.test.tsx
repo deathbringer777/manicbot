@@ -12,7 +12,16 @@ const _mockLocalStorage = {
   get length() { return Object.keys(_lsStore).length; },
   key: (n: number) => Object.keys(_lsStore)[n] ?? null,
 };
-beforeAll(() => { vi.stubGlobal("localStorage", _mockLocalStorage); });
+beforeAll(() => {
+  vi.stubGlobal("localStorage", _mockLocalStorage);
+  // The tRPC link below targets an unreachable host (`http://test.invalid`).
+  // Under happy-dom that triggers a real DNS lookup which fails late and is
+  // aborted at window teardown, spamming every full-suite run with repeated
+  // `ENOTFOUND test.invalid` errors and a teardown `AbortError`. These tests
+  // only assert localStorage isolation, so stub fetch to fail fast offline —
+  // the query outcome is identical (it failed before too), minus the noise.
+  vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("network disabled in test"))));
+});
 beforeEach(() => { _mockLocalStorage.clear(); });
 afterEach(() => cleanup());
 

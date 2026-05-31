@@ -88,6 +88,13 @@ jobs:
         run: npm test
         working-directory: manicbot
 
+      # MessengerHub WebSocket e2e runs in the real workerd runtime via
+      # @cloudflare/vitest-pool-workers (separate config), so it gates transport
+      # refactors that the node unit suite can't catch.
+      - name: Run WebSocket integration test (workers pool)
+        run: npm run test:ws
+        working-directory: manicbot
+
       - name: Check D1 table names (schema.sql vs Drizzle)
         run: npm run check-schema
         working-directory: manicbot

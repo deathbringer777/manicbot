@@ -210,7 +210,7 @@ curl "https://manicbot.com/setup?key=YOUR_ADMIN_KEY"
 ### Tests
 
 ```bash
-cd manicbot && npm test && npm run check-schema
+cd manicbot && npm test && npm run test:ws && npm run check-schema
 cd manicbot/admin-app && npm run typecheck && npm test
 ```
 

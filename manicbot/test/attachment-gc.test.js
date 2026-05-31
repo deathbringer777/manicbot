@@ -10,6 +10,7 @@ vi.mock('../src/utils/events.js', () => ({ logEvent: vi.fn() }));
 import { createMockD1 } from './helpers/mock-db.js';
 import { phaseAttachmentGc } from '../src/handlers/cron.js';
 import { extractCdnKey, extractAttachmentKeys } from '../src/services/attachmentKeys.js';
+import { logEvent } from '../src/utils/events.js'; // mocked above — asserted on for dry-run observability
 
 const KEY = 't/t_a/chat_attachment-abc123def456.png';
 const att = (key) =>
@@ -92,5 +93,43 @@ describe('phaseAttachmentGc', () => {
     );
     await phaseAttachmentGc(ctx, 't_a', NOW_MS);
     expect(del).not.toHaveBeenCalled();
+  });
+
+  it('tenant isolation: GC for tenant A never touches tenant B objects', async () => {
+    const del = vi.fn();
+    const KEY_A = 't/t_a/chat_attachment-aaa111.png';
+    const KEY_B = 't/t_b/chat_attachment-bbb222.png';
+    const db = createMockD1();
+    const table = db._getTable('thread_messages');
+    // t_a: old soft-deleted orphan referencing KEY_A.
+    table.push({ id: 'a1', tenant_id: 't_a', deleted_at: OLD, attachments_json: att(KEY_A) });
+    // t_b: an old orphan + a LIVE reference — both must be invisible to t_a's sweep.
+    table.push({ id: 'b1', tenant_id: 't_b', deleted_at: OLD, attachments_json: att(KEY_B) });
+    table.push({ id: 'b2', tenant_id: 't_b', deleted_at: null, attachments_json: att(KEY_B) });
+    const ctx = { db, tenantId: 't_a', ATTACHMENT_GC_DELETE: '1', ASSETS: { delete: del } };
+
+    await phaseAttachmentGc(ctx, 't_a', NOW_MS);
+
+    expect(del).toHaveBeenCalledWith(KEY_A);
+    expect(del).toHaveBeenCalledTimes(1); // only tenant A's orphan
+    expect(del).not.toHaveBeenCalledWith(KEY_B); // never tenant B's object
+  });
+
+  it('dry-run log carries enriched observability fields (count, sample keys, per-candidate age)', async () => {
+    // dry-run (ATTACHMENT_GC_DELETE unset)
+    const ctx = ctxWith([{ id: 'm1', tenant_id: 't_a', deleted_at: OLD, attachments_json: att(KEY) }]);
+
+    await phaseAttachmentGc(ctx, 't_a', NOW_MS);
+
+    const call = logEvent.mock.calls.find((c) => c[1] === 'cron.attachment_gc.dryrun');
+    expect(call, 'expected a cron.attachment_gc.dryrun event').toBeTruthy();
+    const payload = call[2];
+    expect(payload.totalCandidates).toBe(1);
+    expect(payload.orphanCount).toBe(1);
+    expect(payload.sampleKeys).toContain(KEY);
+    expect(Array.isArray(payload.samples)).toBe(true);
+    expect(payload.samples[0]).toMatchObject({ key: KEY });
+    expect(typeof payload.samples[0].ageSec).toBe('number');
+    expect(payload.samples[0].ageSec).toBeGreaterThan(0);
   });
 });

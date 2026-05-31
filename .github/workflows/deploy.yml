@@ -99,6 +99,15 @@ jobs:
         run: npm run check-schema
         working-directory: manicbot
 
+      # Migration-number collision guard: wrangler tracks D1 migrations by
+      # exact filename and applies them in lexicographic order, so reusing a
+      # number is a latent ordering hazard that can collide with an already-
+      # applied file in prod. Fails the gate on any NEW collision (frozen
+      # historical dupes are allowlisted in migration-check-utils.mjs).
+      - name: Check D1 migration numbers (no collisions)
+        run: npm run check-migrations
+        working-directory: manicbot
+
       - name: Security audit (worker deps)
         run: npm audit --audit-level=high --production
         working-directory: manicbot

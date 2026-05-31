@@ -134,12 +134,14 @@ const ALLOWLIST = new Set([
   // bot-collision query down by ~13 lines) → 1785 (Phase-3 security sweep
   // awaited the master-invite emails in `addMaster` (+7) and
   // `createMasterAccount` (+5) and surfaced `inviteEmailSent`, shifting the
-  // bot-collision query down by 12 lines).
+  // bot-collision query down by 12 lines) → 1789 (appointment name-resolution
+  // added the `appointmentNames` import (+1) and rewrote `getAppointments`
+  // to a `select({...resolved})` block (+3), net +4 lines above this query).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1785",
+  "src/server/api/routers/salon.ts:1789",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

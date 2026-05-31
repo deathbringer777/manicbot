@@ -24,6 +24,7 @@ import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
+import { computeLanes } from "~/lib/calendar/overlapLanes";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
@@ -415,9 +416,25 @@ export function SalonWeekView({
                         />
                       </div>
                     ))}
-                    {list.map((a) => {
+                    {(() => {
+                    // Google-Calendar-style overlap lanes: bookings sharing a
+                    // time window split the column into side-by-side sub-columns
+                    // instead of stacking and hiding each other.
+                    const laneMap = computeLanes(
+                      list.map((a) => {
+                        const start = parseHHMMToMinutes(a.time);
+                        return { id: a.id, startMin: start, endMin: start + Math.max(15, a.duration ?? 60) };
+                      }),
+                    );
+                    return list.map((a) => {
                       const top = timeToTop(a.time);
                       const height = durationToHeight(a.duration);
+                      const placement = laneMap.get(a.id) ?? { lane: 0, lanes: 1 };
+                      // Width/offset within the column, in %, leaving a 4% gutter
+                      // on the right so the rightmost block doesn't touch the
+                      // column border.
+                      const laneWidthPct = (100 - 4) / placement.lanes;
+                      const laneLeftPct = placement.lane * laneWidthPct;
                       const tone =
                         (typeof a.masterId === "number" && masterColor.get(a.masterId)) || fallbackTone;
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
@@ -447,12 +464,16 @@ export function SalonWeekView({
                           onPointerDown={drag?.onPointerDown}
                           data-testid="week-view-event"
                           data-apt-id={a.id}
-                          className={`absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left transition-shadow hover:shadow-lg overflow-hidden ${
+                          className={`absolute rounded-lg px-1.5 py-1 text-left transition-shadow hover:shadow-lg overflow-hidden ${
                             drag ? "cursor-grab active:cursor-grabbing" : ""
                           }`}
                           style={{
                             top,
                             height,
+                            // Lane geometry — side-by-side when overlapping,
+                            // full width (minus gutter) when alone.
+                            left: `calc(${laneLeftPct}% + 2px)`,
+                            width: `calc(${laneWidthPct}% - 2px)`,
                             background: tone.bg,
                             borderLeft: `3px solid ${tone.border}`,
                             opacity,
@@ -466,9 +487,15 @@ export function SalonWeekView({
                           <div className="text-[10px] font-medium text-slate-800 dark:text-white truncate leading-tight">
                             {a.userName ?? a.userTg ?? `#${a.chatId ?? ""}`}
                           </div>
+                          {(a.serviceName ?? a.svcId) && placement.lanes <= 2 && (
+                            <div className="text-[9px] text-slate-500 dark:text-slate-400 truncate leading-tight">
+                              {a.serviceName ?? a.svcId}
+                            </div>
+                          )}
                         </button>
                       );
-                    })}
+                    });
+                    })()}
 
                     {/* Drag-to-reschedule ghost — rendered in the column
                         currently under the cursor, NOT necessarily the

@@ -43,9 +43,11 @@ CREATE INDEX IF NOT EXISTS idx_apt_tenant_chat ON appointments(tenant_id, chat_i
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_status ON appointments(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_ts ON appointments(tenant_id, ts);
 -- 0044: prevents double-booking of the same active slot.
+-- 0097: scoped to assigned masters only — unassigned (master_id NULL) bookings
+-- may overlap on a shared calendar (Google-Calendar-style).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_apt_unique_active_slot
-  ON appointments(tenant_id, COALESCE(master_id, -1), date, time)
-  WHERE cancelled = 0;
+  ON appointments(tenant_id, master_id, date, time)
+  WHERE cancelled = 0 AND master_id IS NOT NULL;
 -- 0051: composite indexes for cron + analytics hot paths.
 CREATE INDEX IF NOT EXISTS idx_apt_unsynced
   ON appointments(tenant_id, ts)

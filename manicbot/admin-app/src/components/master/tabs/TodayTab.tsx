@@ -49,7 +49,7 @@ function AptRow({ apt, onNoShow }: { apt: any; onNoShow?: (id: any, noShowBy: "c
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{apt.userName ?? `#${apt.chatId}`}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{apt.svcId}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{apt.serviceName ?? apt.svcId}</p>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">

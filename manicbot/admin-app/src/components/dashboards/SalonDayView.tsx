@@ -34,6 +34,7 @@ import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
+import { computeLanes } from "~/lib/calendar/overlapLanes";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
@@ -781,9 +782,21 @@ export function SalonDayView({
                     ))}
 
                     {/* Appointment blocks */}
-                    {list.map((a) => {
+                    {(() => {
+                    // Google-Calendar-style overlap lanes — bookings sharing a
+                    // window split this column into side-by-side sub-columns.
+                    const laneMap = computeLanes(
+                      list.map((a) => {
+                        const start = parseHHMMToMinutes(a.time);
+                        return { id: a.id, startMin: start, endMin: start + Math.max(15, a.duration ?? 60) };
+                      }),
+                    );
+                    return list.map((a) => {
                       const top = timeToTop(a.time);
                       const height = durationToHeight(a.duration);
+                      const placement = laneMap.get(a.id) ?? { lane: 0, lanes: 1 };
+                      const laneWidthPct = (100 - 4) / placement.lanes;
+                      const laneLeftPct = placement.lane * laneWidthPct;
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
                       const isNoShow = !!a.noShow;
                       const isTerminal = isCancelled || isNoShow || a.status === "done";
@@ -823,12 +836,15 @@ export function SalonDayView({
                           data-apt-id={a.id}
                           data-selected={isSelected ? "1" : "0"}
                           data-past={isPast ? "1" : "0"}
-                          className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left transition-all overflow-hidden ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-white/20 hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${dimClass} ${
+                          className={`absolute rounded-lg px-2 py-1 text-left transition-all overflow-hidden ring-1 ring-transparent hover:ring-slate-300 dark:hover:ring-white/20 hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${dimClass} ${
                             isSelected ? "ring-2 ring-offset-1 shadow-md" : ""
                           } ${drag ? "cursor-grab active:cursor-grabbing" : ""}`}
                           style={{
                             top,
                             height,
+                            // Lane geometry — side-by-side when overlapping.
+                            left: `calc(${laneLeftPct}% + 2px)`,
+                            width: `calc(${laneWidthPct}% - 2px)`,
                             background: tone.bg,
                             borderLeft: `3px solid ${tone.border}`,
                             ...(dragOpacity !== undefined ? { opacity: dragOpacity } : {}),
@@ -844,14 +860,15 @@ export function SalonDayView({
                           }`}>
                             {a.userName ?? a.userTg ?? `#${a.chatId ?? ""}`}
                           </div>
-                          {a.svcId && height >= HOUR_HEIGHT * 0.75 && (
+                          {(a.serviceName ?? a.svcId) && height >= HOUR_HEIGHT * 0.75 && placement.lanes <= 2 && (
                             <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                              {a.svcId}
+                              {a.serviceName ?? a.svcId}
                             </div>
                           )}
                         </button>
                       );
-                    })}
+                    });
+                    })()}
 
                     {/* Empty-state overlay — single-column (master self-view)
                         mode only, fires when the visible day has zero

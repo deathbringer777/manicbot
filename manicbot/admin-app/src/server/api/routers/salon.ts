@@ -11,7 +11,8 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray, getTableColumns } from "drizzle-orm";
+import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appointmentNames";
 import {
   generatePairingToken,
   buildDeepLink,
@@ -170,7 +171,10 @@ export const salonRouter = createTRPCRouter({
     }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      const rows = await ctx.db.select().from(appointments)
+      // Resolve client + service names at read time (see appointmentNames.ts).
+      const rows = await ctx.db
+        .select({ ...getTableColumns(appointments), ...appointmentNameColumns })
+        .from(appointments)
         .where(and(
           eq(appointments.tenantId, input.tenantId),
           ...(input.date ? [eq(appointments.date, input.date)] : []),
@@ -180,7 +184,7 @@ export const salonRouter = createTRPCRouter({
         ))
         .orderBy(desc(appointments.ts))
         .limit(input.limit ?? 100);
-      return rows;
+      return rows.map(foldAppointmentNames);
     }),
 
   getMasters: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {

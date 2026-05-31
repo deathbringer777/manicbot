@@ -48,7 +48,6 @@ describe("WebShell.getPageTitle — top-bar resolves to the active tab/page", ()
       ["?tab=services", "Услуги"],
       ["?tab=masters", "Мастера"],
       ["?tab=analytics", "Аналитика"],
-      ["?tab=reviews", "Отзывы"],
       ["?tab=appointments", "Записи"],
     ])("/dashboard%s → %s", (search, expected) => {
       expect(getPageTitle("/dashboard", search, flat, "ru")).toBe(expected);
@@ -56,6 +55,10 @@ describe("WebShell.getPageTitle — top-bar resolves to the active tab/page", ()
 
     it("bare /dashboard with no tab still resolves to 'Домой'", () => {
       expect(getPageTitle("/dashboard", "", flat, "ru")).toBe("Домой");
+    });
+
+    it("?tab=reviews is no longer an owner sidebar item → falls back to 'Домой' (reviews moved to Settings)", () => {
+      expect(getPageTitle("/dashboard", "?tab=reviews", flat, "ru")).toBe("Домой");
     });
 
     it("non-tab paths still resolve via prefix (e.g. /marketing → Маркетинг)", () => {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   User, CreditCard, Palette, HelpCircle, ArrowLeft,
   Settings, Wrench, Store, Globe, Users, MessageSquare,
-  UserRound, ChevronLeft, ChevronRight, Gift, Bell,
+  UserRound, ChevronLeft, ChevronRight, Gift, Bell, Star,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -37,6 +37,12 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     ua: { label: "Публічний профіль", desc: "Slug, опис, фото" },
     en: { label: "Public profile",    desc: "Slug, description, photos" },
     pl: { label: "Profil publiczny",  desc: "Slug, opis, zdjęcia" },
+  },
+  reviews: {
+    ru: { label: "Отзывы",            desc: "Рейтинг и отзывы клиентов" },
+    ua: { label: "Відгуки",           desc: "Рейтинг та відгуки клієнтів" },
+    en: { label: "Reviews",           desc: "Ratings and client reviews" },
+    pl: { label: "Opinie",            desc: "Oceny i opinie klientów" },
   },
   team: {
     ru: { label: "Команда",          desc: "Мастера, менеджеры, передача прав" },
@@ -112,6 +118,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   account:       User,
   salon:         Store,
   public:        Globe,
+  reviews:       Star,
   team:          Users,
   channels:      MessageSquare,
   billing:       CreditCard,
@@ -142,7 +149,7 @@ export function getSettingsSectionIds(role: string | null, isPersonalTenant: boo
     (role === "master" && isPersonalTenant);
 
   if (role === "tenant_owner" || role === "tenant_manager") {
-    const ids = ["salon", "public", "team", "channels", "billing", "notifications", "appearance"];
+    const ids = ["salon", "public", "reviews", "team", "channels", "billing", "notifications", "appearance"];
     if (showReferrals) ids.push("referrals");
     ids.push("account", "help");
     return ids;

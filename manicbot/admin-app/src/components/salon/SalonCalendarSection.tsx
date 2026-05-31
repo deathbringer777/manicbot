@@ -72,7 +72,7 @@ export function SalonCalendarSection({ tenantId }: { tenantId: string }) {
             <div className="flex items-center gap-2 min-w-0">
               <CalendarDays className="h-4 w-4 text-brand-400 shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm text-white font-medium truncate">
+                <p className="text-sm text-foreground font-medium truncate">
                   {row.calendarSummary || row.calendarId}
                 </p>
                 <div className="flex items-center gap-2 text-[10px] text-slate-500">

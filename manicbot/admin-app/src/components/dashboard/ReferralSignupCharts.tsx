@@ -76,7 +76,7 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
     <div className="grid gap-4 xl:grid-cols-2">
       <div className="glass-card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-white">{t("charts.signupsTitle", lang)}</h2>
+          <h2 className="text-sm font-bold text-foreground">{t("charts.signupsTitle", lang)}</h2>
           {totalLabel && <span className="text-[10px] text-slate-500 tabular-nums">{totalLabel}</span>}
         </div>
         {barData.length === 0 ? (
@@ -117,7 +117,7 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
       </div>
 
       <div className="glass-card rounded-2xl p-4">
-        <h2 className="text-sm font-bold text-white mb-3">{t("charts.byDayStack", lang)}</h2>
+        <h2 className="text-sm font-bold text-foreground mb-3">{t("charts.byDayStack", lang)}</h2>
         {!hasDaily ? (
           <p className="text-xs text-slate-500 py-8 text-center">{t("charts.noDailySignups", lang)}</p>
         ) : (

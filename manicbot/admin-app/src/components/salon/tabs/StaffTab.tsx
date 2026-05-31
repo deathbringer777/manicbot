@@ -213,11 +213,11 @@ function MemberRow({
     member.permissions.every((p) => selected.has(p));
 
   return (
-    <div className="rounded-xl border border-white/5 bg-slate-900/40 p-3">
+    <div className="rounded-xl border border-black/5 bg-slate-50 dark:border-white/5 dark:bg-slate-900/40 p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-white">{member.name ?? member.email}</p>
+            <p className="truncate text-sm font-medium text-foreground">{member.name ?? member.email}</p>
             <Pill
               tone={isMaster ? "violet" : "sky"}
               variant="soft"

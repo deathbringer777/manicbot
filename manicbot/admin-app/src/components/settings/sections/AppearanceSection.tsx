@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import {
   LayoutGrid, CalendarDays, Scissors, UserRound, Users,
-  Wallet, MessageSquare, BarChart3, Star, Globe,
+  Wallet, MessageSquare, BarChart3,
   Eye, ChevronDown, ChevronUp, GripVertical, Smartphone, Pin, RotateCcw,
   type LucideIcon,
 } from "lucide-react";
@@ -29,8 +29,6 @@ const TOGGLEABLE_TABS: { tab: string; icon: LucideIcon; navKey: string }[] = [
   { tab: "billing",        icon: Wallet,        navKey: "Billing" },
   { tab: "channels",       icon: MessageSquare, navKey: "Channels" },
   { tab: "analytics",      icon: BarChart3,     navKey: "Analytics" },
-  { tab: "reviews",        icon: Star,          navKey: "Reviews" },
-  { tab: "public_profile", icon: Globe,         navKey: "PublicProfile" },
 ];
 
 function tabLabel(navKey: string, lang: Lang): string {

@@ -2,7 +2,7 @@ import {
   Home, Users, Settings, CreditCard, Activity,
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
-  HeadphonesIcon, Scissors, Star, BarChart3, Globe, ArrowLeftRight, Inbox,
+  HeadphonesIcon, Scissors, Star, BarChart3, ArrowLeftRight, Inbox,
   Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound, TrendingUp,
   type LucideIcon,
 } from "lucide-react";
@@ -87,8 +87,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "salon.masters",       href: "/dashboard?tab=masters",        icon: UserRound,     labelKey: "Masters",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.clients",       href: "/dashboard?tab=clients",        icon: Users,         labelKey: "Clients",       roles: ["tenant_owner"], hideable: true },
   { id: "salon.analytics",     href: "/dashboard?tab=analytics",      icon: BarChart3,     labelKey: "Analytics",     roles: ["tenant_owner"], hideable: true },
-  { id: "salon.reviews",       href: "/dashboard?tab=reviews",        icon: Star,          labelKey: "Reviews",       roles: ["tenant_owner"], hideable: true },
-  { id: "salon.publicProfile", href: "/dashboard?tab=public_profile", icon: Globe,         labelKey: "PublicProfile", roles: ["tenant_owner"], hideable: true },
   { id: "salon.messages",      href: "/messages",                     icon: MessageSquare, labelKey: "Messages",      roles: ["tenant_owner"], hideable: true },
   { id: "salon.marketing",     href: "/marketing",                    icon: Megaphone,     labelKey: "Marketing",     roles: ["tenant_owner"], hideable: true },
   { id: "salon.plugins",       href: "/plugins",                      icon: Puzzle,        labelKey: "Plugins",       roles: ["tenant_owner"], hideable: true },

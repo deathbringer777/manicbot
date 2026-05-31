@@ -1348,124 +1348,6 @@ function PublicProfileEditor({ tenantId }: { tenantId: string }) {
 }
 
 // ─── Main Dashboard ──────────────────────────────────────────────
-// ─── Review Card (salon dashboard) ──────────────────────────────────────────
-
-function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [replyText, setReplyText] = useState(rev.replyText ?? "");
-  const utils = api.useUtils();
-
-  const updateStatus = api.reviews.updateStatus.useMutation({
-    onSuccess: () => utils.reviews.getForSalon.invalidate(),
-  });
-  const addReply = api.reviews.addReply.useMutation({
-    onSuccess: () => { utils.reviews.getForSalon.invalidate(); setReplyOpen(false); },
-  });
-  const deleteReply = api.reviews.deleteReply.useMutation({
-    onSuccess: () => utils.reviews.getForSalon.invalidate(),
-  });
-
-  const STATUS_LABELS: Record<string, string> = { active: "Active", hidden: "Hidden", featured: "Featured" };
-  const STATUS_COLORS: Record<string, string> = {
-    active: "bg-emerald-500/20 text-emerald-500",
-    hidden: "bg-slate-500/20 text-slate-400",
-    featured: "bg-amber-500/20 text-amber-500",
-  };
-
-  return (
-    <div className="glass-card rounded-2xl p-4">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-400 text-xs font-bold shrink-0">
-          {(rev.userName ?? "?").charAt(0).toUpperCase()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-900 dark:text-white">{rev.userName ?? `User #${rev.chatId}`}</span>
-            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${STATUS_COLORS[rev.status] ?? ""}`}>
-              {STATUS_LABELS[rev.status] ?? rev.status}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            {[1,2,3,4,5].map(s => (
-              <Star key={s} className={`w-3 h-3 ${s <= rev.rating ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
-            ))}
-            <span className="text-[10px] text-slate-500 ml-1">
-              {new Date(rev.createdAt * 1000).toLocaleDateString()}
-            </span>
-          </div>
-          {rev.text && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 line-clamp-3">{rev.text}</p>}
-          {rev.photos?.length > 0 && (
-            <div className="flex gap-1 mt-2">
-              {rev.photos.map((p: string, i: number) => (
-                <div key={i} className="w-12 h-12 rounded-lg bg-slate-200 dark:bg-slate-700 text-[9px] text-slate-400 flex items-center justify-center">
-                  img
-                </div>
-              ))}
-            </div>
-          )}
-          {rev.replyText && (
-            <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/60 border-l-2 border-brand-400">
-              <p className="text-[10px] text-brand-400 font-medium mb-0.5">Salon reply</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400">{rev.replyText}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-200 dark:border-white/5">
-        <button
-          onClick={() => updateStatus.mutate({ tenantId, reviewId: rev.id, status: rev.status === "hidden" ? "active" : "hidden" })}
-          className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-        >
-          {rev.status === "hidden" ? <><Eye className="w-3 h-3 inline mr-1" />Show</> : <><EyeOff className="w-3 h-3 inline mr-1" />Hide</>}
-        </button>
-        <button
-          onClick={() => updateStatus.mutate({ tenantId, reviewId: rev.id, status: rev.status === "featured" ? "active" : "featured" })}
-          className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-        >
-          <Star className={`w-3 h-3 inline mr-1 ${rev.status === "featured" ? "fill-amber-400 text-amber-400" : ""}`} />
-          {rev.status === "featured" ? "Unfeature" : "Feature"}
-        </button>
-        {!rev.replyText ? (
-          <button
-            onClick={() => setReplyOpen(!replyOpen)}
-            className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-          >
-            <Reply className="w-3 h-3 inline mr-1" />Reply
-          </button>
-        ) : (
-          <button
-            onClick={() => deleteReply.mutate({ tenantId, reviewId: rev.id })}
-            className="text-[10px] px-2 py-1 rounded-lg bg-red-500/10 text-red-400"
-          >
-            <Trash2 className="w-3 h-3 inline mr-1" />Delete reply
-          </button>
-        )}
-      </div>
-
-      {/* Reply form */}
-      {replyOpen && (
-        <div className="mt-2 flex gap-2">
-          <input
-            value={replyText}
-            onChange={e => setReplyText(e.target.value)}
-            placeholder="Write your reply..."
-            className="flex-1 text-xs px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none focus:border-brand-500"
-          />
-          <button
-            onClick={() => addReply.mutate({ tenantId, reviewId: rev.id, text: replyText })}
-            disabled={!replyText.trim() || addReply.isPending}
-            className="px-3 py-2 rounded-lg bg-brand-500 text-white text-xs font-medium disabled:opacity-50"
-          >
-            Send
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Salon BigCalendar — thin wrapper around shared MonthCalendar ──────────
 function SalonBigCalendar({
   apts,
@@ -1556,7 +1438,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const inWeb = useInWebShell();
   const { prefs: dashPrefs } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "reviews", "analytics", "promo_codes", "staff"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -1564,16 +1446,19 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     : urlTab && VALID_SALON_TABS.includes(urlTab as Tab) ? (urlTab as Tab)
     : fallbackTab;
 
-  // Redirect legacy ?tab=settings / ?tab=public_profile inputs to the
-  // canonical /settings surface. These tabs used to render inline inside
+  // Redirect legacy ?tab=settings / ?tab=public_profile / ?tab=reviews inputs
+  // to the canonical /settings surface. These tabs used to render inline inside
   // SalonDashboard, which left the "Домой" page header visible while the
   // body showed settings content — a confusing duplicate. The Settings
-  // page is the single source of truth.
+  // page is the single source of truth (reviews now live under
+  // /settings?section=reviews).
   useEffect(() => {
     if (urlTab === "settings") {
       router.replace("/settings?section=salon");
     } else if (urlTab === "public_profile") {
       router.replace("/settings?section=public");
+    } else if (urlTab === "reviews") {
+      router.replace("/settings?section=reviews");
     }
   }, [urlTab, router]);
 
@@ -1782,8 +1667,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
-  const reviewStats = api.reviews.getStats.useQuery({ tenantId }, { enabled: tab === "reviews" || tab === "overview" });
-  const reviewList = api.reviews.getForSalon.useQuery({ tenantId }, { enabled: tab === "reviews" });
   const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
 
   // Optimistic status state — mirrors `pendingMoves` below, but for status
@@ -1965,7 +1848,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { key: "analytics", label: `📊 ${t("salon.tabs.analytics", lang)}`, perm: null, ownerOnly: true },
     { key: "promo_codes", label: `🎟 ${t("salon.tabs.promoCodes", lang)}`, perm: null, ownerOnly: true },
     { key: "channels", label: t("salon.tabs.channels", lang), perm: "settings.manage" },
-    { key: "reviews", label: t("salon.tabs.reviews", lang), perm: "reviews.view" },
     { key: "public_profile", label: `🌐 ${t("salon.tabs.publicProfile", lang)}`, perm: "branding.manage" },
     { key: "staff", label: `👥 ${t("salon.tabs.staff", lang)}`, perm: null, ownerOnly: true },
     { key: "settings", label: t("common.settings", lang), perm: "settings.manage" },
@@ -2696,56 +2578,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
       {/* ── CLIENTS ── */}
       {tab === "clients" && <ClientsTab tenantId={tenantId} />}
-
-      {/* ── REVIEWS ── */}
-      {tab === "reviews" && (
-        <div className="space-y-4">
-          {/* Stats */}
-          {reviewStats.data && (
-            <div className="glass-card rounded-2xl p-5">
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <p className="text-4xl font-extrabold text-slate-900 dark:text-white">{reviewStats.data.avg || "—"}</p>
-                  <div className="flex gap-0.5 mt-1 justify-center">
-                    {[1,2,3,4,5].map(s => (
-                      <Star key={s} className={`w-4 h-4 ${s <= Math.round(reviewStats.data!.avg) ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">{reviewStats.data.count} reviews</p>
-                </div>
-                <div className="flex-1 space-y-1">
-                  {[5,4,3,2,1].map(n => {
-                    const count = reviewStats.data!.distribution[n] ?? 0;
-                    const pct = reviewStats.data!.count > 0 ? (count / reviewStats.data!.count) * 100 : 0;
-                    return (
-                      <div key={n} className="flex items-center gap-2 text-xs">
-                        <span className="w-3 text-slate-500 dark:text-slate-400">{n}</span>
-                        <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700/60 overflow-hidden">
-                          <div className="h-full rounded-full bg-amber-400" style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="w-6 text-right text-slate-400">{count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Review list */}
-          {reviewList.isLoading ? (
-            <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-24 animate-pulse" />)}</div>
-          ) : (reviewList.data?.reviews ?? []).length === 0 ? (
-            <EmptyState icon={Star} title={t("salon.noReviews", lang)} description={t("salon.empty.reviews", lang)} />
-          ) : (
-            <div className="space-y-2.5">
-              {(reviewList.data?.reviews ?? []).map((rev: any) => (
-                <ReviewCard key={rev.id} rev={rev} tenantId={tenantId} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── ANALYTICS ── */}
       {tab === "analytics" && (

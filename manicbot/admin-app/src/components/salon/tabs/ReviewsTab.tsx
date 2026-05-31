@@ -1,10 +1,14 @@
 "use client";
 
-import { Loader2, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
+import { EmptyState } from "~/components/ui/EmptyState";
 import { ReviewCard } from "~/components/salon/tabs/ReviewCard";
 
 export function ReviewsTab({ tenantId }: { tenantId: string }) {
+  const { lang } = useLang();
   const reviewStats = api.reviews.getStats.useQuery({ tenantId });
   const reviewList = api.reviews.getForSalon.useQuery({ tenantId });
 
@@ -44,10 +48,7 @@ export function ReviewsTab({ tenantId }: { tenantId: string }) {
       {reviewList.isLoading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="glass-card rounded-2xl h-24 animate-pulse" />)}</div>
       ) : (reviewList.data?.reviews ?? []).length === 0 ? (
-        <div className="glass-card rounded-2xl py-12 text-center">
-          <Star className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-          <p className="text-sm text-slate-500">No reviews yet</p>
-        </div>
+        <EmptyState icon={Star} title={t("salon.noReviews", lang)} description={t("salon.empty.reviews", lang)} />
       ) : (
         <div className="space-y-2.5">
           {(reviewList.data?.reviews ?? []).map((rev: any) => (

@@ -69,11 +69,12 @@ describe("SettingsShell — section contract by role", () => {
   // Non-technical roles land on salon/profile; "account" is demoted to
   // second-to-last (just before "help") because its sensitive controls now
   // live in a rarely-opened "danger zone". See getSettingsSectionIds.
-  it("tenant_owner sees the 10 headline sections, salon first and account second-to-last", () => {
+  it("tenant_owner sees the 11 headline sections, salon first and account second-to-last", () => {
     mount("tenant_owner");
     expect(sectionIds()).toEqual([
       "salon",
       "public",
+      "reviews",
       "team",
       "channels",
       "billing",
@@ -90,6 +91,7 @@ describe("SettingsShell — section contract by role", () => {
     expect(sectionIds()).toEqual([
       "salon",
       "public",
+      "reviews",
       "team",
       "channels",
       "billing",

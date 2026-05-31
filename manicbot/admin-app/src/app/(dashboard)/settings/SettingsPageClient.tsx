@@ -14,6 +14,7 @@ import { ReferralsSection } from "~/components/settings/sections/ReferralsSectio
 import { PluginSettingsSection } from "~/components/settings/PluginSettingsSection";
 import { MySalonSection } from "~/components/settings/sections/MySalonSection";
 import { PublicProfileSection } from "~/components/settings/sections/PublicProfileSection";
+import { ReviewsSection } from "~/components/settings/sections/ReviewsSection";
 import { TeamSection } from "~/components/settings/sections/TeamSection";
 import { ChannelsSection } from "~/components/settings/sections/ChannelsSection";
 import { MasterProfileSection } from "~/components/settings/sections/MasterProfileSection";
@@ -65,6 +66,8 @@ export default function SettingsPageClient() {
         return <MySalonSection />;
       case "public":
         return <PublicProfileSection />;
+      case "reviews":
+        return <ReviewsSection />;
       case "team":
         return <TeamSection />;
       case "channels":

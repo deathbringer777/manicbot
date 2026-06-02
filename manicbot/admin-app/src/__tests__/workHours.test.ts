@@ -14,6 +14,15 @@ import {
   parseMasterHours,
   serializeMasterWorkDays,
   parseMasterWorkDays,
+  DEFAULT_MASTER_SCHEDULE,
+  WEEKDAY_KEY_TO_DOW,
+  DOW_TO_WEEKDAY_KEY,
+  hydrateMasterSchedule,
+  serializeMasterSchedule,
+  decodeMasterSchedule,
+  deriveWorkDaysFromSchedule,
+  validateMasterSchedule,
+  type MasterScheduleState,
 } from "~/lib/workHours";
 
 describe("workHours helpers", () => {
@@ -140,5 +149,119 @@ describe("master schedule helpers ({from,to} + workDays — booking-engine shape
     expect(parseMasterWorkDays("[1,9,2]")).toEqual([1, 2]);
     expect(parseMasterWorkDays("not json")).toBeNull();
     expect(parseMasterWorkDays("{}")).toBeNull();
+  });
+});
+
+/**
+ * Per-day master schedule — per-weekday hours + one optional break. Stored in
+ * the SAME `masters.work_hours` column as {"days":{...}}, with `work_days` kept
+ * in sync as the derived 0..6 array. Resolved at booking time by the JS twin
+ * src/services/masterSchedule.js (pinned by test/master-selection.test.js).
+ */
+describe("master per-day schedule (per-day hours + optional break)", () => {
+  it("maps weekday keys to UTC dow with Sunday = 0", () => {
+    expect(WEEKDAY_KEY_TO_DOW.mon).toBe(1);
+    expect(WEEKDAY_KEY_TO_DOW.sat).toBe(6);
+    expect(WEEKDAY_KEY_TO_DOW.sun).toBe(0);
+    expect(DOW_TO_WEEKDAY_KEY[0]).toBe("sun");
+    expect(DOW_TO_WEEKDAY_KEY[1]).toBe("mon");
+    expect(DOW_TO_WEEKDAY_KEY[6]).toBe("sat");
+  });
+
+  it("round-trips serialize → decode with a break", () => {
+    const state: MasterScheduleState = {
+      mon: { open: "09:00", close: "18:00", break: { start: "13:00", end: "14:00" } },
+      tue: { open: "10:00", close: "16:00" },
+      wed: null, thu: null, fri: null, sat: null, sun: null,
+    };
+    const s = serializeMasterSchedule(state);
+    expect(s).toMatch(/^\{"days":\{/);
+    expect(decodeMasterSchedule(s)).toEqual(state);
+  });
+
+  it("serializeMasterSchedule omits the break key when a day has no break", () => {
+    const s = serializeMasterSchedule({
+      mon: { open: "09:00", close: "18:00" },
+      tue: null, wed: null, thu: null, fri: null, sat: null, sun: null,
+    });
+    expect(s).not.toContain("break");
+  });
+
+  it("decodeMasterSchedule returns null for legacy / junk shapes", () => {
+    expect(decodeMasterSchedule('{"from":9,"to":18}')).toBeNull();
+    expect(decodeMasterSchedule("09:00 – 18:00")).toBeNull();
+    expect(decodeMasterSchedule(null)).toBeNull();
+    expect(decodeMasterSchedule("")).toBeNull();
+    expect(decodeMasterSchedule("not json")).toBeNull();
+  });
+
+  it("hydrates the legacy {from,to} + workDays into per-day rows", () => {
+    const st = hydrateMasterSchedule('{"from":14,"to":16}', "[1,3]");
+    expect(st.mon).toEqual({ open: "14:00", close: "16:00" });
+    expect(st.wed).toEqual({ open: "14:00", close: "16:00" });
+    expect(st.tue).toBeNull();
+    expect(st.sun).toBeNull();
+  });
+
+  it("hydrates empty input to the Mon–Sat default (Sun off)", () => {
+    expect(hydrateMasterSchedule(null, null)).toEqual(DEFAULT_MASTER_SCHEDULE);
+    expect(DEFAULT_MASTER_SCHEDULE.mon).toEqual({ open: "09:00", close: "18:00" });
+    expect(DEFAULT_MASTER_SCHEDULE.sun).toBeNull();
+  });
+
+  it("passes the canonical {days} shape through hydrate unchanged", () => {
+    const state: MasterScheduleState = {
+      mon: { open: "08:00", close: "12:00", break: { start: "10:00", end: "10:30" } },
+      tue: null, wed: null, thu: null, fri: null, sat: null, sun: null,
+    };
+    expect(hydrateMasterSchedule(serializeMasterSchedule(state))).toEqual(state);
+  });
+
+  it("derives sorted 0..6 work_days from enabled days (Sunday = 0)", () => {
+    const state: MasterScheduleState = {
+      mon: { open: "09:00", close: "18:00" }, tue: null,
+      wed: { open: "09:00", close: "18:00" }, thu: null, fri: null, sat: null,
+      sun: { open: "10:00", close: "14:00" },
+    };
+    expect(deriveWorkDaysFromSchedule(state)).toEqual([0, 1, 3]);
+  });
+
+  it("validates a correct schedule (break inside hours, touching edge allowed)", () => {
+    expect(validateMasterSchedule({
+      mon: { open: "09:00", close: "18:00", break: { start: "13:00", end: "14:00" } },
+      tue: null, wed: null, thu: null, fri: null, sat: null, sun: null,
+    })).toEqual({ ok: true });
+    expect(validateMasterSchedule({
+      mon: { open: "09:00", close: "18:00", break: { start: "09:00", end: "10:00" } },
+      tue: null, wed: null, thu: null, fri: null, sat: null, sun: null,
+    }).ok).toBe(true);
+  });
+
+  it("rejects close <= open", () => {
+    expect(validateMasterSchedule({
+      mon: { open: "18:00", close: "09:00" },
+      tue: null, wed: null, thu: null, fri: null, sat: null, sun: null,
+    })).toEqual({ ok: false, reason: "range", day: "mon" });
+  });
+
+  it("rejects an inverted break", () => {
+    expect(validateMasterSchedule({
+      mon: null, tue: { open: "09:00", close: "18:00", break: { start: "14:00", end: "13:00" } },
+      wed: null, thu: null, fri: null, sat: null, sun: null,
+    })).toEqual({ ok: false, reason: "break_range", day: "tue" });
+  });
+
+  it("rejects a break outside working hours", () => {
+    expect(validateMasterSchedule({
+      mon: null, tue: { open: "09:00", close: "12:00", break: { start: "13:00", end: "14:00" } },
+      wed: null, thu: null, fri: null, sat: null, sun: null,
+    })).toEqual({ ok: false, reason: "break_outside", day: "tue" });
+  });
+
+  it("a fully-loaded schedule fits under the 2000-char updateMaster cap", () => {
+    const full = Object.fromEntries(
+      WEEKDAY_KEYS.map((d) => [d, { open: "09:00", close: "18:00", break: { start: "13:00", end: "14:00" } }]),
+    ) as MasterScheduleState;
+    expect(serializeMasterSchedule(full).length).toBeLessThan(2000);
   });
 });

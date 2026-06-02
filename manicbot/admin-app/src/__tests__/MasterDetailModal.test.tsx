@@ -317,8 +317,8 @@ describe("MasterDetailModal — salon_created (editable)", () => {
 });
 
 describe("MasterDetailModal — schedule (Harmonogram) tab", () => {
-  it("Harmonogram tab shows the editor; Save fires updateMaster with the serialized default window + days", () => {
-    setMaster(); // workHours/workDays null → editor seeds Mon–Sat 09–18
+  it("Harmonogram tab shows the editor; Save fires updateMaster with the serialized per-day default", () => {
+    setMaster(); // workHours/workDays null → editor seeds Mon–Sat 09–18, Sun off
     renderModal();
     fireEvent.click(screen.getByTestId("master-detail-settings"));
     fireEvent.click(screen.getByTestId("master-detail-tab-schedule"));
@@ -329,39 +329,44 @@ describe("MasterDetailModal — schedule (Harmonogram) tab", () => {
     const call = updateMutate.mock.calls[0]![0];
     expect(call.tenantId).toBe("t_demo");
     expect(call.chatId).toBe(10_000_000_001);
-    expect(call.workHours).toBe('{"from":9,"to":18}');
-    expect(call.workDays).toBe("[1,2,3,4,5,6]");
-    // Schedule save is scoped to schedule fields only.
+    const days = JSON.parse(String(call.workSchedule)).days;
+    expect(days.mon).toEqual({ open: "09:00", close: "18:00" });
+    expect(days.sun).toBeNull();
+    // Schedule save is scoped to the schedule field only.
     expect(call).not.toHaveProperty("name");
     expect(call).not.toHaveProperty("vacationFrom");
+    expect(call).not.toHaveProperty("workHours");
   });
 
-  it("hydrates from stored workHours + workDays and round-trips them on save", () => {
+  it("hydrates a legacy {from,to} + workDays master into per-day rows and saves them", () => {
     setMaster({ workHours: '{"from":10,"to":16}', workDays: "[2,4]" });
     renderModal();
     fireEvent.click(screen.getByTestId("master-detail-settings"));
     fireEvent.click(screen.getByTestId("master-detail-tab-schedule"));
 
-    const fromInput = screen.getByTestId("master-detail-schedule-from") as HTMLInputElement;
-    const toInput = screen.getByTestId("master-detail-schedule-to") as HTMLInputElement;
-    expect(fromInput.value).toBe("10");
-    expect(toInput.value).toBe("16");
+    // Tuesday (dow 2) is a working row with the stored window; Monday is off.
+    const tue = screen.getByTestId("master-detail-schedule-row-tue");
+    expect(within(tue).getByTestId("master-detail-schedule-open-tue-trigger").getAttribute("data-value")).toBe("10:00");
+    expect(within(tue).getByTestId("master-detail-schedule-close-tue-trigger").getAttribute("data-value")).toBe("16:00");
 
     fireEvent.click(screen.getByTestId("master-detail-schedule-save"));
     const call = updateMutate.mock.calls[0]![0];
-    expect(call.workHours).toBe('{"from":10,"to":16}');
-    expect(call.workDays).toBe("[2,4]");
+    const days = JSON.parse(String(call.workSchedule)).days;
+    expect(days.tue).toEqual({ open: "10:00", close: "16:00" });
+    expect(days.thu).toEqual({ open: "10:00", close: "16:00" });
+    expect(days.mon).toBeNull();
   });
 
-  it("toggling Sunday on adds dow 0 to the saved workDays", () => {
+  it("toggling Sunday on adds it to the saved schedule", () => {
     setMaster(); // default Mon–Sat (Sun off)
     renderModal();
     fireEvent.click(screen.getByTestId("master-detail-settings"));
     fireEvent.click(screen.getByTestId("master-detail-tab-schedule"));
-    fireEvent.click(screen.getByTestId("master-detail-schedule-day-0")); // Sunday = dow 0
+    fireEvent.click(screen.getByTestId("master-detail-schedule-toggle-sun"));
     fireEvent.click(screen.getByTestId("master-detail-schedule-save"));
     const call = updateMutate.mock.calls[0]![0];
-    expect(call.workDays).toBe("[0,1,2,3,4,5,6]");
+    const days = JSON.parse(String(call.workSchedule)).days;
+    expect(days.sun).toEqual({ open: "09:00", close: "18:00" });
   });
 });
 

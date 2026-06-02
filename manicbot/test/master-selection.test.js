@@ -148,3 +148,87 @@ describe('getSlots — master schedule', () => {
     expect(slotsM222).toContain('10:30');
   });
 });
+
+describe('getSlots — per-day schedule + breaks', () => {
+  let db, ctx;
+  beforeEach(() => {
+    db = createMockD1();
+    ctx = makeCtx(db);
+  });
+
+  // A future date landing on a specific UTC weekday (avoids the past-slot filter).
+  function futureDow(targetDow) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 30);
+    while (d.getUTCDay() !== targetDow) d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  const MON = futureDow(1);
+  const TUE = futureDow(2);
+
+  function perDay(days) {
+    const base = { mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null };
+    return { days: { ...base, ...days } };
+  }
+
+  it('honors per-day hours (Mon 09–12, Tue 14–18)', async () => {
+    insertMaster(db, { chatId: 111, workHours: perDay({
+      mon: { open: '09:00', close: '12:00' },
+      tue: { open: '14:00', close: '18:00' },
+    }) });
+    const mon = await getSlots(ctx, MON, 'design', 111);
+    expect(mon[0]).toBe('09:00');
+    expect(mon[mon.length - 1]).toBe('11:30');
+    const tue = await getSlots(ctx, TUE, 'design', 111);
+    expect(tue[0]).toBe('14:00');
+    expect(tue[tue.length - 1]).toBe('17:30');
+  });
+
+  it('returns empty on a per-day day off', async () => {
+    insertMaster(db, { chatId: 111, workHours: perDay({ mon: { open: '09:00', close: '12:00' } }) });
+    expect(await getSlots(ctx, TUE, 'design', 111)).toEqual([]);
+  });
+
+  it('excludes a break window from 30-min slots (13:00–14:00)', async () => {
+    insertMaster(db, { chatId: 111, workHours: perDay({
+      mon: { open: '12:00', close: '15:00', break: { start: '13:00', end: '14:00' } },
+    }) });
+    const slots = await getSlots(ctx, MON, 'design', 111);
+    expect(slots).toContain('12:30');     // ends exactly at break start — kept
+    expect(slots).not.toContain('13:00');
+    expect(slots).not.toContain('13:30');
+    expect(slots).toContain('14:00');     // starts exactly at break end — kept
+  });
+
+  it('drops 60-min slots overlapping a break, keeps adjacent ones', async () => {
+    insertMaster(db, { chatId: 111, workHours: perDay({
+      mon: { open: '12:00', close: '16:00', break: { start: '13:00', end: '14:00' } },
+    }) });
+    const slots = await getSlots(ctx, MON, 'classic', 111); // 60-min service
+    expect(slots).toContain('12:00');     // 12:00–13:00 ends at break start
+    expect(slots).not.toContain('12:30'); // 12:30–13:30 overlaps
+    expect(slots).not.toContain('13:00'); // inside break
+    expect(slots).not.toContain('13:30'); // 13:30–14:30 overlaps
+    expect(slots).toContain('14:00');     // 14:00–15:00 starts at break end
+  });
+
+  it('supports a 30-minute opening time (09:30)', async () => {
+    insertMaster(db, { chatId: 111, workHours: perDay({ mon: { open: '09:30', close: '11:00' } }) });
+    const slots = await getSlots(ctx, MON, 'design', 111);
+    expect(slots).not.toContain('09:00');
+    expect(slots[0]).toBe('09:30');
+    expect(slots[slots.length - 1]).toBe('10:30');
+  });
+
+  it('combines break exclusion with an existing booking', async () => {
+    insertMaster(db, { chatId: 111, workHours: perDay({
+      mon: { open: '12:00', close: '17:00', break: { start: '13:00', end: '14:00' } },
+    }) });
+    insertApt(db, { id: 'apX', masterId: 111, date: MON, time: '15:00', svcId: 'design' });
+    const slots = await getSlots(ctx, MON, 'design', 111);
+    expect(slots).not.toContain('13:00'); // break
+    expect(slots).not.toContain('15:00'); // booked
+    expect(slots).toContain('14:00');
+    expect(slots).toContain('16:30');
+  });
+});

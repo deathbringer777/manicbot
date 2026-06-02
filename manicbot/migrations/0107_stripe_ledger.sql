@@ -1,4 +1,4 @@
--- 0106_stripe_ledger.sql — Mirror of Stripe balance_transactions into D1.
+-- 0107_stripe_ledger.sql — Mirror of Stripe balance_transactions into D1.
 --
 -- The system_admin Billing dashboard renders multi-month real revenue / net /
 -- fees from this table (fast, historical) instead of paging Stripe live on

@@ -699,7 +699,7 @@ export default {
         ),
       );
 
-      // Stripe ledger sync (migration 0106). Incrementally mirrors Stripe
+      // Stripe ledger sync (migration 0107). Incrementally mirrors Stripe
       // balance_transactions into D1 `stripe_ledger` so God Mode Billing can
       // chart multi-month real revenue / net / fees from D1. Self-skips when
       // STRIPE_SECRET_KEY is absent; fire-and-forget like the platform jobs

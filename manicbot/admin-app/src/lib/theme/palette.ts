@@ -149,3 +149,32 @@ export function statusHue(status: string, theme: ThemeName): StatusHue {
   const table = STATUS_HUES[theme];
   return table[status as StatusKey] ?? table.pending;
 }
+
+/**
+ * Acquisition-source colors for analytics charts (pie/bar segments). Real
+ * channel brand colors are kept so segments stay recognizable (Instagram pink,
+ * Facebook blue, Google blue, …); non-channel sources use the warm brand
+ * palette instead of the old purple/slate. Theme-agnostic (brand identities).
+ */
+export const SOURCE_COLORS: Record<string, string> = {
+  google: "#4285f4",
+  google_maps: "#34a853",
+  website: "#3b82f6",
+  instagram: "#e4405f",
+  facebook: "#1877f2",
+  tiktok: "#111111",
+  telegram: "#26a5e4",
+  whatsapp: "#25d366",
+  sms: "#1ea896", // was purple -> turquoise (on-brand)
+  qr: "#d14638", // was pink -> red (on-brand)
+  flyer: "#f59e0b",
+  friends: "#d14638", // was purple -> red (on-brand)
+  direct: "#7b6a59", // warm taupe (was slate)
+  other: "#7b6a59",
+  unspecified: "#a6937e",
+};
+
+/** Resolve an acquisition-source color, warm-taupe fallback for unknowns. */
+export function sourceColor(source: string): string {
+  return SOURCE_COLORS[source] ?? "#7b6a59";
+}

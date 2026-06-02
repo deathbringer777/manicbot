@@ -513,7 +513,7 @@ export function SalonWeekView({
                             top: b.top,
                             height: b.height,
                             background:
-                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                              "repeating-linear-gradient(45deg, var(--hatch) 0 6px, transparent 6px 12px)",
                           }}
                         />
                       ));
@@ -641,8 +641,8 @@ export function SalonWeekView({
                         style={{
                           top: timeToTop(createSlot.time),
                           height: durationToHeight(createSlot.durationMin),
-                          background: "rgba(209,70,56,0.18)",
-                          borderColor: "rgba(209,70,56,0.7)",
+                          background: "var(--drag-bg)",
+                          borderColor: "var(--drag-border)",
                           zIndex: 24,
                         }}
                       />
@@ -660,8 +660,8 @@ export function SalonWeekView({
                         style={{
                           top: moveGhost.top,
                           height: moveGhost.height,
-                          background: "rgba(209,70,56,0.22)",
-                          borderColor: "rgba(209,70,56,0.7)",
+                          background: "var(--drag-bg)",
+                          borderColor: "var(--drag-border)",
                           zIndex: 30,
                         }}
                       >
@@ -681,8 +681,8 @@ export function SalonWeekView({
                         style={{
                           top: resizeGhost.top,
                           height: resizeGhost.height,
-                          background: "rgba(209,70,56,0.18)",
-                          borderColor: "rgba(209,70,56,0.7)",
+                          background: "var(--drag-bg)",
+                          borderColor: "var(--drag-border)",
                           zIndex: 30,
                         }}
                       >
@@ -744,9 +744,9 @@ export function SalonWeekView({
                             height,
                             ...laneStyle,
                             background:
-                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
-                            borderColor: "rgba(100,116,139,0.6)",
-                            color: "#475569",
+                              "repeating-linear-gradient(45deg, var(--hatch) 0 6px, transparent 6px 12px)",
+                            borderColor: "var(--status-neutral-dot)",
+                            color: "var(--status-neutral-text)",
                             ...(blockBusy ? { opacity: 0.4 } : {}),
                             ...(blockDrag?.style ?? {}),
                           }}

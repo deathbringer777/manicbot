@@ -109,8 +109,8 @@ export function DragCreateLayer({
           style={{
             top: ghost.top,
             height: ghost.height,
-            background: "rgba(209,70,56,0.18)",
-            borderColor: "rgba(209,70,56,0.7)",
+            background: "var(--drag-bg)",
+            borderColor: "var(--drag-border)",
             zIndex: 25,
           }}
         >

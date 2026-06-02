@@ -708,7 +708,7 @@ export function MasterDashboard({
           {profile.data && (
             <div className="glass-card rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-2xl overflow-hidden bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-2xl font-bold text-white shrink-0">
+                <div className="h-16 w-16 rounded-2xl overflow-hidden bg-gradient-to-br from-brand-500 to-accent-600 flex items-center justify-center text-2xl font-bold text-white shrink-0">
                   {(profile.data as any).photo
                     ? <img src={(profile.data as any).photo} alt="" className="h-full w-full object-cover" />
                     : (profile.data.name ?? "M").charAt(0).toUpperCase()}

@@ -91,7 +91,7 @@ const SOLID: Record<ButtonTone, string> = {
     "dark:bg-red-500 dark:border-red-400 dark:hover:bg-red-400",
   violet:
     "bg-violet-600 text-white border border-violet-700 hover:bg-violet-700 shadow-sm " +
-    "dark:bg-violet-500 dark:border-violet-400 dark:hover:bg-violet-400",
+    "dark:bg-violet-500 dark:border-brand-400 dark:hover:bg-violet-400",
   sky:
     "bg-sky-600 text-white border border-sky-700 hover:bg-sky-700 shadow-sm " +
     "dark:bg-sky-500 dark:border-sky-400 dark:hover:bg-sky-400",

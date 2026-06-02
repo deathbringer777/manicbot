@@ -17,7 +17,7 @@ import { t } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
 
 const FIELD_BASE =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
 
 const LABEL =
   "mb-1 block text-xs font-medium text-slate-600 dark:text-white/70";
@@ -426,7 +426,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
           {(manualLists.length > 0 || creatingList) && (
             <div>
               <label className={`${LABEL} flex items-center gap-1.5`}>
-                <ListChecks className="h-3.5 w-3.5 text-violet-500" />
+                <ListChecks className="h-3.5 w-3.5 text-brand-500" />
                 {t("clients.form.lists", lang)}
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -452,7 +452,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
                   <button
                     type="button"
                     onClick={() => setCreatingList(true)}
-                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-violet-300 hover:text-violet-600 dark:border-white/10 dark:hover:border-violet-400/40 dark:hover:text-violet-300"
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-violet-300 hover:text-violet-600 dark:border-white/10 dark:hover:border-violet-400/40 dark:hover:text-brand-300"
                   >
                     <Plus className="h-3 w-3" />
                     {t("clients.form.lists.new", lang)}
@@ -473,7 +473,7 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
                           setNewListName("");
                         }
                       }}
-                      className="rounded-full border border-violet-300 bg-white px-2.5 py-1 text-[11px] text-slate-900 outline-none focus:border-violet-500 dark:border-violet-400/40 dark:bg-slate-900 dark:text-slate-100"
+                      className="rounded-full border border-violet-300 bg-white px-2.5 py-1 text-[11px] text-slate-900 outline-none focus:border-violet-500 dark:border-brand-400/40 dark:bg-slate-900 dark:text-slate-100"
                     />
                     <button
                       type="button"
@@ -507,13 +507,13 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
           {manualLists.length === 0 && !creatingList && (
             <div>
               <label className={`${LABEL} flex items-center gap-1.5`}>
-                <ListChecks className="h-3.5 w-3.5 text-violet-500" />
+                <ListChecks className="h-3.5 w-3.5 text-brand-500" />
                 {t("clients.form.lists", lang)}
               </label>
               <button
                 type="button"
                 onClick={() => setCreatingList(true)}
-                className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-violet-300 hover:text-violet-600 dark:border-white/10 dark:hover:border-violet-400/40 dark:hover:text-violet-300"
+                className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-violet-300 hover:text-violet-600 dark:border-white/10 dark:hover:border-violet-400/40 dark:hover:text-brand-300"
               >
                 <Plus className="h-3 w-3" />
                 {t("clients.form.lists.new", lang)}

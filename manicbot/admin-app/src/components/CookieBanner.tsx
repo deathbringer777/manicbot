@@ -94,7 +94,7 @@ export function CookieBanner() {
               href={`https://manicbot.com/cookies?lang=${lang}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline decoration-dotted underline-offset-2 hover:text-violet-600 dark:hover:text-violet-300"
+              className="underline decoration-dotted underline-offset-2 hover:text-violet-600 dark:hover:text-brand-300"
             >
               {t("cookies.policy", lang)}
             </a>

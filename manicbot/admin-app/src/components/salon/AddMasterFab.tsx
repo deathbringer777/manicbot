@@ -90,7 +90,7 @@ export function AddMasterFab({ onPick }: AddMasterFabProps) {
             onClick={() => pick("create_account")}
             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
           >
-            <UserPlus className="h-4 w-4 text-violet-500" />
+            <UserPlus className="h-4 w-4 text-brand-500" />
             <span className="text-sm font-medium text-slate-900 dark:text-white">{labels.create}</span>
           </button>
           <button

@@ -649,8 +649,10 @@ export function SalonDayView({
           {/* minWidth uses 100px per column (mobile-safe). On sm+ screens,
               sm:min-w-[180px] on each column expands them via flex. */}
           <div className="flex" style={{ minWidth: 80 + masterColumns.length * MOBILE_COL_WIDTH }}>
-            {/* Hour scale */}
-            <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
+            {/* Hour scale — opaque sticky axis: day columns scroll behind it,
+                so a translucent gutter would bleed the hatched non-working band
+                + grid lines through (ugly seam when scrolled right). */}
+            <div className="shrink-0 w-20 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
               <div className="h-12 border-b border-slate-200 dark:border-white/10" />
               {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
                 <div

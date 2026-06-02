@@ -217,6 +217,24 @@ describe("referrals.validateCode", () => {
     const out = await caller.validateCode({ code: "ANNA-K2X7M" });
     expect(out.valid).toBe(false);
   });
+
+  it("recognizes an admin SVC- service grant code (kind=service_grant)", async () => {
+    const mock = createDbMock([
+      [{ plan: "max", durationDays: 365, status: "active", expiresAt: null }],
+    ]);
+    const caller = createCaller(makeUnauthCtx(mock.db));
+    const out = await caller.validateCode({ code: "SVC-ABCDEFGHJKL" });
+    expect(out).toMatchObject({ kind: "service_grant", valid: true, grantPlan: "max" });
+  });
+
+  it("rejects a revoked SVC- service grant code", async () => {
+    const mock = createDbMock([
+      [{ plan: "max", durationDays: 365, status: "revoked", expiresAt: null }],
+    ]);
+    const caller = createCaller(makeUnauthCtx(mock.db));
+    const out = await caller.validateCode({ code: "SVC-ABCDEFGHJKL" });
+    expect(out).toMatchObject({ kind: "service_grant", valid: false });
+  });
 });
 
 describe("recordRedemption (server helper, not a procedure)", () => {

@@ -1848,3 +1848,30 @@ CREATE TABLE IF NOT EXISTS upload_token_used (
 );
 CREATE INDEX IF NOT EXISTS idx_upload_token_used_expires
   ON upload_token_used(expires_at);
+
+-- ─── SUBSCRIPTION GRANT CODES (Migration 0103) ──────────────────────────────
+-- Admin-issued, one-time "service" codes that grant a tenant a free period of
+-- a plan (e.g. one free year of `max`). Redeemed at registration via the
+-- existing referral-code field, distinguished by the reserved `SVC-` prefix.
+-- Only the SHA-256 hash of the code is stored; the plaintext is shown to the
+-- admin exactly once at generation. One-time redemption is enforced by a
+-- single atomic statement: `UPDATE ... WHERE status='active'` (RETURNING id).
+CREATE TABLE IF NOT EXISTS subscription_grant_codes (
+  id                       TEXT    PRIMARY KEY,
+  code_hash                TEXT    NOT NULL,
+  code_prefix              TEXT    NOT NULL,
+  plan                     TEXT    NOT NULL,
+  duration_days            INTEGER NOT NULL,
+  status                   TEXT    NOT NULL DEFAULT 'active',
+  expires_at               INTEGER,
+  note                     TEXT,
+  created_by               TEXT,
+  created_at               INTEGER NOT NULL,
+  redeemed_by_tenant_id    TEXT,
+  redeemed_by_web_user_id  TEXT,
+  redeemed_at              INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sgc_code_hash
+  ON subscription_grant_codes(code_hash);
+CREATE INDEX IF NOT EXISTS idx_sgc_status_created
+  ON subscription_grant_codes(status, created_at);

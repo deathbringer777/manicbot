@@ -30,6 +30,29 @@ Possible feature values: `booking`, `ai`, `calendar`, `tickets`, `white_label`.
 
 ---
 
+## Admin grant codes (SVC-)
+
+System-admin–issued one-time codes that comp a tenant a free subscription
+period (launch use case: one free year of `max`). Generated in God Mode at
+`/system/grant-codes` (router `subscriptionGrantCodes`). The tester types the
+code into the registration "friend's promo code" field; it is routed by the
+reserved `SVC-` prefix, distinct from peer referral codes (which are always
+`[A-Z]{4}-…`).
+
+- **Storage:** `subscription_grant_codes` (migration 0103). Only the SHA-256
+  **hash** of the code is stored — the plaintext is shown to the admin once at
+  generation. A random / never-generated string is rejected (hash miss).
+- **Redemption** (`redeemGrantCodeAtRegistration`, called fail-open from
+  `webUsers.register`): a single atomic
+  `UPDATE … WHERE status='active' RETURNING id` claims the code (one-time,
+  race-safe), then the tenant is set to `plan` + `billing_status='active'` +
+  `current_period_end = now + duration_days` — the same field set as
+  `billing.manualActivate`.
+- **Guard:** generation/list/revoke require `systemAdminProcedure`; redemption
+  applies the grant only to the just-created tenant.
+
+---
+
 ## Lifecycle
 
 ```

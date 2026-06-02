@@ -46,7 +46,12 @@ export default function InvitationAcceptPage({ params }: PageProps) {
       // session so the JWT re-resolves (tenantId, role) → invited salon as
       // master, then land on the dashboard (now MasterDashboard for it).
       await update();
-      await utils.auth.getMyRole.invalidate();
+      // Invalidate ALL caches (not just getMyRole): the caller now has a NEW
+      // membership, so the header salon switcher's `listMyTenants` query —
+      // primed to 1 item while this page rendered inside WebShell — must
+      // refetch, otherwise the switcher stays hidden (items.length < 2) until
+      // a full reload. Mirrors TenantSwitcher.choose()'s post-switch reset.
+      await utils.invalidate();
       router.replace("/dashboard");
     },
     onError: (e) => setError(e.message),

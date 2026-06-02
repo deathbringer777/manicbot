@@ -7,11 +7,12 @@ import { signOut } from "next-auth/react";
 import {
   Settings,
   LogOut, Menu, X, ChevronLeft, ChevronRight, ChevronDown,
-  Sun, Moon, Compass, Building2,
+  Sun, Moon, Compass,
   Maximize2, Minimize2,
   type LucideIcon,
 } from "lucide-react";
 import { PinnedNavSection } from "~/components/layout/PinnedNavSection";
+import { InvitationsNavSection } from "~/components/layout/InvitationsNavSection";
 import { useCollapsedGroups } from "~/lib/plugins/collapsedGroups";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
@@ -164,7 +165,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { role, createdAt, emailVerified, isPersonalTenant, tenantName } = useRole();
+  const { role, createdAt, emailVerified, isPersonalTenant } = useRole();
   const { lang, setLang } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -293,6 +294,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                 isActive={isActive}
               />
             ))}
+            <InvitationsNavSection collapsed={collapsed} />
             <PinnedNavSection collapsed={collapsed} />
           </nav>
 
@@ -339,6 +341,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                     onItemClick={() => setSidebarOpen(false)}
                   />
                 ))}
+                <InvitationsNavSection />
                 <PinnedNavSection />
               </nav>
 
@@ -386,16 +389,11 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
 
             {/* Right: salon badge + theme toggle + user pill */}
             <div className="flex items-center gap-2 shrink-0">
-              {/* Multi-salon switcher — renders only when the user belongs to
-                  2+ salons (e.g. an owner who also accepted a master invite). */}
+              {/* Salon control — single source of truth. TenantSwitcher renders
+                  a clickable role/salon dropdown when the user belongs to 2+
+                  salons (owner + accepted master invite), or a non-interactive
+                  salon label for a single-salon master. Nothing otherwise. */}
               <TenantSwitcher />
-              {/* Salon name badge for masters */}
-              {role === "master" && tenantName && (
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium max-w-[180px]">
-                  <Building2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{tenantName}</span>
-                </div>
-              )}
               {/* Tour replay button (first 2 days) */}
               {showTourButton && (
                 <button

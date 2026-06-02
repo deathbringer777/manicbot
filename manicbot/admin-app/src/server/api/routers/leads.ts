@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { leads, marketingContacts } from "~/server/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { csvCell } from "~/server/lib/csvSafe";
 
 const STATUSES = ["new", "contacted", "closed"] as const;
 
@@ -84,12 +85,9 @@ export const leadsRouter = createTRPCRouter({
       const rows = await ctx.db.select().from(marketingContacts)
         .where(where as any)
         .orderBy(desc(marketingContacts.lastSeenAt));
-      const esc = (s: unknown) => {
-        const v = s == null ? "" : String(s);
-        return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-      };
+      // #M-07-1 — csvCell adds the formula-injection guard (=,+,-,@) + RFC-4180 quoting.
       const header = "email,name,phone,source,first_seen_at,last_seen_at,lead_count";
-      const body = rows.map(r => [r.email, r.name, r.phone, r.source, r.firstSeenAt, r.lastSeenAt, r.leadCount].map(esc).join(",")).join("\n");
+      const body = rows.map(r => [r.email, r.name, r.phone, r.source, r.firstSeenAt, r.lastSeenAt, r.leadCount].map(csvCell).join(",")).join("\n");
       return { csv: `${header}\n${body}\n`, count: rows.length };
     }),
 

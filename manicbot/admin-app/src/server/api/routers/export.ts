@@ -4,15 +4,11 @@ import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { PLAN_PRICES_PLN } from "~/lib/money";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import { csvCell } from "~/server/lib/csvSafe";
 
 function toCSV(headers: string[], rows: (string | number | null | undefined)[][]): string {
-  const escape = (v: string | number | null | undefined) => {
-    const s = String(v ?? "");
-    return s.includes(",") || s.includes('"') || s.includes("\n")
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
-  };
-  return [headers, ...rows].map((r) => r.map(escape).join(",")).join("\n");
+  // #M-07-5 — csvCell adds the formula-injection guard (=,+,-,@) + RFC-4180 quoting.
+  return [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
 }
 
 export const exportRouter = createTRPCRouter({

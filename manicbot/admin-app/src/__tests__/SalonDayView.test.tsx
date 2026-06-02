@@ -13,7 +13,7 @@
  *     start time (8:00 = 0, 9:00 = HOUR_HEIGHT, etc.).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, screen, fireEvent } from "@testing-library/react";
+import { act, cleanup, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("~/lib/appointments", () => ({
   APT_BORDER: {
@@ -429,5 +429,38 @@ describe("SalonDayView — navigation styling", () => {
     for (const id of ["day-view-prev", "day-view-today", "day-view-next"]) {
       expect(screen.getByTestId(id).className).toContain("brand-500/10");
     }
+  });
+});
+
+describe("SalonDayView — quick-create popover", () => {
+  it("dragging an empty slot shows the quick-create card and defers the full form until «Создать»", () => {
+    const onCreateAt = vi.fn();
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="ru"
+        onCreateAt={onCreateAt}
+      />,
+      "ru",
+    );
+    const layer = screen.getAllByTestId("day-view-drag-layer")[0]!;
+    fireEvent.pointerDown(layer, { button: 0, pointerId: 1, clientX: 50, clientY: 30 });
+    act(() => {
+      document.dispatchEvent(
+        new PointerEvent("pointerup", { pointerId: 1, clientX: 50, clientY: 30, bubbles: true }),
+      );
+    });
+    // The card intercepts; the parent's onCreateAt (which opens the full
+    // ManualBookingModal) fires only after «Создать».
+    expect(screen.getByTestId("create-slot-popover")).toBeTruthy();
+    expect(onCreateAt).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("create-slot-create"));
+    expect(onCreateAt).toHaveBeenCalledTimes(1);
+    expect(onCreateAt.mock.calls[0]![0]).toEqual(expect.objectContaining({ modifier: "none" }));
   });
 });

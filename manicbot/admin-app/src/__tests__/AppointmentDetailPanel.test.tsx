@@ -374,4 +374,62 @@ describe("AppointmentDetailPanel", () => {
       expect(screen.getByTestId("panel-open-client")).toBeTruthy();
     });
   });
+
+  describe("presentation (anchored popover vs centered modal)", () => {
+    const anchor = { left: 100, top: 120, width: 120, height: 48 };
+
+    it("read mode renders inside the anchored popover when anchorRect is given", () => {
+      render(
+        <AppointmentDetailPanel
+          tenantId="t_demo"
+          selected={baseSelected}
+          masters={masters}
+          services={services}
+          lang="ru"
+          anchorRect={anchor}
+          onClose={() => undefined}
+          onChanged={() => undefined}
+        />,
+      );
+      expect(screen.getByTestId("appointment-detail-popover")).toBeTruthy();
+      expect(screen.queryByTestId("appointment-detail-edit-modal")).toBeNull();
+      // Read content lives inside the popover.
+      expect(screen.getByTestId("panel-status-badge")).toBeTruthy();
+    });
+
+    it("escalates to the centered edit modal when the pencil is clicked", () => {
+      render(
+        <AppointmentDetailPanel
+          tenantId="t_demo"
+          selected={baseSelected}
+          masters={masters}
+          services={services}
+          lang="ru"
+          anchorRect={anchor}
+          onClose={() => undefined}
+          onChanged={() => undefined}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("panel-edit"));
+      expect(screen.getByTestId("appointment-detail-edit-modal")).toBeTruthy();
+      expect(screen.queryByTestId("appointment-detail-popover")).toBeNull();
+      expect(screen.getByTestId("panel-edit-date")).toBeTruthy();
+    });
+
+    it("still renders read content when no anchorRect is provided (backward compatible)", () => {
+      render(
+        <AppointmentDetailPanel
+          tenantId="t_demo"
+          selected={baseSelected}
+          masters={masters}
+          services={services}
+          lang="ru"
+          onClose={() => undefined}
+          onChanged={() => undefined}
+        />,
+      );
+      expect(screen.getByTestId("appointment-detail-popover")).toBeTruthy();
+      expect(screen.getByTestId("panel-status-badge")).toBeTruthy();
+    });
+  });
 });

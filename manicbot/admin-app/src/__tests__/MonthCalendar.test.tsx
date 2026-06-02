@@ -282,4 +282,54 @@ describe("MonthCalendar", () => {
     const counts = Array.from(badges).map((s) => s.textContent?.trim());
     expect(counts).toContain("2");
   });
+
+  describe("onEventClick (chip → detail popover trigger)", () => {
+    it("fires onEventClick with the apt + a rect, and does NOT select the day (stopPropagation)", () => {
+      const onEventClick = vi.fn();
+      const setSelectedDay = vi.fn();
+      renderWithLang(
+        <MonthCalendar
+          apts={[apt({ id: "x1", date: "2026-05-10" })]}
+          viewDate={FIXED_NOW}
+          setViewDate={() => undefined}
+          selectedDay={null}
+          setSelectedDay={setSelectedDay}
+          lang="en"
+          onEventClick={onEventClick}
+        />,
+        "en",
+      );
+      const chip = screen.getByTestId("month-cal-event");
+      expect(chip.getAttribute("role")).toBe("button");
+      fireEvent.click(chip);
+      expect(onEventClick).toHaveBeenCalledTimes(1);
+      const [aptArg, rectArg] = onEventClick.mock.calls[0]!;
+      expect((aptArg as { id: string }).id).toBe("x1");
+      expect(rectArg).toEqual(
+        expect.objectContaining({
+          left: expect.any(Number),
+          top: expect.any(Number),
+          width: expect.any(Number),
+          height: expect.any(Number),
+        }),
+      );
+      // The chip stops propagation so the day-cell select must NOT fire.
+      expect(setSelectedDay).not.toHaveBeenCalled();
+    });
+
+    it("leaves chips non-interactive (no button role) when onEventClick is omitted", () => {
+      renderWithLang(
+        <MonthCalendar
+          apts={[apt({ id: "x2", date: "2026-05-10" })]}
+          viewDate={FIXED_NOW}
+          setViewDate={() => undefined}
+          selectedDay={null}
+          setSelectedDay={() => undefined}
+          lang="en"
+        />,
+        "en",
+      );
+      expect(screen.getByTestId("month-cal-event").getAttribute("role")).toBeNull();
+    });
+  });
 });

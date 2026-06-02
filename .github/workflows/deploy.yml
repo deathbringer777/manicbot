@@ -37,16 +37,18 @@ jobs:
         with:
           fetch-depth: 0  # full history needed for gitleaks
 
-      # Invoke the gitleaks binary directly (pinned) instead of
-      # gitleaks/gitleaks-action@v2, whose action.yml declares `using: node20`
-      # and is subject to GitHub's 2026-06-02 Node-20 deprecation. Mirrors the
-      # Semgrep-from-pip approach below, so this step is unaffected by the
-      # Action runtime deprecation. Bump GITLEAKS_VERSION from upstream releases.
+      # GIT-02: a first attempt to replace this with a pinned `gitleaks detect`
+      # binary was REVERTED — the binary scans the FULL git history and tripped
+      # on pre-existing FALSE POSITIVES (env-var NAME strings, e.g.
+      # demoBots.js whKey:'WH_SECRET_SALON1', plus worker.js/calendar.js), which
+      # the action's push-delta scan never re-flags. A proper redo must scope to
+      # the push range (gitleaks git --log-opts=<before>..<after>) and/or extend
+      # .gitleaksignore — not a naive full-history scan. The Node-20 deprecation
+      # below is a warning, not a hard failure; bump when upstream ships node24.
       - name: Gitleaks — detect secrets in history
-        run: |
-          GITLEAKS_VERSION=8.18.4
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /tmp gitleaks
-          /tmp/gitleaks detect --source . --redact --exit-code 1 -v
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # semgrep/semgrep-action repo is archived (deprecated upstream).
       # Per current Semgrep CI docs, install + invoke `semgrep ci` directly

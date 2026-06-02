@@ -760,7 +760,7 @@ export const stripeEvents = sqliteTable("stripe_events", {
 ]);
 
 /**
- * Platform Stripe account ledger (migration 0106) — mirror of Stripe
+ * Platform Stripe account ledger (migration 0107) — mirror of Stripe
  * balance_transactions, synced by the Worker 15-min cron (syncStripeLedger in
  * src/billing/ledgerSync.js). Source of truth for the multi-month real revenue
  * / net / fee widgets in the system_admin Billing dashboard. Money fields are

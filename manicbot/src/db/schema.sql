@@ -714,7 +714,7 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 );
 CREATE INDEX IF NOT EXISTS idx_stripe_events_type ON stripe_events(type, received_at);
 
--- Platform Stripe account ledger (migration 0106). Mirror of Stripe
+-- Platform Stripe account ledger (migration 0107). Mirror of Stripe
 -- balance_transactions, synced by the 15-min cron (syncStripeLedger). Powers
 -- the multi-month real revenue / net / fee widgets in the system_admin Billing
 -- dashboard. Money fields are minor units; created/available_on are unix sec.

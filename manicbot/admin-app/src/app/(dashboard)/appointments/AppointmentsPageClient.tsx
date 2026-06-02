@@ -300,15 +300,9 @@ export default function AppointmentsPageClient() {
           />
 
           <div className="flex-1 min-w-0 space-y-3">
-            {/* Calendar overhaul (2026-05-16): the duplicate page-title
-                H2 lived here next to the inline 5-pill switcher.
-                PageHeader above already renders the title; we drop the
-                H2 and let the switcher dropdown sit at the right of an
-                empty bar. */}
-            <div className="flex items-center justify-end flex-wrap gap-2">
-              <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />
-            </div>
-
+            {/* Calendar overhaul: the view switcher now rides inside each
+                view's header (right of the date nav) via `headerRight`, so it
+                no longer needs its own row here — saves vertical space. */}
             <div
               key={aptViewMode}
               data-testid="apt-view-transition"
@@ -317,6 +311,7 @@ export default function AppointmentsPageClient() {
             >
             {aptViewMode === "day" && (
               <SalonDayView
+                headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />}
                 date={calViewDate}
                 setDate={setCalViewDate}
                 apts={dayFiltered}
@@ -333,6 +328,7 @@ export default function AppointmentsPageClient() {
 
             {aptViewMode === "week" && (
               <SalonWeekView
+                headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />}
                 date={calViewDate}
                 setDate={setCalViewDate}
                 apts={weekFiltered}
@@ -346,6 +342,7 @@ export default function AppointmentsPageClient() {
 
             {aptViewMode === "calendar" && (
               <MonthCalendar
+                headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />}
                 apts={calFiltered}
                 masters={tenantMasters}
                 viewDate={calViewDate}
@@ -363,17 +360,28 @@ export default function AppointmentsPageClient() {
             {aptViewMode === "list" && (
               <>
                 {listApts.isLoading ? (
-                  <div className="glass-card rounded-2xl p-6 text-center text-slate-500 dark:text-slate-400 text-sm">
-                    …
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-end">
+                      <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />
+                    </div>
+                    <div className="glass-card rounded-2xl p-6 text-center text-slate-500 dark:text-slate-400 text-sm">
+                      …
+                    </div>
                   </div>
                 ) : listFiltered.length === 0 && listRows.length === 0 ? (
-                  <EmptyState
-                    icon={CalendarDays}
-                    title={t("gmAppts.noAptsTitle", lang)}
-                    description={t("gmAppts.noAptsHint", lang)}
-                  />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-end">
+                      <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />
+                    </div>
+                    <EmptyState
+                      icon={CalendarDays}
+                      title={t("gmAppts.noAptsTitle", lang)}
+                      description={t("gmAppts.noAptsHint", lang)}
+                    />
+                  </div>
                 ) : (
                   <SalonAgendaView
+                    headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} />}
                     apts={listFiltered}
                     isLoading={false}
                     lang={lang}

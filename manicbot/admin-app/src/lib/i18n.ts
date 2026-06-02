@@ -658,6 +658,7 @@ const translations = {
   "block.create":                        { ru: "Создать", ua: "Створити", en: "Create", pl: "Utwórz" },
   "block.creating":                      { ru: "Создаю…", ua: "Створюю…", en: "Creating…", pl: "Tworzę…" },
   "block.slotConflict":                  { ru: "Этот слот уже занят — выберите другое время", ua: "Слот вже зайнятий — оберіть інший час", en: "Slot is already busy — pick a different time", pl: "Slot zajęty — wybierz inny czas" },
+  "block.allMasters":                    { ru: "Все мастера", ua: "Всі майстри", en: "All masters", pl: "Wszyscy mistrzowie" },
   "block.detail.editTitle":              { ru: "Редактировать блок", ua: "Редагувати блок", en: "Edit block", pl: "Edytuj blok" },
   "block.typeReservation":               { ru: "Резерв", ua: "Резерв", en: "Reserved", pl: "Rezerwacja" },
   "block.typeTimeOff":                   { ru: "Перерыв / выходной", ua: "Перерва / вихідний", en: "Time off", pl: "Przerwa / wolne" },
@@ -992,6 +993,7 @@ const translations = {
 
   // ── Manual booking modal ────────────────────────────────────────────────────
   "appointments.manual.title":           { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
+  "appointments.quickTitle":             { ru: "Добавить название", ua: "Додати назву", en: "Add title", pl: "Dodaj tytuł" },
   "appointments.manual.slotConflict":    { ru: "Это время уже занято у выбранного мастера.", ua: "Цей час уже зайнятий у обраного майстра.", en: "This time slot is already booked for the selected master.", pl: "Ten termin jest już zajęty u wybranego mistrza." },
   "salon.reschedule.success":            { ru: "Запись перенесена", ua: "Запис перенесений", en: "Appointment rescheduled", pl: "Wizyta przeniesiona" },
   "salon.reschedule.conflict":           { ru: "Слот занят — выберите другое время", ua: "Слот зайнятий — оберіть інший час", en: "Slot is busy — pick a different time", pl: "Termin zajęty — wybierz inny" },

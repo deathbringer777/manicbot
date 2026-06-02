@@ -57,6 +57,9 @@ export interface MoveGhost {
 
 export interface MoveCommit {
   appointmentId: string | number;
+  /** Which calendar entity moved — routes the commit to the right mutation
+   *  (appointments.rescheduleAppointment vs appointmentBlocks.update). */
+  kind: "apt" | "block";
   /** Source (pre-drag) coordinates — handy for caller's optimistic update
    *  rollback on conflict. */
   fromDate: string;
@@ -85,6 +88,9 @@ interface UseDragToMoveArgs {
 
 export interface UseDragToMoveBindArgs {
   appointmentId: string | number;
+  /** Defaults to "apt". Set "block" for reservation / time-off blocks so the
+   *  commit routes to appointmentBlocks.update instead of reschedule. */
+  kind?: "apt" | "block";
   /** Block's current ISO date (YYYY-MM-DD). */
   date: string;
   /** Block's current master id, or null if the view doesn't pin masters
@@ -112,6 +118,7 @@ export interface UseDragToMoveApi {
 
 interface DragState {
   appointmentId: string | number;
+  kind: "apt" | "block";
   fromDate: string;
   fromMasterId: number | null;
   fromTime: string;
@@ -239,6 +246,7 @@ export function useDragToMove({
 
       stateRef.current = {
         appointmentId: args.appointmentId,
+        kind: args.kind ?? "apt",
         fromDate: args.date,
         fromMasterId: args.masterId,
         fromTime: args.time,
@@ -299,6 +307,7 @@ export function useDragToMove({
           if (isMove) {
             onCommit({
               appointmentId: st.appointmentId,
+              kind: st.kind,
               fromDate: st.fromDate,
               fromMasterId: st.fromMasterId,
               fromTime: st.fromTime,

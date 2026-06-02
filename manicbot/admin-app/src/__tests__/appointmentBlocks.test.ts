@@ -318,4 +318,71 @@ describe("appointmentBlocksRouter", () => {
   // tenantAccess.ts already has its own coverage for.
 });
 
-void makeMasterCtx;
+describe("appointmentBlocksRouter — createMany (all masters)", () => {
+  const createCaller = createCallerFactory(appointmentBlocksRouter);
+
+  it("creates a block for every master when none conflict", async () => {
+    // Per master (single-day) slotsBusy runs 2 empty selects (apts, blocks)
+    // when there are no apts. Two masters → 4 empty selects.
+    const dbMock = createDbMock([[], [], [], []]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, TENANT));
+    const res = await caller.createMany({
+      tenantId: TENANT,
+      masterIds: [1, 2],
+      type: "time_off",
+      date: "2026-05-16",
+      time: "10:00",
+      durationMin: 60,
+      reason: "Праздник",
+    });
+    expect(res.ok).toBe(true);
+    expect(res.created.map((c) => c.masterId)).toEqual([1, 2]);
+    expect(res.skipped).toHaveLength(0);
+    expect(dbMock.insertCalls).toHaveLength(2);
+    expect(dbMock.insertCalls[0]!.values).toMatchObject({
+      masterId: 1,
+      type: "time_off",
+      date: "2026-05-16",
+      durationMin: 60,
+    });
+  });
+
+  it("skips masters whose slot conflicts but still creates for the free ones", async () => {
+    // m1 free (apts=[], blocks=[]); m2 has a colliding reservation block.
+    const dbMock = createDbMock([
+      [],
+      [],
+      [],
+      [{ id: "blk_x", type: "reservation", date: "2026-05-16", time: "10:00", durationMin: 60, endDate: null }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(dbMock.db, TENANT));
+    const res = await caller.createMany({
+      tenantId: TENANT,
+      masterIds: [1, 2],
+      type: "time_off",
+      date: "2026-05-16",
+      time: "10:30",
+      durationMin: 30,
+    });
+    expect(res.created.map((c) => c.masterId)).toEqual([1]);
+    expect(res.skipped.map((s) => s.masterId)).toEqual([2]);
+    expect(dbMock.insertCalls).toHaveLength(1);
+  });
+
+  it("forbids a master from bulk-blocking other masters' calendars", async () => {
+    // Master self-lookup resolves to chatId 1; targeting [1, 2] must be denied.
+    const dbMock = createDbMock([[{ chatId: 1 }]]);
+    const caller = createCaller(makeMasterCtx(dbMock.db, TENANT));
+    await expect(
+      caller.createMany({
+        tenantId: TENANT,
+        masterIds: [1, 2],
+        type: "time_off",
+        date: "2026-05-16",
+        time: "10:00",
+        durationMin: 60,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(dbMock.insertCalls).toHaveLength(0);
+  });
+});

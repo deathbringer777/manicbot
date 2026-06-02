@@ -26,7 +26,7 @@
  *   - Selected day highlighted with a left accent bar.
  */
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
@@ -91,6 +91,9 @@ interface Props {
    * and a cell click just selects the day.
    */
   onEventClick?: (apt: MonthCalApt, rect: AnchorRect) => void;
+  /** Rendered in the header, right of the prev/today/next nav — the calendar
+   *  view switcher. */
+  headerRight?: ReactNode;
 }
 
 function pad(n: number): string {
@@ -131,6 +134,7 @@ export function MonthCalendar({
   masters,
   titleOverride,
   onEventClick,
+  headerRight,
 }: Props) {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -242,6 +246,7 @@ export function MonthCalendar({
           >
             <ChevronRight className="h-4 w-4" />
           </button>
+          {headerRight}
         </div>
       </div>
 

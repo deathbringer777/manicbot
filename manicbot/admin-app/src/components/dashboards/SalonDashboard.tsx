@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
@@ -67,6 +67,7 @@ import {
 } from "~/lib/workHours";
 import { WorkHoursEditor } from "~/components/salon/WorkHoursEditor";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
+import type { ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
@@ -1366,6 +1367,7 @@ function SalonBigCalendar({
   tenantId,
   services,
   onUpdated,
+  headerRight,
 }: {
   apts: any[];
   masters?: Array<{ chatId: number; name: string | null }>;
@@ -1381,6 +1383,7 @@ function SalonBigCalendar({
   tenantId: string;
   services: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
   onUpdated?: () => void;
+  headerRight?: ReactNode;
 }) {
   const dayMap = useMemo(() => {
     const m: Record<string, any[]> = {};
@@ -1405,6 +1408,7 @@ function SalonBigCalendar({
         setSelectedDay={setSelectedDay}
         isLoading={isLoading}
         lang={lang}
+        headerRight={headerRight}
         onEventClick={(a, rect) => { setEvtApt(a); setEvtRect(rect); }}
       />
 
@@ -1881,6 +1885,66 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       newMasterId: move.toMasterId,
     });
   };
+
+  // Block move + resize → appointmentBlocks.update (no optimistic layer; the
+  // grid re-renders from the refetch on success, snaps back on conflict).
+  const updateBlock = api.appointmentBlocks.update.useMutation({
+    onError: (err) => {
+      toast.error(
+        err?.message === "slot_conflict"
+          ? t("salon.reschedule.conflict", lang)
+          : t("salon.reschedule.failed", lang),
+      );
+      void blocksQuery.refetch();
+    },
+    onSuccess: () => { void blocksQuery.refetch(); },
+  });
+
+  // Drag a reservation / time-off block to a new slot. Week-view drops carry
+  // toMasterId=null (per-day column) — preserve the block's own master.
+  const handleMoveBlock = (move: MoveCommit) => {
+    const b = blockRows.find((x) => String(x.id) === String(move.appointmentId));
+    if (!b) return;
+    updateBlock.mutate({
+      tenantId,
+      id: String(move.appointmentId),
+      masterId: move.toMasterId ?? move.fromMasterId ?? b.masterId,
+      type: b.type,
+      date: move.toDate,
+      time: move.toTime,
+      durationMin: b.durationMin,
+      endDate: b.endDate ?? undefined,
+      reason: b.reason ?? undefined,
+    });
+  };
+
+  // Drag the bottom edge → new duration. Blocks update durationMin in place;
+  // appointments go through rescheduleAppointment(newDurationMin).
+  const handleResize = (c: ResizeCommit) => {
+    if (c.kind === "block") {
+      const b = blockRows.find((x) => String(x.id) === String(c.itemId));
+      if (!b) return;
+      updateBlock.mutate({
+        tenantId,
+        id: String(c.itemId),
+        masterId: c.masterId ?? b.masterId,
+        type: b.type,
+        date: c.date,
+        time: c.time,
+        durationMin: c.durationMin,
+        endDate: b.endDate ?? undefined,
+        reason: b.reason ?? undefined,
+      });
+    } else {
+      rescheduleApt.mutate({
+        tenantId,
+        appointmentId: String(c.itemId),
+        newDate: c.date,
+        newTime: c.time,
+        newDurationMin: c.durationMin,
+      });
+    }
+  };
   const removeMaster = api.salon.removeMaster.useMutation({
     onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
@@ -1926,7 +1990,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
   // TimeReservationDialog). Cleared on dialog close.
-  const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number } | null>(null);
+  const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number; title?: string } | null>(null);
   // Reminders plugin — FAB-launched modal state.
   const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
   // Which plugins are installed for this tenant. Drives the FAB extraItems list.
@@ -2041,6 +2105,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           defaultMasterId={dragPrefill?.masterId ?? undefined}
           defaultDate={dragPrefill?.date}
           defaultTime={dragPrefill?.time}
+          defaultNote={dragPrefill?.title}
           onClose={() => { setManualBookingOpen(false); setDragPrefill(null); }}
           onCreated={() => {
             // Refresh whichever calendar view is active. Invalidating the
@@ -2190,14 +2255,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           />
           {/* Main column — header + view */}
           <div className="flex-1 min-w-0 space-y-3">
-          {/* Calendar overhaul (2026-05-16): the duplicated «Записи» H2 lived
-              here next to the inline 5-pill switcher. PageHeader / Shell
-              already shows the page title — we drop the H2 and let the
-              dropdown sit at the right of an empty bar. */}
-          <div className="flex items-center justify-end">
-            <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />
-          </div>
-
+          {/* Calendar overhaul: the view switcher now lives INSIDE each view's
+              header (right of the date nav) via `headerRight`, so it no longer
+              needs its own row here — saves vertical space (user request). */}
           <div
             key={aptViewMode}
             data-testid="salon-apt-view-transition"
@@ -2206,6 +2266,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           >
           {aptViewMode === "calendar" && (
             <SalonBigCalendar
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               apts={calAptsFiltered}
               masters={(mastersList.data ?? []).map((m: any) => ({ chatId: m.chatId, name: m.name }))}
               viewDate={calViewDate}
@@ -2234,6 +2295,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "day" && (
             <SalonDayView
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               date={calViewDate}
               setDate={setCalViewDate}
               apts={dayAptsFiltered}
@@ -2248,11 +2310,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               blocks={blockRows}
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
-                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin });
+                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                 if (info.modifier === "shift") setTimeReservationOpen(true);
                 else setManualBookingOpen(true);
               }}
               onMoveAppointment={handleMoveAppointment}
+              onMoveBlock={handleMoveBlock}
+              onResize={handleResize}
               tenantId={tenantId}
               services={
                 (svcList.data ?? []).map((s) => ({
@@ -2270,6 +2334,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "week" && (
             <SalonWeekView
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               date={calViewDate}
               setDate={setCalViewDate}
               apts={weekAptsFiltered}
@@ -2282,11 +2347,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               blocks={blockRows}
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
-                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin });
+                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                 if (info.modifier === "shift") setTimeReservationOpen(true);
                 else setManualBookingOpen(true);
               }}
               onMoveAppointment={handleMoveAppointment}
+              onMoveBlock={handleMoveBlock}
+              onResize={handleResize}
               tenantId={tenantId}
               services={
                 (svcList.data ?? []).map((s) => ({
@@ -2308,6 +2375,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               the word «Агенда» the user explicitly wanted dropped. */}
           {aptViewMode === "list" && (
             <SalonAgendaView
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               apts={aptsFiltered}
               isLoading={apts.isLoading}
               lang={lang}
@@ -2699,6 +2767,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           defaultDate={dragPrefill?.date}
           defaultTime={dragPrefill?.time}
           defaultDurationMin={dragPrefill?.durationMin}
+          defaultReason={dragPrefill?.title}
           onClose={() => { setTimeReservationOpen(false); setDragPrefill(null); }}
           onCreated={() => { void apts.refetch(); void todayApts.refetch(); void blocksQuery.refetch(); }}
         />

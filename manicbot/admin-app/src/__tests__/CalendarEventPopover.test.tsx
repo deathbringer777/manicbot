@@ -108,6 +108,27 @@ describe("CreateSlotPopover", () => {
     expect(onReserve).toHaveBeenCalledTimes(1);
   });
 
+  it("carries the typed title into onCreate / onReserve (GCal inline create)", () => {
+    const { onCreate, onReserve } = renderCreate();
+    const title = screen.getByTestId("create-slot-title") as HTMLInputElement;
+
+    fireEvent.change(title, { target: { value: "Стрижка" } });
+    fireEvent.click(screen.getByTestId("create-slot-create"));
+    expect(onCreate).toHaveBeenCalledWith("Стрижка");
+
+    fireEvent.change(title, { target: { value: "Обед" } });
+    fireEvent.click(screen.getByTestId("create-slot-reserve"));
+    expect(onReserve).toHaveBeenCalledWith("Обед");
+  });
+
+  it("Enter in the title field fires the primary create intent", () => {
+    const { onCreate } = renderCreate();
+    const title = screen.getByTestId("create-slot-title");
+    fireEvent.change(title, { target: { value: "Маникюр" } });
+    fireEvent.keyDown(title, { key: "Enter" });
+    expect(onCreate).toHaveBeenCalledWith("Маникюр");
+  });
+
   it("the × button calls onClose", () => {
     const { onClose } = renderCreate();
     fireEvent.click(screen.getByTestId("create-slot-close"));

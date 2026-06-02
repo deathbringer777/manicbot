@@ -24,7 +24,7 @@
  * status tone when the master isn't known.
  */
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, type ReactNode } from "react";
 import { CalendarDays, Loader2, MoreHorizontal, CheckCircle2, XCircle, UserX, AlertTriangle } from "lucide-react";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { STATUS_TONE } from "~/components/dashboards/CalendarLeftRail";
@@ -72,6 +72,9 @@ interface Props {
    * `apts` is empty, we show "filtered out" instead of "no upcoming".
    */
   filtersActive?: boolean;
+  /** Rendered in a top bar (right-aligned) — the calendar view switcher.
+   *  The agenda has no date nav of its own, so this is its only header. */
+  headerRight?: ReactNode;
 }
 
 interface DayGroup {
@@ -325,6 +328,7 @@ export function SalonAgendaView({
   masters,
   serviceNames,
   filtersActive,
+  headerRight,
 }: Props) {
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -349,8 +353,21 @@ export function SalonAgendaView({
     return { upcoming: groupByDay(u), past: groupByDay(p).reverse() };
   }, [apts, todayIso]);
 
+  // The agenda has no date nav of its own, so the view switcher (headerRight)
+  // rides in a thin top bar above whatever body renders (loading/empty/list).
+  const wrap = (node: ReactNode) => (
+    <div className="space-y-3" data-testid="salon-agenda-view">
+      {headerRight && (
+        <div className="flex items-center justify-end" data-testid="agenda-header">
+          {headerRight}
+        </div>
+      )}
+      {node}
+    </div>
+  );
+
   if (isLoading) {
-    return (
+    return wrap(
       <div className="flex justify-center py-8" data-testid="agenda-loading">
         <Loader2 className="animate-spin text-brand-400" />
       </div>
@@ -359,7 +376,7 @@ export function SalonAgendaView({
 
   if (upcoming.length === 0 && past.length === 0) {
     if (filtersActive) {
-      return (
+      return wrap(
         <EmptyState
           icon={CalendarDays}
           title={t("salon.agenda.allFiltered", lang)}
@@ -367,7 +384,7 @@ export function SalonAgendaView({
         />
       );
     }
-    return (
+    return wrap(
       <EmptyState
         icon={CalendarDays}
         title={t("salon.cal.noUpcoming", lang)}
@@ -394,7 +411,7 @@ export function SalonAgendaView({
     );
   };
 
-  return (
+  return wrap(
     <div className="glass-card rounded-2xl overflow-hidden" data-testid="agenda-view">
       <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
         {upcoming.length > 0 && (

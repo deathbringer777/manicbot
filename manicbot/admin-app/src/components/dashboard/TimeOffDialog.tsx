@@ -24,6 +24,7 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { DatePicker } from "~/components/ui/DatePicker";
 
 type Kind = "break" | "dayoff" | "vacation";
 
@@ -53,6 +54,9 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
 
   const [kind, setKind] = useState<Kind>("break");
   const [masterId, setMasterId] = useState<number | null>(defaultMasterId ?? null);
+  // «Все мастера» — bulk-create the same block for every active master
+  // (holidays). Only offered when no specific master was prefilled.
+  const [allMasters, setAllMasters] = useState(false);
   const [dateFrom, setDateFrom] = useState<string>(defaultDate ?? todayIso());
   const [dateTo, setDateTo] = useState<string>(defaultDate ?? todayIso());
   const [time, setTime] = useState<string>("13:00");
@@ -72,52 +76,55 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
     },
   });
 
+  // Bulk path for «Все мастера» — one block per active master; conflicting
+  // masters are skipped server-side and reported in `skipped`.
+  const createMany = api.appointmentBlocks.createMany.useMutation({
+    onSuccess: ({ created }) => {
+      void utils.appointmentBlocks.listByRange.invalidate();
+      void utils.appointments.getAll.invalidate();
+      if (created.length === 0) {
+        setErr(t("block.slotConflict", lang));
+        return;
+      }
+      onCreated?.(created[0]!.id);
+      onClose();
+    },
+    onError: (e) => {
+      setErr(e.message === "slot_conflict" ? t("block.slotConflict", lang) : e.message);
+    },
+  });
+
   const formValid = (() => {
-    if (masterId == null) return false;
+    if (!allMasters && masterId == null) return false;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) return false;
     if (kind === "break") return /^\d{2}:\d{2}$/.test(time) && durationMin > 0;
     if (kind === "vacation") return /^\d{4}-\d{2}-\d{2}$/.test(dateTo) && dateTo >= dateFrom;
     return true;
   })();
-  const submitDisabled = !formValid || create.isPending;
+  const submitDisabled = !formValid || create.isPending || createMany.isPending;
 
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
     if (submitDisabled) return;
 
-    if (kind === "break") {
-      create.mutate({
-        tenantId,
-        masterId: masterId!,
-        type: "time_off",
-        date: dateFrom,
-        time,
-        durationMin,
-        reason: reason.trim() || undefined,
-      });
-    } else if (kind === "dayoff") {
-      create.mutate({
-        tenantId,
-        masterId: masterId!,
-        type: "time_off",
-        date: dateFrom,
-        time: "00:00",
-        durationMin: 60 * 24,
-        reason: reason.trim() || undefined,
-      });
+    // Shared block shape per kind; only the target (one master vs all) differs.
+    const base =
+      kind === "break"
+        ? { type: "time_off" as const, date: dateFrom, time, durationMin, reason: reason.trim() || undefined }
+        : kind === "dayoff"
+          ? { type: "time_off" as const, date: dateFrom, time: "00:00", durationMin: 60 * 24, reason: reason.trim() || undefined }
+          : { type: "time_off" as const, date: dateFrom, time: "00:00", durationMin: 60 * 24, endDate: dateTo, reason: reason.trim() || undefined };
+
+    if (allMasters) {
+      const ids = (masters.data ?? []).map((m) => m.chatId);
+      if (ids.length === 0) {
+        setErr(t("appointments.manual.pickPlaceholder", lang));
+        return;
+      }
+      createMany.mutate({ tenantId, masterIds: ids, ...base });
     } else {
-      // vacation — single row with endDate spanning the range.
-      create.mutate({
-        tenantId,
-        masterId: masterId!,
-        type: "time_off",
-        date: dateFrom,
-        time: "00:00",
-        durationMin: 60 * 24,
-        endDate: dateTo,
-        reason: reason.trim() || undefined,
-      });
+      create.mutate({ tenantId, masterId: masterId!, ...base });
     }
   }
 
@@ -195,14 +202,25 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
             <label className={LABEL}>{t("appointments.manual.master", lang)}</label>
             <Select
               testIdPrefix="block-master"
-              value={masterId == null ? "" : String(masterId)}
-              onChange={(v) => setMasterId(v ? Number(v) : null)}
+              value={allMasters ? "__all__" : masterId == null ? "" : String(masterId)}
+              onChange={(v) => {
+                if (v === "__all__") {
+                  setAllMasters(true);
+                  setMasterId(null);
+                } else {
+                  setAllMasters(false);
+                  setMasterId(v ? Number(v) : null);
+                }
+              }}
               disabled={defaultMasterId != null}
               placeholder={t("appointments.manual.pickPlaceholder", lang)}
-              options={(masters.data ?? []).map((m) => ({
-                value: String(m.chatId),
-                label: m.name || `#${m.chatId}`,
-              }))}
+              options={[
+                { value: "__all__", label: t("block.allMasters", lang) },
+                ...(masters.data ?? []).map((m) => ({
+                  value: String(m.chatId),
+                  label: m.name || `#${m.chatId}`,
+                })),
+              ]}
             />
           </div>
 
@@ -211,12 +229,11 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className={LABEL}>{t("appointments.manual.date", lang)}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className={FIELD}
-                  data-testid="block-date"
+                  onChange={setDateFrom}
+                  lang={lang}
+                  testIdPrefix="block-date"
                 />
               </div>
               <div>
@@ -266,12 +283,11 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
           {kind === "dayoff" && (
             <div>
               <label className={LABEL}>{t("appointments.manual.date", lang)}</label>
-              <input
-                type="date"
+              <DatePicker
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className={FIELD}
-                data-testid="block-date"
+                onChange={setDateFrom}
+                lang={lang}
+                testIdPrefix="block-date"
               />
             </div>
           )}
@@ -281,23 +297,21 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className={LABEL}>{t("block.timeOff.dateFrom", lang)}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className={FIELD}
-                  data-testid="block-date-from"
+                  onChange={setDateFrom}
+                  lang={lang}
+                  testIdPrefix="block-date-from"
                 />
               </div>
               <div>
                 <label className={LABEL}>{t("block.timeOff.dateTo", lang)}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dateTo}
+                  onChange={setDateTo}
+                  lang={lang}
                   min={dateFrom}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className={FIELD}
-                  data-testid="block-date-to"
+                  testIdPrefix="block-date-to"
                 />
               </div>
             </div>

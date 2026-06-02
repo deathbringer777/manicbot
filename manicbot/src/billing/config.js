@@ -81,3 +81,22 @@ export function resolvePriceId(cfg, plan, cycle = 'monthly') {
   return cfg?.priceIds?.[plan] || null;
 }
 
+/**
+ * Reverse of resolvePriceId: map a live Stripe price ID back to its plan key
+ * using the configured monthly + annual price IDs. Returns null when the price
+ * is not one we configured, so callers can fall back to metadata. STRIPE-01.
+ * @param {{ priceIds?: object, priceIdsAnnual?: object }} cfg
+ * @param {string|null|undefined} priceId
+ * @returns {'start'|'pro'|'max'|null}
+ */
+export function priceIdToPlan(cfg, priceId) {
+  if (!cfg || !priceId) return null;
+  for (const map of [cfg.priceIds, cfg.priceIdsAnnual]) {
+    if (!map) continue;
+    for (const plan of Object.keys(map)) {
+      if (map[plan] && map[plan] === priceId) return plan;
+    }
+  }
+  return null;
+}
+

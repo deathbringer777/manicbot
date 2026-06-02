@@ -6,7 +6,7 @@
 
 import { updateTenantBilling } from './storage.js';
 import { mapStripeStatusToBilling } from './stripe.js';
-import { GRACE_DURATION_MS } from './config.js';
+import { GRACE_DURATION_MS, priceIdToPlan } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
 import { nowSec, msToSec } from '../utils/time.js';
 import { sendInvoiceEmail } from './invoiceEmail.js';
@@ -144,22 +144,32 @@ async function tenantExists(ctx, tenantId) {
   }
 }
 
-/** Derive plan key (start/pro/max) from subscription metadata or price metadata. */
-function resolvePlanFromSub(sub) {
-  // 1. Prefer subscription metadata[plan] set at checkout time
+/**
+ * Derive plan key (start/pro/max) for a subscription.
+ *
+ * STRIPE-01: the live price ID is the AUTHORITATIVE signal. A Customer-Portal
+ * plan change swaps the subscription's price but leaves the original checkout's
+ * metadata.plan stale, so resolving from metadata alone desynced tenants.plan.
+ * Map priceId -> plan via the configured STRIPE_PRICE_* ids first; only fall
+ * back to subscription/price metadata when the price is unconfigured (cfg
+ * unavailable, or a legacy/one-off price).
+ */
+function resolvePlanFromSub(sub, cfg) {
+  const priceId = sub.items?.data?.[0]?.price?.id;
+  const planByPrice = priceIdToPlan(cfg, priceId);
+  if (planByPrice) return planByPrice;
   const metaPlan = sub.metadata?.plan;
   if (metaPlan) return metaPlan;
-  // 2. Fallback: price metadata[plan] (set on the Stripe Price object itself)
   const priceMeta = sub.items?.data?.[0]?.price?.metadata?.plan;
   if (priceMeta) return priceMeta;
   return null;
 }
 
-function subscriptionToBillingUpdates(sub) {
+function subscriptionToBillingUpdates(sub, cfg) {
   const status = mapStripeStatusToBilling(sub.status);
   const periodEnd = sub.current_period_end || null;
   const priceId = sub.items?.data?.[0]?.price?.id || null;
-  const planKey = resolvePlanFromSub(sub);
+  const planKey = resolvePlanFromSub(sub, cfg);
   const updates = {
     billingStatus: status,
     subscriptionStatus: sub.status,
@@ -174,7 +184,7 @@ function subscriptionToBillingUpdates(sub) {
   return updates;
 }
 
-export async function handleStripeWebhook(ctx, payload, signature, webhookSecret) {
+export async function handleStripeWebhook(ctx, payload, signature, webhookSecret, cfg = null) {
   if (!ctx?.db || !payload || !webhookSecret) return { ok: false, status: 400 };
   const kv = ctx.kv || ctx.globalKv;
   const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
@@ -313,7 +323,7 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       tenantId = null;
     }
     if (tenantId) {
-      const updates = subscriptionToBillingUpdates(sub);
+      const updates = subscriptionToBillingUpdates(sub, cfg);
       if (type === 'customer.subscription.deleted') {
         updates.billingStatus = 'inactive';
         updates.subscriptionStatus = 'canceled';

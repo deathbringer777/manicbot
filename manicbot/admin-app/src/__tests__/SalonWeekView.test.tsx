@@ -325,4 +325,110 @@ describe("SalonWeekView", () => {
       expect(screen.queryByTestId("panel-open-client")).toBeNull();
     });
   });
+
+  // ── Non-working hours overlay (salon «Godziny pracy») ──────────────────
+  // Salon-level hours shade the week grid with the same gray diagonal gradient
+  // used for time-off blocks. Geometry mirrors SalonDayView's per-master tint.
+  describe("non-working hours overlay", () => {
+    // Mon–Sat 09:00–20:00, Sunday off — matches the «Godziny pracy» screen.
+    const workHours = {
+      mon: { open: "09:00", close: "20:00" },
+      tue: { open: "09:00", close: "20:00" },
+      wed: { open: "09:00", close: "20:00" },
+      thu: { open: "09:00", close: "20:00" },
+      fri: { open: "09:00", close: "20:00" },
+      sat: { open: "09:00", close: "20:00" },
+      sun: null,
+    };
+
+    function colByDay(iso: string): HTMLElement {
+      const col = screen
+        .getAllByTestId("week-view-day-column")
+        .find((c) => c.getAttribute("data-day") === iso);
+      if (!col) throw new Error(`no column for ${iso}`);
+      return col;
+    }
+
+    it("renders no overlay when workHours is omitted (God-Mode / per-master callers)", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          apts={[]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+        />,
+        "en",
+      );
+      expect(screen.queryAllByTestId("week-view-non-working").length).toBe(0);
+    });
+
+    it("shades a day off (Sunday) with a single full-height band", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")} // week Mon 05-04 … Sun 05-10
+          setDate={() => undefined}
+          apts={[]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+          workHours={workHours}
+        />,
+        "en",
+      );
+      const bands = colByDay("2026-05-10").querySelectorAll(
+        "[data-testid='week-view-non-working']",
+      );
+      expect(bands.length).toBe(1);
+      // HOUR_HEIGHT(48) × TOTAL_HOURS(14) = 672px full-height band.
+      expect((bands[0] as HTMLElement).style.height).toBe("672px");
+      expect(bands[0]!.getAttribute("style")).toContain("repeating-linear-gradient");
+    });
+
+    it("shades before-open + after-close on a working day (09:00–20:00 in 08:00–22:00)", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          apts={[]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+          workHours={workHours}
+        />,
+        "en",
+      );
+      const bands = Array.from(
+        colByDay("2026-05-04").querySelectorAll("[data-testid='week-view-non-working']"),
+      ) as HTMLElement[];
+      expect(bands.length).toBe(2);
+      // Before 09:00 → from 08:00, 1h = 48px tall, anchored at top 0.
+      const before = bands.find((b) => b.style.top === "0px");
+      expect(before?.style.height).toBe("48px");
+      // After 20:00 → top = 12h = 576px, height = 672 − 576 = 96px.
+      const after = bands.find((b) => b.style.top === "576px");
+      expect(after?.style.height).toBe("96px");
+    });
+
+    it("shades the whole column when the salon is closed that weekday", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          apts={[]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+          workHours={{ ...workHours, mon: null }}
+        />,
+        "en",
+      );
+      const bands = colByDay("2026-05-04").querySelectorAll(
+        "[data-testid='week-view-non-working']",
+      );
+      expect(bands.length).toBe(1);
+      expect((bands[0] as HTMLElement).style.height).toBe("672px");
+    });
+  });
 });

@@ -174,6 +174,8 @@ describe("Platform AppointmentsPageClient", () => {
 
   it("renders tenant names as left-rail calendar columns", () => {
     renderWithLang(<AppointmentsPageClient />);
+    // «My calendars» is collapsed by default — expand to reveal the per-tenant rows.
+    fireEvent.click(screen.getByTestId("rail-my-calendars-toggle"));
     expect(screen.getAllByText("Salon A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Salon B").length).toBeGreaterThan(0);
   });

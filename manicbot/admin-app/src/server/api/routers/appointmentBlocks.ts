@@ -150,6 +150,100 @@ export const appointmentBlocksRouter = createTRPCRouter({
       return { ok: true, id };
     }),
 
+  // ── Create the SAME block for MANY masters at once (e.g. a public holiday
+  // applies to the whole team). Per-master slot-conflict check; a conflicting
+  // master is SKIPPED and reported rather than failing the entire batch, so
+  // the owner still blocks everyone who's free. Owner/manager only — a master
+  // may only target their own calendar.
+  createMany: protectedProcedure
+    .input(
+      z.object({
+        tenantId: z.string().min(1),
+        masterIds: z.array(z.number().int()).min(1).max(200),
+        type: z.enum(["reservation", "time_off"]),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        time: z.string().regex(/^\d{2}:\d{2}$/),
+        durationMin: z.number().int().min(15).max(60 * 24),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        reason: z.string().max(200).optional(),
+      }).refine(
+        (d) => !d.endDate || d.endDate >= d.date,
+        { message: "endDate must be on or after date" },
+      ),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // A master may only bulk-block their OWN calendar — every requested id
+      // must be the caller's own chat_id, so "all masters" stays owner-only.
+      if (ctx.webUser?.webRole === "master") {
+        const [m] = await ctx.db
+          .select({ chatId: masters.chatId })
+          .from(masters)
+          .where(and(eq(masters.tenantId, input.tenantId), eq(masters.active, 1)))
+          .limit(1);
+        if (!m || input.masterIds.some((id) => id !== m.chatId)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Masters can only block their own calendar",
+          });
+        }
+      }
+
+      // Spanned days for the per-master conflict check (mirrors `create`).
+      const checkDates: string[] = [];
+      if (input.endDate && input.endDate !== input.date) {
+        let d = input.date;
+        while (d <= input.endDate) {
+          checkDates.push(d);
+          const next = new Date(d + "T00:00:00Z");
+          next.setUTCDate(next.getUTCDate() + 1);
+          d = next.toISOString().slice(0, 10);
+        }
+      } else {
+        checkDates.push(input.date);
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const created: Array<{ masterId: number; id: string }> = [];
+      const skipped: Array<{ masterId: number; conflict?: { kind: "appointment" | "block"; id: string } }> = [];
+
+      for (const masterId of input.masterIds) {
+        let conflict: { kind: "appointment" | "block"; id: string } | undefined;
+        for (const d of checkDates) {
+          const r = await slotsBusy({
+            db: ctx.db,
+            tenantId: input.tenantId,
+            masterId,
+            date: d,
+            startTime: input.time,
+            durationMin: input.durationMin,
+          });
+          if (r.busy) { conflict = r.conflict; break; }
+        }
+        if (conflict) { skipped.push({ masterId, conflict }); continue; }
+
+        const id = `b${now}_${Math.random().toString(36).slice(2, 8)}`;
+        await ctx.db.insert(appointmentBlocks).values({
+          id,
+          tenantId: input.tenantId,
+          masterId,
+          type: input.type,
+          date: input.date,
+          time: input.time,
+          durationMin: input.durationMin,
+          endDate: input.endDate ?? null,
+          reason: input.reason ?? null,
+          createdAt: now,
+          createdBy: ctx.webUser?.id ?? null,
+          cancelled: 0,
+        });
+        created.push({ masterId, id });
+      }
+
+      return { ok: true, created, skipped };
+    }),
+
   // ── Soft-cancel a block. The block stays in the table for audit; the
   // partial index `WHERE cancelled = 0` keeps it out of busy checks.
   delete: protectedProcedure

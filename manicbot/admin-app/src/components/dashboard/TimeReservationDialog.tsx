@@ -67,6 +67,8 @@ export function TimeReservationDialog({
   const utils = api.useUtils();
 
   const [masterId, setMasterId] = useState<number | null>(defaultMasterId ?? null);
+  // «Все мастера» — bulk-create the reservation for every active master.
+  const [allMasters, setAllMasters] = useState(false);
   const [date, setDate] = useState<string>(defaultDate ?? todayIso());
   const [time, setTime] = useState<string>(defaultTime ?? nowHHMM());
   const [durationMin, setDurationMin] = useState<number>(defaultDurationMin ?? 30);
@@ -85,22 +87,34 @@ export function TimeReservationDialog({
     },
   });
 
-  const formValid = masterId != null && /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) && durationMin > 0;
-  const submitDisabled = !formValid || create.isPending;
+  const createMany = api.appointmentBlocks.createMany.useMutation({
+    onSuccess: ({ created }) => {
+      void utils.appointmentBlocks.listByRange.invalidate();
+      void utils.appointments.getAll.invalidate();
+      if (created.length === 0) { setErr(t("block.slotConflict", lang)); return; }
+      onCreated?.(created[0]!.id);
+      onClose();
+    },
+    onError: (e) => {
+      setErr(e.message === "slot_conflict" ? t("block.slotConflict", lang) : e.message);
+    },
+  });
+
+  const formValid = (allMasters || masterId != null) && /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) && durationMin > 0;
+  const submitDisabled = !formValid || create.isPending || createMany.isPending;
 
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
     if (submitDisabled) return;
-    create.mutate({
-      tenantId,
-      masterId: masterId!,
-      type: "reservation",
-      date,
-      time,
-      durationMin,
-      reason: reason.trim() || undefined,
-    });
+    const base = { type: "reservation" as const, date, time, durationMin, reason: reason.trim() || undefined };
+    if (allMasters) {
+      const ids = (masters.data ?? []).map((m) => m.chatId);
+      if (ids.length === 0) { setErr(t("appointments.manual.pickPlaceholder", lang)); return; }
+      createMany.mutate({ tenantId, masterIds: ids, ...base });
+    } else {
+      create.mutate({ tenantId, masterId: masterId!, ...base });
+    }
   }
 
   return (
@@ -143,14 +157,25 @@ export function TimeReservationDialog({
             <label className={LABEL}>{t("appointments.manual.master", lang)}</label>
             <Select
               testIdPrefix="block-master"
-              value={masterId == null ? "" : String(masterId)}
-              onChange={(v) => setMasterId(v ? Number(v) : null)}
+              value={allMasters ? "__all__" : masterId == null ? "" : String(masterId)}
+              onChange={(v) => {
+                if (v === "__all__") {
+                  setAllMasters(true);
+                  setMasterId(null);
+                } else {
+                  setAllMasters(false);
+                  setMasterId(v ? Number(v) : null);
+                }
+              }}
               disabled={defaultMasterId != null}
               placeholder={t("appointments.manual.pickPlaceholder", lang)}
-              options={(masters.data ?? []).map((m) => ({
-                value: String(m.chatId),
-                label: m.name || `#${m.chatId}`,
-              }))}
+              options={[
+                { value: "__all__", label: t("block.allMasters", lang) },
+                ...(masters.data ?? []).map((m) => ({
+                  value: String(m.chatId),
+                  label: m.name || `#${m.chatId}`,
+                })),
+              ]}
             />
           </div>
 

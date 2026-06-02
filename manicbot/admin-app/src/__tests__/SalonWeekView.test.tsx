@@ -13,7 +13,7 @@
  *     week contains today.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { cleanup, screen, fireEvent } from "@testing-library/react";
+import { act, cleanup, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("~/lib/appointments", () => ({
   APT_BORDER: {
@@ -472,5 +472,60 @@ describe("SalonWeekView — layout & navigation", () => {
     for (const id of ["week-view-prev", "week-view-today", "week-view-next"]) {
       expect(screen.getByTestId(id).className).toContain("brand-500/10");
     }
+  });
+});
+
+describe("SalonWeekView — Google-Calendar popovers", () => {
+  it("clicking an event opens the anchored detail popover (not a below-grid card)", () => {
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[apt({ id: 7 })]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+        tenantId="t_demo"
+        services={services}
+      />,
+      "en",
+    );
+    fireEvent.click(screen.getByTestId("week-view-event"));
+    expect(screen.getByTestId("appointment-detail-popover")).toBeTruthy();
+    expect(screen.queryByTestId("week-view-selected")).toBeNull();
+  });
+
+  it("dragging an empty slot shows the quick-create card and defers the full form until «Создать»", () => {
+    const onCreateAt = vi.fn();
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="ru"
+        tenantId="t_demo"
+        services={services}
+        onCreateAt={onCreateAt}
+      />,
+      "ru",
+    );
+    // A pointer-down + pointer-up with no movement = a click-create on the
+    // empty grid. The OLD behaviour fired onCreateAt immediately (full-screen
+    // modal → «фон не видно»); now it must defer behind the quick-create card.
+    const layer = screen.getAllByTestId("week-view-drag-layer")[0]!;
+    fireEvent.pointerDown(layer, { button: 0, pointerId: 1, clientX: 50, clientY: 30 });
+    act(() => {
+      document.dispatchEvent(
+        new PointerEvent("pointerup", { pointerId: 1, clientX: 50, clientY: 30, bubbles: true }),
+      );
+    });
+    expect(screen.getByTestId("create-slot-popover")).toBeTruthy();
+    expect(onCreateAt).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("create-slot-create"));
+    expect(onCreateAt).toHaveBeenCalledTimes(1);
+    expect(onCreateAt.mock.calls[0]![0]).toEqual(expect.objectContaining({ modifier: "none" }));
   });
 });

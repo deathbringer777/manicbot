@@ -117,15 +117,14 @@ function Sparkline({ data, trendUp, trendDown }: { data: number[]; trendUp: bool
 
   const strokeId = `kpi-sparkline-stroke-${trendDown ? "down" : "up"}`;
   const fillId = `kpi-sparkline-fill-${trendDown ? "down" : "up"}`;
-  const stroke = trendDown ? "#ef4444" : trendUp ? "#10b981" : "var(--color-secondary)";
-  const fillTop = trendDown ? "rgba(239,68,68,0.18)" : trendUp ? "rgba(16,185,129,0.20)" : "rgba(30,168,150,0.18)";
+  const stroke = trendDown ? "var(--trend-down)" : trendUp ? "var(--trend-up)" : "var(--trend-flat)";
 
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="overflow-visible">
       <defs>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={fillTop} />
-          <stop offset="100%" stopColor={fillTop} stopOpacity="0" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
       <polyline

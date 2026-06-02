@@ -47,11 +47,11 @@ const MASTER_PALETTE = Array.from({ length: 8 }, (_, i) => {
  *  Keys match the status filter Set values so callers can look up a tone
  *  by status string. */
 export const STATUS_TONE: Record<string, { dot: string; bg: string; text: string }> = {
-  pending:   { dot: "#d97706", bg: "rgba(245,158,11,0.15)",  text: "#b45309" },
-  confirmed: { dot: "#059669", bg: "rgba(16,185,129,0.15)",  text: "#047857" },
-  cancelled: { dot: "#dc2626", bg: "rgba(239,68,68,0.15)",   text: "#b91c1c" },
-  no_show:   { dot: "#ea580c", bg: "rgba(249,115,22,0.15)",  text: "#c2410c" },
-  done:      { dot: "#6d28d9", bg: "rgba(124,58,237,0.15)",  text: "#6d28d9" },
+  pending:   { dot: "var(--status-pending-dot)",   bg: "var(--status-pending-bg)",   text: "var(--status-pending-text)" },
+  confirmed: { dot: "var(--status-confirmed-dot)", bg: "var(--status-confirmed-bg)", text: "var(--status-confirmed-text)" },
+  cancelled: { dot: "var(--status-cancelled-dot)", bg: "var(--status-cancelled-bg)", text: "var(--status-cancelled-text)" },
+  no_show:   { dot: "var(--status-noshow-dot)",    bg: "var(--status-noshow-bg)",    text: "var(--status-noshow-text)" },
+  done:      { dot: "var(--status-done-dot)",      bg: "var(--status-done-bg)",      text: "var(--status-done-text)" },
 };
 
 export type StatusKey = "pending" | "confirmed" | "cancelled" | "no_show" | "done";

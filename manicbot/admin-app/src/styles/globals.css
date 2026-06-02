@@ -248,6 +248,29 @@
     --input: #e2d4bf;
     --ring: #178a7b;  /* deeper turquoise: >= 3:1 non-text contrast on beige */
 
+    /* data-viz: chart chrome + calendar status + hatch + trend (theme-aware,
+       LIGHT here; dark overrides below). Inline-style / SVG consumers read
+       these via var() so charts and calendars warm + adapt automatically. */
+    --chart-line: #d14638;
+    --chart-area: rgba(209,70,56,0.18);
+    --chart-grid: #e2d4bf;
+    --chart-axis: #cbbda6;
+    --chart-axis-text: #6f645b;
+    --chart-tooltip-bg: #fffdf8;
+    --chart-tooltip-border: #e2d4bf;
+    --chart-tooltip-text: #2e2722;
+    --trend-up: #10b981;
+    --trend-down: #ef4444;
+    --trend-flat: #1ea896;
+    --status-pending-bg: rgba(245,158,11,0.16);   --status-pending-text: #b45309;  --status-pending-dot: #d97706;
+    --status-confirmed-bg: rgba(16,185,129,0.16); --status-confirmed-text: #047857; --status-confirmed-dot: #059669;
+    --status-done-bg: rgba(124,58,237,0.16);      --status-done-text: #6d28d9;     --status-done-dot: #7c3aed;
+    --status-cancelled-bg: rgba(239,68,68,0.14);  --status-cancelled-text: #b91c1c; --status-cancelled-dot: #dc2626;
+    --status-noshow-bg: rgba(249,115,22,0.16);    --status-noshow-text: #c2410c;   --status-noshow-dot: #ea580c;
+    --status-neutral-bg: rgba(123,106,89,0.16);   --status-neutral-text: #5d5044;  --status-neutral-dot: #7b6a59;
+    --hatch: rgba(123,106,89,0.18);
+    --drag-bg: rgba(209,70,56,0.18); --drag-border: rgba(209,70,56,0.7);
+
     /* brand-* scale -> RED ramp (auto-flips bg-brand and text-brand here) */
     --color-brand-50:  #fcf4f2;
     --color-brand-100: #f9e4df;
@@ -369,6 +392,27 @@
     --border: #3d342c;
     --input: #3d342c;
     --ring: #34c5b0;
+
+    /* data-viz — dark */
+    --chart-line: #e8604f;
+    --chart-area: rgba(232,96,79,0.22);
+    --chart-grid: #3d342c;
+    --chart-axis: #443a30;
+    --chart-axis-text: #b8a993;
+    --chart-tooltip-bg: #26201b;
+    --chart-tooltip-border: #3d342c;
+    --chart-tooltip-text: #f2e8da;
+    --trend-up: #34d399;
+    --trend-down: #f87171;
+    --trend-flat: #34c5b0;
+    --status-pending-bg: rgba(245,158,11,0.20);   --status-pending-text: #fbbf24;  --status-pending-dot: #fbbf24;
+    --status-confirmed-bg: rgba(16,185,129,0.20); --status-confirmed-text: #34d399; --status-confirmed-dot: #34d399;
+    --status-done-bg: rgba(124,58,237,0.24);      --status-done-text: #a78bfa;     --status-done-dot: #a78bfa;
+    --status-cancelled-bg: rgba(239,68,68,0.20);  --status-cancelled-text: #f87171; --status-cancelled-dot: #f87171;
+    --status-noshow-bg: rgba(249,115,22,0.20);    --status-noshow-text: #fb923c;   --status-noshow-dot: #fb923c;
+    --status-neutral-bg: rgba(184,169,147,0.18);  --status-neutral-text: #b8a993;  --status-neutral-dot: #b8a993;
+    --hatch: rgba(184,169,147,0.16);
+    --drag-bg: rgba(232,96,79,0.22); --drag-border: rgba(232,96,79,0.7);
   }
 
   body {

@@ -68,16 +68,15 @@ function StatSparkline({ data, trendUp, trendDown }: { data: number[]; trendUp: 
     .join(" ");
   const lastX = (data.length - 1) * step;
   const lastY = h - ((data[data.length - 1]! - min) / range) * (h - 4) - 2;
-  const stroke = trendDown ? "#ef4444" : trendUp ? "#10b981" : "var(--color-secondary)";
-  const fillTop = trendDown ? "rgba(239,68,68,0.18)" : trendUp ? "rgba(16,185,129,0.20)" : "rgba(30,168,150,0.18)";
+  const stroke = trendDown ? "var(--trend-down)" : trendUp ? "var(--trend-up)" : "var(--trend-flat)";
   const fillId = `stat-spark-fill-${trendDown ? "d" : trendUp ? "u" : "n"}`;
 
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="overflow-visible">
       <defs>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={fillTop} />
-          <stop offset="100%" stopColor={fillTop} stopOpacity="0" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
       <polyline points={`0,${h} ${points} ${lastX},${h}`} fill={`url(#${fillId})`} stroke="none" />

@@ -498,7 +498,9 @@ export function BlockDetailPanel({
             {cardBody}
           </div>
         </div>
-      ) : (
+      ) : confirmDelete ? null : (
+        // While the delete confirm is open we render ONLY the ConfirmDialog
+        // (full-screen dim) — the read popover must not stay layered behind it.
         <AnchoredPopover
           anchorRect={anchorRect ?? null}
           onClose={onClose}

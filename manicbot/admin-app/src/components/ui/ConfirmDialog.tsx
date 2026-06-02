@@ -69,7 +69,8 @@ export function ConfirmDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-100"
+      data-testid="confirm-dialog"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4 animate-in fade-in duration-100"
       onClick={(e) => {
         if (e.target === e.currentTarget && !busy) onCancel();
       }}

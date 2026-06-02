@@ -37,7 +37,7 @@ import { CreateSlotPopover } from "~/components/calendar/CreateSlotPopover";
 import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
-import { computeLanes } from "~/lib/calendar/overlapLanes";
+import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
@@ -674,7 +674,13 @@ export function SalonDayView({
 
             {/* Master columns */}
             <div className="flex-1 flex relative">
-              {masterColumns.map(({ master, tone, apts: list }, idx) => (
+              {masterColumns.map(({ master, tone, apts: list }, idx) => {
+                // Single-day blocks share lanes with appointments (side-by-side);
+                // multi-day bands stay full-width background.
+                const masterBlocks = blocksByMaster.get(master.chatId as number) ?? [];
+                const singleDayBlocks = masterBlocks.filter((b) => !(b.endDate && b.endDate !== isoDate));
+                const laneMap = computeColumnLanes(list, singleDayBlocks);
+                return (
                 <div
                   key={master.chatId}
                   className="flex-1 min-w-[100px] sm:min-w-[180px] border-r border-slate-200 dark:border-white/10 last:border-r-0 relative"
@@ -811,18 +817,12 @@ export function SalonDayView({
 
                     {/* Appointment blocks */}
                     {(() => {
-                    // Google-Calendar-style overlap lanes — bookings sharing a
-                    // window split this column into side-by-side sub-columns.
-                    const laneMap = computeLanes(
-                      list.map((a) => {
-                        const start = parseHHMMToMinutes(a.time);
-                        return { id: a.id, startMin: start, endMin: start + Math.max(15, a.duration ?? 60) };
-                      }),
-                    );
+                    // Shared overlap lanes (appointments + single-day blocks)
+                    // computed once per column above in `laneMap`.
                     return list.map((a) => {
                       const top = timeToTop(a.time);
                       const height = durationToHeight(a.duration);
-                      const placement = laneMap.get(a.id) ?? { lane: 0, lanes: 1 };
+                      const placement = laneMap.get(laneKey("apt", a.id)) ?? { lane: 0, lanes: 1 };
                       const laneWidthPct = (100 - 4) / placement.lanes;
                       const laneLeftPct = placement.lane * laneWidthPct;
                       const isCancelled = !!a.cancelled || a.status === "cancelled" || a.status === "rejected";
@@ -956,7 +956,7 @@ export function SalonDayView({
                         opens a styled ConfirmDialog (replaces the old
                         window.confirm); on confirm calls `onDeleteBlock`
                         to soft-cancel the row. */}
-                    {(blocksByMaster.get(master.chatId as number) ?? []).map((b) => {
+                    {masterBlocks.map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== isoDate;
                       const top = isMultiDay ? 0 : timeToTop(b.time);
                       const height = isMultiDay
@@ -964,6 +964,15 @@ export function SalonDayView({
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
                       const isPast = blockIsPast.get(b.id) === true;
                       const dimClass = isPast ? "opacity-70 saturate-50" : "";
+                      const placement = isMultiDay
+                        ? null
+                        : laneMap.get(laneKey("block", b.id)) ?? { lane: 0, lanes: 1 };
+                      const laneStyle = placement
+                        ? {
+                            left: `calc(${placement.lane * ((100 - 4) / placement.lanes)}% + 2px)`,
+                            width: `calc(${(100 - 4) / placement.lanes}% - 2px)`,
+                          }
+                        : { left: 4, right: 4 };
                       return (
                         <button
                           type="button"
@@ -985,10 +994,11 @@ export function SalonDayView({
                               setBlockToDelete(b.id);
                             }
                           }}
-                          className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity ${dimClass}`}
+                          className={`absolute rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity ${dimClass}`}
                           style={{
                             top,
                             height,
+                            ...laneStyle,
                             background:
                               "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
                             borderColor: "rgba(100,116,139,0.6)",
@@ -1008,7 +1018,8 @@ export function SalonDayView({
                     })}
                   </DragCreateLayer>
                 </div>
-              ))}
+                );
+              })}
 
               {/* Current-time red line — spans all columns */}
               {currentTimeVisible && (

@@ -529,3 +529,56 @@ describe("SalonWeekView — Google-Calendar popovers", () => {
     expect(onCreateAt.mock.calls[0]![0]).toEqual(expect.objectContaining({ modifier: "none" }));
   });
 });
+
+describe("SalonWeekView — blocks share lanes with appointments", () => {
+  it("renders a reservation block side-by-side with an overlapping appointment", () => {
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[apt({ id: 1, date: "2026-05-10", time: "10:00", duration: 60 })]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+        tenantId="t_demo"
+        services={services}
+        blocks={[
+          { id: "b1", date: "2026-05-10", time: "10:00", durationMin: 60, masterId: 100, type: "reservation" },
+        ]}
+      />,
+      "en",
+    );
+    const event = screen.getByTestId("week-view-event");
+    const block = screen.getByTestId("week-view-block");
+    // Two items overlap → 2 lanes → each (100-4)/2 = 48% wide.
+    expect(event.style.width).toBe("calc(48% - 2px)");
+    expect(block.style.width).toBe("calc(48% - 2px)");
+    // Distinct lanes: one at the left edge, the other offset by 48%.
+    const lefts = [event.style.left, block.style.left].sort();
+    expect(lefts).toEqual(["calc(0% + 2px)", "calc(48% + 2px)"]);
+  });
+
+  it("keeps a multi-day time_off band full-width (not laned)", () => {
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+        tenantId="t_demo"
+        services={services}
+        blocks={[
+          { id: "v1", date: "2026-05-04", endDate: "2026-05-12", time: "00:00", durationMin: 1440, masterId: 100, type: "time_off" },
+        ]}
+      />,
+      "en",
+    );
+    const band = screen.getAllByTestId("week-view-block")[0]!;
+    // Full-width band uses numeric left/right insets, not lane calc geometry.
+    expect(band.style.left).toBe("4px");
+    expect(band.style.right).toBe("4px");
+    expect(band.style.width).toBe("");
+  });
+});

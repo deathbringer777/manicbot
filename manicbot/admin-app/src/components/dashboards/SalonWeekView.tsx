@@ -29,7 +29,7 @@ import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
-import { computeLanes } from "~/lib/calendar/overlapLanes";
+import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
 
@@ -421,6 +421,11 @@ export function SalonWeekView({
               const iso = fmtIsoDate(day);
               const isTodayCol = iso === todayIso;
               const list = aptsByDate.get(iso) ?? [];
+              const dayBlocks = blocksByDate.get(iso) ?? [];
+              // Single-day blocks share lanes with appointments (Google-style
+              // side-by-side); multi-day bands stay full-width background.
+              const singleDayBlocks = dayBlocks.filter((b) => !(b.endDate && b.endDate !== iso));
+              const laneMap = computeColumnLanes(list, singleDayBlocks);
               return (
                 <div
                   key={iso}
@@ -513,19 +518,12 @@ export function SalonWeekView({
                       </div>
                     ))}
                     {(() => {
-                    // Google-Calendar-style overlap lanes: bookings sharing a
-                    // time window split the column into side-by-side sub-columns
-                    // instead of stacking and hiding each other.
-                    const laneMap = computeLanes(
-                      list.map((a) => {
-                        const start = parseHHMMToMinutes(a.time);
-                        return { id: a.id, startMin: start, endMin: start + Math.max(15, a.duration ?? 60) };
-                      }),
-                    );
+                    // Shared overlap lanes (appointments + single-day blocks)
+                    // computed once per column above in `laneMap`.
                     return list.map((a) => {
                       const top = timeToTop(a.time);
                       const height = durationToHeight(a.duration);
-                      const placement = laneMap.get(a.id) ?? { lane: 0, lanes: 1 };
+                      const placement = laneMap.get(laneKey("apt", a.id)) ?? { lane: 0, lanes: 1 };
                       // Width/offset within the column, in %, leaving a 4% gutter
                       // on the right so the rightmost block doesn't touch the
                       // column border.
@@ -621,15 +619,24 @@ export function SalonWeekView({
                       </div>
                     )}
 
-                    {/* Blocks (reservation / time_off) — calendar overhaul.
-                        Stacked with appointments; multiple masters' blocks
-                        in the same time window simply layer up. */}
-                    {(blocksByDate.get(iso) ?? []).map((b) => {
+                    {/* Blocks (reservation / time_off). Single-day blocks share
+                        the SAME overlap lanes as appointments (side-by-side);
+                        multi-day bands stay full-width background. */}
+                    {dayBlocks.map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== iso;
                       const top = isMultiDay ? 0 : timeToTop(b.time);
                       const height = isMultiDay
                         ? TOTAL_HOURS * HOUR_HEIGHT
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
+                      const placement = isMultiDay
+                        ? null
+                        : laneMap.get(laneKey("block", b.id)) ?? { lane: 0, lanes: 1 };
+                      const laneStyle = placement
+                        ? {
+                            left: `calc(${placement.lane * ((100 - 4) / placement.lanes)}% + 2px)`,
+                            width: `calc(${(100 - 4) / placement.lanes}% - 2px)`,
+                          }
+                        : { left: 4, right: 4 };
                       return (
                         <button
                           type="button"
@@ -650,10 +657,11 @@ export function SalonWeekView({
                               setBlockToDelete(b.id);
                             }
                           }}
-                          className="absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left overflow-hidden border border-dashed flex items-center gap-1 hover:opacity-80 transition-opacity"
+                          className="absolute rounded-lg px-1.5 py-1 text-left overflow-hidden border border-dashed flex items-center gap-1 hover:opacity-80 transition-opacity"
                           style={{
                             top,
                             height,
+                            ...laneStyle,
                             background:
                               "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
                             borderColor: "rgba(100,116,139,0.6)",

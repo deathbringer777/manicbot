@@ -580,7 +580,8 @@ export function AppointmentDetailPanel({
             {cardBody}
           </div>
         </div>
-      ) : (
+      ) : confirmDelete ? null : (
+        // Delete confirm is full-screen — don't leave the read popover layered.
         <AnchoredPopover
           anchorRect={anchorRect ?? null}
           onClose={onClose}

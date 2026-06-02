@@ -37,14 +37,12 @@ jobs:
         with:
           fetch-depth: 0  # full history needed for gitleaks
 
-      # GIT-02: a first attempt to replace this with a pinned `gitleaks detect`
-      # binary was REVERTED — the binary scans the FULL git history and tripped
-      # on pre-existing FALSE POSITIVES (env-var NAME strings, e.g.
-      # demoBots.js whKey:'WH_SECRET_SALON1', plus worker.js/calendar.js), which
-      # the action's push-delta scan never re-flags. A proper redo must scope to
-      # the push range (gitleaks git --log-opts=<before>..<after>) and/or extend
-      # .gitleaksignore — not a naive full-history scan. The Node-20 deprecation
-      # below is a warning, not a hard failure; bump when upstream ships node24.
+      # GIT-02 note: replacing this step with a pinned gitleaks binary was
+      # reverted — a naive full-history scan re-flags pre-existing false
+      # positives (env-var NAME identifiers in a few demo/config files) that the
+      # action's push-delta scan never re-flags. A proper redo must scope to the
+      # push range or extend .gitleaksignore. The Node-20 deprecation below is a
+      # warning, not a hard failure; bump when upstream ships a node24 build.
       - name: Gitleaks — detect secrets in history
         uses: gitleaks/gitleaks-action@v2
         env:

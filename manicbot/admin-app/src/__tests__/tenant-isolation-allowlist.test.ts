@@ -1,80 +1,77 @@
 /**
- * Self-consistency check for the tenant-isolation scanner allowlist.
+ * Self-consistency check for the tenant-isolation scanner's EXCEPTION mechanism.
  *
- * Background — scripts/check-tenant-isolation.mjs uses (file, line)-keyed
- * entries to whitelist intentional cross-tenant queries (e.g. the global
- * bot_id collision check in salon.ts). PR #67 added unrelated logic above
- * `salon.ts:883`, the line drifted to 913, and the allowlist key went
- * stale. The scanner then failed on every push to main for two days,
- * silently skipping the Worker + Pages deploy jobs (PR #69 was the fix —
- * just bumped the line number).
+ * History: the scanner used to keep a brittle (file, line)-keyed ALLOWLIST.
+ * Line numbers drifted constantly (the salon.ts bot_id collision check was
+ * re-bumped ~30×: 883 → … → 2143) and a stale key once failed CI on main for
+ * two days, silently skipping the deploy jobs. The scanner was rewritten
+ * (2026-06-02) to use CONTENT-ANCHORED inline directives —
+ * `// tenant-scan-ignore: <reason>` on the line above an intentional
+ * cross-tenant / authorized-by-other-means query — which survive line drift.
  *
- * This test pins each ALLOWLIST entry to a real `.from(<TABLE>)` callsite
- * at the exact recorded line, so the next time a line drifts the test
- * suite fails locally before merge instead of the CI deploy gate failing
- * silently on main.
- *
- * Maintenance: when ALLOWLIST changes, this test re-runs automatically. If
- * an entry is removed because the underlying query is gone, the test also
- * checks no stale entries linger.
+ * This test pins the new mechanism: every directive must (a) carry a non-empty
+ * justification, and (b) sit immediately above a real Drizzle query callsite,
+ * so a directive can't rot in place after the query it annotated was moved or
+ * deleted (the successor to the old "no stale entries" check).
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const SCANNER_PATH = join(
-  process.cwd(),
-  "scripts/check-tenant-isolation.mjs",
-);
+const ROUTERS_DIR = join(process.cwd(), "src", "server", "api", "routers");
 
-/** Extract the string contents of the ALLOWLIST set literal from the scanner. */
-function extractAllowlistEntries(): string[] {
-  const src = readFileSync(SCANNER_PATH, "utf8");
-  const match = src.match(/const\s+ALLOWLIST\s*=\s*new\s+Set\(\s*\[([\s\S]*?)\]\s*\)/);
-  if (!match) {
-    throw new Error("ALLOWLIST literal not found in scanner — has the script been restructured?");
+function listRouterFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...listRouterFiles(full));
+    else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts")) out.push(full);
   }
-  // Walk the literal line-by-line so apostrophes inside `//` comments
-  // (e.g. "scanner's") don't break the extraction.
-  const entries: string[] = [];
-  for (const rawLine of match[1]!.split("\n")) {
-    const stripped = rawLine.replace(/\/\/.*$/, "").trim();
-    const m = stripped.match(/^"([^"]+)"\s*,?$/);
-    if (m) entries.push(m[1]!);
-  }
-  return entries;
+  return out;
 }
 
-describe("tenant-isolation scanner allowlist", () => {
-  const entries = extractAllowlistEntries();
+type Directive = { file: string; line: number; reason: string; following: string };
 
-  it("parses at least one entry (script structure invariant)", () => {
-    // If this fails, the regex above is wrong, not the codebase.
-    expect(entries.length).toBeGreaterThan(0);
+function collectDirectives(): Directive[] {
+  const out: Directive[] = [];
+  for (const file of listRouterFiles(ROUTERS_DIR)) {
+    const lines = readFileSync(file, "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i]!.match(/tenant-scan-ignore:?(.*)$/);
+      if (!m) continue;
+      const rel = file.slice(Math.max(0, file.indexOf("src/")));
+      out.push({
+        file: rel,
+        line: i + 1,
+        reason: m[1]!.trim(),
+        following: lines.slice(i + 1, i + 6).join("\n"),
+      });
+    }
+  }
+  return out;
+}
+
+describe("tenant-isolation scanner — content-anchored directives", () => {
+  const directives = collectDirectives();
+
+  it("the codebase uses inline directives (mechanism is wired up)", () => {
+    expect(directives.length).toBeGreaterThan(0);
   });
 
-  it.each(entries)("entry %s points to a real .from() callsite", (entry) => {
-    // Each entry must be "<relative path>:<line>" with a 1-based line number.
-    const m = entry.match(/^(.+):(\d+)$/);
-    expect(m, `entry "${entry}" is not in <path>:<line> format`).not.toBeNull();
-    const [, relPath, lineStr] = m!;
-    const lineNo = Number(lineStr);
-    const fullPath = join(process.cwd(), relPath!);
-    expect(existsSync(fullPath), `entry "${entry}" points to a missing file`).toBe(true);
-
-    const lines = readFileSync(fullPath, "utf8").split("\n");
-    // 1-based line number.
-    const line = lines[lineNo - 1];
-    expect(line, `entry "${entry}" is past EOF`).toBeDefined();
-    // The whole point of the allowlist is to exempt a specific `.from(<table>)`
-    // callsite. If the line no longer contains `.from(`, the underlying query
-    // has moved or been deleted — either way the entry needs to be re-anchored
-    // or removed.
-    expect(
-      /\.from\s*\(\s*[a-zA-Z_]/.test(line!),
-      `entry "${entry}" no longer points to a .from(<table>) call — got:\n  ${line}\n` +
-        `If the query was renamed/moved, update the allowlist line number.\n` +
-        `If the query was deleted, remove the entry.`,
-    ).toBe(true);
-  });
+  it.each(directives.map((d) => [`${d.file}:${d.line}`, d] as const))(
+    "%s carries a justification and anchors a real query",
+    (_label, d) => {
+      // (a) must explain WHY — a bare `// tenant-scan-ignore` is not allowed.
+      expect(
+        d.reason.length,
+        `directive at ${d.file}:${d.line} has no reason after the colon`,
+      ).toBeGreaterThanOrEqual(12);
+      // (b) must sit just above a real Drizzle query callsite (not orphaned).
+      expect(
+        /\.(from|update|delete|insert)\s*\(\s*[a-zA-Z_]/.test(d.following),
+        `directive at ${d.file}:${d.line} does not anchor a .from/.update/.delete/.insert ` +
+          `callsite within 5 lines — re-anchor it to the query or remove it`,
+      ).toBe(true);
+    },
+  );
 });

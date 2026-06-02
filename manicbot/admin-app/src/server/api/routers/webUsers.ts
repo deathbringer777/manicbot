@@ -1299,6 +1299,7 @@ export const webUsersRouter = createTRPCRouter({
           status: masterInvitations.status,
           tokenExpiresAt: masterInvitations.tokenExpiresAt,
         })
+        // tenant-scan-ignore: invitation fetched by id; authorized by the caller-email === invitation-email check below.
         .from(masterInvitations)
         .where(eq(masterInvitations.id, input.invitationId))
         .limit(1);
@@ -1352,7 +1353,7 @@ export const webUsersRouter = createTRPCRouter({
       await ctx.db
         .update(masterInvitations)
         .set({ status: "accepted", acceptedAt: now, acceptedMasterId: syntheticChatId })
-        .where(eq(masterInvitations.id, inv.id));
+        .where(and(eq(masterInvitations.id, inv.id), eq(masterInvitations.tenantId, inv.tenantId)));
 
       // Make the just-joined salon the caller's ACTIVE tenant so accepting
       // actually lands them in it (multi-tenant switcher; migration 0097).
@@ -1482,7 +1483,7 @@ export const webUsersRouter = createTRPCRouter({
       await ctx.db
         .update(masterInvitations)
         .set({ status: "accepted", acceptedAt: now, acceptedMasterId: syntheticChatId })
-        .where(eq(masterInvitations.id, inv.id));
+        .where(and(eq(masterInvitations.id, inv.id), eq(masterInvitations.tenantId, inv.tenantId)));
 
       // Mint a one-time login token (mirror existing post-verify flow).
       const loginToken = generateToken();

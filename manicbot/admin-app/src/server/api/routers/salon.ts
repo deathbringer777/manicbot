@@ -1556,6 +1556,7 @@ export const salonRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // tenant-scan-ignore: load-by-id to read the row's tenant; assertTenantOwner(req.tenantId) authorizes immediately below.
       const [req] = await ctx.db
         .select()
         .from(tenantActionRequests)

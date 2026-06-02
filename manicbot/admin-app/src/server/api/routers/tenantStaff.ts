@@ -376,6 +376,7 @@ export const tenantStaffRouter = createTRPCRouter({
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many attempts. Try again later." });
       }
 
+      // tenant-scan-ignore: elevation code fetched by globally-unique id; authorized by the ownerUserId check below.
       const rows = await ctx.db
         .select()
         .from(permissionElevationCodes)
@@ -398,6 +399,7 @@ export const tenantStaffRouter = createTRPCRouter({
       const inputHash = await hashToken(input.code);
       if (!timingSafeEqualHex(inputHash, row.codeHash)) {
         // Increment attempts
+        // tenant-scan-ignore: same elevation row authorized by ownerUserId above; bumps the failed-attempt counter.
         await ctx.db
           .update(permissionElevationCodes)
           .set({ attempts: (row.attempts ?? 0) + 1 })
@@ -420,6 +422,7 @@ export const tenantStaffRouter = createTRPCRouter({
         });
       }
 
+      // tenant-scan-ignore: same elevation row authorized by ownerUserId above; marks the code consumed.
       await ctx.db
         .update(permissionElevationCodes)
         .set({ consumedAt: now })
@@ -497,6 +500,7 @@ export const tenantStaffRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      // tenant-scan-ignore: load-by-id to read the row's tenant; ownerOnlyForTenant(req.tenantId) authorizes immediately below.
       const [req] = await ctx.db
         .select()
         .from(tenantActionRequests)

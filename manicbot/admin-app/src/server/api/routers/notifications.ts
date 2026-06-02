@@ -150,7 +150,7 @@ export const notificationsRouter = createTRPCRouter({
       }
       await ctx.db
         .delete(userNotifications)
-        .where(eq(userNotifications.id, input.id));
+        .where(and(eq(userNotifications.id, input.id), eq(userNotifications.webUserId, uid)));
       return { ok: true };
     }),
 

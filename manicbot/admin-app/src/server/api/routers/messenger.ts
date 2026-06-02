@@ -38,6 +38,7 @@ import {
 import { ulid } from "~/lib/ulid";
 import { sanitizeText } from "~/server/security/sanitize";
 import { computeDmKey } from "~/server/api/messenger/dmKey";
+import { isHttpsUrl } from "~/server/lib/url";
 import {
   assertMessengerTenantAccess,
   assertThreadMember,
@@ -476,7 +477,7 @@ export const messengerRouter = createTRPCRouter({
         // but the URL is bounded to keep the JSON blob small.
         attachments: z
           .array(z.object({
-            url: z.string().url().max(MAX_ATTACHMENT_URL_LEN),
+            url: z.string().url().max(MAX_ATTACHMENT_URL_LEN).refine(isHttpsUrl, { message: "url_must_be_https" }),
             kind: z.literal("image").default("image"),
           }))
           .max(MAX_ATTACHMENTS_PER_MESSAGE)

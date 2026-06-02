@@ -6,12 +6,13 @@ import { Fragment, type ReactNode } from "react";
  * Zero-dependency Markdown renderer scoped to the blog. The blog is the only
  * place we ship author-controlled prose, so we keep parsing tight: only the
  * subset the editorial team actually uses (H2/H3, paragraphs, ul/ol, bold,
- * italic, inline links, hr, blockquote, inline code, soft line breaks).
+ * italic, inline links, images, hr, blockquote, inline code, soft line breaks).
  *
  * Why not react-markdown:
- *  - +60 KB on a static blog page is a bad trade for 7 element types.
- *  - The content is trusted (lives in our own `articles.ts`), so we don't need
- *    GFM/HTML pass-through or sanitisation beyond escaping inline-link hrefs.
+ *  - +60 KB on a static blog page is a bad trade for a handful of element types.
+ *  - The content is trusted (lives in our own `posts/*.ts`), so we don't need
+ *    GFM/HTML pass-through or sanitisation beyond escaping inline-link hrefs and
+ *    hard-restricting image hosts.
  *  - Tailwind 4 in this repo doesn't ship `@tailwindcss/typography`, so we'd
  *    style every element manually anyway.
  *
@@ -21,8 +22,16 @@ import { Fragment, type ReactNode } from "react";
  *  - `- item` or `* item` → unordered list; `1. item` → ordered list
  *  - `> quote` → blockquote
  *  - `---` on its own line → hr
+ *  - `![alt](url)` on its own line → figure+caption; also valid inline
  *  - inline: `**bold**`, `*italic*`, `` `code` ``, `[text](https://url)`
+ *
+ * Images render as a plain lazy `<img>` (not next/image) to keep this file
+ * dependency-free; the src host is restricted to the two CDNs whitelisted in
+ * next.config.js so a content typo can't smuggle in an arbitrary origin.
  */
+
+/** Only these image hosts may render — mirrors next.config.js remotePatterns. */
+const SAFE_IMG_SRC = /^https:\/\/(images\.unsplash\.com|images\.pexels\.com)\//i;
 
 type Token =
   | { kind: "heading"; level: 2 | 3; text: string }
@@ -30,6 +39,7 @@ type Token =
   | { kind: "ul"; items: string[] }
   | { kind: "ol"; items: string[] }
   | { kind: "blockquote"; text: string }
+  | { kind: "image"; url: string; alt: string }
   | { kind: "hr" };
 
 function tokenize(md: string): Token[] {
@@ -61,6 +71,14 @@ function tokenize(md: string): Token[] {
     const line = raw.trimEnd();
     if (line.trim() === "") {
       flush();
+      continue;
+    }
+    // A line that is *only* an image becomes its own figure block, regardless
+    // of any paragraph currently accumulating above it.
+    const imgBlock = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/.exec(line.trim());
+    if (imgBlock) {
+      flush();
+      tokens.push({ kind: "image", url: imgBlock[2] ?? "", alt: imgBlock[1] ?? "" });
       continue;
     }
     const h = /^(#{2,3})\s+(.+)$/.exec(line);
@@ -108,9 +126,11 @@ function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let rest = text;
   let key = 0;
-  // Greedy left-to-right scan for the next markdown token.
+  // Greedy left-to-right scan for the next markdown token. Image (`![]()`) is
+  // listed before link (`[]()`) so a leading `!` is consumed as an image, not
+  // as stray text + a link.
   const TOKEN_RE =
-    /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/;
+    /(!\[([^\]]*)\]\(([^)]+)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/;
   while (rest.length > 0) {
     const m = TOKEN_RE.exec(rest);
     if (!m) {
@@ -119,20 +139,37 @@ function renderInline(text: string): ReactNode[] {
     }
     if (m.index > 0) nodes.push(rest.slice(0, m.index));
     if (m[1]) {
-      nodes.push(<strong key={`s${key++}`}>{m[2]}</strong>);
-    } else if (m[3]) {
-      nodes.push(<em key={`e${key++}`}>{m[4]}</em>);
-    } else if (m[5]) {
+      const url = m[3] ?? "";
+      if (SAFE_IMG_SRC.test(url)) {
+        nodes.push(
+          <img
+            key={`img${key++}`}
+            src={url}
+            alt={m[2] ?? ""}
+            loading="lazy"
+            decoding="async"
+            className="inline-block max-h-80 w-auto rounded-lg align-middle"
+          />,
+        );
+      } else if (m[2]) {
+        // Unknown host — fall back to the alt text so meaning isn't lost.
+        nodes.push(m[2]);
+      }
+    } else if (m[4]) {
+      nodes.push(<strong key={`s${key++}`}>{m[5]}</strong>);
+    } else if (m[6]) {
+      nodes.push(<em key={`e${key++}`}>{m[7]}</em>);
+    } else if (m[8]) {
       nodes.push(
         <code
           key={`c${key++}`}
           className="rounded bg-slate-100 px-1.5 py-0.5 text-[0.95em] font-mono text-violet-700 dark:bg-slate-800 dark:text-violet-300"
         >
-          {m[6]}
+          {m[9]}
         </code>,
       );
-    } else if (m[7]) {
-      const href = m[9] ?? "#";
+    } else if (m[10]) {
+      const href = m[12] ?? "#";
       const safe = /^(https?:|mailto:|\/)/i.test(href) ? href : "#";
       const external = /^https?:/i.test(safe);
       nodes.push(
@@ -144,7 +181,7 @@ function renderInline(text: string): ReactNode[] {
             : {})}
           className="text-violet-600 underline decoration-violet-300 underline-offset-2 hover:text-violet-700 hover:decoration-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
         >
-          {m[8] ?? safe}
+          {m[11] ?? safe}
         </a>,
       );
     }
@@ -234,6 +271,27 @@ export function MarkdownArticle({ source }: { source: string }) {
             >
               {renderInline(t.text)}
             </blockquote>
+          );
+        }
+        if (t.kind === "image") {
+          // Drop a non-whitelisted host rather than render an unknown origin.
+          if (!SAFE_IMG_SRC.test(t.url)) return <Fragment key={idx} />;
+          return (
+            <figure key={idx} className="my-8">
+              {/* eslint-disable-next-line @next/next/no-img-element -- intentional plain <img> to keep this renderer dependency-free; hosts are whitelisted above. */}
+              <img
+                src={t.url}
+                alt={t.alt}
+                loading="lazy"
+                decoding="async"
+                className="w-full h-auto rounded-xl bg-slate-100 dark:bg-slate-800"
+              />
+              {t.alt && (
+                <figcaption className="mt-2 text-center text-xs text-slate-400 dark:text-white/40">
+                  {t.alt}
+                </figcaption>
+              )}
+            </figure>
           );
         }
         if (t.kind === "hr") {

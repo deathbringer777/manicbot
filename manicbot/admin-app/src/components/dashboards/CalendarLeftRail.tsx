@@ -29,8 +29,8 @@
  * via the supplied setters.
  */
 
-import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Eye, EyeOff, Users, Filter, Scissors } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ChevronDown, Eye, EyeOff, Users, Filter, Scissors } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { FilterDropdown } from "~/components/ui/FilterDropdown";
 
@@ -130,6 +130,10 @@ export function CalendarLeftRail({
   const viewMonth = viewMonthProp ?? selectedDate;
   // Local month nav uses an internal callback if the parent didn't supply one.
   const setVm = setViewMonthProp ?? setSelectedDate;
+
+  // «My calendars» collapses to a single header row (dropdown) to save rail
+  // space; expanding reveals the per-master visibility toggles. Default closed.
+  const [calendarsOpen, setCalendarsOpen] = useState(false);
 
   const year = viewMonth.getFullYear();
   const month = viewMonth.getMonth();
@@ -242,23 +246,32 @@ export function CalendarLeftRail({
       {/* My Calendars — vertical list of master toggles, GCal-parity */}
       {masters && masters.length > 0 && hiddenMasterIds && toggleMasterVisible && (
         <section className="glass-card rounded-2xl p-3" data-testid="rail-my-calendars">
-          <header className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+          <header className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setCalendarsOpen((v) => !v)}
+              data-testid="rail-my-calendars-toggle"
+              aria-expanded={calendarsOpen}
+              className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
               <Users className="h-3 w-3" />
               {t("salon.day.myCalendars", lang)}
-            </p>
-            {hiddenMasterIds.size > 0 && showAllMasters && (
+              <span className="text-slate-300 dark:text-slate-600 normal-case tracking-normal">({masters.length})</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${calendarsOpen ? "rotate-180" : ""}`} />
+            </button>
+            {calendarsOpen && hiddenMasterIds.size > 0 && showAllMasters && (
               <button
                 type="button"
                 onClick={showAllMasters}
                 data-testid="rail-show-all-masters"
-                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline"
+                className="text-[10px] font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 underline-offset-2 hover:underline shrink-0"
               >
                 {t("salon.day.showAll", lang)}
               </button>
             )}
           </header>
-          <ul className="space-y-0.5">
+          {calendarsOpen && (
+            <ul className="space-y-0.5 mt-2">
             {masters.map((m, idx) => {
               const tone = MASTER_PALETTE[idx % MASTER_PALETTE.length]!;
               const visible = !hiddenMasterIds.has(m.chatId);
@@ -302,6 +315,7 @@ export function CalendarLeftRail({
               );
             })}
           </ul>
+          )}
         </section>
       )}
 

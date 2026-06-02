@@ -27,6 +27,7 @@ import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { computeLanes } from "~/lib/calendar/overlapLanes";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
+import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
 const HOUR_START = 8;
@@ -62,6 +63,13 @@ interface Props {
   setDate: (d: Date) => void;
   apts: AptRow[];
   masters: MasterRow[];
+  /**
+   * Salon-level working hours from «Godziny pracy». When provided, the week
+   * grid shades non-working time (before open / after close / days off) with
+   * the same gray gradient used for time-off blocks. Optional — God-Mode and
+   * per-master callers omit it (no overlay rendered).
+   */
+  workHours?: WorkHoursState;
   isLoading: boolean;
   lang: Lang;
   onAction?: (id: number | string, status: "confirmed" | "cancelled" | "rejected") => void;
@@ -110,6 +118,32 @@ function durationToHeight(durationMin: number | null | undefined): number {
   return (d / 60) * HOUR_HEIGHT;
 }
 
+/**
+ * Gray-band rects (top/height in px) for a weekday's salon working hours,
+ * clamped to the visible [HOUR_START, HOUR_END] window. `null` (day off) →
+ * one full-height band. Mirrors SalonDayView's per-master overlay geometry.
+ */
+function nonWorkingBands(dh: DayHours): Array<{ top: number; height: number }> {
+  const totalH = TOTAL_HOURS * HOUR_HEIGHT;
+  if (dh === null) return [{ top: 0, height: totalH }];
+  const dayStart = HOUR_START * 60;
+  const dayEnd = HOUR_END * 60;
+  const openMin = parseHHMMToMinutes(dh.open);
+  const closeMin = parseHHMMToMinutes(dh.close);
+  // Invalid range, or hours entirely outside the visible window → whole day off.
+  if (!(closeMin > openMin) || openMin >= dayEnd || closeMin <= dayStart) {
+    return [{ top: 0, height: totalH }];
+  }
+  const startVis = Math.max(openMin, dayStart);
+  const endVis = Math.min(closeMin, dayEnd);
+  const bands: Array<{ top: number; height: number }> = [];
+  const beforeH = ((startVis - dayStart) / 60) * HOUR_HEIGHT;
+  if (beforeH > 0) bands.push({ top: 0, height: beforeH });
+  const afterTop = ((endVis - dayStart) / 60) * HOUR_HEIGHT;
+  if (totalH - afterTop > 0) bands.push({ top: afterTop, height: totalH - afterTop });
+  return bands;
+}
+
 /** Return Mon-anchored ISO dates for the week containing `d`. */
 function weekDays(d: Date): Date[] {
   const monday = new Date(d);
@@ -131,6 +165,7 @@ export function SalonWeekView({
   setDate,
   apts,
   masters,
+  workHours,
   isLoading,
   lang,
   onAction,
@@ -297,56 +332,51 @@ export function SalonWeekView({
 
   return (
     <div className="space-y-3" data-testid="salon-week-view">
-      {/* Header */}
-      <div className="glass-card rounded-2xl p-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white capitalize truncate">{weekLabel}</h2>
-          {isLoading && (
-            <div className="w-3 h-3 rounded-full border-2 border-brand-500/40 border-t-brand-400 animate-spin shrink-0" />
-          )}
+      {/* Monolithic calendar — nav header + hour grid in one card so the week
+          reads as a single block. The empty state lives below the grid (it was
+          previously wedged between the header and the grid). */}
+      <div className="glass-card rounded-2xl overflow-hidden" data-testid="week-view-card">
+        {/* Header */}
+        <div className="p-3 flex items-center justify-between border-b border-slate-200 dark:border-white/10">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white capitalize truncate">{weekLabel}</h2>
+            {isLoading && (
+              <div className="w-3 h-3 rounded-full border-2 border-brand-500/40 border-t-brand-400 animate-spin shrink-0" />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={goPrev}
+              data-testid="week-view-prev"
+              className="p-2 rounded-xl text-brand-600 dark:text-brand-300 bg-brand-500/10 hover:bg-brand-500/20 transition-colors"
+              aria-label={t("salon.week.prev", lang)}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              onClick={goToday}
+              data-testid="week-view-today"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-brand-700 dark:text-brand-300 bg-brand-500/10 hover:bg-brand-500/20 transition-colors"
+            >
+              {t("salon.week.thisWeek", lang)}
+            </button>
+            <button
+              onClick={goNext}
+              data-testid="week-view-next"
+              className="p-2 rounded-xl text-brand-600 dark:text-brand-300 bg-brand-500/10 hover:bg-brand-500/20 transition-colors"
+              aria-label={t("salon.week.next", lang)}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={goPrev}
-            data-testid="week-view-prev"
-            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
-            aria-label={t("salon.week.prev", lang)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={goToday}
-            data-testid="week-view-today"
-            className="px-2 py-1 rounded-lg text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
-          >
-            {t("salon.week.thisWeek", lang)}
-          </button>
-          <button
-            onClick={goNext}
-            data-testid="week-view-next"
-            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
-            aria-label={t("salon.week.next", lang)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
 
-      {/* Empty state when no apts in the entire week */}
-      {aptsByDate.size === 0 && !isLoading && (
-        <div className="glass-card rounded-2xl py-12 px-4 text-center" data-testid="week-view-empty">
-          <CalendarDays className="h-8 w-8 text-slate-400 dark:text-slate-600 mx-auto mb-2" />
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t("salon.cal.noUpcoming", lang)}</p>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t("salon.empty.apts", lang)}</p>
-        </div>
-      )}
-
-      {/* Hour grid + visible day columns (3 on mobile, 7 on desktop) */}
-      <div
-        ref={scrollerRef}
-        className="glass-card rounded-2xl overflow-auto"
-        style={{ maxHeight: "clamp(400px, calc(100dvh - 280px), 90dvh)" }}
-      >
+        {/* Hour grid + visible day columns (3 on mobile, 7 on desktop) */}
+        <div
+          ref={scrollerRef}
+          className="overflow-auto"
+          style={{ maxHeight: "clamp(400px, calc(100dvh - 280px), 90dvh)" }}
+        >
         <div
           className="flex"
           style={{ minWidth: 80 + visibleDays.length * colWidth }}
@@ -417,6 +447,26 @@ export function SalonWeekView({
                     onCreateAt={onCreateAt}
                     testIdPrefix="week-view-drag"
                   >
+                    {/* Non-working hours — gray diagonal gradient (same look as
+                        time-off blocks), driven by salon «Godziny pracy».
+                        Rendered first so grid lines + appointments paint over
+                        it; pointer-events-none keeps drag-to-create working. */}
+                    {workHours && (() => {
+                      const dh = workHours[WEEKDAY_KEYS[(day.getDay() + 6) % 7]!] ?? null;
+                      return nonWorkingBands(dh).map((b, bi) => (
+                        <div
+                          key={`nw-${bi}`}
+                          data-testid="week-view-non-working"
+                          className="absolute left-0 right-0 pointer-events-none"
+                          style={{
+                            top: b.top,
+                            height: b.height,
+                            background:
+                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                          }}
+                        />
+                      ));
+                    })()}
                     {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
                       <div key={`h-${i}`}>
                         {i > 0 && (
@@ -597,6 +647,17 @@ export function SalonWeekView({
           </div>
         </div>
       </div>
+      </div>
+
+      {/* Empty state — below the calendar so the week grid reads as one
+          monolithic block (previously wedged between header and grid). */}
+      {aptsByDate.size === 0 && !isLoading && (
+        <div className="glass-card rounded-2xl py-12 px-4 text-center" data-testid="week-view-empty">
+          <CalendarDays className="h-8 w-8 text-slate-400 dark:text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("salon.cal.noUpcoming", lang)}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t("salon.empty.apts", lang)}</p>
+        </div>
+      )}
 
       {/* Selected apt drawer — rich AppointmentDetailPanel (status actions,
           reschedule, «Профиль клиента») when the parent supplies tenantId +

@@ -1666,8 +1666,20 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
-  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
+  const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" || tab === "appointments" });
   const botStatus = api.salon.getBotStatus.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" });
+
+  // Salon working hours («Godziny pracy») → drives the gray non-working overlay
+  // on the week grid. hydrateWorkHours normalizes both the per-day JSON and the
+  // legacy {from,to} shape into a full WorkHoursState (falls back to defaults
+  // while the profile query is still loading).
+  const salonWorkHours = useMemo(
+    // `salon` is typed loosely ({}) on the query result; hydrateWorkHours takes
+    // unknown and normalizes the per-day JSON / legacy shape, so narrow just the
+    // workHours field rather than widening the whole row.
+    () => hydrateWorkHours((profile.data?.salon as { workHours?: unknown } | undefined)?.workHours),
+    [profile.data],
+  );
 
   // Optimistic status state — mirrors `pendingMoves` below, but for status
   // mutations (confirm / cancel / reject / no-show). Without this the click
@@ -2207,6 +2219,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               masters={(mastersList.data ?? []) as any}
               isLoading={weekApts.isLoading || mastersList.isLoading}
               lang={lang}
+              workHours={salonWorkHours}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
               blocks={blockRows}

@@ -152,6 +152,8 @@ describe("CalendarLeftRail", () => {
         "en",
       );
       expect(screen.getByTestId("rail-my-calendars")).toBeTruthy();
+      // List is collapsed by default — expand to reveal the per-master toggles.
+      fireEvent.click(screen.getByTestId("rail-my-calendars-toggle"));
       const toggles = screen.getAllByTestId("rail-master-toggle");
       expect(toggles.length).toBe(3);
       // All visible by default
@@ -186,6 +188,7 @@ describe("CalendarLeftRail", () => {
         />,
         "en",
       );
+      fireEvent.click(screen.getByTestId("rail-my-calendars-toggle"));
       const toggles = screen.getAllByTestId("rail-master-toggle");
       const olga = toggles.find((t) => t.getAttribute("data-master-id") === "200");
       fireEvent.click(olga!);
@@ -205,6 +208,7 @@ describe("CalendarLeftRail", () => {
         />,
         "en",
       );
+      // Collapsed by default → «show all» stays hidden regardless of state.
       expect(screen.queryByTestId("rail-show-all-masters")).toBeNull();
       rerender(
         <CalendarLeftRail
@@ -217,6 +221,8 @@ describe("CalendarLeftRail", () => {
           showAllMasters={() => undefined}
         />,
       );
+      // Expand the list — «show all» now surfaces because a master is hidden.
+      fireEvent.click(screen.getByTestId("rail-my-calendars-toggle"));
       expect(screen.getByTestId("rail-show-all-masters")).toBeTruthy();
     });
   });

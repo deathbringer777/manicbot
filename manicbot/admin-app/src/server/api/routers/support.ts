@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { sendSupportReplyEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
 import { signUploadToken } from "~/server/lib/uploadToken";
+import { isHttpsUrl } from "~/server/lib/url";
 import { env } from "~/env";
 import type { Lang } from "~/lib/i18n";
 import { notifyWebUser, notifyManyWebUsers } from "~/server/services/notifyWebUser";
@@ -107,7 +108,7 @@ export const supportRouter = createTRPCRouter({
     .input(z.object({
       ticketId: z.string(),
       text: z.string().min(1),
-      attachmentUrl: z.string().max(2000).optional(),
+      attachmentUrl: z.string().max(2000).refine(isHttpsUrl, { message: "url_must_be_https" }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertSupport(ctx);
@@ -275,7 +276,7 @@ export const supportRouter = createTRPCRouter({
     .input(z.object({
       ticketId: z.string(),
       text: z.string().min(1).max(5000),
-      attachmentUrl: z.string().max(2000).optional(),
+      attachmentUrl: z.string().max(2000).refine(isHttpsUrl, { message: "url_must_be_https" }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const filter = myTicketsFilter(ctx);

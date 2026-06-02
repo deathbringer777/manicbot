@@ -26,6 +26,11 @@ paths = [
 # (commit 17af5f1, replaced with "abc" in bca6631 but still in PR diff range).
 regexes = [
   '''abcdef123456''',
+  # No-look-alike base32 alphabet (no 0/O/1/I) for human-typable codes:
+  # referral codes (routers/referrals.ts) and admin subscription grant codes
+  # (routers/subscriptionGrantCodes.ts). A fixed public constant, not a
+  # credential — gitleaks' entropy heuristic flags it as generic-api-key.
+  '''ABCDEFGHJKLMNPQRSTUVWXYZ23456789''',
 ]
 
 # Whole-commit allowlist for the historical finding so the PR diff scan

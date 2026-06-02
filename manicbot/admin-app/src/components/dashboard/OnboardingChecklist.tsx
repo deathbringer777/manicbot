@@ -311,7 +311,7 @@ function StepRow({
             done
               ? "bg-emerald-500/20 text-emerald-400"
               : isNext
-              ? "border-2 border-violet-500 bg-violet-500/10 text-violet-500"
+              ? "border-2 border-violet-500 bg-violet-500/10 text-brand-500"
               : "border-2 border-foreground/25 bg-transparent text-transparent"
           }`}
         >
@@ -328,8 +328,8 @@ function StepRow({
           done
             ? "text-muted-foreground/60 line-through"
             : isNext
-            ? "font-semibold text-foreground hover:text-violet-600 dark:hover:text-violet-300"
-            : "text-foreground/80 hover:text-violet-600 dark:hover:text-violet-300"
+            ? "font-semibold text-foreground hover:text-violet-600 dark:hover:text-brand-300"
+            : "text-foreground/80 hover:text-violet-600 dark:hover:text-brand-300"
         }`}
       >
         {t(step.labelKey, lang)}

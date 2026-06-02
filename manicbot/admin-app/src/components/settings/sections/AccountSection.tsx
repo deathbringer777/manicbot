@@ -854,7 +854,7 @@ export function AccountSection() {
                   type="text"
                   readOnly
                   value={friendlyRoleName(targetRole, lang)}
-                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-violet-500/20 dark:border-violet-500/20 rounded-xl px-4 py-3 text-sm text-violet-500 dark:text-violet-400 outline-none cursor-default select-none font-medium"
+                  className="w-full bg-slate-50 dark:bg-slate-900/70 border border-violet-500/20 dark:border-violet-500/20 rounded-xl px-4 py-3 text-sm text-brand-500 dark:text-violet-400 outline-none cursor-default select-none font-medium"
                 />
               </div>
               <div>

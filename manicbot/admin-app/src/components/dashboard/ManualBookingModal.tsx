@@ -32,7 +32,7 @@ interface Props {
 }
 
 const FIELD_BASE =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
 
 const LABEL =
   "mb-1 block text-xs font-medium text-slate-600 dark:text-white/70";
@@ -726,7 +726,7 @@ function DatePopover({ value, onChange, lang }: { value: string; onChange: (v: s
         <button
           type="button"
           onClick={() => pick(today)}
-          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-violet-300"
+          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-brand-300"
         >
           {t("appointments.manual.today", lang)}
         </button>
@@ -896,7 +896,7 @@ function TimePopover({ value, onChange, lang }: { value: string; onChange: (v: s
         <button
           type="button"
           onClick={pickNow}
-          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-violet-300"
+          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-brand-300"
         >
           {t("appointments.manual.now", lang)}
         </button>

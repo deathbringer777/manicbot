@@ -278,7 +278,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
                     if (status.kind === "error") setStatus({ kind: "idle" });
                   }}
                   placeholder={labels.emailPh}
-                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60"
                 />
               </div>
               <div>
@@ -287,7 +287,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder={`${labels.name} — ${labels.namePh}`}
-                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60"
                 />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{labels.hint}</p>

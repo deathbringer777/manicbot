@@ -13,6 +13,10 @@
  * that is exactly what getSlots() supports today. Working days are a 0..6
  * weekday set (0=Sun … 6=Sat, matching Date.getUTCDay); booking treats an empty
  * set as "every day", so we seed Mon–Sat defaults (Sunday off).
+ *
+ * `disabled` (with an optional `notice`) renders the editor read-only — used on
+ * the master dashboard when the salon-level policy is `salon_only`. `saveLabel`
+ * overrides the button text (e.g. "Send for approval" under `master_approval`).
  */
 import { useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
@@ -53,6 +57,12 @@ export interface MasterScheduleEditorProps {
   workDays: unknown;
   saving: boolean;
   saved?: boolean;
+  /** Read-only mode (e.g. salon_only policy) — inputs + Save are disabled. */
+  disabled?: boolean;
+  /** Banner shown above the editor (e.g. "Working hours are set by the salon"). */
+  notice?: string | null;
+  /** Overrides the Save button label (e.g. "Send for approval"). */
+  saveLabel?: string;
   lang: Lang;
   /** Receives the serialized `{from,to}` string + the serialized 0..6 day array. */
   onSave: (workHours: string, workDays: string) => void;
@@ -64,6 +74,9 @@ export function MasterScheduleEditor({
   workDays,
   saving,
   saved = false,
+  disabled = false,
+  notice = null,
+  saveLabel,
   lang,
   onSave,
   testIdPrefix = "master-schedule",
@@ -78,15 +91,18 @@ export function MasterScheduleEditor({
   );
   const [error, setError] = useState<string | null>(null);
 
-  const toggleDay = (dow: number) =>
+  const toggleDay = (dow: number) => {
+    if (disabled) return;
     setDows((prev) => {
       const next = new Set(prev);
       if (next.has(dow)) next.delete(dow);
       else next.add(dow);
       return next;
     });
+  };
 
   const handleSave = () => {
+    if (disabled) return;
     if (!isValidMasterHours(from, to)) {
       setError(t("master.schedule.error.range", lang));
       return;
@@ -96,10 +112,18 @@ export function MasterScheduleEditor({
   };
 
   const inputCls =
-    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100";
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 disabled:opacity-60 disabled:cursor-not-allowed dark:border-white/10 dark:bg-slate-800 dark:text-slate-100";
 
   return (
     <div className="space-y-4 text-sm" data-testid={`${testIdPrefix}-editor`}>
+      {notice && (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300"
+          data-testid={`${testIdPrefix}-notice`}
+        >
+          {notice}
+        </div>
+      )}
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
         {t("master.schedule.editHint", lang)}
       </p>
@@ -114,6 +138,7 @@ export function MasterScheduleEditor({
             min={0}
             max={24}
             value={String(from)}
+            disabled={disabled}
             onChange={(e) => setFrom(clampHour(e.target.value))}
             className={inputCls}
             data-testid={`${testIdPrefix}-from`}
@@ -128,6 +153,7 @@ export function MasterScheduleEditor({
             min={0}
             max={24}
             value={String(to)}
+            disabled={disabled}
             onChange={(e) => setTo(clampHour(e.target.value))}
             className={inputCls}
             data-testid={`${testIdPrefix}-to`}
@@ -147,9 +173,10 @@ export function MasterScheduleEditor({
                 key={d.dow}
                 type="button"
                 onClick={() => toggleDay(d.dow)}
+                disabled={disabled}
                 aria-pressed={on}
                 data-testid={`${testIdPrefix}-day-${d.dow}`}
-                className={`h-9 w-9 rounded-full text-xs font-medium transition ${
+                className={`h-9 w-9 rounded-full text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
                   on
                     ? "bg-brand-500 text-white shadow-sm"
                     : "border border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
@@ -176,18 +203,20 @@ export function MasterScheduleEditor({
         </div>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
-          data-testid={`${testIdPrefix}-save`}
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          <span>{t("common.save", lang)}</span>
-        </button>
-      </div>
+      {!disabled && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
+            data-testid={`${testIdPrefix}-save`}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            <span>{saveLabel ?? t("common.save", lang)}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

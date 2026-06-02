@@ -6,6 +6,7 @@ import {
   users,
   services,
   tenants,
+  tenantActionRequests,
   masterClientBlocks,
   bots,
   masterPairingCodes,
@@ -21,6 +22,10 @@ import {
   parseMasterWorkDays,
   serializeMasterWorkDays,
 } from "~/lib/workHours";
+import { readMasterSchedulePolicy } from "~/lib/masterSchedulePolicy";
+import { notifyOrCapture } from "~/server/services/notifyOrCapture";
+import { nowSec } from "~/lib/time";
+import { t, type Lang } from "~/lib/i18n";
 import { notifyWorker } from "~/server/utils/notifyWorker";
 import {
   generatePairingToken,
@@ -95,6 +100,113 @@ async function assertCallerIsMaster(ctx: TenantAccessCtx, tenantId: string, mast
   if (boundRow.chatId !== masterId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Cannot act on another master's record" });
   }
+}
+
+/** `tenant_action_requests.action` value carrying a proposed schedule change. */
+const SCHEDULE_CHANGE_ACTION = "master.schedule_change";
+
+const SUPPORTED_LANGS: readonly Lang[] = ["ru", "ua", "en", "pl"];
+function asLang(raw: unknown): Lang {
+  return typeof raw === "string" && (SUPPORTED_LANGS as readonly string[]).includes(raw)
+    ? (raw as Lang)
+    : "en";
+}
+
+/**
+ * Create — or, if one is already pending for this master, update — the
+ * schedule-change request. One pending request per master keeps the owner's
+ * queue clean (a master tweaking their proposal twice shouldn't spawn two).
+ * The proposed values live in `payload` keyed by chatId so the owner-side
+ * review can locate the master row + reuse the booking-engine shape.
+ */
+async function upsertPendingScheduleRequest(
+  ctx: TenantAccessCtx,
+  tenantId: string,
+  masterId: number,
+  requesterId: string,
+  workHours: string | undefined,
+  workDays: string | undefined,
+): Promise<string> {
+  const payloadObj: Record<string, unknown> = { masterId };
+  if (workHours !== undefined) payloadObj.workHours = workHours;
+  if (workDays !== undefined) payloadObj.workDays = workDays;
+  const payload = JSON.stringify(payloadObj);
+
+  const [existing] = await ctx.db
+    .select({ id: tenantActionRequests.id })
+    .from(tenantActionRequests)
+    .where(and(
+      eq(tenantActionRequests.tenantId, tenantId),
+      eq(tenantActionRequests.requesterId, requesterId),
+      eq(tenantActionRequests.action, SCHEDULE_CHANGE_ACTION),
+      eq(tenantActionRequests.status, "pending"),
+    ))
+    .limit(1);
+
+  if (existing?.id) {
+    await ctx.db
+      .update(tenantActionRequests)
+      .set({ payload, createdAt: nowSec() })
+      .where(eq(tenantActionRequests.id, existing.id));
+    return existing.id;
+  }
+
+  const id = crypto.randomUUID();
+  await ctx.db.insert(tenantActionRequests).values({
+    id,
+    tenantId,
+    requesterId,
+    action: SCHEDULE_CHANGE_ACTION,
+    payload,
+    status: "pending",
+    createdAt: nowSec(),
+  });
+  return id;
+}
+
+/** Best-effort in-app bell to the salon owner about a pending schedule request. */
+async function notifyOwnerOfScheduleRequest(
+  ctx: TenantAccessCtx,
+  tenantId: string,
+  requestId: string,
+): Promise<void> {
+  const [owner] = await ctx.db
+    .select({ id: webUsers.id, lang: webUsers.lang })
+    .from(webUsers)
+    .where(and(eq(webUsers.tenantId, tenantId), eq(webUsers.role, "tenant_owner")))
+    .limit(1);
+  if (!owner?.id) return;
+  const lang = asLang(owner.lang);
+  await notifyOrCapture(
+    ctx.db,
+    {
+      webUserId: owner.id,
+      kind: "approval",
+      tenantId,
+      title: t("notify.scheduleRequest.title", lang),
+      body: t("notify.scheduleRequest.body", lang),
+      link: "?tab=masters",
+      sourceSlug: "schedule_request",
+      sourceId: requestId,
+    },
+    { path: "master.updateWorkHours" },
+  );
+}
+
+/** Apply a master-owned vacation toggle (never gated by the schedule policy). */
+async function applyMasterVacationToggle(
+  ctx: TenantAccessCtx,
+  tenantId: string,
+  masterId: number,
+  onVacation: number,
+): Promise<void> {
+  const setObj: Record<string, unknown> = { onVacation };
+  if (onVacation === 0) {
+    setObj.vacationFrom = null;
+    setObj.vacationUntil = null;
+  }
+  await ctx.db.update(masters).set(setObj)
+    .where(and(eq(masters.tenantId, tenantId), eq(masters.chatId, masterId)));
 }
 
 export const masterRouter = createTRPCRouter({
@@ -593,23 +705,58 @@ export const masterRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
-      const setObj: Record<string, unknown> = {};
-      // Validate + normalize to the booking-engine shape (same contract the
-      // owner-side salon.updateMaster enforces). Reject malformed input.
+      // Validate + normalize the schedule inputs once (shared by every path),
+      // to the booking-engine shape the Worker reads. Reject malformed input.
+      let whStr: string | undefined;
+      let wdStr: string | undefined;
       if (input.workHours !== undefined) {
         const parsed = parseMasterHours(input.workHours);
         if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
         }
-        setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
+        whStr = serializeMasterHours(parsed.from, parsed.to);
       }
       if (input.workDays !== undefined) {
         const parsed = parseMasterWorkDays(input.workDays);
         if (parsed === null) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
         }
-        setObj.workDays = serializeMasterWorkDays(parsed);
+        wdStr = serializeMasterWorkDays(parsed);
       }
+
+      // Salon-level policy gates ONLY the `master` role's own schedule edits —
+      // never the owner (who writes via salon.updateMaster) and never the
+      // master-owned vacation toggle.
+      const callerIsMaster = ctx.webUser?.webRole === "master";
+      const touchesSchedule = whStr !== undefined || wdStr !== undefined;
+      if (callerIsMaster && touchesSchedule) {
+        const [tRow] = await ctx.db
+          .select({ salon: tenants.salon })
+          .from(tenants)
+          .where(eq(tenants.id, input.tenantId))
+          .limit(1);
+        const policy = readMasterSchedulePolicy(tRow?.salon ?? null);
+
+        if (policy === "salon_only") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "master_schedule_locked" });
+        }
+        if (policy === "master_approval") {
+          const requestId = await upsertPendingScheduleRequest(
+            ctx, input.tenantId, input.masterId, ctx.webUser!.id, whStr, wdStr,
+          );
+          await notifyOwnerOfScheduleRequest(ctx, input.tenantId, requestId);
+          // A vacation toggle, if also present, is master-owned — apply now.
+          if (input.onVacation !== undefined) {
+            await applyMasterVacationToggle(ctx, input.tenantId, input.masterId, input.onVacation);
+          }
+          return { pending: true as const, requestId };
+        }
+        // master_free → fall through to the direct write below.
+      }
+
+      const setObj: Record<string, unknown> = {};
+      if (whStr !== undefined) setObj.workHours = whStr;
+      if (wdStr !== undefined) setObj.workDays = wdStr;
       if (input.onVacation !== undefined) {
         setObj.onVacation = input.onVacation;
         // Toggling the legacy flag OFF clears any pinned date range — the
@@ -623,6 +770,41 @@ export const masterRouter = createTRPCRouter({
       await ctx.db.update(masters).set(setObj)
         .where(and(eq(masters.tenantId, input.tenantId), eq(masters.chatId, input.masterId)));
       return { success: true };
+    }),
+
+  /** Salon-level master-schedule policy (gates this master's own editor). */
+  getSchedulePolicy: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      const [tRow] = await ctx.db
+        .select({ salon: tenants.salon })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      return { policy: readMasterSchedulePolicy(tRow?.salon ?? null) };
+    }),
+
+  /** This master's outstanding schedule-change request (master_approval mode). */
+  getMyPendingScheduleRequest: masterProcedure
+    .input(z.object({ tenantId: z.string(), masterId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
+      const [row] = await ctx.db
+        .select()
+        .from(tenantActionRequests)
+        .where(and(
+          eq(tenantActionRequests.tenantId, input.tenantId),
+          eq(tenantActionRequests.requesterId, ctx.webUser!.id),
+          eq(tenantActionRequests.action, SCHEDULE_CHANGE_ACTION),
+          eq(tenantActionRequests.status, "pending"),
+        ))
+        .orderBy(desc(tenantActionRequests.createdAt))
+        .limit(1);
+      if (!row) return { pending: null };
+      let payload: unknown = null;
+      try { payload = row.payload ? JSON.parse(row.payload) : null; } catch { /* ignore */ }
+      return { pending: { id: row.id, createdAt: row.createdAt, payload } };
     }),
 
   /**

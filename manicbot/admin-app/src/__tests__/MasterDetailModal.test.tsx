@@ -35,6 +35,7 @@ vi.mock("~/trpc/react", () => ({
         getMasters: { invalidate: vi.fn() },
         getMasterDetail: { invalidate: vi.fn() },
         getMasterPairingState: { invalidate: vi.fn() },
+        listPendingScheduleRequests: { invalidate: vi.fn() },
       },
     }),
     salon: {
@@ -92,6 +93,14 @@ vi.mock("~/trpc/react", () => ({
           },
           isPending: false,
         }),
+      },
+      // Master-schedule approval surfaces (master_approval policy). No pending
+      // proposals in these fixtures, so the Harmonogram tab shows the editor only.
+      listPendingScheduleRequests: {
+        useQuery: () => ({ data: [], isLoading: false, isError: false }),
+      },
+      reviewMasterScheduleRequest: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
       // Avatar picker mutation (0075) — stubbed so the picker can mount.
       updateMasterAvatar: {

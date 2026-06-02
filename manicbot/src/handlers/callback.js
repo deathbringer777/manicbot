@@ -1315,7 +1315,10 @@ export async function onCb(ctx, cb) {
     const s = ctx.svc.find(x => x.id === sid);
     const user = await getUser(ctx, cid);
     if (!isRegComplete(user)) {
-      return startBooking(ctx, cid, cb.from);
+      // Thread the picked service into the registration gate so finishPhone()
+      // can resume straight to date selection instead of re-asking for a
+      // service after the user registers. See test/booking-resume-after-reg.
+      return startBooking(ctx, cid, cb.from, { svcId: sid });
     }
     const st0 = await getState(ctx, cid);
     if (st0.step === STEP.BOOK_ADJUST && st0.date && st0.time) {

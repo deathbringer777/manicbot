@@ -18,6 +18,7 @@
 
 import type { ReactNode } from "react";
 import { useDragToCreate, minutesToHHMM, type DragGhost } from "~/lib/calendar/useDragToCreate";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 
 interface Props {
   /** Date this column represents — passed straight to `onCreateAt`. */
@@ -39,6 +40,8 @@ interface Props {
     time: string;       // HH:MM
     durationMin: number;
     modifier: DragGhost["modifier"];
+    /** Viewport rect of the slot — anchors a quick-create popover. */
+    anchorRect?: AnchorRect | null;
   }) => void;
   children: ReactNode;
   /** Optional test id suffix so day vs week wrappers don't collide. */
@@ -69,6 +72,7 @@ export function DragCreateLayer({
         time: minutesToHHMM(g.startMin),
         durationMin: g.durationMin,
         modifier: g.modifier,
+        anchorRect: g.anchorRect ?? null,
       });
     },
   });

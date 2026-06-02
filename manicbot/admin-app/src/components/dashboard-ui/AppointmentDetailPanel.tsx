@@ -21,6 +21,8 @@ import { Select } from "~/components/ui/Select";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { STATUS_STYLES } from "~/components/dashboard-ui/AptCard";
 import { ClientDetailModal } from "~/components/salon/tabs/clients/ClientDetailModal";
+import { AnchoredPopover } from "~/components/calendar/AnchoredPopover";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 
 /**
  * Explicit shape for an appointment row passed into the detail panel.
@@ -69,6 +71,13 @@ interface Props {
   onClose: () => void;
   /** Refresh callback after a successful save / status change / delete. */
   onChanged: () => void;
+  /**
+   * Viewport rect of the calendar block this panel describes. When provided,
+   * read mode renders as a Google-Calendar-style popover anchored to the
+   * block; edit mode escalates to a centered modal. Omitted by callers that
+   * still want the panel to behave as a plain anchored card at the cursor.
+   */
+  anchorRect?: AnchorRect | null;
 }
 
 function svcDisplayName(s: ServiceOption | undefined, lang: Lang): string {
@@ -106,6 +115,7 @@ export function AppointmentDetailPanel({
   lang,
   onClose,
   onChanged,
+  anchorRect,
 }: Props) {
   type Mode = "read" | "edit";
   const [mode, setMode] = useState<Mode>("read");
@@ -264,11 +274,8 @@ export function AppointmentDetailPanel({
     });
   }
 
-  return (
-    <div
-      className="glass-card rounded-2xl p-4 space-y-3"
-      data-testid="day-view-selected"
-    >
+  const cardBody = (
+    <div className="space-y-3" data-testid="day-view-selected">
       {/* Header: status + time/duration + edit/delete/close actions */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -548,6 +555,44 @@ export function AppointmentDetailPanel({
         </div>
       )}
 
+    </div>
+  );
+
+  // While a nested overlay (delete confirm / client card) is up, freeze the
+  // popover's outside-click/Esc/scroll dismissal so a click inside that
+  // higher-z dialog can't tear this layer — and the dialog — down mid-click.
+  const nestedOpen = confirmDelete || openClient;
+
+  return (
+    <>
+      {mode === "edit" ? (
+        // Expanded «развернутое меню» — a deliberate, focused centered modal.
+        // The heavy backdrop here is intentional (editing is the committed
+        // surface), mirroring ManualBookingModal's styling.
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            data-testid="appointment-detail-edit-modal"
+            className="w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-slate-900 dark:ring-white/5 sm:rounded-2xl sm:p-6"
+            style={{ maxHeight: "92vh" }}
+          >
+            {cardBody}
+          </div>
+        </div>
+      ) : (
+        <AnchoredPopover
+          anchorRect={anchorRect ?? null}
+          onClose={onClose}
+          closeOnOutside={!nestedOpen}
+          testId="appointment-detail-popover"
+          ariaLabel={selected.userName ?? t("salon.day.panel.client", lang)}
+          className="max-h-[80vh] overflow-y-auto p-4"
+        >
+          {cardBody}
+        </AnchoredPopover>
+      )}
+
       <ConfirmDialog
         open={confirmDelete}
         title={t("salon.day.panel.deleteAptTitle", lang)}
@@ -568,7 +613,7 @@ export function AppointmentDetailPanel({
           onClose={() => setOpenClient(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 

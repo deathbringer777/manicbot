@@ -30,8 +30,10 @@ import { t, type Lang } from "~/lib/i18n";
 import { useNowTicker } from "~/lib/useNowTicker";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { AppointmentDetailPanel, type SelectedAppointment } from "~/components/dashboard-ui/AppointmentDetailPanel";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
+import { CreateSlotPopover } from "~/components/calendar/CreateSlotPopover";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { computeLanes } from "~/lib/calendar/overlapLanes";
@@ -285,6 +287,12 @@ export function SalonDayView({
   });
   const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
+  // Viewport rect of the clicked block — anchors the detail popover (GCal style).
+  const [selectedRect, setSelectedRect] = useState<AnchorRect | null>(null);
+  // Pending empty-slot drag → quick-create popover (intercepts the heavy modal).
+  const [createSlot, setCreateSlot] = useState<
+    { date: string; time: string; durationMin: number; masterId: number | null; rect: AnchorRect | null } | null
+  >(null);
   const [blockToDelete, setBlockToDelete] = useState<string | null>(null);
   const todayIso = fmtIsoDate(new Date());
   const isToday = isoDate === todayIso;
@@ -709,7 +717,18 @@ export function SalonDayView({
                     hourStart={HOUR_START}
                     hourEnd={HOUR_END}
                     totalHeight={TOTAL_HOURS * HOUR_HEIGHT}
-                    onCreateAt={master.chatId === -1 ? undefined : onCreateAt}
+                    onCreateAt={
+                      master.chatId === -1 || !onCreateAt
+                        ? undefined
+                        : (info) =>
+                            setCreateSlot({
+                              date: info.date,
+                              time: info.time,
+                              durationMin: info.durationMin,
+                              masterId: info.masterId,
+                              rect: info.anchorRect ?? null,
+                            })
+                    }
                     testIdPrefix="day-view-drag"
                   >
                     {/* Non-working hours — flat darker tint (rendered first,
@@ -830,7 +849,12 @@ export function SalonDayView({
                         <button
                           type="button"
                           key={a.id}
-                          onClick={(e) => { e.stopPropagation(); setSelectedApt(a); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const r = e.currentTarget.getBoundingClientRect();
+                            setSelectedRect({ left: r.left, top: r.top, width: r.width, height: r.height });
+                            setSelectedApt(a);
+                          }}
                           onPointerDown={drag?.onPointerDown}
                           data-testid="day-view-event"
                           data-apt-id={a.id}
@@ -1015,6 +1039,7 @@ export function SalonDayView({
           masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
           services={services}
           lang={lang}
+          anchorRect={selectedRect}
           onClose={() => setSelectedApt(null)}
           onChanged={() => {
             onUpdated?.();
@@ -1058,6 +1083,38 @@ export function SalonDayView({
         }}
         onCancel={() => setBlockToDelete(null)}
       />
+
+      {createSlot && (
+        <CreateSlotPopover
+          anchorRect={createSlot.rect}
+          date={createSlot.date}
+          time={createSlot.time}
+          durationMin={createSlot.durationMin}
+          masterName={masters.find((m) => m.chatId === createSlot.masterId)?.name ?? undefined}
+          lang={lang}
+          onCreate={() => {
+            onCreateAt?.({
+              date: createSlot.date,
+              masterId: createSlot.masterId,
+              time: createSlot.time,
+              durationMin: createSlot.durationMin,
+              modifier: "none",
+            });
+            setCreateSlot(null);
+          }}
+          onReserve={() => {
+            onCreateAt?.({
+              date: createSlot.date,
+              masterId: createSlot.masterId,
+              time: createSlot.time,
+              durationMin: createSlot.durationMin,
+              modifier: "shift",
+            });
+            setCreateSlot(null);
+          }}
+          onClose={() => setCreateSlot(null)}
+        />
+      )}
     </div>
   );
 }

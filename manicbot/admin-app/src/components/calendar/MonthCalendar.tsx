@@ -29,6 +29,7 @@
 import { useMemo } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 
 /** Brand-derived hue order — must match SalonDayView/Week so the same
  *  master always renders in the same color across every view. */
@@ -83,6 +84,13 @@ interface Props {
   masters?: MonthCalMaster[];
   /** Optional title shown in the header bar (defaults to localized month). */
   titleOverride?: string;
+  /**
+   * When provided, each event chip becomes individually clickable and opens
+   * the caller's detail popover anchored to the chip (GCal parity). Omitted
+   * by read-only callers (God-Mode page), where chips stay non-interactive
+   * and a cell click just selects the day.
+   */
+  onEventClick?: (apt: MonthCalApt, rect: AnchorRect) => void;
 }
 
 function pad(n: number): string {
@@ -122,6 +130,7 @@ export function MonthCalendar({
   lang,
   masters,
   titleOverride,
+  onEventClick,
 }: Props) {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -322,9 +331,36 @@ export function MonthCalendar({
                       data-testid="month-cal-event"
                       data-status={sk}
                       data-apt-id={a.id}
+                      // Kept a <div> (not a <button>) because the day cell is
+                      // already a <button> — nesting buttons is invalid DOM.
+                      // role/tabIndex make the chip keyboard-accessible only
+                      // when the caller wired onEventClick.
+                      role={onEventClick ? "button" : undefined}
+                      tabIndex={onEventClick ? 0 : undefined}
+                      onClick={
+                        onEventClick
+                          ? (e) => {
+                              e.stopPropagation();
+                              const r = e.currentTarget.getBoundingClientRect();
+                              onEventClick(a, { left: r.left, top: r.top, width: r.width, height: r.height });
+                            }
+                          : undefined
+                      }
+                      onKeyDown={
+                        onEventClick
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const r = e.currentTarget.getBoundingClientRect();
+                                onEventClick(a, { left: r.left, top: r.top, width: r.width, height: r.height });
+                              }
+                            }
+                          : undefined
+                      }
                       className={`relative flex items-center gap-1 rounded text-[10px] leading-tight pl-1.5 pr-1 py-[2px] truncate font-medium overflow-hidden ${
                         isMuted ? "opacity-55" : ""
-                      }`}
+                      } ${onEventClick ? "cursor-pointer hover:brightness-95 dark:hover:brightness-110" : ""}`}
                       style={{ background: tone.bg, color: tone.text }}
                     >
                       <span

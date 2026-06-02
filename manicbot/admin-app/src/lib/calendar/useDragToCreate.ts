@@ -26,6 +26,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 
 export interface DragGhost {
   top: number;          // px, relative to the column body
@@ -36,6 +37,10 @@ export interface DragGhost {
    *  `shift` lets callers route the release to the time-reservation
    *  dialog instead of the booking dialog (matches GCal behaviour). */
   modifier: "none" | "shift" | "alt";
+  /** Viewport rect of the committed slot — only set on the `onCommit`
+   *  payload (not the in-progress ghost). Lets callers anchor a quick-create
+   *  popover next to where the user released, GCal-style. */
+  anchorRect?: AnchorRect;
 }
 
 interface UseDragToCreateArgs {
@@ -132,12 +137,24 @@ export function useDragToCreate({
       durationMin = Math.max(snapMin, dayEndMin - startMin);
     }
 
+    // Viewport rect of the resolved slot: the column body's top-left (captured
+    // at pointerdown) + the slot's px offset within it. Lets the caller anchor
+    // a quick-create popover exactly where the slot landed.
+    const slotTopPx = minutesToY(startMin, hourHeight, hourStart);
+    const anchorRect: AnchorRect = {
+      left: start.rect.left,
+      top: start.rect.top + slotTopPx,
+      width: start.rect.width,
+      height: (durationMin / 60) * hourHeight,
+    };
+
     onCommit({
-      top: minutesToY(startMin, hourHeight, hourStart),
+      top: slotTopPx,
       height: (durationMin / 60) * hourHeight,
       startMin,
       durationMin,
       modifier: start.modifier,
+      anchorRect,
     });
     clearAll();
     document.removeEventListener("pointermove", onPointerMove);

@@ -65,6 +65,18 @@ export function sanitizeTenantField(s, maxLen = 200) {
 }
 
 /**
+ * #S01-1 — Sanitize a single chat-history turn before it re-enters the prompt.
+ * USER and ASSISTANT turns are sanitized symmetrically. An attacker can coax the
+ * model into echoing an injection payload (a smuggled action-tag or unicode
+ * bracket); that reply is persisted as 'assistant' history and would otherwise
+ * re-enter the next prompt verbatim, letting a jailbreak persist across the
+ * conversation window. For legitimate assistant prose this is a near-noop.
+ */
+export function sanitizeHistoryContent(content) {
+  return sanitizeUserInput(content);
+}
+
+/**
  * Validate action parameters extracted from AI response.
  * Rejects malformed dates, times, and unexpected params.
  */
@@ -507,7 +519,7 @@ export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client',
   let prompt = sys + '\n\n';
   for (const m of history) {
     const roleLabel = m.role === 'user' ? 'User' : 'Assistant';
-    const safeContent = m.role === 'user' ? sanitizeUserInput(m.content) : m.content;
+    const safeContent = sanitizeHistoryContent(m.content);
     prompt += `${roleLabel}: ${safeContent}\n\n`;
   }
   prompt += `User: ${userText}`;
@@ -563,7 +575,7 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
     const userText = sanitizeUserInput(userMessage.slice(0, 500));
     const messages = [{ role: 'system', content: sys }];
     for (const m of history) {
-      const safeContent = m.role === 'user' ? sanitizeUserInput(m.content) : m.content;
+      const safeContent = sanitizeHistoryContent(m.content);
       messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: safeContent });
     }
     messages.push({ role: 'user', content: userText });

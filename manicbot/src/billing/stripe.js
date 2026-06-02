@@ -143,6 +143,38 @@ export async function getSubscription(secretKey, subscriptionId) {
 }
 
 /**
+ * List Stripe balance transactions (one page). The ledger sync mirrors these
+ * into D1 — `balance_transactions` is the only Stripe object that carries `fee`
+ * and `net` natively (invoices do not) and covers every money movement (charge,
+ * refund, dispute, payout, adjustment, stripe_fee).
+ *
+ * Unlike `stripeRequest` (which swallows errors into `{ error }`), this THROWS
+ * on a non-2xx / network failure so the caller can abort a sync run WITHOUT
+ * advancing its high-water cursor.
+ *
+ * @param {string} secretKey
+ * @param {{ limit?: number, createdGte?: number, startingAfter?: string }} [opts]
+ * @returns {Promise<{ data: object[], has_more: boolean }>}
+ */
+export async function listBalanceTransactions(secretKey, opts = {}) {
+  const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 100), 1), 100);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (opts.createdGte != null) params.set('created[gte]', String(opts.createdGte));
+  if (opts.startingAfter) params.set('starting_after', opts.startingAfter);
+
+  const res = await fetch(`${STRIPE_API}/balance_transactions?${params.toString()}`, {
+    method: 'GET',
+    headers: authHeader(secretKey),
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Stripe balance_transactions failed: ${res.status}`);
+  }
+  return { data: Array.isArray(data.data) ? data.data : [], has_more: !!data.has_more };
+}
+
+/**
  * Idempotent Stripe Coupon mint. Used by the cancellation retention flow
  * to surface a discount counter-offer to the salon owner.
  *

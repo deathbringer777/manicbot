@@ -757,6 +757,32 @@ export const stripeEvents = sqliteTable("stripe_events", {
 ]);
 
 /**
+ * Platform Stripe account ledger (migration 0106) — mirror of Stripe
+ * balance_transactions, synced by the Worker 15-min cron (syncStripeLedger in
+ * src/billing/ledgerSync.js). Source of truth for the multi-month real revenue
+ * / net / fee widgets in the system_admin Billing dashboard. Money fields are
+ * minor units (PLN grosze); `created` / `availableOn` are unix seconds.
+ * Platform-level — the platform's own Stripe account, no tenant scope.
+ */
+export const stripeLedger = sqliteTable("stripe_ledger", {
+  id: text("id").primaryKey(),
+  type: text("type"),
+  reportingCategory: text("reporting_category"),
+  amount: integer("amount").notNull().default(0),
+  fee: integer("fee").notNull().default(0),
+  net: integer("net").notNull().default(0),
+  currency: text("currency"),
+  source: text("source"),
+  created: integer("created").notNull().default(0),
+  availableOn: integer("available_on"),
+  description: text("description"),
+  syncedAt: integer("synced_at").notNull().default(0),
+}, (t) => [
+  index("idx_stripe_ledger_created").on(t.created),
+  index("idx_stripe_ledger_type_created").on(t.type, t.created),
+]);
+
+/**
  * Admin-issued one-time subscription grant codes (migration 0103). A code
  * grants a tenant a free period of a plan (e.g. one free year of `max`),
  * redeemed at registration via the referral-code field and distinguished by

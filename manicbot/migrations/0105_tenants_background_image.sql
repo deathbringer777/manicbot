@@ -1,4 +1,5 @@
--- 0103_tenants_background_image.sql — 2026-06-02
+-- 0105_tenants_background_image.sql — 2026-06-02
+-- (renumbered 0103→0105: main landed 0103_subscription_grant_codes concurrently)
 --
 -- Public salon page: a STATIC background image, distinct from the existing
 -- hero/cover photo (cover_photo/cover_r2_key). The owner sets it in salon

@@ -1,6 +1,6 @@
 import { createTRPCRouter, adminProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
-import { tenants, subscriptionCancellations } from "~/server/db/schema";
+import { tenants, subscriptionCancellations, stripeLedger } from "~/server/db/schema";
 import { eq, and, desc, gte } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -12,6 +12,14 @@ import {
   ensureCoupon,
   applyCouponToSubscription,
   cancelSubscriptionAtPeriodEnd,
+  getBalance,
+  listPayouts,
+  listRecentCharges,
+  listDisputes,
+  type StripeBalanceResult,
+  type StripePayoutRow,
+  type StripeChargeRow,
+  type StripeDisputeRow,
 } from "~/server/lib/stripe";
 import { sendSubscriptionCancelledEmail } from "~/server/email/emailService";
 import { sanitizeText } from "~/server/security/sanitize";
@@ -209,6 +217,123 @@ export const billingRouter = createTRPCRouter({
         ip: ctxIp(ctx),
       });
       return { success: true, periodEnd };
+    }),
+
+  // ─── God Mode real-money dashboard (Stage 2) ──────────────────────────────
+  // Live Stripe state the D1 mirror can't hold: balance, payouts, recent
+  // charges, open disputes. Each section is fetched independently and a failure
+  // is isolated to that section (Promise.allSettled) so a Stripe blip degrades
+  // one widget, never the whole dashboard — this read never throws.
+  getStripeFinancials: adminProcedure.query(async () => {
+    const secretKey = env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      return {
+        configured: false,
+        liveMode: null as boolean | null,
+        balance: null as StripeBalanceResult | null,
+        payouts: { rows: [] as StripePayoutRow[], error: false },
+        charges: { rows: [] as StripeChargeRow[], error: false },
+        disputes: { rows: [] as StripeDisputeRow[], error: false },
+        errors: [] as string[],
+      };
+    }
+
+    const [balanceR, payoutsR, chargesR, disputesR] = await Promise.allSettled([
+      getBalance(secretKey),
+      listPayouts(secretKey, { limit: 10 }),
+      listRecentCharges(secretKey, { limit: 12 }),
+      listDisputes(secretKey, { limit: 10 }),
+    ]);
+
+    const errors: string[] = [];
+    const note = (tag: string, r: PromiseRejectedResult) => {
+      errors.push(tag);
+      log.warn(`billing.financials.${tag}Failed`, {
+        err: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
+    };
+    if (balanceR.status === "rejected") note("balance", balanceR);
+    if (payoutsR.status === "rejected") note("payouts", payoutsR);
+    if (chargesR.status === "rejected") note("charges", chargesR);
+    if (disputesR.status === "rejected") note("disputes", disputesR);
+
+    return {
+      configured: true,
+      liveMode: secretKey.startsWith("sk_live_"),
+      balance: balanceR.status === "fulfilled" ? balanceR.value : null,
+      payouts: { rows: payoutsR.status === "fulfilled" ? payoutsR.value.data : [], error: payoutsR.status === "rejected" },
+      charges: { rows: chargesR.status === "fulfilled" ? chargesR.value.data : [], error: chargesR.status === "rejected" },
+      disputes: { rows: disputesR.status === "fulfilled" ? disputesR.value.data : [], error: disputesR.status === "rejected" },
+      errors,
+    };
+  }),
+
+  // Multi-month real revenue from the D1 `stripe_ledger` mirror (synced by the
+  // Worker cron). Fast + historical — no live Stripe call on load. Buckets
+  // balance transactions by day for the chart, plus an estimated-MRR-vs-actual-
+  // net reconciliation. All money is Stripe minor units (PLN grosze).
+  getLedgerSummary: adminProcedure
+    .input(z.object({ days: z.number().int().min(7).max(365).default(90) }).optional())
+    .query(async ({ ctx, input }) => {
+      const days = input?.days ?? 90;
+      const now = Math.floor(Date.now() / 1000);
+      const windowFloor = now - days * 86400;
+      const floor30 = now - 30 * 86400;
+
+      const rows = await ctx.db
+        .select({
+          type: stripeLedger.type,
+          amount: stripeLedger.amount,
+          fee: stripeLedger.fee,
+          net: stripeLedger.net,
+          created: stripeLedger.created,
+        })
+        .from(stripeLedger)
+        .where(gte(stripeLedger.created, windowFloor))
+        .orderBy(stripeLedger.created);
+
+      // Bucket by UTC day. `gross` counts only positive-revenue charges; `net`
+      // is the true bottom line (refunds/disputes pull it down); `fee` is the
+      // Stripe cut.
+      const byDay = new Map<string, { date: string; gross: number; net: number; fee: number }>();
+      for (const r of rows) {
+        const date = new Date((r.created ?? 0) * 1000).toISOString().slice(0, 10);
+        const bucket = byDay.get(date) ?? { date, gross: 0, net: 0, fee: 0 };
+        if (r.type === "charge") bucket.gross += r.amount ?? 0;
+        bucket.net += r.net ?? 0;
+        bucket.fee += r.fee ?? 0;
+        byDay.set(date, bucket);
+      }
+      const series = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
+      const totals = series.reduce(
+        (t, s) => ({ gross: t.gross + s.gross, net: t.net + s.net, fee: t.fee + s.fee }),
+        { gross: 0, net: 0, fee: 0 },
+      );
+
+      const actualNet30dMinor = rows
+        .filter((r) => (r.created ?? 0) >= floor30)
+        .reduce((s, r) => s + (r.net ?? 0), 0);
+
+      const tenantRows = await ctx.db
+        .select({ plan: tenants.plan, billingStatus: tenants.billingStatus })
+        .from(tenants);
+      // Estimated MRR is whole PLN (plan prices); convert to grosze so the
+      // reconciliation compares like-for-like with the minor-unit ledger net.
+      const estimatedMrr = tenantRows
+        .filter((t) => t.billingStatus === "active")
+        .reduce((s, t) => s + (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0), 0);
+      const estimatedMrrMinor = estimatedMrr * 100;
+
+      return {
+        windowDays: days,
+        series,
+        totals,
+        reconciliation: {
+          estimatedMrrMinor,
+          actualNet30dMinor,
+          deltaMinor: actualNet30dMinor - estimatedMrrMinor,
+        },
+      };
     }),
 
   // ─── Retention flow (migration 0087) ──────────────────────────────────────

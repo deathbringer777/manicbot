@@ -19,7 +19,7 @@ export function PublicFooter() {
             <Link
               key={item.href}
               href={item.href}
-              className="text-sm text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-brand-300"
+              className="text-sm text-slate-500 transition-colors duration-150 hover:text-violet-700 dark:text-white/35 dark:hover:text-violet-300"
             >
               {item.label}
             </Link>

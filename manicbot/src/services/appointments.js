@@ -6,6 +6,7 @@ import { nowSec } from '../utils/time.js';
 import { p2 } from '../utils/helpers.js';
 import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
 import { getMaster } from './users.js';
+import { resolveMasterDay } from './masterSchedule.js';
 import { deleteAppointmentCalendar, loadExternalBusyBlocks } from './google-calendar-oauth.js';
 
 function allKey(dateStr) {
@@ -505,17 +506,20 @@ export async function getSlots(ctx, date, svcId, masterId = null) {
   if (!svc) return [];
 
   let workFrom = WORK.from, workTo = WORK.to;
+  let dayBreaks = [];
   if (masterId != null) {
     const master = await getMaster(ctx, masterId);
     if (!master) return [];
     if (master.onVacation) return [];
-    if (master.workHours?.from != null) workFrom = master.workHours.from;
-    if (master.workHours?.to != null) workTo = master.workHours.to;
-    if (Array.isArray(master.workDays) && master.workDays.length > 0) {
-      const [y, mo, d] = date.split('-').map(Number);
-      const dow = new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
-      if (!master.workDays.includes(dow)) return [];
-    }
+    const [y, mo, d] = date.split('-').map(Number);
+    const dow = new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
+    // Resolve the master's per-day window (new {days} shape or legacy {from,to}
+    // + workDays[]). null ⇒ day off / invalid ⇒ no slots.
+    const day = resolveMasterDay(master, dow);
+    if (!day) return [];
+    workFrom = day.open;
+    workTo = day.close;
+    dayBreaks = day.breaks;
   }
 
   const booked = await loadDayAppointments(ctx, date, masterId);
@@ -527,13 +531,17 @@ export async function getSlots(ctx, date, svcId, masterId = null) {
   const w = warsawNow();
   const ch = w.hour, cm = w.minute;
   const slots = [];
-  for (let h = workFrom; h < workTo; h++) {
+  for (let h = Math.floor(workFrom); h < workTo; h++) {
     for (const m of [0, 30]) {
       const ss = h + m / 60, se = ss + svc.dur / 60;
       const slotStartMin = h * 60 + m;
       const slotEndMin = slotStartMin + svc.dur;
+      if (ss < workFrom) continue;        // handles non-integer opens (e.g. 09:30)
       if (se > workTo) continue;
       if (date === td && (h < ch || (h === ch && m <= cm))) continue;
+      // Drop slots that overlap a break (adjacency — ending at the break start or
+      // starting at the break end — is allowed).
+      if (dayBreaks.some(br => ss < br.end && se > br.start)) continue;
       let ok = true;
       for (const a of booked) {
         const bs = svcMap.get(a.svcId);

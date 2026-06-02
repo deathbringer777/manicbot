@@ -122,6 +122,12 @@ const translations = {
   "master.schedule.days":        { ru: "Рабочие дни", ua: "Робочі дні", en: "Working days", pl: "Dni robocze" },
   "master.schedule.error.range": { ru: "Конец работы должен быть позже начала.", ua: "Кінець роботи має бути пізніше початку.", en: "End time must be after start time.", pl: "Godzina zakończenia musi być późniejsza niż rozpoczęcia." },
   "master.schedule.saved":       { ru: "Расписание сохранено", ua: "Розклад збережено", en: "Schedule saved", pl: "Harmonogram zapisany" },
+  // ── Per-day break (перерыв) controls in the master schedule editor ──
+  "master.schedule.break":              { ru: "Перерыв", ua: "Перерва", en: "Break", pl: "Przerwa" },
+  "master.schedule.addBreak":           { ru: "Добавить перерыв", ua: "Додати перерву", en: "Add break", pl: "Dodaj przerwę" },
+  "master.schedule.removeBreak":        { ru: "Убрать перерыв", ua: "Прибрати перерву", en: "Remove break", pl: "Usuń przerwę" },
+  "master.schedule.error.breakRange":   { ru: "Конец перерыва должен быть позже начала.", ua: "Кінець перерви має бути пізніше початку.", en: "Break end must be after its start.", pl: "Koniec przerwy musi być późniejszy niż początek." },
+  "master.schedule.error.breakOutside": { ru: "Перерыв должен быть внутри рабочих часов.", ua: "Перерва має бути в межах робочих годин.", en: "Break must be within working hours.", pl: "Przerwa musi mieścić się w godzinach pracy." },
   // ── Master-schedule governance policy (salon-level) + approval workflow ──
   "salon.masterSchedulePolicy.title":           { ru: "Кто меняет часы мастеров", ua: "Хто змінює години майстрів", en: "Who edits master hours", pl: "Kto zmienia godziny mistrzów" },
   "salon.masterSchedulePolicy.hint":            { ru: "Кто может менять рабочие часы мастеров. Владелец салона меняет их всегда.", ua: "Хто може змінювати робочі години майстрів. Власник салону змінює їх завжди.", en: "Who may change masters' working hours. The salon owner can always edit them.", pl: "Kto może zmieniać godziny pracy mistrzów. Właściciel salonu zawsze może je edytować." },
@@ -410,6 +416,8 @@ const translations = {
   "onboarding.checklist.headline.setup":       { ru: "Настройте салон",              ua: "Налаштуйте салон",              en: "Set up your salon",              pl: "Skonfiguruj salon" },
   "onboarding.checklist.headline.ready":       { ru: "✅ Готов принимать записи",   ua: "✅ Готовий приймати записи",   en: "✅ Ready to take bookings",       pl: "✅ Gotowy na rezerwacje" },
   "onboarding.checklist.tier.optional":        { ru: "Расширьте профиль",            ua: "Розширте профіль",              en: "Polish your profile",            pl: "Rozszerz profil" },
+  "onboarding.checklist.dismiss":              { ru: "Скрыть",                       ua: "Сховати",                       en: "Hide",                           pl: "Ukryj" },
+  "onboarding.checklist.expand":               { ru: "Показать шаги",                ua: "Показати кроки",                en: "Show steps",                     pl: "Pokaż kroki" },
   // Essentials.
   "onboarding.checklist.connect_bot":          { ru: "Подключите Telegram-бота",     ua: "Підключіть Telegram-бота",      en: "Connect a Telegram bot",         pl: "Podłącz bota Telegram" },
   "onboarding.checklist.add_master":           { ru: "Добавьте мастера",             ua: "Додайте майстра",               en: "Add a master",                   pl: "Dodaj mistrza" },

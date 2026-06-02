@@ -347,3 +347,52 @@ describe("OnboardingChecklist — collapse preference persistence", () => {
     expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
   });
 });
+
+describe("OnboardingChecklist — ready collapse + permanent dismiss (4/4)", () => {
+  const FOUR = ["connect_bot", "add_master", "set_master_schedule", "add_service"];
+  const READY_KEY = "manicbot_onboarding_ready_dismissed";
+
+  it("collapses to the slim ready bar — essential step rows are gone, dismiss is offered", () => {
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8 };
+    renderChecklist();
+    expect(screen.getByTestId("onboarding-checklist")).toBeTruthy();
+    expect(screen.getByTestId("onboarding-headline").textContent).toContain("Готов принимать записи");
+    expect(screen.getByTestId("onboarding-counter").textContent).toBe("4/4");
+    // The four essential rows are collapsed away in the slim bar.
+    expect(document.querySelector('[data-step-id="connect_bot"]')).toBeNull();
+    expect(screen.getByTestId("onboarding-dismiss")).toBeTruthy();
+  });
+
+  it("expanding the ready bar reveals the optional steps", () => {
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8 };
+    renderChecklist();
+    expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
+    fireEvent.click(screen.getByTestId("onboarding-optional-toggle"));
+    expect(document.querySelector('[data-step-id="add_branding"]')).not.toBeNull();
+  });
+
+  it("dismiss hides the whole component and persists across remounts while still ready", () => {
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8 };
+    const { container, unmount } = renderChecklist();
+    fireEvent.click(screen.getByTestId("onboarding-dismiss"));
+    expect(container.firstChild).toBeNull();
+    expect(localStorage.getItem(READY_KEY)).toBe("1");
+    unmount();
+    const { container: c2 } = renderChecklist();
+    expect(c2.firstChild).toBeNull();
+  });
+
+  it("resurfaces and clears the dismiss flag when an essential regresses", () => {
+    localStorage.setItem(READY_KEY, "1");
+    // Only 3/4 now — e.g. the last service was removed.
+    mockData = {
+      completedSteps: ["connect_bot", "add_master", "set_master_schedule"],
+      allCompletedAt: null,
+      totalSteps: 8,
+    };
+    const { container } = renderChecklist();
+    expect(container.firstChild).not.toBeNull();
+    expect(document.querySelector('[data-step-id="add_service"]')).not.toBeNull();
+    expect(localStorage.getItem(READY_KEY)).toBeNull();
+  });
+});

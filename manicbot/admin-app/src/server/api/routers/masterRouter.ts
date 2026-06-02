@@ -21,6 +21,10 @@ import {
   serializeMasterHours,
   parseMasterWorkDays,
   serializeMasterWorkDays,
+  decodeMasterSchedule,
+  validateMasterSchedule,
+  serializeMasterSchedule,
+  deriveWorkDaysFromSchedule,
 } from "~/lib/workHours";
 import { readMasterSchedulePolicy } from "~/lib/masterSchedulePolicy";
 import { notifyOrCapture } from "~/server/services/notifyOrCapture";
@@ -697,8 +701,10 @@ export const masterRouter = createTRPCRouter({
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),
-      // `{from,to}` JSON string + a 0..6 weekday array string — the shape the
-      // Worker booking engine reads (see ~/lib/workHours).
+      // Preferred: per-day `{"days":{…}}` schedule (per-day hours + one optional
+      // break). Legacy `{from,to}` + 0..6 weekday array still accepted — both
+      // normalize to the shape the Worker booking engine reads (see ~/lib/workHours).
+      workSchedule: z.string().max(2000).optional(),
       workHours: z.string().max(200).optional(),
       workDays: z.string().max(200).optional(),
       onVacation: z.number().min(0).max(1).optional(),
@@ -707,21 +713,35 @@ export const masterRouter = createTRPCRouter({
       await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       // Validate + normalize the schedule inputs once (shared by every path),
       // to the booking-engine shape the Worker reads. Reject malformed input.
+      // Prefer the per-day `workSchedule`; fall back to the legacy pair.
       let whStr: string | undefined;
       let wdStr: string | undefined;
-      if (input.workHours !== undefined) {
-        const parsed = parseMasterHours(input.workHours);
-        if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+      if (input.workSchedule !== undefined) {
+        const state = decodeMasterSchedule(input.workSchedule);
+        if (!state) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_schedule" });
         }
-        whStr = serializeMasterHours(parsed.from, parsed.to);
-      }
-      if (input.workDays !== undefined) {
-        const parsed = parseMasterWorkDays(input.workDays);
-        if (parsed === null) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+        const v = validateMasterSchedule(state);
+        if (!v.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `invalid_master_schedule_${v.reason}` });
         }
-        wdStr = serializeMasterWorkDays(parsed);
+        whStr = serializeMasterSchedule(state);
+        wdStr = serializeMasterWorkDays(deriveWorkDaysFromSchedule(state));
+      } else {
+        if (input.workHours !== undefined) {
+          const parsed = parseMasterHours(input.workHours);
+          if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+          }
+          whStr = serializeMasterHours(parsed.from, parsed.to);
+        }
+        if (input.workDays !== undefined) {
+          const parsed = parseMasterWorkDays(input.workDays);
+          if (parsed === null) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+          }
+          wdStr = serializeMasterWorkDays(parsed);
+        }
       }
 
       // Salon-level policy gates ONLY the `master` role's own schedule edits —

@@ -275,10 +275,10 @@ export function MasterDashboard({
                     : undefined
                 }
                 lang={lang}
-                onSave={(workHours, workDays) => {
+                onSave={(workSchedule) => {
                   setScheduleSaved(false);
                   updateWorkHoursMut.mutate(
-                    { tenantId, masterId, workHours, workDays },
+                    { tenantId, masterId, workSchedule },
                     {
                       onSuccess: (res) => {
                         // Approval mode returns { pending } — the pending banner

@@ -54,6 +54,15 @@ const NOW = 1_715_000_000;
 const callMaster = createCallerFactory(masterRouter);
 const callSalon = createCallerFactory(salonRouter);
 
+// A per-day schedule (per-day hours + one break) — enabled Mon (1) + Tue (2).
+const SCHED = JSON.stringify({
+  days: {
+    mon: { open: "09:00", close: "18:00", break: { start: "13:00", end: "14:00" } },
+    tue: { open: "10:00", close: "16:00" },
+    wed: null, thu: null, fri: null, sat: null, sun: null,
+  },
+});
+
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
@@ -202,6 +211,40 @@ describe("master.updateWorkHours — policy enforcement (master role)", () => {
       workDays: "[1,2,3,4,5]",
     });
   });
+
+  it("master_free → writes a per-day workSchedule + derived work_days", async () => {
+    const { db, updateCalls, insertCalls } = createDbMock([
+      [{ chatId: 100 }],
+      [{ salon: '{"masterSchedulePolicy":"master_free"}' }],
+    ]);
+    const ctx = makeMasterCtx(db, "t_alpha");
+    const caller = callMaster(ctx as never);
+    const r = await caller.updateWorkHours({ tenantId: "t_alpha", masterId: 100, workSchedule: SCHED });
+    expect(r).toMatchObject({ success: true });
+    const values = updateCalls.at(-1)!.values as { workHours: string; workDays: string };
+    expect(JSON.parse(values.workHours)).toEqual(JSON.parse(SCHED));
+    expect(values.workDays).toBe("[1,2]");
+    expect(insertCalls.length).toBe(0);
+  });
+
+  it("master_approval → pending request carries the per-day schedule payload", async () => {
+    const { db, updateCalls, insertCalls } = createDbMock([
+      [{ chatId: 100 }],
+      [{ salon: '{"masterSchedulePolicy":"master_approval"}' }],
+      [],
+      [{ id: "w_owner" }],
+    ]);
+    const ctx = makeMasterCtx(db, "t_alpha");
+    const caller = callMaster(ctx as never);
+    const r = await caller.updateWorkHours({ tenantId: "t_alpha", masterId: 100, workSchedule: SCHED });
+    expect(r).toMatchObject({ pending: true });
+    expect(updateCalls.length).toBe(0);
+    expect(insertCalls.length).toBe(1);
+    const payload = JSON.parse(String(insertCalls[0]!.values.payload));
+    expect(payload.masterId).toBe(100);
+    expect(JSON.parse(payload.workHours)).toEqual(JSON.parse(SCHED));
+    expect(payload.workDays).toBe("[1,2]");
+  });
 });
 
 describe("salon.reviewMasterScheduleRequest", () => {
@@ -228,6 +271,20 @@ describe("salon.reviewMasterScheduleRequest", () => {
     expect(insertCalls.length).toBeGreaterThanOrEqual(1);
     // Master notified.
     expect((notifyOrCaptureMock.mock.calls[0]![1] as { webUserId: string }).webUserId).toBe("w_master");
+  });
+
+  it("approved per-day schedule → applies {days} + derived work_days", async () => {
+    const perDayReq = {
+      ...PENDING_REQ,
+      payload: JSON.stringify({ masterId: 100, workHours: SCHED, workDays: "[1,2]" }),
+    };
+    const { db, updateCalls } = createDbMock([[perDayReq]]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = callSalon(ctx as never);
+    await caller.reviewMasterScheduleRequest({ requestId: "req1", decision: "approved" });
+    const mastersWrite = updateCalls.find((c) => "workHours" in c.values)!;
+    expect(JSON.parse(String(mastersWrite.values.workHours))).toEqual(JSON.parse(SCHED));
+    expect(mastersWrite.values.workDays).toBe("[1,2]");
   });
 
   it("denied → does NOT write masters, marks denied", async () => {

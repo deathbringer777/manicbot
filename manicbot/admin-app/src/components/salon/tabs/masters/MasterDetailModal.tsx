@@ -322,11 +322,11 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
     );
   };
 
-  const handleSaveSchedule = (workHours: string, workDays: string) => {
+  const handleSaveSchedule = (workSchedule: string) => {
     setErrorMsg(null);
     setScheduleSaved(false);
     updateMaster.mutate(
-      { tenantId, chatId, workHours, workDays },
+      { tenantId, chatId, workSchedule },
       {
         onSuccess: () => {
           setScheduleSaved(true);
@@ -776,7 +776,7 @@ function SettingsMode({
   onVacationChange: (patch: Partial<{ vacationFrom: string; vacationUntil: string }>) => void;
   onSaveProfile: () => void;
   onSaveVacation: () => void;
-  onSaveSchedule: (workHours: string, workDays: string) => void;
+  onSaveSchedule: (workSchedule: string) => void;
   schedulePending?: React.ReactNode;
   onClearVacation: () => void;
   onExit: () => void;

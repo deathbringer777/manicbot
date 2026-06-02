@@ -17,39 +17,15 @@
  * next state so the parent stays the single source of truth.
  */
 
-import { Select, type SelectOption } from "~/components/ui/Select";
+import { Select } from "~/components/ui/Select";
 import { Switch } from "~/components/ui/Switch";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours, type WeekdayKey } from "~/lib/workHours";
+import { optionsWith } from "~/lib/timeOptions";
 
 /** Restored when a day is switched from "off" back to "working". */
 const DEFAULT_DAY = { open: "09:00", close: "18:00" } as const;
-
-/** 30-minute grid "00:00".."23:30" — 48 slots, built once. */
-const BASE_TIME_OPTIONS: SelectOption[] = (() => {
-  const out: SelectOption[] = [];
-  for (let m = 0; m < 24 * 60; m += 30) {
-    const hh = String(Math.floor(m / 60)).padStart(2, "0");
-    const mm = String(m % 60).padStart(2, "0");
-    const v = `${hh}:${mm}`;
-    out.push({ value: v, label: v });
-  }
-  return out;
-})();
-
-/**
- * Time options that always include the current value, even if it isn't on the
- * 30-minute grid (e.g. a legacy "09:15" written by the old native time input).
- * Returns the stable module-level array for on-grid values so Select doesn't
- * see a new options identity every render.
- */
-function optionsWith(current: string): SelectOption[] {
-  if (!current || BASE_TIME_OPTIONS.some((o) => o.value === current)) return BASE_TIME_OPTIONS;
-  return [...BASE_TIME_OPTIONS, { value: current, label: current }].sort((a, b) =>
-    a.value.localeCompare(b.value),
-  );
-}
 
 export interface WorkHoursEditorProps {
   value: WorkHoursState;

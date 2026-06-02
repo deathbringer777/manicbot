@@ -195,3 +195,158 @@ export function decodePerDayWorkHours(wh: unknown): DayHours[] | null {
     return null;
   }
 }
+
+/**
+ * ── Per-day master schedule (per-day hours + ONE optional break) ──────────
+ *
+ * A richer evolution of the legacy `{from,to}` + `workDays[]` master shape
+ * above. Stored in the SAME `masters.work_hours` TEXT column as:
+ *   {"days":{"mon":{"open":"09:00","close":"18:00","break":{"start":"13:00","end":"14:00"}}, …, "sun":null}}
+ * `null` for a weekday = day off; `break` omitted = no break (max one per day).
+ *
+ * `masters.work_days` is kept in sync as the derived sorted 0..6 array
+ * (`deriveWorkDaysFromSchedule`) so the legacy Worker branch, the public salon
+ * profile, and the onboarding `set_master_schedule` check keep working. The
+ * Worker booking engine resolves BOTH the new and legacy shapes via the JS twin
+ * src/services/masterSchedule.js → resolveMasterDay (kept in lockstep here).
+ */
+export type MasterBreak = { start: string; end: string };
+export type MasterDaySchedule = { open: string; close: string; break?: MasterBreak } | null;
+export type MasterScheduleState = Record<WeekdayKey, MasterDaySchedule>;
+
+/** WeekdayKey ⇄ UTC weekday index (Date.getUTCDay): Sunday = 0, Saturday = 6. */
+export const WEEKDAY_KEY_TO_DOW: Record<WeekdayKey, number> = {
+  mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0,
+};
+export const DOW_TO_WEEKDAY_KEY: Record<number, WeekdayKey> = {
+  0: "sun", 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat",
+};
+
+/** Brand-new master: Mon–Sat 09:00–18:00, Sunday off — mirrors the old editor defaults. */
+export const DEFAULT_MASTER_SCHEDULE: MasterScheduleState = {
+  mon: { open: "09:00", close: "18:00" },
+  tue: { open: "09:00", close: "18:00" },
+  wed: { open: "09:00", close: "18:00" },
+  thu: { open: "09:00", close: "18:00" },
+  fri: { open: "09:00", close: "18:00" },
+  sat: { open: "09:00", close: "18:00" },
+  sun: null,
+};
+
+/** Read a single day's value from a decoded `{days}` payload (defensive). */
+function readMasterDay(v: unknown): MasterDaySchedule {
+  if (!v || typeof v !== "object") return null;
+  const o = v as { open?: unknown; close?: unknown; break?: unknown };
+  if (typeof o.open !== "string" || typeof o.close !== "string") return null;
+  const day: { open: string; close: string; break?: MasterBreak } = { open: o.open, close: o.close };
+  if (o.break && typeof o.break === "object") {
+    const b = o.break as { start?: unknown; end?: unknown };
+    if (typeof b.start === "string" && typeof b.end === "string") {
+      day.break = { start: b.start, end: b.end };
+    }
+  }
+  return day;
+}
+
+/**
+ * Decode ONLY the per-day `{days:{…}}` master shape. Returns null for the legacy
+ * `{from,to}` master shape, the salon string format, or junk — so callers can
+ * fall back to legacy hydration.
+ */
+export function decodeMasterSchedule(raw: unknown): MasterScheduleState | null {
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith("{")) return null;
+    try { parsed = JSON.parse(trimmed); } catch { return null; }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const days = (parsed as { days?: unknown }).days;
+  if (!days || typeof days !== "object") return null;
+  const out = {} as MasterScheduleState;
+  for (const key of WEEKDAY_KEYS) {
+    out[key] = readMasterDay((days as Record<string, unknown>)[key]);
+  }
+  return out;
+}
+
+/** Integer hour 0..24 → "HH:00" (legacy window endpoints). */
+function intHourToHHMM(n: number): string {
+  const clamped = Math.max(0, Math.min(24, Math.trunc(n)));
+  return `${String(clamped).padStart(2, "0")}:00`;
+}
+
+/**
+ * Load a master schedule for editing. Prefers the canonical per-day shape;
+ * otherwise rebuilds it from the legacy `{from,to}` window + `workDays[]`
+ * (empty/absent workDays ⇒ Mon–Sat, matching the previous editor default).
+ */
+export function hydrateMasterSchedule(rawWorkHours: unknown, rawWorkDays?: unknown): MasterScheduleState {
+  const perDay = decodeMasterSchedule(rawWorkHours);
+  if (perDay) return perDay;
+  const hours = parseMasterHours(rawWorkHours) ?? { from: 9, to: 18 };
+  const parsedDays = parseMasterWorkDays(rawWorkDays);
+  const enabled = new Set(parsedDays && parsedDays.length > 0 ? parsedDays : [1, 2, 3, 4, 5, 6]);
+  const open = intHourToHHMM(hours.from);
+  const close = intHourToHHMM(hours.to);
+  const out = {} as MasterScheduleState;
+  for (const key of WEEKDAY_KEYS) {
+    out[key] = enabled.has(WEEKDAY_KEY_TO_DOW[key]) ? { open, close } : null;
+  }
+  return out;
+}
+
+/** Serialize to the `{"days":{…}}` JSON persisted in `masters.work_hours`. */
+export function serializeMasterSchedule(state: MasterScheduleState): string {
+  return JSON.stringify({ days: state });
+}
+
+/** Sorted, de-duped 0..6 weekday indices for every enabled (non-null) day. */
+export function deriveWorkDaysFromSchedule(state: MasterScheduleState): number[] {
+  return WEEKDAY_KEYS
+    .filter((key) => state[key] !== null)
+    .map((key) => WEEKDAY_KEY_TO_DOW[key])
+    .sort((a, b) => a - b);
+}
+
+/** "HH:MM" → minutes since midnight, or null if malformed. */
+function hhmmToMinutes(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 24 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+
+export type MasterScheduleValidation =
+  | { ok: true }
+  | { ok: false; reason: "range" | "break_range" | "break_outside"; day: WeekdayKey };
+
+/**
+ * Validate a per-day master schedule. Rejects close<=open, an inverted break,
+ * and a break outside the working window. A break touching either edge is allowed.
+ * Returns the first offending day so the editor can flag the exact row.
+ */
+export function validateMasterSchedule(state: MasterScheduleState): MasterScheduleValidation {
+  for (const day of WEEKDAY_KEYS) {
+    const slot = state[day];
+    if (slot === null) continue;
+    const open = hhmmToMinutes(slot.open);
+    const close = hhmmToMinutes(slot.close);
+    if (open === null || close === null || close <= open) {
+      return { ok: false, reason: "range", day };
+    }
+    if (slot.break) {
+      const bs = hhmmToMinutes(slot.break.start);
+      const be = hhmmToMinutes(slot.break.end);
+      if (bs === null || be === null || be <= bs) {
+        return { ok: false, reason: "break_range", day };
+      }
+      if (bs < open || be > close) {
+        return { ok: false, reason: "break_outside", day };
+      }
+    }
+  }
+  return { ok: true };
+}

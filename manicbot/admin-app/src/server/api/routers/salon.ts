@@ -27,6 +27,10 @@ import {
   serializeMasterHours,
   parseMasterWorkDays,
   serializeMasterWorkDays,
+  decodeMasterSchedule,
+  validateMasterSchedule,
+  serializeMasterSchedule,
+  deriveWorkDaysFromSchedule,
 } from "~/lib/workHours";
 import { MASTER_SCHEDULE_POLICIES } from "~/lib/masterSchedulePolicy";
 import { t } from "~/lib/i18n";
@@ -1579,16 +1583,27 @@ export const salonRouter = createTRPCRouter({
         if (masterId === null) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "malformed_request_payload" });
         }
-        // Re-validate against the booking-engine shape before applying.
+        // Re-validate against the booking-engine shape before applying. Accept
+        // both the per-day `{days}` schedule (preferred) and the legacy pair.
         const setObj: Record<string, unknown> = {};
         if (typeof payload.workHours === "string") {
-          const parsed = parseMasterHours(payload.workHours);
-          if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+          const perDay = decodeMasterSchedule(payload.workHours);
+          if (perDay) {
+            const v = validateMasterSchedule(perDay);
+            if (!v.ok) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: `invalid_master_schedule_${v.reason}` });
+            }
+            setObj.workHours = serializeMasterSchedule(perDay);
+            setObj.workDays = serializeMasterWorkDays(deriveWorkDaysFromSchedule(perDay));
+          } else {
+            const parsed = parseMasterHours(payload.workHours);
+            if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+            }
+            setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
           }
-          setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
         }
-        if (typeof payload.workDays === "string") {
+        if (typeof payload.workDays === "string" && setObj.workDays === undefined) {
           const parsed = parseMasterWorkDays(payload.workDays);
           if (parsed === null) {
             throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
@@ -1749,9 +1764,11 @@ export const salonRouter = createTRPCRouter({
       tgUsername: z.string().max(64).nullable().optional(),
       bio: z.string().max(500).nullable().optional(),
       photo: z.string().max(2000).nullable().optional(),
-      // Per-master booking schedule. Wire format is the serialized `{from,to}`
-      // string + a serialized 0..6 weekday array — the shape the Worker booking
-      // engine reads (see ~/lib/workHours + src/services/appointments.js).
+      // Per-master booking schedule. Preferred wire format is `workSchedule` —
+      // the per-day `{"days":{…}}` JSON (per-day hours + one optional break).
+      // The legacy `{from,to}` + 0..6 weekday array is still accepted for
+      // backward compatibility (see ~/lib/workHours + src/services/appointments.js).
+      workSchedule: z.string().max(2000).optional(),
       workHours: z.string().max(200).optional(),
       workDays: z.string().max(200).optional(),
       onVacation: z.number().min(0).max(1).optional(),
@@ -1799,20 +1816,34 @@ export const salonRouter = createTRPCRouter({
 
       // Schedule — validate + normalize to the booking-engine shape. The field
       // gates real bookable slots, so reject malformed input rather than store
-      // junk the Worker would silently ignore.
-      if (input.workHours !== undefined) {
-        const parsed = parseMasterHours(input.workHours);
-        if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+      // junk the Worker would silently ignore. Prefer the per-day `workSchedule`
+      // shape; fall back to the legacy `{from,to}` + workDays pair.
+      if (input.workSchedule !== undefined) {
+        const state = decodeMasterSchedule(input.workSchedule);
+        if (!state) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_schedule" });
         }
-        setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
-      }
-      if (input.workDays !== undefined) {
-        const parsed = parseMasterWorkDays(input.workDays);
-        if (parsed === null) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+        const v = validateMasterSchedule(state);
+        if (!v.ok) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `invalid_master_schedule_${v.reason}` });
         }
-        setObj.workDays = serializeMasterWorkDays(parsed);
+        setObj.workHours = serializeMasterSchedule(state);
+        setObj.workDays = serializeMasterWorkDays(deriveWorkDaysFromSchedule(state));
+      } else {
+        if (input.workHours !== undefined) {
+          const parsed = parseMasterHours(input.workHours);
+          if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+          }
+          setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
+        }
+        if (input.workDays !== undefined) {
+          const parsed = parseMasterWorkDays(input.workDays);
+          if (parsed === null) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+          }
+          setObj.workDays = serializeMasterWorkDays(parsed);
+        }
       }
 
       const hasVacFrom = input.vacationFrom !== undefined;

@@ -67,6 +67,7 @@ import {
 } from "~/lib/workHours";
 import { WorkHoursEditor } from "~/components/salon/WorkHoursEditor";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
+import type { ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
@@ -1884,6 +1885,66 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       newMasterId: move.toMasterId,
     });
   };
+
+  // Block move + resize → appointmentBlocks.update (no optimistic layer; the
+  // grid re-renders from the refetch on success, snaps back on conflict).
+  const updateBlock = api.appointmentBlocks.update.useMutation({
+    onError: (err) => {
+      toast.error(
+        err?.message === "slot_conflict"
+          ? t("salon.reschedule.conflict", lang)
+          : t("salon.reschedule.failed", lang),
+      );
+      void blocksQuery.refetch();
+    },
+    onSuccess: () => { void blocksQuery.refetch(); },
+  });
+
+  // Drag a reservation / time-off block to a new slot. Week-view drops carry
+  // toMasterId=null (per-day column) — preserve the block's own master.
+  const handleMoveBlock = (move: MoveCommit) => {
+    const b = blockRows.find((x) => String(x.id) === String(move.appointmentId));
+    if (!b) return;
+    updateBlock.mutate({
+      tenantId,
+      id: String(move.appointmentId),
+      masterId: move.toMasterId ?? move.fromMasterId ?? b.masterId,
+      type: b.type,
+      date: move.toDate,
+      time: move.toTime,
+      durationMin: b.durationMin,
+      endDate: b.endDate ?? undefined,
+      reason: b.reason ?? undefined,
+    });
+  };
+
+  // Drag the bottom edge → new duration. Blocks update durationMin in place;
+  // appointments go through rescheduleAppointment(newDurationMin).
+  const handleResize = (c: ResizeCommit) => {
+    if (c.kind === "block") {
+      const b = blockRows.find((x) => String(x.id) === String(c.itemId));
+      if (!b) return;
+      updateBlock.mutate({
+        tenantId,
+        id: String(c.itemId),
+        masterId: c.masterId ?? b.masterId,
+        type: b.type,
+        date: c.date,
+        time: c.time,
+        durationMin: c.durationMin,
+        endDate: b.endDate ?? undefined,
+        reason: b.reason ?? undefined,
+      });
+    } else {
+      rescheduleApt.mutate({
+        tenantId,
+        appointmentId: String(c.itemId),
+        newDate: c.date,
+        newTime: c.time,
+        newDurationMin: c.durationMin,
+      });
+    }
+  };
   const removeMaster = api.salon.removeMaster.useMutation({
     onSuccess: () => { utils.salon.getMasters.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
@@ -2253,6 +2314,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 else setManualBookingOpen(true);
               }}
               onMoveAppointment={handleMoveAppointment}
+              onMoveBlock={handleMoveBlock}
+              onResize={handleResize}
               tenantId={tenantId}
               services={
                 (svcList.data ?? []).map((s) => ({
@@ -2288,6 +2351,8 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 else setManualBookingOpen(true);
               }}
               onMoveAppointment={handleMoveAppointment}
+              onMoveBlock={handleMoveBlock}
+              onResize={handleResize}
               tenantId={tenantId}
               services={
                 (svcList.data ?? []).map((s) => ({

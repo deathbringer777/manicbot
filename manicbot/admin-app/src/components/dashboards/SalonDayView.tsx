@@ -37,6 +37,7 @@ import { CreateSlotPopover } from "~/components/calendar/CreateSlotPopover";
 import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
+import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
@@ -121,6 +122,10 @@ interface Props {
    *  Day view supports cross-master drag (drop on a different master's
    *  column reassigns the booking). */
   onMoveAppointment?: (move: MoveCommit) => void;
+  /** Drag-to-move a reservation / time-off block (kind="block" commit). */
+  onMoveBlock?: (move: MoveCommit) => void;
+  /** Drag-the-bottom-edge resize for an appointment or block (routed by kind). */
+  onResize?: (c: ResizeCommit) => void;
   /**
    * Rich detail panel — when `tenantId` + `services` are provided the
    * bottom drawer becomes `<AppointmentDetailPanel/>` with read/edit
@@ -274,6 +279,8 @@ export function SalonDayView({
   onCreateAt,
   onDeleteBlock,
   onMoveAppointment,
+  onMoveBlock,
+  onResize,
   tenantId,
   services,
   onUpdated,
@@ -288,7 +295,13 @@ export function SalonDayView({
     hourHeight: HOUR_HEIGHT,
     hourStart: HOUR_START,
     hourEnd: HOUR_END,
-    onCommit: (c) => onMoveAppointment?.(c),
+    onCommit: (c) => (c.kind === "block" ? onMoveBlock : onMoveAppointment)?.(c),
+  });
+  const { ghost: resizeGhost, resizingId, bindHandle: bindResize } = useDragToResize({
+    hourHeight: HOUR_HEIGHT,
+    hourStart: HOUR_START,
+    hourEnd: HOUR_END,
+    onResize: (c) => onResize?.(c),
   });
   const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
@@ -859,6 +872,17 @@ export function SalonDayView({
                               durationMin: a.duration ?? 60,
                             })
                           : null;
+                      const resize =
+                        !isTerminal && master.chatId !== -1 && onResize
+                          ? bindResize({
+                              kind: "apt",
+                              itemId: a.id,
+                              date: isoDate,
+                              masterId: master.chatId as number,
+                              time: a.time,
+                              durationMin: a.duration ?? 60,
+                            })
+                          : null;
                       return (
                         <button
                           type="button"
@@ -902,6 +926,16 @@ export function SalonDayView({
                             <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                               {a.serviceName ?? a.svcId}
                             </div>
+                          )}
+                          {resize && (
+                            <span
+                              data-no-drag
+                              aria-hidden
+                              onPointerDown={resize.onPointerDown}
+                              onClick={(e) => e.stopPropagation()}
+                              style={resize.style}
+                              className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                            />
                           )}
                         </button>
                       );
@@ -956,6 +990,26 @@ export function SalonDayView({
                         </div>
                       )}
 
+                    {/* Drag-to-resize preview — top fixed, height follows cursor. */}
+                    {resizeGhost &&
+                      resizeGhost.date === isoDate &&
+                      resizeGhost.masterId === (master.chatId as number) && (
+                        <div
+                          aria-hidden
+                          data-testid="day-view-resize-ghost"
+                          className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none flex items-end justify-center text-[10px] font-bold text-brand-700 dark:text-brand-100"
+                          style={{
+                            top: resizeGhost.top,
+                            height: resizeGhost.height,
+                            background: "rgba(124,58,237,0.18)",
+                            borderColor: "rgba(124,58,237,0.7)",
+                            zIndex: 30,
+                          }}
+                        >
+                          <span className="tabular-nums leading-none pb-0.5">{resizeGhost.durationMin}m</span>
+                        </div>
+                      )}
+
                     {/* Blocks (reservation / time_off) — calendar overhaul.
                         Hatched grey fill, lock icon, no client column. Click
                         opens a styled ConfirmDialog (replaces the old
@@ -978,6 +1032,15 @@ export function SalonDayView({
                             width: `calc(${(100 - 4) / placement.lanes}% - 2px)`,
                           }
                         : { left: 4, right: 4 };
+                      // Single-day blocks are draggable (move) + resizable;
+                      // multi-day bands stay static.
+                      const blockDrag = !isMultiDay && onMoveBlock
+                        ? bindBlock({ kind: "block", appointmentId: b.id, date: isoDate, masterId: b.masterId, time: b.time, durationMin: b.durationMin })
+                        : null;
+                      const blockResize = !isMultiDay && onResize
+                        ? bindResize({ kind: "block", itemId: b.id, date: isoDate, masterId: b.masterId, time: b.time, durationMin: b.durationMin })
+                        : null;
+                      const blockBusy = draggingId === b.id || resizingId === b.id;
                       return (
                         <button
                           type="button"
@@ -999,7 +1062,8 @@ export function SalonDayView({
                               setBlockToDelete(b.id);
                             }
                           }}
-                          className={`absolute rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity ${dimClass}`}
+                          onPointerDown={blockDrag?.onPointerDown}
+                          className={`absolute rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity ${dimClass} ${blockDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
                           style={{
                             top,
                             height,
@@ -1008,6 +1072,8 @@ export function SalonDayView({
                               "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
                             borderColor: "rgba(100,116,139,0.6)",
                             color: "#475569",
+                            ...(blockBusy ? { opacity: 0.4 } : {}),
+                            ...(blockDrag?.style ?? {}),
                           }}
                           title={b.reason ?? (b.type === "reservation" ? "Резерв" : "Перерыв / выходной")}
                         >
@@ -1018,6 +1084,16 @@ export function SalonDayView({
                           <div className="text-[10px] font-medium text-slate-700 dark:text-slate-200 truncate">
                             {b.reason ?? (b.type === "reservation" ? "Reserved" : "Time off")}
                           </div>
+                          {blockResize && (
+                            <span
+                              data-no-drag
+                              aria-hidden
+                              onPointerDown={blockResize.onPointerDown}
+                              onClick={(e) => e.stopPropagation()}
+                              style={blockResize.style}
+                              className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                            />
+                          )}
                         </button>
                       );
                     })}

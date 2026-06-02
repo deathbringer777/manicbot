@@ -258,6 +258,9 @@ export const appointments = sqliteTable("appointments", {
   // epoch MILLISECONDS, UTC — Warsaw wall-clock via warsawToUtcMs (~/lib/time);
   // NOT seconds. Mirrors the Worker contract. See BUG-01 / BUG-05.
   ts: integer("ts").notNull(),
+  /** Per-appointment duration override (minutes); null = use the service's
+   *  nominal duration. Set by drag-the-bottom-edge resize (migration 0106). */
+  duration: integer("duration"),
   status: text("status").notNull().default("pending"),
   masterId: integer("master_id"),
   userName: text("user_name"),

@@ -28,6 +28,7 @@ const BOOTSTRAP_SQL = `CREATE TABLE appointments (
   svc_id TEXT NOT NULL,
   date TEXT NOT NULL,
   time TEXT NOT NULL,
+  duration INTEGER,
   ts INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   master_id INTEGER,

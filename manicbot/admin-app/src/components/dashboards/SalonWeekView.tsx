@@ -29,6 +29,7 @@ import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
+import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
@@ -82,8 +83,12 @@ interface Props {
   blocks?: DayViewBlock[];
   onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
   onDeleteBlock?: (id: string) => void;
-  /** Drag-to-reschedule: fires when the user drops a block on a new slot. */
+  /** Drag-to-reschedule: fires when the user drops an appointment on a new slot. */
   onMoveAppointment?: (move: MoveCommit) => void;
+  /** Drag-to-move a reservation / time-off block (kind="block" commit). */
+  onMoveBlock?: (move: MoveCommit) => void;
+  /** Drag-the-bottom-edge resize for an appointment or block (routed by kind). */
+  onResize?: (c: ResizeCommit) => void;
   /**
    * Rich detail panel — when `tenantId` + `services` are provided, clicking a
    * block opens `<AppointmentDetailPanel/>` (read/edit + status actions +
@@ -181,6 +186,8 @@ export function SalonWeekView({
   onCreateAt,
   onDeleteBlock,
   onMoveAppointment,
+  onMoveBlock,
+  onResize,
   tenantId,
   services,
   onUpdated,
@@ -194,7 +201,13 @@ export function SalonWeekView({
     hourHeight: HOUR_HEIGHT,
     hourStart: HOUR_START,
     hourEnd: HOUR_END,
-    onCommit: (c) => onMoveAppointment?.(c),
+    onCommit: (c) => (c.kind === "block" ? onMoveBlock : onMoveAppointment)?.(c),
+  });
+  const { ghost: resizeGhost, resizingId, bindHandle: bindResize } = useDragToResize({
+    hourHeight: HOUR_HEIGHT,
+    hourStart: HOUR_START,
+    hourEnd: HOUR_END,
+    onResize: (c) => onResize?.(c),
   });
   const days = useMemo(() => weekDays(date), [date]);
   const todayIso = fmtIsoDate(new Date());
@@ -555,6 +568,16 @@ export function SalonWeekView({
                             durationMin: a.duration ?? 60,
                           })
                         : null;
+                      const resize = !isTerminal && onResize
+                        ? bindResize({
+                            kind: "apt",
+                            itemId: a.id,
+                            date: iso,
+                            masterId: null,
+                            time: a.time,
+                            durationMin: a.duration ?? 60,
+                          })
+                        : null;
                       return (
                         <button
                           type="button"
@@ -596,6 +619,16 @@ export function SalonWeekView({
                               {a.serviceName ?? a.svcId}
                             </div>
                           )}
+                          {resize && (
+                            <span
+                              data-no-drag
+                              aria-hidden
+                              onPointerDown={resize.onPointerDown}
+                              onClick={(e) => e.stopPropagation()}
+                              style={resize.style}
+                              className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                            />
+                          )}
                         </button>
                       );
                     });
@@ -624,6 +657,25 @@ export function SalonWeekView({
                       </div>
                     )}
 
+                    {/* Drag-to-resize preview — same column, top fixed, height
+                        follows the cursor. */}
+                    {resizeGhost && resizeGhost.date === iso && (
+                      <div
+                        aria-hidden
+                        data-testid="week-view-resize-ghost"
+                        className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none flex items-end justify-center text-[10px] font-bold text-brand-700 dark:text-brand-100"
+                        style={{
+                          top: resizeGhost.top,
+                          height: resizeGhost.height,
+                          background: "rgba(124,58,237,0.18)",
+                          borderColor: "rgba(124,58,237,0.7)",
+                          zIndex: 30,
+                        }}
+                      >
+                        <span className="tabular-nums leading-none pb-0.5">{resizeGhost.durationMin}m</span>
+                      </div>
+                    )}
+
                     {/* Blocks (reservation / time_off). Single-day blocks share
                         the SAME overlap lanes as appointments (side-by-side);
                         multi-day bands stay full-width background. */}
@@ -642,6 +694,15 @@ export function SalonWeekView({
                             width: `calc(${(100 - 4) / placement.lanes}% - 2px)`,
                           }
                         : { left: 4, right: 4 };
+                      // Single-day blocks are draggable (move) + resizable;
+                      // multi-day bands stay static.
+                      const blockDrag = !isMultiDay && onMoveBlock
+                        ? bindBlock({ kind: "block", appointmentId: b.id, date: iso, masterId: b.masterId, time: b.time, durationMin: b.durationMin })
+                        : null;
+                      const blockResize = !isMultiDay && onResize
+                        ? bindResize({ kind: "block", itemId: b.id, date: iso, masterId: b.masterId, time: b.time, durationMin: b.durationMin })
+                        : null;
+                      const blockBusy = draggingId === b.id || resizingId === b.id;
                       return (
                         <button
                           type="button"
@@ -662,7 +723,8 @@ export function SalonWeekView({
                               setBlockToDelete(b.id);
                             }
                           }}
-                          className="absolute rounded-lg px-1.5 py-1 text-left overflow-hidden border border-dashed flex items-center gap-1 hover:opacity-80 transition-opacity"
+                          onPointerDown={blockDrag?.onPointerDown}
+                          className={`absolute rounded-lg px-1.5 py-1 text-left overflow-hidden border border-dashed flex items-center gap-1 hover:opacity-80 transition-opacity ${blockDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
                           style={{
                             top,
                             height,
@@ -671,11 +733,23 @@ export function SalonWeekView({
                               "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
                             borderColor: "rgba(100,116,139,0.6)",
                             color: "#475569",
+                            ...(blockBusy ? { opacity: 0.4 } : {}),
+                            ...(blockDrag?.style ?? {}),
                           }}
                           title={b.reason ?? (b.type === "reservation" ? "Резерв" : "Перерыв / выходной")}
                         >
                           <Lock className="h-2.5 w-2.5 shrink-0" />
                           <span className="text-[9px] font-medium truncate">{b.reason ?? (b.type === "reservation" ? "Reserved" : "Time off")}</span>
+                          {blockResize && (
+                            <span
+                              data-no-drag
+                              aria-hidden
+                              onPointerDown={blockResize.onPointerDown}
+                              onClick={(e) => e.stopPropagation()}
+                              style={blockResize.style}
+                              className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                            />
+                          )}
                         </button>
                       );
                     })}

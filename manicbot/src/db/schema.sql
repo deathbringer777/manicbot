@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   svc_id TEXT NOT NULL,
   date TEXT NOT NULL,
   time TEXT NOT NULL,
+  -- Per-appointment duration override in minutes; NULL = use the service's
+  -- nominal duration (legacy). Set by drag-the-bottom-edge resize (migration 0106).
+  duration INTEGER,
   -- epoch MILLISECONDS, UTC — Warsaw wall-clock converted via warsawToUTC in
   -- the Worker and warsawToUtcMs in admin-app lib/time. NOT seconds; reminders,
   -- GCal sync, stats and cleanup all assume ms. See BUG-05.

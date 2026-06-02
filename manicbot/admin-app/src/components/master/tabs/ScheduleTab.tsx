@@ -36,6 +36,7 @@ import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
+import type { ResizeCommit } from "~/lib/calendar/useDragToResize";
 
 interface ScheduleData {
   isLoading: boolean;
@@ -159,6 +160,22 @@ export function ScheduleTab({
     [rescheduleApt, tenantId],
   );
 
+  const handleResize = useCallback(
+    (c: ResizeCommit) => {
+      // Master views show appointments only (no blocks) → resize is an
+      // in-place duration change via rescheduleAppointment(newDurationMin).
+      if (c.kind !== "apt") return;
+      rescheduleApt.mutate({
+        tenantId,
+        appointmentId: String(c.itemId),
+        newDate: c.date,
+        newTime: c.time,
+        newDurationMin: c.durationMin,
+      });
+    },
+    [rescheduleApt, tenantId],
+  );
+
   const noShowCb = canMutate
     ? (id: number | string, noShowBy: "client" | "master") =>
         markNoShowMut.mutate({ tenantId, id: String(id), noShowBy })
@@ -183,16 +200,12 @@ export function ScheduleTab({
 
   return (
     <div className="space-y-3" data-testid="master-schedule-tab">
+      {/* Section title only — the view switcher now rides inside each view's
+          header (right of the «сегодня» date nav), not on its own row. */}
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white flex-1">
           {t("master.allApts", lang)}
         </h2>
-        <CalendarViewSwitcher
-          mode={aptViewMode}
-          setMode={setAptViewMode}
-          lang={lang}
-          testIdPrefix="master-schedule"
-        />
       </div>
 
       {schedule.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
@@ -219,6 +232,8 @@ export function ScheduleTab({
             onAction={undefined}
             onNoShow={noShowCb}
             onMoveAppointment={canMutate ? handleMoveAppointment : undefined}
+            onResize={canMutate ? handleResize : undefined}
+            headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="master-schedule" />}
             // Empty hiddenMasterIds — single-column means no rail toggle.
             hiddenMasterIds={new Set<number>()}
             // Master self-view: hide redundant per-column avatar + name strip,
@@ -240,12 +255,15 @@ export function ScheduleTab({
             onAction={undefined}
             onNoShow={noShowCb}
             onMoveAppointment={canMutate ? handleMoveAppointment : undefined}
+            onResize={canMutate ? handleResize : undefined}
+            headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="master-schedule" />}
           />
         )}
 
         {aptViewMode === "calendar" && (
           <>
             <MonthCalendar
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="master-schedule" />}
               apts={apts}
               viewDate={calViewDate}
               setViewDate={(d) => {
@@ -307,6 +325,7 @@ export function ScheduleTab({
 
         {aptViewMode === "list" && (
           <SalonAgendaView
+            headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="master-schedule" />}
             apts={apts}
             isLoading={schedule.isLoading}
             lang={lang}

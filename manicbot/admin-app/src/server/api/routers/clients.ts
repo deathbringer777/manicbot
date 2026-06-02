@@ -46,6 +46,7 @@ import {
   syncMarketingContact,
   type SyncSource,
 } from "~/server/clients/marketingSync";
+import { writeAudit, ctxIp } from "~/server/security/audit";
 import {
   addContactsToSegment,
   removeContactsFromSegment,
@@ -681,6 +682,26 @@ export const clientsRouter = createTRPCRouter({
           updatedAt: now,
         })
         .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, input.chatId)));
+      // #D-2 — GDPR erasure must also scrub the PII copy held in the linked
+      // marketing_contacts row (otherwise name/email/phone stay queryable in
+      // marketing audiences + CSV exports). Tenant-scoped via
+      // (tenantId, linkedUserChatId); keep the row for lead stats but null the
+      // PII and unsubscribe (a deleted client must not be contacted).
+      await ctx.db
+        .update(marketingContacts)
+        .set({ name: null, email: null, phone: null, unsubscribed: 1 })
+        .where(and(
+          eq(marketingContacts.tenantId, input.tenantId),
+          eq(marketingContacts.linkedUserChatId, input.chatId),
+        ));
+      // #D-3 — audit the destructive PII operation.
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "clients.delete",
+        tenantId: input.tenantId,
+        detail: JSON.stringify({ chatId: input.chatId }),
+        ip: ctxIp(ctx),
+      });
       return { ok: true };
     }),
 
@@ -709,6 +730,14 @@ export const clientsRouter = createTRPCRouter({
           updatedAt: now,
         })
         .where(and(eq(users.tenantId, input.tenantId), eq(users.chatId, input.chatId)));
+      // #D-3 — audit the tenant-wide block toggle.
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: input.blocked ? "clients.block" : "clients.unblock",
+        tenantId: input.tenantId,
+        detail: JSON.stringify({ chatId: input.chatId, blocked: input.blocked }),
+        ip: ctxIp(ctx),
+      });
       return { ok: true };
     }),
 

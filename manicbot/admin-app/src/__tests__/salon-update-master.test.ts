@@ -325,3 +325,82 @@ describe("salon.updateMaster — sanitization + no-op", () => {
     expect(updateCalls.length).toBe(0);
   });
 });
+
+describe("salon.updateMaster — schedule (workHours + workDays)", () => {
+  it("persists a {from,to} window + working days for a salon_created master", async () => {
+    const { db, updateCalls } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await caller.updateMaster({
+      tenantId: "t_alpha",
+      chatId: 10_000_000_001,
+      workHours: '{"from":10,"to":18}',
+      workDays: "[1,2,3,4,5,6]",
+    });
+    expect(updateCalls.at(-1)!.values).toEqual({
+      workHours: '{"from":10,"to":18}',
+      workDays: "[1,2,3,4,5,6]",
+    });
+  });
+
+  it("normalizes a messy workDays payload (sort + de-dupe + clamp to 0..6)", async () => {
+    const { db, updateCalls } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await caller.updateMaster({
+      tenantId: "t_alpha",
+      chatId: 10_000_000_001,
+      workDays: "[3,1,1,9,2]",
+    });
+    expect(updateCalls.at(-1)!.values).toEqual({ workDays: "[1,2,3]" });
+  });
+
+  it("rejects an inverted workHours window", async () => {
+    const { db } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await expect(
+      caller.updateMaster({
+        tenantId: "t_alpha",
+        chatId: 10_000_000_001,
+        workHours: '{"from":18,"to":10}',
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects a non-array workDays payload", async () => {
+    const { db } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await expect(
+      caller.updateMaster({
+        tenantId: "t_alpha",
+        chatId: 10_000_000_001,
+        workDays: '{"mon":true}',
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("a self_registered master's schedule is NOT writable by the owner", async () => {
+    const { db } = createDbMock([
+      [{ origin: "self_registered", allowDelegation: 1 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await expect(
+      caller.updateMaster({
+        tenantId: "t_alpha",
+        chatId: 555,
+        workHours: '{"from":10,"to":18}',
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});

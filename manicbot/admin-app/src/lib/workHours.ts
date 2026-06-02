@@ -83,6 +83,94 @@ export function serializeWorkHours(state: WorkHoursState): string {
 }
 
 /**
+ * ── Per-master booking schedule ──────────────────────────────────────────
+ *
+ * A DIFFERENT shape from the salon-wide per-day hours above. The Worker
+ * booking engine (src/services/appointments.js → getSlots) reads a master's
+ * schedule as:
+ *   - masters.work_hours: { from, to }  — one daily window, integer hours 0..24
+ *   - masters.work_days:  number[]      — UTC weekdays the master works,
+ *                                         0=Sun … 6=Sat (Date.getUTCDay).
+ *                                         Empty/absent ⇒ every day.
+ *
+ * Both the owner editor (salon.updateMaster) and the master editor
+ * (master.updateWorkHours) produce/parse exactly this shape so the UI stays in
+ * lockstep with what booking actually enforces. The slot-generation contract
+ * these helpers target is locked in by test/master-selection.test.js.
+ */
+export type MasterHours = { from: number; to: number };
+
+const MASTER_HOUR_MIN = 0;
+const MASTER_HOUR_MAX = 24;
+const WEEKDAY_DOW_MIN = 0; // Sunday
+const WEEKDAY_DOW_MAX = 6; // Saturday
+
+/** True iff [from, to) is an in-order integer window inside [0, 24]. */
+export function isValidMasterHours(from: number, to: number): boolean {
+  return (
+    Number.isInteger(from)
+    && Number.isInteger(to)
+    && from >= MASTER_HOUR_MIN
+    && to <= MASTER_HOUR_MAX
+    && from < to
+  );
+}
+
+/** Serialize a daily window to the `{from,to}` JSON the Worker reads. Throws on an invalid window. */
+export function serializeMasterHours(from: number, to: number): string {
+  if (!isValidMasterHours(from, to)) throw new Error("invalid_master_hours");
+  return JSON.stringify({ from, to });
+}
+
+/**
+ * Parse stored master hours back to `{from,to}`. Accepts the JSON string or an
+ * already-parsed object; returns null for the salon per-day shape, junk, or
+ * anything that isn't a numeric `{from,to}` pair (no range validation here —
+ * callers decide whether to reject or clamp).
+ */
+export function parseMasterHours(raw: unknown): MasterHours | null {
+  let obj: unknown = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try { obj = JSON.parse(trimmed); } catch { return null; }
+  }
+  if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+    const o = obj as { from?: unknown; to?: unknown };
+    if (typeof o.from === "number" && typeof o.to === "number") {
+      return { from: o.from, to: o.to };
+    }
+  }
+  return null;
+}
+
+/** Normalize working weekdays to a sorted, de-duped 0..6 JSON array string. */
+export function serializeMasterWorkDays(days: number[]): string {
+  const clean = Array.from(new Set(days))
+    .filter((d) => Number.isInteger(d) && d >= WEEKDAY_DOW_MIN && d <= WEEKDAY_DOW_MAX)
+    .sort((a, b) => a - b);
+  return JSON.stringify(clean);
+}
+
+/**
+ * Parse stored workDays back to a number[] of valid weekdays (0..6), dropping
+ * out-of-range entries. Returns null when the input isn't a JSON array at all
+ * (so a caller can reject a malformed payload rather than silently store []).
+ */
+export function parseMasterWorkDays(raw: unknown): number[] | null {
+  let arr: unknown = raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try { arr = JSON.parse(trimmed); } catch { return null; }
+  }
+  if (!Array.isArray(arr)) return null;
+  return arr.filter(
+    (d): d is number => Number.isInteger(d) && d >= WEEKDAY_DOW_MIN && d <= WEEKDAY_DOW_MAX,
+  );
+}
+
+/**
  * Decode the per-day JSON shape only — used by the public renderer when it
  * wants to display each weekday row independently. Returns null if `wh`
  * isn't the per-day shape, so the caller can fall back to legacy display.

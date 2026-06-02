@@ -14,6 +14,7 @@ import { ScheduleTab } from "~/components/master/tabs/ScheduleTab";
 import { MasterTelegramPairingCard } from "~/components/master/MasterTelegramPairingCard";
 import { type ServiceTemplate } from "~/lib/serviceTemplates";
 import { AddServiceDropdown, ServiceTemplatesSheet } from "~/components/salon/ServiceAddMenu";
+import { MasterScheduleEditor } from "~/components/salon/MasterScheduleEditor";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { Switch } from "~/components/ui/Switch";
 import { useRole } from "~/components/RoleContext";
@@ -137,6 +138,7 @@ export function MasterDashboard({
   const [vacationFromInput, setVacationFromInput] = useState("");
   const [vacationUntilInput, setVacationUntilInput] = useState("");
   const [vacationError, setVacationError] = useState<string | null>(null);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
 
   // Seed vacation inputs from the profile when it loads. We re-seed
   // whenever the underlying timestamps change so an external update (e.g.
@@ -229,25 +231,60 @@ export function MasterDashboard({
       {/* SCHEDULE — modernized 2026-05-17: SalonDayView / SalonWeekView /
           MonthCalendar / SalonAgendaView stack scoped to this master. */}
       {tab === "schedule" && (
-        <ScheduleTab
-          tenantId={tenantId}
-          masterId={masterId}
-          lang={lang}
-          schedule={schedule}
-          canMutate={canMutate}
-          markNoShowMut={markNoShowMut}
-          // Fallback chain: masters.name → localized "Master". The synthetic
-          // `#<chatId>` fallback inside SalonDayView's column header used to
-          // surface as e.g. "#10968255038" for salon-created masters whose
-          // `masters.name` row was never backfilled. SingleColumnMode also
-          // suppresses the header strip entirely, but downstream consumers
-          // (AppointmentDetailPanel, masters select) still expect a string.
-          masterName={
-            (((profile.data as any)?.name ?? "") as string).trim() ||
-            t("master.fallback.name", lang)
-          }
-          masterWorkHours={(profile.data as any)?.workHours}
-        />
+        <div className="space-y-4">
+          {/* Working-hours editor — the master sets the window + days that
+              gate their bookable slots (master.updateWorkHours). Gated on
+              profile.data so the editor seeds from real values, not defaults. */}
+          {profile.data && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
+              <div className="mb-2 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-brand-500" />
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {t("master.schedule.editTitle", lang)}
+                </h3>
+              </div>
+              <MasterScheduleEditor
+                workHours={(profile.data as any)?.workHours}
+                workDays={(profile.data as any)?.workDays}
+                saving={updateWorkHoursMut.isPending}
+                saved={scheduleSaved}
+                lang={lang}
+                onSave={(workHours, workDays) => {
+                  setScheduleSaved(false);
+                  updateWorkHoursMut.mutate(
+                    { tenantId, masterId, workHours, workDays },
+                    {
+                      onSuccess: () => {
+                        setScheduleSaved(true);
+                        window.setTimeout(() => setScheduleSaved(false), 2500);
+                      },
+                    },
+                  );
+                }}
+                testIdPrefix="master-schedule"
+              />
+            </div>
+          )}
+          <ScheduleTab
+            tenantId={tenantId}
+            masterId={masterId}
+            lang={lang}
+            schedule={schedule}
+            canMutate={canMutate}
+            markNoShowMut={markNoShowMut}
+            // Fallback chain: masters.name → localized "Master". The synthetic
+            // `#<chatId>` fallback inside SalonDayView's column header used to
+            // surface as e.g. "#10968255038" for salon-created masters whose
+            // `masters.name` row was never backfilled. SingleColumnMode also
+            // suppresses the header strip entirely, but downstream consumers
+            // (AppointmentDetailPanel, masters select) still expect a string.
+            masterName={
+              (((profile.data as any)?.name ?? "") as string).trim() ||
+              t("master.fallback.name", lang)
+            }
+            masterWorkHours={(profile.data as any)?.workHours}
+          />
+        </div>
       )}
 
       {/* CLIENTS */}

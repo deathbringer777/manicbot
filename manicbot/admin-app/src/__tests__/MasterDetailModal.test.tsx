@@ -307,6 +307,55 @@ describe("MasterDetailModal — salon_created (editable)", () => {
   });
 });
 
+describe("MasterDetailModal — schedule (Harmonogram) tab", () => {
+  it("Harmonogram tab shows the editor; Save fires updateMaster with the serialized default window + days", () => {
+    setMaster(); // workHours/workDays null → editor seeds Mon–Sat 09–18
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-schedule"));
+    expect(screen.getByTestId("master-detail-schedule-editor")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("master-detail-schedule-save"));
+    expect(updateMutate).toHaveBeenCalledTimes(1);
+    const call = updateMutate.mock.calls[0]![0];
+    expect(call.tenantId).toBe("t_demo");
+    expect(call.chatId).toBe(10_000_000_001);
+    expect(call.workHours).toBe('{"from":9,"to":18}');
+    expect(call.workDays).toBe("[1,2,3,4,5,6]");
+    // Schedule save is scoped to schedule fields only.
+    expect(call).not.toHaveProperty("name");
+    expect(call).not.toHaveProperty("vacationFrom");
+  });
+
+  it("hydrates from stored workHours + workDays and round-trips them on save", () => {
+    setMaster({ workHours: '{"from":10,"to":16}', workDays: "[2,4]" });
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-schedule"));
+
+    const fromInput = screen.getByTestId("master-detail-schedule-from") as HTMLInputElement;
+    const toInput = screen.getByTestId("master-detail-schedule-to") as HTMLInputElement;
+    expect(fromInput.value).toBe("10");
+    expect(toInput.value).toBe("16");
+
+    fireEvent.click(screen.getByTestId("master-detail-schedule-save"));
+    const call = updateMutate.mock.calls[0]![0];
+    expect(call.workHours).toBe('{"from":10,"to":16}');
+    expect(call.workDays).toBe("[2,4]");
+  });
+
+  it("toggling Sunday on adds dow 0 to the saved workDays", () => {
+    setMaster(); // default Mon–Sat (Sun off)
+    renderModal();
+    fireEvent.click(screen.getByTestId("master-detail-settings"));
+    fireEvent.click(screen.getByTestId("master-detail-tab-schedule"));
+    fireEvent.click(screen.getByTestId("master-detail-schedule-day-0")); // Sunday = dow 0
+    fireEvent.click(screen.getByTestId("master-detail-schedule-save"));
+    const call = updateMutate.mock.calls[0]![0];
+    expect(call.workDays).toBe("[0,1,2,3,4,5,6]");
+  });
+});
+
 describe("MasterDetailModal — non-editable origins", () => {
   it("self_registered hides the Settings button and shows the lock notice", () => {
     setMaster({ origin: "self_registered", allowDelegation: 1 });

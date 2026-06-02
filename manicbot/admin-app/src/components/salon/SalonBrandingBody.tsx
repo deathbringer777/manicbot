@@ -24,6 +24,8 @@ export function SalonBrandingBody({ tenantId, profile }: { tenantId: string; pro
   const [logoR2Key, setLogoR2Key] = useState<string>(profile?.logoR2Key ?? "");
   const [coverPhoto, setCoverPhoto] = useState<string>(profile?.coverPhoto ?? "");
   const [coverR2Key, setCoverR2Key] = useState<string>(profile?.coverR2Key ?? "");
+  const [bgImage, setBgImage] = useState<string>(profile?.bgImage ?? "");
+  const [bgR2Key, setBgR2Key] = useState<string>(profile?.bgR2Key ?? "");
   const [brandPrimary, setBrandPrimary] = useState<string>(
     (profile?.brandPalette && typeof profile.brandPalette === "object" && profile.brandPalette.primary) ||
       DEFAULT_BRAND,
@@ -59,6 +61,15 @@ export function SalonBrandingBody({ tenantId, profile }: { tenantId: string; pro
         preview="cover"
         hint={t("salon.branding.coverHint", lang)}
       />
+      <AssetUploadField
+        label={t("salon.branding.background", lang)}
+        tenantId={tenantId}
+        kind="background"
+        value={bgImage}
+        onChange={({ url, key }) => { setBgImage(url); setBgR2Key(key); }}
+        preview="cover"
+        hint={t("salon.branding.backgroundHint", lang)}
+      />
       <div>
         <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">
           {t("salon.branding.brandColor", lang)}
@@ -87,6 +98,8 @@ export function SalonBrandingBody({ tenantId, profile }: { tenantId: string; pro
             coverPhoto: coverPhoto || "",
             logoR2Key: logoR2Key || "",
             coverR2Key: coverR2Key || "",
+            bgImage: bgImage || "",
+            bgR2Key: bgR2Key || "",
             brandPalette: isValidHex ? { primary: brandPrimary } : null,
           })
         }

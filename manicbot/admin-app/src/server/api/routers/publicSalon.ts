@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { tenants, services, masters, tenantConfig, bots, reviews, serviceCategories } from "~/server/db/schema";
+import { tenants, services, masters, tenantConfig, bots, reviews, serviceCategories, photoAlbums, albumPhotos } from "~/server/db/schema";
 import { eq, and, like, or, isNotNull, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { checkRateLimit } from "~/server/auth/rateLimit";
@@ -96,7 +96,7 @@ export const publicSalonRouter = createTRPCRouter({
       const tenant = tenantRows[0];
       if (!tenant) return null;
 
-      const [serviceRows, masterRows, configRows, botRows, categoryRows] = await Promise.all([
+      const [serviceRows, masterRows, configRows, botRows, categoryRows, albumRows, albumPhotoRows] = await Promise.all([
         ctx.db
           .select()
           .from(services)
@@ -130,6 +130,16 @@ export const publicSalonRouter = createTRPCRouter({
           .from(serviceCategories)
           .where(eq(serviceCategories.tenantId, tenant.id))
           .orderBy(serviceCategories.sortOrder, serviceCategories.name),
+        ctx.db
+          .select()
+          .from(photoAlbums)
+          .where(eq(photoAlbums.tenantId, tenant.id))
+          .orderBy(photoAlbums.sortOrder, photoAlbums.name),
+        ctx.db
+          .select()
+          .from(albumPhotos)
+          .where(eq(albumPhotos.tenantId, tenant.id))
+          .orderBy(albumPhotos.albumId, albumPhotos.sortOrder),
       ]);
 
       const cfg = Object.fromEntries(
@@ -186,6 +196,26 @@ export const publicSalonRouter = createTRPCRouter({
         displayName: tenant.displayName ?? null,
         logo: tenant.logo ?? null,
         coverPhoto: tenant.coverPhoto ?? null,
+        bgImage: tenant.bgImage ?? null,
+        // Albums for the public gallery (folders). Empty albums are dropped so
+        // the page never renders a blank folder tab. The flat `photos` above
+        // stays as the implicit "All" album on the client.
+        albums: (() => {
+          const byAlbum = new Map<string, string[]>();
+          for (const p of albumPhotoRows) {
+            const list = byAlbum.get(p.albumId) ?? [];
+            list.push(p.photoUrl);
+            byAlbum.set(p.albumId, list);
+          }
+          return albumRows
+            .map((a: any) => ({
+              id: a.id as string,
+              name: a.name as string,
+              coverUrl: (a.coverUrl as string | null) ?? null,
+              photos: byAlbum.get(a.id) ?? [],
+            }))
+            .filter((a) => a.photos.length > 0);
+        })(),
         brandPalette,
         description: tenant.description,
         city: tenant.city,

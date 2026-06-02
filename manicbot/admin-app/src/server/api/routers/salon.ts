@@ -3,7 +3,7 @@ import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/se
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
-  masterInvitations, masterPairingCodes, serviceCategories, tenantActionRequests, auditLog,
+  masterInvitations, masterPairingCodes, serviceCategories, photoAlbums, albumPhotos, tenantActionRequests, auditLog,
 } from "~/server/db/schema";
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
@@ -277,6 +277,8 @@ export const salonRouter = createTRPCRouter({
       displayName: tenantRow[0]?.displayName ?? null,
       logoR2Key: tenantRow[0]?.logoR2Key ?? null,
       coverR2Key: tenantRow[0]?.coverR2Key ?? null,
+      bgImage: tenantRow[0]?.bgImage ?? null,
+      bgR2Key: tenantRow[0]?.bgR2Key ?? null,
       brandPalette,
       instagramUrl: tenantRow[0]?.instagramUrl ?? null,
     };
@@ -786,6 +788,183 @@ export const salonRouter = createTRPCRouter({
       return { ok: true, count: input.ids.length };
     }),
 
+  // ── Photo albums (public gallery folders) ───────────────────────────────
+  // Albums group public-gallery photos (e.g. by service type). The flat
+  // tenants.photos array stays as the implicit "All / Все" default album, so
+  // a salon that never creates an album is unaffected. Mirrors the
+  // serviceCategories CRUD shape; every read/write is scoped by tenant_id.
+
+  listAlbums: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const [albumRows, photoRows] = await Promise.all([
+        ctx.db
+          .select()
+          .from(photoAlbums)
+          .where(eq(photoAlbums.tenantId, input.tenantId))
+          .orderBy(photoAlbums.sortOrder, photoAlbums.name),
+        ctx.db
+          .select()
+          .from(albumPhotos)
+          .where(eq(albumPhotos.tenantId, input.tenantId))
+          .orderBy(albumPhotos.albumId, albumPhotos.sortOrder),
+      ]);
+      const byAlbum = new Map<string, { url: string; r2Key: string | null; caption: string | null }[]>();
+      for (const p of photoRows) {
+        const list = byAlbum.get(p.albumId) ?? [];
+        list.push({ url: p.photoUrl, r2Key: p.photoR2Key ?? null, caption: p.caption ?? null });
+        byAlbum.set(p.albumId, list);
+      }
+      return albumRows.map(a => ({
+        id: a.id,
+        name: a.name,
+        coverUrl: a.coverUrl ?? null,
+        sortOrder: a.sortOrder,
+        photos: byAlbum.get(a.id) ?? [],
+      }));
+    }),
+
+  createAlbum: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      name: z.string().trim().min(1, "Имя не может быть пустым").max(60, "Максимум 60 символов"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const name = sanitizeText(input.name.trim(), 60);
+      // Append at end of sort order (mirror createServiceCategory).
+      const maxRow = await ctx.db
+        .select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
+        .from(photoAlbums)
+        .where(eq(photoAlbums.tenantId, input.tenantId));
+      const nextOrder = (Number(maxRow[0]?.max ?? -1)) + 1;
+      const id = `al_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+      await ctx.db.insert(photoAlbums).values({
+        tenantId: input.tenantId,
+        id,
+        name,
+        coverUrl: null,
+        sortOrder: nextOrder,
+        createdAt: Math.floor(Date.now() / 1000),
+      });
+      return { id, name, sortOrder: nextOrder };
+    }),
+
+  renameAlbum: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      id: z.string(),
+      newName: z.string().trim().min(1).max(60),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const row = await ctx.db
+        .select({ id: photoAlbums.id })
+        .from(photoAlbums)
+        .where(and(eq(photoAlbums.tenantId, input.tenantId), eq(photoAlbums.id, input.id)))
+        .limit(1);
+      if (row.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Альбом не найден" });
+      await ctx.db.update(photoAlbums)
+        .set({ name: sanitizeText(input.newName.trim(), 60) })
+        .where(and(eq(photoAlbums.tenantId, input.tenantId), eq(photoAlbums.id, input.id)));
+      return { ok: true };
+    }),
+
+  deleteAlbum: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      // Photos first, then the album row — both tenant-scoped. R2 objects are
+      // left in place (content-addressed, harmless), matching the existing
+      // gallery/cover delete behaviour.
+      await ctx.db.delete(albumPhotos).where(and(
+        eq(albumPhotos.tenantId, input.tenantId),
+        eq(albumPhotos.albumId, input.id),
+      ));
+      await ctx.db.delete(photoAlbums).where(and(
+        eq(photoAlbums.tenantId, input.tenantId),
+        eq(photoAlbums.id, input.id),
+      ));
+      return { ok: true };
+    }),
+
+  reorderAlbums: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      ids: z.array(z.string()).min(1).max(200),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      // Verify every id belongs to the tenant before writing — defends against
+      // a forged id shuffling another tenant's album order.
+      const known = await ctx.db
+        .select({ id: photoAlbums.id })
+        .from(photoAlbums)
+        .where(and(eq(photoAlbums.tenantId, input.tenantId), inArray(photoAlbums.id, input.ids)));
+      const knownSet = new Set(known.map(k => k.id));
+      const unknown = input.ids.filter(id => !knownSet.has(id));
+      if (unknown.length > 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Альбомы не найдены: ${unknown.join(", ")}` });
+      }
+      for (let i = 0; i < input.ids.length; i++) {
+        await ctx.db.update(photoAlbums).set({ sortOrder: i }).where(and(
+          eq(photoAlbums.tenantId, input.tenantId),
+          eq(photoAlbums.id, input.ids[i]!),
+        ));
+      }
+      return { ok: true, count: input.ids.length };
+    }),
+
+  // Bulk-replace an album's photos (the per-album uploader calls this on save).
+  // https-only URL guard per photo — these render into <img src>; same XSS
+  // trust boundary as logo/coverPhoto in updateSalonProfile.
+  setAlbumPhotos: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      albumId: z.string(),
+      photos: z.array(z.object({
+        url: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048),
+        r2Key: z.string().max(256).optional(),
+        caption: z.string().max(300).optional(),
+      })).max(60),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const album = await ctx.db
+        .select({ id: photoAlbums.id })
+        .from(photoAlbums)
+        .where(and(eq(photoAlbums.tenantId, input.tenantId), eq(photoAlbums.id, input.albumId)))
+        .limit(1);
+      if (album.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Альбом не найден" });
+
+      // Full replace: drop existing rows, re-insert in order.
+      await ctx.db.delete(albumPhotos).where(and(
+        eq(albumPhotos.tenantId, input.tenantId),
+        eq(albumPhotos.albumId, input.albumId),
+      ));
+      const now = Math.floor(Date.now() / 1000);
+      for (let i = 0; i < input.photos.length; i++) {
+        const p = input.photos[i]!;
+        await ctx.db.insert(albumPhotos).values({
+          tenantId: input.tenantId,
+          albumId: input.albumId,
+          id: `ap_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+          photoUrl: p.url,
+          photoR2Key: p.r2Key ?? null,
+          caption: p.caption ? sanitizeText(p.caption, 300) : null,
+          sortOrder: i,
+          createdAt: now,
+        });
+      }
+      // Keep the album cover in sync with the first photo (used by the public
+      // album tabs as the folder thumbnail).
+      await ctx.db.update(photoAlbums)
+        .set({ coverUrl: input.photos[0]?.url ?? null })
+        .where(and(eq(photoAlbums.tenantId, input.tenantId), eq(photoAlbums.id, input.albumId)));
+      return { ok: true, count: input.photos.length };
+    }),
+
   // ── CSV export/import ───────────────────────────────────────────────────
 
   exportServices: tenantOwnerProcedure
@@ -904,6 +1083,10 @@ export const salonRouter = createTRPCRouter({
       displayName: z.string().min(1).max(120).optional().or(z.literal("")),
       logoR2Key: z.string().max(256).optional().or(z.literal("")),
       coverR2Key: z.string().max(256).optional().or(z.literal("")),
+      // Static page background (distinct from cover). Same https-only XSS
+      // guard as logo/coverPhoto — flows into <img src> / inline style.
+      bgImage: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
+      bgR2Key: z.string().max(256).optional().or(z.literal("")),
       brandPalette: z
         .object({
           primary: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/),
@@ -999,6 +1182,8 @@ export const salonRouter = createTRPCRouter({
       if (input.displayName !== undefined) tenantUpdate.displayName = input.displayName ? sanitizeText(input.displayName, 120) : null;
       if (input.logoR2Key !== undefined) tenantUpdate.logoR2Key = input.logoR2Key || null;
       if (input.coverR2Key !== undefined) tenantUpdate.coverR2Key = input.coverR2Key || null;
+      if (input.bgImage !== undefined) tenantUpdate.bgImage = input.bgImage || null;
+      if (input.bgR2Key !== undefined) tenantUpdate.bgR2Key = input.bgR2Key || null;
       if (input.brandPalette !== undefined) {
         tenantUpdate.brandPalette = input.brandPalette ? JSON.stringify(input.brandPalette) : null;
       }
@@ -1154,7 +1339,7 @@ export const salonRouter = createTRPCRouter({
   mintUploadToken: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
-      kind: z.enum(["logo", "cover", "photo", "portfolio", "service_photo", "client_avatar", "master_avatar", "cancellation_feedback"]),
+      kind: z.enum(["logo", "cover", "background", "photo", "portfolio", "service_photo", "client_avatar", "master_avatar", "cancellation_feedback"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

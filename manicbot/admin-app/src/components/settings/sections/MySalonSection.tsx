@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, Users,
+  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -18,6 +18,7 @@ import { SalonHoursBody } from "~/components/salon/SalonHoursBody";
 import { MasterSchedulePolicyBody } from "~/components/salon/MasterSchedulePolicyBody";
 import { SalonGalleryBody } from "~/components/salon/SalonGalleryBody";
 import { SalonBrandingBody } from "~/components/salon/SalonBrandingBody";
+import { SalonAlbumsBody } from "~/components/salon/SalonAlbumsBody";
 import { SalonStorefrontBody } from "~/components/salon/SalonStorefrontBody";
 import { SalonPublishBody } from "~/components/salon/SalonPublishBody";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
@@ -218,6 +219,15 @@ export function MySalonSection() {
               defaultOpen
             >
               <SalonBrandingBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={FolderOpen}
+              iconClass="text-sky-400"
+              title={t("salon.albums.title", lang)}
+              desc={t("salon.albums.desc", lang)}
+            >
+              <SalonAlbumsBody tenantId={effectiveTenantId} />
             </CollapsibleSection>
           </>
         )}

@@ -253,6 +253,8 @@ export const appointments = sqliteTable("appointments", {
   svcId: text("svc_id").notNull(),
   date: text("date").notNull(),
   time: text("time").notNull(),
+  // epoch MILLISECONDS, UTC — Warsaw wall-clock via warsawToUtcMs (~/lib/time);
+  // NOT seconds. Mirrors the Worker contract. See BUG-01 / BUG-05.
   ts: integer("ts").notNull(),
   status: text("status").notNull().default("pending"),
   masterId: integer("master_id"),

@@ -447,8 +447,10 @@ export const salonRouter = createTRPCRouter({
       if (row.cancelled || (row.status !== "confirmed" && row.status !== "pending")) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_status_transition" });
       }
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (row.ts > nowSec) {
+      // appointments.ts is epoch MILLISECONDS (Warsaw→UTC); compare against
+      // Date.now() in ms. BUG-02: comparing against seconds rejected every real
+      // (ms) past bot booking, so owners could never mark them Done.
+      if (row.ts > Date.now()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_done_before_start" });
       }
       await ctx.db

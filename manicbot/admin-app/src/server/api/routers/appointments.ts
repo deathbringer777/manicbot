@@ -9,6 +9,7 @@ import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appoi
 import { log } from "~/server/utils/logger";
 import { notifyWorker, type AppointmentAction } from "~/server/utils/notifyWorker";
 import { syncMarketingContact } from "~/server/clients/marketingSync";
+import { warsawToUtcMs } from "~/lib/time";
 
 export const appointmentsRouter = createTRPCRouter({
   getAll: adminProcedure
@@ -546,7 +547,10 @@ export const appointmentsRouter = createTRPCRouter({
       const aptId = `a${Math.floor(Date.now() / 1000)}_${Math.random().toString(36).slice(2, 8)}`;
       const now = Math.floor(Date.now() / 1000);
       const [y, mo, d] = input.date.split("-").map(Number);
-      const startTs = Math.floor(Date.UTC(y!, mo! - 1, d!, h!, m!) / 1000);
+      // Canonical appointment `ts` = epoch MILLISECONDS for the Warsaw wall
+      // clock (matches the Worker bot/cron/GCal/stats). BUG-01: was seconds +
+      // raw UTC, breaking reminders/sync/stats/cleanup for admin-booked rows.
+      const startTs = warsawToUtcMs(y!, mo!, d!, h!, m!);
 
       try {
         await ctx.db.insert(appointments).values({
@@ -719,7 +723,8 @@ export const appointmentsRouter = createTRPCRouter({
 
       const [h, m] = input.newTime.split(":").map(Number);
       const [y, mo, d] = input.newDate.split("-").map(Number);
-      const newTs = Math.floor(Date.UTC(y!, mo! - 1, d!, h!, m!) / 1000);
+      // ms + Warsaw→UTC (BUG-04: same defect as createManual).
+      const newTs = warsawToUtcMs(y!, mo!, d!, h!, m!);
 
       try {
         await ctx.db
@@ -894,10 +899,11 @@ export const appointmentsRouter = createTRPCRouter({
       }
 
       // Recompute `ts` from date+time so list ORDER BY ts stays correct
-      // after a reschedule. Matches the formula used by `createManual`.
+      // after a reschedule. ms + Warsaw→UTC, same helper as createManual
+      // (BUG-04).
       const [yyyy, mm, dd] = nextDate.split("-").map(Number);
       const [hh, mi] = nextTime.split(":").map(Number);
-      const nextTs = Math.floor(Date.UTC(yyyy!, mm! - 1, dd!, hh!, mi!) / 1000);
+      const nextTs = warsawToUtcMs(yyyy!, mm!, dd!, hh!, mi!);
 
       const updates: Record<string, string | number | null> = {
         date: nextDate,

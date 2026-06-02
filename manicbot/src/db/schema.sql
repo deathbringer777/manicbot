@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   svc_id TEXT NOT NULL,
   date TEXT NOT NULL,
   time TEXT NOT NULL,
+  -- epoch MILLISECONDS, UTC — Warsaw wall-clock converted via warsawToUTC in
+  -- the Worker and warsawToUtcMs in admin-app lib/time. NOT seconds; reminders,
+  -- GCal sync, stats and cleanup all assume ms. See BUG-05.
   ts INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   master_id INTEGER,

@@ -42,7 +42,7 @@ export function TenantSwitcher() {
   const { lang } = useLang();
   const router = useRouter();
   const { update } = useSession();
-  const { tenantId: activeTenantId } = useRole();
+  const { tenantId: activeTenantId, role, tenantName } = useRole();
   const utils = api.useUtils();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -69,8 +69,25 @@ export function TenantSwitcher() {
   }, [open]);
 
   const items = memberships.data ?? [];
-  // Nothing to switch between → don't render the control at all.
-  if (items.length < 2) return null;
+
+  // Fewer than 2 salons to switch between → no dropdown. A master still sees a
+  // non-interactive salon label (context: "which salon am I working in?") —
+  // this is the badge that used to live standalone in WebShell. Everyone else
+  // (e.g. an owner on their single salon) sees nothing.
+  if (items.length < 2) {
+    if (role === "master" && tenantName) {
+      return (
+        <div
+          data-testid="tenant-salon-label"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-medium max-w-[180px]"
+        >
+          <Building2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{tenantName}</span>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const active = items.find((m) => m.tenantId === activeTenantId) ?? items[0]!;
 

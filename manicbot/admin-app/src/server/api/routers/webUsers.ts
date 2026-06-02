@@ -9,6 +9,7 @@ import { verifyPassword, hashPassword } from "~/server/auth/password";
 import { generateToken, hashToken, timingSafeEqualHex } from "~/server/auth/tokens";
 import { requireOtpConfirmation, requestActionOtp } from "~/server/auth/otp";
 import { verifyGooglePrefillToken } from "~/server/auth/googlePrefillToken";
+import { listPendingInvitationsForEmail } from "~/server/auth/pendingInvitations";
 import { authPublicBaseUrl } from "~/server/auth/authBaseUrl";
 import { isResendConfigured } from "~/server/email/resend";
 import {
@@ -1248,6 +1249,17 @@ export const webUsersRouter = createTRPCRouter({
         salonName: tenantRow[0]?.name ?? "ManicBot",
       };
     }),
+
+  /**
+   * myPendingInvitations — pending master invitations addressed to the
+   * caller's own email (case-insensitive), non-expired. Drives the sidebar
+   * "Invitations" section + its count badge, and is invalidated alongside
+   * the bell after an invite is accepted. Scoped by recipient email, so it
+   * is safe behind a plain protectedProcedure (not tenant data).
+   */
+  myPendingInvitations: protectedProcedure.query(async ({ ctx }) => {
+    return listPendingInvitationsForEmail(ctx.db, { email: ctx.webUser?.email ?? null });
+  }),
 
   /**
    * Scenario A — accept an existing-user invitation. The caller is already

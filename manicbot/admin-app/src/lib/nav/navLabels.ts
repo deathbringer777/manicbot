@@ -31,6 +31,7 @@ export const NAV_LABELS: Record<string, Record<string, string>> = {
     // Salon nav
     "Services": "Услуги",
     "Masters": "Мастера",
+    "Invitations": "Приглашения",
     "Clients": "Клиенты",
     "Channels": "Каналы",
     // Master nav
@@ -86,6 +87,7 @@ export const NAV_LABELS: Record<string, Record<string, string>> = {
     "Messages": "Повідомлення",
     "Services": "Послуги",
     "Masters": "Майстри",
+    "Invitations": "Запрошення",
     "Clients": "Клієнти",
     "Channels": "Канали",
     "Today": "Сьогодні",
@@ -138,6 +140,7 @@ export const NAV_LABELS: Record<string, Record<string, string>> = {
     "Messages": "Wiadomości",
     "Services": "Usługi",
     "Masters": "Mistrzowie",
+    "Invitations": "Zaproszenia",
     "Clients": "Klienci",
     "Channels": "Kanały",
     "Today": "Dziś",
@@ -190,6 +193,7 @@ export const NAV_LABELS: Record<string, Record<string, string>> = {
     "Messages": "Messages",
     "Services": "Services",
     "Masters": "Masters",
+    "Invitations": "Invitations",
     "Clients": "Clients",
     "Channels": "Channels",
     "Today": "Today",

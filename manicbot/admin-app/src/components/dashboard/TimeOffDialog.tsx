@@ -24,6 +24,7 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { DatePicker } from "~/components/ui/DatePicker";
 
 type Kind = "break" | "dayoff" | "vacation";
 
@@ -211,12 +212,11 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className={LABEL}>{t("appointments.manual.date", lang)}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className={FIELD}
-                  data-testid="block-date"
+                  onChange={setDateFrom}
+                  lang={lang}
+                  testIdPrefix="block-date"
                 />
               </div>
               <div>
@@ -266,12 +266,11 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
           {kind === "dayoff" && (
             <div>
               <label className={LABEL}>{t("appointments.manual.date", lang)}</label>
-              <input
-                type="date"
+              <DatePicker
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className={FIELD}
-                data-testid="block-date"
+                onChange={setDateFrom}
+                lang={lang}
+                testIdPrefix="block-date"
               />
             </div>
           )}
@@ -281,23 +280,21 @@ export function TimeOffDialog({ tenantId, defaultMasterId, defaultDate, onClose,
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className={LABEL}>{t("block.timeOff.dateFrom", lang)}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className={FIELD}
-                  data-testid="block-date-from"
+                  onChange={setDateFrom}
+                  lang={lang}
+                  testIdPrefix="block-date-from"
                 />
               </div>
               <div>
                 <label className={LABEL}>{t("block.timeOff.dateTo", lang)}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={dateTo}
+                  onChange={setDateTo}
+                  lang={lang}
                   min={dateFrom}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className={FIELD}
-                  data-testid="block-date-to"
+                  testIdPrefix="block-date-to"
                 />
               </div>
             </div>

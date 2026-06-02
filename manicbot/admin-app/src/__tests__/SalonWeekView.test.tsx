@@ -582,3 +582,24 @@ describe("SalonWeekView — blocks share lanes with appointments", () => {
     expect(band.style.width).toBe("");
   });
 });
+
+describe("SalonWeekView — header switcher slot", () => {
+  it("renders headerRight (the view switcher) inside the calendar card header", () => {
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+        headerRight={<div data-testid="hr-sentinel">switch</div>}
+      />,
+      "en",
+    );
+    const card = screen.getByTestId("week-view-card");
+    // The switcher must live INSIDE the calendar card header (right of the
+    // date nav), not on a separate row above the grid.
+    expect(card.querySelector("[data-testid='hr-sentinel']")).toBeTruthy();
+  });
+});

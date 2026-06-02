@@ -17,7 +17,7 @@
  * Per §12.1 of the Booksy comparison plan — Week view item.
  */
 
-import { useMemo, useEffect, useState, useRef } from "react";
+import { useMemo, useEffect, useState, useRef, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
@@ -95,6 +95,9 @@ interface Props {
   tenantId?: string;
   services?: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
   onUpdated?: () => void;
+  /** Rendered in the header, right of the prev/today/next nav — the calendar
+   *  view switcher lives here so it no longer needs its own row above the grid. */
+  headerRight?: ReactNode;
 }
 
 function pad(n: number): string {
@@ -181,6 +184,7 @@ export function SalonWeekView({
   tenantId,
   services,
   onUpdated,
+  headerRight,
 }: Props) {
   // Drag-to-reschedule — one hook instance owns the cross-column ghost
   // state. The Week view doesn't pin masters to columns, so commit will
@@ -385,6 +389,7 @@ export function SalonWeekView({
             >
               <ChevronRight className="h-5 w-5" />
             </button>
+            {headerRight}
           </div>
         </div>
 

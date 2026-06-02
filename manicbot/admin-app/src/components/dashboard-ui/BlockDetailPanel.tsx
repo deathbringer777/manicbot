@@ -33,6 +33,7 @@ import {
 import { api } from "~/trpc/react";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { DatePicker } from "~/components/ui/DatePicker";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { AnchoredPopover } from "~/components/calendar/AnchoredPopover";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
@@ -353,24 +354,22 @@ export function BlockDetailPanel({
             <label className={LABEL}>
               {isMultiDay ? t("block.timeOff.dateFrom", lang) : t("salon.day.panel.date", lang)}
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="block-panel-date"
+              onChange={setDate}
+              lang={lang}
+              testIdPrefix="block-panel-date"
             />
           </div>
           {isMultiDay ? (
             <div>
               <label className={LABEL}>{t("block.timeOff.dateTo", lang)}</label>
-              <input
-                type="date"
+              <DatePicker
                 value={endDate}
+                onChange={setEndDate}
+                lang={lang}
                 min={date}
-                onChange={(e) => setEndDate(e.target.value)}
-                className={FIELD_BASE}
-                data-testid="block-panel-end-date"
+                testIdPrefix="block-panel-end-date"
               />
             </div>
           ) : (

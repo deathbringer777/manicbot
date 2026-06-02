@@ -24,7 +24,7 @@
  * import etc. are tracked as P0 follow-ups in §12.7 of the plan.
  */
 
-import { useMemo, useEffect, useState, useRef } from "react";
+import { useMemo, useEffect, useState, useRef, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Users, Eye, EyeOff, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { useNowTicker } from "~/lib/useNowTicker";
@@ -146,6 +146,9 @@ interface Props {
    * behavior in SalonDashboard.
    */
   singleColumnMode?: boolean;
+  /** Rendered in the header, right of the prev/today/next nav — the calendar
+   *  view switcher lives here instead of on its own row above the grid. */
+  headerRight?: ReactNode;
 }
 
 function pad(n: number): string {
@@ -275,6 +278,7 @@ export function SalonDayView({
   services,
   onUpdated,
   singleColumnMode = false,
+  headerRight,
 }: Props) {
   // Drag-to-reschedule — single hook owns the cross-column ghost state.
   // Both the date+master pair are resolved from the column under the
@@ -553,6 +557,7 @@ export function SalonDayView({
           >
             <ChevronRight className="h-5 w-5" />
           </button>
+          {headerRight}
         </div>
       </div>
 

@@ -18,6 +18,7 @@ import {
 import { api } from "~/trpc/react";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { DatePicker } from "~/components/ui/DatePicker";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { STATUS_STYLES } from "~/components/dashboard-ui/AptCard";
 import { ClientDetailModal } from "~/components/salon/tabs/clients/ClientDetailModal";
@@ -399,12 +400,11 @@ export function AppointmentDetailPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>{t("salon.day.panel.date", lang)}</label>
-            <input
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="panel-edit-date"
+              onChange={setDate}
+              lang={lang}
+              testIdPrefix="panel-edit-date"
             />
           </div>
           <div>

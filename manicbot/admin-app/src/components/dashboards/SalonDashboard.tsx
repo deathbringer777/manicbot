@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
@@ -1366,6 +1366,7 @@ function SalonBigCalendar({
   tenantId,
   services,
   onUpdated,
+  headerRight,
 }: {
   apts: any[];
   masters?: Array<{ chatId: number; name: string | null }>;
@@ -1381,6 +1382,7 @@ function SalonBigCalendar({
   tenantId: string;
   services: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
   onUpdated?: () => void;
+  headerRight?: ReactNode;
 }) {
   const dayMap = useMemo(() => {
     const m: Record<string, any[]> = {};
@@ -1405,6 +1407,7 @@ function SalonBigCalendar({
         setSelectedDay={setSelectedDay}
         isLoading={isLoading}
         lang={lang}
+        headerRight={headerRight}
         onEventClick={(a, rect) => { setEvtApt(a); setEvtRect(rect); }}
       />
 
@@ -2190,14 +2193,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           />
           {/* Main column — header + view */}
           <div className="flex-1 min-w-0 space-y-3">
-          {/* Calendar overhaul (2026-05-16): the duplicated «Записи» H2 lived
-              here next to the inline 5-pill switcher. PageHeader / Shell
-              already shows the page title — we drop the H2 and let the
-              dropdown sit at the right of an empty bar. */}
-          <div className="flex items-center justify-end">
-            <CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />
-          </div>
-
+          {/* Calendar overhaul: the view switcher now lives INSIDE each view's
+              header (right of the date nav) via `headerRight`, so it no longer
+              needs its own row here — saves vertical space (user request). */}
           <div
             key={aptViewMode}
             data-testid="salon-apt-view-transition"
@@ -2206,6 +2204,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           >
           {aptViewMode === "calendar" && (
             <SalonBigCalendar
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               apts={calAptsFiltered}
               masters={(mastersList.data ?? []).map((m: any) => ({ chatId: m.chatId, name: m.name }))}
               viewDate={calViewDate}
@@ -2234,6 +2233,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "day" && (
             <SalonDayView
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               date={calViewDate}
               setDate={setCalViewDate}
               apts={dayAptsFiltered}
@@ -2270,6 +2270,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {aptViewMode === "week" && (
             <SalonWeekView
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               date={calViewDate}
               setDate={setCalViewDate}
               apts={weekAptsFiltered}
@@ -2308,6 +2309,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               the word «Агенда» the user explicitly wanted dropped. */}
           {aptViewMode === "list" && (
             <SalonAgendaView
+              headerRight={<CalendarViewSwitcher mode={aptViewMode} setMode={setAptViewMode} lang={lang} testIdPrefix="salon-apt" />}
               apts={aptsFiltered}
               isLoading={apts.isLoading}
               lang={lang}

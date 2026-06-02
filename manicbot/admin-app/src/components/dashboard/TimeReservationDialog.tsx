@@ -18,6 +18,7 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { DatePicker } from "~/components/ui/DatePicker";
 
 interface Props {
   tenantId: string;
@@ -156,12 +157,11 @@ export function TimeReservationDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className={LABEL}>{t("appointments.manual.date", lang)}</label>
-              <input
-                type="date"
+              <DatePicker
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className={FIELD}
-                data-testid="block-date"
+                onChange={setDate}
+                lang={lang}
+                testIdPrefix="block-date"
               />
             </div>
             <div>

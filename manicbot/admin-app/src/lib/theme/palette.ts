@@ -77,3 +77,75 @@ export function masterHue(index: number): string {
   const hues = MASTER_EVENT_HUES;
   return hues[((index % hues.length) + hues.length) % hues.length] as string;
 }
+
+function hexToRgb(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+/**
+ * Full color set for a master's calendar events, derived from the master's
+ * hue. `dot`/`text` are the solid hue; `bg`/`border` are translucent tints for
+ * event blocks. Single source so month/week/day/agenda/rail agree per master.
+ */
+export function masterHueSet(index: number): {
+  dot: string;
+  text: string;
+  bg: string;
+  border: string;
+} {
+  const hue = masterHue(index);
+  const [r, g, b] = hexToRgb(hue);
+  return {
+    dot: hue,
+    text: hue,
+    bg: `rgba(${r},${g},${b},0.16)`,
+    border: `rgba(${r},${g},${b},0.5)`,
+  };
+}
+
+/**
+ * Appointment-status event colors for the calendar, theme-aware. Mirrors the
+ * semantic status palette in lib/appointments.ts (pending=amber,
+ * confirmed=emerald, done=violet, cancelled/rejected=red, no_show=orange) —
+ * these stay as universal status hues (not the brand red/turquoise) so they
+ * read as status, not decoration. `done` is violet to stay distinct from the
+ * red brand and red cancelled. Each entry: tinted `bg`, solid `text`, `border`.
+ */
+export type StatusKey =
+  | "pending"
+  | "confirmed"
+  | "done"
+  | "cancelled"
+  | "rejected"
+  | "no_show";
+
+type StatusHue = { bg: string; text: string; border: string };
+
+export const STATUS_HUES: Record<ThemeName, Record<StatusKey, StatusHue>> = {
+  light: {
+    pending:   { bg: "rgba(245,158,11,0.14)", text: "#b45309", border: "rgba(245,158,11,0.30)" },
+    confirmed: { bg: "rgba(16,185,129,0.14)", text: "#047857", border: "rgba(16,185,129,0.30)" },
+    done:      { bg: "rgba(124,58,237,0.14)", text: "#6d28d9", border: "rgba(124,58,237,0.30)" },
+    cancelled: { bg: "rgba(239,68,68,0.12)",  text: "#b91c1c", border: "rgba(239,68,68,0.30)" },
+    rejected:  { bg: "rgba(239,68,68,0.12)",  text: "#b91c1c", border: "rgba(239,68,68,0.30)" },
+    no_show:   { bg: "rgba(249,115,22,0.12)", text: "#c2410c", border: "rgba(249,115,22,0.30)" },
+  },
+  dark: {
+    pending:   { bg: "rgba(245,158,11,0.18)", text: "#fbbf24", border: "rgba(245,158,11,0.38)" },
+    confirmed: { bg: "rgba(16,185,129,0.18)", text: "#34d399", border: "rgba(16,185,129,0.38)" },
+    done:      { bg: "rgba(124,58,237,0.20)", text: "#a78bfa", border: "rgba(124,58,237,0.40)" },
+    cancelled: { bg: "rgba(239,68,68,0.18)",  text: "#f87171", border: "rgba(239,68,68,0.38)" },
+    rejected:  { bg: "rgba(239,68,68,0.18)",  text: "#f87171", border: "rgba(239,68,68,0.38)" },
+    no_show:   { bg: "rgba(249,115,22,0.18)", text: "#fb923c", border: "rgba(249,115,22,0.38)" },
+  },
+} as const;
+
+/** Resolve a status hue for a theme, falling back to `pending` for unknowns. */
+export function statusHue(status: string, theme: ThemeName): StatusHue {
+  const table = STATUS_HUES[theme];
+  return table[status as StatusKey] ?? table.pending;
+}

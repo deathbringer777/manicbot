@@ -290,8 +290,8 @@ describe("SalonAgendaView", () => {
         isLoading={false}
         lang="en"
         masters={[
-          { chatId: 100, name: "Anna" }, // index 0 → purple
-          { chatId: 200, name: "Olga" }, // index 1 → green
+          { chatId: 100, name: "Anna" }, // index 0 → MASTER_EVENT_HUES[0] (red)
+          { chatId: 200, name: "Olga" }, // index 1 → MASTER_EVENT_HUES[1] (turquoise)
         ]}
         onAction={() => undefined}
         onNoShow={() => undefined}
@@ -299,9 +299,9 @@ describe("SalonAgendaView", () => {
       "en",
     );
     const row = screen.getByTestId("agenda-row");
-    // Olga is index 1 in the palette → "#0b9b6b". CSSStyle reports
-    // it normalized so just check the inline style mentions the hue.
-    expect(row.getAttribute("style") ?? "").toMatch(/0b9b6b|11.*155.*107/);
+    // Olga is index 1 in the palette → MASTER_EVENT_HUES[1] = #1ea896
+    // (turquoise). Inline style carries the hue as hex or rgb.
+    expect(row.getAttribute("style") ?? "").toMatch(/1ea896|30.*168.*150/);
   });
 
   it("looks up service display names via serviceNames map", () => {

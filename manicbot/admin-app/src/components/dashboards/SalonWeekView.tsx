@@ -33,22 +33,19 @@ import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResi
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
+import { masterHueSet } from "~/lib/theme/palette";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
 const HOUR_START = 8;
 const HOUR_END = 22;
 const TOTAL_HOURS = HOUR_END - HOUR_START;
 
-const MASTER_PALETTE = [
-  { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" },
-  { bg: "rgba(11,155,107,0.18)", border: "rgba(11,155,107,0.55)", text: "#0b9b6b" },
-  { bg: "rgba(6,182,212,0.18)",  border: "rgba(6,182,212,0.55)",  text: "#0891b2" },
-  { bg: "rgba(244,114,182,0.18)", border: "rgba(244,114,182,0.55)", text: "#ec4899" },
-  { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.55)", text: "#d97706" },
-  { bg: "rgba(59,130,246,0.18)", border: "rgba(59,130,246,0.55)", text: "#2563eb" },
-  { bg: "rgba(168,85,247,0.18)", border: "rgba(168,85,247,0.55)", text: "#9333ea" },
-  { bg: "rgba(20,184,166,0.18)", border: "rgba(20,184,166,0.55)", text: "#0d9488" },
-] as const;
+// Sourced from the shared theme palette (red/turquoise first) so the same
+// master renders in the same hue across every calendar surface.
+const MASTER_PALETTE = Array.from({ length: 8 }, (_, i) => {
+  const s = masterHueSet(i);
+  return { bg: s.bg, border: s.border, text: s.text };
+});
 
 interface MasterRow {
   chatId: number;
@@ -644,8 +641,8 @@ export function SalonWeekView({
                         style={{
                           top: timeToTop(createSlot.time),
                           height: durationToHeight(createSlot.durationMin),
-                          background: "rgba(124,58,237,0.18)",
-                          borderColor: "rgba(124,58,237,0.7)",
+                          background: "rgba(209,70,56,0.18)",
+                          borderColor: "rgba(209,70,56,0.7)",
                           zIndex: 24,
                         }}
                       />
@@ -663,8 +660,8 @@ export function SalonWeekView({
                         style={{
                           top: moveGhost.top,
                           height: moveGhost.height,
-                          background: "rgba(124,58,237,0.22)",
-                          borderColor: "rgba(124,58,237,0.7)",
+                          background: "rgba(209,70,56,0.22)",
+                          borderColor: "rgba(209,70,56,0.7)",
                           zIndex: 30,
                         }}
                       >
@@ -684,8 +681,8 @@ export function SalonWeekView({
                         style={{
                           top: resizeGhost.top,
                           height: resizeGhost.height,
-                          background: "rgba(124,58,237,0.18)",
-                          borderColor: "rgba(124,58,237,0.7)",
+                          background: "rgba(209,70,56,0.18)",
+                          borderColor: "rgba(209,70,56,0.7)",
                           zIndex: 30,
                         }}
                       >

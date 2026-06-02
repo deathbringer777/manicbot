@@ -145,7 +145,7 @@ export default function InvitationAcceptPage({ params }: PageProps) {
         <div className="flex items-center gap-3">
           <div
             className="h-10 w-10 rounded-xl flex items-center justify-center text-white"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             <Users className="h-5 w-5" />
           </div>
@@ -226,7 +226,7 @@ export default function InvitationAcceptPage({ params }: PageProps) {
                 }}
                 disabled={accept.isPending || !c.emailMatch}
                 className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
               >
                 {accept.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 {accept.isPending ? labels.processing : labels.accept}

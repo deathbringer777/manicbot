@@ -274,6 +274,24 @@
     --color-accent-900: #0e443e;
     --color-accent-950: #06302b;
 
+    /* slate-* scale → WARM TAUPE. slate is the app's only neutral (gray-* is
+       0), so re-tinting the scale warms every card / surface / border / muted-
+       text utility (incl. opacity variants like bg-slate-900/50) across ALL
+       tabs with zero component edits. Lightness tracks Tailwind slate so
+       existing contrast holds; only the cool blue hue shifts to warm taupe.
+       Public pages keep cool slate (outside this scope). */
+    --color-slate-50:  #f7f3ec;
+    --color-slate-100: #efe8dd;
+    --color-slate-200: #e1d7c6;
+    --color-slate-300: #cbbda6;
+    --color-slate-400: #a6937e;
+    --color-slate-500: #7b6a59;
+    --color-slate-600: #5d5044;
+    --color-slate-700: #443a30;
+    --color-slate-800: #2d261f;
+    --color-slate-900: #1c1714;
+    --color-slate-950: #110d0a;
+
     /* Re-anchor the semantic color tokens to THIS scope. The @theme
        indirection (--color-x: var(--x)) is substituted at :root, so overriding
        only the base vars above would NOT re-resolve the bg-primary /

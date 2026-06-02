@@ -39,6 +39,7 @@ import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
+import { masterHueSet } from "~/lib/theme/palette";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
@@ -46,18 +47,14 @@ const HOUR_START = 8; // 08:00
 const HOUR_END = 22; // 22:00 (exclusive — last visible row is 21:00–22:00)
 const TOTAL_HOURS = HOUR_END - HOUR_START;
 
-/** Brand-derived palette — assigned to master columns by index. Each tone
- *  has enough contrast against both light and dark surfaces. */
-const MASTER_PALETTE = [
-  { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" }, // brand purple
-  { bg: "rgba(11,155,107,0.18)", border: "rgba(11,155,107,0.55)", text: "#0b9b6b" }, // accent green
-  { bg: "rgba(6,182,212,0.18)",  border: "rgba(6,182,212,0.55)",  text: "#0891b2" }, // cyan
-  { bg: "rgba(244,114,182,0.18)", border: "rgba(244,114,182,0.55)", text: "#ec4899" }, // pink
-  { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.55)", text: "#d97706" }, // amber
-  { bg: "rgba(59,130,246,0.18)", border: "rgba(59,130,246,0.55)", text: "#2563eb" }, // blue
-  { bg: "rgba(168,85,247,0.18)", border: "rgba(168,85,247,0.55)", text: "#9333ea" }, // violet
-  { bg: "rgba(20,184,166,0.18)", border: "rgba(20,184,166,0.55)", text: "#0d9488" }, // teal
-] as const;
+/** Brand-derived palette — assigned to master columns by index. Sourced from
+ *  the shared theme palette (red/turquoise first) so the same master renders
+ *  in the same hue across every calendar surface. Each tone has enough
+ *  contrast against both light and dark surfaces. */
+const MASTER_PALETTE = Array.from({ length: 8 }, (_, i) => {
+  const s = masterHueSet(i);
+  return { bg: s.bg, border: s.border, text: s.text };
+});
 
 interface MasterRow {
   chatId: number;
@@ -977,8 +974,8 @@ export function SalonDayView({
                           style={{
                             top: timeToTop(createSlot.time),
                             height: durationToHeight(createSlot.durationMin),
-                            background: "rgba(124,58,237,0.18)",
-                            borderColor: "rgba(124,58,237,0.7)",
+                            background: "rgba(209,70,56,0.18)",
+                            borderColor: "rgba(209,70,56,0.7)",
                             zIndex: 24,
                           }}
                         />
@@ -998,8 +995,8 @@ export function SalonDayView({
                           style={{
                             top: moveGhost.top,
                             height: moveGhost.height,
-                            background: "rgba(124,58,237,0.22)",
-                            borderColor: "rgba(124,58,237,0.7)",
+                            background: "rgba(209,70,56,0.22)",
+                            borderColor: "rgba(209,70,56,0.7)",
                             zIndex: 30,
                           }}
                         >
@@ -1020,8 +1017,8 @@ export function SalonDayView({
                           style={{
                             top: resizeGhost.top,
                             height: resizeGhost.height,
-                            background: "rgba(124,58,237,0.18)",
-                            borderColor: "rgba(124,58,237,0.7)",
+                            background: "rgba(209,70,56,0.18)",
+                            borderColor: "rgba(209,70,56,0.7)",
                             zIndex: 30,
                           }}
                         >

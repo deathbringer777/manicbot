@@ -556,9 +556,9 @@ export function ClientFormModal({ tenantId, initial, onClose, onSaved }: Props) 
               className={
                 !valid || pending
                   ? "flex-1 cursor-not-allowed rounded-lg bg-slate-200 py-3 text-sm font-semibold text-slate-400 dark:bg-slate-700 dark:text-slate-500 sm:py-2.5"
-                  : "flex-1 rounded-lg py-3 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90 sm:py-2.5"
+                  : "flex-1 rounded-lg py-3 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90 sm:py-2.5"
               }
-              style={!valid || pending ? undefined : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+              style={!valid || pending ? undefined : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
             >
               {pending
                 ? t("clients.form.saving", lang)

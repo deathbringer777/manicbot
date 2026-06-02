@@ -139,8 +139,8 @@ export function CreateSlotPopover({
             type="button"
             onClick={() => onCreate(title.trim())}
             data-testid="create-slot-create"
-            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             <Plus className="h-4 w-4" />
             {t("appointments.manual.create", lang)}

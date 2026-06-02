@@ -255,7 +255,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
           <div
             className="h-9 w-9 rounded-xl flex items-center justify-center text-white"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             <Mail className="h-4 w-4" />
           </div>
@@ -316,7 +316,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
                 }
                 disabled={!isValid || send.isPending}
                 className="flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
               >
                 {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 {labels.submit}

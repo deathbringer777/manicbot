@@ -1302,7 +1302,7 @@ type InviteCopy = {
 };
 
 function inviteExistingUserCopy(lang: Lang, salonName: string): InviteCopy {
-  const sn = salonName || "ManicBot";
+  const sn = sanitizeEmailDisplayName(salonName) || "ManicBot"; // #MAIL-1/#MAIL-2 — tenant-controlled, sanitize before HTML interpolation
   switch (lang) {
     case "ru":
       return {
@@ -1340,7 +1340,7 @@ function inviteExistingUserCopy(lang: Lang, salonName: string): InviteCopy {
 }
 
 function inviteNewUserCopy(lang: Lang, salonName: string): InviteCopy {
-  const sn = salonName || "ManicBot";
+  const sn = sanitizeEmailDisplayName(salonName) || "ManicBot"; // #MAIL-1/#MAIL-2 — tenant-controlled, sanitize before HTML interpolation
   switch (lang) {
     case "ru":
       return {
@@ -1434,7 +1434,7 @@ function passwordResetCredentialsForOwnerCopy(
   salonName: string,
   masterName: string,
 ): PasswordResetCredentialsForOwnerCopy {
-  const sn = salonName || "ManicBot";
+  const sn = sanitizeEmailDisplayName(salonName) || "ManicBot"; // #MAIL-1/#MAIL-2 — tenant-controlled, sanitize before HTML interpolation
   const mn = masterName || "—";
   switch (lang) {
     case "ru":

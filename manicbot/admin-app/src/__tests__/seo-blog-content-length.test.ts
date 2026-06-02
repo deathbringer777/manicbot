@@ -67,10 +67,11 @@ describe("blog cover images", () => {
 });
 
 describe("blog corpus invariants", () => {
-  it("contains the 10 articles seeded in May 2026", () => {
+  it("contains the original 10 articles plus the 2026-06 long-form batch", () => {
     const slugs = BLOG_ARTICLES.map((a: BlogArticle) => a.slug).sort();
     expect(slugs).toEqual(
       [
+        // Original May-2026 seed
         "ai-receptionist-247",
         "automate-salon-booking",
         "channels-compared-2026",
@@ -81,6 +82,17 @@ describe("blog corpus invariants", () => {
         "nail-trends-2026",
         "reduce-no-shows",
         "whatsapp-instagram-channels",
+        // 2026-06 long-form, image-rich batch (10 new)
+        "ai-beauty-trends-2026",
+        "booking-conversion",
+        "client-retention-loyalty",
+        "instagram-bookings-2026",
+        "local-seo-nail-salon",
+        "nail-salon-pricing-guide",
+        "salon-reviews-reputation",
+        "scale-solo-to-team",
+        "seasonal-marketing-calendar",
+        "tiktok-for-nail-salons",
       ].sort(),
     );
   });

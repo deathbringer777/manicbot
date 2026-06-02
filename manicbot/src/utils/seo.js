@@ -98,6 +98,16 @@ const ADMIN_APP_PUBLIC_ROUTES = [
  * @type {Array<{ slug: string; lastmod: string }>}
  */
 const BLOG_ARTICLES = [
+  { slug: 'instagram-bookings-2026',     lastmod: '2026-06-01' },
+  { slug: 'tiktok-for-nail-salons',      lastmod: '2026-05-30' },
+  { slug: 'local-seo-nail-salon',        lastmod: '2026-05-29' },
+  { slug: 'salon-reviews-reputation',    lastmod: '2026-05-28' },
+  { slug: 'nail-salon-pricing-guide',    lastmod: '2026-05-27' },
+  { slug: 'client-retention-loyalty',    lastmod: '2026-05-26' },
+  { slug: 'scale-solo-to-team',          lastmod: '2026-05-23' },
+  { slug: 'seasonal-marketing-calendar', lastmod: '2026-05-22' },
+  { slug: 'ai-beauty-trends-2026',       lastmod: '2026-05-21' },
+  { slug: 'booking-conversion',          lastmod: '2026-05-19' },
   { slug: 'channels-compared-2026',      lastmod: '2026-05-15' },
   { slug: 'nail-clients-survey-2026',    lastmod: '2026-05-12' },
   { slug: 'ai-receptionist-247',         lastmod: '2026-05-08' },
@@ -412,6 +422,16 @@ export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
  * @type {Array<{ slug: string; title: string; summary: string }>}
  */
 const LLMS_TOP_GUIDES = [
+  { slug: 'instagram-bookings-2026',     title: 'Instagram for nail salons: DMs, Stories and Reels into bookings',     summary: 'How nail salons turn Instagram into a booking channel — Reels for reach (+35% followers/month), saveable carousels, link-in-bio, comment-to-DM automation, and 5-minute DM replies.' },
+  { slug: 'tiktok-for-nail-salons',      title: 'TikTok for nail salons: viral views into booked appointments',        summary: 'A TikTok playbook for nail salons — short-form process and before/after formats, trending audio, and converting roughly 3x-faster follower growth into bookings via a profile link.' },
+  { slug: 'local-seo-nail-salon',        title: 'Local SEO for nail salons: rank for "nail salon near me"',             summary: 'How nail salons rank in Google local search — a complete Google Business Profile, reviews, photos, NAP consistency, and a realistic 3-6 month timeline.' },
+  { slug: 'salon-reviews-reputation',    title: 'More 5-star reviews on autopilot for nail salons',                    summary: 'A system for collecting more 5-star reviews and handling negative ones — review-request timing (77% leave one if asked), response templates, and cross-platform monitoring.' },
+  { slug: 'nail-salon-pricing-guide',    title: 'Nail salon pricing and menu engineering',                            summary: 'How to structure a tiered nail-service menu and raise prices without losing clients — markup math, a premium anchor, and a 30-day price-increase playbook.' },
+  { slug: 'client-retention-loyalty',    title: 'Retention and loyalty: rebook 69% like the top salons',               summary: 'Retention tactics that lift rebooking toward the 69% top-salon benchmark — checkout pre-booking, 90-day win-back, and digital loyalty over paper punch cards.' },
+  { slug: 'scale-solo-to-team',          title: 'From a solo nail master to a team',                                   summary: 'How a solo nail master scales to a team — a live speed-test interview, booth-rent vs commission models, and the systems that keep a multi-chair salon profitable.' },
+  { slug: 'seasonal-marketing-calendar', title: 'The 2026 nail-salon marketing calendar',                             summary: 'A month-by-month marketing calendar for nail salons — seasonal demand peaks, gift-card promotions (sales up about 93% YoY), and campaigns that fill slow weeks.' },
+  { slug: 'ai-beauty-trends-2026',       title: 'AI in beauty 2026: what nail salons are automating',                  summary: 'How AI is used in nail and beauty salons in 2026 — booking chatbots, predictive no-show scoring, and deposits that cut no-shows from 15-30% to under 5%.' },
+  { slug: 'booking-conversion',          title: 'Why clients abandon booking and how to recover them',                 summary: 'Where nail-salon bookings leak — slow replies, hidden prices, app-install friction — and the fixes that recover would-be clients: 5-minute replies and in-messenger booking.' },
   { slug: 'channels-compared-2026',      title: 'Booking channels compared: Telegram vs Instagram vs WhatsApp vs web', summary: 'Which channel converts best for nail salons in 2026, with conversion-rate data and per-platform constraints.' },
   { slug: 'ai-receptionist-247',         title: 'AI receptionist that books appointments 24/7',                          summary: 'How a multilingual AI receptionist handles the entire booking flow without staff intervention.' },
   { slug: 'reduce-no-shows',             title: 'Reduce no-shows: deposits, reminders, follow-ups',                      summary: 'Concrete tactics nail salons use to push no-show rates below 5%, with reminder timing recipes.' },

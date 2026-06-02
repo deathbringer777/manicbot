@@ -44,7 +44,7 @@ describe('seo', () => {
       expect(entries.find((e) => e.loc === '/register')).toBeUndefined();
     });
 
-    it('includes blog article slugs (all 10 articles, May 2026 SEO sweep)', () => {
+    it('includes blog article slugs (all 20 articles — May + June 2026 batches)', () => {
       const slugs = entries.filter((e) => e.loc.startsWith('/blog/')).map((e) => e.loc);
       // Original 6 (rewritten long-form in 4 langs).
       expect(slugs).toContain('/blog/automate-salon-booking');
@@ -58,6 +58,17 @@ describe('seo', () => {
       expect(slugs).toContain('/blog/nail-clients-survey-2026');
       expect(slugs).toContain('/blog/ai-receptionist-247');
       expect(slugs).toContain('/blog/dynamic-pricing-salon');
+      // 2026-06 batch — 10 new long-form articles (4 langs each, image-rich).
+      expect(slugs).toContain('/blog/instagram-bookings-2026');
+      expect(slugs).toContain('/blog/tiktok-for-nail-salons');
+      expect(slugs).toContain('/blog/local-seo-nail-salon');
+      expect(slugs).toContain('/blog/salon-reviews-reputation');
+      expect(slugs).toContain('/blog/nail-salon-pricing-guide');
+      expect(slugs).toContain('/blog/client-retention-loyalty');
+      expect(slugs).toContain('/blog/scale-solo-to-team');
+      expect(slugs).toContain('/blog/seasonal-marketing-calendar');
+      expect(slugs).toContain('/blog/ai-beauty-trends-2026');
+      expect(slugs).toContain('/blog/booking-conversion');
     });
 
     it('every entry has lastmod, priority, changefreq', () => {
@@ -479,7 +490,7 @@ describe('seo', () => {
       expect(txt).toContain('## Contact');
     });
 
-    it('emits ## Top guides with deep links to all 10 blog articles', () => {
+    it('emits ## Top guides with deep links to all 20 blog articles', () => {
       expect(txt).toContain('## Top guides');
       expect(txt).toContain('/blog/channels-compared-2026');
       expect(txt).toContain('/blog/ai-receptionist-247');
@@ -491,6 +502,17 @@ describe('seo', () => {
       expect(txt).toContain('/blog/dynamic-pricing-salon');
       expect(txt).toContain('/blog/nail-trends-2026');
       expect(txt).toContain('/blog/nail-clients-survey-2026');
+      // 2026-06 batch.
+      expect(txt).toContain('/blog/instagram-bookings-2026');
+      expect(txt).toContain('/blog/tiktok-for-nail-salons');
+      expect(txt).toContain('/blog/local-seo-nail-salon');
+      expect(txt).toContain('/blog/salon-reviews-reputation');
+      expect(txt).toContain('/blog/nail-salon-pricing-guide');
+      expect(txt).toContain('/blog/client-retention-loyalty');
+      expect(txt).toContain('/blog/scale-solo-to-team');
+      expect(txt).toContain('/blog/seasonal-marketing-calendar');
+      expect(txt).toContain('/blog/ai-beauty-trends-2026');
+      expect(txt).toContain('/blog/booking-conversion');
     });
 
     it('emits ## Comparisons with all 4 competitor pages', () => {

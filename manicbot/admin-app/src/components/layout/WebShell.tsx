@@ -495,7 +495,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
             data-tour="web-mobile-nav"
             className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900/95 border-t border-[#e5e7eb] dark:border-white/[0.06]"
           >
-            <div className="flex items-center justify-around px-1 py-1.5">
+            <div className="flex items-center justify-around px-1 py-1.5 safe-area-pb">
               {mobileNav.map((item) => {
                 const active = isActive(item);
                 return (

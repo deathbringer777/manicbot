@@ -143,12 +143,15 @@ const ALLOWLIST = new Set([
   // the workHours/workDays zod fields (+5) and the validate+normalize block in
   // `updateMaster` (+18), net +30 lines above this query) → 1958 (the
   // master-schedule policy PR added `reviewMasterScheduleRequest` +
-  // `listPendingScheduleRequests` (~137 lines) above this query).
+  // `listPendingScheduleRequests` (~137 lines) above this query) → 2143 (the
+  // Phase-2 photo-albums PR added album CRUD — listAlbums/createAlbum/
+  // renameAlbum/deleteAlbum/reorderAlbums/setAlbumPhotos, ~185 lines — around
+  // line 785, shifting the bot-collision query down).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1958",
+  "src/server/api/routers/salon.ts:2143",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

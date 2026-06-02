@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   svc_id TEXT NOT NULL,
   date TEXT NOT NULL,
   time TEXT NOT NULL,
+  -- epoch MILLISECONDS, UTC — Warsaw wall-clock converted via warsawToUTC in
+  -- the Worker and warsawToUtcMs in admin-app lib/time. NOT seconds; reminders,
+  -- GCal sync, stats and cleanup all assume ms. See BUG-05.
   ts INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   master_id INTEGER,
@@ -787,7 +790,7 @@ CREATE TABLE IF NOT EXISTS marketing_contacts (
   tenant_id TEXT,
   tags TEXT,
   custom_fields TEXT,
-  consent_email INTEGER NOT NULL DEFAULT 1,
+  consent_email INTEGER NOT NULL DEFAULT 0, -- opt-IN: granted only via logged consent (newsletter DOI / owner toggle → marketing_consent_log). MKT-01.
   consent_sms INTEGER NOT NULL DEFAULT 0,
   brevo_contact_id TEXT,
   unsubscribe_token TEXT,

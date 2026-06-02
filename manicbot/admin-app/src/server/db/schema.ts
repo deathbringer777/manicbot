@@ -253,6 +253,8 @@ export const appointments = sqliteTable("appointments", {
   svcId: text("svc_id").notNull(),
   date: text("date").notNull(),
   time: text("time").notNull(),
+  // epoch MILLISECONDS, UTC — Warsaw wall-clock via warsawToUtcMs (~/lib/time);
+  // NOT seconds. Mirrors the Worker contract. See BUG-01 / BUG-05.
   ts: integer("ts").notNull(),
   status: text("status").notNull().default("pending"),
   masterId: integer("master_id"),
@@ -831,7 +833,7 @@ export const marketingContacts = sqliteTable("marketing_contacts", {
   tenantId: text("tenant_id"),
   tags: text("tags"),
   customFields: text("custom_fields"),
-  consentEmail: integer("consent_email").notNull().default(1),
+  consentEmail: integer("consent_email").notNull().default(0),
   consentSms: integer("consent_sms").notNull().default(0),
   brevoContactId: text("brevo_contact_id"),
   unsubscribeToken: text("unsubscribe_token"),

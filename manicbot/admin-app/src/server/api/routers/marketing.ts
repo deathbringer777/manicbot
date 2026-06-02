@@ -132,6 +132,18 @@ export const marketingRouter = createTRPCRouter({
       if (input.unsubscribed !== undefined) patch.unsubscribed = input.unsubscribed ? 1 : 0;
       if (!Object.keys(patch).length) return { ok: true };
       await ctx.db.update(marketingContacts).set(patch).where(eq(marketingContacts.id, input.id));
+
+      // GDPR (MKT-01/MKT-06): demonstrable consent audit trail for God-Mode
+      // edits of consent flags, mirroring marketingTenant.contactUpdate.
+      const consentTs = now();
+      const consentLogs: Array<typeof marketingConsentLog.$inferInsert> = [];
+      if (input.consentEmail !== undefined) {
+        consentLogs.push({ contactId: input.id, event: input.consentEmail ? "subscribed" : "unsubscribed", source: "system_admin", note: "email", createdAt: consentTs });
+      }
+      if (input.consentSms !== undefined) {
+        consentLogs.push({ contactId: input.id, event: input.consentSms ? "subscribed" : "unsubscribed", source: "system_admin", note: "sms", createdAt: consentTs });
+      }
+      if (consentLogs.length) await ctx.db.insert(marketingConsentLog).values(consentLogs);
       return { ok: true };
     }),
 

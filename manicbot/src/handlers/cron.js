@@ -1278,9 +1278,11 @@ async function processPostVisitConfirmations(ctx, nowMs) {
       AND a.status = 'confirmed'
       AND a.cancelled = 0
       AND a.visit_confirmed_at IS NULL
+      -- a.ts is epoch MILLISECONDS (Warsaw->UTC); compare against nowMs. BUG-03:
+      -- binding nowSec here matched nothing, silently disabling post-visit.
       AND a.ts <= ?
     LIMIT 200
-  `, ctx.tenantId, nowSec);
+  `, ctx.tenantId, nowMs);
 
   if (!candidates.length) return;
 
@@ -1290,7 +1292,7 @@ async function processPostVisitConfirmations(ctx, nowMs) {
   const toAutoDone = [];
   for (const a of candidates) {
     const dur = svcDurMap.get(a.svc_id) || 60;
-    const endSec = a.ts + dur * 60;
+    const endSec = Math.floor(a.ts / 1000) + dur * 60; // a.ts ms -> seconds (BUG-03)
     if (shouldAutoDonePostVisit(a, endSec, oneDayAgo, hardCapAgo)) {
       toAutoDone.push(a.id);
     }
@@ -1312,7 +1314,7 @@ async function processPostVisitConfirmations(ctx, nowMs) {
     // only fires once, see below).
     if (a.review_requested_at != null) continue;
     const dur = svcDurMap.get(a.svc_id) || 60;
-    const endSec = a.ts + dur * 60;
+    const endSec = Math.floor(a.ts / 1000) + dur * 60; // a.ts ms -> seconds (BUG-03)
     if (endSec <= twoHoursAgo) toPrompt.push(a);
   }
   for (const a of toPrompt) {

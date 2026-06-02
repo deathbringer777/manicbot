@@ -52,8 +52,12 @@ function ownerCaller(db: any) {
   return createCallerFactory(salonRouter)(makeTenantOwnerCtx(db, TENANT) as never);
 }
 
-const FUTURE_TS = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
-const PAST_TS = Math.floor(Date.now() / 1000) - 3600;
+// BUG-02: appointments.ts stores `ts` in epoch MILLISECONDS (Warsaw→UTC). The
+// markDone guard compares against Date.now() (ms), so fixtures must be ms — a
+// seconds value (~1.7e9) is always < Date.now() (~1.7e12) and would silently
+// pass the future-guard, masking the regression.
+const FUTURE_TS = Date.now() + 7 * 24 * 3600 * 1000;
+const PAST_TS = Date.now() - 3600 * 1000;
 
 describe("salonRouter status mutations — close adminProcedure regression", () => {
   beforeEach(() => {

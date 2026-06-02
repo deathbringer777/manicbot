@@ -1,4 +1,5 @@
 import { handleStripeWebhook } from '../billing/webhooks.js';
+import { getStripeConfig } from '../billing/config.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
 
@@ -20,7 +21,10 @@ export async function tryStripe(request, env, url) {
       return new Response('Bad body', { status: 400 });
     }
     const ec = envCtx(env);
-    const result = await handleStripeWebhook(ec, body, signature, secret);
+    // STRIPE-01: pass the price-id config so the webhook can map a portal-driven
+    // price change back to the authoritative plan key (not stale metadata).
+    const cfg = getStripeConfig(env);
+    const result = await handleStripeWebhook(ec, body, signature, secret, cfg.ok ? cfg : null);
     if (result.ok && !result.skipped) {
       const stripeType = (() => { try { return JSON.parse(body)?.type ?? 'unknown'; } catch { return 'unknown'; } })();
       void logEvent(ec, 'stripe.event', { message: `Stripe: ${stripeType}` });

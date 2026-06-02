@@ -14,11 +14,9 @@ import { envCtx } from './envCtx.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { notifyAdminNewLead } from '../utils/notifyAdmin.js';
-import { sendSubscriberWelcomeEmail } from '../email/subscriberWelcomeEmail.js';
 
 const ALLOWED_SALON_TYPES = new Set(['nail', 'beauty', 'cosmetology', 'barber', 'other']);
 const MAX_LEADS_PER_EMAIL = 10;
-const ALLOWED_LOCALES = new Set(['ru', 'uk', 'ua', 'en', 'pl']);
 
 function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
@@ -37,11 +35,8 @@ function clientIp(request) {
   return request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 }
 
-export async function tryLeadRoutes(request, env, url, execCtx) {
-  const waitUntil = execCtx && typeof execCtx.waitUntil === 'function'
-    ? execCtx.waitUntil.bind(execCtx)
-    : (p) => { p.catch(() => {}); };
-  if (request.method === 'OPTIONS' && (url.pathname === '/api/leads' || url.pathname === '/api/email-subscribe')) {
+export async function tryLeadRoutes(request, env, url) {
+  if (request.method === 'OPTIONS' && url.pathname === '/api/leads') {
     return json({ ok: true });
   }
 
@@ -102,9 +97,14 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
         (request.headers.get('user-agent') || '').slice(0, 300),
         now,
       );
+      // A demo/lead request is NOT a marketing opt-in: store consent_email=0
+      // explicitly (don't rely on the column default). Email marketing consent
+      // is granted only via newsletter double-opt-in or an explicit owner/booking
+      // opt-in, each logged in marketing_consent_log. ON CONFLICT does NOT touch
+      // consent — a repeat lead must never silently (re)grant or revoke it. MKT-01.
       await dbRun(ec, `
-        INSERT INTO marketing_contacts (email, name, phone, source, first_seen_at, last_seen_at, lead_count)
-        VALUES (?, ?, ?, 'landing', ?, ?, 1)
+        INSERT INTO marketing_contacts (email, name, phone, source, first_seen_at, last_seen_at, lead_count, consent_email, consent_sms)
+        VALUES (?, ?, ?, 'landing', ?, ?, 1, 0, 0)
         ON CONFLICT(email) DO UPDATE SET
           name = excluded.name,
           phone = excluded.phone,
@@ -132,62 +132,12 @@ export async function tryLeadRoutes(request, env, url, execCtx) {
   }
 
   // ── /api/email-subscribe ──
-  if (request.method === 'POST' && url.pathname === '/api/email-subscribe') {
-    if (!env.DB) return json({ error: 'db_unbound' }, 500);
-    const ec = envCtx(env);
-    const ip = clientIp(request);
-
-    // 20/hr per IP — generous enough for shared NAT (offices, mobile carriers)
-    // but still DDoS-safe. Dedup is enforced at the DB level via UNIQUE(email).
-    const rl = await checkAndIncrement(ec, `newsletter:${ip}`, 'post', 20, 3600);
-    if (rl.limited) return json({ error: 'rate_limited' }, 429);
-
-    let body;
-    try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
-    const email = String(body.email || '').trim().toLowerCase().slice(0, 200);
-    const localeRaw = String(body.locale || 'ru').trim();
-    const locale = ALLOWED_LOCALES.has(localeRaw) ? localeRaw : 'ru';
-
-    if (!email.includes('@') || email.length < 5) return json({ error: 'invalid_email' }, 400);
-
-    const now = Math.floor(Date.now() / 1000);
-    let isNew = false;
-    try {
-      const existing = await dbGet(ec, 'SELECT id FROM email_subscribers WHERE email = ?', email);
-      isNew = !existing;
-      await dbRun(ec, `
-        INSERT INTO email_subscribers (email, locale, confirmed, created_at)
-        VALUES (?, ?, 0, ?)
-        ON CONFLICT(email) DO UPDATE SET locale = excluded.locale
-      `, email, locale, now);
-    } catch (e) {
-      log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'newsletter_insert' });
-      return json({ error: 'db_error' }, 500);
-    }
-
-    // Welcome email — only on first subscribe. waitUntil so the promise
-    // survives after the HTTP response returns (Workers cancel naked
-    // promises once the response is sent).
-    if (isNew) {
-      if (ec.resendApiKey && ec.resendFrom) {
-        log.info('http.leads', { message: 'sending newsletter welcome email', locale });
-        waitUntil(
-          sendSubscriberWelcomeEmail({
-            resendKey: ec.resendApiKey,
-            fromAddr: ec.resendFrom,
-            email,
-            locale,
-          })
-            .then((ok) => ok ? log.info('http.leads', { message: 'newsletter welcome email sent' }) : log.warn('http.leads', { message: 'newsletter welcome email FAILED' }))
-            .catch((e) => log.error('http.leads', e instanceof Error ? e : new Error(String(e?.message)), { action: 'newsletter_welcome_email' })),
-        );
-      } else {
-        log.warn('http.leads', { message: 'RESEND_API_KEY or RESEND_FROM missing — skipping welcome email' });
-      }
-    }
-
-    return json({ ok: true });
-  }
+  // Handled earlier in worker.js (alongside /api/subscribe) by
+  // handleSubscribeRequest — the proper GDPR double-opt-in flow into
+  // newsletter_subscribers (mint confirm_token, send a CONFIRM email; the
+  // welcome is sent only after the confirm click). The previous single-opt-in
+  // path here (immediate welcome into email_subscribers) was unreachable dead
+  // code and a compliance landmine — removed. See MKT-07.
 
   return null;
 }

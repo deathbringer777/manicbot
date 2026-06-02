@@ -21,13 +21,33 @@
  *     `share_link` → ?tab=public_profile (the two routing bugs the rework
  *     was chartered to fix).
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { LangContext } from "~/components/LangContext";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 
 let mockData: { completedSteps: string[]; allCompletedAt: number | null; totalSteps: number } | null;
 let mockIsLoading = false;
+
+// happy-dom's bare `localStorage` global lacks a working `.getItem` in a
+// symlinked worktree, so OnboardingChecklist (which reads the optional-tier
+// collapse preference on mount, OnboardingChecklist.tsx:53) throws
+// `localStorage.getItem is not a function` and fails all 19 cases locally while
+// staying green in CI — masking real regressions. Self-provide a real in-memory
+// localStorage (mirrors dashboard-prefs-isolation.test.tsx) so the gate is
+// trustworthy in every environment, including the persistence case below.
+const _lsStore: Record<string, string> = {};
+const _mockLocalStorage = {
+  getItem: (key: string) => _lsStore[key] ?? null,
+  setItem: (key: string, value: string) => { _lsStore[key] = String(value); },
+  removeItem: (key: string) => { delete _lsStore[key]; },
+  clear: () => { Object.keys(_lsStore).forEach((k) => delete _lsStore[k]); },
+  get length() { return Object.keys(_lsStore).length; },
+  key: (n: number) => Object.keys(_lsStore)[n] ?? null,
+};
+beforeAll(() => {
+  vi.stubGlobal("localStorage", _mockLocalStorage);
+});
 
 vi.mock("~/trpc/react", () => ({
   api: {

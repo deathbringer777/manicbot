@@ -636,7 +636,7 @@ describe("appointmentsRouter", () => {
       expect(body.oldTime).toBe(baseRow.time);
     });
 
-    it("update sets ts to the recomputed UTC seconds for the new date+time", async () => {
+    it("update sets ts to the recomputed UTC milliseconds (Warsaw wall-clock) for the new date+time", async () => {
       const dbMock = createDbMock([
         [baseRow],
         [{ duration: 60 }],
@@ -645,7 +645,10 @@ describe("appointmentsRouter", () => {
 
       await caller.update({ id: "apt_1", date: "2026-05-18", time: "10:30" });
 
-      const ts = Math.floor(Date.UTC(2026, 4 /* May */, 18, 10, 30) / 1000);
+      // BUG-01/04/06: `ts` is epoch MILLISECONDS for the Warsaw wall clock,
+      // matching the Worker contract (warsawToUtcMs). 2026-05-18 10:30 in
+      // Warsaw is CEST (UTC+2) → 08:30 UTC.
+      const ts = Date.UTC(2026, 4 /* May */, 18, 8, 30);
       expect(dbMock.updateCalls[0]?.values).toMatchObject({
         date: "2026-05-18",
         time: "10:30",

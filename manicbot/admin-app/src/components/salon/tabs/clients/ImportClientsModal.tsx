@@ -194,7 +194,7 @@ export function ImportClientsModal({ tenantId, onClose }: Props) {
                 ? "flex-1 cursor-not-allowed rounded-lg bg-slate-200 py-3 text-sm font-semibold text-slate-400 dark:bg-slate-700 dark:text-slate-500 sm:py-2.5"
                 : "flex-1 rounded-lg py-3 text-sm font-semibold text-white shadow transition hover:opacity-90 sm:py-2.5"
             }
-            style={!csv.trim() || realRun.isPending ? undefined : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            style={!csv.trim() || realRun.isPending ? undefined : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             {realRun.isPending ? t("clients.import.running", lang) : t("clients.import.run", lang)}
           </button>

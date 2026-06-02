@@ -68,8 +68,8 @@ function StatSparkline({ data, trendUp, trendDown }: { data: number[]; trendUp: 
     .join(" ");
   const lastX = (data.length - 1) * step;
   const lastY = h - ((data[data.length - 1]! - min) / range) * (h - 4) - 2;
-  const stroke = trendDown ? "#ef4444" : trendUp ? "#10b981" : "#7c3aed";
-  const fillTop = trendDown ? "rgba(239,68,68,0.18)" : trendUp ? "rgba(16,185,129,0.20)" : "rgba(124,58,237,0.18)";
+  const stroke = trendDown ? "#ef4444" : trendUp ? "#10b981" : "var(--color-secondary)";
+  const fillTop = trendDown ? "rgba(239,68,68,0.18)" : trendUp ? "rgba(16,185,129,0.20)" : "rgba(30,168,150,0.18)";
   const fillId = `stat-spark-fill-${trendDown ? "d" : trendUp ? "u" : "n"}`;
 
   return (

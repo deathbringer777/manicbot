@@ -220,10 +220,10 @@ export function TimeReservationDialog({
                     data-testid={`block-duration-${d}`}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
                       sel
-                        ? "border-transparent text-white shadow-[0_4px_12px_-4px_rgba(124,58,237,0.55)]"
+                        ? "border-transparent text-white shadow-[0_4px_12px_-4px_rgba(209,70,56,0.55)]"
                         : "border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04]"
                     }`}
-                    style={sel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                    style={sel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
                   >
                     {d < 60 ? `${d}m` : `${(d / 60).toFixed(d % 60 === 0 ? 0 : 1)}h`}
                   </button>
@@ -266,9 +266,9 @@ export function TimeReservationDialog({
               className={
                 submitDisabled
                   ? "flex-1 rounded-lg bg-slate-200 py-2.5 text-sm font-semibold text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
-                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
+                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
               }
-              style={submitDisabled ? undefined : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+              style={submitDisabled ? undefined : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
             >
               {create.isPending ? t("block.creating", lang) : t("block.create", lang)}
             </button>

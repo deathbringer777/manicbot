@@ -163,7 +163,7 @@ export default function GrantCodesClient() {
             }
             disabled={generateMut.isPending}
             className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             {generateMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ticket className="w-4 h-4" />}
             Сгенерировать

@@ -223,7 +223,7 @@ export function OnboardingChecklist({ tenantId }: Props) {
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: essentialProgress === 0 ? "4px" : `${essentialProgress * 100}%`,
-            background: "linear-gradient(135deg,#7c3aed,#06b6d4)",
+            background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))",
           }}
         />
       </div>

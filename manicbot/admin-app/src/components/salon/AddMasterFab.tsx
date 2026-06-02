@@ -117,7 +117,7 @@ export function AddMasterFab({ onPick }: AddMasterFabProps) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="h-14 sm:h-12 rounded-full text-white font-semibold flex items-center justify-center gap-2 px-4 sm:px-5 shadow-2xl active:scale-95 transition-transform"
-        style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+        style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
       >
         <Plus className="h-5 w-5" />
         <span className="hidden sm:inline text-sm">{labels.add}</span>

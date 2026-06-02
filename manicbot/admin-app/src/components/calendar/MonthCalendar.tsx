@@ -30,19 +30,13 @@ import { useMemo, type ReactNode } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
+import { MASTER_EVENT_HUES } from "~/lib/theme/palette";
 
 /** Brand-derived hue order — must match SalonDayView/Week so the same
- *  master always renders in the same color across every view. */
-export const MONTH_CAL_MASTER_PALETTE = [
-  "#7c3aed", // brand purple
-  "#0b9b6b", // accent green
-  "#0891b2", // cyan
-  "#ec4899", // pink
-  "#d97706", // amber
-  "#2563eb", // blue
-  "#9333ea", // violet
-  "#0d9488", // teal
-] as const;
+ *  master always renders in the same color across every view. Sourced from
+ *  the shared theme palette (red/turquoise first) so all calendar surfaces
+ *  agree per master. */
+export const MONTH_CAL_MASTER_PALETTE = [...MASTER_EVENT_HUES];
 
 const WEEKDAYS_BY_LANG: Record<string, string[]> = {
   ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],

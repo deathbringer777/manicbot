@@ -476,9 +476,9 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
               className={
                 submitDisabled
                   ? "flex-1 rounded-lg bg-slate-200 py-2.5 text-sm font-semibold text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
-                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
+                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
               }
-              style={submitDisabled ? undefined : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+              style={submitDisabled ? undefined : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
             >
               {create.isPending ? t("appointments.manual.creating", lang) : t("appointments.manual.create", lang)}
             </button>
@@ -691,7 +691,7 @@ function DatePopover({ value, onChange, lang }: { value: string; onChange: (v: s
           const base = "h-9 rounded-lg text-sm font-medium transition";
           let cls: string;
           if (isSel) {
-            cls = `${base} text-white shadow-[0_4px_12px_-2px_rgba(124,58,237,0.45)]`;
+            cls = `${base} text-white shadow-[0_4px_12px_-2px_rgba(209,70,56,0.45)]`;
           } else if (isPast) {
             cls = `${base} text-slate-300 cursor-not-allowed dark:text-white/20`;
           } else if (!cell.inMonth) {
@@ -708,7 +708,7 @@ function DatePopover({ value, onChange, lang }: { value: string; onChange: (v: s
               disabled={isPast}
               onClick={() => !isPast && pick(dt)}
               className={cls}
-              style={isSel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+              style={isSel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
             >
               {dt.getDate()}
             </button>
@@ -852,7 +852,7 @@ function TimePopover({ value, onChange, lang }: { value: string; onChange: (v: s
                       ? "block w-full px-3 py-1.5 text-sm font-semibold text-white"
                       : "block w-full px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
                   }
-                  style={sel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                  style={sel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
                 >
                   {pad2(h)}
                 </button>
@@ -876,7 +876,7 @@ function TimePopover({ value, onChange, lang }: { value: string; onChange: (v: s
                       ? "block w-full px-3 py-1.5 text-sm font-semibold text-white"
                       : "block w-full px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
                   }
-                  style={sel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                  style={sel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
                 >
                   {pad2(m)}
                 </button>

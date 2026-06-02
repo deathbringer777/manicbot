@@ -1,8 +1,28 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ===========================================================================
+   DESIGN TOKENS — single source of truth.
+
+   Two palettes coexist:
+   • DEFAULT (public / marketing / salon storefronts) — the original
+     slate + brand-purple + accent-green system. Unchanged.
+   • AUTHENTICATED APP (tenant dashboard + god-mode admin) — a warm
+     beige + red + turquoise system, scoped under `[data-app="authed"]`
+     (set in src/app/(dashboard)/layout.tsx). See the scope block below.
+
+   How the scope works: Tailwind 4 compiles `bg-brand-500` to
+   `background-color: var(--color-brand-500)` and `text-foreground` to
+   `color: var(--color-foreground)`. Overriding those variables on the
+   authed wrapper re-resolves every utility in that subtree — so the whole
+   app reskins with near-zero component edits, while public pages keep the
+   defaults. To swap the app palette later, edit ONLY the `[data-app=...]`
+   blocks below.
+   =========================================================================== */
+
 @theme {
-  /* Brand (purple) — kept for Telegram Mini App */
+  /* Brand scale — DEFAULT purple (public + Telegram Mini App).
+     Overridden to a red ramp inside the authed scope. */
   --color-brand-50: #f5f3ff;
   --color-brand-100: #ede9fe;
   --color-brand-200: #ddd6fe;
@@ -15,7 +35,8 @@
   --color-brand-900: #3b1473;
   --color-brand-950: #2e1065;
 
-  /* Accent (Brevo green) — web admin dashboard */
+  /* Accent scale — DEFAULT Brevo green (public).
+     Overridden to a turquoise ramp inside the authed scope. */
   --color-accent-50:  #ecfef6;
   --color-accent-100: #d0fce9;
   --color-accent-200: #a3f8d4;
@@ -28,13 +49,45 @@
   --color-accent-900: #044530;
   --color-accent-950: #022318;
 
-  /* Brevo-inspired surface tokens */
+  /* Brevo-inspired fixed surface tokens (public marketing). Left intact. */
   --color-surface:       #fafaf7;
   --color-surface-card:  #ffffff;
   --color-ink:           #1a1a2e;
   --color-ink-muted:     #6b7280;
   --color-ink-border:    #e5e7eb;
   --color-ink-faint:     #f3f4f6;
+
+  /* Semantic color tokens → generate bg-/text-/border- utilities that read
+     theme-aware base vars (defined in :root blocks below). These let the
+     authed scope reskin without per-component edits, and wire up the
+     `text-foreground` / `border-border` / `text-muted-foreground` utilities
+     already used across the app. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-surface-muted: var(--surface-muted);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-text: var(--secondary-text);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-strong: var(--warning-strong);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
@@ -50,7 +103,7 @@
     -moz-appearance: textfield;
   }
 
-  /* Dark mode (default for dashboard) */
+  /* ── DEFAULT palette · dark (public default for dashboard chrome) ── */
   :root {
     --background: #0f172a; /* slate-900 */
     --foreground: #f8fafc; /* slate-50 */
@@ -61,17 +114,30 @@
     --popover: #1e293b;
     --popover-foreground: #f8fafc;
 
+    --surface-muted: #334155; /* slate-700 */
+
     --primary: #7c3aed; /* brand-500 */
     --primary-foreground: #ffffff;
+    --primary-hover: #6d28d9;
 
     --secondary: #334155; /* slate-700 */
     --secondary-foreground: #f8fafc;
+    --secondary-hover: #475569;
+    --secondary-text: #a78bfa;
 
     --muted: #334155;
     --muted-foreground: #94a3b8; /* slate-400 */
 
     --accent: #334155;
     --accent-foreground: #f8fafc;
+
+    --success: #34d399;
+    --success-foreground: #052e1a;
+    --warning: #fbbf24;
+    --warning-foreground: #422006;
+    --warning-strong: #fbbf24;
+    --danger: #ef4444;
+    --danger-foreground: #ffffff;
 
     --destructive: #ef4444; /* red-500 */
     --destructive-foreground: #ffffff;
@@ -83,7 +149,7 @@
     --radius: 0.75rem;
   }
 
-  /* Light mode — Brevo-inspired palette */
+  /* ── DEFAULT palette · light (public, Brevo-inspired) ── */
   :root:not(.dark) {
     --background: #fafaf7;
     --foreground: #1a1a2e;
@@ -94,11 +160,16 @@
     --popover: #ffffff;
     --popover-foreground: #1a1a2e;
 
+    --surface-muted: #f3f4f6;
+
     --primary: #0b9b6b;
     --primary-foreground: #ffffff;
+    --primary-hover: #098f61;
 
     --secondary: #f3f4f6;
     --secondary-foreground: #1a1a2e;
+    --secondary-hover: #e5e7eb;
+    --secondary-text: #07714d;
 
     --muted: #f3f4f6;
     --muted-foreground: #6b7280;
@@ -106,12 +177,198 @@
     --accent: #ecfef6;
     --accent-foreground: #1a1a2e;
 
+    --success: #16a34a;
+    --success-foreground: #ffffff;
+    --warning: #d97706;
+    --warning-foreground: #ffffff;
+    --warning-strong: #b45309;
+    --danger: #ef4444;
+    --danger-foreground: #ffffff;
+
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
 
     --border: #e5e7eb;
     --input: #e5e7eb;
     --ring: #0b9b6b;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     AUTHENTICATED APP palette — beige + red + turquoise.
+     Scoped to the [data-app="authed"] subtree (tenant dashboard + god-mode
+     admin). Public/marketing/storefront pages live outside this wrapper and
+     keep the DEFAULT palette above.
+
+     The brand and accent scale overrides here re-tint every `bg-brand-*`,
+     `text-accent-*`, etc. in the subtree to red/turquoise with no component
+     edits. Semantic vars are LIGHT here; `.dark [data-app="authed"]` below
+     overrides them for the dark theme. All foreground/background pairings
+     are WCAG AA verified (theme-tokens-contrast.test.ts).
+     ═══════════════════════════════════════════════════════════════════════ */
+  [data-app="authed"] {
+    /* semantic — LIGHT (warm beige) */
+    --background: #f7f0e6;
+    --foreground: #2e2722;
+
+    --card: #fffdf8;
+    --card-foreground: #2e2722;
+
+    --popover: #fffdf8;
+    --popover-foreground: #2e2722;
+
+    --surface-muted: #efe5d6;
+
+    --primary: #d14638;          /* red */
+    --primary-foreground: #ffffff;
+    --primary-hover: #b23a30;
+
+    --secondary: #1ea896;        /* turquoise */
+    --secondary-foreground: #06302b;  /* dark teal text on turquoise fill (AA) */
+    --secondary-hover: #178a7b;
+    --secondary-text: #0b6f62;        /* turquoise-as-foreground on beige (AA) */
+
+    --muted: #efe5d6;
+    --muted-foreground: #6f645b;      /* darkened for AA on page bg */
+
+    --accent: #efe5d6;
+    --accent-foreground: #2e2722;
+
+    --success: #1f7a58;
+    --success-foreground: #ffffff;
+    --warning: #c9892f;
+    --warning-foreground: #3a2d14;
+    --warning-strong: #8a5d18;        /* warning-as-text on beige (AA) */
+    --danger: #c0392b;
+    --danger-foreground: #ffffff;
+
+    --destructive: #c0392b;
+    --destructive-foreground: #ffffff;
+
+    --border: #e2d4bf;
+    --input: #e2d4bf;
+    --ring: #178a7b;  /* deeper turquoise: >= 3:1 non-text contrast on beige */
+
+    /* brand-* scale -> RED ramp (auto-flips bg-brand and text-brand here) */
+    --color-brand-50:  #fcf4f2;
+    --color-brand-100: #f9e4df;
+    --color-brand-200: #f2c5bc;
+    --color-brand-300: #e89e90;
+    --color-brand-400: #dd7058;
+    --color-brand-500: #d14638;
+    --color-brand-600: #b23a30;
+    --color-brand-700: #93302a;
+    --color-brand-800: #6e2620;
+    --color-brand-900: #4f1c18;
+    --color-brand-950: #2c0f0d;
+
+    /* accent-* scale → TURQUOISE ramp */
+    --color-accent-50:  #e8f8f5;
+    --color-accent-100: #c8efe9;
+    --color-accent-200: #97e2d7;
+    --color-accent-300: #5fd0c0;
+    --color-accent-400: #2fbaa6;
+    --color-accent-500: #1ea896;
+    --color-accent-600: #178a7b;
+    --color-accent-700: #136f64;
+    --color-accent-800: #11574f;
+    --color-accent-900: #0e443e;
+    --color-accent-950: #06302b;
+
+    /* slate-* scale → WARM TAUPE. slate is the app's only neutral (gray-* is
+       0), so re-tinting the scale warms every card / surface / border / muted-
+       text utility (incl. opacity variants like bg-slate-900/50) across ALL
+       tabs with zero component edits. Lightness tracks Tailwind slate so
+       existing contrast holds; only the cool blue hue shifts to warm taupe.
+       Public pages keep cool slate (outside this scope). */
+    --color-slate-50:  #f7f3ec;
+    --color-slate-100: #efe8dd;
+    --color-slate-200: #e1d7c6;
+    --color-slate-300: #cbbda6;
+    --color-slate-400: #a6937e;
+    --color-slate-500: #7b6a59;
+    --color-slate-600: #5d5044;
+    --color-slate-700: #443a30;
+    --color-slate-800: #2d261f;
+    --color-slate-900: #1c1714;
+    --color-slate-950: #110d0a;
+
+    /* Re-anchor the semantic color tokens to THIS scope. The @theme
+       indirection (--color-x: var(--x)) is substituted at :root, so overriding
+       only the base vars above would NOT re-resolve the bg-primary /
+       text-foreground / etc. utilities in this subtree (they'd keep the value
+       computed at :root). Re-declaring the indirection here rebinds them to the
+       beige values. Works for both themes — the .dark block below only swaps
+       the base vars, and these read whichever base var is in effect. */
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-surface-muted: var(--surface-muted);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary-hover: var(--primary-hover);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary-hover: var(--secondary-hover);
+    --color-secondary-text: var(--secondary-text);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-warning-strong: var(--warning-strong);
+    --color-danger: var(--danger);
+    --color-danger-foreground: var(--danger-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+  }
+
+  /* AUTHENTICATED APP · dark theme overrides (warm beige-dark) */
+  .dark [data-app="authed"] {
+    --background: #1c1714;
+    --foreground: #f2e8da;
+
+    --card: #26201b;
+    --card-foreground: #f2e8da;
+
+    --popover: #26201b;
+    --popover-foreground: #f2e8da;
+
+    --surface-muted: #2f2823;
+
+    --primary: #e8604f;
+    --primary-foreground: #1c1714;
+    --primary-hover: #f07260;
+
+    --secondary: #34c5b0;
+    --secondary-foreground: #10211e;
+    --secondary-hover: #45d6c0;
+    --secondary-text: #34c5b0;
+
+    --muted: #2f2823;
+    --muted-foreground: #b8a993;
+
+    --accent: #2f2823;
+    --accent-foreground: #f2e8da;
+
+    --success: #5fbe97;
+    --success-foreground: #10211e;
+    --warning: #e0a85a;
+    --warning-foreground: #26201b;
+    --warning-strong: #e0a85a;
+    --danger: #e5705f;
+    --danger-foreground: #1c1714;
+
+    --destructive: #e5705f;
+    --destructive-foreground: #1c1714;
+
+    --border: #3d342c;
+    --input: #3d342c;
+    --ring: #34c5b0;
   }
 
   body {
@@ -158,6 +415,27 @@
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
   }
 
+  /* Authenticated app — warm glass (beige). Higher specificity than the
+     defaults above, so authed cards/panels go beige; public glass unchanged. */
+  [data-app="authed"] .glass {
+    background: rgba(255, 253, 248, 0.72);
+    border-color: rgba(60, 40, 20, 0.08);
+  }
+  [data-app="authed"] .glass-card {
+    background: rgba(255, 253, 248, 0.85);
+    border-color: rgba(60, 40, 20, 0.08);
+    box-shadow: 0 4px 16px 0 rgba(60, 40, 20, 0.06);
+  }
+  .dark [data-app="authed"] .glass {
+    background: rgba(38, 32, 27, 0.6);
+    border-color: rgba(242, 232, 218, 0.08);
+  }
+  .dark [data-app="authed"] .glass-card {
+    background: linear-gradient(145deg, rgba(47,40,35,0.55), rgba(38,32,27,0.8));
+    border-color: rgba(242, 232, 218, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  }
+
   /* Skeleton shimmer */
   @keyframes shimmer {
     0%   { background-position: -400px 0; }
@@ -171,6 +449,15 @@
   :root.dark .skeleton-shimmer,
   .dark .skeleton-shimmer {
     background: linear-gradient(90deg, rgba(51,65,85,0.5) 25%, rgba(71,85,105,0.6) 50%, rgba(51,65,85,0.5) 75%);
+    background-size: 800px 100%;
+  }
+  /* Authenticated app — warm beige shimmer */
+  [data-app="authed"] .skeleton-shimmer {
+    background: linear-gradient(90deg, #efe5d6 25%, #e2d4bf 50%, #efe5d6 75%);
+    background-size: 800px 100%;
+  }
+  .dark [data-app="authed"] .skeleton-shimmer {
+    background: linear-gradient(90deg, rgba(47,40,35,0.6) 25%, rgba(61,52,44,0.7) 50%, rgba(47,40,35,0.6) 75%);
     background-size: 800px 100%;
   }
 

@@ -29,17 +29,11 @@ import { CalendarDays, Loader2, MoreHorizontal, CheckCircle2, XCircle, UserX, Al
 import { EmptyState } from "~/components/ui/EmptyState";
 import { STATUS_TONE } from "~/components/dashboards/CalendarLeftRail";
 import { t, type Lang } from "~/lib/i18n";
+import { MASTER_EVENT_HUES } from "~/lib/theme/palette";
 
-const MASTER_PALETTE = [
-  "#7c3aed",
-  "#0b9b6b",
-  "#0891b2",
-  "#ec4899",
-  "#d97706",
-  "#2563eb",
-  "#9333ea",
-  "#0d9488",
-] as const;
+// Sourced from the shared theme palette (red/turquoise first) so the same
+// master renders in the same hue across every calendar surface.
+const MASTER_PALETTE = [...MASTER_EVENT_HUES];
 
 type AgendaApt = Record<string, any> & {
   id: number | string;

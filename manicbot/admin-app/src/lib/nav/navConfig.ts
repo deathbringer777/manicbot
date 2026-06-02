@@ -3,7 +3,7 @@ import {
   Building2, CalendarDays, UserCog, MessageSquare,
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, ArrowLeftRight, Inbox,
-  Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound, TrendingUp,
+  Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound, TrendingUp, Ticket,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -65,6 +65,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.customers",     href: "/system/customers",   icon: UsersRound,      labelKey: "Platform Customers", roles: ["system_admin"], group: "platform" },
   { id: "god.support",       href: "/platform-support",   icon: HeadphonesIcon,  labelKey: "Platform tickets", roles: ["system_admin"], group: "platform" },
   { id: "god.billing",       href: "/billing",            icon: CreditCard,      labelKey: "Billing",          roles: ["system_admin"], group: "platform" },
+  { id: "god.grantCodes",    href: "/system/grant-codes", icon: Ticket,          labelKey: "Grant Codes",      roles: ["system_admin"], group: "platform" },
   { id: "god.events",        href: "/events",             icon: ScrollText,      labelKey: "Events",           roles: ["system_admin"], group: "platform" },
   // Blocker 5 — pre-launch funnel analytics. Cross-tenant view of
   // analytics_events with per-slug 24h/7d counters + paginated filter.

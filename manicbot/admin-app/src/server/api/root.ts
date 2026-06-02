@@ -37,6 +37,7 @@ import { ownershipRouter } from "~/server/api/routers/ownership";
 import { clientsRouter } from "~/server/api/routers/clients";
 import { otpRouter } from "~/server/api/routers/otp";
 import { referralsRouter } from "~/server/api/routers/referrals";
+import { subscriptionGrantCodesRouter } from "~/server/api/routers/subscriptionGrantCodes";
 import { messengerRouter } from "~/server/api/routers/messenger";
 import { platformMessengerRouter } from "~/server/api/routers/platformMessenger";
 import { platformBroadcastsRouter } from "~/server/api/routers/platformBroadcasts";
@@ -90,6 +91,7 @@ export const appRouter = createTRPCRouter({
   clients: clientsRouter,
   otp: otpRouter,
   referrals: referralsRouter,
+  subscriptionGrantCodes: subscriptionGrantCodesRouter,
   messenger: messengerRouter,
   platformMessenger: platformMessengerRouter,
   platformBroadcasts: platformBroadcastsRouter,

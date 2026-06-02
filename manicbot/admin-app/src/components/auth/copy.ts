@@ -125,6 +125,7 @@ export const authCopy: Record<
       referralCodePlaceholder: string;
       referralCodeValid: string;
       referralCodeInvalid: string;
+      referralCodeServiceGrant: string;
       passwordsMismatch: string;
       passwordTooShort: string;
       googleStartError: string;
@@ -288,6 +289,7 @@ export const authCopy: Record<
       referralCodePlaceholder: "Например, ANNA-K2X7M",
       referralCodeValid: "Промо от {name} — 20% off первого месяца или 10% off годовой подписки",
       referralCodeInvalid: "Этот код не действителен. Можно продолжить без него.",
+      referralCodeServiceGrant: "Сервисный промокод подтверждён — бесплатная подписка активируется после регистрации.",
       passwordsMismatch: "Пароли не совпадают",
       passwordTooShort: "Пароль должен содержать минимум 12 символов",
       googleStartError: "Не удалось начать вход через Google",
@@ -450,6 +452,7 @@ export const authCopy: Record<
       referralCodePlaceholder: "Наприклад, ANNA-K2X7M",
       referralCodeValid: "Промо від {name} — 20% off першого місяця або 10% off річної підписки",
       referralCodeInvalid: "Цей код недійсний. Можна продовжити без нього.",
+      referralCodeServiceGrant: "Сервісний промокод підтверджено — безкоштовна підписка активується після реєстрації.",
       passwordsMismatch: "Паролі не збігаються",
       passwordTooShort: "Пароль має містити щонайменше 12 символів",
       googleStartError: "Не вдалося почати вхід через Google",
@@ -612,6 +615,7 @@ export const authCopy: Record<
       referralCodePlaceholder: "e.g. ANNA-K2X7M",
       referralCodeValid: "Promo from {name} — 20% off your first month or 10% off yearly",
       referralCodeInvalid: "This code is no longer valid. You can continue without one.",
+      referralCodeServiceGrant: "Service code confirmed — your free subscription activates after sign-up.",
       passwordsMismatch: "Passwords do not match",
       passwordTooShort: "Password must be at least 12 characters long",
       googleStartError: "Could not start Google sign-in",
@@ -774,6 +778,7 @@ export const authCopy: Record<
       referralCodePlaceholder: "np. ANNA-K2X7M",
       referralCodeValid: "Promo od {name} — 20% zniżki w pierwszym miesiącu lub 10% zniżki rocznie",
       referralCodeInvalid: "Ten kod nie jest już aktywny. Możesz kontynuować bez niego.",
+      referralCodeServiceGrant: "Kod serwisowy potwierdzony — bezpłatna subskrypcja aktywuje się po rejestracji.",
       passwordsMismatch: "Hasła nie są takie same",
       passwordTooShort: "Hasło musi mieć co najmniej 12 znaków",
       googleStartError: "Nie udało się rozpocząć logowania przez Google",

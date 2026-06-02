@@ -130,8 +130,21 @@ export function MasterDashboard({
     onSuccess: () => { utils.master.getMyServices.invalidate(); },
   });
   const updateWorkHoursMut = api.master.updateWorkHours.useMutation({
-    onSuccess: () => { utils.master.getMyProfile.invalidate(); },
+    onSuccess: () => {
+      utils.master.getMyProfile.invalidate();
+      utils.master.getMyPendingScheduleRequest.invalidate();
+    },
   });
+  // Salon-level policy gating this master's own schedule editor + any
+  // outstanding proposal awaiting the owner's approval.
+  const schedulePolicyQ = api.master.getSchedulePolicy.useQuery(
+    { tenantId, masterId },
+    { enabled: tab === "schedule" },
+  );
+  const pendingScheduleQ = api.master.getMyPendingScheduleRequest.useQuery(
+    { tenantId, masterId },
+    { enabled: tab === "schedule" },
+  );
   const setVacationMut = api.master.setVacation.useMutation({
     onSuccess: () => { utils.master.getMyProfile.invalidate(); setVacationError(null); },
   });
@@ -248,15 +261,33 @@ export function MasterDashboard({
                 workDays={(profile.data as any)?.workDays}
                 saving={updateWorkHoursMut.isPending}
                 saved={scheduleSaved}
+                disabled={schedulePolicyQ.data?.policy === "salon_only"}
+                notice={
+                  schedulePolicyQ.data?.policy === "salon_only"
+                    ? t("master.schedule.lockedNotice", lang)
+                    : pendingScheduleQ.data?.pending
+                      ? t("master.schedule.pendingNotice", lang)
+                      : null
+                }
+                saveLabel={
+                  schedulePolicyQ.data?.policy === "master_approval"
+                    ? t("master.schedule.submitForApproval", lang)
+                    : undefined
+                }
                 lang={lang}
                 onSave={(workHours, workDays) => {
                   setScheduleSaved(false);
                   updateWorkHoursMut.mutate(
                     { tenantId, masterId, workHours, workDays },
                     {
-                      onSuccess: () => {
-                        setScheduleSaved(true);
-                        window.setTimeout(() => setScheduleSaved(false), 2500);
+                      onSuccess: (res) => {
+                        // Approval mode returns { pending } — the pending banner
+                        // covers it; only flash "saved" on a direct write.
+                        if (!(res && "pending" in res && res.pending)) {
+                          setScheduleSaved(true);
+                          window.setTimeout(() => setScheduleSaved(false), 2500);
+                        }
+                        utils.master.getMyPendingScheduleRequest.invalidate({ tenantId, masterId });
                       },
                     },
                   );

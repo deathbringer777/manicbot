@@ -45,7 +45,8 @@ import {
 } from "lucide-react";
 import { api, type RouterOutputs } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
-import { t, type Lang } from "~/lib/i18n";
+import { t, type Lang, type TranslationKey } from "~/lib/i18n";
+import { parseMasterHours, parseMasterWorkDays } from "~/lib/workHours";
 import { resolveMasterAvatarEmoji } from "~/lib/masterAvatar";
 import { DatePicker } from "~/components/ui/DatePicker";
 import { MasterAvatarPicker } from "./MasterAvatarPicker";
@@ -85,6 +86,71 @@ function dateInputToUnix(s: string): number | null {
   const [y, m, d] = s.split("-").map(Number);
   if (!y || !m || !d) return null;
   return Math.floor(new Date(y, m - 1, d).getTime() / 1000);
+}
+
+// getUTCDay() index → short weekday label, for rendering a proposed schedule.
+const DOW_LABEL: Record<number, TranslationKey> = {
+  0: "weekday.short.sun", 1: "weekday.short.mon", 2: "weekday.short.tue",
+  3: "weekday.short.wed", 4: "weekday.short.thu", 5: "weekday.short.fri", 6: "weekday.short.sat",
+};
+
+function formatScheduleProposal(payload: unknown, lang: Lang): string {
+  const p = (payload ?? {}) as { workHours?: unknown; workDays?: unknown };
+  const hours = typeof p.workHours === "string" ? parseMasterHours(p.workHours) : null;
+  const days = typeof p.workDays === "string" ? parseMasterWorkDays(p.workDays) : null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hoursStr = hours ? `${pad(hours.from)}:00–${pad(hours.to)}:00` : "—";
+  const daysStr = days && days.length
+    ? days.map((d) => t(DOW_LABEL[d] ?? "weekday.short.mon", lang)).join(", ")
+    : "—";
+  return `${hoursStr} · ${daysStr}`;
+}
+
+/** Owner-facing pending master schedule proposal with Approve / Reject. */
+function SchedulePendingPanel({
+  payload,
+  lang,
+  onReview,
+  reviewing,
+}: {
+  payload: unknown;
+  lang: Lang;
+  onReview: (decision: "approved" | "denied") => void;
+  reviewing: boolean;
+}) {
+  return (
+    <div
+      className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs"
+      data-testid="master-detail-schedule-pending"
+    >
+      <p className="mb-1 font-semibold text-amber-700 dark:text-amber-300">
+        {t("master.schedule.proposedByMaster", lang)}
+      </p>
+      <p className="mb-3 text-sm text-slate-800 dark:text-slate-100">
+        {formatScheduleProposal(payload, lang)}
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => onReview("approved")}
+          disabled={reviewing}
+          data-testid="master-detail-schedule-approve"
+          className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {t("master.schedule.approve", lang)}
+        </button>
+        <button
+          type="button"
+          onClick={() => onReview("denied")}
+          disabled={reviewing}
+          data-testid="master-detail-schedule-reject"
+          className="flex-1 rounded-lg border border-rose-500/40 px-3 py-2 font-semibold text-rose-600 transition hover:bg-rose-500/10 disabled:opacity-50 dark:text-rose-300"
+        >
+          {t("master.schedule.reject", lang)}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChannels }: Props) {
@@ -156,6 +222,24 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
       onClose();
     },
   });
+
+  // Pending schedule proposals (master_approval policy) — the owner approves /
+  // rejects this master's proposal right here in the Harmonogram tab.
+  const pendingReqsQ = api.salon.listPendingScheduleRequests.useQuery(
+    { tenantId },
+    { refetchOnWindowFocus: false },
+  );
+  const reviewSchedule = api.salon.reviewMasterScheduleRequest.useMutation({
+    onSuccess: () => {
+      void utils.salon.listPendingScheduleRequests.invalidate({ tenantId });
+      void utils.salon.getMasterDetail.invalidate({ tenantId, masterChatId: chatId });
+      void utils.salon.getMasters.invalidate();
+    },
+  });
+  const pendingProposal = pendingReqsQ.data?.find((r) => {
+    const p = r.payload as { masterId?: unknown } | null;
+    return !!p && typeof p.masterId === "number" && p.masterId === chatId;
+  }) ?? null;
 
   const m = detail.data;
 
@@ -423,6 +507,18 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
             onSaveProfile={handleSaveProfile}
             onSaveVacation={handleSaveVacation}
             onSaveSchedule={handleSaveSchedule}
+            schedulePending={
+              pendingProposal ? (
+                <SchedulePendingPanel
+                  payload={pendingProposal.payload}
+                  lang={lang}
+                  reviewing={reviewSchedule.isPending}
+                  onReview={(decision) =>
+                    reviewSchedule.mutate({ requestId: pendingProposal.id, decision })
+                  }
+                />
+              ) : null
+            }
             onClearVacation={() => {
               setVacationForm({ vacationFrom: "", vacationUntil: "" });
             }}
@@ -660,6 +756,7 @@ function SettingsMode({
   onSaveProfile,
   onSaveVacation,
   onSaveSchedule,
+  schedulePending,
   onClearVacation,
   onExit,
 }: {
@@ -680,6 +777,7 @@ function SettingsMode({
   onSaveProfile: () => void;
   onSaveVacation: () => void;
   onSaveSchedule: (workHours: string, workDays: string) => void;
+  schedulePending?: React.ReactNode;
   onClearVacation: () => void;
   onExit: () => void;
 }) {
@@ -697,15 +795,18 @@ function SettingsMode({
           onSave={onSaveProfile}
         />
       ) : activeTab === "schedule" ? (
-        <MasterScheduleEditor
-          workHours={master.workHours}
-          workDays={master.workDays}
-          saving={saving}
-          saved={scheduleSaved}
-          lang={lang}
-          onSave={onSaveSchedule}
-          testIdPrefix="master-detail-schedule"
-        />
+        <div className="space-y-1">
+          {schedulePending}
+          <MasterScheduleEditor
+            workHours={master.workHours}
+            workDays={master.workDays}
+            saving={saving}
+            saved={scheduleSaved}
+            lang={lang}
+            onSave={onSaveSchedule}
+            testIdPrefix="master-detail-schedule"
+          />
+        </div>
       ) : (
         <SettingsPane
           master={master}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink,
+  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, Users,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -15,6 +15,7 @@ import { CollapsibleSection } from "~/components/settings/CollapsibleSection";
 import { Pill } from "~/components/ui/Pill";
 import { SalonBasicInfoBody } from "~/components/salon/SalonBasicInfoBody";
 import { SalonHoursBody } from "~/components/salon/SalonHoursBody";
+import { MasterSchedulePolicyBody } from "~/components/salon/MasterSchedulePolicyBody";
 import { SalonGalleryBody } from "~/components/salon/SalonGalleryBody";
 import { SalonBrandingBody } from "~/components/salon/SalonBrandingBody";
 import { SalonStorefrontBody } from "~/components/salon/SalonStorefrontBody";
@@ -184,6 +185,15 @@ export function MySalonSection() {
               defaultOpen
             >
               <SalonHoursBody tenantId={effectiveTenantId} profile={data} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={Users}
+              iconClass="text-emerald-400"
+              title={t("salon.masterSchedulePolicy.title", lang)}
+              desc={t("salon.masterSchedulePolicy.hint", lang)}
+            >
+              <MasterSchedulePolicyBody tenantId={effectiveTenantId} profile={data} />
             </CollapsibleSection>
           </>
         )}

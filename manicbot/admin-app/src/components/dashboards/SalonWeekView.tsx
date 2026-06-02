@@ -389,8 +389,11 @@ export function SalonWeekView({
           className="flex"
           style={{ minWidth: 80 + visibleDays.length * colWidth }}
         >
-          {/* Hour scale */}
-          <div className="shrink-0 w-20 sticky left-0 z-10 bg-white/95 dark:bg-slate-900/80 backdrop-blur-sm border-r border-slate-200 dark:border-white/10">
+          {/* Hour scale — the sticky left axis must be OPAQUE: day columns
+              scroll horizontally behind it, and a translucent gutter let the
+              hatched non-working band + grid lines bleed through (ugly seam
+              when scrolled right). */}
+          <div className="shrink-0 w-20 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
             <div className="h-12 border-b border-slate-200 dark:border-white/10" />
             {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
               <div

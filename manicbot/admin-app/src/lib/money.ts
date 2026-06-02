@@ -16,3 +16,17 @@ export function formatPlnWhole(amount: number): string {
     }).format(amount)
   );
 }
+
+/**
+ * Stripe minor units (PLN grosze) → localized currency string with decimals.
+ * The God Mode Billing dashboard's real-money widgets carry Stripe amounts in
+ * minor units end to end; `locale` should come from i18n `localeFor(lang)`.
+ */
+export function formatMinorPln(minorUnits: number, locale = "pl-PL", currency = "PLN"): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format((minorUnits ?? 0) / 100);
+}

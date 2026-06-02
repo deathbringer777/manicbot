@@ -242,6 +242,163 @@ export async function retrieveSubscription(
   return json;
 }
 
+// ─── God Mode Billing dashboard — live financial reads ──────────────────────
+// Power the real-money widgets (balance, payouts, recent charges, disputes).
+// The historical revenue chart reads the D1 `stripe_ledger` mirror instead;
+// these surface "right now" state that only Stripe holds. `stripeGet` throws on
+// a non-2xx response, which the caller isolates per-section via allSettled.
+// All amounts are Stripe minor units (PLN grosze); currency is lowercase ISO.
+
+export interface StripeMoney {
+  amount: number;
+  currency: string;
+}
+
+export interface StripeBalanceResult {
+  available: StripeMoney[];
+  pending: StripeMoney[];
+}
+
+/** GET /v1/balance — current available + pending funds, per currency. */
+export async function getBalance(secretKey: string): Promise<StripeBalanceResult> {
+  const data = await stripeGet<{ available?: StripeMoney[]; pending?: StripeMoney[] }>(secretKey, "/balance");
+  const pick = (arr?: StripeMoney[]): StripeMoney[] =>
+    Array.isArray(arr) ? arr.map((b) => ({ amount: b.amount ?? 0, currency: b.currency ?? "" })) : [];
+  return { available: pick(data.available), pending: pick(data.pending) };
+}
+
+/** Stripe caps list `limit` at 100; floor at 1. */
+function clampLimit(limit: number | undefined, fallback: number): number {
+  return Math.min(Math.max(Math.trunc(limit ?? fallback), 1), 100);
+}
+
+interface RawCharge {
+  id: string;
+  amount?: number;
+  currency?: string;
+  created?: number;
+  status?: string;
+  paid?: boolean;
+  refunded?: boolean;
+  amount_refunded?: number;
+  description?: string | null;
+  billing_details?: { email?: string | null };
+  receipt_email?: string | null;
+}
+
+export interface StripeChargeRow {
+  id: string;
+  amount: number;
+  currency: string;
+  created: number;
+  status: string;
+  paid: boolean;
+  refunded: boolean;
+  amountRefunded: number;
+  description: string | null;
+  email: string | null;
+}
+
+/** GET /v1/charges — most recent real payments (one bounded page). */
+export async function listRecentCharges(
+  secretKey: string,
+  opts: { limit?: number } = {},
+): Promise<{ data: StripeChargeRow[]; hasMore: boolean }> {
+  const res = await stripeGet<{ data?: RawCharge[]; has_more?: boolean }>(secretKey, "/charges", {
+    limit: String(clampLimit(opts.limit, 10)),
+  });
+  const data = (res.data ?? []).map((o) => ({
+    id: String(o.id),
+    amount: o.amount ?? 0,
+    currency: o.currency ?? "",
+    created: o.created ?? 0,
+    status: o.status ?? "",
+    paid: !!o.paid,
+    refunded: !!o.refunded,
+    amountRefunded: o.amount_refunded ?? 0,
+    description: o.description ?? null,
+    email: o.billing_details?.email ?? o.receipt_email ?? null,
+  }));
+  return { data, hasMore: !!res.has_more };
+}
+
+interface RawPayout {
+  id: string;
+  amount?: number;
+  currency?: string;
+  arrival_date?: number;
+  status?: string;
+  created?: number;
+}
+
+export interface StripePayoutRow {
+  id: string;
+  amount: number;
+  currency: string;
+  arrivalDate: number;
+  status: string;
+  created: number;
+}
+
+/** GET /v1/payouts — bank payouts (did the money actually land). */
+export async function listPayouts(
+  secretKey: string,
+  opts: { limit?: number } = {},
+): Promise<{ data: StripePayoutRow[]; hasMore: boolean }> {
+  const res = await stripeGet<{ data?: RawPayout[]; has_more?: boolean }>(secretKey, "/payouts", {
+    limit: String(clampLimit(opts.limit, 10)),
+  });
+  const data = (res.data ?? []).map((o) => ({
+    id: String(o.id),
+    amount: o.amount ?? 0,
+    currency: o.currency ?? "",
+    arrivalDate: o.arrival_date ?? 0,
+    status: o.status ?? "",
+    created: o.created ?? 0,
+  }));
+  return { data, hasMore: !!res.has_more };
+}
+
+interface RawDispute {
+  id: string;
+  amount?: number;
+  currency?: string;
+  reason?: string;
+  status?: string;
+  created?: number;
+  evidence_details?: { due_by?: number | null };
+}
+
+export interface StripeDisputeRow {
+  id: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  status: string;
+  created: number;
+  dueBy: number | null;
+}
+
+/** GET /v1/disputes — chargebacks (deadline-sensitive, low volume). */
+export async function listDisputes(
+  secretKey: string,
+  opts: { limit?: number } = {},
+): Promise<{ data: StripeDisputeRow[]; hasMore: boolean }> {
+  const res = await stripeGet<{ data?: RawDispute[]; has_more?: boolean }>(secretKey, "/disputes", {
+    limit: String(clampLimit(opts.limit, 10)),
+  });
+  const data = (res.data ?? []).map((o) => ({
+    id: String(o.id),
+    amount: o.amount ?? 0,
+    currency: o.currency ?? "",
+    reason: o.reason ?? "",
+    status: o.status ?? "",
+    created: o.created ?? 0,
+    dueBy: o.evidence_details?.due_by ?? null,
+  }));
+  return { data, hasMore: !!res.has_more };
+}
+
 /**
  * Idempotent Stripe Coupon mint. Mirror of Worker `manicbot/src/billing/stripe.js`
  * `ensureCoupon` — kept in lockstep so backend logic stays single-source-of-truth.

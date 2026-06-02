@@ -1448,6 +1448,27 @@ const translations = {
   "gmBilling.activating":         { ru: "Активация...",           ua: "Активація...",           en: "Activating...",          pl: "Aktywacja..." },
   "gmBilling.perMonthShort":      { ru: "/мес",                   ua: "/міс",                   en: "/mo",                    pl: "/mies" },
 
+  // Real money · Stripe (live + ledger)
+  "gmBilling.realMoney":          { ru: "Реальные деньги · Stripe", ua: "Реальні гроші · Stripe", en: "Real money · Stripe",    pl: "Realne pieniądze · Stripe" },
+  "gmBilling.testData":           { ru: "Тестовые данные",        ua: "Тестові дані",           en: "Test data",              pl: "Dane testowe" },
+  "gmBilling.notConfigured":      { ru: "Stripe не настроен",     ua: "Stripe не налаштовано",  en: "Stripe not configured",  pl: "Stripe nie skonfigurowany" },
+  "gmBilling.availableBalance":   { ru: "Доступно",               ua: "Доступно",               en: "Available",              pl: "Dostępne" },
+  "gmBilling.pendingBalance":     { ru: "В обработке",            ua: "В обробці",              en: "Pending",                pl: "Oczekujące" },
+  "gmBilling.netRevenue":         { ru: "Нетто",                  ua: "Нетто",                  en: "Net",                    pl: "Netto" },
+  "gmBilling.stripeFees":         { ru: "Комиссии Stripe",        ua: "Комісії Stripe",         en: "Stripe fees",            pl: "Prowizje Stripe" },
+  "gmBilling.windowSub":          { ru: "за 90 дней",             ua: "за 90 днів",             en: "last 90 days",           pl: "ost. 90 dni" },
+  "gmBilling.stripeUnavailable":  { ru: "Данные Stripe недоступны", ua: "Дані Stripe недоступні", en: "Stripe data unavailable", pl: "Dane Stripe niedostępne" },
+  "gmBilling.revenueChart":       { ru: "Выручка по дням",        ua: "Виручка по днях",        en: "Daily revenue",          pl: "Przychód dzienny" },
+  "gmBilling.reconciliation":     { ru: "Сверка: оценка vs факт", ua: "Звірка: оцінка vs факт", en: "Reconciliation: estimate vs actual", pl: "Uzgodnienie: szacunek vs rzeczywistość" },
+  "gmBilling.estMrr":             { ru: "Оценка MRR",             ua: "Оцінка MRR",             en: "Estimated MRR",          pl: "Szac. MRR" },
+  "gmBilling.actualNet30":        { ru: "Факт нетто (30д)",       ua: "Факт нетто (30д)",       en: "Actual net (30d)",       pl: "Rzecz. netto (30d)" },
+  "gmBilling.reconDelta":         { ru: "Разница",                ua: "Різниця",                en: "Delta",                  pl: "Różnica" },
+  "gmBilling.payouts":            { ru: "Выплаты на банк",        ua: "Виплати на банк",        en: "Bank payouts",           pl: "Wypłaty na bank" },
+  "gmBilling.recentCharges":      { ru: "Последние платежи",      ua: "Останні платежі",        en: "Recent payments",        pl: "Ostatnie płatności" },
+  "gmBilling.refunded":           { ru: "возврат",                ua: "повернення",             en: "refunded",               pl: "zwrot" },
+  "gmBilling.disputes":           { ru: "Споры / чарджбеки",      ua: "Спори / чарджбеки",      en: "Disputes / chargebacks", pl: "Spory / chargebacki" },
+  "gmBilling.disputeDue":         { ru: "ответить до",            ua: "відповісти до",          en: "respond by",             pl: "odpowiedz do" },
+
   // ── God Mode: Tenants page ─────────────────────────────────────────────────
   "gmTenants.title":              { ru: "Салоны",                 ua: "Салони",                 en: "Salons",                 pl: "Salony" },
   "gmTenants.subtitle":           { ru: "Все салоны",             ua: "Усі салони",             en: "All salons",             pl: "Wszystkie salony" },

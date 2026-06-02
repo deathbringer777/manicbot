@@ -5,6 +5,7 @@ import { Loader2, WifiOff } from "lucide-react";
 import { ChatHeader } from "~/components/chat/ChatHeader";
 import { MessageBubble } from "~/components/chat/MessageBubble";
 import { Composer } from "~/components/chat/Composer";
+import { useVisualViewport } from "~/components/chat/useVisualViewport";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import type {
@@ -110,6 +111,8 @@ export function ChatClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastTsRef = useRef<number>(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   // Keep a ref so callbacks always read the latest lang without forcing
   // a re-bind of every event handler.
@@ -117,10 +120,21 @@ export function ChatClient({
     langRef.current = lang;
   }, [lang]);
 
-  // Auto-scroll to newest message
+  // Keep the message list pinned to the latest message. Scroll the list
+  // container itself rather than scrollIntoView, which can shift the whole
+  // page on iOS and make the surface "jump".
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = mainRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    scrollToBottom("auto");
+  }, [messages.length, scrollToBottom]);
+
+  // Follow the on-screen keyboard: size the surface to the visual viewport and
+  // re-pin to the bottom as it animates, so the composer never floats / hides.
+  useVisualViewport(rootRef, scrollToBottom);
 
   // ── Session bootstrap ────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,6 +238,7 @@ export function ChatClient({
         parseMode: m.parseMode,
         buttons: m.buttons,
         photo: m.photo,
+        photos: m.photos,
         editMessageId: m.editMessageId,
       }))
       // Drop empty/zero-width "keyboard-clear" artifacts — but keep edits, which
@@ -331,7 +346,8 @@ export function ChatClient({
   return (
     <div className="h-dvh overflow-hidden bg-slate-100 dark:bg-slate-950 md:flex md:items-stretch md:justify-center">
     <div
-      className="h-dvh flex flex-col w-full md:max-w-2xl lg:max-w-3xl md:shadow-2xl md:border-x md:border-slate-200/60 dark:md:border-white/5 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900"
+      ref={rootRef}
+      className="fixed inset-x-0 top-0 flex h-dvh w-full flex-col md:static md:max-w-2xl lg:max-w-3xl md:shadow-2xl md:border-x md:border-slate-200/60 dark:md:border-white/5 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900"
       style={{
         ['--chat-brand' as string]: brandColor,
       }}
@@ -345,7 +361,7 @@ export function ChatClient({
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto overscroll-contain px-3 md:px-6 py-4 space-y-2.5">
+      <main ref={mainRef} className="flex-1 overflow-y-auto overscroll-contain px-3 md:px-6 py-4 space-y-2.5">
         {status === "initializing" && messages.length === 0 && (
           <div className="flex items-center justify-center py-12 text-slate-500">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -373,6 +389,7 @@ export function ChatClient({
 
       <Composer
         onSend={handleSend}
+        onFocus={() => scrollToBottom("auto")}
         disabled={!sessionId || status === "initializing"}
         brandColor={brandColor}
       />

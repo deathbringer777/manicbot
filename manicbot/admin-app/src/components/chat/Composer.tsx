@@ -7,11 +7,13 @@ import { t } from "~/lib/i18n";
 
 export function Composer({
   onSend,
+  onFocus,
   disabled,
   brandColor = "#EC4899",
   placeholder,
 }: {
   onSend: (text: string) => void;
+  onFocus?: () => void;
   disabled?: boolean;
   brandColor?: string;
   placeholder?: string;
@@ -61,6 +63,7 @@ export function Composer({
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
+        onFocus={onFocus}
         placeholder={ph}
         disabled={disabled}
         rows={1}

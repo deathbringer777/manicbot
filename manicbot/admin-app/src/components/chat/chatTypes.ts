@@ -37,6 +37,8 @@ export interface ChatMessageFromBot {
   parseMode?: "HTML" | "MarkdownV2" | "plain";
   buttons: ChatButton[][] | null;
   photo: string | null;
+  /** Full image set for the catalog swipe carousel (web only). */
+  photos?: string[] | null;
   editMessageId: string | null;
 }
 

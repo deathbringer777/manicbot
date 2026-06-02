@@ -202,7 +202,7 @@ export class WebAdapter {
    */
   async sendPhoto(userId, url, caption, extra = {}) {
     const buttons = extra?.reply_markup?.inline_keyboard ?? null;
-    return this.send(userId, { text: caption ?? '', photo: url, buttons, parseMode: 'HTML' });
+    return this.send(userId, { text: caption ?? '', photo: url, photos: extra?.photos ?? null, buttons, parseMode: 'HTML' });
   }
 
   /**
@@ -221,6 +221,7 @@ export class WebAdapter {
     const normalized = this._buildPublicMessage({
       text: caption ?? '',
       photo: url,
+      photos: extra?.photos ?? null,
       buttons,
       parseMode: 'HTML',
       editMessageId: String(msgId),
@@ -280,6 +281,9 @@ export class WebAdapter {
       parseMode: outbound?.parseMode ?? 'HTML',
       buttons: this._flattenButtons(rawButtons),
       photo: outbound?.photo ?? null,
+      // Full image set for the catalog swipe carousel (web only). null when the
+      // message carries a single photo or none.
+      photos: Array.isArray(outbound?.photos) ? outbound.photos : null,
       editMessageId: outbound?.editMessageId ?? null,
     };
   }

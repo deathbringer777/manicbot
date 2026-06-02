@@ -3,7 +3,7 @@ import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/se
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
-  masterInvitations, masterPairingCodes, serviceCategories, photoAlbums, albumPhotos,
+  masterInvitations, masterPairingCodes, serviceCategories, photoAlbums, albumPhotos, tenantActionRequests, auditLog,
 } from "~/server/db/schema";
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
@@ -28,6 +28,8 @@ import {
   parseMasterWorkDays,
   serializeMasterWorkDays,
 } from "~/lib/workHours";
+import { MASTER_SCHEDULE_POLICIES } from "~/lib/masterSchedulePolicy";
+import { t } from "~/lib/i18n";
 import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/masterPasswordVault";
@@ -1053,6 +1055,8 @@ export const salonRouter = createTRPCRouter({
       workHours: z.string().optional(),
       workHoursFrom: z.number().int().optional(),
       workHoursTo: z.number().int().optional(),
+      // Salon-level policy: who may change a master's working hours.
+      masterSchedulePolicy: z.enum(MASTER_SCHEDULE_POLICIES).optional(),
       // Public profile fields
       slug: z.string().regex(/^[a-z0-9-]+$/, "Только строчные латинские буквы, цифры и дефис").optional(),
       description: z.string().max(1000).optional(),
@@ -1149,6 +1153,9 @@ export const salonRouter = createTRPCRouter({
         if (input.workHoursFrom !== undefined) wh.from = input.workHoursFrom;
         if (input.workHoursTo !== undefined) wh.to = input.workHoursTo;
         existing.workHours = wh;
+      }
+      if (input.masterSchedulePolicy !== undefined) {
+        existing.masterSchedulePolicy = input.masterSchedulePolicy;
       }
       // Mirror name into salon JSON so the Worker bot's `showAdminSettings`
       // (`src/ui/admin.js` reads `ctx.tenant.salon.name`) renders the
@@ -1535,6 +1542,136 @@ export const salonRouter = createTRPCRouter({
    * deleting them. The master still works internally (assigned to
    * bookings, sees own schedule, master dashboard works) — only the
    * public directory & profile master list filter them out.
+  /**
+   * Owner reviews a master's pending schedule-change request (master_approval
+   * policy). On approval the proposed `{from,to}` + workDays are re-validated
+   * and written to the master's row; on denial nothing is applied. Either way
+   * the request is closed, audited, and the master gets a bell notification.
+   */
+  reviewMasterScheduleRequest: tenantOwnerProcedure
+    .input(z.object({
+      requestId: z.string(),
+      decision: z.enum(["approved", "denied"]),
+      ownerNote: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const [req] = await ctx.db
+        .select()
+        .from(tenantActionRequests)
+        .where(eq(tenantActionRequests.id, input.requestId))
+        .limit(1);
+      if (!req) throw new TRPCError({ code: "NOT_FOUND" });
+      await assertTenantOwner(ctx, req.tenantId);
+      if (req.action !== "master.schedule_change") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "not_a_schedule_request" });
+      }
+      if (req.status !== "pending") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "request_already_reviewed" });
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      let payload: { masterId?: unknown; workHours?: unknown; workDays?: unknown } = {};
+      try { payload = req.payload ? JSON.parse(req.payload) : {}; } catch { /* malformed */ }
+
+      if (input.decision === "approved") {
+        const masterId = typeof payload.masterId === "number" ? payload.masterId : null;
+        if (masterId === null) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "malformed_request_payload" });
+        }
+        // Re-validate against the booking-engine shape before applying.
+        const setObj: Record<string, unknown> = {};
+        if (typeof payload.workHours === "string") {
+          const parsed = parseMasterHours(payload.workHours);
+          if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+          }
+          setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
+        }
+        if (typeof payload.workDays === "string") {
+          const parsed = parseMasterWorkDays(payload.workDays);
+          if (parsed === null) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+          }
+          setObj.workDays = serializeMasterWorkDays(parsed);
+        }
+        if (Object.keys(setObj).length > 0) {
+          await ctx.db.update(masters).set(setObj)
+            .where(and(eq(masters.tenantId, req.tenantId), eq(masters.chatId, masterId)));
+        }
+      }
+
+      await ctx.db
+        .update(tenantActionRequests)
+        .set({
+          status: input.decision === "approved" ? "executed" : "denied",
+          ownerNote: input.ownerNote ?? null,
+          reviewedBy: ctx.webUser.id,
+          reviewedAt: now,
+        })
+        .where(eq(tenantActionRequests.id, input.requestId));
+
+      await ctx.db.insert(auditLog).values({
+        tenantId: req.tenantId,
+        actor: ctx.webUser.email ?? null,
+        action: `master.schedule_${input.decision}`,
+        detail: JSON.stringify({ requestId: input.requestId, masterId: payload.masterId ?? null }),
+        ip: null,
+        createdAt: now,
+      });
+
+      // Best-effort bell to the master in their own language.
+      const [wu] = await ctx.db
+        .select({ lang: webUsers.lang })
+        .from(webUsers)
+        .where(eq(webUsers.id, req.requesterId))
+        .limit(1);
+      const supported = ["ru", "ua", "en", "pl"];
+      const lang = (typeof wu?.lang === "string" && supported.includes(wu.lang))
+        ? (wu.lang as Lang)
+        : "en";
+      const approved = input.decision === "approved";
+      await notifyOrCapture(
+        ctx.db,
+        {
+          webUserId: req.requesterId,
+          kind: "approval",
+          tenantId: req.tenantId,
+          title: t(approved ? "notify.scheduleApproved.title" : "notify.scheduleDenied.title", lang),
+          body: t(approved ? "notify.scheduleApproved.body" : "notify.scheduleDenied.body", lang),
+          link: "?tab=schedule",
+          sourceSlug: "schedule_review",
+          sourceId: req.id,
+        },
+        { path: "salon.reviewMasterScheduleRequest" },
+      );
+
+      return { success: true };
+    }),
+
+  /** Owner lists outstanding master schedule-change requests (with payload). */
+  listPendingScheduleRequests: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select()
+        .from(tenantActionRequests)
+        .where(and(
+          eq(tenantActionRequests.tenantId, input.tenantId),
+          eq(tenantActionRequests.action, "master.schedule_change"),
+          eq(tenantActionRequests.status, "pending"),
+        ))
+        .orderBy(desc(tenantActionRequests.createdAt))
+        .limit(100);
+      return rows.map((r) => {
+        let payload: unknown = null;
+        try { payload = r.payload ? JSON.parse(r.payload) : null; } catch { /* ignore */ }
+        return { id: r.id, requesterId: r.requesterId, createdAt: r.createdAt, payload };
+      });
+    }),
+
+  /**
    * Implemented via `masters.public_hidden` (migration 0060).
    */
   setMasterPublicHidden: tenantOwnerProcedure

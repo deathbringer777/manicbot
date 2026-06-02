@@ -756,6 +756,33 @@ export const stripeEvents = sqliteTable("stripe_events", {
   index("idx_stripe_events_type").on(t.type, t.receivedAt),
 ]);
 
+/**
+ * Admin-issued one-time subscription grant codes (migration 0103). A code
+ * grants a tenant a free period of a plan (e.g. one free year of `max`),
+ * redeemed at registration via the referral-code field and distinguished by
+ * the reserved `SVC-` prefix. Only the SHA-256 hash is stored — the plaintext
+ * is shown to the admin once at generation. One-time redemption is enforced
+ * by a single atomic `UPDATE ... WHERE status='active'` (RETURNING id).
+ */
+export const subscriptionGrantCodes = sqliteTable("subscription_grant_codes", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  codePrefix: text("code_prefix").notNull(),
+  plan: text("plan").notNull(),
+  durationDays: integer("duration_days").notNull(),
+  status: text("status").notNull().default("active"),
+  expiresAt: integer("expires_at"),
+  note: text("note"),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at").notNull(),
+  redeemedByTenantId: text("redeemed_by_tenant_id"),
+  redeemedByWebUserId: text("redeemed_by_web_user_id"),
+  redeemedAt: integer("redeemed_at"),
+}, (t) => [
+  uniqueIndex("uq_sgc_code_hash").on(t.codeHash),
+  index("idx_sgc_status_created").on(t.status, t.createdAt),
+]);
+
 export const tenantOnboarding = sqliteTable("tenant_onboarding", {
   tenantId: text("tenant_id").primaryKey(),
   completedSteps: text("completed_steps").notNull().default("[]"),

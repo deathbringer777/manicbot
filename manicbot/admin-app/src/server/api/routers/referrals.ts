@@ -36,6 +36,7 @@ import {
   webUsers,
 } from "~/server/db/schema";
 import { checkRateLimit } from "~/server/auth/rateLimit";
+import { isGrantCode, peekGrantCode } from "~/server/api/routers/subscriptionGrantCodes";
 
 // Local clientIp helper — copied from webUsers.ts / publicSalon.ts (no
 // central module exists; each router defines its own to avoid an import cycle
@@ -328,6 +329,23 @@ export const referralsRouter = createTRPCRouter({
       }
 
       const code = input.code.toUpperCase();
+
+      // Admin "service" grant code (reserved SVC- prefix): a different
+      // namespace with a different reward (a free subscription period, not a
+      // peer discount). Validate without consuming so the register UI can
+      // confirm it before the tester submits.
+      if (isGrantCode(code)) {
+        const peek = await peekGrantCode(ctx.db, code);
+        return {
+          kind: "service_grant" as const,
+          valid: peek.valid,
+          grantPlan: peek.valid ? peek.plan : null,
+          ownerDisplayName: null,
+          expectedInviteeDiscountMonthly: 0,
+          expectedInviteeDiscountYearly: 0,
+        };
+      }
+
       const [row] = await ctx.db
         .select({
           ownerWebUserId: referralCodes.ownerWebUserId,
@@ -338,7 +356,7 @@ export const referralsRouter = createTRPCRouter({
         .where(eq(referralCodes.code, code))
         .limit(1);
       if (!row || !row.isActive) {
-        return { valid: false as const, ownerDisplayName: null, expectedInviteeDiscountMonthly: 20, expectedInviteeDiscountYearly: 10 };
+        return { kind: "referral" as const, valid: false as const, grantPlan: null, ownerDisplayName: null, expectedInviteeDiscountMonthly: 20, expectedInviteeDiscountYearly: 10 };
       }
 
       const [owner] = await ctx.db
@@ -347,7 +365,9 @@ export const referralsRouter = createTRPCRouter({
         .where(eq(webUsers.id, row.ownerWebUserId))
         .limit(1);
       return {
+        kind: "referral" as const,
         valid: true as const,
+        grantPlan: null,
         ownerDisplayName: owner?.name ?? owner?.email?.split("@")[0] ?? "—",
         expectedInviteeDiscountMonthly: 20,
         expectedInviteeDiscountYearly: 10,

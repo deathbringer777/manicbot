@@ -28,7 +28,10 @@ export function makeAwaitableChain(result: unknown) {
   return chain;
 }
 
-export function createDbMock(selectResults: unknown[] = []) {
+export function createDbMock(
+  selectResults: unknown[] = [],
+  updateReturnings: unknown[] = [],
+) {
   const updateCalls: Array<{ values: Record<string, unknown> }> = [];
   const deleteCalls: Array<{ whereCalled: boolean }> = [];
   const insertCalls: Array<{ values: Record<string, unknown> }> = [];
@@ -39,7 +42,20 @@ export function createDbMock(selectResults: unknown[] = []) {
       update: vi.fn(() => ({
         set: vi.fn((values: Record<string, unknown>) => {
           updateCalls.push({ values });
-          return { where: vi.fn(async () => ({ ok: true })) };
+          // `.where(c)` is awaitable (legacy callers) AND chainable to
+          // `.returning()` for atomic conditional-claim callers. Each
+          // `.returning()` shifts the next queued rowset off `updateReturnings`
+          // so a test can simulate "claim won" ([{...}]) vs "already taken" ([]).
+          return {
+            where: vi.fn(() => {
+              const whereChain: any = {
+                returning: vi.fn(async () => updateReturnings.shift() ?? []),
+                then: (resolve: (v: unknown) => unknown, reject?: (r: unknown) => unknown) =>
+                  Promise.resolve({ ok: true }).then(resolve, reject),
+              };
+              return whereChain;
+            }),
+          };
         }),
       })),
       delete: vi.fn(() => {

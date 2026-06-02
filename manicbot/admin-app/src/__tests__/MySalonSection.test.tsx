@@ -69,6 +69,7 @@ vi.mock("~/components/settings/CollapsibleSection", () => ({
 
 vi.mock("~/components/salon/SalonBasicInfoBody", () => ({ SalonBasicInfoBody: () => React.createElement("div", { "data-testid": "body-basic" }) }));
 vi.mock("~/components/salon/SalonHoursBody", () => ({ SalonHoursBody: () => React.createElement("div", { "data-testid": "body-hours" }) }));
+vi.mock("~/components/salon/MasterSchedulePolicyBody", () => ({ MasterSchedulePolicyBody: () => React.createElement("div", { "data-testid": "body-schedule-policy" }) }));
 vi.mock("~/components/salon/SalonGalleryBody", () => ({ SalonGalleryBody: () => React.createElement("div", { "data-testid": "body-gallery" }) }));
 vi.mock("~/components/salon/SalonBrandingBody", () => ({ SalonBrandingBody: () => React.createElement("div", { "data-testid": "body-branding" }) }));
 vi.mock("~/components/salon/SalonAlbumsBody", () => ({ SalonAlbumsBody: () => React.createElement("div", { "data-testid": "body-albums" }) }));

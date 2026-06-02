@@ -331,21 +331,37 @@ export const webUsersRouter = createTRPCRouter({
         }
       }
 
-      // Record referral code redemption AFTER everything else succeeds.
-      // Fail-open: invalid/self-referral codes log but never block signup.
+      // Redeem the code AFTER everything else succeeds. Fail-open: a bad code
+      // logs but never blocks signup. An admin "service" grant code (reserved
+      // SVC- prefix) is routed to the one-time subscription-grant flow; any
+      // other code is treated as a peer referral. Both share this one field.
       if (input.referralCode && assignedTenantId) {
         try {
-          const { recordRedemption } = await import("~/server/api/routers/referrals");
-          const r = await recordRedemption(ctx.db, {
-            code: input.referralCode,
-            inviteeWebUserId: id,
-            inviteeTenantId: assignedTenantId,
-          });
-          if (!r.ok) {
-            log.info(`webUsers.register: referral code redemption rejected (${r.reason})`, { code: input.referralCode });
+          const grants = await import("~/server/api/routers/subscriptionGrantCodes");
+          if (grants.isGrantCode(input.referralCode)) {
+            const g = await grants.redeemGrantCodeAtRegistration(ctx.db, {
+              code: input.referralCode,
+              tenantId: assignedTenantId,
+              webUserId: id,
+              actor: email,
+            });
+            if (!g.ok) {
+              // Log only the non-secret prefix — never the full plaintext code.
+              log.info(`webUsers.register: grant code redemption rejected (${g.reason})`, { codePrefix: input.referralCode.slice(0, 7) });
+            }
+          } else {
+            const { recordRedemption } = await import("~/server/api/routers/referrals");
+            const r = await recordRedemption(ctx.db, {
+              code: input.referralCode,
+              inviteeWebUserId: id,
+              inviteeTenantId: assignedTenantId,
+            });
+            if (!r.ok) {
+              log.info(`webUsers.register: referral code redemption rejected (${r.reason})`, { code: input.referralCode });
+            }
           }
         } catch (err: unknown) {
-          log.error("webUsers.register: referral redemption threw", err instanceof Error ? err : new Error(String(err)));
+          log.error("webUsers.register: code redemption threw", err instanceof Error ? err : new Error(String(err)));
         }
       }
 

@@ -141,12 +141,14 @@ const ALLOWLIST = new Set([
   // with a commented `row.ts > Date.now()`, net +2 lines above this query) →
   // 1821 (per-master schedule editor added the `~/lib/workHours` import (+7),
   // the workHours/workDays zod fields (+5) and the validate+normalize block in
-  // `updateMaster` (+18), net +30 lines above this query).
+  // `updateMaster` (+18), net +30 lines above this query) → 1958 (the
+  // master-schedule policy PR added `reviewMasterScheduleRequest` +
+  // `listPendingScheduleRequests` (~137 lines) above this query).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1821",
+  "src/server/api/routers/salon.ts:1958",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

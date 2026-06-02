@@ -442,10 +442,12 @@ export default function RegisterPageClient() {
                 {referralCode && /^[A-Z0-9-]{6,16}$/.test(referralCode) && codeValidation.data && (
                   codeValidation.data.valid ? (
                     <p className="rounded-xl border border-emerald-200/60 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200">
-                      {copy.register.referralCodeValid.replace(
-                        "{name}",
-                        codeValidation.data.ownerDisplayName ?? "—",
-                      )}
+                      {codeValidation.data.kind === "service_grant"
+                        ? copy.register.referralCodeServiceGrant
+                        : copy.register.referralCodeValid.replace(
+                            "{name}",
+                            codeValidation.data.ownerDisplayName ?? "—",
+                          )}
                     </p>
                   ) : (
                     <p className="rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-200">

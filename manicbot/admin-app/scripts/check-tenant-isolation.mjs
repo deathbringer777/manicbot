@@ -158,13 +158,14 @@ const ALLOWLIST = new Set([
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization
-  // is by ownerUserId. Line drifted after listMembers extension for masters (PR-A).
-  "src/server/api/routers/tenantStaff.ts:381",
+  // is by ownerUserId. Line drifted after listMembers extension for masters (PR-A)
+  // → 388 (#D-1 revokeMember tenant-scoping added 7 lines above this block).
+  "src/server/api/routers/tenantStaff.ts:388",
   // tenantStaff.ts:540 — tenantActionRequests query. The `where` variable is
   // built two lines above and DOES include eq(table.tenantId, input.tenantId).
   // The scanner's 800-char window misses the prior assignment. Line drifted
-  // 525 → 540 after listMembers extension for masters (PR-A).
-  "src/server/api/routers/tenantStaff.ts:540",
+  // 525 → 540 (PR-A) → 547 (#D-1 revokeMember tenant-scoping added 7 lines above).
+  "src/server/api/routers/tenantStaff.ts:547",
 ]);
 
 function listRouterFiles(dir) {

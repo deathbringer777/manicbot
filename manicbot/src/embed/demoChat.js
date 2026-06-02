@@ -72,6 +72,48 @@ export function detectPhotoNav(m) {
   return null;
 }
 
+/**
+ * #X-01 — Whitelist renderer for bot HTML in the embed widget.
+ *
+ * Telegram-style bot messages use a tiny tag set (<b> <i> <a> ...). We escape
+ * the whole string, then re-allow ONLY those tags, RECONSTRUCTED WITHOUT any
+ * attributes — so an injected event handler (e.g. `<b onmouseover=...>`) cannot
+ * survive. `<a>` is rebuilt with a single sanitized href + rel/target. This
+ * mirrors the admin-app `sanitizeChatHtml.ts` reconstruct-not-unescape contract
+ * so both chat surfaces share one safe rule. The widget renders bot text via
+ * innerHTML on the embedding site (outside ManicBot's CSP), so this is the only
+ * line of defense there.
+ *
+ * Exported as a pure function and inlined into DEMO_CHAT_SRC via toString(), so
+ * it runs in the browser AND is unit-testable (test/embed-sanitize-bothtml.test.js).
+ */
+export function sanitizeBotHtml(html, parseMode) {
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  if (parseMode !== 'HTML') return esc(html).replace(/\n/g, '<br>');
+  var escaped = esc(html);
+  // attrs group requires a leading space (so `<br>` matches 'br' not 'b'+'r')
+  // and is tempered against `&gt;` so a single tag never consumes past its own
+  // close into the following text/tags.
+  escaped = escaped.replace(
+    /&lt;([/]?)(b|strong|i|em|u|s|code|pre|br|a)((?:\s(?:(?!&gt;)[\s\S])*)?)&gt;/gi,
+    function (_m, slash, tag, attrs) {
+      tag = tag.toLowerCase();
+      if (slash === '/') return '</' + tag + '>';
+      if (tag !== 'a') return '<' + tag + '>';
+      var href = '';
+      var hm = attrs && attrs.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+      if (hm) href = (hm[1] != null ? hm[1] : hm[2]) || '';
+      href = href.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+      if (!/^(https?:\/\/|mailto:|tel:)/i.test(href)) return '<a rel="noopener noreferrer nofollow" target="_blank">';
+      var safe = href.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return '<a href="' + safe + '" rel="noopener noreferrer nofollow" target="_blank">';
+    }
+  );
+  return escaped.replace(/\n/g, '<br>');
+}
+
 export const DEMO_CHAT_SRC = `
 (function () {
   // document.currentScript is null for async/defer scripts — fall back to
@@ -828,34 +870,7 @@ export const DEMO_CHAT_SRC = `
     return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function sanitizeBotHtml(html, parseMode) {
-    if (parseMode !== 'HTML') return escapeHtml(html).replace(/\\n/g, '<br>');
-    var escaped = escapeHtml(html);
-    // #S14 — use character class [/] instead of \\/ to avoid the template
-    // literal → regex-literal escape ambiguity. Allow HTML entities (&amp;
-    // &quot; etc.) inside tag attributes so that <a href="...?a=1&amp;b=2">
-    // is correctly un-escaped rather than shown raw.
-    escaped = escaped.replace(/&lt;([/]?)(b|strong|i|em|u|s|code|pre|br|a)(\\s(?:[^&]|&(?:amp|quot|lt|gt|apos|#\\d+);)*)?&gt;/gi, function (m) {
-      var unescaped = m.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-      // #S-15 — anchor sanitization runs in two passes so that pathological
-      // hrefs containing inner ">" (e.g. data:text/html,<script>...) cannot
-      // hide unsafe protocols inside a non-greedy tag split. Pass 1 rewrites
-      // any unsafe href value to "#" across the whole string. Pass 2 finds
-      // the opening <a tag and adds rel/target if absent.
-      unescaped = unescaped.replace(/\\bhref\\s*=\\s*("([^"]*)"|'([^']*)')/gi, function (full, _quoted, dq, sq) {
-        var v = (dq != null ? dq : (sq || '')).trim();
-        return /^(https?:\\/\\/|mailto:|tel:)/i.test(v) ? full : 'href="#"';
-      });
-      unescaped = unescaped.replace(/(<a\\b[^>]*?)(\\s*\\/?>)/i, function (_full, head, tail) {
-        var extra = '';
-        if (!/\\brel\\s*=/i.test(head)) extra += ' rel="noopener noreferrer nofollow"';
-        if (!/\\btarget\\s*=/i.test(head)) extra += ' target="_blank"';
-        return head + extra + tail;
-      });
-      return unescaped;
-    });
-    return escaped.replace(/\\n/g, '<br>');
-  }
+  ${sanitizeBotHtml.toString()}
 
   function isEmptyMessage(m) {
     // The bot sometimes emits a zero-width-space placeholder for layout

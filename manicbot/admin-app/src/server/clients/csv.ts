@@ -19,6 +19,8 @@
  * row-level error so the operator sees exactly which rows to fix.
  */
 
+import { csvCell } from "~/server/lib/csvSafe";
+
 export interface ParsedClientRow {
   name: string | null;
   phone: string | null;
@@ -163,7 +165,12 @@ function tokenize(input: string): string[][] {
 // ─── Normalisers ─────────────────────────────────────────────────────────────
 function tidy(v: string | undefined): string | null {
   if (v === undefined) return null;
-  const t = v.trim();
+  // #M-07-5 — reverse the CSV-injection guard: csvCell prefixes a single quote
+  // before a leading =,+,-,@ (or tab/CR) so spreadsheets don't execute the cell.
+  // Strip exactly that on import so export→re-import round-trips (e.g. a phone
+  // "+48..."). Only `'` immediately followed by a formula char is removed — a
+  // legitimate value like "'tis" is untouched.
+  const t = v.trim().replace(/^'([=+\-@\t\r])/, "$1");
   return t.length > 0 ? t : null;
 }
 
@@ -451,8 +458,7 @@ export interface ExportableClient {
 }
 
 function escapeCell(v: string | number | null | undefined): string {
-  const s = String(v ?? "");
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return csvCell(v); // #M-07-5 — formula-injection-safe encoder (see lib/csvSafe.ts)
 }
 
 export const CLIENT_EXPORT_HEADERS = [

@@ -233,6 +233,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_svc_cat_tenant_name
 CREATE INDEX IF NOT EXISTS idx_svc_cat_tenant_order
   ON service_categories(tenant_id, sort_order);
 
+-- Photo albums / folders for the public salon gallery (migration 0104).
+-- The flat tenants.photos array remains the implicit "All" default album.
+CREATE TABLE IF NOT EXISTS photo_albums (
+  tenant_id   TEXT NOT NULL,
+  id          TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  cover_url   TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_photo_albums_tenant_order
+  ON photo_albums(tenant_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS album_photos (
+  tenant_id    TEXT NOT NULL,
+  album_id     TEXT NOT NULL,
+  id           TEXT NOT NULL,
+  photo_url    TEXT NOT NULL,
+  photo_r2_key TEXT,
+  caption      TEXT,
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_album_photos_tenant_album
+  ON album_photos(tenant_id, album_id, sort_order);
+
 CREATE TABLE IF NOT EXISTS tenant_config (
   tenant_id TEXT NOT NULL,
   key TEXT NOT NULL,
@@ -311,6 +339,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   logo_r2_key TEXT,
   cover_r2_key TEXT,
   brand_palette TEXT,
+  bg_image TEXT,
+  bg_r2_key TEXT,
   is_personal INTEGER NOT NULL DEFAULT 0,
   industry TEXT NOT NULL DEFAULT 'beauty',
   is_test INTEGER NOT NULL DEFAULT 0,

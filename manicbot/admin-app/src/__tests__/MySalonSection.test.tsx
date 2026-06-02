@@ -71,6 +71,7 @@ vi.mock("~/components/salon/SalonBasicInfoBody", () => ({ SalonBasicInfoBody: ()
 vi.mock("~/components/salon/SalonHoursBody", () => ({ SalonHoursBody: () => React.createElement("div", { "data-testid": "body-hours" }) }));
 vi.mock("~/components/salon/SalonGalleryBody", () => ({ SalonGalleryBody: () => React.createElement("div", { "data-testid": "body-gallery" }) }));
 vi.mock("~/components/salon/SalonBrandingBody", () => ({ SalonBrandingBody: () => React.createElement("div", { "data-testid": "body-branding" }) }));
+vi.mock("~/components/salon/SalonAlbumsBody", () => ({ SalonAlbumsBody: () => React.createElement("div", { "data-testid": "body-albums" }) }));
 vi.mock("~/components/salon/SalonStorefrontBody", () => ({ SalonStorefrontBody: () => React.createElement("div", { "data-testid": "body-storefront" }) }));
 vi.mock("~/components/salon/SalonPublishBody", () => ({ SalonPublishBody: () => React.createElement("div", { "data-testid": "body-publish" }) }));
 vi.mock("~/components/salon/AutoConfirmSettings", () => ({ AutoConfirmSettings: () => React.createElement("div", { "data-testid": "body-autoconfirm" }) }));
@@ -81,7 +82,7 @@ import { MySalonSection } from "~/components/settings/sections/MySalonSection";
 
 function visibleBodies() {
   return [
-    "body-basic", "body-hours", "body-gallery", "body-branding",
+    "body-basic", "body-hours", "body-gallery", "body-branding", "body-albums",
     "body-storefront", "body-publish", "body-autoconfirm", "body-favorite", "body-calendar",
   ].filter((id) => screen.queryByTestId(id));
 }
@@ -122,7 +123,7 @@ describe("MySalonSection — top sub-tabs", () => {
   it("clicking a tab swaps the visible cards and writes ?sub= to the URL", () => {
     render(React.createElement(MySalonSection));
     fireEvent.click(screen.getByRole("tab", { name: /Оформление/ }));
-    expect(visibleBodies()).toEqual(["body-gallery", "body-branding"]);
+    expect(visibleBodies()).toEqual(["body-gallery", "body-branding", "body-albums"]);
     expect(mockReplace).toHaveBeenCalledTimes(1);
     expect(String(mockReplace.mock.calls[0]?.[0])).toContain("sub=appearance");
   });

@@ -165,6 +165,8 @@ describe("publicSalon router — FTS5 wiring", () => {
         [],         // tenantConfig — no reviews_public override
         [],         // bots
         [],         // serviceCategories (PR — categories list, parallel with bots)
+        [],         // photoAlbums (0104 — albums batch)
+        [],         // albumPhotos (0104 — albums batch)
         reviewsAvg, // reviews (single query, keyed on tenant.id)
       ]);
       const caller = publicCaller(dbMock.db);
@@ -172,11 +174,55 @@ describe("publicSalon router — FTS5 wiring", () => {
       const result = await caller.getProfile({ slug: "demo" });
 
       expect(result?.rating).toEqual({ avg: 4.5, count: 12 });
-      // 6 selects for the Promise.all batch + exactly 1 for reviews = 7 total.
-      // Previously it was 6 (bumped because serviceCategories was added to
-      // the parallel batch). Still ONE reviews query, not two — the test's
+      // 8 selects for the Promise.all batch + exactly 1 for reviews = 9 total.
+      // The batch grew from 6→8 when photo_albums + album_photos joined it
+      // (migration 0104). Still ONE reviews query, not two — the test's
       // original guarantee (no dead reviews-by-slug round-trip) holds.
-      expect(dbMock.db.select).toHaveBeenCalledTimes(7);
+      expect(dbMock.db.select).toHaveBeenCalledTimes(9);
+    });
+  });
+
+  describe("getProfile — background image + albums (0103/0104)", () => {
+    it("exposes bgImage and assembles albums, dropping empty ones", async () => {
+      const tenantRows = [
+        { id: "t_real", slug: "demo", publicActive: 1, name: "Demo", bgImage: "https://cdn.test/bg.jpg" },
+      ];
+      const albumRows = [
+        { id: "al_1", name: "Маникюр", coverUrl: null, sortOrder: 0 },
+        { id: "al_empty", name: "Пусто", coverUrl: null, sortOrder: 1 },
+      ];
+      const albumPhotoRows = [
+        { albumId: "al_1", photoUrl: "https://cdn.test/p1.jpg" },
+        { albumId: "al_1", photoUrl: "https://cdn.test/p2.jpg" },
+      ];
+      const dbMock = createDbMock([
+        tenantRows, [], [], [], [], [], albumRows, albumPhotoRows, [{ avg: 0, count: 0 }],
+      ]);
+      const caller = publicCaller(dbMock.db);
+
+      const result = await caller.getProfile({ slug: "demo" });
+
+      expect(result?.bgImage).toBe("https://cdn.test/bg.jpg");
+      // al_empty has no photos → filtered out.
+      expect(result?.albums).toHaveLength(1);
+      expect(result?.albums[0]).toMatchObject({ id: "al_1", name: "Маникюр" });
+      expect(result?.albums[0]?.photos).toEqual([
+        "https://cdn.test/p1.jpg",
+        "https://cdn.test/p2.jpg",
+      ]);
+    });
+
+    it("returns null bgImage and empty albums for a salon with none (backward-compat)", async () => {
+      const tenantRows = [{ id: "t2", slug: "plain", publicActive: 1, name: "Plain" }];
+      const dbMock = createDbMock([
+        tenantRows, [], [], [], [], [], [], [], [{ avg: 0, count: 0 }],
+      ]);
+      const caller = publicCaller(dbMock.db);
+
+      const result = await caller.getProfile({ slug: "plain" });
+
+      expect(result?.bgImage).toBeNull();
+      expect(result?.albums).toEqual([]);
     });
   });
 });

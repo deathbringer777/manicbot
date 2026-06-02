@@ -35,6 +35,8 @@ export const tenants = sqliteTable("tenants", {
   logoR2Key: text("logo_r2_key"),
   coverR2Key: text("cover_r2_key"),
   brandPalette: text("brand_palette"),
+  bgImage: text("bg_image"),
+  bgR2Key: text("bg_r2_key"),
   isPersonal: integer("is_personal").notNull().default(0),
   industry: text("industry").notNull().default("beauty"),
   isTest: integer("is_test").notNull().default(0),
@@ -320,6 +322,32 @@ export const serviceCategories = sqliteTable("service_categories", {
   primaryKey({ columns: [t.tenantId, t.id] }),
   uniqueIndex("idx_svc_cat_tenant_name").on(t.tenantId, t.name),
   index("idx_svc_cat_tenant_order").on(t.tenantId, t.sortOrder),
+]);
+
+export const photoAlbums = sqliteTable("photo_albums", {
+  tenantId: text("tenant_id").notNull(),
+  id: text("id").notNull(),
+  name: text("name").notNull(),
+  coverUrl: text("cover_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.id] }),
+  index("idx_photo_albums_tenant_order").on(t.tenantId, t.sortOrder),
+]);
+
+export const albumPhotos = sqliteTable("album_photos", {
+  tenantId: text("tenant_id").notNull(),
+  albumId: text("album_id").notNull(),
+  id: text("id").notNull(),
+  photoUrl: text("photo_url").notNull(),
+  photoR2Key: text("photo_r2_key"),
+  caption: text("caption"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.id] }),
+  index("idx_album_photos_tenant_album").on(t.tenantId, t.albumId, t.sortOrder),
 ]);
 
 export const tenantConfig = sqliteTable("tenant_config", {

@@ -89,6 +89,9 @@ interface SalonProfile {
   phone: string | null;
   workHours: WorkHours;
   photos: string[];
+  bgImage?: string | null;
+  albums?: { id: string; name: string; coverUrl: string | null; photos: string[] }[];
+  rating?: { avg: number; count: number } | null;
   mapsUrl: string | null;
   instagramUrl: string | null;
   botUsername: string | null;
@@ -266,9 +269,14 @@ function MasterCard({ master, services }: { master: MasterItem; services: Servic
   const vacationLabel = (() => {
     if (!master.onVacation) return null;
     if (!master.vacationUntil) return "В отпуске";
+    // Format from UTC parts, not local. This component is statically
+    // prerendered (SSG builds in UTC) but hydrates in the visitor's local
+    // timezone — getDate()/getMonth() would disagree across a midnight
+    // boundary and trip React hydration error #418. UTC is deterministic
+    // everywhere and matches how the epoch is stored.
     const until = new Date(master.vacationUntil * 1000);
-    const day = String(until.getDate()).padStart(2, "0");
-    const month = String(until.getMonth() + 1).padStart(2, "0");
+    const day = String(until.getUTCDate()).padStart(2, "0");
+    const month = String(until.getUTCMonth() + 1).padStart(2, "0");
     return `В отпуске до ${day}.${month}`;
   })();
   return (
@@ -307,6 +315,76 @@ function MasterCard({ master, services }: { master: MasterItem; services: Servic
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Photo gallery — renders album folder tabs when the salon defined any,
+ * otherwise the flat grid (backward-compatible). The synthetic "Все" tab is
+ * backed by the flat `photos` array and keeps the hero-strip interaction
+ * (clicking a tile drives `photoIdx`); album tabs are display-only.
+ */
+function GallerySection({
+  photos,
+  albums,
+  photoIdx,
+  setPhotoIdx,
+}: {
+  photos: string[];
+  albums: { id: string; name: string; coverUrl: string | null; photos: string[] }[];
+  photoIdx: number;
+  setPhotoIdx: (i: number) => void;
+}) {
+  const hasAlbums = albums.length > 0;
+  const tabs = [{ id: "__all__", name: "Все", photos }, ...albums];
+  const [activeId, setActiveId] = useState("__all__");
+  const active = tabs.find((tb) => tb.id === activeId) ?? tabs[0]!;
+  const isAll = active.id === "__all__";
+
+  if (photos.length === 0 && !hasAlbums) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
+        <ImageIcon className="h-5 w-5 text-violet-600 dark:text-brand-400" />
+        Фотографии
+      </h2>
+      {hasAlbums && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveId(tab.id)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                tab.id === activeId
+                  ? "bg-violet-600 text-white dark:bg-brand-500"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              {tab.name}
+              <span className="ml-1.5 text-xs opacity-70">{tab.photos.length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+        {active.photos.map((url, i) =>
+          isAll ? (
+            <button
+              key={i}
+              onClick={() => setPhotoIdx(i)}
+              className={`aspect-square overflow-hidden rounded-xl border-2 transition ${photoIdx === i ? "border-violet-500 dark:border-brand-500" : "border-transparent"}`}
+            >
+              <img src={url} alt={`Фото ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+            </button>
+          ) : (
+            <div key={i} className="aspect-square overflow-hidden rounded-xl border-2 border-transparent">
+              <img src={url} alt={`${active.name} ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+            </div>
+          ),
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -354,7 +432,17 @@ export function SalonProfileClient({
   const coverPhoto = profile.photos[photoIdx] ?? null;
 
   return (
-    <div className="pb-20">
+    <div className="relative isolate pb-20">
+      {/* Static background image (owner-set), behind all content. `isolate`
+          scopes this stacking context so the -z-10 layer paints above the
+          public-layout's opaque slate wrapper yet below the salon content;
+          the scrim keeps every card's text contrast intact in both themes. */}
+      {profile.bgImage ? (
+        <div aria-hidden className="fixed inset-0 -z-10">
+          <img src={profile.bgImage} alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-slate-50/85 backdrop-blur-[2px] dark:bg-slate-950/88" />
+        </div>
+      ) : null}
       {/* Hero */}
       <div className="relative h-64 w-full overflow-hidden bg-slate-100 md:h-80 dark:bg-slate-900">
         {coverPhoto ? (
@@ -399,12 +487,19 @@ export function SalonProfileClient({
               {profile.address && (
                 <span className="text-slate-400 dark:text-slate-500">{profile.address}</span>
               )}
-              {/* Rating placeholder */}
-              <span className="flex items-center gap-1 text-yellow-500 dark:text-yellow-400">
-                <Star className="h-4 w-4 fill-yellow-500 dark:fill-yellow-400" />
-                <span className="font-semibold">5.0</span>
-                <span className="text-slate-400 dark:text-slate-500">(новый)</span>
-              </span>
+              {/* Rating — real reviews only. No fabricated "5.0" for brand-new
+                  salons (trust + SEO liability); show a neutral chip instead. */}
+              {profile.rating && profile.rating.count > 0 ? (
+                <span className="flex items-center gap-1 text-yellow-500 dark:text-yellow-400">
+                  <Star className="h-4 w-4 fill-yellow-500 dark:fill-yellow-400" />
+                  <span className="font-semibold">{profile.rating.avg.toFixed(1)}</span>
+                  <span className="text-slate-400 dark:text-slate-500">({profile.rating.count})</span>
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                  Новый салон
+                </span>
+              )}
             </div>
             {profile.description && (
               <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{profile.description}</p>
@@ -458,26 +553,13 @@ export function SalonProfileClient({
           </div>
         </div>
 
-        {/* Photo gallery */}
-        {profile.photos.length > 0 && (
-          <section className="mt-8">
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
-              <ImageIcon className="h-5 w-5 text-violet-600 dark:text-brand-400" />
-              Фотографии
-            </h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {profile.photos.map((url, i) => (
-                <button
-                  key={i}
-                  onClick={() => setPhotoIdx(i)}
-                  className={`aspect-square overflow-hidden rounded-xl border-2 transition ${photoIdx === i ? "border-violet-500 dark:border-brand-500" : "border-transparent"}`}
-                >
-                  <img src={url} alt={`Фото ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Photo gallery — album folder tabs when defined, flat grid otherwise */}
+        <GallerySection
+          photos={profile.photos}
+          albums={profile.albums ?? []}
+          photoIdx={photoIdx}
+          setPhotoIdx={setPhotoIdx}
+        />
 
         {/* Layout: 2 columns on wide */}
         <div className="mt-8 grid gap-6 lg:grid-cols-3">

@@ -790,7 +790,7 @@ CREATE TABLE IF NOT EXISTS marketing_contacts (
   tenant_id TEXT,
   tags TEXT,
   custom_fields TEXT,
-  consent_email INTEGER NOT NULL DEFAULT 1,
+  consent_email INTEGER NOT NULL DEFAULT 0, -- opt-IN: granted only via logged consent (newsletter DOI / owner toggle → marketing_consent_log). MKT-01.
   consent_sms INTEGER NOT NULL DEFAULT 0,
   brevo_contact_id TEXT,
   unsubscribe_token TEXT,

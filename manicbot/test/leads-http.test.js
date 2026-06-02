@@ -172,6 +172,33 @@ describe('POST /api/leads', () => {
     expect(rows.contacts.get('repeat@x.com').lead_count).toBe(2);
   });
 
+  it('stores the marketing contact as opt-out (consent_email=0) — a lead is not a marketing opt-in (MKT-01)', async () => {
+    let contactsSql = '';
+    const capturingEnv = {
+      DB: {
+        prepare(sql) {
+          if (sql.includes('INSERT INTO marketing_contacts')) contactsSql = sql;
+          return {
+            // first() → null covers both the dedupe COUNT (→0) and the
+            // rate-limit lookup (→not limited); run() → success for all inserts.
+            bind: () => ({ run: async () => ({ success: true }), first: async () => null }),
+          };
+        },
+      },
+    };
+    const res = await tryLeadRoutes(
+      reqJson('/api/leads', { name: 'NoConsent', email: 'noconsent@x.com', phone: '+48500000000' }),
+      capturingEnv,
+      new URL('https://manicbot.com/api/leads'),
+    );
+    expect(res.status).toBe(200);
+    // consent_email + consent_sms are written EXPLICITLY as 0 (opt-out), not
+    // left to the column default — a demo/lead request never grants marketing
+    // email consent. Consent is granted only via a logged opt-in.
+    expect(contactsSql).toContain('consent_email, consent_sms');
+    expect(contactsSql).toMatch(/1,\s*0,\s*0\)/);
+  });
+
   it('caps leads at 10 per email and returns already_submitted (no new row, no TG)', async () => {
     env.BOT_TOKEN = 'TOK';
     env.ADMIN_CHAT_ID = '1';
@@ -286,165 +313,9 @@ describe('POST /api/leads', () => {
   });
 });
 
-describe('POST /api/email-subscribe', () => {
-  let env, rows;
-  beforeEach(() => { ({ env, rows } = makeEnv()); });
-
-  it('inserts a valid subscriber', async () => {
-    const req = reqJson('/api/email-subscribe', { email: 'news@test.com', locale: 'ru' });
-    const res = await tryLeadRoutes(req, env, new URL(req.url));
-    expect(res.status).toBe(200);
-    expect(rows.filter(r => r.table === 'subs')).toHaveLength(1);
-    expect(rows[0].params[1]).toBe('ru');
-  });
-
-  it('rejects invalid email with 400', async () => {
-    const req = reqJson('/api/email-subscribe', { email: 'no-at', locale: 'ru' });
-    const res = await tryLeadRoutes(req, env, new URL(req.url));
-    expect(res.status).toBe(400);
-    expect(rows).toHaveLength(0);
-  });
-
-  it('falls back to locale=ru for unknown locales', async () => {
-    const req = reqJson('/api/email-subscribe', { email: 'a@b.com', locale: 'xx-rogue' });
-    const res = await tryLeadRoutes(req, env, new URL(req.url));
-    expect(res.status).toBe(200);
-    expect(rows[0].params[1]).toBe('ru');
-  });
-
-  it('does NOT send welcome email when RESEND_API_KEY is missing (warns instead)', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const calls = [];
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      calls.push(String(url));
-      return new Response('{}', { status: 200 });
-    }));
-    try {
-      const r = await tryLeadRoutes(
-        reqJson('/api/email-subscribe', { email: 'nokey@test.com', locale: 'en' }, '6.6.6.6'),
-        env, new URL('https://manicbot.com/api/email-subscribe'),
-      );
-      expect(r.status).toBe(200);
-      await new Promise((r) => setTimeout(r, 10));
-      expect(calls.filter((u) => u.includes('api.resend.com'))).toHaveLength(0);
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('RESEND_API_KEY or RESEND_FROM missing'));
-    } finally {
-      vi.unstubAllGlobals();
-      warnSpy.mockRestore();
-    }
-  });
-
-  it('uses execCtx.waitUntil so the welcome email survives after response', async () => {
-    const env2 = {
-      RESEND_API_KEY: 'rk',
-      RESEND_FROM: 'ManicBot <noreply@manicbot.com>',
-      DB: {
-        prepare() {
-          return {
-            bind() {
-              return {
-                run: async () => ({ success: true }),
-                first: async () => null,
-              };
-            },
-          };
-        },
-      },
-    };
-    const tracked = [];
-    const execCtx = { waitUntil: (p) => { tracked.push(p); } };
-    const fetchMock = vi.fn(async () => new Response('{"id":"1"}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    try {
-      const r = await tryLeadRoutes(
-        reqJson('/api/email-subscribe', { email: 'wu@test.com', locale: 'en' }, '5.5.5.5'),
-        env2, new URL('https://manicbot.com/api/email-subscribe'), execCtx,
-      );
-      expect(r.status).toBe(200);
-      expect(tracked).toHaveLength(1);
-      await Promise.all(tracked);
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.resend.com/emails',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('sends welcome email via Resend on first subscribe only', async () => {
-    // Custom env that tracks whether the email already exists
-    const subs = new Set();
-    const env2 = {
-      RESEND_API_KEY: 'rk_test',
-      RESEND_FROM: 'ManicBot <noreply@manicbot.com>',
-      DB: {
-        prepare(sql) {
-          return {
-            bind(...params) {
-              return {
-                run: async () => {
-                  if (sql.includes('INSERT INTO email_subscribers')) subs.add(params[0]);
-                  return { success: true };
-                },
-                first: async () => {
-                  if (sql.includes('SELECT id FROM email_subscribers')) {
-                    return subs.has(params[0]) ? { id: 1 } : null;
-                  }
-                  return null;
-                },
-              };
-            },
-          };
-        },
-      },
-    };
-    const calls = [];
-    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
-      calls.push({ url: String(url), init });
-      return new Response('{"id":"e_1"}', { status: 200 });
-    }));
-    try {
-      // First time: new subscriber → email sent
-      const r1 = await tryLeadRoutes(
-        reqJson('/api/email-subscribe', { email: 'wel@test.com', locale: 'pl' }, '8.8.8.8'),
-        env2, new URL('https://manicbot.com/api/email-subscribe'),
-      );
-      expect(r1.status).toBe(200);
-      await new Promise((r) => setTimeout(r, 10));
-      const resendCalls = calls.filter((c) => c.url.includes('api.resend.com'));
-      expect(resendCalls).toHaveLength(1);
-      const body = JSON.parse(resendCalls[0].init.body);
-      expect(body.to).toEqual(['wel@test.com']);
-      expect(body.subject).toMatch(/ManicBot/);
-      expect(body.html).toContain('ManicBot');
-      // Polish copy check
-      expect(body.html).toContain('Dziękujemy');
-
-      // Second time: same email → no new email
-      const r2 = await tryLeadRoutes(
-        reqJson('/api/email-subscribe', { email: 'wel@test.com', locale: 'pl' }, '8.8.8.9'),
-        env2, new URL('https://manicbot.com/api/email-subscribe'),
-      );
-      expect(r2.status).toBe(200);
-      await new Promise((r) => setTimeout(r, 10));
-      expect(calls.filter((c) => c.url.includes('api.resend.com'))).toHaveLength(1);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('rate-limits after 20 requests per IP per hour', async () => {
-    for (let i = 0; i < 20; i++) {
-      const req = reqJson('/api/email-subscribe', { email: `x${i}@y.com` }, '7.7.7.7');
-      const r = await tryLeadRoutes(req, env, new URL(req.url));
-      expect(r.status, `call ${i}`).toBe(200);
-    }
-    const req = reqJson('/api/email-subscribe', { email: 'x20@y.com' }, '7.7.7.7');
-    const r = await tryLeadRoutes(req, env, new URL(req.url));
-    expect(r.status).toBe(429);
-  });
-});
+// /api/email-subscribe is handled at the worker.js level by handleSubscribeRequest
+// (proper double-opt-in into newsletter_subscribers) — see subscribe-http.test.js.
+// The former single-opt-in path in leadsHttp.js was dead code; removed (MKT-07).
 
 describe('unknown path', () => {
   it('returns null so other handlers get a chance', async () => {

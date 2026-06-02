@@ -169,6 +169,20 @@ export const marketingTenantRouter = createTRPCRouter({
       if (input.unsubscribed !== undefined) patch.unsubscribed = input.unsubscribed ? 1 : 0;
       if (!Object.keys(patch).length) return { ok: true };
       await ctx.db.update(marketingContacts).set(patch).where(eq(marketingContacts.id, input.id));
+
+      // GDPR (MKT-01/MKT-06): the boolean is the send gate; this log is the
+      // demonstrable audit trail of who/when granted or revoked consent. Record
+      // a 'subscribed'/'unsubscribed' event per channel whenever the owner
+      // toggles a consent flag, mirroring the unsubscribe-link event shape.
+      const consentTs = now();
+      const consentLogs: Array<typeof marketingConsentLog.$inferInsert> = [];
+      if (input.consentEmail !== undefined) {
+        consentLogs.push({ contactId: input.id, event: input.consentEmail ? "subscribed" : "unsubscribed", source: "owner", note: "email", createdAt: consentTs });
+      }
+      if (input.consentSms !== undefined) {
+        consentLogs.push({ contactId: input.id, event: input.consentSms ? "subscribed" : "unsubscribed", source: "owner", note: "sms", createdAt: consentTs });
+      }
+      if (consentLogs.length) await ctx.db.insert(marketingConsentLog).values(consentLogs);
       return { ok: true };
     }),
 

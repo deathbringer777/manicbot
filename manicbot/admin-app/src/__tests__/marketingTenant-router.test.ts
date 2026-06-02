@@ -190,6 +190,34 @@ describe("marketingTenantRouter.contactUpdate cross-tenant guard", () => {
     expect(updateCalls.length).toBe(1);
     expect(updateCalls[0]?.values).toMatchObject({ tags: "vip" });
   });
+
+  it("logs a 'subscribed' consent event when consentEmail is toggled on (MKT-01/MKT-06)", async () => {
+    const { db, updateCalls, insertCalls } = createDbMock([
+      [{ tenantId: "t_a" }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactUpdate({ tenantId: "t_a", id: 42, consentEmail: true });
+    expect(out).toEqual({ ok: true });
+    // boolean flag still written (the send gate)...
+    expect(updateCalls[0]?.values).toMatchObject({ consentEmail: 1 });
+    // ...AND a demonstrable consent event is logged (the GDPR audit trail).
+    const logged = insertCalls
+      .flatMap((c) => { const v = c.values as unknown; return Array.isArray(v) ? v : [v]; })
+      .find((v: { contactId?: number }) => v?.contactId === 42);
+    expect(logged).toMatchObject({ event: "subscribed", source: "owner", note: "email" });
+  });
+
+  it("logs an 'unsubscribed' consent event when consentEmail is toggled off", async () => {
+    const { db, insertCalls } = createDbMock([
+      [{ tenantId: "t_a" }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await caller.contactUpdate({ tenantId: "t_a", id: 7, consentEmail: false });
+    const logged = insertCalls
+      .flatMap((c) => { const v = c.values as unknown; return Array.isArray(v) ? v : [v]; })
+      .find((v: { contactId?: number }) => v?.contactId === 7);
+    expect(logged).toMatchObject({ event: "unsubscribed", note: "email" });
+  });
 });
 
 describe("marketingTenantRouter manual lists (0072)", () => {

@@ -833,7 +833,7 @@ export const marketingContacts = sqliteTable("marketing_contacts", {
   tenantId: text("tenant_id"),
   tags: text("tags"),
   customFields: text("custom_fields"),
-  consentEmail: integer("consent_email").notNull().default(1),
+  consentEmail: integer("consent_email").notNull().default(0),
   consentSms: integer("consent_sms").notNull().default(0),
   brevoContactId: text("brevo_contact_id"),
   unsubscribeToken: text("unsubscribe_token"),

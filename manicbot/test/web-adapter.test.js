@@ -287,6 +287,29 @@ describe('WebAdapter.sendPhoto / sendDocument', () => {
     ]);
   });
 
+  it('sendPhoto forwards the full photos[] array for the web carousel', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    await adapter.sendPhoto(-1, 'https://example.com/a.png', 'caption', {
+      reply_markup: { inline_keyboard: [[{ text: 'Book', callback_data: 'sv:gel' }]] },
+      photos: ['https://example.com/a.png', 'https://example.com/b.png', 'https://example.com/c.png'],
+    });
+    const msg = adapter._outbox[0];
+    expect(msg.photo).toBe('https://example.com/a.png');
+    expect(msg.photos).toEqual([
+      'https://example.com/a.png',
+      'https://example.com/b.png',
+      'https://example.com/c.png',
+    ]);
+  });
+
+  it('sendPhoto leaves photos null when none provided (single-photo back-compat)', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    await adapter.sendPhoto(-1, 'https://example.com/a.png', 'caption');
+    expect(adapter._outbox[0].photos).toBeNull();
+  });
+
   it('sendDocument with URL content renders an anchor', async () => {
     const adapter = new WebAdapter(makeCtx());
     adapter.setActiveChat(-1);
@@ -319,6 +342,19 @@ describe('WebAdapter.editPhoto', () => {
     expect(msg.text).toBe('caption 2');
     expect(msg.buttons).toEqual([
       [{ text: '▶️', callback_data: 'cat:svc1:3', url: null }],
+    ]);
+  });
+
+  it('editPhoto forwards the full photos[] array', async () => {
+    const adapter = new WebAdapter(makeCtx());
+    adapter.setActiveChat(-1);
+    await adapter.editPhoto(-1, 'mid', 'https://example.com/b.png', 'cap', {
+      reply_markup: { inline_keyboard: [[{ text: '▶️', callback_data: 'cc:gel:1' }]] },
+      photos: ['https://example.com/a.png', 'https://example.com/b.png'],
+    });
+    expect(adapter._outbox[0].photos).toEqual([
+      'https://example.com/a.png',
+      'https://example.com/b.png',
     ]);
   });
 

@@ -158,12 +158,15 @@ export async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
     const rawDesc = (s.desc?.[lg] || s.desc?.ru || '').trim();
     const cap = rawDesc ? `${baseCap}\n\n📝 ${escHtml(rawDesc)}` : baseCap;
     const kb = catPhotoKb(lg, svcId, currentIdx, photos.length);
+    // On web, ship the full photo array so the widget renders a swipe carousel
+    // (desktop-style) instead of one-photo-at-a-time ◀️/▶️ server round-trips.
+    const extra = ctx.channel?.type === 'web' ? { ...kb, photos } : kb;
 
     if (msgId) {
-      const res = await editPhoto(ctx, cid, msgId, photos[currentIdx], cap, kb);
+      const res = await editPhoto(ctx, cid, msgId, photos[currentIdx], cap, extra);
       if (res) return;
     }
-    const res = await trySendPhoto(ctx, cid, photos[currentIdx], cap, kb);
+    const res = await trySendPhoto(ctx, cid, photos[currentIdx], cap, extra);
     if (res) return;
 
     // Photo broken — advance to next, can't edit anymore

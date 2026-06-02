@@ -29,7 +29,7 @@ interface Props {
   onCreated?: (id: string) => void;
 }
 
-const DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 180] as const;
+export const DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 180] as const;
 
 const FIELD =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";

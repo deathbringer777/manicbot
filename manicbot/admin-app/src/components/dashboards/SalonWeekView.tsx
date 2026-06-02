@@ -25,6 +25,8 @@ import { AppointmentDetailPanel, type SelectedAppointment } from "~/components/d
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import { CreateSlotPopover } from "~/components/calendar/CreateSlotPopover";
+import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { computeLanes } from "~/lib/calendar/overlapLanes";
@@ -324,6 +326,13 @@ export function SalonWeekView({
   const [createSlot, setCreateSlot] = useState<
     { date: string; time: string; durationMin: number; masterId: number | null; rect: AnchorRect | null } | null
   >(null);
+  // Clicked block → Google-Calendar-style detail popover (view / edit /
+  // delete-with-confirm) when the parent supplies tenantId; God-Mode callers
+  // without it fall back to the styled confirm via `blockToDelete`.
+  const [selectedBlock, setSelectedBlock] = useState<
+    { block: DayViewBlock; rect: AnchorRect | null } | null
+  >(null);
+  const [blockToDelete, setBlockToDelete] = useState<string | null>(null);
 
   const weekLabel = (() => {
     const first = days[0]!;
@@ -630,9 +639,15 @@ export function SalonWeekView({
                           data-block-type={b.type}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!onDeleteBlock) return;
-                            if (typeof window !== "undefined" && window.confirm(t("common.deleteConfirm", lang))) {
-                              onDeleteBlock(b.id);
+                            const r = e.currentTarget.getBoundingClientRect();
+                            const rect = { left: r.left, top: r.top, width: r.width, height: r.height };
+                            // Rich detail popover (view / edit / delete) when the
+                            // parent supplies tenantId; God-Mode callers without it
+                            // fall back to the styled confirm (no native window.confirm).
+                            if (tenantId) {
+                              setSelectedBlock({ block: b, rect });
+                            } else if (onDeleteBlock) {
+                              setBlockToDelete(b.id);
                             }
                           }}
                           className="absolute left-1 right-1 rounded-lg px-1.5 py-1 text-left overflow-hidden border border-dashed flex items-center gap-1 hover:opacity-80 transition-opacity"
@@ -740,6 +755,38 @@ export function SalonWeekView({
           <AptCard a={selectedApt} lang={lang} onAction={onAction} onNoShow={onNoShow} />
         </div>
       ) : null}
+
+      {/* Rich block detail — view / edit / delete-with-confirm (GCal style). */}
+      {selectedBlock && tenantId && (
+        <BlockDetailPanel
+          tenantId={tenantId}
+          block={selectedBlock.block}
+          masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
+          lang={lang}
+          anchorRect={selectedBlock.rect}
+          onClose={() => setSelectedBlock(null)}
+          onChanged={() => {
+            onUpdated?.();
+            setSelectedBlock(null);
+          }}
+        />
+      )}
+
+      {/* Styled confirm fallback for block deletion — replaces the old
+          window.confirm for God-Mode callers that don't pass tenantId. */}
+      <ConfirmDialog
+        open={blockToDelete !== null}
+        title={t("salon.day.deleteBlockTitle", lang)}
+        description={t("salon.day.deleteBlockDesc", lang)}
+        confirmLabel={t("common.delete", lang)}
+        cancelLabel={t("common.cancel", lang)}
+        tone="danger"
+        onConfirm={() => {
+          if (blockToDelete && onDeleteBlock) onDeleteBlock(blockToDelete);
+          setBlockToDelete(null);
+        }}
+        onCancel={() => setBlockToDelete(null)}
+      />
 
       {createSlot && (
         <CreateSlotPopover

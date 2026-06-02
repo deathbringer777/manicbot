@@ -203,6 +203,113 @@ describe("appointmentBlocksRouter", () => {
     });
   });
 
+  // ── update: edit an existing block in place (date/time/master/duration/
+  //    reason). Mirrors `create`'s guards + slot-conflict check, but passes
+  //    `excludeBlockId` so the block never collides with its own row.
+  describe("update", () => {
+    it("UNAUTHORIZED when no session", async () => {
+      const { db } = createDbMock();
+      const caller = createCaller(makeUnauthCtx(db) as never);
+      await expect(
+        caller.update({
+          tenantId: TENANT,
+          id: "blk_1",
+          masterId: 1,
+          type: "reservation",
+          date: "2026-05-16",
+          time: "10:00",
+          durationMin: 30,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+
+    it("FORBIDDEN on a foreign tenant", async () => {
+      const { db } = createDbMock();
+      const caller = createCaller(makeTenantOwnerCtx(db, "t_other") as never);
+      await expect(
+        caller.update({
+          tenantId: TENANT,
+          id: "blk_1",
+          masterId: 1,
+          type: "reservation",
+          date: "2026-05-16",
+          time: "10:00",
+          durationMin: 30,
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("404s when the block doesn't exist", async () => {
+      const dbMock = createDbMock([[] /* existence check → none */]);
+      const caller = createCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+      await expect(
+        caller.update({
+          tenantId: TENANT,
+          id: "missing",
+          masterId: 1,
+          type: "reservation",
+          date: "2026-05-16",
+          time: "10:00",
+          durationMin: 30,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("rejects when the new slot overlaps a DIFFERENT block", async () => {
+      const dbMock = createDbMock([
+        [{ tenantId: TENANT, masterId: 1 }], // existence check
+        [], // slotsBusy: appointments
+        // slotsBusy: blocks — a different block occupies 10:00–11:00
+        [{ id: "blk_other", type: "reservation", date: "2026-05-16", time: "10:00", durationMin: 60, endDate: null }],
+      ]);
+      const caller = createCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+      await expect(
+        caller.update({
+          tenantId: TENANT,
+          id: "blk_self",
+          masterId: 1,
+          type: "reservation",
+          date: "2026-05-16",
+          time: "10:30",
+          durationMin: 30,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT", message: "slot_conflict" });
+    });
+
+    it("updates in place when the only overlap is the block's own row", async () => {
+      // The blocks query returns the block being edited (same id). With
+      // excludeBlockId wired, slotsBusy must skip it → no conflict → UPDATE.
+      const dbMock = createDbMock([
+        [{ tenantId: TENANT, masterId: 1 }], // existence check
+        [], // slotsBusy: appointments
+        [{ id: "blk_self", type: "reservation", date: "2026-05-16", time: "10:00", durationMin: 60, endDate: null }],
+      ]);
+      const caller = createCaller(makeTenantOwnerCtx(dbMock.db, TENANT) as never);
+      const res = await caller.update({
+        tenantId: TENANT,
+        id: "blk_self",
+        masterId: 1,
+        type: "reservation",
+        date: "2026-05-16",
+        time: "10:00",
+        durationMin: 60,
+        reason: "Обновлённая причина",
+      });
+      expect(res.ok).toBe(true);
+      expect(dbMock.updateCalls).toHaveLength(1);
+      expect(dbMock.updateCalls[0]!.values).toMatchObject({
+        masterId: 1,
+        type: "reservation",
+        date: "2026-05-16",
+        time: "10:00",
+        durationMin: 60,
+        reason: "Обновлённая причина",
+      });
+      // Editing must never resurrect a soft-cancelled row by accident.
+      expect(dbMock.updateCalls[0]!.values).not.toHaveProperty("cancelled");
+    });
+  });
+
   // Master-role scoping is enforced via assertTenantOwner (personal
   // tenants only) + the caller-tenant guard inside `create` / `delete`;
   // the auth-guard tests above already exercise that path through the

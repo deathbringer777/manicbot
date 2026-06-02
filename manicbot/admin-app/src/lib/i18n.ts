@@ -650,6 +650,9 @@ const translations = {
   "block.create":                        { ru: "Создать", ua: "Створити", en: "Create", pl: "Utwórz" },
   "block.creating":                      { ru: "Создаю…", ua: "Створюю…", en: "Creating…", pl: "Tworzę…" },
   "block.slotConflict":                  { ru: "Этот слот уже занят — выберите другое время", ua: "Слот вже зайнятий — оберіть інший час", en: "Slot is already busy — pick a different time", pl: "Slot zajęty — wybierz inny czas" },
+  "block.detail.editTitle":              { ru: "Редактировать блок", ua: "Редагувати блок", en: "Edit block", pl: "Edytuj blok" },
+  "block.typeReservation":               { ru: "Резерв", ua: "Резерв", en: "Reserved", pl: "Rezerwacja" },
+  "block.typeTimeOff":                   { ru: "Перерыв / выходной", ua: "Перерва / вихідний", en: "Time off", pl: "Przerwa / wolne" },
 
   "completeness.title":                  { ru: "Профиль готов на", ua: "Профіль готовий на", en: "Profile ready", pl: "Profil gotowy w" },
   "completeness.toDo":                   { ru: "Доделай чтобы расти", ua: "Доробити, щоб рости", en: "Finish to level up", pl: "Dokończ, by awansować" },

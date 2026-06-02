@@ -34,6 +34,7 @@ import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import { CreateSlotPopover } from "~/components/calendar/CreateSlotPopover";
+import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { computeLanes } from "~/lib/calendar/overlapLanes";
@@ -294,6 +295,12 @@ export function SalonDayView({
     { date: string; time: string; durationMin: number; masterId: number | null; rect: AnchorRect | null } | null
   >(null);
   const [blockToDelete, setBlockToDelete] = useState<string | null>(null);
+  // Clicked block → Google-Calendar-style detail popover (view / edit /
+  // delete-with-confirm). Used when the parent supplies tenantId; God-Mode
+  // callers without it fall back to the legacy confirm via `blockToDelete`.
+  const [selectedBlock, setSelectedBlock] = useState<
+    { block: DayViewBlock; rect: AnchorRect | null } | null
+  >(null);
   const todayIso = fmtIsoDate(new Date());
   const isToday = isoDate === todayIso;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -967,8 +974,16 @@ export function SalonDayView({
                           data-past={isPast ? "1" : "0"}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!onDeleteBlock) return;
-                            setBlockToDelete(b.id);
+                            const r = e.currentTarget.getBoundingClientRect();
+                            const rect = { left: r.left, top: r.top, width: r.width, height: r.height };
+                            // Rich detail popover (view / edit / delete) when the
+                            // parent supplies tenantId; God-Mode callers without it
+                            // fall back to the legacy delete-confirm.
+                            if (tenantId) {
+                              setSelectedBlock({ block: b, rect });
+                            } else if (onDeleteBlock) {
+                              setBlockToDelete(b.id);
+                            }
                           }}
                           className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden border border-dashed flex flex-col gap-0.5 hover:opacity-80 transition-opacity ${dimClass}`}
                           style={{
@@ -1085,6 +1100,22 @@ export function SalonDayView({
         }}
         onCancel={() => setBlockToDelete(null)}
       />
+
+      {/* Rich block detail — view / edit / delete-with-confirm (GCal style). */}
+      {selectedBlock && tenantId && (
+        <BlockDetailPanel
+          tenantId={tenantId}
+          block={selectedBlock.block}
+          masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
+          lang={lang}
+          anchorRect={selectedBlock.rect}
+          onClose={() => setSelectedBlock(null)}
+          onChanged={() => {
+            onUpdated?.();
+            setSelectedBlock(null);
+          }}
+        />
+      )}
 
       {createSlot && (
         <CreateSlotPopover

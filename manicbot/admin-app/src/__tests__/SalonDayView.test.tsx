@@ -412,3 +412,22 @@ describe("SalonDayView", () => {
     expect(olgaCol?.querySelectorAll("[data-testid='day-view-event']").length).toBe(1);
   });
 });
+
+describe("SalonDayView — navigation styling", () => {
+  it("styles the day nav buttons with the brand-purple tint", () => {
+    renderWithLang(
+      <SalonDayView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    for (const id of ["day-view-prev", "day-view-today", "day-view-next"]) {
+      expect(screen.getByTestId(id).className).toContain("brand-500/10");
+    }
+  });
+});

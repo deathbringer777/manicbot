@@ -432,3 +432,45 @@ describe("SalonWeekView", () => {
     });
   });
 });
+
+describe("SalonWeekView — layout & navigation", () => {
+  it("renders the calendar as one monolithic card with the empty state below it", () => {
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    const root = screen.getByTestId("salon-week-view");
+    const card = screen.getByTestId("week-view-card");
+    const empty = screen.getByTestId("week-view-empty");
+    // The 7-day grid lives INSIDE the monolithic card…
+    expect(card.querySelectorAll("[data-testid='week-view-day-column']").length).toBe(7);
+    // …and the empty state is a sibling rendered AFTER the card, not nested in it.
+    expect(card.contains(empty)).toBe(false);
+    const kids = Array.from(root.children);
+    expect(kids.indexOf(empty)).toBeGreaterThan(kids.indexOf(card));
+  });
+
+  it("styles the week nav buttons with the brand-purple tint", () => {
+    renderWithLang(
+      <SalonWeekView
+        date={new Date("2026-05-10T12:00:00")}
+        setDate={() => undefined}
+        apts={[]}
+        masters={masters}
+        isLoading={false}
+        lang="en"
+      />,
+      "en",
+    );
+    for (const id of ["week-view-prev", "week-view-today", "week-view-next"]) {
+      expect(screen.getByTestId(id).className).toContain("brand-500/10");
+    }
+  });
+});

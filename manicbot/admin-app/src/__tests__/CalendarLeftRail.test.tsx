@@ -225,6 +225,45 @@ describe("CalendarLeftRail", () => {
       fireEvent.click(screen.getByTestId("rail-my-calendars-toggle"));
       expect(screen.getByTestId("rail-show-all-masters")).toBeTruthy();
     });
+
+    it("collapses the master list by default (toggles hidden until expanded)", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={masters}
+          hiddenMasterIds={new Set()}
+          toggleMasterVisible={() => undefined}
+        />,
+        "en",
+      );
+      // Header + chevron render, but the per-master toggles stay hidden.
+      const toggle = screen.getByTestId("rail-my-calendars-toggle");
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryAllByTestId("rail-master-toggle").length).toBe(0);
+    });
+
+    it("expands and re-collapses the master list when the header is clicked", () => {
+      renderWithLang(
+        <CalendarLeftRail
+          selectedDate={FIXED_NOW}
+          setSelectedDate={() => undefined}
+          lang="en"
+          masters={masters}
+          hiddenMasterIds={new Set()}
+          toggleMasterVisible={() => undefined}
+        />,
+        "en",
+      );
+      const toggle = screen.getByTestId("rail-my-calendars-toggle");
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getAllByTestId("rail-master-toggle").length).toBe(3);
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryAllByTestId("rail-master-toggle").length).toBe(0);
+    });
   });
 
   // ── Status filter dropdown (FilterDropdown, single-select) ────────

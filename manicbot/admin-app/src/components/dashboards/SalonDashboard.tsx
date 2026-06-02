@@ -18,6 +18,8 @@ import { SalonAgendaView } from "~/components/dashboards/SalonAgendaView";
 import { SalonDayView } from "~/components/dashboards/SalonDayView";
 import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
+import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDetailPanel";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
 import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
 import { Bell, Repeat } from "lucide-react";
@@ -1361,6 +1363,9 @@ function SalonBigCalendar({
   onAction,
   onNoShow,
   serviceNames,
+  tenantId,
+  services,
+  onUpdated,
 }: {
   apts: any[];
   masters?: Array<{ chatId: number; name: string | null }>;
@@ -1373,6 +1378,9 @@ function SalonBigCalendar({
   onAction: (id: number, status: "confirmed" | "cancelled" | "rejected") => void;
   onNoShow: (id: number, noShowBy: "client" | "master") => void;
   serviceNames?: Record<string, string>;
+  tenantId: string;
+  services: Array<{ svcId: string; names?: string | null; duration: number; price: number }>;
+  onUpdated?: () => void;
 }) {
   const dayMap = useMemo(() => {
     const m: Record<string, any[]> = {};
@@ -1380,6 +1388,11 @@ function SalonBigCalendar({
     return m;
   }, [apts]);
   const selectedDayApts = selectedDay ? dayMap[selectedDay] ?? [] : [];
+
+  // Clicking a month event chip opens the rich detail popover anchored to it
+  // (same component the Day/Week grids use), giving month full GCal parity.
+  const [evtApt, setEvtApt] = useState<any | null>(null);
+  const [evtRect, setEvtRect] = useState<AnchorRect | null>(null);
 
   return (
     <div className="space-y-3">
@@ -1392,7 +1405,39 @@ function SalonBigCalendar({
         setSelectedDay={setSelectedDay}
         isLoading={isLoading}
         lang={lang}
+        onEventClick={(a, rect) => { setEvtApt(a); setEvtRect(rect); }}
       />
+
+      {evtApt && (
+        <AppointmentDetailPanel
+          tenantId={tenantId}
+          selected={{
+            id: evtApt.id,
+            tenantId,
+            date: evtApt.date,
+            time: evtApt.time,
+            duration: typeof evtApt.duration === "number" ? evtApt.duration : null,
+            status: evtApt.status,
+            cancelled: evtApt.cancelled ?? null,
+            noShow: evtApt.noShow ?? null,
+            noShowBy: evtApt.noShowBy ?? null,
+            cancelledBy: evtApt.cancelledBy ?? null,
+            cancelReason: evtApt.cancelReason ?? null,
+            masterId: evtApt.masterId ?? null,
+            svcId: evtApt.svcId ?? null,
+            userName: evtApt.userName ?? null,
+            userPhone: evtApt.userPhone ?? null,
+            userTg: evtApt.userTg ?? null,
+            chatId: evtApt.chatId ?? null,
+          }}
+          masters={masters ?? []}
+          services={services}
+          lang={lang}
+          anchorRect={evtRect}
+          onClose={() => setEvtApt(null)}
+          onChanged={() => { onUpdated?.(); setEvtApt(null); }}
+        />
+      )}
 
       {selectedDay && (
         <div className="glass-card rounded-2xl p-4 space-y-3">
@@ -2160,6 +2205,18 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
               onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })}
               serviceNames={serviceNames}
+              tenantId={tenantId}
+              services={
+                (svcList.data ?? []).map((s) => ({
+                  svcId: s.svcId,
+                  names: s.names ?? null,
+                  duration: s.duration,
+                  price: typeof s.price === "number" ? s.price : Number(s.price ?? 0),
+                }))
+              }
+              onUpdated={() => {
+                void utils.salon.getAppointments.invalidate();
+              }}
             />
           )}
 

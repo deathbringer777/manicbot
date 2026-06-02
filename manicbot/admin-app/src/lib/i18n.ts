@@ -985,6 +985,7 @@ const translations = {
 
   // ── Manual booking modal ────────────────────────────────────────────────────
   "appointments.manual.title":           { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
+  "appointments.quickTitle":             { ru: "Добавить название", ua: "Додати назву", en: "Add title", pl: "Dodaj tytuł" },
   "appointments.manual.slotConflict":    { ru: "Это время уже занято у выбранного мастера.", ua: "Цей час уже зайнятий у обраного майстра.", en: "This time slot is already booked for the selected master.", pl: "Ten termin jest już zajęty u wybranego mistrza." },
   "salon.reschedule.success":            { ru: "Запись перенесена", ua: "Запис перенесений", en: "Appointment rescheduled", pl: "Wizyta przeniesiona" },
   "salon.reschedule.conflict":           { ru: "Слот занят — выберите другое время", ua: "Слот зайнятий — оберіть інший час", en: "Slot is busy — pick a different time", pl: "Termin zajęty — wybierz inny" },

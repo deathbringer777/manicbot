@@ -25,6 +25,8 @@ interface Props {
    *  picked. Optional — falls back to "" (no prefill) when not provided. */
   defaultDate?: string;
   defaultTime?: string;
+  /** Prefilled note — carries the GCal-style quick-create title in. */
+  defaultNote?: string;
   onClose: () => void;
   onCreated?: (appointmentId: string) => void;
 }
@@ -62,7 +64,7 @@ function formatDateForUser(s: string, lang: Lang): string {
  * Manual booking modal used on dashboard Overview / Appointments / Clients tabs.
  * Owner role: can pick any master. Master role: locked to their own chat_id.
  */
-export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, defaultTime, onClose, onCreated }: Props) {
+export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, defaultTime, defaultNote, onClose, onCreated }: Props) {
   const { lang } = useLang();
   // 0074 — `masterSelectValue` is the raw Select value ("", "random", or
   // a chat-id string). `resolvedMasterId` is the parsed numeric chat id
@@ -94,7 +96,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
   const [clientEmail, setClientEmail] = useState<string>("");
   const [clientTg, setClientTg] = useState<string>("");
   const [clientIg, setClientIg] = useState<string>("");
-  const [note, setNote] = useState<string>("");
+  const [note, setNote] = useState<string>(defaultNote ?? "");
   const [err, setErr] = useState<string | null>(null);
 
   const masters = api.salon.getMasters.useQuery({ tenantId });

@@ -26,6 +26,8 @@ interface Props {
   defaultDate?: string;
   defaultTime?: string;
   defaultDurationMin?: number;
+  /** Prefilled reason — carries the GCal-style quick-create title in. */
+  defaultReason?: string;
   onClose: () => void;
   onCreated?: (id: string) => void;
 }
@@ -59,6 +61,7 @@ export function TimeReservationDialog({
   defaultDate,
   defaultTime,
   defaultDurationMin,
+  defaultReason,
   onClose,
   onCreated,
 }: Props) {
@@ -72,7 +75,7 @@ export function TimeReservationDialog({
   const [date, setDate] = useState<string>(defaultDate ?? todayIso());
   const [time, setTime] = useState<string>(defaultTime ?? nowHHMM());
   const [durationMin, setDurationMin] = useState<number>(defaultDurationMin ?? 30);
-  const [reason, setReason] = useState<string>("");
+  const [reason, setReason] = useState<string>(defaultReason ?? "");
   const [err, setErr] = useState<string | null>(null);
 
   const create = api.appointmentBlocks.create.useMutation({

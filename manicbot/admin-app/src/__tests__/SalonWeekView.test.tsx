@@ -523,6 +523,8 @@ describe("SalonWeekView — Google-Calendar popovers", () => {
     });
     expect(screen.getByTestId("create-slot-popover")).toBeTruthy();
     expect(onCreateAt).not.toHaveBeenCalled();
+    // GCal parity: the dragged slot stays painted while the card is open.
+    expect(screen.getAllByTestId("week-view-draft-slot").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId("create-slot-create"));
     expect(onCreateAt).toHaveBeenCalledTimes(1);

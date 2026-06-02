@@ -81,7 +81,7 @@ interface Props {
   onNoShow?: (id: number | string, noShowBy: "client" | "master") => void;
   /** Calendar overhaul (2026-05-16) — block rendering + drag-to-create. */
   blocks?: DayViewBlock[];
-  onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"] }) => void;
+  onCreateAt?: (info: { date: string; masterId: number | null; time: string; durationMin: number; modifier: DragGhost["modifier"]; title?: string }) => void;
   onDeleteBlock?: (id: string) => void;
   /** Drag-to-reschedule: fires when the user drops an appointment on a new slot. */
   onMoveAppointment?: (move: MoveCommit) => void;
@@ -634,6 +634,23 @@ export function SalonWeekView({
                     });
                     })()}
 
+                    {/* Painted draft selection — keeps the dragged slot
+                        visible while the quick-create card is open (GCal). */}
+                    {createSlot && createSlot.date === iso && (
+                      <div
+                        aria-hidden
+                        data-testid="week-view-draft-slot"
+                        className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none"
+                        style={{
+                          top: timeToTop(createSlot.time),
+                          height: durationToHeight(createSlot.durationMin),
+                          background: "rgba(124,58,237,0.18)",
+                          borderColor: "rgba(124,58,237,0.7)",
+                          zIndex: 24,
+                        }}
+                      />
+                    )}
+
                     {/* Drag-to-reschedule ghost — rendered in the column
                         currently under the cursor, NOT necessarily the
                         source column. The hook commits the new (date,
@@ -882,23 +899,25 @@ export function SalonWeekView({
           time={createSlot.time}
           durationMin={createSlot.durationMin}
           lang={lang}
-          onCreate={() => {
+          onCreate={(title) => {
             onCreateAt?.({
               date: createSlot.date,
               masterId: createSlot.masterId,
               time: createSlot.time,
               durationMin: createSlot.durationMin,
               modifier: "none",
+              title,
             });
             setCreateSlot(null);
           }}
-          onReserve={() => {
+          onReserve={(title) => {
             onCreateAt?.({
               date: createSlot.date,
               masterId: createSlot.masterId,
               time: createSlot.time,
               durationMin: createSlot.durationMin,
               modifier: "shift",
+              title,
             });
             setCreateSlot(null);
           }}

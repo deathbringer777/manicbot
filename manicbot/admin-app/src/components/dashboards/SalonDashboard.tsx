@@ -1990,7 +1990,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
   // TimeReservationDialog). Cleared on dialog close.
-  const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number } | null>(null);
+  const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number; title?: string } | null>(null);
   // Reminders plugin — FAB-launched modal state.
   const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
   // Which plugins are installed for this tenant. Drives the FAB extraItems list.
@@ -2105,6 +2105,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           defaultMasterId={dragPrefill?.masterId ?? undefined}
           defaultDate={dragPrefill?.date}
           defaultTime={dragPrefill?.time}
+          defaultNote={dragPrefill?.title}
           onClose={() => { setManualBookingOpen(false); setDragPrefill(null); }}
           onCreated={() => {
             // Refresh whichever calendar view is active. Invalidating the
@@ -2309,7 +2310,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               blocks={blockRows}
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
-                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin });
+                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                 if (info.modifier === "shift") setTimeReservationOpen(true);
                 else setManualBookingOpen(true);
               }}
@@ -2346,7 +2347,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               blocks={blockRows}
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
-                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin });
+                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                 if (info.modifier === "shift") setTimeReservationOpen(true);
                 else setManualBookingOpen(true);
               }}
@@ -2766,6 +2767,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           defaultDate={dragPrefill?.date}
           defaultTime={dragPrefill?.time}
           defaultDurationMin={dragPrefill?.durationMin}
+          defaultReason={dragPrefill?.title}
           onClose={() => { setTimeReservationOpen(false); setDragPrefill(null); }}
           onCreated={() => { void apts.refetch(); void todayApts.refetch(); void blocksQuery.refetch(); }}
         />

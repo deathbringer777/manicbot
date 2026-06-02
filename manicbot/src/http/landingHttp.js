@@ -246,6 +246,21 @@ const BRIDGE_SCRIPT = `<script>
 <\/script>`;
 
 /**
+ * #LPH-01 — Build the header set forwarded to the (separately-deployed) landing
+ * origin. The landing shares the apex domain with the admin-app, so the visitor's
+ * session `Cookie` / `Authorization` must NOT cross to it. Strip credentials;
+ * keep content-negotiation + caching headers (no behaviour change for the static
+ * site). Exported for unit testing.
+ * @param {Headers} reqHeaders
+ * @returns {Headers}
+ */
+export function landingForwardHeaders(reqHeaders) {
+  const fwd = new Headers(reqHeaders);
+  for (const h of ['cookie', 'cookie2', 'authorization', 'proxy-authorization']) fwd.delete(h);
+  return fwd;
+}
+
+/**
  * SEO audit 2026-05-20 P0-4 — HEAD support.
  *
  * Bing crawler + Meta crawler + uptime monitors (Pingdom, BetterStack,
@@ -269,7 +284,7 @@ export async function tryLanding(request, env, url, force) {
 
   const landingOrigin = resolveLandingOrigin(env);
   const landingUrl = buildLandingFetchUrl(url.pathname, landingOrigin);
-  const res = await fetch(landingUrl, { method: request.method, headers: request.headers });
+  const res = await fetch(landingUrl, { method: request.method, headers: landingForwardHeaders(request.headers) });
 
   // SEO audit 2026-05-20 P0-7 — soft-404 guard.
   //

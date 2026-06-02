@@ -261,3 +261,58 @@ describe("masterRouter.setVacation (migration 0060)", () => {
     expect(updateCalls.at(-1)!.values).toEqual({ onVacation: 1 });
   });
 });
+
+describe("masterRouter.updateWorkHours — schedule (workHours + workDays)", () => {
+  const createCaller = createCallerFactory(masterRouter);
+
+  beforeEach(() => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("master persists their own {from,to} window + working days (normalized)", async () => {
+    const { db, updateCalls } = createDbMock([[{ chatId: 100 }]]);
+    const ctx = makeMasterCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await caller.updateWorkHours({
+      tenantId: "t_alpha",
+      masterId: 100,
+      workHours: '{"from":11,"to":19}',
+      workDays: "[3,1,2]",
+    });
+    expect(updateCalls.at(-1)!.values).toEqual({
+      workHours: '{"from":11,"to":19}',
+      workDays: "[1,2,3]",
+    });
+  });
+
+  it("rejects an inverted workHours window", async () => {
+    const { db } = createDbMock([[{ chatId: 100 }]]);
+    const ctx = makeMasterCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await expect(
+      caller.updateWorkHours({
+        tenantId: "t_alpha",
+        masterId: 100,
+        workHours: '{"from":20,"to":8}',
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("another master cannot write this master's schedule (IDOR)", async () => {
+    const { db } = createDbMock([[{ chatId: 100 }]]);
+    const ctx = makeMasterCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await expect(
+      caller.updateWorkHours({
+        tenantId: "t_alpha",
+        masterId: 999,
+        workHours: '{"from":10,"to":18}',
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});

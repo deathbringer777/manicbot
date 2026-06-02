@@ -138,12 +138,15 @@ const ALLOWLIST = new Set([
   // added the `appointmentNames` import (+1) and rewrote `getAppointments`
   // to a `select({...resolved})` block (+3), net +4 lines above this query) →
   // 1791 (BUG-02: markDone's seconds→ms guard in salon.ts replaced 2 lines
-  // with a commented `row.ts > Date.now()`, net +2 lines above this query).
+  // with a commented `row.ts > Date.now()`, net +2 lines above this query) →
+  // 1821 (per-master schedule editor added the `~/lib/workHours` import (+7),
+  // the workHours/workDays zod fields (+5) and the validate+normalize block in
+  // `updateMaster` (+18), net +30 lines above this query).
   //
   // Brittleness is now well-documented; the long-term fix is to switch to
   // a content-anchored allowlist (match the comment on the prior line
   // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:1791",
+  "src/server/api/routers/salon.ts:1821",
   // tenantStaff.ts — permissionElevationCodes lookup by primary key.
   // Owner/system_admin check on next line gates access; tenantId predicate
   // is unnecessary because the row id is globally unique and authorization

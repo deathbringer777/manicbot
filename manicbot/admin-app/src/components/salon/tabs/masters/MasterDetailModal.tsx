@@ -51,10 +51,11 @@ import { DatePicker } from "~/components/ui/DatePicker";
 import { MasterAvatarPicker } from "./MasterAvatarPicker";
 import { MasterTelegramInlineSection } from "./MasterTelegramInlineSection";
 import { MasterPasswordVaultSection } from "./MasterPasswordVaultSection";
+import { MasterScheduleEditor } from "~/components/salon/MasterScheduleEditor";
 import { ThreadView } from "~/app/(dashboard)/messages/_components/ThreadView";
 
 type MasterDetail = RouterOutputs["salon"]["getMasterDetail"];
-type TabKey = "profile" | "settings";
+type TabKey = "profile" | "schedule" | "settings";
 type PanelKey = "profile" | "messages";
 
 interface Props {
@@ -105,6 +106,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [vacationSaved, setVacationSaved] = useState(false);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
 
   const [form, setForm] = useState({
@@ -231,6 +233,20 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
         onSuccess: () => {
           setVacationSaved(true);
           window.setTimeout(() => setVacationSaved(false), 2500);
+        },
+      },
+    );
+  };
+
+  const handleSaveSchedule = (workHours: string, workDays: string) => {
+    setErrorMsg(null);
+    setScheduleSaved(false);
+    updateMaster.mutate(
+      { tenantId, chatId, workHours, workDays },
+      {
+        onSuccess: () => {
+          setScheduleSaved(true);
+          window.setTimeout(() => setScheduleSaved(false), 2500);
         },
       },
     );
@@ -394,16 +410,19 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
               setActiveTab(tab);
               setErrorMsg(null);
               setVacationSaved(false);
+              setScheduleSaved(false);
             }}
             form={form}
             vacationForm={vacationForm}
             saving={updateMaster.isPending}
             errorMsg={errorMsg}
             vacationSaved={vacationSaved}
+            scheduleSaved={scheduleSaved}
             onFormChange={(patch) => setForm((s) => ({ ...s, ...patch }))}
             onVacationChange={(patch) => setVacationForm((s) => ({ ...s, ...patch }))}
             onSaveProfile={handleSaveProfile}
             onSaveVacation={handleSaveVacation}
+            onSaveSchedule={handleSaveSchedule}
             onClearVacation={() => {
               setVacationForm({ vacationFrom: "", vacationUntil: "" });
             }}
@@ -635,10 +654,12 @@ function SettingsMode({
   saving,
   errorMsg,
   vacationSaved,
+  scheduleSaved,
   onFormChange,
   onVacationChange,
   onSaveProfile,
   onSaveVacation,
+  onSaveSchedule,
   onClearVacation,
   onExit,
 }: {
@@ -653,10 +674,12 @@ function SettingsMode({
   saving: boolean;
   errorMsg: string | null;
   vacationSaved: boolean;
+  scheduleSaved: boolean;
   onFormChange: (patch: Partial<{ name: string; tgUsername: string; bio: string; photo: string }>) => void;
   onVacationChange: (patch: Partial<{ vacationFrom: string; vacationUntil: string }>) => void;
   onSaveProfile: () => void;
   onSaveVacation: () => void;
+  onSaveSchedule: (workHours: string, workDays: string) => void;
   onClearVacation: () => void;
   onExit: () => void;
 }) {
@@ -672,6 +695,16 @@ function SettingsMode({
           errorMsg={errorMsg}
           onChange={onFormChange}
           onSave={onSaveProfile}
+        />
+      ) : activeTab === "schedule" ? (
+        <MasterScheduleEditor
+          workHours={master.workHours}
+          workDays={master.workDays}
+          saving={saving}
+          saved={scheduleSaved}
+          lang={lang}
+          onSave={onSaveSchedule}
+          testIdPrefix="master-detail-schedule"
         />
       ) : (
         <SettingsPane
@@ -724,6 +757,13 @@ function TabBar({
         icon={<User className="h-3.5 w-3.5" />}
         label={t("masterDetail.tab.profile", lang)}
         testId="master-detail-tab-profile"
+      />
+      <TabButton
+        active={activeTab === "schedule"}
+        onClick={() => onTabChange("schedule")}
+        icon={<Calendar className="h-3.5 w-3.5" />}
+        label={t("master.schedule", lang)}
+        testId="master-detail-tab-schedule"
       />
       <TabButton
         active={activeTab === "settings"}

@@ -14,6 +14,13 @@ import {
 import { eq, and, gte, lte, desc, inArray, isNull, gt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sanitizeText } from "~/server/security/sanitize";
+import {
+  parseMasterHours,
+  isValidMasterHours,
+  serializeMasterHours,
+  parseMasterWorkDays,
+  serializeMasterWorkDays,
+} from "~/lib/workHours";
 import { notifyWorker } from "~/server/utils/notifyWorker";
 import {
   generatePairingToken,
@@ -578,15 +585,31 @@ export const masterRouter = createTRPCRouter({
     .input(z.object({
       tenantId: z.string(),
       masterId: z.number(),
-      workHours: z.string().optional(),
-      workDays: z.string().optional(),
+      // `{from,to}` JSON string + a 0..6 weekday array string — the shape the
+      // Worker booking engine reads (see ~/lib/workHours).
+      workHours: z.string().max(200).optional(),
+      workDays: z.string().max(200).optional(),
       onVacation: z.number().min(0).max(1).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertCallerIsMaster(ctx, input.tenantId, input.masterId);
       const setObj: Record<string, unknown> = {};
-      if (input.workHours !== undefined) setObj.workHours = input.workHours;
-      if (input.workDays !== undefined) setObj.workDays = input.workDays;
+      // Validate + normalize to the booking-engine shape (same contract the
+      // owner-side salon.updateMaster enforces). Reject malformed input.
+      if (input.workHours !== undefined) {
+        const parsed = parseMasterHours(input.workHours);
+        if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+        }
+        setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
+      }
+      if (input.workDays !== undefined) {
+        const parsed = parseMasterWorkDays(input.workDays);
+        if (parsed === null) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+        }
+        setObj.workDays = serializeMasterWorkDays(parsed);
+      }
       if (input.onVacation !== undefined) {
         setObj.onVacation = input.onVacation;
         // Toggling the legacy flag OFF clears any pinned date range — the

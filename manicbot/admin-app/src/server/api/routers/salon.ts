@@ -21,6 +21,13 @@ import {
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
+import {
+  parseMasterHours,
+  isValidMasterHours,
+  serializeMasterHours,
+  parseMasterWorkDays,
+  serializeMasterWorkDays,
+} from "~/lib/workHours";
 import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
 import { encryptMasterPassword, decryptMasterPassword } from "~/server/security/masterPasswordVault";
@@ -1420,6 +1427,11 @@ export const salonRouter = createTRPCRouter({
       tgUsername: z.string().max(64).nullable().optional(),
       bio: z.string().max(500).nullable().optional(),
       photo: z.string().max(2000).nullable().optional(),
+      // Per-master booking schedule. Wire format is the serialized `{from,to}`
+      // string + a serialized 0..6 weekday array — the shape the Worker booking
+      // engine reads (see ~/lib/workHours + src/services/appointments.js).
+      workHours: z.string().max(200).optional(),
+      workDays: z.string().max(200).optional(),
       onVacation: z.number().min(0).max(1).optional(),
       vacationFrom: z.number().int().nullable().optional(),
       vacationUntil: z.number().int().nullable().optional(),
@@ -1461,6 +1473,24 @@ export const salonRouter = createTRPCRouter({
       }
       if (input.photo !== undefined) {
         setObj.photo = input.photo ? input.photo : null;
+      }
+
+      // Schedule — validate + normalize to the booking-engine shape. The field
+      // gates real bookable slots, so reject malformed input rather than store
+      // junk the Worker would silently ignore.
+      if (input.workHours !== undefined) {
+        const parsed = parseMasterHours(input.workHours);
+        if (!parsed || !isValidMasterHours(parsed.from, parsed.to)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_hours" });
+        }
+        setObj.workHours = serializeMasterHours(parsed.from, parsed.to);
+      }
+      if (input.workDays !== undefined) {
+        const parsed = parseMasterWorkDays(input.workDays);
+        if (parsed === null) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "invalid_master_work_days" });
+        }
+        setObj.workDays = serializeMasterWorkDays(parsed);
       }
 
       const hasVacFrom = input.vacationFrom !== undefined;

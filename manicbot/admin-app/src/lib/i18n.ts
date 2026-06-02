@@ -116,6 +116,12 @@ const translations = {
   "master.fallback.name":          { ru: "Мастер", ua: "Майстер", en: "Master", pl: "Mistrz" },
   "master.schedule.emptyDay.title":    { ru: "Сегодня записей нет", ua: "Сьогодні записів немає", en: "No appointments today", pl: "Brak wizyt dzisiaj" },
   "master.schedule.emptyDay.subtitle": { ru: "Записи появятся, как только клиенты забронируют слот.", ua: "Записи з'являться, щойно клієнти забронюють слот.", en: "Bookings will appear here when clients reserve a slot.", pl: "Wizyty pojawią się, gdy klienci zarezerwują termin." },
+  // ── Master schedule editor (per-master booking window + working days) ──
+  "master.schedule.editTitle":   { ru: "Рабочие часы", ua: "Робочі години", en: "Working hours", pl: "Godziny pracy" },
+  "master.schedule.editHint":    { ru: "Эти часы и дни определяют слоты, доступные клиентам для записи к мастеру. Выходной — выключите день.", ua: "Ці години та дні визначають слоти, доступні клієнтам для запису до майстра. Вихідний — вимкніть день.", en: "These hours and days define the slots clients can book with this master. Toggle a day off to mark it non-working.", pl: "Te godziny i dni określają terminy dostępne do rezerwacji u tego mistrza. Wyłącz dzień, aby oznaczyć go jako wolny." },
+  "master.schedule.days":        { ru: "Рабочие дни", ua: "Робочі дні", en: "Working days", pl: "Dni robocze" },
+  "master.schedule.error.range": { ru: "Конец работы должен быть позже начала.", ua: "Кінець роботи має бути пізніше початку.", en: "End time must be after start time.", pl: "Godzina zakończenia musi być późniejsza niż rozpoczęcia." },
+  "master.schedule.saved":       { ru: "Расписание сохранено", ua: "Розклад збережено", en: "Schedule saved", pl: "Harmonogram zapisany" },
   "master.myClients":       { ru: "Мои клиенты",  ua: "Мої клієнти",    en: "My clients", pl: "Moi klienci" },
   "master.lastApt":         { ru: "Последняя запись:", ua: "Остання запис:", en: "Last appointment:", pl: "Ostatnia wizyta:" },
   "master.profileHint":     { ru: "Для изменения профиля используйте бота: /profile", ua: "Для зміни профілю використайте бота: /profile", en: "To edit profile, use the bot: /profile", pl: "Aby edytować profil, użyj bota: /profile" },
@@ -497,6 +503,14 @@ const translations = {
   "salon.publicProfile.day.fri":         { ru: "Пятница", ua: "П'ятниця", en: "Friday", pl: "Piątek" },
   "salon.publicProfile.day.sat":         { ru: "Суббота", ua: "Субота", en: "Saturday", pl: "Sobota" },
   "salon.publicProfile.day.sun":         { ru: "Воскресенье", ua: "Неділя", en: "Sunday", pl: "Niedziela" },
+  // Short weekday labels (Mon..Sun) — compact day toggles, e.g. master schedule.
+  "weekday.short.mon":                   { ru: "Пн", ua: "Пн", en: "Mon", pl: "Pon" },
+  "weekday.short.tue":                   { ru: "Вт", ua: "Вт", en: "Tue", pl: "Wt" },
+  "weekday.short.wed":                   { ru: "Ср", ua: "Ср", en: "Wed", pl: "Śr" },
+  "weekday.short.thu":                   { ru: "Чт", ua: "Чт", en: "Thu", pl: "Czw" },
+  "weekday.short.fri":                   { ru: "Пт", ua: "Пт", en: "Fri", pl: "Pt" },
+  "weekday.short.sat":                   { ru: "Сб", ua: "Сб", en: "Sat", pl: "Sob" },
+  "weekday.short.sun":                   { ru: "Вс", ua: "Нд", en: "Sun", pl: "Nd" },
 
   // --- My Salon redesign: chip titles/descriptions + save feedback + status ---
   "common.saved":                        { ru: "Сохранено", ua: "Збережено", en: "Saved", pl: "Zapisano" },

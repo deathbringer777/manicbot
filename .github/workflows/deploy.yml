@@ -10,6 +10,12 @@ on:
   # the trigger.
   push:
     branches: [main]
+  # Run security-scan + test on PRs targeting main. Deploy jobs below are
+  # already gated on `github.event_name == 'push'`, so they stay push-only —
+  # PRs get the safety nets (gitleaks, semgrep, unit + integration tests,
+  # tenant-isolation scanners, audit) without ever touching prod.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       landing_source:

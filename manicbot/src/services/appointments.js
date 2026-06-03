@@ -636,6 +636,7 @@ export async function getAptById(ctx, aptId) {
  */
 export async function getAptByIdGlobal(ctx, aptId) {
   if (!ctx?.db) return null;
+  // tenant-scan-ignore: HMAC-authenticated calendar handler only; appointment id is globally unique — intentional cross-tenant lookup (see this fn's JSDoc above).
   const row = await dbGet(ctx, 'SELECT * FROM appointments WHERE id = ?', aptId);
   return aptRowToDoc(row);
 }

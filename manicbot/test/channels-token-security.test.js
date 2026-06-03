@@ -97,7 +97,7 @@ describe('BOT_ENCRYPTION_KEY is used when set', () => {
       'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
     ).bind('cc1', 'test', 'instagram', '{}', 'old_token', Date.now(), Date.now()).run();
 
-    const result = await encryptAndStoreToken(ctx, 'cc1', 'EAAnewtoken123', VALID_ENC_KEY);
+    const result = await encryptAndStoreToken(ctx, 'test', 'cc1', 'EAAnewtoken123', VALID_ENC_KEY);
     expect(result).toBe(true);
 
     // Verify stored value is encrypted (not the plaintext)
@@ -117,7 +117,7 @@ describe('BOT_ENCRYPTION_KEY is used when set', () => {
       'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
     ).bind('cc2', 'test', 'instagram', '{}', encrypted, Date.now(), Date.now()).run();
 
-    const decrypted = await getDecryptedToken(ctx, 'cc2', VALID_ENC_KEY);
+    const decrypted = await getDecryptedToken(ctx, 'test', 'cc2', VALID_ENC_KEY);
     expect(decrypted).toBe(plain);
   });
 });
@@ -135,7 +135,7 @@ describe('plaintext fallback removed (P1-8)', () => {
       'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
     ).bind('cc3', 'test', 'whatsapp', '{}', '', Date.now(), Date.now()).run();
 
-    const result = await encryptAndStoreToken(ctx, 'cc3', 'EAAplaintoken', null);
+    const result = await encryptAndStoreToken(ctx, 'test', 'cc3', 'EAAplaintoken', null);
     expect(result).toBe(false);
   });
 
@@ -146,7 +146,7 @@ describe('plaintext fallback removed (P1-8)', () => {
       'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
     ).bind('cc4', 'test', 'instagram', '{}', plain, Date.now(), Date.now()).run();
 
-    const result = await getDecryptedToken(ctx, 'cc4', null);
+    const result = await getDecryptedToken(ctx, 'test', 'cc4', null);
     expect(result).toBeNull();
   });
 });
@@ -322,5 +322,59 @@ describe('Google token encryption key fallback chain', () => {
   it('returns null when no keys are available', () => {
     expect(getTokenEncryptionKey({})).toBeNull();
     expect(getTokenEncryptionKey({ ADMIN_KEY: '' })).toBeNull();
+  });
+});
+
+// ── Tenant isolation (D3) ─────────────────────────────────────────────────
+//
+// encryptAndStoreToken / getDecryptedToken touch channel_configs by PK. They
+// now ALSO scope by tenant_id, so a channelConfigId from one tenant can never
+// read or overwrite another tenant's channel token. Defense-in-depth: the id
+// is a random 12-char, but the gate makes cross-tenant access impossible even
+// if an id leaks. Flips the worker tenant-isolation scanner green for D3.
+
+describe('channel token tenant isolation (D3)', () => {
+  const KEY = VALID_ENC_KEY;
+
+  async function seedRow(ctx, id, tenantId, plain) {
+    const enc = await encryptToken(plain, KEY, 'channel-token-v1');
+    await ctx.db.prepare(
+      'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+    ).bind(id, tenantId, 'instagram', '{}', enc, Date.now(), Date.now()).run();
+    return enc;
+  }
+
+  it('getDecryptedToken returns the token for the owning tenant', async () => {
+    const ctx = makeTokenCtx();
+    await seedRow(ctx, 'cc_iso1', 'tenantA', 'EAAtokenA');
+    expect(await getDecryptedToken(ctx, 'tenantA', 'cc_iso1', KEY)).toBe('EAAtokenA');
+  });
+
+  it('getDecryptedToken returns null for a cross-tenant channelConfigId', async () => {
+    const ctx = makeTokenCtx();
+    await seedRow(ctx, 'cc_iso2', 'tenantA', 'EAAtokenA');
+    // tenantB knows the id but does not own the row → no leak.
+    expect(await getDecryptedToken(ctx, 'tenantB', 'cc_iso2', KEY)).toBeNull();
+  });
+
+  it('encryptAndStoreToken does not overwrite a cross-tenant row', async () => {
+    const ctx = makeTokenCtx();
+    const original = await seedRow(ctx, 'cc_iso3', 'tenantA', 'EAAoriginal');
+    // Attacker in tenantB tries to overwrite tenantA's token.
+    await encryptAndStoreToken(ctx, 'tenantB', 'cc_iso3', 'EAAhijack', KEY);
+    const row = await ctx.db.prepare(
+      'SELECT token_encrypted FROM channel_configs WHERE id = ?',
+    ).bind('cc_iso3').first();
+    expect(row.token_encrypted).toBe(original); // unchanged
+    expect(await decryptToken(row.token_encrypted, KEY, 'channel-token-v1')).toBe('EAAoriginal');
+  });
+
+  it('encryptAndStoreToken updates the row for the owning tenant', async () => {
+    const ctx = makeTokenCtx();
+    await seedRow(ctx, 'cc_iso4', 'tenantA', 'EAAoriginal');
+    const ok = await encryptAndStoreToken(ctx, 'tenantA', 'cc_iso4', 'EAArotated', KEY);
+    expect(ok).toBe(true);
+    const decrypted = await getDecryptedToken(ctx, 'tenantA', 'cc_iso4', KEY);
+    expect(decrypted).toBe('EAArotated');
   });
 });

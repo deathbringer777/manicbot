@@ -110,15 +110,13 @@ jobs:
         working-directory: manicbot
 
       # Worker raw-SQL tenant-isolation scanner (sibling to the admin-app
-      # scanner below). ADVISORY for now: it surfaces tenant-scoped raw-SQL
-      # queries that lack a `tenant_id` predicate. The current hits are all
-      # authorize-then-act / bot→tenant resolvers / platform god-mode — verified
-      # non-breaches (see SECURITY_FINDINGS.md). continue-on-error keeps the
-      # deploy unblocked until those callsites carry `// tenant-scan-ignore`
-      # directives, after which this step flips to a hard gate.
-      - name: Worker — tenant-isolation scanner (advisory)
+      # scanner below). GATING: every tenant-scoped raw-SQL query must carry a
+      # `tenant_id`/`web_user_id` predicate or an audited
+      # `// tenant-scan-ignore: <reason>` directive. The prior 35 advisory hits
+      # were annotated/scoped and token-manager.js now threads tenantId (D3);
+      # a regression now fails the deploy gate, like the admin-app scanner below.
+      - name: Worker — tenant-isolation scanner
         run: npm run check-tenant-isolation
-        continue-on-error: true
         working-directory: manicbot
 
       - name: Security audit (worker deps)

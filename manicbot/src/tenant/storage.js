@@ -200,6 +200,7 @@ export async function getBotToken(ctx, botId, encryptionKey = null) {
   if (!ctx?.db) return null;
   let row;
   try {
+    // tenant-scan-ignore: bot->token resolver keyed by globally-unique bot_id (inbound webhook path; bot_id is the tenant discriminator).
     row = await dbGet(ctx, 'SELECT token_encrypted FROM bots WHERE bot_id = ?', botId);
   } catch (e) {
     log.error('tenant.storage', e instanceof Error ? e : new Error(String(e?.message ?? e)), { action: 'getBotToken_dbGet', botId });

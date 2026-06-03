@@ -39,7 +39,7 @@ vi.mock('../src/utils/db.js', () => ({
 const createChannelConfigMock = vi.fn(async () => 'cc_oauth_new');
 vi.mock('../src/channels/token-manager.js', () => ({
   createChannelConfig: (...args) => createChannelConfigMock(...args),
-  getDecryptedToken: vi.fn(async (_ctx, _id, key) => key ? 'IGAA_LIVE_TOKEN' : null),
+  getDecryptedToken: vi.fn(async (_ctx, _tenantId, _id, key) => key ? 'IGAA_LIVE_TOKEN' : null),
 }));
 
 import {

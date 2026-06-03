@@ -18,13 +18,14 @@ const CHANNEL_TOKEN_LABEL = 'channel-token-v1';
  * Encrypt a plaintext token and store (or update) it in channel_configs.
  *
  * @param {{ db: D1Database }} ctx
+ * @param {string} tenantId - owning tenant; the UPDATE is scoped to it (defense-in-depth)
  * @param {string} channelConfigId - PK of the channel_configs row
  * @param {string} plainToken
  * @param {string|null} encKey - BOT_ENCRYPTION_KEY
  * @param {number|null} [expiresAt] - Unix seconds when token expires (optional)
  * @returns {Promise<boolean>} true on success
  */
-export async function encryptAndStoreToken(ctx, channelConfigId, plainToken, encKey, expiresAt = null) {
+export async function encryptAndStoreToken(ctx, tenantId, channelConfigId, plainToken, encKey, expiresAt = null) {
   if (!ctx?.db) return false;
   // P1-8 — fail closed. The legacy fallback wrote the plaintext value into
   // token_encrypted when BOT_ENCRYPTION_KEY was unset, producing a column
@@ -40,23 +41,24 @@ export async function encryptAndStoreToken(ctx, channelConfigId, plainToken, enc
     return false;
   }
   await dbRun(ctx,
-    'UPDATE channel_configs SET token_encrypted = ?, token_expires_at = ?, updated_at = ? WHERE id = ?',
-    encrypted, expiresAt, nowSec(), channelConfigId,
+    'UPDATE channel_configs SET token_encrypted = ?, token_expires_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?',
+    encrypted, expiresAt, nowSec(), channelConfigId, tenantId,
   );
   return true;
 }
 
 /**
- * Fetch and decrypt a token from channel_configs.
+ * Fetch and decrypt a channel_configs token by id (scoped to tenantId).
  *
  * @param {{ db: D1Database }} ctx
+ * @param {string} tenantId - owning tenant; the SELECT is scoped to it (defense-in-depth)
  * @param {string} channelConfigId
  * @param {string|null} encKey
  * @returns {Promise<string|null>}
  */
-export async function getDecryptedToken(ctx, channelConfigId, encKey) {
+export async function getDecryptedToken(ctx, tenantId, channelConfigId, encKey) {
   if (!ctx?.db) return null;
-  const rows = await dbAll(ctx, 'SELECT token_encrypted FROM channel_configs WHERE id = ? LIMIT 1', channelConfigId);
+  const rows = await dbAll(ctx, 'SELECT token_encrypted FROM channel_configs WHERE id = ? AND tenant_id = ? LIMIT 1', channelConfigId, tenantId);
   if (!rows.length || !rows[0].token_encrypted) return null;
   // P1-8 — fail closed. Returning the raw column when the key was missing
   // would surface plaintext from any legacy row. Refuse instead.
@@ -71,7 +73,7 @@ export async function getDecryptedToken(ctx, channelConfigId, encKey) {
  * Check if an Instagram long-lived token is expiring soon.
  * Instagram tokens are valid for 60 days; we refresh if < daysThreshold remain.
  *
- * @param {object} channelConfig - Row from channel_configs
+ * @param {object} channelConfig - a channel_configs row
  * @param {number} [daysThreshold=10]
  * @returns {boolean}
  */
@@ -86,12 +88,13 @@ export function isTokenExpiring(channelConfig, daysThreshold = 10) {
  * Uses GET graph.facebook.com/refresh_access_token
  *
  * @param {{ db: D1Database }} ctx
+ * @param {string} tenantId - owning tenant (threaded to the token read/write)
  * @param {string} channelConfigId
  * @param {string|null} encKey
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
-export async function refreshInstagramToken(ctx, channelConfigId, encKey) {
-  const currentToken = await getDecryptedToken(ctx, channelConfigId, encKey);
+export async function refreshInstagramToken(ctx, tenantId, channelConfigId, encKey) {
+  const currentToken = await getDecryptedToken(ctx, tenantId, channelConfigId, encKey);
   if (!currentToken) return { ok: false, error: 'no_token' };
 
   try {
@@ -108,7 +111,7 @@ export async function refreshInstagramToken(ctx, channelConfigId, encKey) {
 
     const expiresIn = data.expires_in ?? 5184000; // default 60 days
     const expiresAt = nowSec() + expiresIn;
-    const stored = await encryptAndStoreToken(ctx, channelConfigId, data.access_token, encKey, expiresAt);
+    const stored = await encryptAndStoreToken(ctx, tenantId, channelConfigId, data.access_token, encKey, expiresAt);
     return stored ? { ok: true } : { ok: false, error: 'store_failed' };
   } catch (e) {
     return { ok: false, error: e.message };

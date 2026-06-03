@@ -181,6 +181,7 @@ export async function tryConsumePairingCode(ctx, rawToken, chatId) {
            WHERE tenant_id = ? AND chat_id = ?`,
         chatId, ctx.tenantId, code.master_chat_id,
       ],
+      // tenant-scan-ignore: pairing-code consume keyed by the secret token_hash (capability); the code row was resolved from that hash above.
       [
         `UPDATE master_pairing_codes
            SET consumed_at = ?, consumed_chat_id = ?

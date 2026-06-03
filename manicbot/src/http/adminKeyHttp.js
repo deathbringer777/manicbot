@@ -1008,7 +1008,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       }
       const row = rows[0];
       const { getDecryptedToken } = await import('../channels/token-manager.js');
-      const token = await getDecryptedToken(ec, row.id, env.BOT_ENCRYPTION_KEY);
+      const token = await getDecryptedToken(ec, tenantId, row.id, env.BOT_ENCRYPTION_KEY);
       if (!token) {
         return Response.json({ error: 'token_decrypt_failed' }, { status: 503 });
       }

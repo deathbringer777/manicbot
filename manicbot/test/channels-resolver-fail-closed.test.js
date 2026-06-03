@@ -103,13 +103,13 @@ describe('token-manager — P1-8 fail-closed', () => {
 
   it('encryptAndStoreToken refuses to write when encKey is missing', async () => {
     const ctx = { db: mutableDb() };
-    const ok = await encryptAndStoreToken(ctx, 'cfg_1', 'plaintext-fake-token', null);
+    const ok = await encryptAndStoreToken(ctx, 'test-tenant', 'cfg_1', 'plaintext-fake-token', null);
     expect(ok).toBe(false);
   });
 
   it('encryptAndStoreToken refuses to write when encKey is too short', async () => {
     const ctx = { db: mutableDb() };
-    const ok = await encryptAndStoreToken(ctx, 'cfg_1', 'plaintext-fake-token', 'short');
+    const ok = await encryptAndStoreToken(ctx, 'test-tenant', 'cfg_1', 'plaintext-fake-token', 'short');
     expect(ok).toBe(false);
   });
 
@@ -121,7 +121,7 @@ describe('token-manager — P1-8 fail-closed', () => {
         }),
       }),
     };
-    const token = await getDecryptedToken({ db: dbStub }, 'cfg_1', null);
+    const token = await getDecryptedToken({ db: dbStub }, 'test-tenant', 'cfg_1', null);
     expect(token).toBeNull();
   });
 });

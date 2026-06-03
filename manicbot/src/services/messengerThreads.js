@@ -89,7 +89,7 @@ async function findClientConvThread(ctx, tenantId, conversationId) {
  *  3. Ensure thread_members has an `external_client` member for the sender.
  *  4. Add ALL active web_users on the tenant as `web_user` members (INSERT OR IGNORE).
  *  5. Insert a `thread_messages` row with sender_kind='external_client'.
- *  6. Update threads.last_message_at + last_message_preview.
+ *  6. Touch threads.last_message_at + last_message_preview.
  *
  * @param {object} ctx - Tenant context (has `db`)
  * @param {object} params
@@ -200,6 +200,7 @@ export async function upsertClientConvThreadForInbound(ctx, params) {
     );
 
     // Touch the thread for inbox ordering.
+    // tenant-scan-ignore: threadId resolved for this tenant earlier in this upsert; the thread_messages INSERT above is tenant-stamped (authorize-then-act).
     await dbRunSafe(ctx,
       `UPDATE threads
           SET last_message_at = ?, last_message_preview = ?, archived = 0
@@ -217,7 +218,7 @@ export async function upsertClientConvThreadForInbound(ctx, params) {
 }
 
 /**
- * Insert an outbound (staff → client) message into thread_messages without
+ * Insert an outbound (staff → client) message into the thread_messages table without
  * triggering a re-send loop. Used by the outbound relay HTTP endpoint to
  * stamp `external_msg_id` after the channel adapter returns it.
  *
@@ -247,6 +248,7 @@ export async function appendOutboundStaffMessage(ctx, params) {
       params.body, null, 0, params.externalMsgId, params.replyToMessageId ?? null,
       now, null, null,
     );
+    // tenant-scan-ignore: caller verifies the thread belongs to the tenant (documented contract); the thread_messages INSERT above is tenant-stamped, this touch keys by that threadId.
     await dbRunSafe(ctx,
       `UPDATE threads
           SET last_message_at = ?, last_message_preview = ?

@@ -81,3 +81,101 @@ describe("worker scanner — scanSource", () => {
     expect(scanSource(src, TENANT)).toHaveLength(1);
   });
 });
+
+// Gap A — for UPDATE/DELETE the tenant predicate must sit in the WHERE filter,
+// not merely anywhere in the statement. `UPDATE t SET tenant_id=? WHERE id=?`
+// writes the tenant column but filters rows by id alone → a cross-tenant write.
+// Mirrors PR #350's admin-app fix, adapted to the raw-SQL model.
+describe("worker scanner — Gap A: UPDATE/DELETE tenant predicate must be in WHERE", () => {
+  it("flags an UPDATE that sets tenant_id but filters rows by id alone", () => {
+    const src =
+      "await dbRun(ctx, 'UPDATE appointments SET tenant_id = ?, status = ? WHERE id = ?', t, s, id);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("accepts an UPDATE whose WHERE carries tenant_id (id + tenant_id)", () => {
+    const src =
+      "await dbRun(ctx, 'UPDATE appointments SET status = ? WHERE id = ? AND tenant_id = ?', s, id, t);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("flags a multi-line UPDATE with tenant_id only in the SET, id-only WHERE", () => {
+    const src =
+      "await dbRun(ctx, `UPDATE marketing_contacts\n" +
+      "     SET tenant_id = ?, email = ?\n" +
+      "   WHERE id = ?`, t, e, id);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("accepts a multi-line UPDATE with tenant_id in the WHERE", () => {
+    const src =
+      "await dbRun(ctx, `UPDATE marketing_contacts\n" +
+      "     SET email = ?\n" +
+      "   WHERE id = ? AND tenant_id = ?`, e, id, t);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("flags an UPDATE on a tenant table with NO where clause at all", () => {
+    const src = "await dbRun(ctx, 'UPDATE appointments SET status = ?', s);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("flags a DELETE whose row filter is id alone (tenant_id absent from WHERE)", () => {
+    const src = "await dbRun(ctx, 'DELETE FROM appointments WHERE id = ?', id);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("accepts a DELETE scoped by tenant_id in the WHERE", () => {
+    const src = "await dbRun(ctx, 'DELETE FROM appointments WHERE tenant_id = ? AND id = ?', t, id);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("still accepts a SELECT that carries tenant_id anywhere in the statement", () => {
+    // SELECT has no SET clause; the loose anywhere-in-window rule still applies.
+    const src = "await dbAll(ctx, 'SELECT id FROM appointments WHERE tenant_id = ? AND ts > ?', t, since);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("still accepts an INSERT carrying tenant_id in its VALUES (no WHERE)", () => {
+    const src =
+      "await dbRun(ctx, 'INSERT INTO appointments (id, tenant_id, status) VALUES (?, ?, ?)', id, t, s);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("accepts an UPDATE missing a WHERE tenant predicate when annotated with a directive", () => {
+    const src =
+      "// tenant-scan-ignore: contact resolved above by capability token; keyed by PK\n" +
+      "await dbRun(ctx, 'UPDATE marketing_contacts SET unsubscribe_token = ? WHERE id = ?', tok, id);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+});
+
+// Gap B — SQL comments are stripped before the predicate test, so a commented
+// `-- tenant_id` or `/* tenant_id */` can't spoof the isolation check.
+describe("worker scanner — Gap B: SQL comments stripped before the keyword test", () => {
+  it("flags a SELECT whose only tenant_id is inside a /* */ block comment", () => {
+    const src =
+      "await dbAll(ctx, 'SELECT * FROM marketing_contacts /* tenant_id handled upstream */ WHERE id = ?', id);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("flags a SELECT whose only tenant_id is inside a -- line comment", () => {
+    const src =
+      "await dbAll(ctx, `SELECT * FROM marketing_contacts\n" +
+      "  -- tenant_id is implied\n" +
+      "  WHERE id = ?`, id);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("flags an UPDATE whose WHERE tenant_id is only a commented-out clause", () => {
+    const src =
+      "await dbRun(ctx, 'UPDATE appointments SET status = ? WHERE id = ? /* AND tenant_id = ? */', s, id);";
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("still accepts a real tenant_id predicate alongside a comment", () => {
+    const src =
+      "await dbRun(ctx, 'UPDATE appointments SET status = ? WHERE id = ? AND tenant_id = ? -- scoped', s, id, t);";
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+});
